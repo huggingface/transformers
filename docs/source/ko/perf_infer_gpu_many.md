@@ -13,15 +13,15 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Efficient Inference on a Multiple GPUs
+# 다중 GPU에서 효율적인 추론 [[efficient-inference-on-a-multiple-gpus]]
 
-This document contains information on how to efficiently infer on a multiple GPUs. 
+이 문서에는 다중 GPU에서 효율적으로 추론하는 방법에 대한 정보가 포함되어 있습니다.
 <Tip>
 
-Note: A multi GPU setup can use the majority of the strategies described in the [single GPU section](./perf_infer_gpu_one). You must be aware of simple techniques, though, that can be used for a better usage.
+참고: 다중 GPU 설정은 [단일 GPU 섹션](./perf_infer_gpu_one)에서 설명된 대부분의 전략을 사용할 수 있습니다. 그러나 더 나은 활용을 위해 간단한 기술을 알아야 합니다.
 
 </Tip>
 
-## `BetterTransformer` for faster inference
+## 더 빠른 추론을 위한 `BetterTransformer` [[bettertransformer-for-faster-inference]]
 
-We have recently integrated `BetterTransformer` for faster inference on multi-GPU for text, image and audio models. Check the documentation about this integration [here](https://huggingface.co/docs/optimum/bettertransformer/overview) for more details.
+우리는 최근 텍스트, 이미지 및 오디오 모델의 다중 GPU에서 더 빠른 추론을 위해 `BetterTransformer`를 통합했습니다. 자세한 내용은 [여기](https://huggingface.co/docs/optimum/bettertransformer/overview)에서 이 통합에 대한 문서를 확인하십시오.
