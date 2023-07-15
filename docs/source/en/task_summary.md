@@ -329,13 +329,13 @@ Document question answering is a task that answers natural language questions fr
 >>> url = "https://datasets-server.huggingface.co/assets/hf-internal-testing/example-documents/--/hf-internal-testing--example-documents/test/2/image/image.jpg"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> doc_question_answerer = pipeline("document-question-answering", model="naver-clova-ix/donut-base-finetuned-docvqa")
+>>> doc_question_answerer = pipeline("document-question-answering", model="magorshunov/layoutlm-invoices")
 >>> preds = doc_question_answerer(
 ...     question="What is the total amount?",
 ...     image=image,
 ... )
 >>> preds
-[{'answer': '17,000'}]
+[{'score': 0.8531239628791809, 'answer': '17,000', 'start': 4, 'end': 4}]
 ```
 
 Hopefully, this page has given you some more background information about all the types of tasks in each modality and the practical importance of each one. In the next [section](tasks_explained), you'll learn **how** 🤗 Transformers work to solve these tasks.
