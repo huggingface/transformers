@@ -104,7 +104,7 @@
   title: (번역중) 개발자 가이드
 - sections:
     - local: performance
-      title: 성능과 확장성
+      title: 성능 및 확장성
     - local: in_translation
       title: (번역중) Training on one GPU
     - local: in_translation
