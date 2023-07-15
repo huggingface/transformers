@@ -30,6 +30,7 @@ else:
         "TinyVitForImageClassification",
         "TinyVitModel",
         "TinyVitPreTrainedModel",
+        "TinyVitBackbone",
     ]
 
 if TYPE_CHECKING:
@@ -43,6 +44,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_tinyvit import (
             TINYVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TinyVitBackbone,
             TinyVitForImageClassification,
             TinyVitModel,
             TinyVitPreTrainedModel,

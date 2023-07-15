@@ -2808,6 +2808,7 @@ else:
     _import_structure["models.tinyvit"].extend(
         [
             "TINYVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TinyVitBackbone",
             "TinyVitForImageClassification",
             "TinyVitModel",
             "TinyVitPreTrainedModel",
@@ -6532,6 +6533,7 @@ if TYPE_CHECKING:
         from .models.timm_backbone import TimmBackbone
         from .models.tinyvit import (
             TINYVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TinyVitBackbone,
             TinyVitForImageClassification,
             TinyVitModel,
             TinyVitPreTrainedModel,

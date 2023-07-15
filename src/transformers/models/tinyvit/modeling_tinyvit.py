@@ -24,7 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
+from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
@@ -32,6 +32,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from ...utils.backbone_utils import BackboneMixin
 from .configuration_tinyvit import TinyVitConfig
 
 
@@ -41,16 +42,16 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "TinyVitConfig"
 
 # Base docstring
-_CHECKPOINT_FOR_DOC = "microsoft/tinyvit-21m-224"
+_CHECKPOINT_FOR_DOC = "microsoft/tinyvit-21m-1k"
 _EXPECTED_OUTPUT_SHAPE = [1, 49, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "microsoft/tinyvit-21m-224"
+_IMAGE_CLASS_CHECKPOINT = "microsoft/tinyvit-21m-1k"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 
 TINYVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/tinyvit-21m-224",
+    "microsoft/tinyvit-21m-1k",
     # See all TinyViT models at https://huggingface.co/models?filter=tinyvit
 ]
 
@@ -402,7 +403,6 @@ class TinyViTLayer(nn.Module):
             raise ValueError("input feature has wrong size")
         res_x = x
         if height == self.window_size and width == self.window_size:
-            print("we are here")
             attention_outputs = self.attn(x, output_attentions)
             x = attention_outputs[0]
         else:
@@ -518,7 +518,6 @@ class TinyVitStage(nn.Module):
             #     hidden_state = torch.utils.checkpoint.checkpoint(layer, hidden_state)
             # else:
             layer_outputs = layer(hidden_state, output_attentions, print_values=print_values)
-            print(f"Shape of hidden state after layer {idx}:", layer_outputs[0].shape)
             hidden_state = layer_outputs[0]
 
         hidden_state_before_downsampling = hidden_state
@@ -604,11 +603,11 @@ class TinyVitEncoder(nn.Module):
                 )
             else:
                 # TODO support layer_head_mask similar to Swin
-                print(f"Hidden states before stage {i}:", hidden_states.shape)
                 stage_outputs = stage_module(hidden_states, input_dimensions, output_attentions, print_values=False)
 
             hidden_states = stage_outputs[0]
             hidden_state_before_downsampling = stage_outputs[1]
+            print("Shape of hidden state before downsampling:", hidden_state_before_downsampling.shape)
             output_dimensions = stage_outputs[2]
 
             input_dimensions = (output_dimensions[-2], output_dimensions[-1])
@@ -622,17 +621,22 @@ class TinyVitEncoder(nn.Module):
                         batch_size, *(output_dimensions[0], output_dimensions[1]), hidden_size
                     )
                     reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
+                else:
+                    hidden_state_before_downsampling = hidden_state_before_downsampling.flatten(2).transpose(1, 2)
+
                 all_hidden_states += (hidden_state_before_downsampling,)
                 all_reshaped_hidden_states += (
                     (hidden_state_before_downsampling,) if i == 0 else (reshaped_hidden_state,)
                 )
             elif output_hidden_states and not output_hidden_states_before_downsampling:
-                batch_size, _, hidden_size = hidden_states.shape
-                # rearrange b (h w) c -> b c h w
-                reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size)
-                reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
+                if i != 0:
+                    batch_size, _, hidden_size = hidden_states.shape
+                    # rearrange b (h w) c -> b c h w
+                    reshaped_hidden_state = hidden_states.view(batch_size, *input_dimensions, hidden_size)
+                    reshaped_hidden_state = reshaped_hidden_state.permute(0, 3, 1, 2)
+
                 all_hidden_states += (hidden_states,)
-                all_reshaped_hidden_states += (reshaped_hidden_state,)
+                all_reshaped_hidden_states += (hidden_states,) if i == 0 else (reshaped_hidden_state,)
 
             if output_attentions and i != 0:
                 all_self_attentions += stage_outputs[3:]
@@ -723,9 +727,6 @@ class TinyVitModel(TinyVitPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -887,5 +888,106 @@ class TinyVitForImageClassification(TinyVitPreTrainedModel):
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+class TinyVitLayerNorm2d(nn.Module):
+    def __init__(self, num_channels: int, eps: float = 1e-6) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(num_channels))
+        self.bias = nn.Parameter(torch.zeros(num_channels))
+        self.eps = eps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        u = x.mean(1, keepdim=True)
+        s = (x - u).pow(2).mean(1, keepdim=True)
+        x = (x - u) / torch.sqrt(s + self.eps)
+        x = self.weight[:, None, None] * x + self.bias[:, None, None]
+        return x
+
+
+@add_start_docstrings(
+    """
+    TinyViT backbone, to be used with frameworks like SAM (segment-anything-model).
+    """,
+    TINYVIT_START_DOCSTRING,
+)
+class TinyVitBackbone(TinyVitPreTrainedModel, BackboneMixin):
+    def __init__(self, config: TinyVitConfig):
+        super().__init__(config)
+        super()._init_backbone(config)
+
+        self.embeddings = TinyVitEmbeddings(config)
+        self.encoder = TinyVitEncoder(config, self.embeddings.patches_resolution)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> BackboneOutput:
+        """
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoBackbone
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> processor = AutoImageProcessor.from_pretrained("microsoft/tinyvit-21m-1k")
+        >>> model = AutoBackbone.from_pretrained(
+        ...     "microsoft/tinyvit-21m-1k", out_features=["stage1", "stage2", "stage3", "stage4"]
+        ... )
+
+        >>> inputs = processor(image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> feature_maps = outputs.feature_maps
+        >>> list(feature_maps[-1].shape)
+        [1, 768, 7, 7]
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+
+        embedding_output, input_dimensions = self.embeddings(pixel_values)
+
+        outputs = self.encoder(
+            embedding_output,
+            input_dimensions,
+            head_mask=None,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+        )
+
+        hidden_states = outputs.hidden_states
+
+        feature_maps = ()
+        for stage, hidden_state in zip(self.stage_names, hidden_states):
+            if stage in self.out_features:
+                feature_maps += (hidden_state,)
+
+        if not return_dict:
+            output = (feature_maps,)
+            if output_hidden_states:
+                output += (outputs.hidden_states,)
+            return output
+
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
