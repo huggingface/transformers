@@ -1556,6 +1556,15 @@ class Blip2Model(Blip2PreTrainedModel):
 
     One can optionally pass `input_ids` to the model, which serve as a text prompt, to make the language model continue
     the prompt. Otherwise, the language model starts generating text from the [BOS] (beginning-of-sequence) token.
+
+    <Tip>
+
+    Note that Flan-T5 checkpoints cannot be cast to float16. They are pre-trained using bfloat16.
+
+    Note that it's most efficient to leverage int4 inference using
+    bitsandbytes](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
+
+    </Tip>
     """,
     BLIP_2_START_DOCSTRING,
 )
@@ -1701,6 +1710,32 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
         >>> print(generated_text)
         two
+        
+        Note that int8 inference is also supported through [bitsandbytes](https://github.com/TimDettmers/bitsandbytes).
+        This greatly reduces the amount of memory used by the model while maintaining the same performance.
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import Blip2Processor, Blip2ForConditionalGeneration
+        >>> import torch
+
+        >>> processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
+        >>> model = Blip2ForConditionalGeneration.from_pretrained(
+        ...     "Salesforce/blip2-flan-t5-xl", load_in_8bit=True, device_map="auto", torch_dtype=torch.bfloat16
+        ... )  # doctest: +IGNORE_RESULT
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> prompt = "Question: how many cats are there? Answer:"
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt").to(device="cuda", dtype=torch.bfloat16)
+
+        >>> generated_ids = model.generate(**inputs)
+        >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
+        >>> print(generated_text)
+        two
+
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
