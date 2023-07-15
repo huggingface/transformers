@@ -42,6 +42,9 @@ RUN python3 -m pip install -U "itsdangerous<2.1.0"
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
+# Add peft for PEFT integration
+RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/peft@main#egg=peft
+
 # Add bitsandbytes for mixed int8 testing
 RUN python3 -m pip install --no-cache-dir bitsandbytes
 
