@@ -1189,14 +1189,6 @@ class TrainingArguments:
         },
     )
 
-    xpu_backend: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "The backend to be used for distributed training on Intel XPU.",
-            "choices": ["mpi", "ccl", "gloo"],
-        },
-    )
-
     def __post_init__(self):
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
@@ -1219,14 +1211,6 @@ class TrainingArguments:
             )
             # Go back to the underlying string or we won't be able to instantiate `IntervalStrategy` on it.
             self.evaluation_strategy = self.evaluation_strategy.value
-
-        if self.xpu_backend is not None:
-            warnings.warn(
-                "using `xpu_backend` is deprecated and will be removed in version 4.31"
-                " of 🤗 Transformers. Use `ddp_backend` instead",
-                FutureWarning,
-            )
-            self.ddp_backend = self.xpu_backend
 
         self.evaluation_strategy = IntervalStrategy(self.evaluation_strategy)
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
