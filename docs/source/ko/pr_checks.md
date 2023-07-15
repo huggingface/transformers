@@ -17,128 +17,127 @@ limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+# Pull Request에 대한 확인 사항 [[checks-on-a-pull-request]]
 
-# Checks on a Pull Request
+🤗 Transformers에서 Pull Request를 열 때, 기존에 있는 것을 망가뜨리지 않는지 확인하기 위해 상당한 수의 확인 사항이 실행됩니다. 이러한 확인 사항은 다음과 같은 네 가지 유형으로 구성됩니다:
+- 일반적인 테스트
+- 문서 빌드
+- 코드 및 문서 스타일
+- 일반 저장소 일관성
 
-When you open a pull request on 🤗 Transformers, a fair number of checks will be run to make sure the patch you are adding is not breaking anything existing. Those checks are of four types:
-- regular tests
-- documentation build
-- code and documentation style
-- general repository consistency
+이 문서에서는 이러한 다양한 확인 사항과 그 이유를 설명하고, PR에서 하나 이상의 확인 사항이 실패한 경우 로컬에서 어떻게 디버그하는지 알아보겠습니다.
 
-In this document, we will take a stab at explaining what those various checks are and the reason behind them, as well as how to debug them locally if one of them fails on your PR.
-
-Note that, ideally, they require you to have a dev install:
+참고로, 이러한 확인 사항을 사용하려면 개발 설치가 필요합니다:
 
 ```bash
 pip install transformers[dev]
 ```
 
-or for an editable install:
+또는 편집 가능한 설치의 경우:
 
 ```bash
 pip install -e .[dev]
 ```
 
-inside the Transformers repo. Since the number of optional dependencies of Transformers has grown a lot, it's possible you don't manage to get all of them. If the dev install fails, make sure to install the Deep Learning framework you are working with (PyTorch, TensorFlow and/or Flax) then do
+Transformers 리포지토리 내에서 작동합니다. Transformers의 선택적 종속성 수가 많이 늘어났기 때문에 모두 설치하지 못할 수도 있습니다. 개발 설치가 실패하는 경우 작업 중인 Deep Learning 프레임워크 (PyTorch, TensorFlow 및/또는 Flax)를 설치하고 다음 명령을 실행하십시오:
 
 ```bash
 pip install transformers[quality]
 ```
 
-or for an editable install:
+또는 편집 가능한 설치의 경우:
 
 ```bash
 pip install -e .[quality]
 ```
 
 
-## Tests
+## 테스트 [[tests]]
 
-All the jobs that begin with `ci/circleci: run_tests_` run parts of the Transformers testing suite. Each of those jobs focuses on a part of the library in a certain environment: for instance `ci/circleci: run_tests_pipelines_tf` runs the pipelines test in an environment where TensorFlow only is installed.
+`ci/circleci: run_tests_`로 시작하는 모든 작업은 Transformers 테스트 스위트의 일부를 실행합니다. 이러한 작업은 특정 환경에서 라이브러리의 일부에 중점을 둡니다. 예를 들어 `ci/circleci: run_tests_pipelines_tf`는 TensorFlow만 설치된 환경에서 파이프라인 테스트를 실행합니다.
 
-Note that to avoid running tests when there is no real change in the modules they are testing, only part of the test suite is run each time: a utility is run to determine the differences in the library between before and after the PR (what GitHub shows you in the "Files changes" tab) and picks the tests impacted by that diff. That utility can be run locally with:
+테스트 모듈에서 실제로 변경 사항이 없을 때 테스트를 실행하지 않기 위해, 각 테스트 작업은 테스트 스위트의 일부만 실행됩니다. 라이브러리의 변경 전후에 대한 차이를 확인하기 위해 유틸리티가 실행되고, 해당 차이에 영향을 받는 테스트가 선택됩니다. 이 유틸리티는 로컬에서 다음과 같이 실행할 수 있습니다:
 
 ```bash
 python utils/tests_fetcher.py
 ```
 
-from the root of the Transformers repo. It will:
+Transformers 리포지토리의 루트에서 실행합니다. 이 유틸리티는 다음과 같은 작업을 수행합니다:
 
-1. Check for each file in the diff if the changes are in the code or only in comments or docstrings. Only the files with real code changes are kept.
-2. Build an internal map that gives for each file of the source code of the library all the files it recursively impacts. Module A is said to impact module B if module B imports module A. For the recursive impact, we need a chain of modules going from module A to module B in which each module imports the previous one.
-3. Apply this map on the files gathered in step 1, which  gives us the list of model files impacted by the PR.
-4. Map each of those files to their corresponding test file(s) and get the list of tests to run.
+1. 변경 사항이 있는 파일마다 변경 사항이 코드인지 주석 또는 문서 문자열인지 확인합니다. 실제 코드 변경이 있는 파일만 유지됩니다.
+2. 소스 코드 파일의 각 파일에 대해 재귀적으로 영향을 주는 모든 파일을 제공하는 내부 맵을 작성합니다. 모듈 B가 모듈 A를 가져오면 모듈 A는 모듈 B에 영향을 줍니다. 재귀적인 영향에는 각 모듈이 이전 모듈을 가져오는 모듈 체인이 필요합니다.
+3. 단계 1에서 수집한 파일에 이 맵을 적용하여 PR에 영향을 받는 모델 파일 목록을 얻습니다.
+4. 각 파일을 해당하는 테스트 파일에 매핑하고 실행할 테스트 목록을 가져옵니다.
 
-When executing the script locally, you should get the results of step 1, 3 and 4 printed and thus know which tests are run. The script will also create a file named `test_list.txt` which contains the list of tests to run, and you can run them locally with the following command:
+로컬에서 스크립트를 실행하면 단계 1, 3 및 4의 결과를 출력하여 실행되는 테스트를 알 수 있습니다. 스크립트는 또한 `test_list.txt`라는 파일을 생성하여 실행할 테스트 목록을 포함하며, 다음 명령으로 해당 테스트를 로컬에서 실행할 수 있습니다:
 
 ```bash
 python -m pytest -n 8 --dist=loadfile -rA -s $(cat test_list.txt)
 ```
 
-Just in case anything slipped through the cracks, the full test suite is also run daily.
+잘못된 사항이 누락되었을 경우, 전체 테스트 스위트도 매일 실행됩니다.
 
-## Documentation build
+## 문서 빌드 [[documentation-build]]
 
-The `build_pr_documentation` job builds and generates a preview of the documentation to make sure everything looks okay once your PR is merged. A bot will add a link to preview the documentation in your PR. Any changes you make to the PR are automatically updated in the preview. If the documentation fails to build, click on **Details** next to the failed job to see where things went wrong. Often, the error is as simple as a missing file in the `toctree`.
+`build_pr_documentation` 작업은 문서를 빌드하고 미리 보기를 생성하여 PR이 병합된 후 모든 것이 제대로 보이는지 확인합니다. 로봇은 PR에 문서 미리 보기 링크를 추가합니다. PR에서 만든 변경 사항은 자동으로 미리 보기에 업데이트됩니다. 문서 빌드에 실패한 경우 **세부 정보**를 클릭하여 어디에서 문제가 발생했는지 확인할 수 있습니다. 오류는 주로 `toctree`에 누락된 파일과 같이 간단한 오류입니다.
 
-If you're interested in building or previewing the documentation locally, take a look at the [`README.md`](https://github.com/huggingface/transformers/tree/main/docs) in the docs folder.
+로컬에서 문서를 빌드하거나 미리 볼 경우, docs 폴더의 [`README.md`](https://github.com/huggingface/transformers/tree/main/docs)를 참조하십시오.
 
-## Code and documentation style
+## 코드 및 문서 스타일 [[code-and-documentation-style]]
 
-Code formatting is applied to all the source files, the examples and the tests using `black` and `ruff`. We also have a custom tool taking care of the formatting of docstrings and `rst` files (`utils/style_doc.py`), as well as the order of the lazy imports performed in the Transformers `__init__.py` files (`utils/custom_init_isort.py`). All of this can be launched by executing
+`black`과 `ruff`를 사용하여 모든 소스 파일, 예제 및 테스트에 코드 형식을 적용합니다. 또한, `utils/style_doc.py`에서 문서 문자열과 `rst` 파일의 형식, 그리고 Transformers의 `__init__.py` 파일에서 실행되는 지연된 임포트의 순서에 대한 사용자 정의 도구가 있습니다. 이 모든 것은 다음을 실행함으로써 실행할 수 있습니다:
 
 ```bash
 make style
 ```
 
-The CI checks those have been applied inside the `ci/circleci: check_code_quality` check. It also runs `ruff`, that will have a basic look at your code and will complain if it finds an undefined variable, or one that is not used. To run that check locally, use
+CI는 이러한 사항이 `ci/circleci: check_code_quality` 확인 사항 내에서 적용되었는지 확인합니다. 또한 `ruff`도 실행되며, 정의되지 않은 변수나 사용되지 않은 변수를 발견하면 경고합니다. 이 확인 사항을 로컬에서 실행하려면 다음을 사용하십시오:
 
 ```bash
 make quality
 ```
 
-This can take a lot of time, so to run the same thing on only the files you modified in the current branch, run
+이 작업은 많은 시간이 소요될 수 있으므로 현재 브랜치에서 수정한 파일에 대해서만 동일한 작업을 실행하려면 다음을 실행하십시오:
 
 ```bash
 make fixup
 ```
 
-This last command will also run all the additional checks for the repository consistency. Let's have a look at them.
+이 마지막 명령은 현재 브랜치에서 수정한 파일에 대한 모든 추가적인 확인 사항도 실행합니다. 이제 이들을 살펴보겠습니다.
 
-## Repository consistency
+## 저장소 일관성 [[repository-consistency]]
 
-This regroups all the tests to make sure your PR leaves the repository in a good state, and is performed by the `ci/circleci: check_repository_consistency` check. You can locally run that check by executing the following:
+이는 PR이 저장소를 정상적인 상태로 유지하는지 확인하는 모든 테스트를 모은 것이며, `ci/circleci: check_repository_consistency` 확인 사항에서 수행됩니다. 다음을 실행함으로써 로컬에서 이 확인 사항을 실행할 수 있습니다:
 
 ```bash
 make repo-consistency
 ```
 
-This checks that:
+다음을 확인합니다:
 
-- All objects added to the init are documented (performed by `utils/check_repo.py`)
-- All `__init__.py` files have the same content in their two sections (performed by `utils/check_inits.py`)
-- All code identified as a copy from another module is consistent with the original (performed by `utils/check_copies.py`)
-- All configuration classes have at least one valid checkpoint mentioned in their docstrings (performed by `utils/check_config_docstrings.py`)
-- All configuration classes only contain attributes that are used in corresponding modeling files (performed by `utils/check_config_attributes.py`)
-- The translations of the READMEs and the index of the doc have the same model list as the main README (performed by `utils/check_copies.py`)
-- The auto-generated tables in the documentation are up to date (performed by `utils/check_table.py`)
-- The library has all objects available even if not all optional dependencies are installed (performed by `utils/check_dummies.py`)
+- init에 추가된 모든 객체가 문서화되었는지 (`utils/check_repo.py`에서 수행)
+- `__init__.py` 파일의 두 섹션에 동일한 내용이 있는지 (`utils/check_inits.py`에서 수행)
+- 다른 모듈에서 복사된 코드가 원본과 일치하는지 (`utils/check_copies.py`에서 수행)
+- 모든 구성 클래스에 docstring에 언급된 유효한 체크포인트가 적어도 하나 있는지 (`utils/check_config_docstrings.py`에서 수행)
+- 모든 구성 클래스가 해당하는 모델링 파일에서 사용되는 속성만 포함하고 있는지 (`utils/check_config_attributes.py`에서 수행)
+- README와 문서 인덱스의 번역이 메인 README와 동일한 모델 목록을 가지고 있는지 (`utils/check_copies.py`에서 수행)
+- 문서의 자동 생성된 테이블이 최신 상태인지 (`utils/check_table.py`에서 수행)
+- 라이브러리에는 선택적 종속성이 설치되지 않았더라도 모든 객체가 사용 가능한지 (`utils/check_dummies.py`에서 수행)
 
-Should this check fail, the first two items require manual fixing, the last four can be fixed automatically for you by running the command
+이러한 확인 사항이 실패하는 경우, 처음 두 가지 항목은 수동으로 수정해야 하며, 나머지 네 가지 항목은 다음 명령을 실행하여 자동으로 수정할 수 있습니다.
 
 ```bash
 make fix-copies
 ```
 
-Additional checks concern PRs that add new models, mainly that:
+추가적인 확인 사항은 새로운 모델을 추가하는 PR에 대한 것으로, 주로 다음과 같습니다:
 
-- All models added are in an Auto-mapping (performed by `utils/check_repo.py`)
+- 추가된 모든 모델이 Auto-mapping에 있는지 (`utils/check_repo.py`에서 수행)
 <!-- TODO Sylvain, add a check that makes sure the common tests are implemented.-->
-- All models are properly tested (performed by `utils/check_repo.py`)
+- 모든 모델이 올바르게 테스트되었는지 (`utils/check_repo.py`에서 수행)
 
 <!-- TODO Sylvain, add the following
-- All models are added to the main README, inside the main doc
-- All checkpoints used actually exist on the Hub
+- 모든 모델이 메인 README, 주요 문서에 추가되었는지
+- 사용된 모든 체크포인트가 실제로 Hub에 존재하는지
 
 -->
