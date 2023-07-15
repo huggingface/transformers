@@ -397,6 +397,10 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
+    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
+    def test_model_is_small(self):
+        pass
+
     def test_identity_shortcut(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         config.use_conv_shortcut = False

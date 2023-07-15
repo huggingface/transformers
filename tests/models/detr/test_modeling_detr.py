@@ -19,7 +19,7 @@ import inspect
 import math
 import unittest
 
-from transformers import DetrConfig, is_timm_available, is_vision_available
+from transformers import DetrConfig, ResNetConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
@@ -29,10 +29,10 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-if is_timm_available():
+if is_torch_available():
     import torch
 
-    from transformers import DetrForObjectDetection, DetrForSegmentation, DetrModel, ResNetConfig
+    from transformers import DetrForObjectDetection, DetrForSegmentation, DetrModel
 
 
 if is_vision_available():
@@ -48,7 +48,7 @@ class DetrModelTester:
         batch_size=8,
         is_training=True,
         use_labels=True,
-        hidden_size=256,
+        hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=8,
         intermediate_size=4,
@@ -106,6 +106,16 @@ class DetrModelTester:
         return config, pixel_values, pixel_mask, labels
 
     def get_config(self):
+        resnet_config = ResNetConfig(
+            num_channels=3,
+            embeddings_size=10,
+            hidden_sizes=[10, 20, 30, 40],
+            depths=[1, 1, 2, 1],
+            hidden_act="relu",
+            num_labels=3,
+            out_features=["stage2", "stage3", "stage4"],
+            out_indices=[2, 3, 4],
+        )
         return DetrConfig(
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -118,6 +128,8 @@ class DetrModelTester:
             attention_dropout=self.attention_probs_dropout_prob,
             num_queries=self.num_queries,
             num_labels=self.num_labels,
+            use_timm_backbone=False,
+            backbone_config=resnet_config,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -154,27 +166,8 @@ class DetrModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
-    def create_and_check_no_timm_backbone(self, config, pixel_values, pixel_mask, labels):
-        config.use_timm_backbone = False
-        config.backbone_config = ResNetConfig()
-        model = DetrForObjectDetection(config=config)
-        model.to(torch_device)
-        model.eval()
 
-        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-        result = model(pixel_values)
-
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
-
-        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
-
-        self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
-
-
-@require_timm
+@require_torch
 class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
@@ -182,7 +175,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             DetrForObjectDetection,
             DetrForSegmentation,
         )
-        if is_timm_available()
+        if is_torch_available()
         else ()
     )
     pipeline_model_mapping = (
@@ -191,7 +184,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             "image-segmentation": DetrForSegmentation,
             "object-detection": DetrForObjectDetection,
         }
-        if is_timm_available()
+        if is_torch_available()
         else {}
     )
     is_encoder_decoder = True
@@ -241,10 +234,6 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_detr_object_detection_head_model(*config_and_inputs)
-
-    def test_detr_no_timm_backbone(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_no_timm_backbone(*config_and_inputs)
 
     # TODO: check if this works again for PyTorch 2.x.y
     @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
@@ -464,6 +453,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
         # let's set num_channels to 1
         config.num_channels = 1
+        config.backbone_config.num_channels = 1
 
         for model_class in self.all_model_classes:
             model = model_class(config)
