@@ -2621,7 +2621,7 @@ class Trainer:
                 else torch.cuda.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
             )
         else:
-            ctx_manager = contextlib.nullcontext() if sys.version_info >= (3, 7) else contextlib.suppress()
+            ctx_manager = contextlib.nullcontext()
 
         return ctx_manager
 
