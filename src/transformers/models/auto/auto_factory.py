@@ -551,7 +551,8 @@ class _BaseAutoModelClass:
         commit_hash: Optional[str] = None,
     ) -> Optional[str]:
         r"""
-        Simply checks if the model stored on the Hub or locally is an adapter model or not
+        Simply checks if the model stored on the Hub or locally is an adapter model or not, return the path the the
+        adapter config file if it is, None otherwise.
         """
         adapter_cached_filename = None
         if os.path.isdir(model_id):

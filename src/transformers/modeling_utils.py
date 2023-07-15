@@ -2189,7 +2189,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
-        kwargs.pop("peft_adapter_name", None)
+        peft_adapter_name = kwargs.pop("peft_adapter_name", "default")
         peft_adapter_model_id = kwargs.pop("_peft_adapter_model_id", None)
 
         has_adapter_file = False
@@ -2973,10 +2973,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if is_peft_available() and has_adapter_file:
             from peft import PeftModel
 
-            # TODO: handle correctly PeftModel kwargs here
             model = PeftModel.from_pretrained(
                 model,
                 peft_adapter_model_id,
+                adapter_name=peft_adapter_name,
+                device_map=device_map,
+                max_memory=max_memory,
+                offload_index=offload_index,
+                offload_dir=offload_folder,
+                subfolder=subfolder,
+                revision=revision,
+                cache_dir=cache_dir,
+                use_auth_token=use_auth_token,
             )
 
         if output_loading_info:
