@@ -13,101 +13,78 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# How to convert a 🤗 Transformers model to TensorFlow?
+# 🤗 Transformers 모델을 TensorFlow로 변환하는 방법은 무엇인가요? [[how-to-convert-a-transformers-model-to-tensorflow]]
 
-Having multiple frameworks available to use with 🤗 Transformers gives you flexibility to play their strengths when
-designing your application, but it implies that compatibility must be added on a per-model basis. The good news is that
-adding TensorFlow compatibility to an existing model is simpler than [adding a new model from scratch](add_new_model)!
-Whether you wish to have a deeper understanding of large TensorFlow models, make a major open-source contribution, or
-enable TensorFlow for your model of choice, this guide is for you.
+🤗 Transformers를 사용할 수 있는 여러 가지 프레임워크를 가지고 있으면 응용 프로그램을 설계할 때 그 강점을 활용할 수 있는 유연성이 생깁니다.
+그러나 이는 모델 별로 호환성을 추가해야한다는 것을 의미합니다. 좋은 소식은 기존 모델에 TensorFlow 호환성을 추가하는 것이 [새로운 모델을 처음부터 추가하는 것보다 간단하다는 것입니다](add_new_model)! 
+큰 TensorFlow 모델을 더 깊이 이해하거나 주요 오픈 소스 기여를 수행하거나 선택한 모델에 TensorFlow를 사용하려는 경우 이 안내서는 여러분을 위한 것입니다.
 
-This guide empowers you, a member of our community, to contribute TensorFlow model weights and/or
-architectures to be used in 🤗 Transformers, with minimal supervision from the Hugging Face team. Writing a new model
-is no small feat, but hopefully this guide will make it less of a rollercoaster 🎢 and more of a walk in the park 🚶.
-Harnessing our collective experiences is absolutely critical to make this process increasingly easier, and thus we
-highly encourage that you suggest improvements to this guide!
+이 가이드는 Hugging Face 팀의 최소한의 감독 아래에서 🤗 Transformers에서 사용되는 TensorFlow 모델 가중치와/또는 아키텍처를 기여할 수 있는 커뮤니티 구성원인 여러분을 대상으로 합니다. 
+새로운 모델을 작성하는 것은 쉬운 일이 아니지만, 이 가이드를 통해 조금 덜 힘들고 훨씬 쉬운 작업으로 만들 수 있습니다. 
+우리의 경험을 활용하는 것은 이 프로세스를 점차적으로 더 쉽게 만드는 데 굉장히 중요하며, 따라서 이 가이드에 대한 개선 제안을 적극적으로 권장합니다!
 
-Before you dive deeper, it is recommended that you check the following resources if you're new to 🤗 Transformers:
-- [General overview of 🤗 Transformers](add_new_model#general-overview-of-transformers)
-- [Hugging Face's TensorFlow Philosophy](https://huggingface.co/blog/tensorflow-philosophy)
+더 깊이 알아보기 전에, 🤗 Transformers에 처음 접하는 경우 다음 자료를 확인하는 것이 좋습니다:
+- [🤗 Transformers의 일반 개요]
+(add_new_model#general-overview-of-transformers)
+- [Hugging Face의 TensorFlow 철학](https://huggingface.co/blog/tensorflow-philosophy)
 
-In the remainder of this guide, you will learn what's needed to add a new TensorFlow model architecture, the
-procedure to convert PyTorch into TensorFlow model weights, and how to efficiently debug mismatches across ML
-frameworks. Let's get started!
+이 가이드의 나머지 부분에서는 새로운 TensorFlow 모델 아키텍처를 추가하는 데 필요한 단계, PyTorch를 TensorFlow 모델 가중치로 변환하는 절차 및 ML 프레임워크 간의 불일치를 효율적으로 디버깅하는 방법을 알게 될 것입니다. 시작해봅시다!
 
-<Tip>
+<팁>
 
-Are you unsure whether the model you wish to use already has a corresponding TensorFlow architecture?
+사용하려는 모델이 이미 해당하는 TensorFlow 아키텍처가 있는지 확실하지 않은 경우,
 
-&nbsp;
+모델 선택지([example](https://huggingface.co/bert-base-uncased/blob/main/config.json#L14))의 `config.json`의 `model_type` 필드를 확인해보세요. 🤗 Transformers의 해당 모델 폴더에는 "modeling_tf"로 시작하는 파일이 있는 경우, 해당 모델에는 해당 TensorFlow 아키텍처([example](https://github.com/huggingface/transformers/tree/main/src/transformers/models/bert))가 있다는 의미입니다.
 
-Check the `model_type` field of the `config.json` of your model of choice
-([example](https://huggingface.co/bert-base-uncased/blob/main/config.json#L14)). If the corresponding model folder in
-🤗 Transformers has a file whose name starts with "modeling_tf", it means that it has a corresponding TensorFlow
-architecture ([example](https://github.com/huggingface/transformers/tree/main/src/transformers/models/bert)).
+</팁>
 
-</Tip>
+## TensorFlow 모델 아키텍처 코드 추가하는 단계별 가이드 
 
+큰 모델 아키텍처를 설계하는 여러 가지 방법이 있으며, 해당 디자인을 구현하는 여러 가지 방법도 있습니다. 
+그러나 우리는 [🤗 Transformers의 일반 개요](add_new_model#general-overview-of-transformers)에서 언급한 대로 일관된 설계 선택에 따라 🤗 Transformers의 사용 편의성이 달려 있음을 상기시켜 드리겠습니다. 
+우리의 경험에 따르면 TensorFlow 모델을 추가하는 데 관련된 중요한 몇 가지 사항을 알려 드릴 수 있습니다:
 
-## Step-by-step guide to add TensorFlow model architecture code
+- 휠을 다시 발명하지 마세요! 대개 최소한 두 개의 참조 구현을 확인해야 합니다: 구현하려는 모델의 PyTorch 동등 버전 및 동일한 문제 유형에 대한 다른 TensorFlow 모델.
+- 우수한 모델 구현은 시간에 따라 테스트를 통과합니다. 이것은 코드가 아름답다는 이유가 아니라 코드가 명확하고 디버그 및 개선이 쉬워야 하기 때문입니다. TensorFlow 구현에서 동일한 패턴을 복제하고 PyTorch 구현과의 불일치를 최소화하여 유지 관리자의 업무를 쉽게 할 경우, 기여한 사항이 오래 유지됨을 보장할 수 있습니다.
+- 도움이 필요한 경우 도움을 요청하세요! 🤗 Transformers 팀은 여러분을 돕기 위해 여기에 있으며, 여러분이 직면한 동일한 문제에 대한 해결책을 이미 찾은 경우도 있을 수 있습니다.
 
-There are many ways to design a large model architecture, and multiple ways of implementing said design. However,
-you might recall from our [general overview of 🤗 Transformers](add_new_model#general-overview-of-transformers)
-that we are an opinionated bunch - the ease of use of 🤗 Transformers relies on consistent design choices. From
-experience, we can tell you a few important things about adding TensorFlow models:
+TensorFlow 모델 아키텍처를 추가하는 데 필요한 단계의 개요를 제공합니다:
+1. 변환하려는 모델 선택
+2. transformers 개발 환경 준비
+3. (선택 사항) 이론적 측면 및 기존 구현 이해
+4. 모델 아키텍처 구현
+5. 모델 테스트 구현
+6. pull 요청 제출
+7. (선택 사항) 데모 빌드 및 공유
 
-- Don't reinvent the wheel! More often that not, there are at least two reference implementations you should check: the
-PyTorch equivalent of the model you are implementing and other TensorFlow models for the same class of problems.
-- Great model implementations survive the test of time. This doesn't happen because the code is pretty, but rather
-because the code is clear, easy to debug and build upon. If you make the life of the maintainers easy with your
-TensorFlow implementation, by replicating the same patterns as in other TensorFlow models and minimizing the mismatch
-to the PyTorch implementation, you ensure your contribution will be long lived.
-- Ask for help when you're stuck! The 🤗 Transformers team is here to help, and we've probably found solutions to the same
-problems you're facing.
+### 1.-3. 모델 기여 준비 [[13-prepare-your-model-contribution]]
 
-Here's an overview of the steps needed to add a TensorFlow model architecture:
-1. Select the model you wish to convert
-2. Prepare transformers dev environment
-3. (Optional) Understand theoretical aspects and the existing implementation
-4. Implement the model architecture
-5. Implement model tests
-6. Submit the pull request
-7. (Optional) Build demos and share with the world
+**1. 변환하려는 모델 선택**
 
-### 1.-3. Prepare your model contribution
+우선 기본 사항부터 시작해 보겠습니다. 알고리즘을 변환하려는 아키텍처를 알아야 합니다. 
+특정 아키텍처에 대한 목표가 없는 경우, 🤗 Transformers 팀에게 제안을 요청하는 것은 여러분의 영향력을 극대화하는 좋은 방법입니다. 
+우리는 TensorFlow에서 빠져 있는 가장 유명한 아키텍처로 이끌어 드리겠습니다. 
+TensorFlow에서 사용할 모델이 이미 🤗 Transformers에 TensorFlow 아키텍처 구현이 있지만 가중치가 없는 경우, 
+이 페이지의 [가중치 추가 섹션](#adding-tensorflow-weights-to-hub)으로 바로 이동하셔도 됩니다.
 
-**1. Select the model you wish to convert**
+간단히 말해서, 이 안내서의 나머지 부분은 TensorFlow 버전의 *BrandNewBert*([가이드](add_new_model)와 동일한 예제)를 기여하려고 결정했다고 가정합니다.
 
-Let's start off with the basics: the first thing you need to know is the architecture you want to convert. If you
-don't have your eyes set on a specific architecture, asking the 🤗 Transformers team for suggestions is a great way to
-maximize your impact - we will guide you towards the most prominent architectures that are missing on the TensorFlow
-side. If the specific model you want to use with TensorFlow already has a TensorFlow architecture implementation in
-🤗 Transformers but is lacking weights, feel free to jump straight into the
-[weight conversion section](#adding-tensorflow-weights-to-hub)
-of this page.
+<팁>
 
-For simplicity, the remainder of this guide assumes you've decided to contribute with the TensorFlow version of
-*BrandNewBert* (the same example as in the [guide](add_new_model) to add a new model from scratch).
+TensorFlow 모델 아키텍처에 작업을 시작하기 전에 해당 작업이 진행 중인지 확인하세요. 
+`BrandNewBert`를 검색하여
+[풀 요청 GitHub 페이지](https://github.com/huggingface/transformers/pulls?q=is%3Apr)에서 TensorFlow 관련 풀 요청이 없는지 확인할 수 있습니다.
 
-<Tip>
+</팁>
 
-Before starting the work on a TensorFlow model architecture, double-check that there is no ongoing effort to do so.
-You can search for `BrandNewBert` on the
-[pull request GitHub page](https://github.com/huggingface/transformers/pulls?q=is%3Apr) to confirm that there is no
-TensorFlow-related pull request.
-
-</Tip>
+**2. transformers 개발 환경 준비**
 
 
-**2. Prepare transformers dev environment**
+모델 아키텍처를 선택한 후, 관련 작업을 수행할 의도를 신호로 알리기 위해 draft PR을 엽니다. 환경을 설정하고 draft PR을 열려면 아래 지침을 따르세요.
 
-Having selected the model architecture, open an draft PR to signal your intention to work on it. Follow the
-instructions below to set up your environment and open a draft PR.
+1. 'Fork' 버튼을 클릭하여 [저장소](https://github.com/huggingface/transformers)를 포크합니다. 이렇게 하면 GitHub 사용자 계정에 코드의 사본이 생성됩니다.
 
-1. Fork the [repository](https://github.com/huggingface/transformers) by clicking on the 'Fork' button on the
-   repository's page. This creates a copy of the code under your GitHub user account.
-
-2. Clone your `transformers` fork to your local disk, and add the base repository as a remote:
+2. `transformers` 포크를 로컬 디스크에 클론하고 기본 저장소를 원격 저장소로 추가합니다.
 
 ```bash
 git clone https://github.com/[your Github handle]/transformers.git
@@ -115,40 +92,36 @@ cd transformers
 git remote add upstream https://github.com/huggingface/transformers.git
 ```
 
-3. Set up a development environment, for instance by running the following command:
+3. 개발 환경을 설정합니다. 예를 들어, 다음 명령을 실행하여 개발 환경을 설정할 수 있습니다.
 
 ```bash
 python -m venv .env
 source .env/bin/activate
 pip install -e ".[dev]"
 ```
-
-Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
-failure with this command. If that's the case make sure to install TensorFlow then do:
-
+운영 체제에 따라서 Transformers의 선택적 종속성이 증가하면서 이 명령으로 실패할 수도 있습니다. 그런 경우 TensorFlow를 설치한 후 다음을 수행하세요.
 ```bash
 pip install -e ".[quality]"
 ```
 
-**Note:** You don't need to have CUDA installed. Making the new model work on CPU is sufficient.
+**참고:** CUDA를 설치할 필요는 없습니다. 새로운 모델이 CPU에서 작동하도록 만드는 것만으로 충분합니다.
 
-4. Create a branch with a descriptive name from your main branch
+4. 메인 브랜치에서 설명적인 이름으로 브랜치를 만듭니다.
 
 ```bash
 git checkout -b add_tf_brand_new_bert
 ```
 
-5. Fetch and rebase to current main
+5. 현재 메인 브랜치로 페치 및 리베이스합니다.
 
 ```bash
 git fetch upstream
 git rebase upstream/main
 ```
 
-6. Add an empty `.py` file in `transformers/src/models/brandnewbert/` named `modeling_tf_brandnewbert.py`. This will
-be your TensorFlow model file.
+6. `transformers/src/models/brandnewbert/`에 `modeling_tf_brandnewbert.py`라는 빈 `.py` 파일을 추가합니다. 이 파일이 TensorFlow 모델 파일이 될 것입니다.
 
-7. Push the changes to your account using:
+7. 변경 사항을 계정에 푸시합니다.
 
 ```bash
 git add .
@@ -156,202 +129,118 @@ git commit -m "initial commit"
 git push -u origin add_tf_brand_new_bert
 ```
 
-8. Once you are satisfied, go to the webpage of your fork on GitHub. Click on “Pull request”. Make sure to add the
-   GitHub handle of some members of the Hugging Face team as reviewers, so that the Hugging Face team gets notified for
-   future changes.
-
-9. Change the PR into a draft by clicking on “Convert to draft” on the right of the GitHub pull request web page.
+8. 만족스러운 경우 GitHub에서 포크된 웹 페이지로 이동합니다. "Pull request"를 클릭합니다. Hugging Face 팀의 GitHub 핸들을 리뷰어에 추가하여 앞으로의 변경 사항에 대해 Hugging Face 팀이 통지를 받을 수 있도록 합니다.
 
 
-Now you have set up a development environment to port *BrandNewBert* to TensorFlow in 🤗 Transformers.
+9. GitHub 풀 요청 웹 페이지 오른쪽에 있는 "Convert to draft"를 클릭하여 PR을 드래프트로 변경합니다.
+
+이제 🤗 Transformers에서 *BrandNewBert*를 TensorFlow로 변환할 개발 환경을 설정했습니다.
 
 
-**3. (Optional) Understand theoretical aspects and the existing implementation**
-
-You should take some time to read *BrandNewBert's* paper, if such descriptive work exists. There might be large
-sections of the paper that are difficult to understand. If this is the case, this is fine - don't worry! The goal is
-not to get a deep theoretical understanding of the paper, but to extract the necessary information required to
-effectively re-implement the model in 🤗 Transformers using TensorFlow. That being said, you don't have to spend too
-much time on the theoretical aspects, but rather focus on the practical ones, namely the existing model documentation
-page (e.g. [model docs for BERT](model_doc/bert)).
-
-After you've grasped the basics of the models you are about to implement, it's important to understand the existing
-implementation. This is a great chance to confirm that a working implementation matches your expectations for the
-model, as well as to foresee technical challenges on the TensorFlow side.
-
-It's perfectly natural that you feel overwhelmed with the amount of information that you've just absorbed. It is
-definitely not a requirement that you understand all facets of the model at this stage. Nevertheless, we highly
-encourage you to clear any pressing questions in our [forum](https://discuss.huggingface.co/).
+**3. (선택 사항) 이론적 측면 및 기존 구현 이해**
 
 
-### 4. Model implementation
+이론적 측면을 이해하는 데 시간을 할애해야 합니다. *BrandNewBert*의 논문을 읽어야 할 수도 있습니다. 이해하기 어려운 부분이 많을 수 있습니다. 그렇다고 해서 걱정하지 마세요! 목표는 논문의 심도있는 이론적 이해가 아니라 TensorFlow를 사용하여 🤗 Transformers에 모델을 효과적으로 다시 구현하는 데 필요한 정보를 추출하는 것입니다. 그럼에도 불구하고 이 단계에서 모델(e.g. [model docs for BERT](model_doc/bert))의 모든 면을 깊이 이해해야 하는 것은 필요하지 않습니다.
 
-Now it's time to finally start coding. Our suggested starting point is the PyTorch file itself: copy the contents of
-`modeling_brand_new_bert.py` inside `src/transformers/models/brand_new_bert/` into
-`modeling_tf_brand_new_bert.py`. The goal of this section is to modify the file and update the import structure of
-🤗 Transformers such that you can import `TFBrandNewBert` and
-`TFBrandNewBert.from_pretrained(model_repo, from_pt=True)` successfully loads a working TensorFlow *BrandNewBert* model.
+모델의 기본 사항을 이해한 후, 기존 구현을 이해하는 것이 중요합니다. 이는 작업 중인 모델에 대한 작동 구현과 모델에 대한 기대 사항을 미리 확인하는 좋은 기회입니다. 또한 TensorFlow 측면에서의 기술적 도전을 예상할 수 있습니다.
 
-Sadly, there is no prescription to convert a PyTorch model into TensorFlow. You can, however, follow our selection of
-tips to make the process as smooth as possible:
-- Prepend `TF` to the name of all classes (e.g. `BrandNewBert` becomes `TFBrandNewBert`).
-- Most PyTorch operations have a direct TensorFlow replacement. For example, `torch.nn.Linear` corresponds to
-  `tf.keras.layers.Dense`, `torch.nn.Dropout` corresponds to `tf.keras.layers.Dropout`, etc. If you're not sure
-  about a specific operation, you can use the [TensorFlow documentation](https://www.tensorflow.org/api_docs/python/tf)
-  or the [PyTorch documentation](https://pytorch.org/docs/stable/).
-- Look for patterns in the 🤗 Transformers codebase. If you come across a certain operation that doesn't have a direct
-   replacement, the odds are that someone else already had the same problem.
-- By default, keep the same variable names and structure as in PyTorch. This will make it easier to debug, track
-   issues, and add fixes down the line.
-- Some layers have different default values in each framework. A notable example is the batch normalization layer's
-   epsilon (`1e-5` in [PyTorch](https://pytorch.org/docs/stable/generated/torch.nn.BatchNorm2d.html#torch.nn.BatchNorm2d)
-   and `1e-3` in [TensorFlow](https://www.tensorflow.org/api_docs/python/tf/keras/layers/BatchNormalization)).
-   Double-check the documentation!
-- PyTorch's `nn.Parameter` variables typically need to be initialized within TF Layer's `build()`. See the following
-   example: [PyTorch](https://github.com/huggingface/transformers/blob/655f72a6896c0533b1bdee519ed65a059c2425ac/src/transformers/models/vit_mae/modeling_vit_mae.py#L212) /
+막대한 양의 정보를 처음으로 소화했을 때 압도당하는 것은 자연스러운 일입니다. 이 단계에서 모델의 모든 측면을 이해해야 하는 요구 사항은 전혀 없습니다. 그러나 우리는 Hugging Face의 [포럼](https://discuss.huggingface.co/)을 통해 질문이 있는 경우 대답을 구할 것을 권장합니다.
+
+### 4. 모델 구현 [[4-model-implementation]]
+
+
+이제 드디어 코딩을 시작할 시간입니다. 우리의 제안된 시작점은 PyTorch 파일 자체입니다: `modeling_brand_new_bert.py`의 내용을 
+`src/transformers/models/brand_new_bert/`에 복사하여
+`modeling_tf_brand_new_bert.py`로 업데이트합니다. 이 섹션의 목표는 파일을 수정하고 🤗 Transformers의 import 구조를 업데이트하여 `TFBrandNewBert` 및 `TFBrandNewBert.from_pretrained(model_repo, from_pt=True)`가 성공적으로 작동하는 TensorFlow *BrandNewBert* 모델을 가져올 수 있도록 하는 것입니다.
+
+유감스럽게도, PyTorch 모델을 TensorFlow로 변환하는 규칙은 없습니다. 그러나 프로세스를 가능한한 원활하게 만들기 위해 다음 팁을 따를 수 있습니다.
+- 모든 클래스 이름 앞에 `TF`를 붙입니다(예: `BrandNewBert`는 `TFBrandNewBert`가 됩니다).
+- 대부분의 PyTorch 작업에는 직접적인 TensorFlow 대체가 있습니다. 예를 들어, `torch.nn.Linear`는 `tf.keras.layers.Dense`에 해당하고, `torch.nn.Dropout`은 `tf.keras.layers.Dropout`에 해당합니다. 특정 작업에 대해 확신이 없는 경우 [TensorFlow 문서](https://www.tensorflow.org/api_docs/python/tf)나 [PyTorch 문서](https://pytorch.org/docs/stable/)를 참조할 수 있습니다.
+- 🤗 Transformers 코드베이스에서 패턴을 찾으세요. 직접적인 대체가 없는 특정 작업을 만나면 다른 사람이 이미 동일한 문제를 해결한 경우가 많습니다.
+- 기본적으로 PyTorch와 동일한 변수 이름과 구조를 유지하세요. 이렇게 하면 디버깅과 문제 추적, 그리고 문제 해결 추가가 더 쉬워집니다.
+- 일부 레이어는 각 프레임워크마다 다른 기본값을 가지고 있습니다. 대표적인 예로 배치 정규화 레이어의 epsilon은 [PyTorch](https://pytorch.org/docs/stable/generated/torch.nn.BatchNorm2d.html#torch.nn.BatchNorm2d)에서 `1e-5`이고 [TensorFlow](https://www.tensorflow.org/api_docs/python/tf/keras/layers/BatchNormalization)에서 `1e-3`입니다. 문서를 확인하세요!
+- PyTorch의 `nn.Parameter` 변수는 일반적으로 TF 레이어의 `build()` 내에서 초기화해야 합니다. 다음 예를 참조하세요: [PyTorch](https://github.com/huggingface/transformers/blob/655f72a6896c0533b1bdee519ed65a059c2425ac/src/transformers/models/vit_mae/modeling_vit_mae.py#L212) /
    [TensorFlow](https://github.com/huggingface/transformers/blob/655f72a6896c0533b1bdee519ed65a059c2425ac/src/transformers/models/vit_mae/modeling_tf_vit_mae.py#L220)
-- If the PyTorch model has a `#copied from ...` on top of a function, the odds are that your TensorFlow model can also
-   borrow that function from the architecture it was copied from, assuming it has a TensorFlow architecture.
-- Assigning the `name` attribute correctly in TensorFlow functions is critical to do the `from_pt=True` weight
-   cross-loading. `name` is almost always the name of the corresponding variable in the PyTorch code. If `name` is not
-   properly set, you will see it in the error message when loading the model weights.
-- The logic of the base model class, `BrandNewBertModel`, will actually reside in `TFBrandNewBertMainLayer`, a Keras
-   layer subclass ([example](https://github.com/huggingface/transformers/blob/4fd32a1f499e45f009c2c0dea4d81c321cba7e02/src/transformers/models/bert/modeling_tf_bert.py#L719)).
-   `TFBrandNewBertModel` will simply be a wrapper around this layer.
-- Keras models need to be built in order to load pretrained weights. For that reason, `TFBrandNewBertPreTrainedModel`
-   will need to hold an example of inputs to the model, the `dummy_inputs`
-   ([example](https://github.com/huggingface/transformers/blob/4fd32a1f499e45f009c2c0dea4d81c321cba7e02/src/transformers/models/bert/modeling_tf_bert.py#L916)).
-- If you get stuck, ask for help - we're here to help you! 🤗
+- PyTorch 모델의 함수 상단에 `#copied from ...`가 있는 경우, TensorFlow 모델도 해당 함수를 복사한 아키텍처에서 사용할 수 있습니다(전제조건은 TensorFlow 아키텍처이어야 함).
+- TensorFlow 함수에서 `name` 속성을 올바르게 할당하는 것은 `from_pt=True` 가중치 교차 로딩을 수행하는 데 중요합니다. `name`은 대부분 PyTorch 코드의 해당 변수의 이름입니다. `name`이 제대로 설정되지 않으면 모델 가중치를 로드할 때 오류 메시지에서 확인할 수 있습니다.
+- 기본 모델 클래스인 `BrandNewBertModel`의 로직은 실제로 Keras 레이어 서브클래스인 `TFBrandNewBertMainLayer`에 있습니다([예시](https://github.com/huggingface/transformers/blob/4fd32a1f499e45f009c2c0dea4d81c321cba7e02/src/transformers/models/bert/modeling_tf_bert.py#L719)). `TFBrandNewBertModel`은 이 레이어를 감싸기만 하는 래퍼 역할을 합니다.
+- Keras 모델은 사전 훈련된 가중치를 로드하기 위해 빌드되어야 합니다. 따라서 `TFBrandNewBertPreTrainedModel`은 모델의 입력 예제인 `dummy_inputs`를 유지해야 합니다([예시](https://github.com/huggingface/transformers/blob/4fd32a1f499e45f009c2c0dea4d81c321cba7e02/src/transformers/models/bert/modeling_tf_bert.py#L916)).
+- 도움이 필요한 경우 도움을 요청하세요. 우리는 여기 있어서 도움을 드리기 위해 있는 것입니다! 🤗
 
-In addition to the model file itself, you will also need to add the pointers to the model classes and related
-documentation pages. You can complete this part entirely following the patterns in other PRs
-([example](https://github.com/huggingface/transformers/pull/18020/files)). Here's a list of the needed manual
-changes:
-- Include all public classes of *BrandNewBert* in `src/transformers/__init__.py`
-- Add *BrandNewBert* classes to the corresponding Auto classes in `src/transformers/models/auto/modeling_tf_auto.py`
-- Include the modeling file in the documentation test file list in `utils/documentation_tests.txt`
-- Add the lazy loading classes related to *BrandNewBert* in `src/transformers/utils/dummy_tf_objects.py`
-- Update the import structures for the public classes in `src/transformers/models/brand_new_bert/__init__.py`
-- Add the documentation pointers to the public methods of *BrandNewBert* in `docs/source/en/model_doc/brand_new_bert.md`
-- Add yourself to the list of contributors to *BrandNewBert* in `docs/source/en/model_doc/brand_new_bert.md`
-- Finally, add a green tick ✅ to the TensorFlow column of *BrandNewBert* in `docs/source/en/index.md`
+모델 파일 자체 외에도 모델 클래스 및 관련 문서 페이지에 대한 포인터를 추가해야 합니다. 이 부분은 다른 PR의 패턴을 따라 완전히 완료할 수 있습니다([예시](https://github.com/huggingface/transformers/pull/18020/files)). 다음은 필요한 수동 변경 목록입니다.
 
-When you're happy with your implementation, run the following checklist to confirm that your model architecture is
-ready:
-1. All layers that behave differently at train time (e.g. Dropout) are called with a `training` argument, which is
-propagated all the way from the top-level classes
-2. You have used `#copied from ...` whenever possible
-3. `TFBrandNewBertMainLayer` and all classes that use it have their `call` function decorated with `@unpack_inputs`
-4. `TFBrandNewBertMainLayer` is decorated with `@keras_serializable`
-5. A TensorFlow model can be loaded from PyTorch weights using `TFBrandNewBert.from_pretrained(model_repo, from_pt=True)`
-6. You can call the TensorFlow model using the expected input format
+- `src/transformers/__init__.py`에 *BrandNewBert*의 모든 공개 클래스를 포함합니다.
+- `src/transformers/models/auto/modeling_tf_auto.py`에서 *BrandNewBert* 클래스를 해당 Auto 클래스에 추가합니다.
+- `utils/documentation_tests.txt`에 모델 파일을 문서화하는 테스트 파일 목록을 추가합니다.
+- `src/transformers/utils/dummy_tf_objects.py`에 *BrandNewBert*와 관련된 레이지 로딩 클래스를 추가합니다.
+- `src/transformers/models/brand_new_bert/__init__.py`에서 공개 클래스에 대한 import 구조를 업데이트합니다.
+- `docs/source/en/model_doc/brand_new_bert.md`에서 *BrandNewBert*의 공개 메서드에 대한 문서 포인터를 추가합니다.
+- `docs/source/en/model_doc/brand_new_bert.md`의 *BrandNewBert* 기여자 목록에 자신을 추가합니다.
+
+🎉 축하합니다! TensorFlow 모델 아키텍처를 구현하는 데 성공했습니다.
 
 
-### 5. Add model tests
+### 5. 모델 테스트 구현 [[5-add-model-tests]]
 
-Hurray, you've implemented a TensorFlow model! Now it's time to add tests to make sure that your model behaves as
-expected. As in the previous section, we suggest you start by copying the `test_modeling_brand_new_bert.py` file in
-`tests/models/brand_new_bert/` into `test_modeling_tf_brand_new_bert.py`, and continue by making the necessary
-TensorFlow replacements. For now, in all `.from_pretrained()` calls, you should use the `from_pt=True` flag to load
-the existing PyTorch weights.
+이제 TensorFlow 모델을 테스트하는 구현을 작성할 차례입니다. 이를 통해 모델이 예상대로 작동하는지 확인할 수 있습니다.
 
-After you're done, it's time for the moment of truth: run the tests! 😬
+🤗 Transformers는 다양한 유형의 테스트를 지원합니다. 다음은 추가할 수 있는 몇 가지 테스트 유형의 예입니다:
+- `test_model_loading`: 특정 체크포인트를 사용하여 모델을 로드하고, 모델의 아웃풋을 기대값과 비교합니다.
+- `test_model_forwarding`: 모델의 입력을 주고 결과를 얻고, 기대값과 비교합니다.
+- `test_attention_is_consistent`: 어텐션 계산이 올바르게 이루어지는지 확인합니다.
+- `test_output_all_attentions`: 모든 어텐션 값을 출력하고, 이전 버전의 출력값과 비교합니다.
+- `test_hidden_states_are_reproducible`: 랜덤 시드를 고정하여 모델을 두 번 실행하고, 두 번째 실행의 출력값이 첫 번째 실행과 동일한지 확인합니다.
 
 ```bash
 NVIDIA_TF32_OVERRIDE=0 RUN_SLOW=1 RUN_PT_TF_CROSS_TESTS=1 \
 py.test -vv tests/models/brand_new_bert/test_modeling_tf_brand_new_bert.py
 ```
 
-The most likely outcome is that you'll see a bunch of errors. Don't worry, this is expected! Debugging ML models is
-notoriously hard, and the key ingredient to success is patience (and `breakpoint()`). In our experience, the hardest
-problems arise from subtle mismatches between ML frameworks, for which we have a few pointers at the end of this guide.
-In other cases, a general test might not be directly applicable to your model, in which case we suggest an override
-at the model test class level. Regardless of the issue, don't hesitate to ask for help in your draft pull request if
-you're stuck.
+테스트를 추가하는 방법에 대한 자세한 내용은 [🤗 Transformers의 테스트 가이드](https://huggingface.co/transformers/contributing.html#running-tests)를 참조하세요.
 
-When all tests pass, congratulations, your model is nearly ready to be added to the 🤗 Transformers library! 🎉
+테스트를 작성하는 동안 기존 모델 테스트를 참고하는 것이 도움이 될 수 있습니다. 기존 모델의 테스트 파일을 확인하고, 기존 테스트와 동일한 유형의 테스트를 작성하는 방법을 이해하세요. 이를 통해 코드를 작성하고 기존 모델의 동작을 신뢰할 수 있습니다.
 
-### 6.-7. Ensure everyone can use your model
+### 6. 풀 요청 제출 [[67-ensure-everyone-can-use-your-model]]
 
-**6. Submit the pull request**
+모델 아키텍처 구현 및 테스트 구현이 완료되었다면, 이제 풀 요청(PR)을 제출할 차례입니다. 다음은 풀 요청을 제출하는 단계입니다:
 
-Once you're done with the implementation and the tests, it's time to submit a pull request. Before pushing your code,
-run our code formatting utility, `make fixup` 🪄. This will automatically fix any formatting issues, which would cause
-our automatic checks to fail.
+1. 변경 사항을 본인의 포크 저장소에 푸시합니다.
 
-It's now time to convert your draft pull request into a real pull request. To do so, click on the "Ready for
-review" button and add Joao (`@gante`) and Matt (`@Rocketknight1`) as reviewers. A model pull request will need
-at least 3 reviewers, but they will take care of finding appropriate additional reviewers for your model.
+2. GitHub 웹 페이지로 이동하여 포크된 저장소로 이동합니다.
 
-After all reviewers are happy with the state of your PR, the final action point is to remove the `from_pt=True` flag in
-`.from_pretrained()` calls. Since there are no TensorFlow weights, you will have to add them! Check the section
-below for instructions on how to do it.
+3. "Compare & pull request" 버튼을 클릭하여 PR을 생성합니다.
 
-Finally, when the TensorFlow weights get merged, you have at least 3 reviewer approvals, and all CI checks are
-green, double-check the tests locally one last time
+4. 제목과 설명을 작성합니다. PR 설명에는 변경한 내용에 대한 상세한 정보를 포함해야 합니다. 또한 이전에 추가된 테스트가 실패하지 않는지 확인하세요.
 
 ```bash
 NVIDIA_TF32_OVERRIDE=0 RUN_SLOW=1 RUN_PT_TF_CROSS_TESTS=1 \
 py.test -vv tests/models/brand_new_bert/test_modeling_tf_brand_new_bert.py
 ```
 
-and we will merge your PR! Congratulations on the milestone 🎉
+5. Hugging Face 팀의 GitHub 핸들을 리뷰어로 추가하여 앞으로의 변경 사항에 대해 통지를 받을 수 있도록 합니다.
 
-**7. (Optional) Build demos and share with the world**
+6. PR을 제출합니다.
 
-One of the hardest parts about open-source is discovery. How can the other users learn about the existence of your
-fabulous TensorFlow contribution? With proper communication, of course! 📣
+축하합니다! 이제 풀 요청이 만들어졌습니다. Hugging Face 팀의 리뷰를 기다리며 코드에 대한 피드백을 받을 수 있습니다.
 
-There are two main ways to share your model with the community:
-- Build demos. These include Gradio demos, notebooks, and other fun ways to show off your model. We highly
-   encourage you to add a notebook to our [community-driven demos](https://huggingface.co/docs/transformers/community).
-- Share stories on social media like Twitter and LinkedIn. You should be proud of your work and share
-   your achievement with the community - your model can now be used by thousands of engineers and researchers around
-   the world 🌍! We will be happy to retweet your posts and help you share your work with the community.
+### 7. (선택 사항) 데모 빌드 및 공유 [[adding-tensorflow-weights-to-hub]]
 
 
-## Adding TensorFlow weights to 🤗 Hub
+모델 아키텍처가 구현되고 풀 요청이 완료되면, 🤗 Transformers의 데모에 해당 모델을 추가하여 다른 사용자들과 공유할 수 있습니다. 이를 통해 사용자들이 해당 모델을 사용하는 방법을 시도해 볼 수 있습니다.
 
-Assuming that the TensorFlow model architecture is available in 🤗 Transformers, converting PyTorch weights into
-TensorFlow weights is a breeze!
+모델을 데모에 추가하려면 다음 단계를 수행하세요:
 
-Here's how to do it:
-1. Make sure you are logged into your Hugging Face account in your terminal. You can log in using the command
-   `huggingface-cli login` (you can find your access tokens [here](https://huggingface.co/settings/tokens))
-2. Run `transformers-cli pt-to-tf --model-name foo/bar`, where `foo/bar` is the name of the model repository
-   containing the PyTorch weights you want to convert
-3. Tag `@joaogante` and `@Rocketknight1` in the 🤗 Hub PR the command above has just created
+1. 풀 요청이 승인되었는지 확인하세요.
 
-That's it! 🎉
+2. 🤗 Transformers 데모 저장소를 로컬 디스크에 클론합니다.
 
 
-## Debugging mismatches across ML frameworks 🐛
+3. `transformers/examples/legacy/run_generation.py`와 같은 기존 데모 코드에서 사용할 수 있도록 모델을 추가합니다. 모델 파일은 `huggingface.co/models`에 호스팅되어야 합니다.
 
-At some point, when adding a new architecture or when creating TensorFlow weights for an existing architecture, you
-might come across errors compaining about mismatches between PyTorch and TensorFlow. You might even decide to open the
-model architecture code for the two frameworks, and find that they look identical. What's going on? 🤔
+4. 변경 사항을 포함하여 본인의 포크 저장소에 커밋 및 푸시합니다.
 
-First of all, let's talk about why understanding these mismatches matters. Many community members will use 🤗
-Transformers models out of the box, and trust that our models behave as expected. When there is a large mismatch
-between the two frameworks, it implies that the model is not following the reference implementation for at least one
-of the frameworks. This might lead to silent failures, in which the model runs but has poor performance. This is
-arguably worse than a model that fails to run at all! To that end, we aim at having a framework mismatch smaller than
-`1e-5` at all stages of the model.
+5. Hugging Face 팀에게 데모에 대한 PR을 제출합니다.
 
-As in other numerical problems, the devil is in the details. And as in any detail-oriented craft, the secret
-ingredient here is patience. Here is our suggested workflow for when you come across this type of issues:
-1. Locate the source of mismatches. The model you're converting probably has near identical inner variables up to a
-   certain point. Place `breakpoint()` statements in the two frameworks' architectures, and compare the values of the
-   numerical variables in a top-down fashion until you find the source of the problems.
-2. Now that you've pinpointed the source of the issue, get in touch with the 🤗 Transformers team. It is possible
-   that we've seen a similar problem before and can promptly provide a solution. As a fallback, scan popular pages
-   like StackOverflow and GitHub issues.
-3. If there is no solution in sight, it means you'll have to go deeper. The good news is that you've located the
-   issue, so you can focus on the problematic instruction, abstracting away the rest of the model! The bad news is
-   that you'll have to venture into the source implementation of said instruction. In some cases, you might find an
-   issue with a reference implementation - don't abstain from opening an issue in the upstream repository.
+데모를 제공하면 다른 사용자들이 새로운 모델을 쉽게 사용하고 결과를 확인할 수 있습니다.
 
-In some cases, in dicussion with the 🤗 Transformers team, we might find that the fixing the mismatch is infeasible.
-When the mismatch is very small in the output layers of the model (but potentially large in the hidden states), we
-might decide to ignore it in favor of distributing the model. The `pt-to-tf` CLI mentioned above has a `--max-error`
-flag to override the error message at weight conversion time.
+이제 🤗 Transformers에서 TensorFlow 모델을 구현하고 기여하기 위한 모든 단계를 알게 되었습니다. 커뮤니티에 더 많은 모델 아키텍처를 추가하여 다른 사용자들과 공유하십시오!
