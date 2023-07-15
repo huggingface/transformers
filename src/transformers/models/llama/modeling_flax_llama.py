@@ -143,9 +143,11 @@ class FlaxLlamaRMSNorm(nn.Module):
     def __call__(self, hidden_states):
         input_dtype = hidden_states.dtype
         variance = jnp.asarray(hidden_states, dtype=jnp.float32)
-        variance = jnp.square(variance)
+        variance = jnp.power(variance, 2)
         variance = variance.mean(-1, keepdims=True)
-        hidden_states = hidden_states * jax.lax.rsqrt(variance + self.eps)
+        # use `jax.numpy.sqrt` as `jax.lax.rsqrt` does not match `torch.rsqrt`
+        # hidden_states = hidden_states * jax.lax.rsqrt(variance + self.eps)
+        hidden_states = hidden_states / jnp.sqrt(variance + self.eps)
 
         weight = self.param("weight", lambda _, shape: jnp.ones(shape), hidden_states.shape[-1])
 
@@ -683,6 +685,8 @@ class FlaxLlamaForCausalLM(FlaxLlamaPreTrainedModel):
 
 if __name__ == "__main__":
     import torch
+    torch.set_printoptions(precision=8)
+    jnp.set_printoptions(precision=8, floatmode='fixed')
 
     from .configuration_llama import LlamaConfig
     from .modeling_llama import LlamaForCausalLM
@@ -690,7 +694,7 @@ if __name__ == "__main__":
     key = jax.random.PRNGKey(0)
     torch.manual_seed(0)
 
-    config = LlamaConfig(num_hidden_layers=2, vocab_size=16)
+    config = LlamaConfig(num_hidden_layers=1, vocab_size=64, hidden_size=64, num_attention_heads=8, max_position_embeddings=128, intermediate_size=256)
     model = FlaxLlamaForCausalLM(config)
     print(config)
 
@@ -698,7 +702,7 @@ if __name__ == "__main__":
     pt_model = LlamaForCausalLM(config)
 
     key, subkey = jax.random.split(key)
-    x = jax.random.randint(subkey, (4, 128), 0, 16)
+    x = jax.random.randint(subkey, (4, 128), 0, 64)
     mask = jnp.ones((4, 128), dtype=bool)
     position_ids = jnp.arange(128)[jnp.newaxis, :].repeat(4, axis=0)
 
@@ -761,7 +765,7 @@ if __name__ == "__main__":
     pt_y = pt_y.detach().numpy()
 
     try:
-        np.testing.assert_allclose(y, pt_y, atol=1e-2, rtol=1e-2)
+        np.testing.assert_allclose(y, pt_y, atol=1e-6, rtol=1e-6)
     except AssertionError as e:
         print(e)
         import ipdb
