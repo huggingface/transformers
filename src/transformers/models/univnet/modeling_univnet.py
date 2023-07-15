@@ -539,7 +539,7 @@ class UnivNetGan(PreTrainedModel):
             ]
         )
 
-        self.conv_post = nn.Conv1d(config.channel_size, 1, 7, padding=3, padding_mode="reflect")
+        self.conv_post = nn.Conv1d(config.model_hidden_channels, 1, 7, padding=3, padding_mode="reflect")
     
     def forward(
         self,
@@ -590,7 +590,7 @@ class UnivNetGan(PreTrainedModel):
         if spectrogram_batch_size > 1 and noise_waveform_batch_size == 1:
             # Repeat noise_waveform spectrogram_batch_size times
             noise_waveform = noise_waveform.repeat(spectrogram_batch_size, 1, 1)
-        elif noise_waveform_batch_size > 1 and not spectrogram_batch_size == 1:
+        elif noise_waveform_batch_size > 1 and spectrogram_batch_size == 1:
             # Repeat spectrogram noise_waveform_batch_size times
             spectrogram = spectrogram.repeat(noise_waveform_batch_size, 1, 1)
         
@@ -604,7 +604,7 @@ class UnivNetGan(PreTrainedModel):
         hidden_states = noise_waveform.transpose(2, 1)
         spectrogram = spectrogram.transpose(2, 1)
 
-        hidden_states = self.conv_pre(noise_waveform)
+        hidden_states = self.conv_pre(hidden_states)
 
         for resblock in self.resblocks:
             hidden_states = resblock(hidden_states, spectrogram)
