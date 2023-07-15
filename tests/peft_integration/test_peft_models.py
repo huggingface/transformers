@@ -16,8 +16,9 @@ import inspect
 import unittest
 
 from transformers import AutoModelForCausalLM, OPTForCausalLM
+from transformers.testing_utils import require_peft, require_torch, require_torch_gpu, slow, torch_device
 from transformers.utils import is_peft_available, is_torch_available
-from transformers.testing_utils import require_peft, torch_device, require_torch, slow, require_torch_gpu
+
 
 if is_peft_available():
     from peft import PeftModel
@@ -25,19 +26,14 @@ if is_peft_available():
 if is_torch_available():
     import torch
 
+
 @require_peft
 @require_torch
 @slow
 class PeftTesterMixin:
     # one safetensors adapters and one pickle adapter
-    peft_test_model_ids = (
-        "peft-internal-testing/opt-350m-lora-pickle",
-        "peft-internal-testing/opt-350m-lora"
-    )
-    transformers_test_model_classes = (
-        AutoModelForCausalLM, 
-        OPTForCausalLM
-    )
+    peft_test_model_ids = ("peft-internal-testing/opt-350m-lora-pickle", "peft-internal-testing/opt-350m-lora")
+    transformers_test_model_classes = (AutoModelForCausalLM, OPTForCausalLM)
 
 
 class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
@@ -49,7 +45,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
     - test_peft_from_pretrained_kwargs:
         Tests if the kwargs are correctly passed to the peft model
     """
-    
+
     def test_peft_from_pretrained(self):
         r"""
         Simple test that tests the basic usage of PEFT model through `from_pretrained`
@@ -62,7 +58,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # dummy generation
                 _ = peft_model.generate(input_ids=torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device))
 
-
     @require_torch_gpu
     def test_peft_from_pretrained_kwargs(self):
         r"""
@@ -74,9 +69,11 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 peft_model = transformers_class.from_pretrained(model_id, load_in_8bit=True, device_map="auto")
                 self.assertTrue(isinstance(peft_model, PeftModel))
 
-                module = inspect.getmodule(peft_model.base_model.model.model.decoder.layers[0].self_attn.v_proj.__class__)
-                
-                # Check that the converted linear layers are from PEFT library - which is different from the 
+                module = inspect.getmodule(
+                    peft_model.base_model.model.model.decoder.layers[0].self_attn.v_proj.__class__
+                )
+
+                # Check that the converted linear layers are from PEFT library - which is different from the
                 # `Linear8bitLt` class from bnb.
                 # here `module` should be `peft/src/peft/tuners/lora.py` thus contain the class `LoraModel`
                 self.assertTrue("LoraModel" in dir(module))
