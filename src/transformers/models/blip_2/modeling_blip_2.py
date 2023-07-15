@@ -1561,9 +1561,6 @@ class Blip2Model(Blip2PreTrainedModel):
 
     Note that Flan-T5 checkpoints cannot be cast to float16. They are pre-trained using bfloat16.
 
-    Note that it's most efficient to leverage int4 inference using
-    bitsandbytes](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
     </Tip>
     """,
     BLIP_2_START_DOCSTRING,
