@@ -18,10 +18,10 @@ rendered properly in your Markdown viewer.
 이 문서에는 다중 GPU에서 효율적으로 추론하는 방법에 대한 정보가 포함되어 있습니다.
 <Tip>
 
-참고: 다중 GPU 설정은 [단일 GPU 섹션](./perf_infer_gpu_one)에서 설명된 대부분의 전략을 사용할 수 있습니다. 그러나 더 나은 활용을 위해 간단한 기술을 알아야 합니다.
+참고: 다중 GPU 설정은 [단일 GPU 섹션](./perf_infer_gpu_one)에서 설명된 대부분의 전략을 사용할 수 있습니다. 그러나 더 나은 활용을 위해 간단한 기법들을 알아야 합니다.
 
 </Tip>
 
 ## 더 빠른 추론을 위한 `BetterTransformer` [[bettertransformer-for-faster-inference]]
 
-우리는 최근 텍스트, 이미지 및 오디오 모델의 다중 GPU에서 더 빠른 추론을 위해 `BetterTransformer`를 통합했습니다. 자세한 내용은 [여기](https://huggingface.co/docs/optimum/bettertransformer/overview)에서 이 통합에 대한 문서를 확인하십시오.
+우리는 최근 텍스트, 이미지 및 오디오 모델에 대한 다중 GPU에서 더 빠른 추론을 위해 `BetterTransformer`를 통합했습니다. 자세한 내용은 이 통합에 대한 문서 [여기](https://huggingface.co/docs/optimum/bettertransformer/overview)를 확인하십시오.
