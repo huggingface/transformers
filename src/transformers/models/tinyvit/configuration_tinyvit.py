@@ -16,6 +16,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -25,7 +26,7 @@ TINYVIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class TinyVitConfig(PretrainedConfig):
+class TinyVitConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TinyVitModel`]. It is used to instantiate a
     TinyVit model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -61,6 +62,14 @@ class TinyVitConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         local_conv_size ():
             The kernel size of the depthwise convolution between attention and MLP.
+        out_features (`List[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage.
 
     Example:
 
@@ -98,6 +107,8 @@ class TinyVitConfig(PretrainedConfig):
         initializer_range=0.02,
         local_conv_size=3,
         mbconv_expand_ratio=4.0,
+        out_features=None,
+        out_indices=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -116,3 +127,7 @@ class TinyVitConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.local_conv_size = local_conv_size
         self.mbconv_expand_ratio = mbconv_expand_ratio
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )

@@ -30,7 +30,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
+from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig, SamVisionAutoBackboneConfig
 
 
 logger = logging.get_logger(__name__)
@@ -566,8 +566,7 @@ class SamMaskDecoder(nn.Module):
 class SamPositionalEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.scale = config.hidden_size // 2
-        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
+        self.register_buffer("positional_embedding",  torch.randn((2, config.num_pos_feats)))
 
     def forward(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
@@ -961,11 +960,12 @@ class SamVisionLayer(nn.Module):
 
 
 class SamVisionNeck(nn.Module):
-    def __init__(self, config: SamVisionConfig):
+    def __init__(self, config: Union[SamVisionConfig, SamVisionAutoBackboneConfig]):
         super().__init__()
         self.config = config
 
-        self.conv1 = nn.Conv2d(config.hidden_size, config.output_channels, kernel_size=1, bias=False)
+        hidden_size = config.backbone_config.hidden_sizes[-1] if hasattr(config, "backbone_config") else config.hidden_size
+        self.conv1 = nn.Conv2d(hidden_size, config.output_channels, kernel_size=1, bias=False)
         self.layer_norm1 = SamLayerNorm(config.output_channels, data_format="channels_first")
         self.conv2 = nn.Conv2d(config.output_channels, config.output_channels, kernel_size=3, padding=1, bias=False)
         self.layer_norm2 = SamLayerNorm(config.output_channels, data_format="channels_first")
@@ -981,12 +981,12 @@ class SamVisionNeck(nn.Module):
 
 
 class SamVisionEncoder(nn.Module):
-    def __init__(self, config: SamVisionConfig):
+    def __init__(self, config: Union[SamVisionConfig, SamVisionAutoBackboneConfig]):
         super().__init__()
         self.config = config
 
         self.backbone = None
-        if config.backbone_config is not None:
+        if hasattr(config, "backbone_config"):
             self.backbone = AutoBackbone.from_config(config.backbone_config)
 
         else:

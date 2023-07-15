@@ -252,7 +252,7 @@ class SamVisionAutoBackboneConfig(PretrainedConfig):
             Dimensionality of the output channels in the Patch Encoder.
     """
 
-    def __init__(self, backbone_config: Optional[Dict] = None, output_channels=256, **kwargs):
+    def __init__(self, backbone_config: Optional[Dict] = None, num_pos_feats=128, output_channels=256, **kwargs):
         super().__init__(**kwargs)
 
         if backbone_config is None:
@@ -264,6 +264,7 @@ class SamVisionAutoBackboneConfig(PretrainedConfig):
             backbone_config = config_class.from_dict(backbone_config)
 
         self.backbone_config = backbone_config
+        self.num_pos_feats = num_pos_feats
         self.output_channels = output_channels
 
 
