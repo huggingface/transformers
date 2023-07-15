@@ -13,21 +13,21 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Efficient Training on Multiple CPUs
+# 다중 CPU에서 효율적으로 훈련하기 [[efficient-training-on-multiple-cpus]]
 
-When training on a single CPU is too slow, we can use multiple CPUs. This guide focuses on PyTorch-based DDP enabling distributed CPU training efficiently.
+하나의 CPU에서 훈련하는 것이 너무 느릴 때는 다중 CPU를 사용할 수 있습니다. 이 가이드는 PyTorch 기반의 DDP를 사용하여 분산 CPU 훈련을 효율적으로 수행하는 방법에 대해 설명합니다.
 
-## Intel® oneCCL Bindings for PyTorch
+## PyTorch용 Intel® oneCCL 바인딩 [[intel-oneccl-bindings-for-pytorch]]
 
-[Intel® oneCCL](https://github.com/oneapi-src/oneCCL) (collective communications library) is a library for efficient distributed deep learning training implementing such collectives like allreduce, allgather, alltoall. For more information on oneCCL, please refer to the [oneCCL documentation](https://spec.oneapi.com/versions/latest/elements/oneCCL/source/index.html) and [oneCCL specification](https://spec.oneapi.com/versions/latest/elements/oneCCL/source/index.html).
+[Intel® oneCCL](https://github.com/oneapi-src/oneCCL) (collective communications library)은 allreduce, allgather, alltoall과 같은 collective 통신을 구현한 효율적인 분산 딥러닝 훈련을 위한 라이브러리입니다. oneCCL에 대한 자세한 정보는 [oneCCL 문서](https://spec.oneapi.com/versions/latest/elements/oneCCL/source/index.html)와 [oneCCL 사양](https://spec.oneapi.com/versions/latest/elements/oneCCL/source/index.html)을 참조하세요.
 
-Module `oneccl_bindings_for_pytorch` (`torch_ccl` before version 1.12)  implements PyTorch C10D ProcessGroup API and can be dynamically loaded as external ProcessGroup and only works on Linux platform now
+`oneccl_bindings_for_pytorch` 모듈 (`torch_ccl`은 버전 1.12 이전에 사용되었습니다)은 PyTorch C10D ProcessGroup API를 구현하며, 외부 ProcessGroup로 동적으로 로드할 수 있으며 현재 Linux 플랫폼에서만 작동합니다.
 
-Check more detailed information for [oneccl_bind_pt](https://github.com/intel/torch-ccl).
+[oneccl_bind_pt](https://github.com/intel/torch-ccl)에서 더 자세한 정보를 확인하세요.
 
-### Intel® oneCCL Bindings for PyTorch installation:
+### PyTorch용 Intel® oneCCL 바인딩 설치: [[intel-oneccl-bindings-for-pytorch-installation]]
 
-Wheel files are available for the following Python versions:
+다음 Python 버전에 대한 Wheel 파일을 사용할 수 있습니다:
 
 | Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 | Python 3.10 |
 | :---------------: | :--------: | :--------: | :--------: | :--------: | :---------: |
@@ -40,49 +40,49 @@ Wheel files are available for the following Python versions:
 ```
 pip install oneccl_bind_pt=={pytorch_version} -f https://developer.intel.com/ipex-whl-stable-cpu
 ```
-where `{pytorch_version}` should be your PyTorch version, for instance 1.13.0.
-Check more approaches for [oneccl_bind_pt installation](https://github.com/intel/torch-ccl).
-Versions of oneCCL and PyTorch must match.
+`{pytorch_version}`은 PyTorch 버전을 나타냅니다. 예를 들어 1.13.0입니다.
+[oneccl_bind_pt 설치](https://github.com/intel/torch-ccl)에 대한 더 많은 접근 방법을 확인하세요.
+oneCCL과 PyTorch의 버전은 일치해야 합니다.
 
 <Tip warning={true}>
 
-oneccl_bindings_for_pytorch 1.12.0 prebuilt wheel does not work with PyTorch 1.12.1 (it is for PyTorch 1.12.0)
-PyTorch 1.12.1 should work with oneccl_bindings_for_pytorch 1.12.100
+oneccl_bindings_for_pytorch 1.12.0 미리 빌드된 Wheel 파일은 PyTorch 1.12.1과 호환되지 않습니다 (PyTorch 1.12.0용입니다).
+PyTorch 1.12.1은 oneccl_bindings_for_pytorch 1.12.100과 함께 사용해야 합니다.
 
 </Tip>
 
-## Intel® MPI library
-Use this standards-based MPI implementation to deliver flexible, efficient, scalable cluster messaging on Intel® architecture. This component is part of the Intel® oneAPI HPC Toolkit.
+## Intel® MPI 라이브러리 [[intel-mpi-library]]
+이 표준 기반 MPI 구현을 사용하여 Intel® 아키텍처에서 유연하고 효율적이며 확장 가능한 클러스터 메시징을 제공하세요. 이 구성 요소는 Intel® oneAPI HPC Toolkit의 일부입니다.
 
-oneccl_bindings_for_pytorch is installed along with the MPI tool set. Need to source the environment before using it.
+oneccl_bindings_for_pytorch는 MPI 도구 세트와 함께 설치됩니다. 사용하기 전에 환경을 소스로 지정해야 합니다.
 
-for Intel® oneCCL >= 1.12.0
+Intel® oneCCL 버전 1.12.0 이상인 경우
 ```
 oneccl_bindings_for_pytorch_path=$(python -c "from oneccl_bindings_for_pytorch import cwd; print(cwd)")
 source $oneccl_bindings_for_pytorch_path/env/setvars.sh
 ```
 
-for Intel® oneCCL whose version < 1.12.0
+Intel® oneCCL 버전이 1.12.0보다 작은 경우
 ```
 torch_ccl_path=$(python -c "import torch; import torch_ccl; import os;  print(os.path.abspath(os.path.dirname(torch_ccl.__file__)))")
 source $torch_ccl_path/env/setvars.sh
 ```
 
-#### IPEX installation:
+#### IPEX 설치: [[ipex-installation]]
 
-IPEX provides performance optimizations for CPU training with both Float32 and BFloat16, you could refer [single CPU section](./perf_train_cpu).
-
-
-The following "Usage in Trainer" takes mpirun in Intel® MPI library as an example.
+IPEX는 Float32와 BFloat16을 모두 사용하는 CPU 훈련을 위한 성능 최적화를 제공합니다. [single CPU section](./perf_train_cpu)을 참조하세요.
 
 
-## Usage in Trainer
-To enable multi CPU distributed training in the Trainer with the ccl backend, users should add **`--ddp_backend ccl`** in the command arguments.
-
-Let's see an example with the [question-answering example](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)
+다음 "Trainer에서의 사용"은 Intel® MPI 라이브러리의 mpirun을 예로 들었습니다.
 
 
-The following command enables training with 2 processes on one Xeon node, with one process running per one socket. The variables OMP_NUM_THREADS/CCL_WORKER_COUNT can be tuned for optimal performance.
+## Trainer에서의 사용 [[usage-in-trainer]]
+Trainer에서 ccl 백엔드를 사용하여 멀티 CPU 분산 훈련을 활성화하려면 명령 인수에 **`--ddp_backend ccl`**을 추가해야 합니다.
+
+[질문-답변 예제](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)를 사용한 예를 살펴보겠습니다.
+
+
+다음 명령은 한 Xeon 노드에서 2개의 프로세스로 훈련을 활성화하며, 각 소켓당 하나의 프로세스가 실행됩니다. OMP_NUM_THREADS/CCL_WORKER_COUNT 변수는 최적의 성능을 위해 조정할 수 있습니다.
 ```shell script
  export CCL_WORKER_COUNT=1
  export MASTER_ADDR=127.0.0.1
@@ -102,15 +102,15 @@ The following command enables training with 2 processes on one Xeon node, with o
  --ddp_backend ccl \
  --use_ipex
 ```
-The following command enables training with a total of four processes on two Xeons (node0 and node1, taking node0 as the main process), ppn (processes per node) is set to 2, with one process running per one socket. The variables OMP_NUM_THREADS/CCL_WORKER_COUNT can be tuned for optimal performance.
+다음 명령은 두 개의 Xeon(노드0 및 노드1, 노드0을 주 프로세스로 사용)에서 총 4개의 프로세스로 훈련을 활성화하며, 각 소켓당 하나의 프로세스가 실행됩니다. OMP_NUM_THREADS/CCL_WORKER_COUNT 변수는 최적의 성능을 위해 조정할 수 있습니다.
 
-In node0, you need to create a configuration file which contains the IP addresses of each node (for example hostfile) and pass that configuration file path as an argument.
+노드0에서는 각 노드의 IP 주소를 포함하는 구성 파일(예: hostfile)을 생성하고 해당 구성 파일 경로를 인수로 전달해야 합니다.
 ```shell script
  cat hostfile
  xxx.xxx.xxx.xxx #node0 ip
  xxx.xxx.xxx.xxx #node1 ip
 ```
-Now, run the following command in node0 and **4DDP** will be enabled in node0 and node1 with BF16 auto mixed precision:
+이제 노드0에서 다음 명령을 실행하면 **4DDP**가 노드0 및 노드1에서 BF16 자동 혼합 정밀도로 활성화됩니다.
 ```shell script
  export CCL_WORKER_COUNT=1
  export MASTER_ADDR=xxx.xxx.xxx.xxx #node0 ip
