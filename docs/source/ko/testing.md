@@ -14,185 +14,173 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Testing
+# 테스트
 
 
-Let's take a look at how 🤗 Transformers models are tested and how you can write new tests and improve the existing ones.
+먼저 🤗 Transformers 모델이 어떻게 테스트되는지 살펴보고, 새로운 테스트를 작성 및 기존 테스트를 개선하는 방법을 알아봅시다.
 
-There are 2 test suites in the repository:
+이 저장소에는 2개의 테스트 스위트가 있습니다:
 
-1. `tests` -- tests for the general API
-2. `examples` -- tests primarily for various applications that aren't part of the API
+1. `tests` - 일반 API에 대한 테스트
+2. `examples` - API의 일부가 아닌 다양한 응용 프로그램에 대한 테스트
 
-## How transformers are tested
+## Transformers 테스트 방법
 
-1. Once a PR is submitted it gets tested with 9 CircleCi jobs. Every new commit to that PR gets retested. These jobs
-   are defined in this [config file](https://github.com/huggingface/transformers/tree/main/.circleci/config.yml), so that if needed you can reproduce the same
-   environment on your machine.
+1. PR이 제출되면 9개의 CircleCi 작업으로 테스트됩니다. 해당 PR에 대한 모든 새로운 커밋은 다시 테스트됩니다. 이 작업들은  
+    이 [config 파일](https://github.com/huggingface/transformers/tree/main/.circleci/config.yml)에 정의되어 있으므로 필요하다면, 동일한 환경을 로컬 머신에서 재현할 수 있습니다.
 
-   These CI jobs don't run `@slow` tests.
+   이 CI 작업은 `@slow` 테스트를 실행하지 않습니다.
 
-2. There are 3 jobs run by [github actions](https://github.com/huggingface/transformers/actions):
+2. [github actions](https://github.com/huggingface/transformers/actions)에 의해 실행되는 3개의 작업이 있습니다:
 
-   - [torch hub integration](https://github.com/huggingface/transformers/tree/main/.github/workflows/github-torch-hub.yml): checks whether torch hub
-     integration works.
+   - [torch hub integration](https://github.com/huggingface/transformers/tree/main/.github/workflows/github-torch-hub.yml): torch hub integration이 작동하는지 확인합니다.
 
-   - [self-hosted (push)](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-push.yml): runs fast tests on GPU only on commits on
-     `main`. It only runs if a commit on `main` has updated the code in one of the following folders: `src`,
-     `tests`, `.github` (to prevent running on added model cards, notebooks, etc.)
+   - [self-hosted (push)](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-push.yml): `main` 브랜치에서 커밋이 업데이트된 경우에만 GPU에서 빠른 테스트를 실행합니다.   
+    이는 `src`, `tests`, `.github` 폴더 중 하나에 코드가 업데이트된 경우에만 실행됩니다. (model card, notebook 등을 추가한 경우 실행되지 않도록 하기 위한 목적입니다)
 
-   - [self-hosted runner](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-scheduled.yml): runs normal and slow tests on GPU in
-     `tests` and `examples`:
+   - [self-hosted runner](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-scheduled.yml): GPU에서 `tests` 및 `examples`에서 일반적인 및 느린 테스트를 실행합니다.
+
 
 ```bash
 RUN_SLOW=1 pytest tests/
 RUN_SLOW=1 pytest examples/
 ```
 
-   The results can be observed [here](https://github.com/huggingface/transformers/actions).
+   결과는 [여기](https://github.com/huggingface/transformers/actions)에서 확인할 수 있습니다.
 
+	 
+## 테스트 실행하기
 
+### 실행할 테스트 선택하기
 
-## Running tests
+이 문서는 테스트를 실행하는 다양한 방법에 대해 자세히 설명합니다. 모든 내용을 읽은 후에도 더 자세한 내용이 필요한 경우 [여기](https://docs.pytest.org/en/latest/usage.html)에서 찾을 수 있습니다.
 
+다음은 가장 유용한 테스트 실행 방법 몇 가지입니다.
 
-
-
-
-### Choosing which tests to run
-
-This document goes into many details of how tests can be run. If after reading everything, you need even more details
-you will find them [here](https://docs.pytest.org/en/latest/usage.html).
-
-Here are some most useful ways of running tests.
-
-Run all:
+모두 실행:
 
 ```console
 pytest
 ```
 
-or:
+또는:
 
 ```bash
 make test
 ```
 
-Note that the latter is defined as:
+후자는 다음과 같이 정의됩니다:
 
 ```bash
 python -m pytest -n auto --dist=loadfile -s -v ./tests/
 ```
 
-which tells pytest to:
+위의 명령어는 pytest에게 아래의 내용을 전달합니다:
 
-- run as many test processes as they are CPU cores (which could be too many if you don't have a ton of RAM!)
-- ensure that all tests from the same file will be run by the same test process
-- do not capture output
-- run in verbose mode
+- 사용 가능한 CPU 코어 수만큼 테스트 프로세스를 실행하도록 지시합니다. (RAM이 풍부하지 않은 경우 테스트 프로세스 수가 너무 많을 수 있습니다)
+- 동일한 파일의 모든 테스트는 동일한 테스트 프로세스에서 실행됩니다.
+- 출력을 캡처하지 않습니다.
+- 자세한 모드로 실행합니다.
 
+### 모든 테스트 목록 가져오기
 
-
-### Getting the list of all tests
-
-All tests of the test suite:
+테스트 스위트의 모든 테스트:
 
 ```bash
-pytest --collect-only -q
+pytest --collect-only -q| n gpus | decorator                      |
+|--------+--------------
 ```
 
-All tests of a given test file:
+지정된 테스트 파일의 모든 테스트:
 
 ```bash
 pytest tests/test_optimization.py --collect-only -q
 ```
 
-### Run a specific test module
+### 특정 테스트 모듈 실행하기
 
-To run an individual test module:
+개별 테스트 모듈 실행하기:
 
 ```bash
 pytest tests/test_logging.py
 ```
 
-### Run specific tests
+### 특정 테스트 실행하기
 
-Since unittest is used inside most of the tests, to run specific subtests you need to know the name of the unittest
-class containing those tests. For example, it could be:
+대부분의 테스트 내부에서는 unittest가 사용됩니다. 따라서 특정 하위 테스트를 실행하려면 해당 테스트를 포함하는 unittest 클래스의 이름을 알아야합니다.   
+예를 들어 다음과 같을 수 있습니다:
 
 ```bash
 pytest tests/test_optimization.py::OptimizationTest::test_adam_w
 ```
 
-Here:
+위의 명령어 해석:
 
-- `tests/test_optimization.py` - the file with tests
-- `OptimizationTest` - the name of the class
-- `test_adam_w` - the name of the specific test function
+- `tests/test_optimization.py` - 테스트가 있는 파일
+- `OptimizationTest` - 클래스의 이름
+- `test_adam_w` - 특정 테스트 함수의 이름
 
-If the file contains multiple classes, you can choose to run only tests of a given class. For example:
+파일에 여러 클래스가 포함된 경우, 특정 클래스의 테스트만 실행할 수도 있습니다. 예를 들어:
 
 ```bash
 pytest tests/test_optimization.py::OptimizationTest
 ```
 
-will run all the tests inside that class.
+이 명령어는 해당 클래스 내부의 모든 테스트를 실행합니다.
 
-As mentioned earlier you can see what tests are contained inside the `OptimizationTest` class by running:
+위에서 언급한 것처럼 `OptimizationTest` 클래스에 포함된 테스트를 확인할 수 있습니다.
 
 ```bash
 pytest tests/test_optimization.py::OptimizationTest --collect-only -q
 ```
 
-You can run tests by keyword expressions.
+키워드 표현식을 사용하여 테스트를 실행할 수도 있습니다.
 
-To run only tests whose name contains `adam`:
+`adam`이라는 이름을 포함하는 테스트만 실행하려면:
 
 ```bash
 pytest -k adam tests/test_optimization.py
 ```
 
-Logical `and` and `or` can be used to indicate whether all keywords should match or either. `not` can be used to
-negate.
+논리 연산자 `and`와 `or`를 사용하여 모든 키워드가 일치해야 하는지 또는 어느 하나든 일치해야 하는지를 나타낼 수 있습니다.   
+`not`은 부정할 때 사용할 수 있습니다.
 
-To run all tests except those whose name contains `adam`:
+`adam`이라는 이름을 포함하지 않는 모든 테스트를 실행하려면:
 
 ```bash
 pytest -k "not adam" tests/test_optimization.py
 ```
 
-And you can combine the two patterns in one:
+두 가지 패턴을 하나로 결합할 수도 있습니다:
 
 ```bash
 pytest -k "ada and not adam" tests/test_optimization.py
 ```
 
-For example to run both `test_adafactor` and `test_adam_w` you can use:
+예를 들어 `test_adafactor`와 `test_adam_w`를 모두 실행하려면 다음을 사용할 수 있습니다:
 
 ```bash
 pytest -k "test_adam_w or test_adam_w" tests/test_optimization.py
 ```
 
-Note that we use `or` here, since we want either of the keywords to match to include both.
+여기서 `or`를 사용하는 것에 유의하세요. 두 키워드 중 하나가 일치하도록 하기 위한 목적으로 사용하기 때문입니다.
 
-If you want to include only tests that include both patterns, `and` is to be used:
+두 패턴이 모두 포함되어야 하는 테스트만 포함하려면 `and`를 사용해야 합니다:
 
 ```bash
 pytest -k "test and ada" tests/test_optimization.py
 ```
 
-### Run `accelerate` tests
 
-Sometimes you need to run `accelerate` tests on your models. For that you can just add `-m accelerate_tests` to your command, if let's say you want to run these tests on `OPT` run:
-```bash
-RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py 
-```
+### `accelerate` 테스트 실행하기
 
+모델에서 `accelerate` 테스트를 실행해야 할 때가 있습니다. 이를 위해 명령어에 `-m accelerate_tests`를 추가하면 됩니다.  
+예를 들어, `OPT`에서 이러한 테스트를 실행하려면 다음을 사용할 수 있습니다:
 
-### Run documentation tests 
+### 문서 테스트 실행하기
 
-In order to test whether the documentation examples are correct, you should check that the `doctests` are passing. 
-As an example, let's use [`WhisperModel.forward`'s docstring](https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/modeling_whisper.py#L1017-L1035): 
+예시 문서가 올바른지 테스트하려면 `doctests`가 통과하는지 확인해야 합니다.  
+예를 들어, 다음은 [`WhisperModel.forward`'s docstring](https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/modeling_whisper.py#L1017-L1035)을 사용하는 예제입니다:
 
 ```python 
 r"""
@@ -217,16 +205,17 @@ Example:
 
 ```
 
-Just run the following line to automatically test every docstring example in the desired file: 
+원하는 파일의 모든 독스트링 예제를 자동으로 테스트하려면 다음 명령을 실행하면 됩니다:
 ```bash 
 pytest --doctest-modules <path_to_file_or_dir>
 ```
-If the file has a markdown extention, you should add the `--doctest-glob="*.md"` argument.
 
-### Run only modified tests
+파일의 확장자가 markdown인 경우 `--doctest-glob="*.md"` 인수를 추가해야 합니다.
 
-You can run the tests related to the unstaged files or the current branch (according to Git) by using [pytest-picked](https://github.com/anapaulagomes/pytest-picked). This is a great way of quickly testing your changes didn't break
-anything, since it won't run the tests related to files you didn't touch.
+### 수정된 테스트만 실행하기
+
+수정된 파일 또는 현재 브랜치 (Git 기준)와 관련된 테스트를 실행하려면 [pytest-picked](https://github.com/anapaulagomes/pytest-picked)을 사용할 수 있습니다.   
+이는 변경한 내용이 테스트에 영향을 주지 않았는지 빠르게 확인할 수 있는 좋은 방법입니다.
 
 ```bash
 pip install pytest-picked
@@ -236,80 +225,69 @@ pip install pytest-picked
 pytest --picked
 ```
 
-All tests will be run from files and folders which are modified, but not yet committed.
+모든 수정된 파일 및 폴더에서 테스트가 실행됩니다.
 
-### Automatically rerun failed tests on source modification
+### 소스 수정 시 실패한 테스트 자동 재실행하기
 
-[pytest-xdist](https://github.com/pytest-dev/pytest-xdist) provides a very useful feature of detecting all failed
-tests, and then waiting for you to modify files and continuously re-rerun those failing tests until they pass while you
-fix them. So that you don't need to re start pytest after you made the fix. This is repeated until all tests pass after
-which again a full run is performed.
+[pytest-xdist](https://github.com/pytest-dev/pytest-xdist)는 모든 실패한 테스트를 감지하고 파일을 수정한 후에 파일을 계속 재실행하여 테스트가 성공할 때까지 기다리는 매우 유용한 기능을 제공합니다. 
+따라서 수정한 내용을 확인한 후 pytest를 다시 시작할 필요가 없습니다. 모든 테스트가 통과될 때까지 이 과정을 반복한 후 다시 전체 실행이 수행됩니다.
 
 ```bash
 pip install pytest-xdist
 ```
 
-To enter the mode: `pytest -f` or `pytest --looponfail`
+재귀적 모드의 사용: `pytest -f` 또는 `pytest --looponfail`
 
-File changes are detected by looking at `looponfailroots` root directories and all of their contents (recursively).
-If the default for this value does not work for you, you can change it in your project by setting a configuration
-option in `setup.cfg`:
+파일 변경은 `looponfailroots` 루트 디렉토리와 해당 내용을 (재귀적으로) 확인하여 감지됩니다.   
+이 값의 기본값이 작동하지 않는 경우 `setup.cfg`의 설정 옵션을 변경하여 프로젝트에서 변경할 수 있습니다:
 
 ```ini
 [tool:pytest]
 looponfailroots = transformers tests
 ```
 
-or `pytest.ini`/``tox.ini`` files:
+또는 `pytest.ini` 또는 `tox.ini` 파일:
 
 ```ini
 [pytest]
 looponfailroots = transformers tests
 ```
 
-This would lead to only looking for file changes in the respective directories, specified relatively to the ini-file’s
-directory.
+이렇게 하면 ini-file의 디렉터리를 기준으로 지정된 각 디렉터리에서 파일 변경 사항만 찾게 됩니다.
 
-[pytest-watch](https://github.com/joeyespo/pytest-watch) is an alternative implementation of this functionality.
+이 기능을 대체할 수 있는 구현 방법인 [pytest-watch](https://github.com/joeyespo/pytest-watch)도 있습니다.
 
+### 특정 테스트 모듈 건너뛰기
 
-### Skip a test module
-
-If you want to run all test modules, except a few you can exclude them by giving an explicit list of tests to run. For
-example, to run all except `test_modeling_*.py` tests:
+모든 테스트 모듈을 실행하되 특정 모듈을 제외하려면 실행할 테스트 목록을 명시적으로 지정할 수 있습니다. 예를 들어, `test_modeling_*.py` 테스트를 제외한 모든 테스트를 실행하려면 다음을 사용할 수 있습니다:
 
 ```bash
 pytest *ls -1 tests/*py | grep -v test_modeling*
 ```
 
-### Clearing state
+### 상태 초기화하기
 
-CI builds and when isolation is important (against speed), cache should be cleared:
+CI 빌드 및 (속도에 대한) 격리가 중요한 경우, 캐시를 지워야 합니다:
 
 ```bash
 pytest --cache-clear tests
 ```
 
-### Running tests in parallel
+### 병렬로 테스트 실행하기
 
-As mentioned earlier `make test` runs tests in parallel via `pytest-xdist` plugin (`-n X` argument, e.g. `-n 2`
-to run 2 parallel jobs).
+이전에 언급한 대로 `make test`는 테스트를 병렬로 실행하기 위해 `pytest-xdist` 플러그인(`-n X` 인수, 예시: `-n 2`를 사용하여 2개의 병렬 작업 실행)을 통해 실행됩니다.
 
-`pytest-xdist`'s `--dist=` option allows one to control how the tests are grouped. `--dist=loadfile` puts the
-tests located in one file onto the same process.
+`pytest-xdist`의 `--dist=` 옵션을 사용하여 테스트를 어떻게 그룹화할지 제어할 수 있습니다. `--dist=loadfile`은 하나의 파일에 있는 테스트를 동일한 프로세스로 그룹화합니다.
 
-Since the order of executed tests is different and unpredictable, if running the test suite with `pytest-xdist`
-produces failures (meaning we have some undetected coupled tests), use [pytest-replay](https://github.com/ESSS/pytest-replay) to replay the tests in the same order, which should help with then somehow
-reducing that failing sequence to a minimum.
+실행된 테스트의 순서가 다르고 예측할 수 없기 때문에 `pytest-xdist`로 테스트 스위트를 실행하면 실패가 발생할 수 있습니다 (검출되지 않은 결합된 테스트가 있는 경우).   
+이 경우 [pytest-replay](https://github.com/ESSS/pytest-replay)를 사용하여 동일한 순서로 테스트를 다시 실행하여 실패하는 시퀀스를 최소화하는 데 도움을 받을 수 있습니다.
 
-### Test order and repetition
+### 테스트 순서와 반복
 
-It's good to repeat the tests several times, in sequence, randomly, or in sets, to detect any potential
-inter-dependency and state-related bugs (tear down). And the straightforward multiple repetition is just good to detect
-some problems that get uncovered by randomness of DL.
+잠재적인 종속성 및 상태 관련 버그(tear down)를 감지하기 위해 테스트를 여러 번, 연속으로, 무작위로 또는 세트로 반복하는 것이 좋습니다.  
+그리고 직접적인 다중 반복은 DL의 무작위성에 의해 발견되는 일부 문제를 감지하는 데 유용합니다.
 
-
-#### Repeat tests
+#### 테스트 반복하기
 
 - [pytest-flakefinder](https://github.com/dropbox/pytest-flakefinder):
 
@@ -317,35 +295,25 @@ some problems that get uncovered by randomness of DL.
 pip install pytest-flakefinder
 ```
 
-And then run every test multiple times (50 by default):
-
-```bash
-pytest --flake-finder --flake-runs=5 tests/test_failing_test.py
-```
+모든 테스트를 여러 번 실행합니다(기본값은 50회):
 
 <Tip>
 
-This plugin doesn't work with `-n` flag from `pytest-xdist`.
+이 플러그인은 `pytest-xdist`의 `-n` 플래그와 함께 작동하지 않습니다.
 
 </Tip>
 
 <Tip>
 
-There is another plugin `pytest-repeat`, but it doesn't work with `unittest`.
+`pytest-repeat`라는 또 다른 플러그인도 있지만 `unittest`와 함께 작동하지 않습니다.
 
 </Tip>
 
-#### Run tests in a random order
+#### 테스트를 임의의 순서로 실행하기
 
-```bash
-pip install pytest-random-order
-```
+중요: `pytest-random-order`가 설치되면 테스트가 자동으로 임의의 순서로 섞입니다. 구성 변경이나 커맨드 라인 옵션이 필요하지 않습니다.
 
-Important: the presence of `pytest-random-order` will automatically randomize tests, no configuration change or
-command line options is required.
-
-As explained earlier this allows detection of coupled tests - where one test's state affects the state of another. When
-`pytest-random-order` is installed it will print the random seed it used for that session, e.g:
+앞서 설명한 것처럼 이를 통해 한 테스트의 상태가 다른 테스트의 상태에 영향을 미치는 결합된 테스트를 감지할 수 있습니다. `pytest-random-order`가 설치되면 해당 세션에서 사용한 랜덤 시드가 출력되며 그 예시는 다음과 같습니다.
 
 ```bash
 pytest tests
@@ -354,7 +322,7 @@ Using --random-order-bucket=module
 Using --random-order-seed=573663
 ```
 
-So that if the given particular sequence fails, you can reproduce it by adding that exact seed, e.g.:
+따라서 특정 시퀀스가 실패하는 경우 정확한 시드를 추가하여 재현할 수 있습니다. 예를 들어:
 
 ```bash
 pytest --random-order-seed=573663
@@ -363,61 +331,54 @@ Using --random-order-bucket=module
 Using --random-order-seed=573663
 ```
 
-It will only reproduce the exact order if you use the exact same list of tests (or no list at all). Once you start to
-manually narrowing down the list you can no longer rely on the seed, but have to list them manually in the exact order
-they failed and tell pytest to not randomize them instead using `--random-order-bucket=none`, e.g.:
+정확히 동일한 테스트 목록(또는 목록이 없음)을 사용하는 경우에만 정확한 순서를 재현합니다.  
+목록을 수동으로 좁히기 시작하면 시드에 의존할 수 없으므로, 정확한 실패 순서로 목록을 수동으로 나열하고 `--random-order-bucket=none`을 사용하여 pytest에게 순서를 임의로 설정하지 않도록 알려야 합니다. 예를 들어:
 
 ```bash
 pytest --random-order-bucket=none tests/test_a.py tests/test_c.py tests/test_b.py
 ```
 
-To disable the shuffling for all tests:
+모든 테스트에 대해 섞기를 비활성화하려면:
 
 ```bash
 pytest --random-order-bucket=none
 ```
 
-By default `--random-order-bucket=module` is implied, which will shuffle the files on the module levels. It can also
-shuffle on `class`, `package`, `global` and `none` levels. For the complete details please see its
-[documentation](https://github.com/jbasko/pytest-random-order).
+기본적으로 `--random-order-bucket=module`이 함축되어 있으므로, 모듈 수준에서 파일을 섞습니다. `class`, `package`, `global` 및 `none` 수준에서도 섞을 수 있습니다.  
+자세한 내용은 해당 [문서](https://github.com/jbasko/pytest-random-order)를 참조하세요.
 
-Another randomization alternative is: [`pytest-randomly`](https://github.com/pytest-dev/pytest-randomly). This
-module has a very similar functionality/interface, but it doesn't have the bucket modes available in
-`pytest-random-order`. It has the same problem of imposing itself once installed.
+또 다른 무작위화의 대안은 [`pytest-randomly`](https://github.com/pytest-dev/pytest-randomly)입니다.   
+이 모듈은 매우 유사한 기능/인터페이스를 가지고 있지만, `pytest-random-order`에 있는 버킷 모드를 사용할 수는 없습니다. 설치 후에도 자동으로 적용되는 동일한 문제를 가지고 있습니다.
 
-### Look and feel variations
+### 외관과 느낌 변경하기
 
 #### pytest-sugar
 
-[pytest-sugar](https://github.com/Frozenball/pytest-sugar) is a plugin that improves the look-n-feel, adds a
-progressbar, and show tests that fail and the assert instantly. It gets activated automatically upon installation.
+[pytest-sugar](https://github.com/Frozenball/pytest-sugar)는 테스트가 보여지는 형태를 개선하고, 진행 상황 바를 추가하며, 실패한 테스트와 검증을 즉시 표시하는 플러그인입니다. 설치하면 자동으로 활성화됩니다.
 
 ```bash
 pip install pytest-sugar
 ```
 
-To run tests without it, run:
+설치되어 있지 않은 상태에서 테스트를 실행하려면 다음을 실행하세요:
 
 ```bash
 pytest -p no:sugar
 ```
 
-or uninstall it.
+또는 제거하세요.
 
+#### 각 하위 테스트 이름과 진행 상황 보고
 
-
-#### Report each sub-test name and its progress
-
-For a single or a group of tests via `pytest` (after `pip install pytest-pspec`):
+`pytest`를 통해 단일 또는 그룹의 테스트를 실행하는 경우(`pip install pytest-pspec` 이후):
 
 ```bash
 pytest --pspec tests/test_optimization.py
 ```
 
-#### Instantly shows failed tests
+#### 실패한 테스트 즉시 표시
 
-[pytest-instafail](https://github.com/pytest-dev/pytest-instafail) shows failures and errors instantly instead of
-waiting until the end of test session.
+[pytest-instafail](https://github.com/pytest-dev/pytest-instafail)은 테스트 세션의 끝까지 기다리지 않고 즉시 실패 및 오류를 표시합니다.
 
 ```bash
 pip install pytest-instafail
@@ -427,35 +388,32 @@ pip install pytest-instafail
 pytest --instafail
 ```
 
-### To GPU or not to GPU
+### GPU 사용 여부
 
-On a GPU-enabled setup, to test in CPU-only mode add `CUDA_VISIBLE_DEVICES=""`:
+GPU 활성화된 환경에서 CPU 전용 모드로 테스트하려면 `CUDA_VISIBLE_DEVICES=""`를 추가합니다:
 
 ```bash
 CUDA_VISIBLE_DEVICES="" pytest tests/test_logging.py
 ```
 
-or if you have multiple gpus, you can specify which one is to be used by `pytest`. For example, to use only the
-second gpu if you have gpus `0` and `1`, you can run:
+또는 다중 GPU가 있는 경우 `pytest`에서 사용할 GPU를 지정할 수도 있습니다. 예를 들어, GPU `0` 및 `1`이 있는 경우 다음을 실행할 수 있습니다:
 
 ```bash
 CUDA_VISIBLE_DEVICES="1" pytest tests/test_logging.py
 ```
 
-This is handy when you want to run different tasks on different GPUs.
+이렇게 하면 다른 GPU에서 다른 작업을 실행하려는 경우 유용합니다.
 
-Some tests must be run on CPU-only, others on either CPU or GPU or TPU, yet others on multiple-GPUs. The following skip
-decorators are used to set the requirements of tests CPU/GPU/TPU-wise:
+일부 테스트는 반드시 CPU 전용으로 실행해야 하며, 일부는 CPU 또는 GPU 또는 TPU에서 실행해야 하고, 일부는 여러 GPU에서 실행해야 합니다. 다음 스킵 데코레이터는 테스트의 요구 사항을 CPU/GPU/TPU별로 설정하는 데 사용됩니다:
 
-- `require_torch` - this test will run only under torch
-- `require_torch_gpu` - as `require_torch` plus requires at least 1 GPU
-- `require_torch_multi_gpu` - as `require_torch` plus requires at least 2 GPUs
-- `require_torch_non_multi_gpu` - as `require_torch` plus requires 0 or 1 GPUs
-- `require_torch_up_to_2_gpus` - as `require_torch` plus requires 0 or 1 or 2 GPUs
-- `require_torch_tpu` - as `require_torch` plus requires at least 1 TPU
+- `require_torch` - 이 테스트는 torch에서만 실행됩니다.
+- `require_torch_gpu` - `require_torch`에 추가로 적어도 1개의 GPU가 필요합니다.
+- `require_torch_multi_gpu` - `require_torch`에 추가로 적어도 2개의 GPU가 필요합니다.
+- `require_torch_non_multi_gpu` - `require_torch`에 추가로 0개 또는 1개의 GPU가 필요합니다.
+- `require_torch_up_to_2_gpus` - `require_torch`에 추가로 0개, 1개 또는 2개의 GPU가 필요합니다.
+- `require_torch_tpu` - `require_torch`에 추가로 적어도 1개의 TPU가 필요합니다.
 
-Let's depict the GPU requirements in the following table:
-
+다음 표에 GPU 요구 사항을 나타내었습니다:
 
 | n gpus | decorator                      |
 |--------+--------------------------------|
@@ -465,23 +423,21 @@ Let's depict the GPU requirements in the following table:
 | `< 2`  | `@require_torch_non_multi_gpu` |
 | `< 3`  | `@require_torch_up_to_2_gpus`  |
 
-
-For example, here is a test that must be run only when there are 2 or more GPUs available and pytorch is installed:
+예를 들어, 다음과 같이 pytorch가 설치되어 있을 때 2개 이상의 GPU가 있는 경우에만 실행해야 하는 테스트가 있습니다:
 
 ```python no-style
 @require_torch_multi_gpu
 def test_example_with_multi_gpu():
 ```
 
-If a test requires `tensorflow` use the `require_tf` decorator. For example:
+`tensorflow`가 필요한 경우 `require_tf` 데코레이터를 사용합니다. 예를 들어:
 
 ```python no-style
 @require_tf
 def test_tf_thing_with_tensorflow():
 ```
 
-These decorators can be stacked. For example, if a test is slow and requires at least one GPU under pytorch, here is
-how to set it up:
+이러한 데코레이터는 중첩될 수 있습니다. 예를 들어, 테스트가 느리고 pytorch에서 적어도 하나의 GPU가 필요한 경우 다음과 같이 설정할 수 있습니다:
 
 ```python no-style
 @require_torch_gpu
@@ -489,8 +445,7 @@ how to set it up:
 def test_example_slow_on_gpu():
 ```
 
-Some decorators like `@parametrized` rewrite test names, therefore `@require_*` skip decorators have to be listed
-last for them to work correctly. Here is an example of the correct usage:
+`@parametrized`와 같은 일부 데코레이터는 테스트 이름을 다시 작성하기 때문에 `@require_*` 스킵 데코레이터는 올바르게 작동하려면 항상 맨 마지막에 나열되어야 합니다. 다음은 올바른 사용 예입니다:
 
 ```python no-style
 @parameterized.expand(...)
@@ -498,12 +453,11 @@ last for them to work correctly. Here is an example of the correct usage:
 def test_integration_foo():
 ```
 
-This order problem doesn't exist with `@pytest.mark.parametrize`, you can put it first or last and it will still
-work. But it only works with non-unittests.
+`@pytest.mark.parametrize`와는 달리 이러한 순서 문제는 없으며, 먼저나 나중에 위치시킬 수 있고 이러한 경우에도 잘 작동할 것입니다. 하지만 unittest와는 작동하지 않습니다.
 
-Inside tests:
+테스트 내부에서 다음을 사용할 수 있습니다:
 
-- How many GPUs are available:
+- 사용 가능한 GPU 수:
 
 ```python
 from transformers.testing_utils import get_gpu_count
@@ -511,81 +465,75 @@ from transformers.testing_utils import get_gpu_count
 n_gpu = get_gpu_count()  # works with torch and tf
 ```
 
-### Distributed training
+### 분산 훈련
 
-`pytest` can't deal with distributed training directly. If this is attempted - the sub-processes don't do the right
-thing and end up thinking they are `pytest` and start running the test suite in loops. It works, however, if one
-spawns a normal process that then spawns off multiple workers and manages the IO pipes.
+`pytest`는 직접 분산 훈련을 다루지 못합니다. 이를 시도하면 하위 프로세스가 올바른 작업을 수행하지 않고 `pytest`라고 생각하고 테스트 스위트를 반복해서 실행하게 됩니다.   
+그러나 일반 프로세스를 생성한 다음 여러 워커를 생성하고 IO 파이프를 관리하도록 하면 동작합니다.
 
-Here are some tests that use it:
+다음과 같은 테스트를 사용합니다:
 
 - [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/test_trainer_distributed.py)
 - [test_deepspeed.py](https://github.com/huggingface/transformers/tree/main/tests/deepspeed/test_deepspeed.py)
 
-To jump right into the execution point, search for the `execute_subprocess_async` call in those tests.
+실행 지점으로 바로 이동하려면 해당 테스트에서 `execute_subprocess_async` 호출을 검색하세요.
 
-You will need at least 2 GPUs to see these tests in action:
+이러한 테스트를 실행하려면 적어도 2개의 GPU가 필요합니다.
 
 ```bash
 CUDA_VISIBLE_DEVICES=0,1 RUN_SLOW=1 pytest -sv tests/test_trainer_distributed.py
 ```
 
-### Output capture
 
-During test execution any output sent to `stdout` and `stderr` is captured. If a test or a setup method fails, its
-according captured output will usually be shown along with the failure traceback.
+### 출력 캡처
 
-To disable output capturing and to get the `stdout` and `stderr` normally, use `-s` or `--capture=no`:
+테스트 실행 중 `stdout` 및 `stderr`로 전송된 모든 출력이 캡처됩니다. 테스트나 설정 메서드가 실패하면 해당하는 캡처된 출력은 일반적으로 실패 추적 정보와 함께 표시됩니다.
+
+출력 캡처를 비활성화하고 `stdout` 및 `stderr`를 정상적으로 받으려면 `-s` 또는 `--capture=no`를 사용하세요:
 
 ```bash
 pytest -s tests/test_logging.py
 ```
 
-To send test results to JUnit format output:
+테스트 결과를 JUnit 형식의 출력으로 보내려면 다음을 사용하세요:
 
 ```bash
 py.test tests --junitxml=result.xml
 ```
 
-### Color control
+### 색상 제어
 
-To have no color (e.g., yellow on white background is not readable):
+색상이 없도록 설정하려면(예를 들어 흰색 배경에 노란색 글씨는 가독성이 좋지 않습니다):
 
 ```bash
 pytest --color=no tests/test_logging.py
 ```
 
-### Sending test report to online pastebin service
+### online pastebin service에 테스트 보고서 전송
 
-Creating a URL for each test failure:
+각 테스트 실패에 대한 URL을 만듭니다:
 
 ```bash
 pytest --pastebin=failed tests/test_logging.py
 ```
 
-This will submit test run information to a remote Paste service and provide a URL for each failure. You may select
-tests as usual or add for example -x if you only want to send one particular failure.
+이렇게 하면 각 실패에 대한 URL을 제공하는 remote Paste service에 테스트 실행 정보를 제출합니다. 일반적인 테스트를 선택할 수도 있고 혹은 특정 실패만 보내려면 `-x`와 같이 추가할 수도 있습니다.
 
-Creating a URL for a whole test session log:
+전체 테스트 세션 로그에 대한 URL을 생성합니다:
 
 ```bash
 pytest --pastebin=all tests/test_logging.py
 ```
 
-## Writing tests
+## 테스트 작성
 
-🤗 transformers tests are based on `unittest`, but run by `pytest`, so most of the time features from both systems
-can be used.
+🤗 transformers 테스트는 대부분 `unittest`를 기반으로하지만, `pytest`에서 실행되므로 대부분의 경우 두 시스템의 기능을 사용할 수 있습니다.
 
-You can read [here](https://docs.pytest.org/en/stable/unittest.html) which features are supported, but the important
-thing to remember is that most `pytest` fixtures don't work. Neither parametrization, but we use the module
-`parameterized` that works in a similar way.
+지원되는 기능에 대해 [여기](https://docs.pytest.org/en/stable/unittest.html)에서 읽을 수 있지만, 기억해야 할 중요한 점은 대부분의 `pytest` fixture가 작동하지 않는다는 것입니다.   
+파라미터화도 작동하지 않지만, 비슷한 방식으로 작동하는 `parameterized` 모듈을 사용합니다.
 
+### 파라미터화
 
-### Parametrization
-
-Often, there is a need to run the same test multiple times, but with different arguments. It could be done from within
-the test, but then there is no way of running that test for just one set of arguments.
+동일한 테스트를 다른 인수로 여러 번 실행해야 하는 경우가 종종 있습니다. 테스트 내에서 이 작업을 수행할 수 있지만, 그렇게 하면 하나의 인수 세트에 대해 테스트를 실행할 수 없습니다.
 
 ```python
 # test_this1.py
@@ -605,29 +553,27 @@ class TestMathUnitTest(unittest.TestCase):
         assert_equal(math.floor(input), expected)
 ```
 
-Now, by default this test will be run 3 times, each time with the last 3 arguments of `test_floor` being assigned the
-corresponding arguments in the parameter list.
+이제 기본적으로 이 테스트는 `test_floor`의 마지막 3개 인수가 매개변수 목록의 해당 인수에 할당되는 것으로 3번 실행될 것입니다.
 
-and you could run just the `negative` and `integer` sets of params with:
+그리고 `negative` 및 `integer` 매개변수 집합만 실행하려면 다음과 같이 실행할 수 있습니다:
 
 ```bash
 pytest -k "negative and integer" tests/test_mytest.py
 ```
 
-or all but `negative` sub-tests, with:
+또는 `negative` 하위 테스트를 제외한 모든 서브 테스트를 다음과 같이 실행할 수 있습니다:
 
 ```bash
 pytest -k "not negative" tests/test_mytest.py
 ```
 
-Besides using the `-k` filter that was just mentioned, you can find out the exact name of each sub-test and run any
-or all of them using their exact names.
+앞에서 언급한 `-k` 필터를 사용하는 것 외에도, 각 서브 테스트의 정확한 이름을 확인하고 해당하는 테스트의 모든 서브 테스트 또는 모든 서브 테스트를 실행할 수 있습니다.
 
 ```bash
 pytest test_this1.py --collect-only -q
 ```
 
-and it will list:
+위와 같이 실행하면 다음이 나열됩니다:
 
 ```bash
 test_this1.py::TestMathUnitTest::test_floor_0_negative
@@ -635,19 +581,17 @@ test_this1.py::TestMathUnitTest::test_floor_1_integer
 test_this1.py::TestMathUnitTest::test_floor_2_large_fraction
 ```
 
-So now you can run just 2 specific sub-tests:
+이제 특정한 2개의 서브 테스트만 실행할 수도 있습니다:
 
 ```bash
 pytest test_this1.py::TestMathUnitTest::test_floor_0_negative  test_this1.py::TestMathUnitTest::test_floor_1_integer
 ```
 
-The module [parameterized](https://pypi.org/project/parameterized/) which is already in the developer dependencies
-of `transformers` works for both: `unittests` and `pytest` tests.
+`transformers`의 개발자 종속성에 이미 있는 [parameterized](https://pypi.org/project/parameterized/) 모듈은 `unittests`와 `pytest` 테스트 모두에서 작동합니다.
 
-If, however, the test is not a `unittest`, you may use `pytest.mark.parametrize` (or you may see it being used in
-some existing tests, mostly under `examples`).
+그러나 테스트가 `unittest`가 아닌 경우 `pytest.mark.parametrize`를 사용할 수 있습니다(이미 있는 일부 테스트에서 사용되는 경우도 있습니다. 주로 `examples` 하위에 있습니다).
 
-Here is the same example, this time using `pytest`'s `parametrize` marker:
+다음은 `pytest`의 `parametrize` 마커를 사용한 동일한 예입니다:
 
 ```python
 # test_this2.py
@@ -666,15 +610,13 @@ def test_floor(name, input, expected):
     assert_equal(math.floor(input), expected)
 ```
 
-Same as with `parameterized`, with `pytest.mark.parametrize` you can have a fine control over which sub-tests are
-run, if the `-k` filter doesn't do the job. Except, this parametrization function creates a slightly different set of
-names for the sub-tests. Here is what they look like:
+`parameterized`와 마찬가지로 `pytest.mark.parametrize`를 사용하면 `-k` 필터가 작업하지 않는 경우에도 실행할 서브 테스트를 정확하게 지정할 수 있습니다. 이렇게 작성된 서브 테스트의 이름 집합이 약간 다르게 생성됩니다. 다음과 같은 모습입니다:
 
 ```bash
 pytest test_this2.py --collect-only -q
 ```
 
-and it will list:
+그리고 아래와 같이 나열될 것입니다.
 
 ```bash
 test_this2.py::test_floor[integer-1-1.0]
@@ -682,33 +624,29 @@ test_this2.py::test_floor[negative--1.5--2.0]
 test_this2.py::test_floor[large fraction-1.6-1]
 ```
 
-So now you can run just the specific test:
+이제 특정한 테스트에 대해서만 실행할 수도 있습니다:
 
 ```bash
 pytest test_this2.py::test_floor[negative--1.5--2.0] test_this2.py::test_floor[integer-1-1.0]
 ```
 
-as in the previous example.
+이전의 예시와 같이 실행할 수 있습니다.
 
+### 파일 및 디렉토리
 
+테스트에서 종종 현재 테스트 파일과 관련된 상대적인 위치를 알아야 하는 경우가 있습니다. 테스트가 여러 디렉터리에서 호출되거나 깊이가 다른 하위 디렉터리에 있을 수 있기 때문에 그 위치를 아는 것은 간단하지 않습니다.
+`transformers.test_utils.TestCasePlus`라는 헬퍼 클래스가 모든 기본 경로를 처리하여 간단한 액세서를 제공하여 이 문제를 해결합니다:
 
-### Files and directories
+- `pathlib` 객체(완전히 정해진 경로)
 
-In tests often we need to know where things are relative to the current test file, and it's not trivial since the test
-could be invoked from more than one directory or could reside in sub-directories with different depths. A helper class
-`transformers.test_utils.TestCasePlus` solves this problem by sorting out all the basic paths and provides easy
-accessors to them:
+  - `test_file_path` - 현재 테스트 파일 경로 (예: `__file__`)
+  - test_file_dir` - 현재 테스트 파일이 포함된 디렉토리
+  - tests_dir` - `tests` 테스트 스위트의 디렉토리
+  - examples_dir` - `examples` 테스트 스위트의 디렉토리
+  - repo_root_dir` - 저장소 디렉터리
+  - src_dir` - `src`의 디렉토리(예: `transformers` 하위 디렉터리가 있는 곳)
 
-- `pathlib` objects (all fully resolved):
-
-  - `test_file_path` - the current test file path, i.e. `__file__`
-  - `test_file_dir` - the directory containing the current test file
-  - `tests_dir` - the directory of the `tests` test suite
-  - `examples_dir` - the directory of the `examples` test suite
-  - `repo_root_dir` - the directory of the repository
-  - `src_dir` - the directory of `src` (i.e. where the `transformers` sub-dir resides)
-
-- stringified paths---same as above but these return paths as strings, rather than `pathlib` objects:
+- 문자열로 변환된 경로---위와 동일하지만 `pathlib` 객체가 아닌 문자열로 경로를 반환합니다:
 
   - `test_file_path_str`
   - `test_file_dir_str`
@@ -717,8 +655,7 @@ accessors to them:
   - `repo_root_dir_str`
   - `src_dir_str`
 
-To start using those all you need is to make sure that the test resides in a subclass of
-`transformers.test_utils.TestCasePlus`. For example:
+위의 내용을 사용하려면 테스트가 'transformers.test_utils.TestCasePlus'의 서브클래스에 있는지 확인해야 합니다. 예를 들어:
 
 ```python
 from transformers.testing_utils import TestCasePlus
@@ -729,8 +666,7 @@ class PathExampleTest(TestCasePlus):
         data_dir = self.tests_dir / "fixtures/tests_samples/wmt_en_ro"
 ```
 
-If you don't need to manipulate paths via `pathlib` or you just need a path as a string, you can always invoked
-`str()` on the `pathlib` object or use the accessors ending with `_str`. For example:
+만약 `pathlib`를 통해 경로를 조작할 필요가 없거나 경로를 문자열로만 필요로 하는 경우에는 `pathlib` 객체에 `str()`을 호출하거나 `_str`로 끝나는 접근자를 사용할 수 있습니다. 예를 들어:
 
 ```python
 from transformers.testing_utils import TestCasePlus
@@ -741,19 +677,16 @@ class PathExampleTest(TestCasePlus):
         examples_dir = self.examples_dir_str
 ```
 
-### Temporary files and directories
+### 임시 파일 및 디렉토리
 
-Using unique temporary files and directories are essential for parallel test running, so that the tests won't overwrite
-each other's data. Also we want to get the temporary files and directories removed at the end of each test that created
-them. Therefore, using packages like `tempfile`, which address these needs is essential.
+고유한 임시 파일 및 디렉토리를 사용하는 것은 병렬 테스트 실행에 필수적입니다. 이렇게 함으로써 테스트가 다른 테스트의 데이터를 덮어쓰지 않게 할 수 있습니다. 또한 우리는 이러한 임시 파일 및 디렉토리를 생성한 테스트의 종료 단계에서 제거하고 싶습니다.  
+따라서 이러한 요구 사항을 충족시켜주는 `tempfile`과 같은 패키지를 사용하는 것이 중요합니다.
 
-However, when debugging tests, you need to be able to see what goes into the temporary file or directory and you want
-to know it's exact path and not having it randomized on every test re-run.
+그러나 테스트를 디버깅할 때는 임시 파일이나 디렉토리에 들어가는 내용을 확인할 수 있어야 하며, 각 테스트 실행 시마다 임시 파일이나 디렉토리의 경로가 무작위가 아닌 정확히 알 수 있는 경로여야 합니다.
 
-A helper class `transformers.test_utils.TestCasePlus` is best used for such purposes. It's a sub-class of
-`unittest.TestCase`, so we can easily inherit from it in the test modules.
+`transformers.test_utils.TestCasePlus`라는 도우미 클래스가 이러한 목적에 가장 적합합니다. 이 클래스는 `unittest.TestCase`의 하위 클래스이므로 테스트 모듈에서 쉽게 상속할 수 있습니다.
 
-Here is an example of its usage:
+다음은 해당 클래스를 사용하는 예입니다:
 
 ```python
 from transformers.testing_utils import TestCasePlus
@@ -764,56 +697,48 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
 ```
 
-This code creates a unique temporary directory, and sets `tmp_dir` to its location.
+이 코드는 고유한 임시 디렉토리를 생성하고 `tmp_dir`을 해당 위치로 설정합니다.
 
-- Create a unique temporary dir:
+- 고유한 임시 디렉토리를 생성합니다:
 
 ```python
 def test_whatever(self):
     tmp_dir = self.get_auto_remove_tmp_dir()
 ```
 
-`tmp_dir` will contain the path to the created temporary dir. It will be automatically removed at the end of the
-test.
+`tmp_dir`에는 생성된 임시 디렉토리의 경로가 포함됩니다. 이는 테스트의 종료 단계에서 자동으로 제거됩니다.
 
-- Create a temporary dir of my choice, ensure it's empty before the test starts and don't empty it after the test.
+- 선택한 경로로 임시 디렉토리 생성 후에 테스트 시작 전에 비어 있는 상태인지 확인하고 테스트 후에는 비우지 마세요.
 
 ```python
 def test_whatever(self):
     tmp_dir = self.get_auto_remove_tmp_dir("./xxx")
 ```
 
-This is useful for debug when you want to monitor a specific directory and want to make sure the previous tests didn't
-leave any data in there.
+이것은 디버깅을 할 때 특정 디렉토리를 모니터링하고, 그 디렉토리에 이전에 실행된 테스트가 데이터를 남기지 않도록 할 떄에 유용합니다.
 
-- You can override the default behavior by directly overriding the `before` and `after` args, leading to one of the
-  following behaviors:
+- `before` 및 `after` 인수를 직접 오버라이딩하여 기본 동작을 변경할 수 있으며 다음 중 하나의 동작으로 이어집니다:
 
-  - `before=True`: the temporary dir will always be cleared at the beginning of the test.
-  - `before=False`: if the temporary dir already existed, any existing files will remain there.
-  - `after=True`: the temporary dir will always be deleted at the end of the test.
-  - `after=False`: the temporary dir will always be left intact at the end of the test.
+  - `before=True`: 테스트 시작 시 임시 디렉토리가 항상 지워집니다.
+  - `before=False`: 임시 디렉토리가 이미 존재하는 경우 기존 파일은 그대로 남습니다.
+  - `after=True`: 테스트 종료 시 임시 디렉토리가 항상 삭제됩니다.
+  - `after=False`: 테스트 종료 시 임시 디렉토리가 항상 그대로 유지됩니다.
 
 <Tip>
 
-In order to run the equivalent of `rm -r` safely, only subdirs of the project repository checkout are allowed if
-an explicit `tmp_dir` is used, so that by mistake no `/tmp` or similar important part of the filesystem will
-get nuked. i.e. please always pass paths that start with `./`.
+`rm -r`에 해당하는 명령을 안전하게 실행하려면, 명시적으로 `tmp_dir`을 사용할 때 프로젝트 저장소 체크아웃의 하위 디렉토리만 허용됩니다.  따라서 실수로 `/tmp`가 아닌 중요한 파일 시스템의 일부가 삭제되지 않도록 항상 `./`로 시작하는 경로를 전달해야 합니다.
 
 </Tip>
 
 <Tip>
 
-Each test can register multiple temporary directories and they all will get auto-removed, unless requested
-otherwise.
+각 테스트는 여러 개의 임시 디렉토리를 등록할 수 있으며, 요청하지 않는 한 모두 자동으로 제거됩니다.
 
 </Tip>
 
-### Temporary sys.path override
+### 임시 sys.path 재정의
 
-If you need to temporary override `sys.path` to import from another test for example, you can use the
-`ExtendSysPath` context manager. Example:
-
+`sys.path`를 다른 테스트로 임시로 오버라이드하기 위해 예를 들면 `ExtendSysPath` 컨텍스트 매니저를 사용할 수 있습니다. 예를 들어:
 
 ```python
 import os
@@ -824,47 +749,41 @@ with ExtendSysPath(f"{bindir}/.."):
     from test_trainer import TrainerIntegrationCommon  # noqa
 ```
 
-### Skipping tests
+### 테스트 건너뛰기
 
-This is useful when a bug is found and a new test is written, yet the bug is not fixed yet. In order to be able to
-commit it to the main repository we need make sure it's skipped during `make test`.
+이것은 버그가 발견되어 새로운 테스트가 작성되었지만 아직 그 버그가 수정되지 않은 경우에 유용합니다. 이 테스트를 주 저장소에 커밋할 수 있도록 하려면 `make test` 중에 건너뛰도록 해야 합니다.
 
-Methods:
+방법:
 
--  A **skip** means that you expect your test to pass only if some conditions are met, otherwise pytest should skip
-  running the test altogether. Common examples are skipping windows-only tests on non-windows platforms, or skipping
-  tests that depend on an external resource which is not available at the moment (for example a database).
+- **skip**은 테스트가 일부 조건이 충족될 경우에만 통과되는 것으로, 그렇지 않으면 pytest가 전체 테스트를 건너뛰도록 기대하는 것을 의미합니다. 일반적인 예로는 Windows가 아닌 플랫폼에서 Windows 전용 테스트를 건너뛰거나 외부 리소스(예를 들어 데이터베이스)에 의존하는 테스트를 건너뛰는 것이 있습니다.
 
--  A **xfail** means that you expect a test to fail for some reason. A common example is a test for a feature not yet
-  implemented, or a bug not yet fixed. When a test passes despite being expected to fail (marked with
-  pytest.mark.xfail), it’s an xpass and will be reported in the test summary.
+- **xfail**은 테스트가 특정한 이유로 인해 실패할 것으로 예상하는 것을 의미합니다. 일반적인 예로는 아직 구현되지 않은 기능이나 아직 수정되지 않은 버그의 테스트가 있습니다. `xfail`로 표시된 테스트가 예상대로 실패하지 않고 통과된 경우, 이것은 xpass이며 테스트 결과 요약에 기록됩니다.
 
-One of the important differences between the two is that `skip` doesn't run the test, and `xfail` does. So if the
-code that's buggy causes some bad state that will affect other tests, do not use `xfail`.
+두 가지 중요한 차이점 중 하나는 `skip`은 테스트를 실행하지 않지만 `xfail`은 실행한다는 것입니다. 따라서 오류가 있는 코드가 일부 테스트에 영향을 미칠 수 있는 경우 `xfail`을 사용하지 마세요.
 
-#### Implementation
+#### 구현
 
-- Here is how to skip whole test unconditionally:
+- 전체 테스트를 조건 없이 건너뛰려면 다음과 같이 할 수 있습니다:
 
 ```python no-style
 @unittest.skip("this bug needs to be fixed")
 def test_feature_x():
 ```
 
-or via pytest:
+또는 pytest를 통해:
 
 ```python no-style
 @pytest.mark.skip(reason="this bug needs to be fixed")
 ```
 
-or the `xfail` way:
+또는 `xfail` 방식으로:
 
 ```python no-style
 @pytest.mark.xfail
 def test_feature_x():
 ```
 
-- Here is how to skip a test based on some internal check inside the test:
+- 테스트 내부에서 내부 확인에 따라 테스트를 건너뛰는 방법은 다음과 같습니다:
 
 ```python
 def test_feature_x():
@@ -872,7 +791,7 @@ def test_feature_x():
         pytest.skip("unsupported configuration")
 ```
 
-or the whole module:
+또는 모듈 전체:
 
 ```python
 import pytest
@@ -881,34 +800,34 @@ if not pytest.config.getoption("--custom-flag"):
     pytest.skip("--custom-flag is missing, skipping tests", allow_module_level=True)
 ```
 
-or the `xfail` way:
+또는 `xfail` 방식으로:
 
 ```python
 def test_feature_x():
     pytest.xfail("expected to fail until bug XYZ is fixed")
 ```
 
-- Here is how to skip all tests in a module if some import is missing:
+- import가 missing된 모듈이 있을 때 그 모듈의 모든 테스트를 건너뛰는 방법:
 
 ```python
 docutils = pytest.importorskip("docutils", minversion="0.3")
 ```
 
--  Skip a test based on a condition:
+- 조건에 따라 테스트를 건너뛰는 방법:
 
 ```python no-style
 @pytest.mark.skipif(sys.version_info < (3,6), reason="requires python3.6 or higher")
 def test_feature_x():
 ```
 
-or:
+또는:
 
 ```python no-style
 @unittest.skipIf(torch_device == "cpu", "Can't do half precision")
 def test_feature_x():
 ```
 
-or skip the whole module:
+또는 모듈 전체를 건너뛰는 방법:
 
 ```python no-style
 @pytest.mark.skipif(sys.platform == 'win32', reason="does not run on windows")
@@ -916,13 +835,12 @@ class TestClass():
     def test_feature_x(self):
 ```
 
-More details, example and ways are [here](https://docs.pytest.org/en/latest/skipping.html).
+자세한 내용, 예제 및 방법은 [여기](https://docs.pytest.org/en/latest/skipping.html)에서 확인할 수 있습니다.
 
-### Slow tests
+### 느린 테스트
 
-The library of tests is ever-growing, and some of the tests take minutes to run, therefore we can't afford waiting for
-an hour for the test suite to complete on CI. Therefore, with some exceptions for essential tests, slow tests should be
-marked as in the example below:
+테스트 라이브러리는 지속적으로 확장되고 있으며, 일부 테스트는 실행하는 데 몇 분이 걸립니다. 그리고 우리에게는 테스트 스위트가 CI를 통해 완료되기까지 한 시간을 기다릴 여유가 없습니다.   
+따라서 필수 테스트에 있어 일부 예외가 있지만, 느린 테스트인 경우 다음 예시와 같이 표시되어야 합니다.
 
 ```python no-style
 from transformers.testing_utils import slow
@@ -930,69 +848,51 @@ from transformers.testing_utils import slow
 def test_integration_foo():
 ```
 
-Once a test is marked as `@slow`, to run such tests set `RUN_SLOW=1` env var, e.g.:
+`@slow`로 표시된 테스트를 실행하려면 `RUN_SLOW=1` 환경 변수를 설정하십시오. 예를 들어:
 
 ```bash
 RUN_SLOW=1 pytest tests
 ```
 
-Some decorators like `@parameterized` rewrite test names, therefore `@slow` and the rest of the skip decorators
-`@require_*` have to be listed last for them to work correctly. Here is an example of the correct usage:
+`@parameterized`와 같은 몇 가지 데코레이터는 테스트 이름을 다시 작성합니다. 그러므로 `@slow`와 나머지 건너뛰기 데코레이터 `@require_*`가 올바르게 작동되려면 하려면 마지막에 나열되어야 합니다. 다음은 올바른 사용 예입니다.
 
 ```python no-style
-@parameteriz ed.expand(...)
+@parameterized.expand(...)
 @slow
 def test_integration_foo():
 ```
 
-As explained at the beginning of this document, slow tests get to run on a scheduled basis, rather than in PRs CI
-checks. So it's possible that some problems will be missed during a PR submission and get merged. Such problems will
-get caught during the next scheduled CI job. But it also means that it's important to run the slow tests on your
-machine before submitting the PR.
+이 문서의 처음에 설명된대로 느린 테스트는 PR CI 확인이 아닌 예약된 일정 기반으로 실행됩니다. 따라서 PR 제출 중에 일부 문제를 놓치고 병합될 수 있습니다.   
+이러한 문제는 다음 예정된 CI 작업 중에 감지됩니다. 하지만 PR을 제출하기 전에 자신의 컴퓨터에서 느린 테스트를 실행하는 것 또한 중요합니다.
 
-Here is a rough decision making mechanism for choosing which tests should be marked as slow:
+느린 테스트로 표시해야 하는지 여부를 결정하는 대략적인 결정 기준은 다음과 같습니다.
 
-If the test is focused on one of the library's internal components (e.g., modeling files, tokenization files,
-pipelines), then we should run that test in the non-slow test suite. If it's focused on an other aspect of the library,
-such as the documentation or the examples, then we should run these tests in the slow test suite. And then, to refine
-this approach we should have exceptions:
+테스트가 라이브러리의 내부 구성 요소 중 하나에 집중되어 있는 경우(예: 모델링 파일, 토큰화 파일, 파이프라인), 해당 테스트를 느린 테스트 스위트에서 실행해야 합니다.   
+라이브러리의 다른 측면(예: 문서 또는 예제)에 집중된 경우, 해당 테스트를 느린 테스트 스위트에서 실행해야 합니다. 그리고 이 접근 방식을 보완하기 위해 예외를 만들어야 합니다.
 
-- All tests that need to download a heavy set of weights or a dataset that is larger than ~50MB (e.g., model or
-  tokenizer integration tests, pipeline integration tests) should be set to slow. If you're adding a new model, you
-  should create and upload to the hub a tiny version of it (with random weights) for integration tests. This is
-  discussed in the following paragraphs.
-- All tests that need to do a training not specifically optimized to be fast should be set to slow.
-- We can introduce exceptions if some of these should-be-non-slow tests are excruciatingly slow, and set them to
-  `@slow`. Auto-modeling tests, which save and load large files to disk, are a good example of tests that are marked
-  as `@slow`.
-- If a test completes under 1 second on CI (including downloads if any) then it should be a normal test regardless.
+- 무거운 가중치 세트나 50MB보다 큰 데이터셋을 다운로드해야 하는 모든 테스트(예: 모델 통합 테스트, 토크나이저 통합 테스트, 파이프라인 통합 테스트)를 느린 테스트로 설정해야 합니다.   
+  새로운 모델을 추가하는 경우 통합 테스트용으로 무작위 가중치로 작은 버전을 만들어 허브에 업로드해야 합니다. 이 내용은 아래 단락에서 설명됩니다.
+- 특별히 빠르게 실행되도록 최적화되지 않은 학습을 수행해야 하는 테스트는 느린 테스트로 설정해야 합니다.
+- 느리지 않아야 할 테스트 중 일부가 극도로 느린 경우 예외를 도입하고 이를 `@slow`로 설정할 수 있습니다. 대용량 파일을 디스크에 저장하고 불러오는 자동 모델링 테스트는 `@slow`으로 표시된 테스트의 좋은 예입니다.
+- CI에서 1초 이내에 테스트가 완료되는 경우(다운로드 포함) 느린 테스트가 아니어야 합니다.
 
-Collectively, all the non-slow tests need to cover entirely the different internals, while remaining fast. For example,
-a significant coverage can be achieved by testing with specially created tiny models with random weights. Such models
-have the very minimal number of layers (e.g., 2), vocab size (e.g., 1000), etc. Then the `@slow` tests can use large
-slow models to do qualitative testing. To see the use of these simply look for *tiny* models with:
+느린 테스트가 아닌 경우에는 다양한 내부를 완전히 커버하면서 빠르게 유지되어야 합니다. 예를 들어, 무작위 가중치를 사용하여 특별히 생성된 작은 모델로 테스트하면 상당한 커버리지를 얻을 수 있습니다.   
+이러한 모델은 최소한의 레이어 수(예: 2), 어휘 크기(예: 1000) 등의 요소만 가집니다. 그런 다음 `@slow` 테스트는 대형 느린 모델을 사용하여 정성적인 테스트를 수행할 수 있습니다.   
+이러한 작은 모델을 사용하는 방법을 확인하려면 다음과 같이 *tiny* 모델을 찾아보세요.
 
 ```bash
 grep tiny tests examples
 ```
 
-Here is a an example of a [script](https://github.com/huggingface/transformers/tree/main/scripts/fsmt/fsmt-make-tiny-model.py) that created the tiny model
-[stas/tiny-wmt19-en-de](https://huggingface.co/stas/tiny-wmt19-en-de). You can easily adjust it to your specific
-model's architecture.
+다음은 [stas/tiny-wmt19-en-de](https://huggingface.co/stas/tiny-wmt19-en-de)작은 모델을 만든 [script](https://github.com/huggingface/transformers/tree/main/scripts/fsmt/fsmt-make-tiny-model.py) 예시입니다. 특정 모델 아키텍처에 맞게 쉽게 조정할 수 있습니다.
 
-It's easy to measure the run-time incorrectly if for example there is an overheard of downloading a huge model, but if
-you test it locally the downloaded files would be cached and thus the download time not measured. Hence check the
-execution speed report in CI logs instead (the output of `pytest --durations=0 tests`).
+예를 들어 대용량 모델을 다운로드하는 경우 런타임을 잘못 측정하기 쉽지만, 로컬에서 테스트하면 다운로드한 파일이 캐시되어 다운로드 시간이 측정되지 않습니다. 그러므로 CI 로그의 실행 속도 보고서를 대신 확인하세요(`pytest --durations=0 tests`의 출력).
 
-That report is also useful to find slow outliers that aren't marked as such, or which need to be re-written to be fast.
-If you notice that the test suite starts getting slow on CI, the top listing of this report will show the slowest
-tests.
+이 보고서는 느린 이상값으로 표시되지 않거나 빠르게 다시 작성해야 하는 느린 이상값을 찾는 데도 유용합니다. CI에서 테스트 스위트가 느려지기 시작하면 이 보고서의 맨 위 목록에 가장 느린 테스트가 표시됩니다.
 
+### stdout/stderr 출력 테스트
 
-### Testing the stdout/stderr output
-
-In order to test functions that write to `stdout` and/or `stderr`, the test can access those streams using the
-`pytest`'s [capsys system](https://docs.pytest.org/en/latest/capture.html). Here is how this is accomplished:
+`stdout` 및/또는 `stderr`로 쓰는 함수를 테스트하려면 `pytest`의 [capsys 시스템](https://docs.pytest.org/en/latest/capture.html)을 사용하여 해당 스트림에 액세스할 수 있습니다. 다음과 같이 수행할 수 있습니다.
 
 ```python
 import sys
@@ -1010,17 +910,16 @@ def test_result_and_stdout(capsys):
     msg = "Hello"
     print_to_stdout(msg)
     print_to_stderr(msg)
-    out, err = capsys.readouterr()  # consume the captured output streams
-    # optional: if you want to replay the consumed streams:
+    out, err = capsys.readouterr()  # 캡처된 출력 스트림 사용
+    # 선택 사항: 캡처된 스트림 재생성
     sys.stdout.write(out)
     sys.stderr.write(err)
-    # test:
+    # 테스트:
     assert msg in out
     assert msg in err
 ```
 
-And, of course, most of the time, `stderr` will come as a part of an exception, so try/except has to be used in such
-a case:
+그리고, 물론 대부분의 경우에는 `stderr`는 예외의 일부로 제공되므로, 해당 경우에는 try/except를 사용해야 합니다.
 
 ```python
 def raise_exception(msg):
@@ -1037,7 +936,7 @@ def test_something_exception():
         assert msg in error, f"{msg} is in the exception:\n{error}"
 ```
 
-Another approach to capturing stdout is via `contextlib.redirect_stdout`:
+`stdout`를 캡처하는 또 다른 방법은 `contextlib.redirect_stdout`를 사용하는 것입니다.
 
 ```python
 from io import StringIO
@@ -1054,19 +953,17 @@ def test_result_and_stdout():
     with redirect_stdout(buffer):
         print_to_stdout(msg)
     out = buffer.getvalue()
-    # optional: if you want to replay the consumed streams:
+    # 선택 사항: 캡처된 스트림 재생성
     sys.stdout.write(out)
-    # test:
+    # 테스트:
     assert msg in out
 ```
 
-An important potential issue with capturing stdout is that it may contain `\r` characters that in normal `print`
-reset everything that has been printed so far. There is no problem with `pytest`, but with `pytest -s` these
-characters get included in the buffer, so to be able to have the test run with and without `-s`, you have to make an
-extra cleanup to the captured output, using `re.sub(r'~.*\r', '', buf, 0, re.M)`.
+`stdout` 캡처에 관련된 중요한 문제 중 하나는 보통 `print`에서 이전에 인쇄된 내용을 재설정하는 `\r` 문자가 포함될 수 있다는 것입니다.   
+`pytest`에서는 문제가 없지만 `pytest -s`에서는 이러한 문자가 버퍼에 포함되므로 `-s`로 테스트를 실행하거나 그렇지 않으면 캡처된 출력에 대해 추가 정리를 수행해야 합니다.  
+`re.sub(r'~.*\r', '', buf, 0, re.M)`을 사용하여 캡처된 출력에 대해 추가 정리할 수 있습니다.
 
-But, then we have a helper context manager wrapper to automatically take care of it all, regardless of whether it has
-some `\r`'s in it or not, so it's a simple:
+하지만 도우미 컨텍스트 관리자 래퍼를 사용하면 출력에 `\r`이 포함되어 있는지 여부에 관계없이 모든 것을 자동으로 처리하므로 편리합니다.
 
 ```python
 from transformers.testing_utils import CaptureStdout
@@ -1076,7 +973,7 @@ with CaptureStdout() as cs:
 print(cs.out)
 ```
 
-Here is a full test example:
+다음은 전체 테스트 예제입니다.
 
 ```python
 from transformers.testing_utils import CaptureStdout
@@ -1088,7 +985,7 @@ with CaptureStdout() as cs:
 assert cs.out == final + "\n", f"captured: {cs.out}, expecting {final}"
 ```
 
-If you'd like to capture `stderr` use the `CaptureStderr` class instead:
+`stderr`를 캡처해야 하는 경우 대신 `CaptureStderr` 클래스를 사용하십시오.
 
 ```python
 from transformers.testing_utils import CaptureStderr
@@ -1098,7 +995,7 @@ with CaptureStderr() as cs:
 print(cs.err)
 ```
 
-If you need to capture both streams at once, use the parent `CaptureStd` class:
+두 스트림을 동시에 캡처해야 하는 경우 부모인 `CaptureStd` 클래스를 사용하십시오.
 
 ```python
 from transformers.testing_utils import CaptureStd
@@ -1108,13 +1005,12 @@ with CaptureStd() as cs:
 print(cs.err, cs.out)
 ```
 
-Also, to aid debugging test issues, by default these context managers automatically replay the captured streams on exit
-from the context.
+또한, 테스트 문제의 디버깅을 지원하기 위해 이러한 컨텍스트 관리자는 컨텍스트에서 종료할 때 캡처된 스트림을 자동으로 다시 실행합니다.
 
 
-### Capturing logger stream
+### 로거 스트림 캡처
 
-If you need to validate the output of a logger, you can use `CaptureLogger`:
+로거 출력을 검증해야 하는 경우 `CaptureLogger`를 사용할 수 있습니다.
 
 ```python
 from transformers import logging
@@ -1128,10 +1024,9 @@ with CaptureLogger(logger) as cl:
 assert cl.out, msg + "\n"
 ```
 
-### Testing with environment variables
+### 환경 변수를 이용하여 테스트하기
 
-If you want to test the impact of environment variables for a specific test you can use a helper decorator
-`transformers.testing_utils.mockenv`
+특정 테스트의 환경 변수 영향을 검증하려면 `transformers.testing_utils.mockenv`라는 도우미 데코레이터를 사용할 수 있습니다.
 
 ```python
 from transformers.testing_utils import mockenv
@@ -1143,8 +1038,8 @@ class HfArgumentParserTest(unittest.TestCase):
         env_level_str = os.getenv("TRANSFORMERS_VERBOSITY", None)
 ```
 
-At times an external program needs to be called, which requires setting `PYTHONPATH` in `os.environ` to include
-multiple local paths. A helper class `transformers.test_utils.TestCasePlus` comes to help:
+일부 경우에는 외부 프로그램을 호출해야할 수도 있는데, 이 때에는 여러 개의 로컬 경로를 포함하는 `os.environ`에서 `PYTHONPATH`의 설정이 필요합니다.  
+헬퍼 클래스 `transformers.test_utils.TestCasePlus`가 도움이 됩니다:
 
 ```python
 from transformers.testing_utils import TestCasePlus
@@ -1153,31 +1048,28 @@ from transformers.testing_utils import TestCasePlus
 class EnvExampleTest(TestCasePlus):
     def test_external_prog(self):
         env = self.get_env()
-        # now call the external program, passing `env` to it
+        # 이제 `env`를 사용하여 외부 프로그램 호출
 ```
 
-Depending on whether the test file was under the `tests` test suite or `examples` it'll correctly set up
-`env[PYTHONPATH]` to include one of these two directories, and also the `src` directory to ensure the testing is
-done against the current repo, and finally with whatever `env[PYTHONPATH]` was already set to before the test was
-called if anything.
+테스트 파일이 `tests` 테스트 스위트 또는 `examples`에 있는지에 따라 `env[PYTHONPATH]`가 두 디렉터리 중 하나를 포함하도록 설정되며, 현재 저장소에 대해 테스트가 수행되도록 `src` 디렉터리도 포함됩니다.   
+테스트 호출 이전에 설정된 경우에는 `env[PYTHONPATH]`를 그대로 사용합니다.
 
-This helper method creates a copy of the `os.environ` object, so the original remains intact.
+이 헬퍼 메서드는 `os.environ` 객체의 사본을 생성하므로 원본은 그대로 유지됩니다.
 
 
-### Getting reproducible results
+### 재현 가능한 결과 얻기
 
-In some situations you may want to remove randomness for your tests. To get identical reproducible results set, you
-will need to fix the seed:
+일부 상황에서 테스트에서 임의성을 제거하여 동일하게 재현 가능한 결과를 얻고 싶을 수 있습니다. 이를 위해서는 다음과 같이 시드를 고정해야 합니다.
 
 ```python
 seed = 42
 
-# python RNG
+# 파이썬 RNG
 import random
 
 random.seed(seed)
 
-# pytorch RNGs
+# 파이토치 RNG
 import torch
 
 torch.manual_seed(seed)
@@ -1185,64 +1077,65 @@ torch.backends.cudnn.deterministic = True
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(seed)
 
-# numpy RNG
+# 넘파이 RNG
 import numpy as np
 
 np.random.seed(seed)
 
-# tf RNG
+# 텐서플로 RNG
 tf.random.set_seed(seed)
 ```
 
-### Debugging tests
+### 테스트 디버깅
 
-To start a debugger at the point of the warning, do this:
+경고의 지점에서 디버거를 시작하려면 다음을 수행하십세요.
 
 ```bash
 pytest tests/test_logging.py -W error::UserWarning --pdb
 ```
 
-## Working with github actions workflows
+## Github Actions 워크플로우 작업 처리
 
-To trigger a self-push workflow CI job, you must:
+셀프 푸시 워크플로우 CI 작업을 트리거하려면, 다음을 수행해야 합니다.
 
-1. Create a new branch on `transformers` origin (not a fork!).
-2. The branch name has to start with either `ci_` or `ci-` (`main` triggers it too, but we can't do PRs on
-   `main`). It also gets triggered only for specific paths - you can find the up-to-date definition in case it
-   changed since this document has been written [here](https://github.com/huggingface/transformers/blob/main/.github/workflows/self-push.yml) under *push:*
-3. Create a PR from this branch.
-4. Then you can see the job appear [here](https://github.com/huggingface/transformers/actions/workflows/self-push.yml). It may not run right away if there
-   is a backlog.
+1. `transformers` 원본에서 새 브랜치를 만듭니다(포크가 아닙니다!).
+2. 브랜치 이름은 `ci_` 또는 `ci-`로 시작해야 합니다(`main`도 트리거하지만 `main`에서는 PR을 할 수 없습니다). 또한 특정 경로에 대해서만 트리거되므로 이 문서가 작성된 후에 변경된 내용은 [여기](https://github.com/huggingface/transformers/blob/main/.github/workflows/self-push.yml)의 *push:*에서 확인할 수 있습니다.
+3. 이 브랜치에서 PR을 만듭니다.
+4. 그런 다음 [여기](https://github.com/huggingface/transformers/actions/workflows/self-push.yml)에서 작업이 나타나는지 확인할 수 있습니다. 이 문서 작성 시점에서 PR을 넣어도 바로 실행되지 않을 수 있습니다.
 
 
+## Github Actions 워크플로우 처리
+
+자체 푸시 워크플로우 CI 작업을 트리거하려면 다음을 수행해야 합니다.
+
+1. `transformers` 원본(포크가 아님)에서 새 브랜치를 만듭니다.
+2. 브랜치 이름은 `ci_` 또는 `ci-`로 시작해야 합니다(`main`은 트리거하지만 PR은 불가능합니다). 또한, 특정 경로에서만 트리거되며, 이 문서가 작성된 이후에 변경된 경우 [여기](https://github.com/huggingface/transformers/blob/main/.github/workflows/self-push.yml)의 *push:* 아래에서 최신 정의를 찾을 수 있습니다.
+3. 이 브랜치에서 PR을 생성합니다.
+4. 그런 다음 작업이 [여기](https://github.com/huggingface/transformers/actions/workflows/self-push.yml)에 나타나는지 확인할 수 있습니다. 백로그가 있는 경우 즉시 실행되지 않을 수도 있습니다.
 
 
-## Testing Experimental CI Features
+## 실험적인 CI 기능 테스트
 
-Testing CI features can be potentially problematic as it can interfere with the normal CI functioning. Therefore if a
-new CI feature is to be added, it should be done as following.
+CI 기능을 테스트하는 것은 일반 CI 작동에 방해가 될 수 있기 때문에 잠재적으로 문제가 될 수 있습니다. 따라서 새로운 CI 기능을 추가하는 경우 다음과 같이 수행해야 합니다.
 
-1. Create a new dedicated job that tests what needs to be tested
-2. The new job must always succeed so that it gives us a green ✓ (details below).
-3. Let it run for some days to see that a variety of different PR types get to run on it (user fork branches,
-   non-forked branches, branches originating from github.com UI direct file edit, various forced pushes, etc. - there
-   are so many) while monitoring the experimental job's logs (not the overall job green as it's purposefully always
-   green)
-4. When it's clear that everything is solid, then merge the new changes into existing jobs.
+1. 테스트해야 할 내용을 테스트하는 새로운 전용 작업을 생성합니다.
+2. 새로운 작업은 항상 성공해야 하며, 그렇게 하여 우리에게 녹색 ✓를 제공해야 합니다(아래에 자세한 내용이 있습니다).
+3. 다양한 PR 유형이 실행되는지 확인하기 위해 몇 일 동안 실행을 진행합니다(사용자 포크 브랜치, 포크되지 않은 브랜치, github.com UI 직접 파일 편집에서 생성된 브랜치, 강제 푸시 등 아주 다양한 유형의 PR이 많이 있습니다. )   
+   실험 작업의 로그를 모니터링하면서 의도적으로 항상 녹색을 표시하므로 전체 작업이 녹색은 아니라는 점에 유의합니다.
+4. 모든 것이 안정적인지 확인한 후 새로운 변경 사항을 기존 작업에 통합합니다.
 
-That way experiments on CI functionality itself won't interfere with the normal workflow.
+이렇게 하면 CI 기능 자체에 대한 실험이 일반 작업 흐름에 방해가 되지 않습니다.
 
-Now how can we make the job always succeed while the new CI feature is being developed?
+그러나 새로운 CI 기능이 개발 중인 동안 항상 성공하도록 할 수 있는 방법은 무엇일까요?
 
-Some CIs, like TravisCI support ignore-step-failure and will report the overall job as successful, but CircleCI and
-Github Actions as of this writing don't support that.
+TravisCI와 같은 일부 CI는 `ignore-step-failure`를 지원하며 전체 작업을 성공으로 보고할 수 있지만, 현재 쓰는 CircleCI와 Github Actions는 그렇지 않습니다.
 
-So the following workaround can be used:
+따라서 다음과 같은 해결책을 사용할 수 있습니다.
 
-1. `set +euo pipefail` at the beginning of the run command to suppress most potential failures in the bash script.
-2. the last command must be a success: `echo "done"` or just `true` will do
+1. bash 스크립트에서 가능한 많은 오류를 억제하기 위해 실행 명령의 시작 부분에 `set +euo pipefail`을 추가합니다.
+2. 마지막 명령은 반드시 성공해야 합니다. `echo "done"` 또는 `true`를 사용하면 됩니다.
 
-Here is an example:
+다음은 예입니다.
 
 ```yaml
 - run:
@@ -1258,21 +1151,17 @@ Here is an example:
         echo "during experiment do not remove: reporting success to CI, even if there were failures"
 ```
 
-For simple commands you could also do:
+간단한 명령의 경우 다음과 같이 수행할 수도 있습니다.
 
 ```bash
 cmd_that_may_fail || true
 ```
 
-Of course, once satisfied with the results, integrate the experimental step or job with the rest of the normal jobs,
-while removing `set +euo pipefail` or any other things you may have added to ensure that the experimental job doesn't
-interfere with the normal CI functioning.
+결과에 만족한 후에는 물론, 실험적인 단계 또는 작업을 일반 작업의 나머지 부분과 통합하면서 `set +euo pipefail` 또는 기타 추가한 요소를 제거하여 실험 작업이 일반 CI 작동에 방해되지 않도록 해야 합니다.
 
-This whole process would have been much easier if we only could set something like `allow-failure` for the
-experimental step, and let it fail without impacting the overall status of PRs. But as mentioned earlier CircleCI and
-Github Actions don't support it at the moment.
+이 프로세스는 실험 단계가 PR의 전반적인 상태에 영향을 주지 않고 실패하도록 `allow-failure`와 같은 기능을 설정할 수 있다면 훨씬 더 쉬웠을 것입니다. 그러나 앞에서 언급한 바와 같이 CircleCI와 Github Actions는 현재 이를 지원하지 않습니다.
 
-You can vote for this feature and see where it is at these CI-specific threads:
+이 기능에 투표하고 현재 CI 관련 스레드에서 상황을 확인할 수 있습니다.
 
 - [Github Actions:](https://github.com/actions/toolkit/issues/399)
 - [CircleCI:](https://ideas.circleci.com/ideas/CCI-I-344)
