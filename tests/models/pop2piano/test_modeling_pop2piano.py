@@ -48,7 +48,7 @@ class Pop2PianoModelTester:
         is_training=False,
         use_attention_mask=True,
         use_labels=True,
-        hidden_size=512,
+        hidden_size=64,
         num_hidden_layers=5,
         num_attention_heads=4,
         d_ff=37,
@@ -98,10 +98,8 @@ class Pop2PianoModelTester:
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
-        config = self.get_config()
-
         return (
-            config,
+            self.get_config(),
             input_ids,
             decoder_input_ids,
             attention_mask,

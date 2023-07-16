@@ -33,8 +33,8 @@ if is_torch_available():
 
     from transformers.models.pop2piano.modeling_pop2piano import Pop2PianoForConditionalGeneration
 
-requirements = is_torch_available() and is_pretty_midi_available()
-if requirements:
+requirements_available = is_torch_available() and is_pretty_midi_available()
+if requirements_available:
     import pretty_midi
 
     from transformers import Pop2PianoFeatureExtractor, Pop2PianoTokenizer
@@ -98,20 +98,16 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
         ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
 
-        output_fe = feature_extractor(ds["audio"][0]["array"], sampling_rate=ds["audio"][0]["sampling_rate"])
+        output_fe = feature_extractor(
+            ds["audio"][0]["array"], sampling_rate=ds["audio"][0]["sampling_rate"], return_tensors="pt"
+        )
         output_model = model.generate(input_features=output_fe["input_features"], composer="composer1")
-        output_tokenizer = tokenizer(
-            token_ids=output_model,
-            feature_extractor_output=output_fe,
-        )[
-            "pretty_midi_objects"
-        ][0]
-
+        output_tokenizer = tokenizer(token_ids=output_model, feature_extractor_output=output_fe)
+        pretty_midi_object = output_tokenizer["pretty_midi_objects"][0]
         # Checking if no of notes are same
-        self.assertEqual(len(output_tokenizer.instruments[0].notes), 59)
-
+        self.assertEqual(len(pretty_midi_object.instruments[0].notes), 59)
         predicted_timings = []
-        for i in output_tokenizer.instruments[0].notes:
+        for i in pretty_midi_object.instruments[0].notes:
             predicted_timings.append(i.start)
 
         # Checking note start timings(first 6)

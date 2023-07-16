@@ -38,9 +38,11 @@ from transformers.utils.import_utils import (
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
-requirements = is_torch_available() and is_essentia_available() and is_scipy_available() and is_librosa_available()
+requirements_available = (
+    is_torch_available() and is_essentia_available() and is_scipy_available() and is_librosa_available()
+)
 
-if requirements:
+if requirements_available:
     import torch
 
     from transformers import Pop2PianoFeatureExtractor
@@ -87,7 +89,7 @@ class Pop2PianoFeatureExtractionTester(unittest.TestCase):
 @require_librosa
 @require_scipy
 class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-    feature_extraction_class = Pop2PianoFeatureExtractor if requirements else None
+    feature_extraction_class = Pop2PianoFeatureExtractor if requirements_available else None
 
     def setUp(self):
         self.feat_extract_tester = Pop2PianoFeatureExtractionTester(self)
@@ -124,12 +126,7 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
 
     def test_call(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        speech_input = np.zeros(
-            [
-                1000000,
-            ],
-            dtype=np.float32,
-        )
+        speech_input = np.zeros([1000000], dtype=np.float32)
 
         input_features = feature_extractor(speech_input, sampling_rate=16_000, return_tensors="np")
         self.assertTrue(input_features.input_features.ndim == 3)
@@ -141,9 +138,8 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
     def test_integration(self):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         speech_samples = ds.sort("id").select([0])["audio"]
-        input_speech, sampling_rate = [x["array"] for x in speech_samples][0], [
-            x["sampling_rate"] for x in speech_samples
-        ][0]
+        input_speech = [x["array"] for x in speech_samples][0]
+        sampling_rate = [x["sampling_rate"] for x in speech_samples][0]
         feaure_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
         input_features = feaure_extractor(
             input_speech, sampling_rate=sampling_rate, return_tensors="pt"
@@ -156,19 +152,13 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
 
     def test_attention_mask(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        speech_input1 = np.zeros(
-            [
-                1_000_000,
-            ],
-            dtype=np.float32,
-        )
-        speech_input2 = np.random.randint(low=0, high=10, size=500_000)
-        speech_input2 = speech_input2.astype(np.float32).reshape(
-            -1,
-        )
-
+        speech_input1 = np.zeros([1_000_000], dtype=np.float32)
+        speech_input2 = np.random.randint(low=0, high=10, size=500_000).astype(np.float32)
         input_features = feature_extractor(
-            [speech_input1, speech_input2], sampling_rate=[44_100, 16_000], return_tensors="np"
+            [speech_input1, speech_input2],
+            sampling_rate=[44_100, 16_000],
+            return_tensors="np",
+            return_attention_mask=True,
         )
 
         self.assertTrue(hasattr(input_features, "attention_mask"))
@@ -189,25 +179,14 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
 
     def test_batch_feature(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        speech_input1 = np.zeros(
-            [
-                1_000_000,
-            ],
-            dtype=np.float32,
-        )
-        speech_input2 = np.ones(
-            [
-                2_000_000,
-            ],
-            dtype=np.float32,
-        )
-        speech_input3 = np.random.randint(low=0, high=10, size=500_000)
-        speech_input3 = speech_input3.astype(np.float32).reshape(
-            -1,
-        )
+        speech_input1 = np.zeros([1_000_000], dtype=np.float32)
+        speech_input2 = np.ones([2_000_000], dtype=np.float32)
+        speech_input3 = np.random.randint(low=0, high=10, size=500_000).astype(np.float32)
 
         input_features = feature_extractor(
-            [speech_input1, speech_input2, speech_input3], sampling_rate=[44_100, 16_000, 48_000]
+            [speech_input1, speech_input2, speech_input3],
+            sampling_rate=[44_100, 16_000, 48_000],
+            return_attention_mask=True,
         )
 
         self.assertEqual(len(input_features["input_features"].shape), 3)
@@ -217,25 +196,15 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
 
     def test_batch_feature_np(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        speech_input1 = np.zeros(
-            [
-                1_000_000,
-            ],
-            dtype=np.float32,
-        )
-        speech_input2 = np.ones(
-            [
-                2_000_000,
-            ],
-            dtype=np.float32,
-        )
-        speech_input3 = np.random.randint(low=0, high=10, size=500_000)
-        speech_input3 = speech_input3.astype(np.float32).reshape(
-            -1,
-        )
+        speech_input1 = np.zeros([1_000_000], dtype=np.float32)
+        speech_input2 = np.ones([2_000_000], dtype=np.float32)
+        speech_input3 = np.random.randint(low=0, high=10, size=500_000).astype(np.float32)
 
         input_features = feature_extractor(
-            [speech_input1, speech_input2, speech_input3], sampling_rate=[44_100, 16_000, 48_000], return_tensors="np"
+            [speech_input1, speech_input2, speech_input3],
+            sampling_rate=[44_100, 16_000, 48_000],
+            return_tensors="np",
+            return_attention_mask=True,
         )
 
         # check np array or not
@@ -246,25 +215,15 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
 
     def test_batch_feature_pt(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        speech_input1 = np.zeros(
-            [
-                1_000_000,
-            ],
-            dtype=np.float32,
-        )
-        speech_input2 = np.ones(
-            [
-                2_000_000,
-            ],
-            dtype=np.float32,
-        )
-        speech_input3 = np.random.randint(low=0, high=10, size=500_000)
-        speech_input3 = speech_input3.astype(np.float32).reshape(
-            -1,
-        )
+        speech_input1 = np.zeros([1_000_000], dtype=np.float32)
+        speech_input2 = np.ones([2_000_000], dtype=np.float32)
+        speech_input3 = np.random.randint(low=0, high=10, size=500_000).astype(np.float32)
 
         input_features = feature_extractor(
-            [speech_input1, speech_input2, speech_input3], sampling_rate=[44_100, 16_000, 48_000], return_tensors="pt"
+            [speech_input1, speech_input2, speech_input3],
+            sampling_rate=[44_100, 16_000, 48_000],
+            return_tensors="pt",
+            return_attention_mask=True,
         )
 
         # check pt tensor or not
@@ -278,25 +237,15 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         import tensorflow as tf
 
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
-        speech_input1 = np.zeros(
-            [
-                1_000_000,
-            ],
-            dtype=np.float32,
-        )
-        speech_input2 = np.ones(
-            [
-                2_000_000,
-            ],
-            dtype=np.float32,
-        )
-        speech_input3 = np.random.randint(low=0, high=10, size=500_000)
-        speech_input3 = speech_input3.astype(np.float32).reshape(
-            -1,
-        )
+        speech_input1 = np.zeros([1_000_000], dtype=np.float32)
+        speech_input2 = np.ones([2_000_000], dtype=np.float32)
+        speech_input3 = np.random.randint(low=0, high=10, size=500_000).astype(np.float32)
 
         input_features = feature_extractor(
-            [speech_input1, speech_input2, speech_input3], sampling_rate=[44_100, 16_000, 48_000], return_tensors="tf"
+            [speech_input1, speech_input2, speech_input3],
+            sampling_rate=[44_100, 16_000, 48_000],
+            return_tensors="tf",
+            return_attention_mask=True,
         )
 
         # check tf tensor or not
@@ -306,25 +255,25 @@ class Pop2PianoFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         self.assertEqual(len(input_features["input_features"].shape), 3)
 
     @unittest.skip(
-        "Pop2PianoFeatureExtractor does not supports padding externally(while processing audios in batches padding is automatically applied to max_length)"
+        "Pop2PianoFeatureExtractor does not supports padding externally (while processing audios in batches padding is automatically applied to max_length)"
     )
     def test_padding_accepts_tensors_pt(self):
         pass
 
     @unittest.skip(
-        "Pop2PianoFeatureExtractor does not supports padding externally(while processing audios in batches padding is automatically applied to max_length)"
+        "Pop2PianoFeatureExtractor does not supports padding externally (while processing audios in batches padding is automatically applied to max_length)"
     )
     def test_padding_accepts_tensors_tf(self):
         pass
 
     @unittest.skip(
-        "Pop2PianoFeatureExtractor does not supports padding externally(while processing audios in batches padding is automatically applied to max_length)"
+        "Pop2PianoFeatureExtractor does not supports padding externally (while processing audios in batches padding is automatically applied to max_length)"
     )
     def test_padding_from_list(self):
         pass
 
     @unittest.skip(
-        "Pop2PianoFeatureExtractor does not supports padding externally(while processing audios in batches padding is automatically applied to max_length)"
+        "Pop2PianoFeatureExtractor does not supports padding externally (while processing audios in batches padding is automatically applied to max_length)"
     )
     def test_padding_from_array(self):
         pass

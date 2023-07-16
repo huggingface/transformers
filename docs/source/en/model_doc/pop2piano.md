@@ -70,7 +70,7 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 >>> tokenizer_output.write("./Outputs/midi_output.mid")
 ```
 
-- Example using Your own Audio File:
+- Example using your own audio file:
 
 ```python
 >>> import librosa
@@ -89,7 +89,7 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 >>> tokenizer_output.write("./Outputs/midi_output.mid")
 ```
 
-- Example of processing mutiple Audio Files in batch:
+- Example of processing multiple audio files in batch:
 
 ```python
 >>> import librosa

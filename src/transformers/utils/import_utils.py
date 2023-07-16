@@ -265,12 +265,6 @@ def is_pretty_midi_available():
     return _pretty_midi_available
 
 
-def is_music_available():
-    if is_pretty_midi_available() and is_essentia_available() and is_librosa_available() and is_scipy_available():
-        return True
-    return False
-
-
 def is_torch_cuda_available():
     if is_torch_available():
         import torch
@@ -1012,10 +1006,23 @@ Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
-MUSIC_IMPORT_ERROR = """
-{0} requires these libraries - pretty_midi, essentia, librosa, scipy. But at least
-one of them was not found in your environment. You can install them with pip:
-`pip install pretty-midi==0.2.9 essentia==2.1b6.dev609 librosa scipy`
+ESSENTIA_IMPORT_ERROR = """
+{0} requires essentia library. But that was not found in your environment. You can install them with pip:
+`pip install essentia==2.1b6.dev1034`
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+LIBROSA_IMPORT_ERROR = """
+{0} requires thes librosa library. But that was not found in your environment. You can install them with pip:
+`pip install librosa`
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+PRETTY_MIDI_IMPORT_ERROR = """
+{0} requires thes pretty_midi library. But that was not found in your environment. You can install them with pip:
+`pip install pretty_midi`
 Please note that you may need to restart your runtime after installation.
 """
 
@@ -1039,11 +1046,14 @@ BACKENDS_MAPPING = OrderedDict(
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
+        ("essentia", (is_essentia_available, ESSENTIA_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
         ("ftfy", (is_ftfy_available, FTFY_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
+        ("pretty_midi", (is_pretty_midi_available, PRETTY_MIDI_IMPORT_ERROR)),
+        ("librosa", (is_librosa_available, LIBROSA_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
@@ -1064,7 +1074,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),
         ("oneccl_bind_pt", (is_ccl_available, CCL_IMPORT_ERROR)),
-        ("music", (is_music_available, MUSIC_IMPORT_ERROR)),
         ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
         ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),

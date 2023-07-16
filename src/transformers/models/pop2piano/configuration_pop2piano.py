@@ -40,6 +40,8 @@ class Pop2PianoConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 2400):
             Vocabulary size of the `Pop2PianoForConditionalGeneration` model. Defines the number of different tokens
             that can be represented by the `inputs_ids` passed when calling [`Pop2PianoForConditionalGeneration`].
+        composer_vocab_size (`int`, *optional*, defaults to 21):
+            Denotes the number of composers.
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
@@ -70,17 +72,15 @@ class Pop2PianoConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         dense_act_fn (`string`, *optional*, defaults to `"relu"`):
             Type of Activation Function to be used in `Pop2PianoDenseActDense` and in `Pop2PianoDenseGatedActDense`.
-        composer_vocab_size (`int`, *optional*, defaults to 21):
-            Denotes the number of composers.
     """
 
     model_type = "pop2piano"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"hidden_size": "d_model", "num_attention_heads": "num_heads", "num_hidden_layers": "num_layers"}
 
     def __init__(
         self,
         vocab_size=2400,
+        composer_vocab_size=21,
         d_model=512,
         d_kv=64,
         d_ff=2048,
@@ -98,10 +98,10 @@ class Pop2PianoConfig(PretrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         dense_act_fn="relu",
-        composer_vocab_size=21,
         **kwargs,
     ):
         self.vocab_size = vocab_size
+        self.composer_vocab_size = composer_vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
         self.d_ff = d_ff
@@ -116,8 +116,10 @@ class Pop2PianoConfig(PretrainedConfig):
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
         self.dense_act_fn = dense_act_fn
-        self.composer_vocab_size = composer_vocab_size
         self.is_gated_act = self.feed_forward_proj.split("-")[0] == "gated"
+        self.hidden_size = self.d_model
+        self.num_attention_heads = num_heads
+        self.num_hidden_layers = num_layers
 
         super().__init__(
             pad_token_id=pad_token_id,
