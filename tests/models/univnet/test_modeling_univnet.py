@@ -43,7 +43,7 @@ class UnivNetGanTester:
         self.kernel_predictor_hidden_channels = kernel_predictor_hidden_channels
         self.seed = seed
         self.is_training = is_training
-    
+
     def prepare_noise_waveform(self):
         generator = torch.manual_seed(self.seed)
         noise_shape = (self.seq_length, self.in_channels)
@@ -174,7 +174,9 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
                 )
 
             self.assertEqual(
-                batched_spectrogram.shape[0], batched_outputs.shape[0], msg="Got different batch dims for input and output"
+                batched_spectrogram.shape[0],
+                batched_outputs.shape[0],
+                msg="Got different batch dims for input and output",
             )
 
     def test_unbatched_inputs_outputs(self):

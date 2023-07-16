@@ -12,9 +12,9 @@ UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class UnivNetGanConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`UnivNetGan`]. It is used to instantiate
-    a UnivNet vocoder model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the UnivNet
+    This is the configuration class to store the configuration of a [`UnivNetGan`]. It is used to instantiate a UnivNet
+    vocoder model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the UnivNet
     [dg845/univnet-dev](https://huggingface.co/dg845/univnet-dev) architecture, which corresponds to the 'c32'
     architecture in [mindslab-ai/univnet](https://github.com/mindslab-ai/univnet/blob/master/config/default_c32.yaml).
 
@@ -23,8 +23,8 @@ class UnivNetGanConfig(PretrainedConfig):
 
     Args:
         model_in_channels (`int`, *optional*, defaults to 64):
-            The number of input channels for the UnivNet residual network. This corresponds to dimension 1 of the
-            input noise sequence to the vocoder, which should have shape (batch_size, model_in_dim, seq_length).
+            The number of input channels for the UnivNet residual network. This corresponds to dimension 1 of the input
+            noise sequence to the vocoder, which should have shape (batch_size, model_in_dim, seq_length).
         model_hidden_channels ('int', *optional*, defaults to 32):
             The number of hidden channels of each residual block in the UnivNet residual network.
         num_mel_channels ('int', *optional*, defaults to 100):
@@ -36,7 +36,7 @@ class UnivNetGanConfig(PretrainedConfig):
         resblock_stride_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[8, 8, 4]`):
             A tuple of integers defining the stride sizes of the 1D convolutional layers in the UnivNet residual
             network. The length of `resblock_stride_sizes` should match that of `resblock_kernel_sizes` and
-            `resblock_dilation_sizes`. 
+            `resblock_dilation_sizes`.
         resblock_dilation_sizes (`Tuple[Tuple[int]]` or `List[List[int]]`, *optional*, defaults to `[[1, 3, 9, 27], [1, 3, 9, 27], [1, 3, 9, 27]]`):
             A nested tuple of integers defining the dilation rates of the dilated 1D convolutional layers in the
             UnivNet residual network. The length of `resblock_dilation_sizes` should match that of
@@ -54,7 +54,7 @@ class UnivNetGanConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         leaky_relu_slope (`float`, *optional*, defaults to 0.2):
             The angle of the negative slope used by the leaky ReLU activation.
-    
+
     Example:
 
     ```python
@@ -78,7 +78,7 @@ class UnivNetGanConfig(PretrainedConfig):
         model_hidden_channels=32,
         num_mel_channels=100,
         resblock_kernel_sizes=[3, 3, 3],
-        resblock_stride_sizes = [8, 8, 4],
+        resblock_stride_sizes=[8, 8, 4],
         resblock_dilation_sizes=[[1, 3, 9, 27], [1, 3, 9, 27], [1, 3, 9, 27]],
         kernel_predictor_num_blocks=3,
         kernel_predictor_hidden_channels=64,

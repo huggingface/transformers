@@ -38,6 +38,7 @@ class UnivNetKernelPredictorResidualBlock(nn.Module):
         leaky_relu_slope (`float`, *optional*, defaults to 0.1):
             The angle of the negative slope used by the leaky ReLU activation.
     """
+
     def __init__(
         self,
         channels: int = 64,
@@ -63,7 +64,7 @@ class UnivNetKernelPredictorResidualBlock(nn.Module):
             padding=self.get_padding(kernel_size),
             bias=True,
         )
-    
+
     def forward(self, hidden_states: torch.FloatTensor):
         # hidden_states should have shape (batch_size, channels, seq_length)
         residual = hidden_states
@@ -73,14 +74,14 @@ class UnivNetKernelPredictorResidualBlock(nn.Module):
         hidden_states = self.conv2(hidden_states)
         hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
         return hidden_states + residual
-    
+
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-    
+
     def get_padding(self, kernel_size: int, dilation: int = 1):
         return dilation * (kernel_size - 1) // 2
 
@@ -99,7 +100,8 @@ class UnivNetKernelPredictor(nn.Module):
     Implementation of the kernel predictor network which supplies the kernel and bias for the location variable
     convolutional layers (LVCs) in each UnivNet LVCBlock.
 
-    Based on the KernelPredictor implementation in [mindslab-ai/univnet](https://github.com/mindslab-ai/univnet/blob/master/model/lvcnet.py#L7).
+    Based on the KernelPredictor implementation in
+    [mindslab-ai/univnet](https://github.com/mindslab-ai/univnet/blob/master/model/lvcnet.py#L7).
 
     Parameters:
         conv_layers (`int`):
@@ -126,6 +128,7 @@ class UnivNetKernelPredictor(nn.Module):
         leaky_relu_slope (`float`, *optional*, defaults 0.1):
             The angle of the negative slope used by the leaky ReLU activation.
     """
+
     def __init__(
         self,
         conv_layers: int,
@@ -159,7 +162,7 @@ class UnivNetKernelPredictor(nn.Module):
                     channels=resnet_hidden_channels,
                     kernel_size=resnet_kernel_size,
                     dropout=dropout,
-                    leaky_relu_slope=leaky_relu_slope
+                    leaky_relu_slope=leaky_relu_slope,
                 )
                 for _ in range(num_blocks)
             ]
@@ -171,7 +174,7 @@ class UnivNetKernelPredictor(nn.Module):
         self.bias_conv = nn.Conv1d(
             resnet_hidden_channels, bias_channels, resnet_kernel_size, padding=padding, bias=True
         )
-    
+
     def forward(self, spectrogram: torch.FloatTensor):
         """
         Maps a conditioning log-mel spectrogram to a tensor of convolutional kernels and biases, for use in location
@@ -181,10 +184,10 @@ class UnivNetKernelPredictor(nn.Module):
         Args:
             spectrogram (`torch.FloatTensor` of shape `(batch_size, input_channels, seq_length)`):
                 Tensor containing the log-mel spectrograms.
-        
+
         Returns:
-            Tuple[`torch.FloatTensor, `torch.FloatTensor`]: tuple of tensors where the first element is the tensor
-            of location variable convolution kernels of shape `(batch_size, self.conv_layers, self.conv_in_channels,
+            Tuple[`torch.FloatTensor, `torch.FloatTensor`]: tuple of tensors where the first element is the tensor of
+            location variable convolution kernels of shape `(batch_size, self.conv_layers, self.conv_in_channels,
             self.conv_out_channels, self.conv_kernel_size, seq_length)` and the second element is the tensor of
             location variable convolution biases of shape `(batch_size, self.conv_layers. self.conv_out_channels,
             seq_length)`.
@@ -212,14 +215,14 @@ class UnivNetKernelPredictor(nn.Module):
             seq_length,
         )
         return kernels, biases
-    
+
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-    
+
     def get_padding(self, kernel_size: int, dilation: int = 1):
         return dilation * (kernel_size - 1) // 2
 
@@ -252,6 +255,7 @@ class UnivNetLVCResidualBlock(nn.Module):
         leaky_relu_slope (`float`, *optional*, defaults to 0.2):
             The angle of the negative slope used by the leaky ReLU activation.
     """
+
     def __init__(
         self,
         hidden_channels: int,
@@ -270,7 +274,7 @@ class UnivNetLVCResidualBlock(nn.Module):
             padding=self.get_padding(kernel_size, dilation),
             dilation=dilation,
         )
-    
+
     def forward(self, hidden_states, kernel, bias, hop_size=256):
         residual = hidden_states
         hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
@@ -278,12 +282,14 @@ class UnivNetLVCResidualBlock(nn.Module):
         hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
         hidden_states = self.location_variable_convolution(hidden_states, kernel, bias, hop_size=hop_size)
         # Gated activation unit
-        hidden_states = torch.sigmoid(hidden_states[:, :self.hidden_channels, :]) * torch.tanh(hidden_states[:, self.hidden_channels:, :])
+        hidden_states = torch.sigmoid(hidden_states[:, : self.hidden_channels, :]) * torch.tanh(
+            hidden_states[:, self.hidden_channels :, :]
+        )
         # Skip connection
         hidden_states = residual + hidden_states
 
         return hidden_states
-    
+
     # Based on https://github.com/mindslab-ai/univnet/blob/master/model/lvcnet.py#L171
     def location_variable_convolution(
         self,
@@ -293,58 +299,60 @@ class UnivNetLVCResidualBlock(nn.Module):
         dilation: int = 1,
         hop_size: int = 256,
     ):
-        '''
-        Performs location-variable convolution operation on the input sequence (x) using the local convolution kernal. 
+        """
+        Performs location-variable convolution operation on the input sequence (x) using the local convolution kernal.
         Time: 414 μs ± 309 ns per loop (mean ± std. dev. of 7 runs, 1000 loops each), test on NVIDIA V100.
 
         Args:
             x (`torch.FloatTensor` of shape `(batch_size, in_channels, in_length)`):
-                The input sequence of shape (batch, in_channels, in_length). 
+                The input sequence of shape (batch, in_channels, in_length).
             kernel (`torch.FloatTensor` of shape `(batch_size, in_channels, out_channels, kernel_size, kernel_length)`):
                 The local convolution kernel of shape (batch, in_channels, out_channels, kernel_size, kernel_length).
             bias (`torch.FloatTensor` of shape `(batch_size, out_channels, kernel_length)`):
-                The bias for the local convolution of shape (batch, out_channels, kernel_length). 
+                The bias for the local convolution of shape (batch, out_channels, kernel_length).
             dilation (`int`, *optional*, defaults to 1):
-                The dilation of convolution. 
+                The dilation of convolution.
             hop_size (`int`, *optional*, defaults to 256):
-                The hop_size of the conditioning sequence. 
+                The hop_size of the conditioning sequence.
         Returns:
             `torch.FloatTensor`: the output sequence after performing local convolution with shape (batch_size,
             out_channels, in_length).
-        '''
+        """
         batch, _, in_length = x.shape
         batch, _, out_channels, kernel_size, kernel_length = kernel.shape
         assert in_length == (kernel_length * hop_size), "length of (x, kernel) is not matched"
 
         padding = dilation * int((kernel_size - 1) / 2)
-        x = nn.functional.pad(x, (padding, padding), 'constant', 0)  # (batch, in_channels, in_length + 2*padding)
+        x = nn.functional.pad(x, (padding, padding), "constant", 0)  # (batch, in_channels, in_length + 2*padding)
         x = x.unfold(2, hop_size + 2 * padding, hop_size)  # (batch, in_channels, kernel_length, hop_size + 2*padding)
 
         if hop_size < dilation:
-            x = nn.functional.pad(x, (0, dilation), 'constant', 0)
-        x = x.unfold(3, dilation, dilation)     # (batch, in_channels, kernel_length, (hop_size + 2*padding)/dilation, dilation)
-        x = x[:, :, :, :, :hop_size]          
-        x = x.transpose(3, 4)                   # (batch, in_channels, kernel_length, dilation, (hop_size + 2*padding)/dilation)  
-        x = x.unfold(4, kernel_size, 1)         # (batch, in_channels, kernel_length, dilation, _, kernel_size)
+            x = nn.functional.pad(x, (0, dilation), "constant", 0)
+        x = x.unfold(
+            3, dilation, dilation
+        )  # (batch, in_channels, kernel_length, (hop_size + 2*padding)/dilation, dilation)
+        x = x[:, :, :, :, :hop_size]
+        x = x.transpose(3, 4)  # (batch, in_channels, kernel_length, dilation, (hop_size + 2*padding)/dilation)
+        x = x.unfold(4, kernel_size, 1)  # (batch, in_channels, kernel_length, dilation, _, kernel_size)
 
-        o = torch.einsum('bildsk,biokl->bolsd', x, kernel)
+        o = torch.einsum("bildsk,biokl->bolsd", x, kernel)
         o = o.to(memory_format=torch.channels_last_3d)
         bias = bias.unsqueeze(-1).unsqueeze(-1).to(memory_format=torch.channels_last_3d)
         o = o + bias
         o = o.contiguous().view(batch, out_channels, -1)
 
         return o
-    
+
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-    
+
     def get_padding(self, kernel_size: int, dilation: int = 1):
         return dilation * (kernel_size - 1) // 2
-    
+
     def apply_weight_norm(self):
         nn.utils.weight_norm(self.conv)
 
@@ -386,6 +394,7 @@ class UnivNetLVCBlock(nn.Module):
         kernel_predictor_leaky_relu_slope (`float`, *optional*, defaults to 0.2):
             The angle of the negative slope used by the leaky ReLU activation for the kernel predictor.
     """
+
     def __init__(
         self,
         hidden_channels: int = 32,
@@ -437,7 +446,7 @@ class UnivNetLVCBlock(nn.Module):
                 for i in range(len(dilations))
             ]
         )
-    
+
     def forward(self, hidden_states: torch.FloatTensor, spectrogram: torch.FloatTensor):
         # hidden_states: (batch_size, hidden_channels, seq_length)
         # spectrogram: (batch_size, cond_channels, cond_length)
@@ -448,9 +457,9 @@ class UnivNetLVCBlock(nn.Module):
             kernel = kernels[:, i, :, :, :, :]
             bias = biases[:, i, :, :]
             hidden_states = resblock(hidden_states, kernel, bias, hop_size=self.cond_hop_length)
-        
+
         return hidden_states
-    
+
     def _init_weights(self, module):
         """Initialize the weights."""
         if isinstance(module, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d)):
@@ -518,7 +527,7 @@ class UnivNetGan(PreTrainedModel):
         for stride in config.resblock_stride_sizes:
             hop_length = hop_length * stride
             hop_lengths.append(hop_length)
-        
+
         self.resblocks = nn.ModuleList(
             [
                 UnivNetLVCBlock(
@@ -540,12 +549,12 @@ class UnivNetGan(PreTrainedModel):
         )
 
         self.conv_post = nn.Conv1d(config.model_hidden_channels, 1, 7, padding=3, padding_mode="reflect")
-    
+
     def forward(
         self,
         spectrogram: torch.FloatTensor,
         noise_waveform: Optional[torch.FloatTensor] = None,
-        noise_length: int = 10, 
+        noise_length: int = 10,
         generator: Optional[torch.Generator] = None,
     ):
         r"""
@@ -566,7 +575,7 @@ class UnivNetGan(PreTrainedModel):
             generator (`torch.Generator`, *optional*):
                 A [torch generator](https://pytorch.org/docs/stable/generated/torch.Generator.html) to make generation
                 deterministic.
-        
+
         Returns:
             `torch.FloatTensor`: Tensor containing the speech waveform. IF the input spectrogram is batched, wil be of
             shape `(batch_size, num_frames)`. If un-batched, will be of shape `(num_frames,)`.
@@ -576,7 +585,7 @@ class UnivNetGan(PreTrainedModel):
         if not spectrogram_batched:
             spectrogram = spectrogram.unsqueeze(0)
         spectrogram_batch_size = spectrogram.shape[0]
-        
+
         if noise_waveform is not None:
             noise_waveform_batched = noise_waveform.dim() == 3
             if not noise_waveform_batched:
@@ -596,13 +605,13 @@ class UnivNetGan(PreTrainedModel):
         elif noise_waveform_batch_size > 1 and spectrogram_batch_size == 1:
             # Repeat spectrogram noise_waveform_batch_size times
             spectrogram = spectrogram.repeat(noise_waveform_batch_size, 1, 1)
-        
+
         if noise_waveform_batch_size != spectrogram_batch_size:
             raise ValueError(
                 f"The batch size of `noise_waveform` is {noise_waveform_batch_size} and the batch size of"
                 f" `spectrogram` is {spectrogram_batch_size}, but the two are expected to be equal."
             )
-        
+
         # Change shapes to have channels before sequence lengths
         hidden_states = noise_waveform.transpose(2, 1)
         spectrogram = spectrogram.transpose(2, 1)
@@ -611,7 +620,7 @@ class UnivNetGan(PreTrainedModel):
 
         for resblock in self.resblocks:
             hidden_states = resblock(hidden_states, spectrogram)
-        
+
         hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
         hidden_states = self.conv_post(hidden_states)
         hidden_states = torch.tanh(hidden_states)
@@ -643,4 +652,3 @@ class UnivNetGan(PreTrainedModel):
         for layer in self.resblocks:
             layer.remove_weight_norm()
         nn.utils.remove_weight_norm(self.conv_post)
-
