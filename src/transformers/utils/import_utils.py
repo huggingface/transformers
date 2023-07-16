@@ -195,7 +195,7 @@ except importlib.metadata.PackageNotFoundError:
 _pretty_midi_available = importlib.util.find_spec("pretty_midi") is not None
 try:
     _pretty_midi_version = importlib.metadata.version("pretty_midi")
-    logger.debug(f"Successfully imported essentia version {_pretty_midi_version}")
+    logger.debug(f"Successfully imported pretty_midi version {_pretty_midi_version}")
 except importlib.metadata.PackageNotFoundError:
     _pretty_midi_available = False
 

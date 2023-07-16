@@ -20,11 +20,10 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import pretty_midi
-import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import is_torch_tensor, logging, to_numpy
+from ...utils import TensorType, is_torch_tensor, logging, to_numpy
 
 
 logger = logging.get_logger(__name__)
@@ -38,6 +37,41 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "sweetcocoa/pop2piano": "https://huggingface.co/sweetcocoa/pop2piano/blob/main/vocab.json",
     },
 }
+
+
+def token_time_to_note(number, cutoff_time_idx, current_idx):
+    current_idx += number
+    if cutoff_time_idx is not None:
+        current_idx = min(current_idx, cutoff_time_idx)
+
+    return current_idx
+
+
+def token_note_to_note(number, current_velocity, default_velocity, note_onsets_ready, current_idx, notes):
+    if current_velocity == 0:
+        # note_offset
+        if note_onsets_ready[number] is not None:
+            # offset with onset
+            onset_idx = note_onsets_ready[number]
+            if onset_idx < current_idx:
+                # Time shift after previous note_on
+                offset_idx = current_idx
+                notes.append([onset_idx, offset_idx, number, default_velocity])
+                note_onsets_ready[number] = None
+    else:
+        # note_onset
+        if note_onsets_ready[number] is None:
+            note_onsets_ready[number] = current_idx
+        else:
+            # note-on already exists
+            onset_idx = note_onsets_ready[number]
+            if onset_idx < current_idx:
+                # Time shift after previous note_on
+                offset_idx = current_idx
+                notes.append([onset_idx, offset_idx, number, default_velocity])
+                note_onsets_ready[number] = current_idx
+
+    return notes
 
 
 class Pop2PianoTokenizer(PreTrainedTokenizer):
@@ -205,36 +239,21 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
                 if number == 1:
                     break
             elif token_type == self.encoder["TOKEN_TIME"]:
-                current_idx += number
-                if cutoff_time_idx is not None:
-                    current_idx = min(current_idx, cutoff_time_idx)
-
+                current_idx = token_time_to_note(
+                    number=number, cutoff_time_idx=cutoff_time_idx, current_idx=current_idx
+                )
             elif token_type == self.encoder["TOKEN_VELOCITY"]:
                 current_velocity = number
+
             elif token_type == self.encoder["TOKEN_NOTE"]:
-                pitch = number
-                if current_velocity == 0:
-                    # note_offset
-                    if note_onsets_ready[pitch] is not None:
-                        # offset with onset
-                        onset_idx = note_onsets_ready[pitch]
-                        if onset_idx < current_idx:
-                            # Time shift after previous note_on
-                            offset_idx = current_idx
-                            notes.append([onset_idx, offset_idx, pitch, self.encoder["DEFAULT_VELOCITY"]])
-                            note_onsets_ready[pitch] = None
-                else:
-                    # note_onset
-                    if note_onsets_ready[pitch] is None:
-                        note_onsets_ready[pitch] = current_idx
-                    else:
-                        # note-on already exists
-                        onset_idx = note_onsets_ready[pitch]
-                        if onset_idx < current_idx:
-                            # Time shift after previous note_on
-                            offset_idx = current_idx
-                            notes.append([onset_idx, offset_idx, pitch, self.encoder["DEFAULT_VELOCITY"]])
-                            note_onsets_ready[pitch] = current_idx
+                notes = token_note_to_note(
+                    number=number,
+                    current_velocity=current_velocity,
+                    default_velocity=self.encoder["DEFAULT_VELOCITY"],
+                    note_onsets_ready=note_onsets_ready,
+                    current_idx=current_idx,
+                    notes=notes,
+                )
             else:
                 raise ValueError("Token type not understood!")
 
@@ -302,7 +321,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     def __call__(
         self,
-        token_ids: Union[List, List[np.ndarray], List[torch.Tensor]],
+        token_ids: Union[List, TensorType],
         feature_extractor_output: BatchFeature,
         return_midi: bool = True,
     ):
@@ -378,9 +397,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         for index, end_idx in enumerate(batch_idx):
             each_tokens_ids = token_ids[start_idx:end_idx]
             # check where the whole example ended by searching for eos_token_id and getting the upper bound
-            each_tokens_ids = each_tokens_ids[
-                :, : torch.max(torch.where(each_tokens_ids == int(self.eos_token))[1]) + 1
-            ]
+            each_tokens_ids = each_tokens_ids[:, : np.max(np.where(each_tokens_ids == int(self.eos_token))[1]) + 1]
             beatsteps = feature_extractor_output["beatsteps"][index]
             extrapolated_beatstep = feature_extractor_output["extrapolated_beatstep"][index]
 
@@ -390,9 +407,9 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
                 attention_mask_extrapolated_beatstep = feature_extractor_output[
                     "attention_mask_extrapolated_beatstep"
                 ][index]
-                beatsteps = beatsteps[: torch.max(torch.where(attention_mask_beatsteps == 1)[0]) + 1]
+                beatsteps = beatsteps[: np.max(np.where(attention_mask_beatsteps == 1)[0]) + 1]
                 extrapolated_beatstep = extrapolated_beatstep[
-                    : torch.max(torch.where(attention_mask_extrapolated_beatstep == 1)[0]) + 1
+                    : np.max(np.where(attention_mask_extrapolated_beatstep == 1)[0]) + 1
                 ]
 
             each_tokens_ids = to_numpy(each_tokens_ids)

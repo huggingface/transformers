@@ -18,10 +18,9 @@ import copy
 from typing import List, Optional, Union
 
 import librosa
+import numpy
 import numpy as np
 import scipy
-import torch
-from torch.nn.utils.rnn import pad_sequence
 
 from ...audio_utils import mel_filter_bank, spectrogram
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
@@ -161,7 +160,22 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
         return bpm, beat_times, confidence, estimates, essentia_beat_intervals
 
-    def interpolate_beat_times(self, beat_times, steps_per_beat, extend=False):
+    def interpolate_beat_times(
+        self, beat_times: numpy.ndarray, steps_per_beat: numpy.ndarray, n_extend: numpy.ndarray
+    ):
+        """
+        This method takes beat_times and then interpolates that using `scipy.interpolate.interp1d` and the output is
+        then used to convert raw audio to log-mel-spectrogram.
+
+        Args:
+            beat_times (`numpy.ndarray`):
+                beat_times is passed into `scipy.interpolate.interp1d` for processing.
+            steps_per_beat (`int`):
+                used as an parameter to control the interpolation.
+            n_extend (`int`):
+                used as an parameter to control the interpolation.
+        """
+
         requires_backends(self, ["scipy"])
         beat_times_function = scipy.interpolate.interp1d(
             np.arange(beat_times.size),
@@ -169,22 +183,10 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             bounds_error=False,
             fill_value="extrapolate",
         )
-        if extend:
-            beat_steps_8th = beat_times_function(np.linspace(0, beat_times.size, beat_times.size * steps_per_beat + 1))
-        else:
-            beat_steps_8th = beat_times_function(
-                np.linspace(0, beat_times.size - 1, beat_times.size * steps_per_beat - 1)
-            )
-        return beat_steps_8th
 
-    def extrapolate_beat_times(self, beat_times, n_extend=1):
-        beat_times_function = scipy.interpolate.interp1d(
-            np.arange(beat_times.size),
-            beat_times,
-            bounds_error=False,
-            fill_value="extrapolate",
+        ext_beats = beat_times_function(
+            np.linspace(0, beat_times.size + n_extend - 1, beat_times.size * steps_per_beat + n_extend)
         )
-        ext_beats = beat_times_function(np.linspace(0, beat_times.size + n_extend - 1, beat_times.size + n_extend))
 
         return ext_beats
 
@@ -210,9 +212,11 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
         num_steps = self.num_bars * 4
         num_target_steps = len(beatstep)
-        extrapolated_beatstep = self.extrapolate_beat_times(beatstep, (self.num_bars + 1) * 4 + 1)
+        extrapolated_beatstep = self.interpolate_beat_times(
+            beat_times=beatstep, steps_per_beat=1, n_extend=(self.num_bars + 1) * 4 + 1
+        )
 
-        batch = []
+        batch, feature_lengths = [], []
         for i in range(0, num_target_steps, num_steps):
             start_idx = i
             end_idx = min(i + num_steps, num_target_steps)
@@ -221,9 +225,59 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             end_sample = int(extrapolated_beatstep[end_idx] * self.sampling_rate)
             feature = audio[start_sample:end_sample]
             batch.append(feature)
-        batch = pad_sequence(batch, batch_first=True, padding_value=self.padding_value)
+            feature_lengths.append(feature.shape[0])
 
-        return batch, extrapolated_beatstep
+        pad_max_length = max(feature_lengths)
+
+        padded_batch = []
+        for feature in batch:
+            feature = np.pad(feature, ((0, pad_max_length - feature.shape[0]),), "constant", constant_values=0)
+
+            padded_batch.append(feature)
+
+        padded_batch = np.asarray(padded_batch)
+        return padded_batch, extrapolated_beatstep
+
+    def _pad(self, features: np.ndarray, add_zero_line=True):
+        features_shapes = [each_feature.shape for each_feature in features]
+        attention_masks, padded_features = [], []
+        for i, each_feature in enumerate(features):
+            if len(each_feature.shape) == 3:
+                features_pad_value = max([*zip(*features_shapes)][1]) - features_shapes[i][1]
+                attention_mask = np.ones(features_shapes[i][:2], dtype=np.int64)
+                feature_padding = ((0, 0), (0, features_pad_value), (0, 0))
+                attention_mask_padding = (feature_padding[0], feature_padding[1])
+
+            else:
+                each_feature = each_feature.reshape(1, -1)
+                features_pad_value = max([*zip(*features_shapes)][0]) - features_shapes[i][0]
+                attention_mask = np.ones(features_shapes[i], dtype=np.int64).reshape(1, -1)
+                feature_padding = attention_mask_padding = ((0, 0), (0, features_pad_value))
+
+            each_padded_feature = np.pad(each_feature, feature_padding, "constant", constant_values=self.padding_value)
+            attention_mask = np.pad(
+                attention_mask, attention_mask_padding, "constant", constant_values=self.padding_value
+            )
+
+            if add_zero_line:
+                # if it is batched then we seperate each examples using zero array
+                zero_array_len = max([*zip(*features_shapes)][1])
+
+                # we concatenate the zero array line here
+                each_padded_feature = np.concatenate(
+                    [each_padded_feature, np.zeros([1, zero_array_len, self.feature_size])], axis=0
+                )
+                attention_mask = np.concatenate(
+                    [attention_mask, np.zeros([1, zero_array_len], dtype=np.int64)], axis=0
+                )
+
+            padded_features.append(each_padded_feature)
+            attention_masks.append(attention_mask)
+
+        padded_features = np.concatenate(padded_features, axis=0)
+        attention_masks = np.concatenate(attention_masks, axis=0)
+
+        return padded_features, attention_masks
 
     def pad(self, inputs: BatchFeature):
         """
@@ -252,69 +306,18 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
               max_extrapolated_beatstep_seq_length)
         """
 
-        input_features_shapes = [input_feature.shape for input_feature in inputs["input_features"]]
-        beatsteps_shapes = [beatsteps.shape for beatsteps in inputs["beatsteps"]]
-        extrapolated_beatstep_shapes = [
-            extrapolated_beatstep.shape for extrapolated_beatstep in inputs["extrapolated_beatstep"]
-        ]
+        processed_features_dict = {}
+        for feature_name, feature_value in inputs.items():
+            if feature_name == "input_features":
+                padded_feature_values, attention_mask = self._pad(feature_value, add_zero_line=True)
+                processed_features_dict[feature_name] = padded_feature_values
+                processed_features_dict["attention_mask"] = attention_mask
+            else:
+                padded_feature_values, attention_mask = self._pad(feature_value, add_zero_line=False)
+                processed_features_dict[feature_name] = padded_feature_values
+                processed_features_dict[f"attention_mask_{feature_name}"] = attention_mask
 
-        attention_masks = []
-        for i, input_feature in enumerate(inputs["input_features"]):
-            features_pad_value = max([*zip(*input_features_shapes)][1]) - input_features_shapes[i][1]
-            padding = ((0, 0), (0, features_pad_value), (0, 0))
-            padding_mask = (padding[0], padding[1])
-            # if it is batched then we seperate each examples using zero array
-            zero_array_len = max([*zip(*input_features_shapes)][1])
-
-            input_feature = np.pad(input_feature, padding, "constant", constant_values=self.padding_value)
-            # we concatenate the zero array line here
-            input_feature = np.concatenate([input_feature, np.zeros([1, zero_array_len, 512])], axis=0)
-            inputs["input_features"][i] = input_feature
-
-            # compute attention_mask for input_features and add it to list
-            attention_mask = np.ones(input_features_shapes[i][:2], dtype=np.int64)
-            attention_mask = np.pad(attention_mask, padding_mask, "constant", constant_values=self.padding_value)
-            # we concatenate the zero array line here
-            attention_mask = np.concatenate([attention_mask, np.zeros([1, zero_array_len], dtype=np.int64)], axis=0)
-            attention_masks.append(attention_mask)
-        inputs["input_features"] = np.concatenate(inputs["input_features"], axis=0)
-        inputs["attention_mask"] = np.concatenate(attention_masks, axis=0)
-
-        attention_mask_beatsteps = []
-        for i, beatsteps in enumerate(inputs["beatsteps"]):
-            beatsteps_pad_value = max([*zip(*beatsteps_shapes)][0]) - beatsteps_shapes[i][0]
-            padding = (0, beatsteps_pad_value)
-
-            beatsteps = np.pad(beatsteps, padding, "constant", constant_values=self.padding_value)
-            inputs["beatsteps"][i] = beatsteps.reshape(1, -1)
-            # compute attention_mask for beatsteps and add it to list
-            attention_mask_beatstep = np.ones(beatsteps_shapes[i])
-            attention_mask_beatstep = np.pad(
-                attention_mask_beatstep, padding, "constant", constant_values=self.padding_value
-            ).reshape(1, -1)
-            attention_mask_beatsteps.append(attention_mask_beatstep)
-        inputs["beatsteps"] = np.concatenate(inputs["beatsteps"], axis=0)
-        inputs["attention_mask_beatsteps"] = np.concatenate(attention_mask_beatsteps, axis=0)
-
-        attention_mask_extrapolated_beatsteps = []
-        for i, extrapolated_beatstep in enumerate(inputs["extrapolated_beatstep"]):
-            extrapolated_beatstep_pad_value = (
-                max([*zip(*extrapolated_beatstep_shapes)][0]) - extrapolated_beatstep_shapes[i][0]
-            )
-            padding = (0, extrapolated_beatstep_pad_value)
-
-            extrapolated_beatstep = np.pad(
-                extrapolated_beatstep, padding, "constant", constant_values=self.padding_value
-            )
-            inputs["extrapolated_beatstep"][i] = extrapolated_beatstep.reshape(1, -1)
-            # compute attention_mask for extrapolated_beatstep and add it to list
-            attention_mask_extrapolated_beatstep = np.ones(extrapolated_beatstep_shapes[i])
-            attention_mask_extrapolated_beatstep = np.pad(
-                attention_mask_extrapolated_beatstep, padding, "constant", constant_values=self.padding_value
-            ).reshape(1, -1)
-            attention_mask_extrapolated_beatsteps.append(attention_mask_beatstep)
-        inputs["extrapolated_beatstep"] = np.concatenate(inputs["extrapolated_beatstep"], axis=0)
-        inputs["attention_mask_extrapolated_beatstep"] = np.concatenate(attention_mask_extrapolated_beatsteps, axis=0)
+        inputs.update(processed_features_dict)
 
         return inputs
 
@@ -361,7 +364,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 )
             return_attention_mask = True if return_attention_mask is None else return_attention_mask
         else:
-            # To process it in the same pipeline
             audio = [audio]
             sampling_rate = [sampling_rate]
             return_attention_mask = False if return_attention_mask is None else return_attention_mask
@@ -375,7 +377,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             bpm, beat_times, confidence, estimates, essentia_beat_intervals = self.extract_rhythm(
                 audio=single_raw_audio
             )
-            beatsteps = self.interpolate_beat_times(beat_times, steps_per_beat, extend=True)
+            beatsteps = self.interpolate_beat_times(beat_times=beat_times, steps_per_beat=steps_per_beat, n_extend=1)
 
             if do_infer_resample:
                 if self.sampling_rate != single_sampling_rate and self.sampling_rate is not None:
@@ -392,7 +394,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             end_sample = int(beatsteps[-1] * single_sampling_rate)
 
             input_features, extrapolated_beatstep = self.preprocess_mel(
-                torch.from_numpy(single_raw_audio)[start_sample:end_sample], beatsteps - beatsteps[0]
+                single_raw_audio[start_sample:end_sample], beatsteps - beatsteps[0]
             )
 
             input_features = np.transpose(self.log_mel_spectrogram(input_features), (0, -1, -2))
