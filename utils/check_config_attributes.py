@@ -69,10 +69,6 @@ SPECIAL_CASES_TO_ALLOW = {
     "CvtConfig": ["layer_norm_eps"],
     # having default values other than `1e-5` - we can't fix them without breaking
     "PerceiverConfig": ["layer_norm_eps"],
-    # having default values other than `1e-5` - we can't fix them without breaking
-    "RetriBertConfig": ["layer_norm_eps"],
-    # having default values other than `1e-5` - we can't fix them without breaking
-    "TrajectoryTransformerConfig": ["layer_norm_eps"],
     # used internally to calculate the feature size
     "InformerConfig": ["num_static_real_features", "num_time_features"],
     # used internally to calculate the feature size
@@ -106,7 +102,6 @@ SPECIAL_CASES_TO_ALLOW.update(
         "OneFormerConfig": True,
         "PerceiverConfig": True,
         "RagConfig": True,
-        "RetriBertConfig": True,
         "SpeechT5Config": True,
         "SwinConfig": True,
         "Swin2SRConfig": True,
@@ -114,11 +109,9 @@ SPECIAL_CASES_TO_ALLOW.update(
         "SwitchTransformersConfig": True,
         "TableTransformerConfig": True,
         "TapasConfig": True,
-        "TrajectoryTransformerConfig": True,
         "TransfoXLConfig": True,
         "UniSpeechConfig": True,
         "UniSpeechSatConfig": True,
-        "VanConfig": True,
         "WavLMConfig": True,
         "WhisperConfig": True,
         # TODO: @Arthur (for `alignment_head` and `alignment_layer`)
@@ -267,6 +260,9 @@ def check_config_attributes():
     """Check the arguments in `__init__` of all configuration classes are used in  python files"""
     configs_with_unused_attributes = {}
     for _config_class in list(CONFIG_MAPPING.values()):
+        # Skip deprecated models
+        if "models.deprecated" in _config_class.__module__:
+            continue
         # Some config classes are not in `CONFIG_MAPPING` (e.g. `CLIPVisionConfig`, `Blip2VisionConfig`, etc.)
         config_classes_in_module = [
             cls
