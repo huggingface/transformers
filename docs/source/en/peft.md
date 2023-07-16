@@ -36,7 +36,7 @@ Get started by installing 🤗 PEFT:
 pip install peft
 ```
 
-If you want to try out the brand new features, you might be interesting in installing the library from source:
+If you want to try out the brand new features, you might be interested in installing the library from source:
 
 ```bash
 pip install git+https://github.com/huggingface/peft.git
