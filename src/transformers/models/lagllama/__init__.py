@@ -21,7 +21,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_lag_llama": ["LAGLLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LagLlamaConfig"],
+    "configuration_lagllama": ["LAGLLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LagLlamaConfig"],
 }
 
 
