@@ -382,7 +382,7 @@ class UnivNetLVCBlock(nn.Module):
         kernel_predictor_conv_size (`int`, *optional*, defaults to 3):
             The kernel size for the 1D convolutional layers in the kernel predictor.
         kernel_predictor_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilit for the Dropout layers in the kernel predictor.
+            The dropout probability for the Dropout layers in the kernel predictor.
         kernel_predictor_leaky_relu_slope (`float`, *optional*, defaults to 0.2):
             The angle of the negative slope used by the leaky ReLU activation for the kernel predictor.
     """
