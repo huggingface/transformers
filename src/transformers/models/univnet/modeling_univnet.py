@@ -563,6 +563,9 @@ class UnivNetGan(PreTrainedModel):
                 config.model_in_channels)`. If not supplied, will be randomly generated.
             noise_length (`int`, *optional*, defaults to 10):
                 The sequence length of the noise waveform. Used only when generating a noise waveform.
+            generator (`torch.Generator`, *optional*):
+                A [torch generator](https://pytorch.org/docs/stable/generated/torch.Generator.html) to make generation
+                deterministic.
         
         Returns:
             `torch.FloatTensor`: Tensor containing the speech waveform. IF the input spectrogram is batched, wil be of

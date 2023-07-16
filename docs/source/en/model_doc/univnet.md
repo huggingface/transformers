@@ -11,7 +11,8 @@ The abstract from the paper is the following:
 
 Tips:
 
-- The `noise_waveform` argument for inference should be standard Gaussian noise (such as from `torch.randn`) of shape `([batch_size], noise_length, config.model_in_channels)`. If not supplied, it will be randomly generated; you will most likely want to supply a `noise_length` argument in this case to get a waveform of the desired length. A `generator` can also be specified for reproducibility.
+- The `noise_waveform` argument for [`UnivNetGan.forward`] should be standard Gaussian noise (such as from `torch.randn`) of shape `([batch_size], noise_length, config.model_in_channels)`. If not supplied, it will be randomly generated; you will most likely want to supply a `noise_length` argument in this case to get a waveform of the desired length. A `generator` can also be specified for reproducibility.
+- When creating a [`UnivNetGanConfig`], the `resblock_kernel_sizes`, `resblock_stride_sizes`, and `resblock_dilation_sizes` arguments should have the same length (which corresponds to the number of outer resnet blocks in the vocoder).
 
 This model was contributed by [dg845](https://huggingface.co/dg845).
 To the best of my knowledge, there is no official code release, but an unofficial implementation can be found at [mindslab-ai/univnet](https://github.com/mindslab-ai/univnet).
