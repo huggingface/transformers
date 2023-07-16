@@ -23,6 +23,8 @@
     title: Share your model
   - local: transformers_agents
     title: Agents
+  - local: peft
+    title: Load model adapters and train them with 🤗 PEFT
   title: Tutorials
 - sections:
   - sections:
