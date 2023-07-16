@@ -254,7 +254,7 @@ class LagLlamaRotaryEmbedding(torch.nn.Module):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->LagLlama
 class LagLlamaLinearScalingRotaryEmbedding(LagLlamaRotaryEmbedding):
-    """OpenLlamaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+    """LagLlamaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
@@ -274,7 +274,7 @@ class LagLlamaLinearScalingRotaryEmbedding(LagLlamaRotaryEmbedding):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->LagLlama
 class LagLlamaDynamicNTKScalingRotaryEmbedding(LagLlamaRotaryEmbedding):
-    """OpenLlamaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+    """LagLlamaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor

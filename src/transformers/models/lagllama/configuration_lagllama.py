@@ -95,6 +95,7 @@ class LagLlamaConfig(PretrainedConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-6,
         use_cache=True,
+        rope_scaling=None,
         **kwargs,
     ):
         self.distribution_output = distribution_output
@@ -112,6 +113,8 @@ class LagLlamaConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
+        self.rope_scaling = rope_scaling
+        self._rope_scaling_validation()
 
         super().__init__(**kwargs)
 
@@ -119,3 +122,25 @@ class LagLlamaConfig(PretrainedConfig):
     def _number_of_features(self) -> int:
         # the log1p(abs(loc)) and log(scale) features of the context window
         return self.input_size * 2
+
+    # Copied from transformers.models.llama.configuration_llama.LlamaConfig._rope_scaling_validation
+    def _rope_scaling_validation(self):
+        """
+        Validate the `rope_scaling` configuration.
+        """
+        if self.rope_scaling is None:
+            return
+
+        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
+            raise ValueError(
+                "`rope_scaling` must be a dictionary with with two fields, `name` and `factor`, "
+                f"got {self.rope_scaling}"
+            )
+        rope_scaling_type = self.rope_scaling.get("type", None)
+        rope_scaling_factor = self.rope_scaling.get("factor", None)
+        if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic"]:
+            raise ValueError(
+                f"`rope_scaling`'s name field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
+            )
+        if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
+            raise ValueError(f"`rope_scaling`'s factor field must be an float > 1, got {rope_scaling_factor}")
