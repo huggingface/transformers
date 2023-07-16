@@ -26,8 +26,8 @@ from flax.linen.attention import dot_product_attention_weights
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
-from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLMOutput
+from ...modeling_flax_utils import ACT2FN, FlaxPreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_llama import LlamaConfig
 
@@ -227,15 +227,12 @@ class FlaxLlamaAttention(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
     ):
-        # mismatch between here...
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
-
         query = self._split_heads(query)
         key = self._split_heads(key)
         value = self._split_heads(value)
-        # ...and here
 
         sincos = self.embed_positions[position_ids]
         sincos = jnp.split(sincos, 2, axis=-1)
@@ -299,9 +296,9 @@ class FlaxLlamaMLP(nn.Module):
         jax.nn.initializers.normal(self.config.initializer_range)
         self.act = ACT2FN[self.config.hidden_act]
 
-        self.gate_proj = nn.Dense(self.intermediate_size, use_bias=False)
-        self.down_proj = nn.Dense(embed_dim, use_bias=False)
-        self.up_proj = nn.Dense(self.intermediate_size, use_bias=False)
+        self.gate_proj = nn.Dense(self.intermediate_size, use_bias=False, dtype=self.dtype)
+        self.down_proj = nn.Dense(embed_dim, use_bias=False, dtype=self.dtype)
+        self.up_proj = nn.Dense(self.intermediate_size, use_bias=False, dtype=self.dtype)
 
     def __call__(self, hidden_states):
         hidden_states = self.up_proj(hidden_states) * self.act(self.gate_proj(hidden_states))
@@ -385,7 +382,9 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        random_params = self.module.init(rngs, input_ids, position_ids=position_ids, attention_mask=attention_mask, return_dict=False)["params"]
+        random_params = self.module.init(
+            rngs, input_ids, position_ids=position_ids, attention_mask=attention_mask, return_dict=False
+        )["params"]
 
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
@@ -412,7 +411,12 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
         init_variables = self.module.init(
-            jax.random.PRNGKey(0), input_ids, position_ids=position_ids, attention_mask=attention_mask, return_dict=False, init_cache=True
+            jax.random.PRNGKey(0),
+            input_ids,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            return_dict=False,
+            init_cache=True,
         )
         return unfreeze(init_variables["cache"])
 
@@ -506,7 +510,7 @@ class FlaxLlamaBlockCollection(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        return_dict: bool = False
+        return_dict: bool = False,
     ):
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
@@ -685,10 +689,11 @@ class FlaxLlamaForCausalLM(FlaxLlamaPreTrainedModel):
 
 # append_call_sample_docstring(FlaxLlamaForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC)
 
-if __name__ == "__main__":
-    import torch
+
+def main():
+    jax.config.update("jax_platform_name", "cpu")
     torch.set_printoptions(precision=8)
-    jnp.set_printoptions(precision=8, floatmode='fixed')
+    jnp.set_printoptions(precision=8, floatmode="fixed")
 
     from .configuration_llama import LlamaConfig
     from .modeling_llama import LlamaForCausalLM
@@ -696,13 +701,20 @@ if __name__ == "__main__":
     key = jax.random.PRNGKey(0)
     torch.manual_seed(0)
 
-    # config = LlamaConfig(num_hidden_layers=1, vocab_size=64, hidden_size=64, num_attention_heads=8, max_position_embeddings=128, intermediate_size=256)
+    config = LlamaConfig(
+        num_hidden_layers=16,
+        vocab_size=64,
+        hidden_size=64,
+        num_attention_heads=8,
+        max_position_embeddings=128,
+        intermediate_size=256,
+    )
     # model = FlaxLlamaForCausalLM(config)
-    model = FlaxLlamaForCausalLM.from_pretrained("openlm-research/open_llama_3b", from_pt=True)
-    # print(config)
+    # model = FlaxLlamaForCausalLM.from_pretrained("openlm-research/open_llama_3b", from_pt=True, dtype=jnp.bfloat16)
+    print(config)
 
-    # model = FlaxLlamaForCausalLM(config)
-    # pt_model = LlamaForCausalLM(config)
+    model = FlaxLlamaForCausalLM(config)
+    pt_model = LlamaForCausalLM(config)
 
     N = 1
     key, subkey = jax.random.split(key)
@@ -711,16 +723,10 @@ if __name__ == "__main__":
     position_ids = jnp.arange(128)[jnp.newaxis, :].repeat(N, axis=0)
 
     key, model_key = jax.random.split(key)
-    # y, params = model.init_with_output(model_key, x, attention_mask=mask, position_ids=position_ids)
     params = model.params
-    # y = model(model_key, x, attention_mask=mask, position_ids=position_ids)
     y = model(x, attention_mask=mask, position_ids=position_ids)
     y = y[0]
 
-    print(y)
-    exit()
-
-    # params = flatten_dict(params["params"], sep=".")
     params = flatten_dict(params, sep=".")
 
     for i, l in enumerate(pt_model.model.layers):
@@ -756,11 +762,9 @@ if __name__ == "__main__":
             }
         )
 
-    pt_model.model.embed_tokens.weight = torch.nn.Parameter(
-        torch.from_numpy(np.asarray(params["model.embed_tokens.embedding"]))
-    )
-    pt_model.model.norm.weight = torch.nn.Parameter(torch.from_numpy(np.asarray(params["model.norm.weight"])))
-    pt_model.lm_head.weight = torch.nn.Parameter(torch.from_numpy(np.asarray(params["lm_head.kernel"].T)))
+    pt_model.model.embed_tokens.weight.copy_(torch.from_numpy(np.asarray(params["model.embed_tokens.embedding"])))
+    pt_model.model.norm.weight.copy_(torch.from_numpy(np.asarray(params["model.norm.weight"])))
+    pt_model.lm_head.weight.copy_(torch.from_numpy(np.asarray(params["lm_head.kernel"].T)))
 
     x_pt = torch.tensor(np.asarray(x))
     pt_y = pt_model(
@@ -780,3 +784,9 @@ if __name__ == "__main__":
         ipdb.set_trace()
 
     print("done")
+
+
+if __name__ == "__main__":
+    import torch
+
+    torch.no_grad()(main)()
