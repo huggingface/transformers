@@ -52,7 +52,7 @@ class LagLlamaConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
+        max_context_length (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -62,6 +62,15 @@ class LagLlamaConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        rope_scaling (`Dict`, *optional*):
+            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
+            strategies: linear and dynamic. Their scaling factor must be an float greater than 1. The expected format
+            is `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
+            `max_context_length` to the expected new maximum. See the following thread for more information on how
+            these scaling strategies behave:
+            https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
+            experimental feature, subject to breaking API changes in future versions.
+
         Example:
 
     ```python
