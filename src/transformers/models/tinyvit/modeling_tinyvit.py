@@ -969,7 +969,7 @@ class TinyVitBackbone(TinyVitPreTrainedModel, BackboneMixin):
             input_dimensions,
             head_mask=None,
             output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            output_hidden_states=True,
             return_dict=True,
         )
 

@@ -79,6 +79,10 @@ class TinyVitModelTester:
         self.use_labels = use_labels
         self.type_sequence_label_size = type_sequence_label_size
 
+        # set expected sequence length of final hidden states
+        patches_resolution = self.image_size // 4
+        self.seq_length = (patches_resolution // (2 ** (len(depths) - 1))) ** 2
+
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
@@ -111,10 +115,9 @@ class TinyVitModelTester:
         model.eval()
         result = model(pixel_values)
 
-        expected_seq_len = (config.image_size // 16) ** 2  # 8, 4, 2 (reduction of 4, 8, 16)
-        expected_dim = config.hidden_sizes[-1]
-
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, expected_dim))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_sizes[-1])
+        )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size

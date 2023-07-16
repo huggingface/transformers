@@ -60,8 +60,10 @@ class TinyVitConfig(BackboneConfigMixin, PretrainedConfig):
             `"selu"` and `"gelu_new"` are supported.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        local_conv_size ():
+        local_conv_size (`int`, *optional*, defaults to 3):
             The kernel size of the depthwise convolution between attention and MLP.
+        mbconv_expand_ratio (`float`, *optional*, defaults to 4.0):
+            Ratio of hidden dimensionality to embedding dimensionality in the MBConv layers.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the

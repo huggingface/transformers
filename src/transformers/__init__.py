@@ -503,8 +503,8 @@ _import_structure = {
         "SamMaskDecoderConfig",
         "SamProcessor",
         "SamPromptEncoderConfig",
-        "SamVisionConfig",
         "SamVisionAutoBackboneConfig",
+        "SamVisionConfig",
     ],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
@@ -4608,8 +4608,8 @@ if TYPE_CHECKING:
         SamMaskDecoderConfig,
         SamProcessor,
         SamPromptEncoderConfig,
-        SamVisionConfig,
         SamVisionAutoBackboneConfig,
+        SamVisionConfig,
     )
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig
