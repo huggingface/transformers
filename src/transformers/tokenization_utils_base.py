@@ -1722,7 +1722,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         if token is not None:
             # change to `token` in a follow-up PR
-            kwargs["use_auth_token"] = token
+            use_auth_token = token
 
         user_agent = {"file_type": "tokenizer", "from_auto_class": from_auto_class, "is_fast": "Fast" in cls.__name__}
         if from_pipeline is not None:
