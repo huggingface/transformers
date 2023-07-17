@@ -68,10 +68,16 @@ def create_rename_keys(config):
                     (f"block{i + 1}.{j}.attn.norm.bias", f"pvt.encoder.block.{i}.{j}.attention.self.layer_norm.bias")
                 )
                 rename_keys.append(
-                    (f"block{i + 1}.{j}.attn.sr.weight", f"pvt.encoder.block.{i}.{j}.attention.self.sequence_reduction.weight")
+                    (
+                        f"block{i + 1}.{j}.attn.sr.weight",
+                        f"pvt.encoder.block.{i}.{j}.attention.self.sequence_reduction.weight",
+                    )
                 )
                 rename_keys.append(
-                    (f"block{i + 1}.{j}.attn.sr.bias", f"pvt.encoder.block.{i}.{j}.attention.self.sequence_reduction.bias")
+                    (
+                        f"block{i + 1}.{j}.attn.sr.bias",
+                        f"pvt.encoder.block.{i}.{j}.attention.self.sequence_reduction.bias",
+                    )
                 )
 
             rename_keys.append(
@@ -179,21 +185,13 @@ def convert_pvt_checkpoint(pvt_size, pvt_checkpoint, pytorch_dump_folder_path):
     logits = outputs.logits.detach().cpu()
 
     if pvt_size == "tiny":
-        expected_slice_logits = torch.tensor(
-            [-1.4192, -1.9158, -0.9702]
-        )
+        expected_slice_logits = torch.tensor([-1.4192, -1.9158, -0.9702])
     elif pvt_size == "small":
-        expected_slice_logits = torch.tensor(
-            [0.4353, -0.1960, -0.2373]
-        )
+        expected_slice_logits = torch.tensor([0.4353, -0.1960, -0.2373])
     elif pvt_size == "medium":
-        expected_slice_logits = torch.tensor(
-            [-0.2914, -0.2231,  0.0321]
-        )
+        expected_slice_logits = torch.tensor([-0.2914, -0.2231, 0.0321])
     elif pvt_size == "large":
-        expected_slice_logits = torch.tensor(
-            [0.3740, -0.7739, -0.4214]
-        )
+        expected_slice_logits = torch.tensor([0.3740, -0.7739, -0.4214])
     else:
         raise ValueError(f"Available model's size: 'tiny', 'small', 'medium', 'large', but " f"'{pvt_size}' was given")
 
