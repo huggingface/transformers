@@ -1460,6 +1460,12 @@ class TrainingArguments:
                 " during training"
             )
 
+        if not (self.sharded_ddp == "" or not self.sharded_ddp):
+            warnings.warn(
+                "using `sharded_ddp` is deprecated and will be removed in version 4.33"
+                " of 🤗 Transformers. Use `fsdp` instead",
+                FutureWarning,
+            )
         if isinstance(self.sharded_ddp, bool):
             self.sharded_ddp = "simple" if self.sharded_ddp else ""
         if isinstance(self.sharded_ddp, str):
