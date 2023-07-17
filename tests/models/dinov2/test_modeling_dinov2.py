@@ -43,7 +43,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTImageProcessor
+    from transformers import AutoImageProcessor
 
 
 class Dinov2ModelTester:
@@ -229,44 +229,26 @@ def prepare_img():
 class Dinov2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
+        return AutoImageProcessor.from_pretrained("facebook/dinov2-base") if is_vision_available() else None
 
     @slow
     def test_inference_no_head(self):
-        # TODO update organization
-        model = Dinov2Model.from_pretrained("nielsr/dinov2-base").to(torch_device)
+        model = Dinov2Model.from_pretrained("facebook/dinov2-base").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
-        image_processor(images=image, return_tensors="pt").to(torch_device)
-
-        # TODO replace by image processor class
-        from torchvision import transforms
-
-        transformations = transforms.Compose(
-            [
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    mean=[0.485, 0.456, 0.406],  # these are RGB mean+std values
-                    std=[0.229, 0.224, 0.225],  # across a large photo dataset.
-                ),
-            ]
-        )
-
-        pixel_values = transformations(image).unsqueeze(0).to(torch_device)  # insert batch dimension
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
-            outputs = model(pixel_values)
+            outputs = model(**inputs)
 
         # verify the last hidden states
         expected_shape = torch.Size((1, 257, 768))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-2.1849, -0.3433, 1.0913], [-3.2696, -0.7386, -0.8044], [-3.0603, 1.2498, -0.7685]],
+            [[-2.1747, -0.4729, 1.0936], [-3.2780, -0.8269, -0.9210], [-2.9129, 1.1284, -0.7306]],
             device=torch_device,
         )
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))

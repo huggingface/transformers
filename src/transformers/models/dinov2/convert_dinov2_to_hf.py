@@ -219,8 +219,8 @@ def convert_dinov2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=
         }
 
         name = model_name_to_hf_name[model_name]
-        model.push_to_hub(f"nielsr/{name}")
-        processor.push_to_hub(f"nielsr/{name}")
+        model.push_to_hub(f"facebook/{name}")
+        processor.push_to_hub(f"facebook/{name}")
 
 
 if __name__ == "__main__":
