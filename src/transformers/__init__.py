@@ -4702,7 +4702,6 @@ if TYPE_CHECKING:
         from .models.mbart50 import MBart50TokenizerFast
         from .models.mobilebert import MobileBertTokenizerFast
         from .models.mpnet import MPNetTokenizerFast
-        from .models.mpt import MptTokenizer
         from .models.mt5 import MT5TokenizerFast
         from .models.mvp import MvpTokenizerFast
         from .models.nllb import NllbTokenizerFast

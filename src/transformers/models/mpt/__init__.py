@@ -20,13 +20,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 _import_structure = {
     "configuration_mpt": ["MPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MptConfig", "MptOnnxConfig"],
 }
-try:
-    if not is_tokenizers_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_mpt_fast"] = ["MptTokenizer"]
 
 try:
     if not is_torch_available():
@@ -46,14 +39,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_mpt import MPT_PRETRAINED_CONFIG_ARCHIVE_MAP, MptConfig, MptOnnxConfig
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_mpt_fast import MptTokenizer
 
     try:
         if not is_torch_available():
