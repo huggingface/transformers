@@ -27,7 +27,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_outputs import BaseTSModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -736,11 +736,13 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        loc: Optional[torch.FloatTensor] = None,
+        scale: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[Tuple, BaseTSModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -854,12 +856,16 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
 
         next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
-        return BaseModelOutputWithPast(
+            return tuple(
+                v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, loc, scale] if v is not None
+            )
+        return BaseTSModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
+            loc=loc,
+            scale=scale,
         )
 
 
@@ -917,6 +923,8 @@ class LlamaForPrediction(LagLlamaPreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        loc: Optional[torch.FloatTensor] = None,
+        scale: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -962,6 +970,8 @@ class LlamaForPrediction(LagLlamaPreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            loc=loc,
+            scale=scale,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
