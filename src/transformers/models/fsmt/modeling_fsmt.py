@@ -377,7 +377,7 @@ def _make_linear_from_emb(emb):
 # Helper Functions, mostly for making masks
 def _check_shapes(shape_1, shape2):
     if shape_1 != shape2:
-        raise ValueError(f"shape mismatch: {shape_1} != {shape2}")
+        raise AssertionError(f"shape mismatch: {shape_1} != {shape2}")
 
 
 def shift_tokens_right(input_ids, pad_token_id):
