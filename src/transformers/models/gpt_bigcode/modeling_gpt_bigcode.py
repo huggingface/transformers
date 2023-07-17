@@ -164,7 +164,7 @@ class GPTBigCodeAttention(nn.Module):
             # This is needed because of a bug in pytorch https://github.com/pytorch/pytorch/issues/80588.
             # The bug was fixed in https://github.com/pytorch/pytorch/pull/96086,
             # but the fix has not been released as of pytorch version 2.0.0.
-            attn_weights.zero_()
+            attn_weights = torch.zeros_like(attn_weights)
             beta = 1
         else:
             beta = 0

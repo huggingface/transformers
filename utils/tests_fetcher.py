@@ -310,10 +310,17 @@ def get_doctest_files(diff_with_last_commit=False):
             print(f"Parent commit: {commit}")
         test_files_to_run = get_diff_for_doctesting(repo, repo.head.commit, parent_commits)
 
+    # This is the full list of doctest tests
     with open("utils/documentation_tests.txt") as fp:
         documentation_tests = set(fp.read().strip().split("\n"))
+    # Not to run slow doctest tests
+    with open("utils/slow_documentation_tests.txt") as fp:
+        slow_documentation_tests = set(fp.read().strip().split("\n"))
+
     # So far we don't have 100% coverage for doctest. This line will be removed once we achieve 100%.
-    test_files_to_run = [x for x in test_files_to_run if x in documentation_tests]
+    test_files_to_run = [
+        x for x in test_files_to_run if x in documentation_tests and x not in slow_documentation_tests
+    ]
     # Make sure we did not end up with a test file that was removed
     test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
 
