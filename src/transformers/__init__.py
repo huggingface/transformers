@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.31.0.dev0"
+__version__ = "4.32.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -159,6 +159,13 @@ _import_structure = {
     "models.autoformer": [
         "AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "AutoformerConfig",
+    ],
+    "models.bark": [
+        "BarkCoarseConfig",
+        "BarkConfig",
+        "BarkFineConfig",
+        "BarkProcessor",
+        "BarkSemanticConfig",
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
@@ -1134,6 +1141,17 @@ else:
             "AutoformerForPrediction",
             "AutoformerModel",
             "AutoformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.bark"].extend(
+        [
+            "BARK_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BarkCausalModel",
+            "BarkCoarseModel",
+            "BarkFineModel",
+            "BarkModel",
+            "BarkPreTrainedModel",
+            "BarkSemanticModel",
         ]
     )
     _import_structure["models.bart"].extend(
@@ -4098,6 +4116,13 @@ if TYPE_CHECKING:
         AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AutoformerConfig,
     )
+    from .models.bark import (
+        BarkCoarseConfig,
+        BarkConfig,
+        BarkFineConfig,
+        BarkProcessor,
+        BarkSemanticConfig,
+    )
     from .models.bart import BartConfig, BartTokenizer
     from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
     from .models.bert import (
@@ -4977,6 +5002,15 @@ if TYPE_CHECKING:
             AutoformerForPrediction,
             AutoformerModel,
             AutoformerPreTrainedModel,
+        )
+        from .models.bark import (
+            BARK_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BarkCausalModel,
+            BarkCoarseModel,
+            BarkFineModel,
+            BarkModel,
+            BarkPreTrainedModel,
+            BarkSemanticModel,
         )
         from .models.bart import (
             BART_PRETRAINED_MODEL_ARCHIVE_LIST,
