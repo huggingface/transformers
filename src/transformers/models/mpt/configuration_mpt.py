@@ -33,13 +33,13 @@ MPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class MptAttentionConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`MptAttention`] class. It is used to instantiate
+    This is the configuration class to store the configuration of a [*MptAttention*] class. It is used to instantiate
     attention layers according to the specified arguments, defining the layers architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MPT
     [mosaicml/mpt-7b](https://huggingface.co/mosaicml/mpt-7b) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [*PretrainedConfig*] and can be used to control the model outputs. Read the
+    documentation from [*PretrainedConfig*] for more information.
 
     Args:
         attn_type (str):
@@ -53,15 +53,15 @@ class MptAttentionConfig(PretrainedConfig):
             If not None, clip the queries, keys, and values in the attention layer to this value.
         softmax_scale (Optional[float]):
             If not None, scale the softmax in the attention layer by this value. If None, use the default scale of
-            ``1/sqrt(d_keys)``.
+            `1/sqrt(d_keys)`.
         prefix_lm (Optional[bool]):
-            Whether the model should operate as a Prefix LM. This requires passing an extra `prefix_mask` argument
+            Whether the model should operate as a Prefix LM. This requires passing an extra *prefix_mask* argument
             which indicates which tokens belong to the prefix. Tokens in the prefix can attend to one another
             bi-directionally. Tokens outside the prefix use causal attention.
         attn_uses_sequence_id (Optional[bool]):
-            Whether to restrict attention to tokens that have the same sequence_id. When the model is in `train` mode,
-            this requires passing an extra `sequence_id` argument which indicates which sub-sequence each token belongs
-            to. Defaults to ``False`` meaning any provided `sequence_id` will be ignored.
+            Whether to restrict attention to tokens that have the same sequence_id. When the model is in *train* mode,
+            this requires passing an extra *sequence_id* argument which indicates which sub-sequence each token belongs
+            to. Defaults to `False` meaning any provided *sequence_id* will be ignored.
         alibi (bool):
             Whether to use the alibi bias instead of position embeddings. alibi_bias_max (int): The maximum value of
             the alibi bias.
@@ -96,13 +96,13 @@ class MptAttentionConfig(PretrainedConfig):
 
 class MptIntializerConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`MptAttention`] class. It is used to instantiate
+    This is the configuration class to store the configuration of a [*MptAttention*] class. It is used to instantiate
     attention layers according to the specified arguments, defining the layers architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MPT
     [mosaicml/mpt-7b](https://huggingface.co/mosaicml/mpt-7b) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [*PretrainedConfig*] and can be used to control the model outputs. Read the
+    documentation from [*PretrainedConfig*] for more information.
 
     Args:
         init_config.name:
@@ -110,12 +110,12 @@ class MptIntializerConfig(PretrainedConfig):
                 'kaiming_uniform_', 'kaiming_normal_', 'neox_init_', 'small_init_', 'xavier_uniform_', or
                 'xavier_normal_'. These mimic the parameter initialization methods in PyTorch.
             init_div_is_residual (Union[int, float, str, bool]):
-                Value to divide initial weights by if ``module._is_residual`` is True.
+                Value to divide initial weights by if `module._is_residual` is True.
             emb_init_std (Optional[float]):
                 The standard deviation of the normal distribution used to initialize the embedding layer.
             emb_init_uniform_lim (Optional[Union[Tuple[float,float], float]]):
                 The lower and upper limits of the uniform distribution used to initialize the embedding layer. Mutually
-                exclusive with ``emb_init_std``.
+                exclusive with `emb_init_std`.
             init_std (float):
                 The standard deviation of the normal distribution used to initialize the model, if using the baseline_
                 parameter initialization scheme.

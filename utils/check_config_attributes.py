@@ -98,6 +98,10 @@ SPECIAL_CASES_TO_ALLOW.update(
         "LayoutLMv2Config": True,
         "MaskFormerSwinConfig": True,
         "MT5Config": True,
+        # For backward compatibility with trust remote code models
+        "MptConfig": True,
+        "MptAttentionConfig": True,
+        "MptIntializerConfig": True,
         "NatConfig": True,
         "OneFormerConfig": True,
         "PerceiverConfig": True,
