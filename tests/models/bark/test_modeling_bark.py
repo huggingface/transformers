@@ -663,12 +663,40 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         # take first codebook channel
-        attention_mask = input_ids[:, :, 0].ne(1).to(torch_device)
+
         model = self.all_model_classes[0](config).eval().to(torch_device)
-        codebook_idx = 4
         if torch_device == "cuda":
             model.half()
-        model(codebook_idx, input_ids, attention_mask=attention_mask)
+
+        # toy generation_configs
+        semantic_generation_config = BarkSemanticGenerationConfig(semantic_vocab_size=0)
+        coarse_generation_config = BarkCoarseGenerationConfig(n_coarse_codebooks=config.n_codes_given)
+        fine_generation_config = BarkFineGenerationConfig(
+            max_fine_history_length=config.block_size // 2,
+            max_fine_input_length=config.block_size,
+            n_fine_codebooks=config.n_codes_total,
+        )
+        codebook_size = config.vocab_size - 1
+
+        model.generate(
+            input_ids,
+            history_prompt=None,
+            temperature=None,
+            semantic_generation_config=semantic_generation_config,
+            coarse_generation_config=coarse_generation_config,
+            fine_generation_config=fine_generation_config,
+            codebook_size=codebook_size,
+        )
+
+        model.generate(
+            input_ids,
+            history_prompt=None,
+            temperature=0.7,
+            semantic_generation_config=semantic_generation_config,
+            coarse_generation_config=coarse_generation_config,
+            fine_generation_config=fine_generation_config,
+            codebook_size=codebook_size,
+        )
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -942,3 +970,22 @@ class BarkModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             self.model.generate(**input_ids, do_sample=True, temperature=0.6, penalty_alpha=0.6)
             self.model.generate(**input_ids, do_sample=True, temperature=0.6, num_beams=4)
+
+    @slow
+    def test_generate_end_to_end_with_sub_models_args(self):
+        input_ids = self.inputs
+
+        with torch.no_grad():
+            self.model.generate(**input_ids, do_sample=False, coarse_do_sample=True, coarse_temperature=0.7)
+            self.model.generate(
+                **input_ids, do_sample=False, coarse_do_sample=True, coarse_temperature=0.7, fine_temperature=0.3
+            )
+            self.model.generate(
+                **input_ids,
+                do_sample=True,
+                temperature=0.6,
+                penalty_alpha=0.6,
+                semantic_temperature=0.9,
+                coarse_temperature=0.2,
+                fine_temperature=0.1,
+            )
