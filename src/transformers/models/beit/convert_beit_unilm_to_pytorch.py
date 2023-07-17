@@ -337,7 +337,8 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     else:
         raise ValueError("Can't verify logits as model is not supported")
 
-    assert logits.shape == expected_shape, "Shape of logits not as expected"
+    if logits.shape != expected_shape:
+        raise ValueError(f"Shape of logits not as expected. {logits.shape=}, {expected_shape=}")
     if not has_lm_head:
         if is_semantic:
             assert torch.allclose(
