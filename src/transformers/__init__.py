@@ -572,12 +572,12 @@ _import_structure = {
     "models.vit_hybrid": ["VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTHybridConfig"],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
+    "models.vitdet": ["VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitDetConfig"],
+    "models.vitmatte": ["VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitMatteConfig"],
     "models.vivit": [
         "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VivitConfig",
     ],
-    "models.vitdet": ["VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitDetConfig"],
-    "models.vitmatte": ["VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitMatteConfig"],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2Config",
@@ -2879,14 +2879,6 @@ else:
             "ViTMSNPreTrainedModel",
         ]
     )
-    _import_structure["models.vivit"].extend(
-        [
-            "VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "VivitForVideoClassification",
-            "VivitModel",
-            "VivitPreTrainedModel",
-        ]
-    )
     _import_structure["models.vitdet"].extend(
         [
             "VITDET_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2900,6 +2892,14 @@ else:
             "VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST",
             "VitMatteForImageMatting",
             "VitMattePreTrainedModel",
+        ]
+    )
+    _import_structure["models.vivit"].extend(
+        [
+            "VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VivitForVideoClassification",
+            "VivitModel",
+            "VivitPreTrainedModel",
         ]
     )
     _import_structure["models.wav2vec2"].extend(
@@ -4562,9 +4562,9 @@ if TYPE_CHECKING:
     from .models.vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
-    from .models.vivit import VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, VivitConfig
     from .models.vitdet import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP, VitDetConfig
     from .models.vitmatte import VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP, VitMatteConfig
+    from .models.vivit import VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, VivitConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2Config,
@@ -6477,12 +6477,6 @@ if TYPE_CHECKING:
             ViTMSNModel,
             ViTMSNPreTrainedModel,
         )
-        from .models.vivit import (
-            VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VivitForVideoClassification,
-            VivitModel,
-            VivitPreTrainedModel,
-        )
         from .models.vitdet import (
             VITDET_PRETRAINED_MODEL_ARCHIVE_LIST,
             VitDetBackbone,
@@ -6493,6 +6487,12 @@ if TYPE_CHECKING:
             VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST,
             VitMatteForImageMatting,
             VitMattePreTrainedModel,
+        )
+        from .models.vivit import (
+            VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VivitForVideoClassification,
+            VivitModel,
+            VivitPreTrainedModel,
         )
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,

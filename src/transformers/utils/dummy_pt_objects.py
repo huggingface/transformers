@@ -7739,10 +7739,6 @@ class ViTMSNPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class VivitForVideoClassification(metaclass=DummyObject):
 VITDET_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -7760,14 +7756,6 @@ class VitDetModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class VivitModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class VivitPreTrainedModel(metaclass=DummyObject):
 class VitDetPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7786,6 +7774,30 @@ class VitMatteForImageMatting(metaclass=DummyObject):
 
 
 class VitMattePreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class VivitForVideoClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VivitModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VivitPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
