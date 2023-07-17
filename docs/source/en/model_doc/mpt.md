@@ -43,11 +43,6 @@ Tips:
 [[autodoc]] MptModel
     - forward
 
-## MptTokenizer
-
-[[autodoc]] MptTokenizer
-    - all
-
 ## MptForCausalLM
 
 [[autodoc]] MptForCausalLM
