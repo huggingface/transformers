@@ -96,7 +96,7 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
                 num = int(scope_names[1])
                 pointer = pointer[num]
         try:
-            if pointer.shape == array.shape:
+            if pointer.shape != array.shape:
                 raise ValueError(
                     f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
                 )
