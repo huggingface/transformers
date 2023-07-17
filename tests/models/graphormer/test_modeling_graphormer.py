@@ -332,6 +332,17 @@ class GraphormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 self.assertTrue(found_buffer)
                 model_buffers.pop(i)
 
+            model_buffers = list(model.buffers())
+            for non_persistent_buffer in non_persistent_buffers.values():
+                found_buffer = False
+                for i, model_buffer in enumerate(model_buffers):
+                    if torch.equal(non_persistent_buffer, model_buffer):
+                        found_buffer = True
+                        break
+
+                self.assertTrue(found_buffer)
+                model_buffers.pop(i)
+
             models_equal = True
             for layer_name, p1 in model_state_dict.items():
                 if layer_name in loaded_model_state_dict:
@@ -458,6 +469,10 @@ class GraphormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_for_graph_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_graph_classification(*config_and_inputs)
+
+    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
+    def test_model_is_small(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):

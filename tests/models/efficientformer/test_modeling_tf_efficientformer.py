@@ -344,6 +344,24 @@ class TFEfficientFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unitte
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
 
+    def test_compile_tf_model(self):
+        # We use a simplified version of this test for EfficientFormer because it requires training=False
+        # and Keras refuses to let us force that during functional construction
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # Prepare our model
+            model = model_class(config)
+            # These are maximally general inputs for the model, with multiple None dimensions
+            # Hopefully this will catch any conditionals that fail for flexible shapes
+            functional_inputs = {
+                key: tf.keras.Input(shape=val.shape[1:], dtype=val.dtype, name=key)
+                for key, val in model.input_signature.items()
+                if key in model.dummy_inputs
+            }
+            outputs_dict = model(functional_inputs)
+            self.assertTrue(outputs_dict is not None)
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():

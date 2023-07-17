@@ -105,8 +105,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str`, *optional*, defaults to `<|startoftranscript|>`):
-            The beginning of sequence token.
+        bos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+            The beginning of sequence token. The `decoder_start_token_id` is used to set the first token as
+            `"<|startoftranscript|>"` when generating.
         eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The end of sequence token.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
@@ -138,7 +139,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         normalizer_file=None,
         tokenizer_file=None,
         unk_token="<|endoftext|>",
-        bos_token="<|startoftranscript|>",
+        bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
         add_prefix_space=False,
         language=None,
@@ -294,7 +295,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 Whether or not to output the offsets of the tokens. This should only be set if the model predicted
                 timestamps.
             decode_with_timestamps (`bool`, *optional*, defaults to `False`):
-                WHether or not to decode with timestamps included in the raw text.
+                Whether or not to decode with timestamps included in the raw text.
         Returns:
             `str`: The decoded sentence.
         """

@@ -346,20 +346,22 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
     text_features = tf.nn.l2_normalize(text_features, axis=-1)
 
     # Check whether original and HF model outputs match  -> np.allclose
-    assert np.allclose(image_features, hf_image_features, atol=1e-3), "The predicted image features are not the same."
-    assert np.allclose(text_features, hf_text_features, atol=1e-3), "The predicted text features are not the same."
+    if not np.allclose(image_features, hf_image_features, atol=1e-3):
+        raise ValueError("The predicted image features are not the same.")
+    if not np.allclose(text_features, hf_text_features, atol=1e-3):
+        raise ValueError("The predicted text features are not the same.")
     print("Model outputs match!")
 
     if save_model:
         # Create folder to save model
         if not os.path.isdir(pytorch_dump_folder_path):
             os.mkdir(pytorch_dump_folder_path)
-        # Save converted model and feature extractor
+        # Save converted model and image processor
         hf_model.save_pretrained(pytorch_dump_folder_path)
         processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        # Push model and feature extractor to hub
+        # Push model and image processor to hub
         print("Pushing converted ALIGN to the hub...")
         processor.push_to_hub("align-base")
         hf_model.push_to_hub("align-base")
@@ -381,7 +383,7 @@ if __name__ == "__main__":
         help="Path to the output PyTorch model directory.",
     )
     parser.add_argument("--save_model", action="store_true", help="Save model to local")
-    parser.add_argument("--push_to_hub", action="store_true", help="Push model and feature extractor to the hub")
+    parser.add_argument("--push_to_hub", action="store_true", help="Push model and image processor to the hub")
 
     args = parser.parse_args()
     convert_align_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.save_model, args.push_to_hub)

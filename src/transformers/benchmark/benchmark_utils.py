@@ -890,7 +890,8 @@ class Benchmark(ABC):
             return
         self.print_fn("Saving results to csv.")
         with open(filename, mode="w") as csv_file:
-            assert len(self.args.model_names) > 0, f"At least 1 model should be defined, but got {self.model_names}"
+            if len(self.args.model_names) <= 0:
+                raise ValueError(f"At least 1 model should be defined, but got {self.model_names}")
 
             fieldnames = ["model", "batch_size", "sequence_length"]
             writer = csv.DictWriter(csv_file, fieldnames=fieldnames + ["result"])

@@ -263,14 +263,14 @@ def get_diff_for_doctesting(repo, base_commit, commits):
     code_diff = []
     for commit in commits:
         for diff_obj in commit.diff(base_commit):
-            # We always add new python/mdx files
-            if diff_obj.change_type in ["A"] and (diff_obj.b_path.endswith(".py") or diff_obj.b_path.endswith(".mdx")):
+            # We always add new python/md files
+            if diff_obj.change_type in ["A"] and (diff_obj.b_path.endswith(".py") or diff_obj.b_path.endswith(".md")):
                 code_diff.append(diff_obj.b_path)
             # Now for modified files
             elif (
                 diff_obj.change_type in ["M", "R"]
                 and diff_obj.b_path.endswith(".py")
-                or diff_obj.b_path.endswith(".mdx")
+                or diff_obj.b_path.endswith(".md")
             ):
                 # In case of renames, we'll look at the tests using both the old and new name.
                 if diff_obj.a_path != diff_obj.b_path:
@@ -310,10 +310,17 @@ def get_doctest_files(diff_with_last_commit=False):
             print(f"Parent commit: {commit}")
         test_files_to_run = get_diff_for_doctesting(repo, repo.head.commit, parent_commits)
 
+    # This is the full list of doctest tests
     with open("utils/documentation_tests.txt") as fp:
         documentation_tests = set(fp.read().strip().split("\n"))
+    # Not to run slow doctest tests
+    with open("utils/slow_documentation_tests.txt") as fp:
+        slow_documentation_tests = set(fp.read().strip().split("\n"))
+
     # So far we don't have 100% coverage for doctest. This line will be removed once we achieve 100%.
-    test_files_to_run = [x for x in test_files_to_run if x in documentation_tests]
+    test_files_to_run = [
+        x for x in test_files_to_run if x in documentation_tests and x not in slow_documentation_tests
+    ]
     # Make sure we did not end up with a test file that was removed
     test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
 
@@ -428,7 +435,7 @@ def get_module_dependencies(module_fname, cache=None):
                 # So we get the imports from that init then try to find where our objects come from.
                 new_imported_modules = extract_imports(module, cache=cache)
                 for new_module, new_imports in new_imported_modules:
-                    if any([i in new_imports for i in imports]):
+                    if any(i in new_imports for i in imports):
                         if new_module not in dependencies:
                             new_modules.append((new_module, [i for i in new_imports if i in imports]))
                         imports = [i for i in imports if i not in new_imports]

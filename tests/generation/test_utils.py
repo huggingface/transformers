@@ -464,6 +464,7 @@ class GenerationTesterMixin:
             **model_kwargs,
         )
         # beam_search does not automatically interleave `batch_size` dim for `num_beams * num_return_sequences`
+        torch.manual_seed(0)
         kwargs = {}
         if model.config.is_encoder_decoder:
             encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
@@ -482,7 +483,6 @@ class GenerationTesterMixin:
         logits_processor = LogitsProcessorList()
         logits_processor.append(InfNanRemoveLogitsProcessor())
 
-        torch.manual_seed(0)
         with torch.no_grad():
             model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
             output_beam_sample = model.beam_sample(
@@ -2366,6 +2366,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             num_beams=2,
             num_beam_groups=2,
             num_return_sequences=2,
+            diversity_penalty=1.0,
             eos_token_id=None,
             return_dict_in_generate=True,
             output_scores=True,

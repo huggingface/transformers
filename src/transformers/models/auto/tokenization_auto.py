@@ -167,6 +167,7 @@ else:
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("ibert", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+            ("instructblip", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("jukebox", ("JukeboxTokenizer", None)),
             ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlmv2", ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast" if is_tokenizers_available() else None)),
@@ -213,6 +214,7 @@ else:
             ("mluke", ("MLukeTokenizer" if is_sentencepiece_available() else None, None)),
             ("mobilebert", ("MobileBertTokenizer", "MobileBertTokenizerFast" if is_tokenizers_available() else None)),
             ("mpnet", ("MPNetTokenizer", "MPNetTokenizerFast" if is_tokenizers_available() else None)),
+            ("mra", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "mt5",
                 (
@@ -323,6 +325,13 @@ else:
             ("tapas", ("TapasTokenizer", None)),
             ("tapex", ("TapexTokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
+            (
+                "umt5",
+                (
+                    "T5Tokenizer" if is_sentencepiece_available() else None,
+                    "T5TokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("vilt", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("visual_bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),
@@ -675,6 +684,8 @@ class AutoTokenizer:
                 class_ref = tokenizer_auto_map[0]
             tokenizer_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
+            if os.path.isdir(pretrained_model_name_or_path):
+                tokenizer_class.register_for_auto_class()
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif config_tokenizer_class is not None:
             tokenizer_class = None

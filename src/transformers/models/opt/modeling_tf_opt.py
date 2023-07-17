@@ -303,7 +303,7 @@ class TFOPTDecoderLayer(tf.keras.layers.Layer):
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
         """
         Args:
-            hidden_states (`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (`tf.Tensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`tf.Tensor`, *optional*): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`tf.Tensor`, *optional*): mask for attention heads in a given layer of size
@@ -618,7 +618,7 @@ class TFOPTDecoder(tf.keras.layers.Layer):
             attention_mask = tf.ones(inputs_embeds.shape[:2], dtype=tf.bool)
         else:
             tf.debugging.assert_equal(
-                attention_mask.shape[1],
+                tf.shape(attention_mask)[1],
                 past_key_values_length + input_shape[1],
                 message=(
                     f"The provided attention mask has length {attention_mask.shape[1]}, but its length should be "

@@ -97,8 +97,8 @@ if stale_egg_info.exists():
 # 1. all dependencies should be listed here with their version requirements if any
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
-    "Pillow",
-    "accelerate>=0.20.2",
+    "Pillow<10.0.0",
+    "accelerate>=0.20.3",
     "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
     "beautifulsoup4",
     "black~=23.1",
@@ -107,7 +107,7 @@ _deps = [
     "dataclasses",
     "datasets!=2.5.0",
     "decord==0.6.0",
-    "deepspeed>=0.8.3",
+    "deepspeed>=0.9.3",
     "diffusers",
     "dill<0.3.5",
     "evaluate>=0.2.0",
@@ -115,7 +115,7 @@ _deps = [
     "faiss-cpu",
     "fastapi",
     "filelock",
-    "flax>=0.4.1,<=0.6.9",
+    "flax>=0.4.1,<=0.7.0",
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
@@ -124,8 +124,8 @@ _deps = [
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
-    "jax>=0.2.8,!=0.3.2,<=0.3.6",
-    "jaxlib>=0.1.65,<=0.3.6",
+    "jax>=0.2.8,!=0.3.2,<=0.4.13",
+    "jaxlib>=0.1.65,<=0.4.13",
     "jieba",
     "kenlm",
     "keras-nlp>=0.3.1",
@@ -142,14 +142,14 @@ _deps = [
     "packaging>=20.0",
     "parameterized",
     "phonemizer",
-    "protobuf<=3.20.3",
+    "protobuf",
     "psutil",
     "pyyaml>=5.1",
-    "pydantic",
+    "pydantic<2",
     "pytest>=7.2.0",
     "pytest-timeout",
     "pytest-xdist",
-    "python>=3.7.0",
+    "python>=3.8.0",
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
@@ -168,9 +168,9 @@ _deps = [
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
     # TensorFlow pin. When changing this value, update examples/tensorflow/_tests_requirements.txt accordingly
-    "tensorflow-cpu>=2.4,<2.13",
-    "tensorflow>=2.4,<2.13",
-    "tensorflow-text<2.13",
+    "tensorflow-cpu>=2.6,<2.14",
+    "tensorflow>=2.6,<2.14",
+    "tensorflow-text<2.14",
     "tf2onnx",
     "timeout-decorator",
     "timm",
@@ -413,7 +413,6 @@ extras["agents"] = deps_list(
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
-    deps["importlib_metadata"] + ";python_version<'3.8'",  # importlib_metadata for Python versions that don't have it
     deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
     deps["huggingface-hub"],
     deps["numpy"],
@@ -444,8 +443,8 @@ setup(
     zip_safe=False,
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
-    python_requires=">=3.7.0",
-    install_requires=install_requires,
+    python_requires=">=3.8.0",
+    install_requires=list(install_requires),
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
@@ -454,7 +453,6 @@ setup(
         "License :: OSI Approved :: Apache Software License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",

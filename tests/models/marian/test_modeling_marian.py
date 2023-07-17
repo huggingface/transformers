@@ -618,7 +618,7 @@ class TestMarian_FI_EN_V2(MarianIntegrationTest):
         return cls
 
     @slow
-    def test_batch_generation_en_fr(self):
+    def test_batch_generation_fi_en(self):
         self._assert_generated_batch_equal_expected()
 
 

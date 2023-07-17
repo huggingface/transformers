@@ -36,18 +36,6 @@ from unittest import mock
 
 import huggingface_hub
 import requests
-from _pytest.doctest import (
-    Module,
-    _get_checker,
-    _get_continue_on_failure,
-    _get_runner,
-    _is_mocked,
-    _patch_unwrap_mock_aware,
-    get_optionflags,
-    import_path,
-)
-from _pytest.outcomes import skip
-from pytest import DoctestItem
 
 from transformers import logging as transformers_logging
 
@@ -83,11 +71,13 @@ from .utils import (
     is_phonemizer_available,
     is_pyctcdecode_available,
     is_pytesseract_available,
+    is_pytest_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
     is_safetensors_available,
     is_scipy_available,
     is_sentencepiece_available,
+    is_seqio_available,
     is_soundfile_availble,
     is_spacy_available,
     is_sudachi_available,
@@ -114,6 +104,24 @@ from .utils import (
 
 if is_accelerate_available():
     from accelerate.state import AcceleratorState, PartialState
+
+
+if is_pytest_available():
+    from _pytest.doctest import (
+        Module,
+        _get_checker,
+        _get_continue_on_failure,
+        _get_runner,
+        _is_mocked,
+        _patch_unwrap_mock_aware,
+        get_optionflags,
+        import_path,
+    )
+    from _pytest.outcomes import skip
+    from pytest import DoctestItem
+else:
+    Module = object
+    DoctestItem = object
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
@@ -433,6 +441,13 @@ def require_sentencepiece(test_case):
     Decorator marking a test that requires SentencePiece. These tests are skipped when SentencePiece isn't installed.
     """
     return unittest.skipUnless(is_sentencepiece_available(), "test requires SentencePiece")(test_case)
+
+
+def require_seqio(test_case):
+    """
+    Decorator marking a test that requires SentencePiece. These tests are skipped when SentencePiece isn't installed.
+    """
+    return unittest.skipUnless(is_seqio_available(), "test requires Seqio")(test_case)
 
 
 def require_scipy(test_case):
@@ -1850,9 +1865,9 @@ To skip cuda tests, make sure to call `SKIP_CUDA_DOCTEST=1 pytest --doctest-modu
 
 
 def preprocess_string(string, skip_cuda_tests):
-    """Prepare a docstring or a `.mdx` file to be run by doctest.
+    """Prepare a docstring or a `.md` file to be run by doctest.
 
-    The argument `string` would be the whole file content if it is a `.mdx` file. For a python file, it would be one of
+    The argument `string` would be the whole file content if it is a `.md` file. For a python file, it would be one of
     its docstring. In each case, it may contain multiple python code examples. If `skip_cuda_tests` is `True` and a
     cuda stuff is detective (with a heuristic), this method will return an empty string so no doctest will be run for
     `string`.
@@ -1874,13 +1889,6 @@ def preprocess_string(string, skip_cuda_tests):
     modified_string = ""
     if not is_cuda_found:
         modified_string = "".join(codeblocks)
-
-        if ">>>" in modified_string:
-            lines = modified_string.split("\n")
-            indent = len(lines[-1]) - len(lines[-1].lstrip())
-
-            cleanup = ">>> import gc; gc.collect()  # doctest: +IGNORE_RESULT"
-            modified_string += "\n" + " " * indent + cleanup
 
     return modified_string
 

@@ -1597,7 +1597,8 @@
             "EfficientFormerImageProcessor"
         ],
         "model_classes": [
-            "EfficientFormerForImageClassification"
+            "EfficientFormerForImageClassification",
+            "TFEfficientFormerForImageClassification"
         ],
         "sha": "ebadb628e12f268e321fcc756fa4606f7b5b3178"
     },
@@ -1607,7 +1608,8 @@
             "EfficientFormerImageProcessor"
         ],
         "model_classes": [
-            "EfficientFormerForImageClassificationWithTeacher"
+            "EfficientFormerForImageClassificationWithTeacher",
+            "TFEfficientFormerForImageClassificationWithTeacher"
         ],
         "sha": "1beabce6da9cb4ebbeafcd1ef23fac36b4a269e2"
     },
@@ -1617,7 +1619,8 @@
             "EfficientFormerImageProcessor"
         ],
         "model_classes": [
-            "EfficientFormerModel"
+            "EfficientFormerModel",
+            "TFEfficientFormerModel"
         ],
         "sha": "200fae5b875844d09c8a91d1c155b72b06a517f6"
     },
@@ -1735,6 +1738,16 @@
             "TFElectraModel"
         ],
         "sha": "312b532cbef26610d80f2bd008650160cae4f7a1"
+    },
+    "EncodecModel": {
+        "tokenizer_classes": [],
+        "processor_classes": [
+            "EncodecFeatureExtractor"
+        ],
+        "model_classes": [
+            "EncodecModel"
+        ],
+        "sha": "e14c5a2fd6529c85cd4ac5a05ee9e550ced6a006"
     },
     "EncoderDecoderModel": {
         "tokenizer_classes": [
@@ -3888,6 +3901,36 @@
         ],
         "sha": "b3a1452e7cb44b600b21ee14f3d5382366855a46"
     },
+    "MobileViTV2ForImageClassification": {
+        "tokenizer_classes": [],
+        "processor_classes": [
+            "MobileViTImageProcessor"
+        ],
+        "model_classes": [
+            "MobileViTV2ForImageClassification"
+        ],
+        "sha": "25752b0967ad594341d1b685401450d7f698433c"
+    },
+    "MobileViTV2ForSemanticSegmentation": {
+        "tokenizer_classes": [],
+        "processor_classes": [
+            "MobileViTImageProcessor"
+        ],
+        "model_classes": [
+            "MobileViTV2ForSemanticSegmentation"
+        ],
+        "sha": "13b953f50be33219d55a12f1098be38b88000897"
+    },
+    "MobileViTV2Model": {
+        "tokenizer_classes": [],
+        "processor_classes": [
+            "MobileViTImageProcessor"
+        ],
+        "model_classes": [
+            "MobileViTV2Model"
+        ],
+        "sha": "2f46357659db2d6d54d870e28073deeea1c8cb64"
+    },
     "MvpForCausalLM": {
         "tokenizer_classes": [
             "MvpTokenizer",
@@ -4451,6 +4494,16 @@
             "PerceiverModel"
         ],
         "sha": "83ec4d2d61ed62525ee033e13d144817beb29d19"
+    },
+    "Pix2StructForConditionalGeneration": {
+        "tokenizer_classes": [
+            "T5TokenizerFast"
+        ],
+        "processor_classes": [
+            "Pix2StructImageProcessor"
+        ],
+        "model_classes": [],
+        "sha": "42b3de00ad535076c4893e4ac5ae2d2748cc4ccb"
     },
     "PoolFormerForImageClassification": {
         "tokenizer_classes": [],
@@ -5123,7 +5176,8 @@
             "SamImageProcessor"
         ],
         "model_classes": [
-            "SamModel"
+            "SamModel",
+            "TFSamModel"
         ],
         "sha": "eca8651bc84e5ac3b1b62e784b744a6bd1b82575"
     },

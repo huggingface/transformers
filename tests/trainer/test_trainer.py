@@ -42,12 +42,14 @@ from transformers import (
     is_torch_available,
     logging,
 )
+from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     TOKEN,
     USER,
     CaptureLogger,
     TestCasePlus,
+    execute_subprocess_async,
     get_gpu_count,
     get_tests_dir,
     is_staging_test,
@@ -72,7 +74,7 @@ from transformers.testing_utils import (
     require_wandb,
     slow,
 )
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
@@ -2097,6 +2099,51 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertListEqual(trainer.optimizer.param_groups[0]["params"], wd_params)
         self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
 
+    @slow
+    @require_torch_multi_gpu
+    def test_end_to_end_example(self):
+        # Tests that `translation.py` will run without issues
+        script_path = os.path.abspath(
+            os.path.join(
+                os.path.dirname(__file__), "..", "..", "examples", "pytorch", "translation", "run_translation.py"
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            command = [
+                "accelerate",
+                "launch",
+                script_path,
+                "--model_name_or_path",
+                "t5-small",
+                "--per_device_train_batch_size",
+                "1",
+                "--output_dir",
+                tmpdir,
+                "--overwrite_output_dir",
+                "--do_train",
+                "--max_train_samples",
+                "64",
+                "--num_train_epochs",
+                "1",
+                "--dataset_name",
+                "wmt16",
+                "--dataset_config",
+                "ro-en",
+                "--source_lang",
+                "en",
+                "--target_lang",
+                "ro",
+                "--do_predict",
+                "--max_predict_samples",
+                "64",
+                "--predict_with_generate",
+                "--ddp_timeout",
+                "60",
+            ]
+            execute_subprocess_async(command)
+            # successful return here == success - any errors would have caused an error or a timeout in the sub-call
+
 
 @require_torch
 @is_staging_test
@@ -2803,3 +2850,11 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
             trainer.hyperparameter_search(
                 direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="wandb", n_trials=4, anonymous="must"
             )
+
+
+class HyperParameterSearchBackendsTest(unittest.TestCase):
+    def test_hyperparameter_search_backends(self):
+        self.assertEqual(
+            list(ALL_HYPERPARAMETER_SEARCH_BACKENDS.keys()),
+            list(HPSearchBackend),
+        )

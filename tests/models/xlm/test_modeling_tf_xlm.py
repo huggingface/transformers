@@ -61,7 +61,7 @@ class TFXLMModelTester:
         self.vocab_size = 99
         self.n_special = 0
         self.hidden_size = 32
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 2
         self.num_attention_heads = 4
         self.hidden_dropout_prob = 0.1
         self.attention_probs_dropout_prob = 0.1

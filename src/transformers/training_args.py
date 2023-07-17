@@ -87,9 +87,9 @@ if is_torch_neuroncore_available(check_device=False):
             )
             import torch_xla.distributed.xla_backend as xbn
 
-            if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
-                torch.distributed.init_process_group(backend="xla")
-                if not isinstance(torch.distributed.group.WORLD, xbn.ProcessGroupXla):
+            if not isinstance(dist.group.WORLD, xbn.ProcessGroupXla):
+                dist.init_process_group(backend="xla")
+                if not isinstance(dist.group.WORLD, xbn.ProcessGroupXla):
                     raise AssertionError("Failed to initialize torch.distributed process group using XLA backend.")
 
 
@@ -283,7 +283,11 @@ class TrainingArguments:
             float in range `[0,1)`. If smaller than 1, will be interpreted as ratio of total training steps.
         save_total_limit (`int`, *optional*):
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
-            `output_dir`.
+            `output_dir`. When `load_best_model_at_end` is enabled, the "best" checkpoint according to
+            `metric_for_best_model` will always be retained in addition to the most recent ones. For example, for
+            `save_total_limit=5` and `load_best_model_at_end`, the four last checkpoints will always be retained
+            alongside the best model. When `save_total_limit=1` and `load_best_model_at_end`, it is possible that two
+            checkpoints are saved: the last one and the best one (if they are different).
         save_safetensors (`bool`, *optional*, defaults to `False`):
             Use [safetensors](https://huggingface.co/docs/safetensors) saving and loading for state dicts instead of
             default `torch.load` and `torch.save`.
@@ -371,7 +375,10 @@ class TrainingArguments:
             except if the model used is one of the `XxxForQuestionAnswering` in which case it will also include the
             `["start_positions", "end_positions"]` keys.
         load_best_model_at_end (`bool`, *optional*, defaults to `False`):
-            Whether or not to load the best model found during training at the end of training.
+            Whether or not to load the best model found during training at the end of training. When this option is
+            enabled, the best checkpoint will always be saved. See
+            [`save_total_limit`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.save_total_limit)
+            for more.
 
             <Tip>
 
@@ -505,6 +512,9 @@ class TrainingArguments:
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
         ddp_bucket_cap_mb (`int`, *optional*):
             When using distributed training, the value of the flag `bucket_cap_mb` passed to `DistributedDataParallel`.
+        ddp_broadcast_buffers (`bool`, *optional*):
+            When using distributed training, the value of the flag `broadcast_buffers` passed to
+            `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
         dataloader_pin_memory (`bool`, *optional*, defaults to `True`):
             Whether you want to pin memory in data loaders or not. Will default to `True`.
         skip_memory_metrics (`bool`, *optional*, defaults to `True`):
@@ -581,7 +591,7 @@ class TrainingArguments:
             (https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) for more
             information.
         use_mps_device (`bool`, *optional*, defaults to `False`):
-            Whether to use Apple Silicon chip based `mps` device.
+            This argument is deprecated.`mps` device will be used if it is available similar to `cuda` device.
         torch_compile (`bool`, *optional*, defaults to `False`):
             Whether or not to compile the model using PyTorch 2.0
             [`torch.compile`](https://pytorch.org/get-started/pytorch-2.0/).
@@ -758,8 +768,13 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Limit the total amount of checkpoints. "
-                "Deletes the older checkpoints in the output_dir. Default is unlimited checkpoints"
+                "If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in"
+                " `output_dir`. When `load_best_model_at_end` is enabled, the 'best' checkpoint according to"
+                " `metric_for_best_model` will always be retained in addition to the most recent ones. For example,"
+                " for `save_total_limit=5` and `load_best_model_at_end=True`, the four last checkpoints will always be"
+                " retained alongside the best model. When `save_total_limit=1` and `load_best_model_at_end=True`,"
+                " it is possible that two checkpoints are saved: the last one and the best one (if they are different)."
+                " Default is unlimited checkpoints"
             )
         },
     )
@@ -780,7 +795,11 @@ class TrainingArguments:
     )
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
     use_mps_device: bool = field(
-        default=False, metadata={"help": "Whether to use Apple Silicon chip based `mps` device."}
+        default=False,
+        metadata={
+            "help": "This argument is deprecated. `mps` device will be used if available similar to `cuda` device."
+            " It will be removed in version 5.0 of 🤗 Transformers"
+        },
     )
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
     data_seed: Optional[int] = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
@@ -866,7 +885,7 @@ class TrainingArguments:
             )
         },
     )
-    debug: str = field(
+    debug: Union[str, List[DebugOption]] = field(
         default="",
         metadata={
             "help": (
@@ -917,10 +936,14 @@ class TrainingArguments:
     label_names: Optional[List[str]] = field(
         default=None, metadata={"help": "The list of keys in your dictionary of inputs that correspond to the labels."}
     )
-
     load_best_model_at_end: Optional[bool] = field(
         default=False,
-        metadata={"help": "Whether or not to load the best model found during training at the end of training."},
+        metadata={
+            "help": (
+                "Whether or not to load the best model found during training at the end of training. When this option"
+                " is enabled, the best checkpoint will always be saved. See `save_total_limit` for more."
+            )
+        },
     )
     metric_for_best_model: Optional[str] = field(
         default=None, metadata={"help": "The metric to use to compare two different models."}
@@ -1037,6 +1060,15 @@ class TrainingArguments:
         metadata={
             "help": (
                 "When using distributed training, the value of the flag `bucket_cap_mb` passed to "
+                "`DistributedDataParallel`."
+            )
+        },
+    )
+    ddp_broadcast_buffers: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": (
+                "When using distributed training, the value of the flag `broadcast_buffers` passed to "
                 "`DistributedDataParallel`."
             )
         },
@@ -1428,6 +1460,12 @@ class TrainingArguments:
                 " during training"
             )
 
+        if not (self.sharded_ddp == "" or not self.sharded_ddp):
+            warnings.warn(
+                "using `sharded_ddp` is deprecated and will be removed in version 4.33"
+                " of 🤗 Transformers. Use `fsdp` instead",
+                FutureWarning,
+            )
         if isinstance(self.sharded_ddp, bool):
             self.sharded_ddp = "simple" if self.sharded_ddp else ""
         if isinstance(self.sharded_ddp, str):
@@ -1545,10 +1583,16 @@ class TrainingArguments:
                 " `--debug tpu_metrics_debug` instead",
                 FutureWarning,
             )
-            self.debug += " tpu_metrics_debug"
+            if self.debug is None:
+                self.debug = " tpu_metrics_debug"
+            else:
+                self.debug += " tpu_metrics_debug"
             self.tpu_metrics_debug = False
+
         if isinstance(self.debug, str):
             self.debug = [DebugOption(s) for s in self.debug.split()]
+        elif self.debug is None:
+            self.debug = []
 
         self.deepspeed_plugin = None
         if self.deepspeed:
@@ -1692,16 +1736,14 @@ class TrainingArguments:
             del os.environ["ACCELERATE_USE_DEEPSPEED"]
             self._n_gpu = 1
         else:
-            self.distributed_state = PartialState(backend=self.ddp_backend)
+            self.distributed_state = PartialState(
+                backend=self.ddp_backend, timeout=timedelta(seconds=self.ddp_timeout)
+            )
             self._n_gpu = 1
         if not is_sagemaker_mp_enabled():
             device = self.distributed_state.device
             self.local_rank = self.distributed_state.local_process_index
-        if (
-            torch.distributed.is_available()
-            and torch.distributed.is_initialized()
-            and self.parallel_mode != ParallelMode.DISTRIBUTED
-        ):
+        if dist.is_available() and dist.is_initialized() and self.parallel_mode != ParallelMode.DISTRIBUTED:
             logger.warning(
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
@@ -1714,29 +1756,18 @@ class TrainingArguments:
             pass
         elif self.distributed_state.distributed_type == DistributedType.NO:
             if self.use_mps_device:
-                if not torch.backends.mps.is_available():
-                    if not torch.backends.mps.is_built():
-                        raise AssertionError(
-                            "MPS not available because the current PyTorch install was not "
-                            "built with MPS enabled. Please install torch version >=1.12.0 on "
-                            "your Apple silicon Mac running macOS 12.3 or later with a native "
-                            "version (arm64) of Python"
-                        )
-                    else:
-                        raise AssertionError(
-                            "MPS not available because the current MacOS version is not 12.3+ "
-                            "and/or you do not have an MPS-enabled device on this machine."
-                        )
-                else:
-                    if not version.parse(version.parse(torch.__version__).base_version) > version.parse("1.12.0"):
-                        warnings.warn(
-                            "We strongly recommend to install PyTorch >= 1.13 (nightly version at the time of writing)"
-                            " on your MacOS machine. It has major fixes related to model correctness and performance"
-                            " improvements for transformer based models. Please refer to"
-                            " https://github.com/pytorch/pytorch/issues/82707 for more details."
-                        )
-                    device = torch.device("mps")
-                    self._n_gpu = 1
+                warnings.warn(
+                    "`use_mps_device` is deprecated and will be removed in version 5.0 of 🤗 Transformers."
+                    "`mps` device will be used by default if available similar to the way `cuda` device is used."
+                    "Therefore, no action from user is required. "
+                )
+                if device.type != "mps":
+                    raise ValueError(
+                        "Either you do not have an MPS-enabled device on this machine or MacOS version is not 12.3+ "
+                        "or current PyTorch install was not built with MPS enabled."
+                    )
+            if device.type == "mps":
+                self._n_gpu = 1
             elif self.no_cuda:
                 device = torch.device("cpu")
                 self._n_gpu = 0
@@ -1811,15 +1842,10 @@ class TrainingArguments:
         The number of processes used in parallel.
         """
         requires_backends(self, ["torch"])
-
-        if is_torch_tpu_available():
-            return xm.xrt_world_size()
+        if self.distributed_state is not None:
+            return self.distributed_state.num_processes
         elif is_sagemaker_mp_enabled():
             return smp.dp_size() if not smp.state.cfg.prescaled_batch else smp.rdp_size()
-        elif is_sagemaker_dp_enabled():
-            return dist.get_world_size()
-        elif self.parallel_mode == ParallelMode.DISTRIBUTED:
-            return torch.distributed.get_world_size()
         return 1
 
     @property
@@ -1828,14 +1854,10 @@ class TrainingArguments:
         The index of the current process used.
         """
         requires_backends(self, ["torch"])
-        if is_torch_tpu_available():
-            return xm.get_ordinal()
+        if self.distributed_state is not None:
+            return self.distributed_state.process_index
         elif is_sagemaker_mp_enabled():
             return smp.dp_rank() if not smp.state.cfg.prescaled_batch else smp.rdp_rank()
-        elif is_sagemaker_dp_enabled():
-            return dist.get_rank()
-        elif self.parallel_mode == ParallelMode.DISTRIBUTED:
-            return torch.distributed.get_rank()
         return 0
 
     @property
@@ -1844,14 +1866,11 @@ class TrainingArguments:
         The index of the local process used.
         """
         requires_backends(self, ["torch"])
-        if is_torch_tpu_available():
-            return xm.get_local_ordinal()
+
+        if self.distributed_state is not None:
+            return self.distributed_state.local_process_index
         elif is_sagemaker_mp_enabled():
             return smp.local_rank()
-        elif is_sagemaker_dp_enabled():
-            return dist.get_rank()
-        elif self.parallel_mode == ParallelMode.DISTRIBUTED:
-            return self.local_rank
         return 0
 
     @property
@@ -1940,25 +1959,23 @@ class TrainingArguments:
 
         """
         if is_torch_available() and self.world_size > 1:
-            main_process_desc = "main process"
-            if local:
-                is_main_process = self.local_process_index == 0
-                main_process_desc = "main local process"
+            main_process_desc = "main local process" if local else "main process"
+            if self.distributed_state is not None:
+                is_main_process = (
+                    self.distributed_state.is_local_main_process if local else self.distributed_state.is_main_process
+                )
             elif is_sagemaker_mp_enabled():
                 is_main_process = smp.rank() == 0
-            else:
-                is_main_process = self.process_index == 0
 
             try:
                 if not is_main_process:
                     # tell all replicas to wait
                     logger.debug(f"{self.process_index}: waiting for the {main_process_desc} to perform {desc}")
+
                     if is_torch_tpu_available():
                         xm.rendezvous(desc)
-                    elif is_sagemaker_dp_enabled():
-                        dist.barrier()
                     else:
-                        torch.distributed.barrier()
+                        dist.barrier()
                 yield
             finally:
                 if is_main_process:
@@ -1966,10 +1983,8 @@ class TrainingArguments:
                     logger.debug(f"{self.process_index}: {main_process_desc} completed {desc}, releasing all replicas")
                     if is_torch_tpu_available():
                         xm.rendezvous(desc)
-                    elif is_sagemaker_dp_enabled():
-                        dist.barrier()
                     else:
-                        torch.distributed.barrier()
+                        dist.barrier()
         else:
             yield
 

@@ -16,6 +16,7 @@
 import importlib
 import inspect
 import json
+import os
 from collections import OrderedDict
 
 # Build the list of all feature extractors
@@ -54,6 +55,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("git", "GitProcessor"),
         ("groupvit", "CLIPProcessor"),
         ("hubert", "Wav2Vec2Processor"),
+        ("instructblip", "InstructBlipProcessor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
         ("markuplm", "MarkupLMProcessor"),
@@ -261,6 +263,8 @@ class AutoProcessor:
                 processor_auto_map, pretrained_model_name_or_path, **kwargs
             )
             _ = kwargs.pop("code_revision", None)
+            if os.path.isdir(pretrained_model_name_or_path):
+                processor_class.register_for_auto_class()
             return processor_class.from_pretrained(
                 pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
             )

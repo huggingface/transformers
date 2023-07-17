@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Auto Config class."""
 import importlib
+import os
 import re
 import warnings
 from collections import OrderedDict
@@ -80,10 +81,12 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("efficientformer", "EfficientFormerConfig"),
         ("efficientnet", "EfficientNetConfig"),
         ("electra", "ElectraConfig"),
+        ("encodec", "EncodecConfig"),
         ("encoder-decoder", "EncoderDecoderConfig"),
         ("ernie", "ErnieConfig"),
         ("ernie_m", "ErnieMConfig"),
         ("esm", "EsmConfig"),
+        ("falcon", "FalconConfig"),
         ("flaubert", "FlaubertConfig"),
         ("flava", "FlavaConfig"),
         ("fnet", "FNetConfig"),
@@ -106,6 +109,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("ibert", "IBertConfig"),
         ("imagegpt", "ImageGPTConfig"),
         ("informer", "InformerConfig"),
+        ("instructblip", "InstructBlipConfig"),
         ("jukebox", "JukeboxConfig"),
         ("layoutlm", "LayoutLMConfig"),
         ("layoutlmv2", "LayoutLMv2Config"),
@@ -135,7 +139,9 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mobilevit", "MobileViTConfig"),
         ("mobilevitv2", "MobileViTV2Config"),
         ("mpnet", "MPNetConfig"),
+        ("mra", "MraConfig"),
         ("mt5", "MT5Config"),
+        ("musicgen", "MusicgenConfig"),
         ("mvp", "MvpConfig"),
         ("nat", "NatConfig"),
         ("nezha", "NezhaConfig"),
@@ -191,6 +197,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("transfo-xl", "TransfoXLConfig"),
         ("trocr", "TrOCRConfig"),
         ("tvlt", "TvltConfig"),
+        ("umt5", "UMT5Config"),
         ("unispeech", "UniSpeechConfig"),
         ("unispeech-sat", "UniSpeechSatConfig"),
         ("upernet", "UperNetConfig"),
@@ -204,6 +211,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("vit_hybrid", "ViTHybridConfig"),
         ("vit_mae", "ViTMAEConfig"),
         ("vit_msn", "ViTMSNConfig"),
+        ("vivit", "VivitConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
         ("wavlm", "WavLMConfig"),
@@ -273,9 +281,11 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("efficientformer", "EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("efficientnet", "EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("electra", "ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("encodec", "ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("ernie", "ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("ernie_m", "ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("esm", "ESM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("falcon", "FALCON_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("flaubert", "FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("flava", "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fnet", "FNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -297,6 +307,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("ibert", "IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("imagegpt", "IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("informer", "INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("instructblip", "INSTRUCTBLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("jukebox", "JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("layoutlm", "LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("layoutlmv2", "LAYOUTLMV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -323,6 +334,8 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("mobilevit", "MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilevitv2", "MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mpnet", "MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("mra", "MRA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("musicgen", "MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mvp", "MVP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("nat", "NAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("nezha", "NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -382,6 +395,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("vit_hybrid", "VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit_mae", "VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit_msn", "VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("vivit", "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2", "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2-conformer", "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("whisper", "WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -461,10 +475,12 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("efficientformer", "EfficientFormer"),
         ("efficientnet", "EfficientNet"),
         ("electra", "ELECTRA"),
+        ("encodec", "EnCodec"),
         ("encoder-decoder", "Encoder decoder"),
         ("ernie", "ERNIE"),
         ("ernie_m", "ErnieM"),
         ("esm", "ESM"),
+        ("falcon", "Falcon"),
         ("flan-t5", "FLAN-T5"),
         ("flan-ul2", "FLAN-UL2"),
         ("flaubert", "FlauBERT"),
@@ -490,6 +506,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("ibert", "I-BERT"),
         ("imagegpt", "ImageGPT"),
         ("informer", "Informer"),
+        ("instructblip", "InstructBLIP"),
         ("jukebox", "Jukebox"),
         ("layoutlm", "LayoutLM"),
         ("layoutlmv2", "LayoutLMv2"),
@@ -525,7 +542,9 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mobilevit", "MobileViT"),
         ("mobilevitv2", "MobileViTV2"),
         ("mpnet", "MPNet"),
+        ("mra", "MRA"),
         ("mt5", "MT5"),
+        ("musicgen", "MusicGen"),
         ("mvp", "MVP"),
         ("nat", "NAT"),
         ("nezha", "Nezha"),
@@ -586,6 +605,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("trocr", "TrOCR"),
         ("tvlt", "TVLT"),
         ("ul2", "UL2"),
+        ("umt5", "UMT5"),
         ("unispeech", "UniSpeech"),
         ("unispeech-sat", "UniSpeechSat"),
         ("upernet", "UPerNet"),
@@ -599,6 +619,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("vit_hybrid", "ViT Hybrid"),
         ("vit_mae", "ViTMAE"),
         ("vit_msn", "ViTMSN"),
+        ("vivit", "ViViT"),
         ("wav2vec2", "Wav2Vec2"),
         ("wav2vec2-conformer", "Wav2Vec2-Conformer"),
         ("wav2vec2_phoneme", "Wav2Vec2Phoneme"),
@@ -620,6 +641,15 @@ MODEL_NAMES_MAPPING = OrderedDict(
     ]
 )
 
+DEPRECATED_MODELS = [
+    "bort",
+    "mctct",
+    "mmbt",
+    "retribert",
+    "trajectory_transformer",
+    "van",
+]
+
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
     [
         ("openai-gpt", "openai"),
@@ -639,7 +669,11 @@ def model_type_to_module_name(key):
     if key in SPECIAL_MODEL_TYPE_TO_MODULE_NAME:
         return SPECIAL_MODEL_TYPE_TO_MODULE_NAME[key]
 
-    return key.replace("-", "_")
+    key = key.replace("-", "_")
+    if key in DEPRECATED_MODELS:
+        key = f"deprecated.{key}"
+
+    return key
 
 
 def config_class_to_model_type(config):
@@ -696,11 +730,11 @@ class _LazyConfigMapping(OrderedDict):
     def __contains__(self, item):
         return item in self._mapping or item in self._extra_content
 
-    def register(self, key, value):
+    def register(self, key, value, exist_ok=False):
         """
         Register a new configuration in this mapping.
         """
-        if key in self._mapping.keys():
+        if key in self._mapping.keys() and not exist_ok:
             raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
         self._extra_content[key] = value
 
@@ -951,6 +985,8 @@ class AutoConfig:
         if has_remote_code and trust_remote_code:
             class_ref = config_dict["auto_map"]["AutoConfig"]
             config_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
+            if os.path.isdir(pretrained_model_name_or_path):
+                config_class.register_for_auto_class()
             _ = kwargs.pop("code_revision", None)
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
