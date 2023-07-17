@@ -57,7 +57,7 @@ def create_rename_keys(config):
             )
             rename_keys.append((f"block{i + 1}.{j}.attn.kv.bias", f"pvt.encoder.block.{i}.{j}.attention.self.kv.bias"))
 
-            if config.sr_ratios[i] > 1:
+            if config.sequence_reduction_ratios[i] > 1:
                 rename_keys.append(
                     (
                         f"block{i + 1}.{j}.attn.norm.weight",
@@ -68,10 +68,10 @@ def create_rename_keys(config):
                     (f"block{i + 1}.{j}.attn.norm.bias", f"pvt.encoder.block.{i}.{j}.attention.self.layer_norm.bias")
                 )
                 rename_keys.append(
-                    (f"block{i + 1}.{j}.attn.sr.weight", f"pvt.encoder.block.{i}.{j}.attention.self.sr.weight")
+                    (f"block{i + 1}.{j}.attn.sr.weight", f"pvt.encoder.block.{i}.{j}.attention.self.sequence_reduction.weight")
                 )
                 rename_keys.append(
-                    (f"block{i + 1}.{j}.attn.sr.bias", f"pvt.encoder.block.{i}.{j}.attention.self.sr.bias")
+                    (f"block{i + 1}.{j}.attn.sr.bias", f"pvt.encoder.block.{i}.{j}.attention.self.sequence_reduction.bias")
                 )
 
             rename_keys.append(
@@ -149,16 +149,16 @@ def convert_pvt_checkpoint(pvt_size, pvt_checkpoint, pytorch_dump_folder_path):
 
     # define default Pvt configuration
     if pvt_size == "tiny":
-        config_path = "https://huggingface.co/Xrenya/pvt-medium-224/raw/main/config.json"
+        config_path = "Zetatech/pvt-tiny-224"
     elif pvt_size == "small":
-        config_path = "https://huggingface.co/Xrenya/pvt-small-224/raw/main/config.json"
+        config_path = "Zetatech/pvt-small-224"
     elif pvt_size == "medium":
-        config_path = "https://huggingface.co/Xrenya/pvt-medium-224/raw/main/config.json"
+        config_path = "Zetatech/pvt-medium-224"
     elif pvt_size == "large":
-        config_path = "https://huggingface.co/Xrenya/pvt-large-224/raw/main/config.json"
+        config_path = "Zetatech/pvt-large-224"
     else:
         raise ValueError(f"Available model's size: 'tiny', 'small', 'medium', 'large', but " f"'{pvt_size}' was given")
-    config = PvtConfig(config_path)
+    config = PvtConfig(name_or_path=config_path)
     # load original model from https://github.com/whai362/PVT
     state_dict = torch.load(pvt_checkpoint, map_location="cpu")
 
@@ -172,17 +172,38 @@ def convert_pvt_checkpoint(pvt_size, pvt_checkpoint, pytorch_dump_folder_path):
     model.load_state_dict(state_dict)
 
     # Check outputs on an image, prepared by PVTFeatureExtractor
-    feature_extractor = PvtImageProcessor(size=config.image_size)
-    encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
+    image_processor = PvtImageProcessor(size=config.image_size)
+    encoding = image_processor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values)
-    outputs = outputs.logits.detach().cpu().argmax().item()
+    logits = outputs.logits.detach().cpu()
+
+    if pvt_size == "tiny":
+        expected_slice_logits = torch.tensor(
+            [-1.4192, -1.9158, -0.9702]
+        )
+    elif pvt_size == "small":
+        expected_slice_logits = torch.tensor(
+            [0.4353, -0.1960, -0.2373]
+        )
+    elif pvt_size == "medium":
+        expected_slice_logits = torch.tensor(
+            [-0.2914, -0.2231,  0.0321]
+        )
+    elif pvt_size == "large":
+        expected_slice_logits = torch.tensor(
+            [0.3740, -0.7739, -0.4214]
+        )
+    else:
+        raise ValueError(f"Available model's size: 'tiny', 'small', 'medium', 'large', but " f"'{pvt_size}' was given")
+
+    assert torch.allclose(logits[0, :3], expected_slice_logits, atol=1e-4)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model pytorch_model.bin to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
-    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving image processor to {pytorch_dump_folder_path}")
+    image_processor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

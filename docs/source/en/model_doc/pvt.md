@@ -36,9 +36,6 @@ that PVT could serve as an alternative and useful backbone for pixel-level predi
 
 This model was contributed by [Xrenya](<https://huggingface.co/Xrenya). The original code can be found [here](https://github.com/whai362/PVT).
 
-Tips:
-
-- The PyTorch version of this model is only available.
 
 - PVTv1 on ImageNet-1K
 

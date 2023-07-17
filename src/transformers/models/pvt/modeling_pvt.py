@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Pvt model."""
+""" PyTorch PVT model."""
 
 import collections
 import math
@@ -43,14 +43,14 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PvtConfig"
 
-_CHECKPOINT_FOR_DOC = "Xrenya/pvt-tiny-224"
+_CHECKPOINT_FOR_DOC = "Zetatech/pvt-tiny-224"
 _EXPECTED_OUTPUT_SHAPE = [1, 50, 512]
 
-_IMAGE_CLASS_CHECKPOINT = "Xrenya/pvt-tiny-224"
+_IMAGE_CLASS_CHECKPOINT = "Zetatech/pvt-tiny-224"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 PVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Xrenya/pvt-tiny-224"
+    "Zetatech/pvt-tiny-224"
     # See all PVT models at https://huggingface.co/models?filter=pvt
 ]
 

@@ -146,177 +146,6 @@ class PvtModelTester:
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
-    fx_compatible = True
-
-    test_pruning = True
-    test_resize_embeddings = False
-    test_head_masking = False
-
-    all_model_classes = (PvtForImageClassification, PvtModel) if is_torch_available() else ()
-
-    def setUp(self):
-        self.model_tester = PvtModelTester(self)
-        self.config_tester = PvtConfigTester(self, config_class=PvtConfig)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skip("PVT does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip("PVT does not have get_input_embeddings method and get_output_embeddings methods")
-    def test_model_common_attributes(self):
-        pass
-
-    def test_forward_signature(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
-            arg_names = [*signature.parameters.keys()]
-
-            expected_arg_names = ["pixel_values"]
-            self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-
-            expected_num_attentions = sum(self.model_tester.depths)
-            self.assertEqual(len(attentions), expected_num_attentions)
-
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-
-            self.assertEqual(len(attentions), expected_num_attentions)
-
-            # verify the first attentions (first block, first layer)
-            expected_seq_len = (self.model_tester.image_size // 4) ** 2
-            expected_reduced_seq_len = (self.model_tester.image_size // (4 * self.model_tester.sr_ratios[0])) ** 2
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads[0], expected_seq_len, expected_reduced_seq_len],
-            )
-
-            # verify the last attentions (last block, last layer)
-            expected_seq_len = (self.model_tester.image_size // 32) ** 2
-            expected_reduced_seq_len = (self.model_tester.image_size // (32 * self.model_tester.sr_ratios[-1])) ** 2
-            self.assertListEqual(
-                list(attentions[-1].shape[-3:]),
-                [self.model_tester.num_attention_heads[-1], expected_seq_len, expected_reduced_seq_len],
-            )
-            out_len = len(outputs)
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            self.assertEqual(out_len + 1, len(outputs))
-
-            self_attentions = outputs.attentions
-
-            self.assertEqual(len(self_attentions), expected_num_attentions)
-            # verify the first attentions (first block, first layer)
-            expected_seq_len = (self.model_tester.image_size // 4) ** 2
-            expected_reduced_seq_len = (self.model_tester.image_size // (4 * self.model_tester.sr_ratios[0])) ** 2
-            self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads[0], expected_seq_len, expected_reduced_seq_len],
-            )
-
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.hidden_states
-
-            expected_num_layers = sum(self.model_tester.depths) + 1
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            # verify the first hidden states (first block)
-            self.assertListEqual(
-                list(hidden_states[0].shape[-3:]),
-                [
-                    self.model_tester.batch_size,
-                    (self.model_tester.image_size // 4) ** 2,
-                    self.model_tester.image_size // 4,
-                ],
-            )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-    def test_training(self):
-        if not self.model_tester.is_training:
-            return
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-
-        for model_class in self.all_model_classes:
-            if model_class in get_values(MODEL_MAPPING):
-                continue
-
-            model = model_class(config)
-            model.to(torch_device)
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-            loss.backward()
-
-    def test_for_image_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in PVT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = PvtForImageClassification.from_pretrained(model_name)
-            self.assertIsNotNone(model)
 
 
 # We will verify our results on an image of cute cats
@@ -354,9 +183,16 @@ class PvtModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip("PVT normally initialized the parameters so negative values are expected.")
     def test_initialization(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            for name, param in model.named_parameters():
+                self.assertTrue(
+                    -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

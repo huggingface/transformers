@@ -557,7 +557,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("plbart", "PLBart"),
         ("poolformer", "PoolFormer"),
         ("prophetnet", "ProphetNet"),
-        ("pvt", "Pvt"),
+        ("pvt", "PVT"),
         ("qdqbert", "QDQBert"),
         ("rag", "RAG"),
         ("realm", "REALM"),
