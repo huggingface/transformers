@@ -1428,7 +1428,10 @@ class BarkModel(BarkPreTrainedModel):
         coarse_generation_config = BarkCoarseGenerationConfig(**self.generation_config.coarse_acoustics_config)
         fine_generation_config = BarkFineGenerationConfig(**self.generation_config.fine_acoustics_config)
 
-        kwargs_semantic = {}
+        kwargs_semantic = {
+            # if "attention_mask" is set, it should not be passed to CoarseModel and FineModel
+            "attention_mask": kwargs.pop("attention_mask", None)
+        }
         kwargs_coarse = {}
         kwargs_fine = {}
         for key, value in kwargs.items():
@@ -1455,7 +1458,6 @@ class BarkModel(BarkPreTrainedModel):
         semantic_output = self.semantic.generate(
             input_ids,
             history_prompt=history_prompt,
-            attention_mask=kwargs.pop("attention_mask", None),
             semantic_generation_config=semantic_generation_config,
             **kwargs_semantic,
         )
