@@ -94,9 +94,23 @@ with torch.no_grad():
 
 Below you can find the list of the models we benchmarked.
 
-- Image Classification: google/vit-base-patch16-224, microsoft/beit-base-patch16-224-pt22k-ft22k
-- Image Segmentation: nvidia/segformer-b0-finetuned-ade-512-512
-- Object Detection: google/owlvit-base-patch32, facebook/detr-resnet-50
+**Image Classification** 
+- google/vit-base-patch16-224 
+- microsoft/beit-base-patch16-224-pt22k-ft22k 
+- facebook/convnext-large-224
+- microsoft/resnet-50
+
+**Image Segmentation** 
+- nvidia/segformer-b0-finetuned-ade-512-512
+- facebook/mask2former-swin-tiny-coco-panoptic
+- facebook/maskformer-swin-base-ade
+- google/deeplabv3_mobilenet_v2_1.0_513
+
+**Object Detection** 
+- google/owlvit-base-patch32
+- facebook/detr-resnet-101
+- microsoft/conditional-detr-resnet-50
+
 
 Below you can find inference durations in milliseconds for each model with and without `compile()`. Note that OwlViT results in OOM in larger batch sizes.
 
@@ -109,7 +123,13 @@ Below you can find inference durations in milliseconds for each model with and w
 | Object Detection/OwlViT | 24.978 | 18.420 |
 | Image Classification/BeiT | 11.282 | 8.448 | 
 | Object Detection/DETR | 34.619 | 19.040 |
-
+| Image Classification/ConvNeXT | 10.410 | 10.208 | 
+| Image Classification/ResNet | 6.531 | 4.124 |
+| Image Segmentation/Mask2former | 60.188 | 49.117 |
+| Image Segmentation/Maskformer | 75.764 | 59.487 | 
+| Image Segmentation/MobileNet | 8.583 | 3.974 |
+| Object Detection/Resnet-101 | 36.276 | 18.197 |
+| Object Detection/Conditional-DETR | 31.219 | 17.993 |
 
 
 ### A100 (batch size: 4)
@@ -120,6 +140,13 @@ Below you can find inference durations in milliseconds for each model with and w
 | Image Segmentation/Segformer | 18.838 | 16.476 |
 | Image Classification/BeiT | 13.205 | 13.048 | 
 | Object Detection/DETR | 48.657 | 32.418|
+| Image Classification/ConvNeXT | 22.940 | 21.631 | 
+| Image Classification/ResNet | 6.657 | 4.268 |
+| Image Segmentation/Mask2former | 74.277 | 61.781 |
+| Image Segmentation/Maskformer | 180.700 | 159.116 | 
+| Image Segmentation/MobileNet | 14.174 | 8.515 |
+| Object Detection/Resnet-101 | 68.101 | 44.998 |
+| Object Detection/Conditional-DETR | 56.470 | 35.552 |
 
 ### A100 (batch size: 16)
 
@@ -129,6 +156,13 @@ Below you can find inference durations in milliseconds for each model with and w
 | Image Segmentation/Segformer | 37.005 | 31.144 |
 | Image Classification/BeiT | 41.854 | 41.048 | 
 | Object Detection/DETR | 164.382 | 161.902 |
+| Image Classification/ConvNeXT | 82.258 / 75.561 | 
+| Image Classification/ResNet | 7.018 / 5.024 |
+| Image Segmentation/Mask2former | 178.945 / 154.814 |
+| Image Segmentation/Maskformer | 638.570 / 579.826 | 
+| Image Segmentation/MobileNet | 51.693 / 30.310 |
+| Object Detection/Resnet-101 | 232.887 / 155.021 |
+| Object Detection/Conditional-DETR | 180.491 / 124.032 |
 
 ### V100 (batch size: 1)
 
@@ -139,6 +173,13 @@ Below you can find inference durations in milliseconds for each model with and w
 | Object Detection/OwlViT | 25.769 | 22.395 | 
 | Image Classification/BeiT | 11.347 | 7.234 | 
 | Object Detection/DETR | 33.951 | 19.388 |
+| Image Classification/ConvNeXT | 11.623 | 10.412 | 
+| Image Classification/ResNet | 6.484 | 3.820 |
+| Image Segmentation/Mask2former | 64.640 | 49.873 |
+| Image Segmentation/Maskformer | 95.532 | 72.207 | 
+| Image Segmentation/MobileNet | 9.217 | 4.753 |
+| Object Detection/Resnet-101 | 52.818 | 28.367 |
+| Object Detection/Conditional-DETR | 39.512 | 20.816 |
 
 ### V100 (batch size: 4)
 
@@ -148,6 +189,13 @@ Below you can find inference durations in milliseconds for each model with and w
 | Image Segmentation/Segformer | 16.787 | 16.188 |
 | Image Classification/BeiT | 15.171 | 14.753 | 
 | Object Detection/DETR | 88.529 | 64.195 |
+| Image Classification/ConvNeXT | 29.574 | 27.085 | 
+| Image Classification/ResNet | 6.109 | 4.731 |
+| Image Segmentation/Mask2former | 90.402 | 76.926 |
+| Image Segmentation/Maskformer | 234.261 | 205.456 | 
+| Image Segmentation/MobileNet | 24.623 | 14.816 |
+| Object Detection/Resnet-101 | 134.672 | 101.304 |
+| Object Detection/Conditional-DETR | 97.464 | 69.739 |
 
 ### V100 (batch size: 16)
 
@@ -157,6 +205,13 @@ Below you can find inference durations in milliseconds for each model with and w
 | Image Segmentation/Segformer | 61.013 | 55.499 |
 | Image Classification/BeiT | 53.938 | 53.581  |
 | Object Detection/DETR | OOM | OOM |
+| Image Classification/ConvNeXT | 109.682 | 100.771 | 
+| Image Classification/ResNet | 14.857 | 12.089 |
+| Image Segmentation/Mask2former | 249.605 | 222.801 |
+| Image Segmentation/Maskformer | 831.142 | 743.645 | 
+| Image Segmentation/MobileNet | 93.129 | 55.365 |
+| Object Detection/Resnet-101 | 482.425 | 361.843 |
+| Object Detection/Conditional-DETR | 344.661 | 255.298 |
 
 ### T4 (batch size: 1)
 
@@ -168,6 +223,14 @@ Below you can find inference durations in milliseconds for each model with and w
 | Image Classification/BeiT | 16.464 | 15.710 | 
 | Object Detection/DETR | 73.100 | 53.99 |
 
+| Image Classification/ConvNeXT | 32.932 | 30.845 | 
+| Image Classification/ResNet | 6.031 | 4.321 |
+| Image Segmentation/Mask2former | 79.192 | 66.815 |
+| Image Segmentation/Maskformer | 200.026 | 188.268 | 
+| Image Segmentation/MobileNet | 18.908 | 11.997 |
+| Object Detection/Resnet-101 | 106.622 | 82.566 |
+| Object Detection/Conditional-DETR | 77.594 | 56.984 |
+
 ### T4 (batch size: 4)
 
 | **Task/Model** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** |
@@ -176,6 +239,13 @@ Below you can find inference durations in milliseconds for each model with and w
 | Image Segmentation/Segformer | 45.327 | 42.445 |
 | Image Classification/BeiT | 52.007 | 51.354 | 
 | Object Detection/DETR | 277.850 | 268.003 |
+| Image Classification/ConvNeXT | 119.259 | 105.580 | 
+| Image Classification/ResNet | 13.039 | 11.388 |
+| Image Segmentation/Mask2former | 201.540 | 184.670 |
+| Image Segmentation/Maskformer | 764.052 | 711.280 | 
+| Image Segmentation/MobileNet | 74.289 | 48.677 |
+| Object Detection/Resnet-101 | 421.859 | 357.614 |
+| Object Detection/Conditional-DETR | 289.002 | 226.945 |
 
 ### T4 (batch size: 16)
 
@@ -185,5 +255,12 @@ Below you can find inference durations in milliseconds for each model with and w
 | Image Segmentation/Segformer | 192.412 | 163.620 |
 | Image Classification/BeiT | 188.978 | 187.976 | 
 | Object Detection/DETR | OOM | OOM |
+| Image Classification/ConvNeXT | 422.886 | 388.078 | 
+| Image Classification/ResNet | 44.114 | 37.604 |
+| Image Segmentation/Mask2former | 756.337 | 695.291 |
+| Image Segmentation/Maskformer | 2842.940 | 2656.88 | 
+| Image Segmentation/MobileNet | 299.003 | 201.942 |
+| Object Detection/Resnet-101 |  1619.505 | 1262.758 | 
+| Object Detection/Conditional-DETR | 1137.513 | 897.390|
 
 
