@@ -236,7 +236,11 @@ class MptModelTester:
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask, output_hidden_states=True,)[
+        output_from_no_past = model(
+            next_input_ids,
+            attention_mask=next_attention_mask,
+            output_hidden_states=True,
+        )[
             "hidden_states"
         ][0]
         output_from_past = model(
