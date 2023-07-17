@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Auto Config class."""
 import importlib
+import os
 import re
 import warnings
 from collections import OrderedDict
@@ -640,6 +641,15 @@ MODEL_NAMES_MAPPING = OrderedDict(
     ]
 )
 
+DEPRECATED_MODELS = [
+    "bort",
+    "mctct",
+    "mmbt",
+    "retribert",
+    "trajectory_transformer",
+    "van",
+]
+
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
     [
         ("openai-gpt", "openai"),
@@ -659,7 +669,11 @@ def model_type_to_module_name(key):
     if key in SPECIAL_MODEL_TYPE_TO_MODULE_NAME:
         return SPECIAL_MODEL_TYPE_TO_MODULE_NAME[key]
 
-    return key.replace("-", "_")
+    key = key.replace("-", "_")
+    if key in DEPRECATED_MODELS:
+        key = f"deprecated.{key}"
+
+    return key
 
 
 def config_class_to_model_type(config):
@@ -971,6 +985,8 @@ class AutoConfig:
         if has_remote_code and trust_remote_code:
             class_ref = config_dict["auto_map"]["AutoConfig"]
             config_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
+            if os.path.isdir(pretrained_model_name_or_path):
+                config_class.register_for_auto_class()
             _ = kwargs.pop("code_revision", None)
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
