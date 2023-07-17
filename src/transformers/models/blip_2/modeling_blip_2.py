@@ -1707,7 +1707,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
         >>> print(generated_text)
         two
-        
+        ```
+
         Note that int8 inference is also supported through [bitsandbytes](https://github.com/TimDettmers/bitsandbytes).
         This greatly reduces the amount of memory used by the model while maintaining the same performance.
 
