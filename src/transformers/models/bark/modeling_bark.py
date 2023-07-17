@@ -1402,6 +1402,13 @@ class BarkModel(BarkPreTrainedModel):
                 longest generation among the batch.
             history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
                 Optional `Bark` speaker prompt. Note that for now, this model takes only one speaker prompt per batch.
+        kwargs (*optional*): Remaining dictionary of keyword arguments. Keyword arguments are of two types:
+
+            - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model.
+            - With a *semantic_*, *coarse_*, *fine_* prefix, they will be input for the `generate` method of the
+              semantic, coarse and fine respectively. It has the priority over the keywords without a prefix.
+
+            This means you can, for example, specify a generation strategy for all sub-models except one.
         Returns:
             torch.LongTensor: Output generated audio.
 
