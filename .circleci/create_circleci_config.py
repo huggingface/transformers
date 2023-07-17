@@ -398,12 +398,13 @@ examples_flax_job = CircleCIJob(
 
 hub_job = CircleCIJob(
     "hub",
+    additional_env={"HUGGINGFACE_CO_STAGING": True},
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install git-lfs",
         'git config --global user.email "ci@dummy.com"',
         'git config --global user.name "ci"',
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[torch,sentencepiece,testing]",
+        "pip install -U --upgrade-strategy eager .[torch,sentencepiece,testing,vision]",
     ],
     marker="is_staging_test",
     pytest_num_workers=1,

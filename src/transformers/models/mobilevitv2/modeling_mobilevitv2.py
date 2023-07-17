@@ -953,7 +953,6 @@ class MobileViTV2DeepLabV3(nn.Module):
     """,
     MOBILEVITV2_START_DOCSTRING,
 )
-# Copied from transformers.models.mobilevit.modeling_mobilevit.MobileViTForSemanticSegmentation with MOBILEVIT->MOBILEVITV2,MobileViT->MobileViTV2,mobilevit->mobilevitv2
 class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
     def __init__(self, config: MobileViTV2Config) -> None:
         super().__init__(config)
@@ -984,15 +983,16 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, MobileViTV2ForSemanticSegmentation
-        >>> from PIL import Image
         >>> import requests
+        >>> import torch
+        >>> from PIL import Image
+        >>> from transformers import AutoImageProcessor, MobileViTV2ForSemanticSegmentation
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("apple/deeplabv3-mobilevitv2-small")
-        >>> model = MobileViTV2ForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevitv2-small")
+        >>> image_processor = AutoImageProcessor.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256")
+        >>> model = MobileViTV2ForSemanticSegmentation.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 

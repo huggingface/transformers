@@ -400,6 +400,8 @@ def check_model_list():
     models_dir = os.path.join(PATH_TO_TRANSFORMERS, "models")
     _models = []
     for model in os.listdir(models_dir):
+        if model == "deprecated":
+            continue
         model_dir = os.path.join(models_dir, model)
         if os.path.isdir(model_dir) and "__init__.py" in os.listdir(model_dir):
             _models.append(model)
@@ -445,6 +447,8 @@ def get_model_modules():
     ]
     modules = []
     for model in dir(transformers.models):
+        if model == "deprecated":
+            continue
         # There are some magic dunder attributes in the dir, we ignore them
         if not model.startswith("__"):
             model_module = getattr(transformers.models, model)
@@ -767,6 +771,8 @@ def check_objects_being_equally_in_main_init():
         obj = getattr(transformers, attr)
         if hasattr(obj, "__module__"):
             module_path = obj.__module__
+            if "models.deprecated" in module_path:
+                continue
             module_name = module_path.split(".")[-1]
             module_dir = ".".join(module_path.split(".")[:-1])
             if (
@@ -914,6 +920,12 @@ UNDOCUMENTED_OBJECTS = [
     "logging",  # External module
     "requires_backends",  # Internal function
     "AltRobertaModel",  # Internal module
+    "FalconConfig",  # TODO Matt Remove this and re-add the docs once TGI is ready
+    "FalconForCausalLM",
+    "FalconForQuestionAnswering",
+    "FalconForSequenceClassification",
+    "FalconForTokenClassification",
+    "FalconModel",
 ]
 
 # This list should be empty. Objects in it should get their own doc page.

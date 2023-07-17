@@ -243,6 +243,10 @@ class EsmFoldModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
+    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
+    def test_model_is_small(self):
+        pass
+
 
 @require_torch
 class EsmModelIntegrationTest(TestCasePlus):

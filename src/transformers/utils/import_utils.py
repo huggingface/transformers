@@ -546,7 +546,10 @@ def is_vision_available():
         try:
             package_version = importlib.metadata.version("Pillow")
         except importlib.metadata.PackageNotFoundError:
-            return False
+            try:
+                package_version = importlib.metadata.version("Pillow-SIMD")
+            except importlib.metadata.PackageNotFoundError:
+                return False
         logger.debug(f"Detected PIL version {package_version}")
     return _pil_available
 

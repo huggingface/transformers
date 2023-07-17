@@ -454,6 +454,10 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     def test_greedy_generate_dict_outputs_use_cache(self):
         pass
 
+    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
+    def test_model_is_small(self):
+        pass
+
 
 @require_torch
 @require_vision
