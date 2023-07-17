@@ -117,7 +117,7 @@ class VitMatteModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.alphas.shape, (self.batch_size, 1, self.hidden_size, self.hidden_size))
+        self.parent.assertEqual(result.alphas.shape, (self.batch_size, 1, self.image_size, self.image_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
