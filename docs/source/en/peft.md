@@ -14,19 +14,17 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Loading adapters using the 🤗 PEFT library
+# Load adapters with 🤗 PEFT
 
-*What are adapters and why are they are useful?*. If you are not familiar with adapters and Parameter-Efficient Fine Tuning (PEFT) approaches, we advise you to have a look at the introduction of the [🤗 PEFT announcement blogpost](https://huggingface.co/blog/peft).
+[Parameter-Efficient Fine Tuning (PEFT)](https://huggingface.co/blog/peft) methods aim to fine-tune a pretrained model while keeping the number of trainable parameters as low as possible. This is achieved by freezing the pretrained model and adding a small number of trainable parameters (the adapters) on top of it. The adapters are trained to learn task-specific information. This approach has been shown to be very memory-efficient with lower compute usage while producing results comparable to a fully fine-tuned model. 
 
-PEFT methods aims to fine-tune a pretrained model while keeping the number of trainable parameters as low as possible. This is achieved by freezing the pretrained model and adding a small number of trainable parameters (the adapters) on top of it. The adapters are then trained to learn the task-specific information. This approach has been shown to be very efficient in terms of memory and compute usage, while achieving competitive results compared to full fine-tuning. 
+Adapters trained with PEFT are also usually an order of magnitude smaller than the full model, making it convenient to share, store, and load them. In the image below, the adapter weights for a [`OPTForCausalLM`] model are stored on the Hub, and its weights are only ~6MB compared to the full size of the model weights, which can be ~700MB. 
 
-When training adapters with PEFT, you might want to save the trained adapter and share them with the community, usually the saved checkpoints are order of magnitude smaller than the full model. 
+<div class="flex justify-center">
+  <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/peft/PEFT-hub-screenshot.png"/>
+</div>
 
-| **Example screenshot of a PEFT adapter pushed on the Hub**                                           |
-|-----------------------------------------------------------------------------------------------------------------------------|
-| <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/peft/PEFT-hub-screenshot.png" width=200> | 
-
-Above is an example of what an adapter model would look like if correctly pushed on 🤗 Hub. The repo stores adapter weights of `OPTForCausalLM` model, that should have ~700MB of full model weights. As you can see from the screenshot, the adapter weights are only ~6MB, meaning the community can benefit from fine-tuned performance out of box and easily loading adapter weights.
+If you're interested in learning more about the 🤗 PEFT library, check out the [documentation](https://huggingface.co/docs/peft/index).
 
 ## Setup
 
@@ -41,6 +39,26 @@ If you want to try out the brand new features, you might be interested in instal
 ```bash
 pip install git+https://github.com/huggingface/peft.git
 ```
+
+## Load PEFT adapter
+
+To load and use a PEFT adapter model from 🤗 Transformers, make sure the Hub repository or local directory contains an `adapter_config.json` file and the adapter weights, as shown in the example image above. Then you can load the PEFT adapter model using the `AutoModelFor` class. For example, to load a PEFT adapter model for causal language modeling:
+
+1. specify the PEFT model id
+2. pass it to the [`AutoModelForCausalLM`] class
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+peft_model_id = "ybelkada/opt-350m-lora"
+model = AutoModelForCausalLM.from_pretrained(peft_model_id)
+```
+
+<Tip>
+
+You can still load a PEFT adapter even if your model isn't an auto-mapped model as long as the Hub repository or your local directory contains an `adapter_config.json` file with the `base_model_name_or_path` key.
+
+</Tip>
 
 <!--
 
