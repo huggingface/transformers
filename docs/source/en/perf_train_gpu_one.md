@@ -54,7 +54,8 @@ The methods and tools covered in this guide can be classified based on the effec
 
 <Tip>
 
-The parentheses mean there may be negligible effects on memory utilization.
+Note: when using mixed precision with a small model and a large batch size, there will be some memory savings but with a 
+large model and a small batch size, the memory use will be larger.
 
 </Tip>
 
