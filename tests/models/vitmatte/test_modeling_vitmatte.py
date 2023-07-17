@@ -52,14 +52,15 @@ class VitMatteModelTester:
         num_channels=4,
         is_training=True,
         use_labels=False,
-        hidden_size=32,
+        hidden_size=2,
         num_hidden_layers=6,
-        num_attention_heads=8,
+        num_attention_heads=2,
         hidden_act="gelu",
         type_sequence_label_size=10,
         initializer_range=0.02,
         scope=None,
         out_features=["stage5"],
+        fusion_out=[128, 64, 32, 16],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -76,6 +77,7 @@ class VitMatteModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
         self.out_features = out_features
+        self.fusion_out = fusion_out
 
         self.seq_length = (self.image_size // self.patch_size) ** 2
 
@@ -107,6 +109,7 @@ class VitMatteModelTester:
         return VitMatteConfig(
             backbone_config=self.get_backbone_config(),
             hidden_size=self.hidden_size,
+            fusion_out=self.fusion_out,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
