@@ -14,71 +14,68 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Debugging
+# 디버깅 [[debugging]]
 
-## Multi-GPU Network Issues Debug
+## Multi-GPU 네트워크 문제 디버그 [[multigpu-network-issues-debug]]
 
-When training or inferencing with `DistributedDataParallel` and multiple GPU, if you run into issue of inter-communication between processes and/or nodes, you can use the following script to diagnose network issues.
+`DistributedDataParallel` 및 다중 GPU를 사용하여 훈련하거나 추론할 때, 프로세스 및/또는 노드 간의 상호 통신 문제가 발생하는 경우, 다음 스크립트를 사용하여 네트워크 문제를 진단할 수 있습니다.
 
 ```bash
 wget https://raw.githubusercontent.com/huggingface/transformers/main/scripts/distributed/torch-distributed-gpu-test.py
 ```
 
-For example to test how 2 GPUs interact do:
+예를 들어, 2개의 GPU가 상호 작용하는 방식을 테스트하려면 다음을 실행하세요:
 
 ```bash
 python -m torch.distributed.run --nproc_per_node 2 --nnodes 1 torch-distributed-gpu-test.py
 ```
-If both processes can talk to each and allocate GPU memory each will print an OK status.
+두 프로세스가 서로 통신하고 GPU 메모리를 할당하는 경우, 각각 "OK" 상태를 출력합니다.
 
-For more GPUs or nodes adjust the arguments in the script.
+더 많은 GPU 또는 노드의 경우 스크립트의 인수를 조정하면 됩니다.
 
-You will find a lot more details inside the diagnostics script and even a recipe to how you could run it in a SLURM environment.
+진단 스크립트 내에서 더 많은 세부 정보와 SLURM 환경에서 실행하는 방법에 대한 레시피를 찾을 수 있습니다.
 
-An additional level of debug is to add `NCCL_DEBUG=INFO` environment variable as follows:
+추가적인 디버그 수준은 다음과 같이 `NCCL_DEBUG=INFO` 환경 변수를 추가하는 것입니다:
 
 ```bash
 NCCL_DEBUG=INFO python -m torch.distributed.run --nproc_per_node 2 --nnodes 1 torch-distributed-gpu-test.py
 ```
 
-This will dump a lot of NCCL-related debug information, which you can then search online if you find that some problems are reported. Or if you're not sure how to interpret the output you can share the log file in an Issue.
+이렇게 하면 NCCL 관련 디버그 정보가 많이 출력되며, 문제가 보고된 경우에는 인터넷에서 검색할 수 있습니다. 또는 출력을 해석하는 방법을 잘 모르는 경우 로그 파일을 이슈에 공유할 수 있습니다.
 
 
 
-## Underflow and Overflow Detection
+## 언더플로 및 오버플로 감지 [[underflow-and-overflow-detection]]
+
 
 <Tip>
 
-This feature is currently available for PyTorch-only.
+이 기능은 현재 PyTorch에서만 사용할 수 있습니다.
 
 </Tip>
 
 <Tip>
 
-For multi-GPU training it requires DDP (`torch.distributed.launch`).
+다중 GPU 훈련을 위해서는 DDP (`torch.distributed.launch`)가 필요합니다.
 
 </Tip>
 
 <Tip>
 
-This feature can be used with any `nn.Module`-based model.
+이 기능은 `nn.Module`을 기반으로 하는 모델과 함께 사용할 수 있습니다.
 
 </Tip>
 
-If you start getting `loss=NaN` or the model inhibits some other abnormal behavior due to `inf` or `nan` in
-activations or weights one needs to discover where the first underflow or overflow happens and what led to it. Luckily
-you can accomplish that easily by activating a special module that will do the detection automatically.
+`loss=NaN`이 나타나거나 모델이 `inf` 또는 `nan`으로 인해 다른 이상한 동작을 하는 경우, 언더플로 또는 오버플로의 첫 번째 발생 위치와 그 원인을 파악해야 합니다. 다행히도 이를 자동으로 감지하는 특수 모듈을 활성화하여 쉽게 알아낼 수 있습니다.
 
-If you're using [`Trainer`], you just need to add:
+[`Trainer`]를 사용하는 경우, 다음을 기존의 명령줄 인수에 추가하면 됩니다.
 
 ```bash
 --debug underflow_overflow
 ```
+또는 [`TrainingArguments`] 객체를 생성할 때 `debug="underflow_overflow"`를 전달합니다.
 
-to the normal command line arguments, or pass `debug="underflow_overflow"` when creating the
-[`TrainingArguments`] object.
-
-If you're using your own training loop or another Trainer you can accomplish the same with:
+자체 훈련 루프나 다른 Trainer를 사용하는 경우, 다음과 같이 수행할 수 있습니다. 
 
 ```python
 from transformers.debug_utils import DebugUnderflowOverflow
@@ -86,10 +83,7 @@ from transformers.debug_utils import DebugUnderflowOverflow
 debug_overflow = DebugUnderflowOverflow(model)
 ```
 
-[`~debug_utils.DebugUnderflowOverflow`] inserts hooks into the model that immediately after each
-forward call will test input and output variables and also the corresponding module's weights. As soon as `inf` or
-`nan` is detected in at least one element of the activations or weights, the program will assert and print a report
-like this (this was caught with `google/mt5-small` under fp16 mixed precision):
+[`~debug_utils.DebugUnderflowOverflow`]는 모델에 후크를 삽입하여 각 forward 호출 직후에 입력 및 출력 변수 및 해당 모듈의 가중치를 테스트합니다. 활성화나 가중치의 최소한 하나의 요소에서 `inf` 또는 `nan`이 감지되면 프로그램이 어설트되고 다음과 같은 보고서가 출력됩니다. (이 예제는 fp16 혼합 정밀도에서 `google/mt5-small`에서 캡처된 것입니다):
 
 ```
 Detected inf/nan during batch_number=0
@@ -131,18 +125,13 @@ abs min  abs max  metadata
 0.00e+00      inf output
 ```
 
-The example output has been trimmed in the middle for brevity.
+예제 출력은 간략성을 위해 중간 부분이 잘려 있습니다.
 
-The second column shows the value of the absolute largest element, so if you have a closer look at the last few frames,
-the inputs and outputs were in the range of `1e4`. So when this training was done under fp16 mixed precision the very
-last step overflowed (since under `fp16` the largest number before `inf` is `64e3`). To avoid overflows under
-`fp16` the activations must remain way below `1e4`, because `1e4 * 1e4 = 1e8` so any matrix multiplication with
-large activations is going to lead to a numerical overflow condition.
+두 번째 열은 절대적으로 가장 큰 요소의 값이며, 따라서 마지막 몇 개의 프레임을 자세히 살펴보면 입력과 출력이 1e4 범위에 있음을 알 수 있습니다. 따라서 이 훈련은 fp16 혼합 정밀도로 수행될 때 가장 마지막 단계에서 오버플로우가 발생했습니다 (fp16에서 inf 이전의 가장 큰 숫자는 64e3입니다). fp16 아래에서 오버플로우를 피하기 위해서는 활성화는 1e4보다 훨씬 작아야 합니다. 왜냐하면 1e4 * 1e4 = 1e8이기 때문에 큰 활성화와의 행렬 곱은 수치적인 오버플로우 조건으로 이어질 것입니다.
 
-At the very start of the trace you can discover at which batch number the problem occurred (here `Detected inf/nan during batch_number=0` means the problem occurred on the first batch).
+추적의 맨 처음에서 어느 배치 번호에서 문제가 발생했는지 알 수 있습니다 (여기서 Detected inf/nan during batch_number=0은 문제가 첫 번째 배치에서 발생했음을 의미합니다).
 
-Each reported frame starts by declaring the fully qualified entry for the corresponding module this frame is reporting
-for. If we look just at this frame:
+각 보고된 프레임은 해당 프레임이 보고하는 해당 모듈에 대한 완전한 항목을 선언하며, 이 프레임만 살펴보면 다음과 같습니다.
 
 ```
                   encoder.block.2.layer.1.layer_norm T5LayerNorm
@@ -151,10 +140,9 @@ for. If we look just at this frame:
 1.79e-06 4.65e+00 output
 ```
 
-Here, `encoder.block.2.layer.1.layer_norm` indicates that it was a layer norm for the first layer, of the second
-block of the encoder. And the specific calls of the `forward` is `T5LayerNorm`.
+여기서 `encoder.block.2.layer.1.layer_norm`은 인코더의 두 번째 블록의 첫 번째 레이어에 대한 레이어 정규화를 의미하며, `forward`의 특정 호출은 `T5LayerNorm`입니다.
 
-Let's look at the last few frames of that report:
+이 보고서의 마지막 몇 개 프레임을 살펴보겠습니다:
 
 ```
 Detected inf/nan during batch_number=0
@@ -181,20 +169,13 @@ abs min  abs max  metadata
 0.00e+00      inf output
 ```
 
-The last frame reports for `Dropout.forward` function with the first entry for the only input and the second for the
-only output. You can see that it was called from an attribute `dropout` inside `DenseReluDense` class. We can see
-that it happened during the first layer, of the 2nd block, during the very first batch. Finally, the absolute largest
-input elements was `6.27e+04` and same for the output was `inf`.
+마지막 프레임은 Dropout.forward 함수에 대한 보고입니다. 첫 번째 항목은 유일한 입력을 나타내고 두 번째 항목은 유일한 출력을 나타냅니다. 이 함수가 DenseReluDense 클래스 내부의 dropout 속성에서 호출된 것을 볼 수 있습니다. 이는 첫 번째 레이어의 두 번째 블록에서 첫 번째 배치 중에 발생했다는 것을 알 수 있습니다. 마지막으로, 절대적으로 가장 큰 입력 요소는 6.27e+04이고 출력도 마찬가지로 inf입니다.
 
-You can see here, that `T5DenseGatedGeluDense.forward` resulted in output activations, whose absolute max value was
-around 62.7K, which is very close to fp16's top limit of 64K. In the next frame we have `Dropout` which renormalizes
-the weights, after it zeroed some of the elements, which pushes the absolute max value to more than 64K, and we get an
-overflow (`inf`).
+여기에서는 T5DenseGatedGeluDense.forward가 출력 활성화를 생성하는데, 절대적으로 가장 큰 값이 약 62.7K인 것을 볼 수 있습니다. 이 값은 fp16의 최대 제한인 64K에 매우 근접합니다. 다음 프레임에서는 일부 요소를 0으로 만든 후 가중치를 재정규화하는 Dropout이 있습니다. 이로 인해 절대 최대값이 64K를 초과하고 오버플로우(inf)가 발생합니다.
 
-As you can see it's the previous frames that we need to look into when the numbers start going into very large for fp16
-numbers.
+보시다시피, fp16 숫자의 경우 숫자가 매우 커질 때 이전 프레임을 살펴보아야 합니다.
 
-Let's match the report to the code from `models/t5/modeling_t5.py`:
+보고서를 models/t5/modeling_t5.py의 코드와 일치시켜 보겠습니다.
 
 ```python
 class T5DenseGatedGeluDense(nn.Module):
@@ -215,15 +196,11 @@ class T5DenseGatedGeluDense(nn.Module):
         return hidden_states
 ```
 
-Now it's easy to see the `dropout` call, and all the previous calls as well.
+이제 `dropout` 호출과 이전의 모든 호출을 쉽게 확인할 수 있습니다.
 
-Since the detection is happening in a forward hook, these reports are printed immediately after each `forward`
-returns.
+감지는 forward 후크에서 발생하므로, 이러한 보고서는 각 `forward`가 반환된 직후에 즉시 출력됩니다.
 
-Going back to the full report, to act on it and to fix the problem, we need to go a few frames up where the numbers
-started to go up and most likely switch to the `fp32` mode here, so that the numbers don't overflow when multiplied
-or summed up. Of course, there might be other solutions. For example, we could turn off `amp` temporarily if it's
-enabled, after moving the original `forward` into a helper wrapper, like so:
+전체 보고서로 돌아가서 문제에 대한 조치 및 수정을 하려면, 숫자가 증가하기 시작한 몇 개의 프레임 위로 이동하고 아마도 여기서 fp32 모드로 전환해야 합니다. 이렇게 하면 숫자가 곱해지거나 합쳐질 때 오버플로우되지 않습니다. 물론 다른 해결책도 있을 수 있습니다. 예를 들어, amp가 활성화된 경우 일시적으로 끄고 원래의 forward를 도우미 래퍼로 이동한 후 다음과 같이 할 수 있습니다.
 
 ```python
 def _forward(self, hidden_states):
@@ -246,9 +223,7 @@ def forward(self, hidden_states):
         return self._forward(hidden_states)
 ```
 
-Since the automatic detector only reports on inputs and outputs of full frames, once you know where to look, you may
-want to analyse the intermediary stages of any specific `forward` function as well. In such a case you can use the
-`detect_overflow` helper function to inject the detector where you want it, for example:
+자동 감지기는 전체 프레임의 입력과 출력에 대해서만 보고하므로, 어디를 살펴봐야 하는지 알면 특정 forward 함수의 중간 단계도 분석할 수 있습니다. 이 경우에는 detect_overflow 도우미 함수를 사용하여 원하는 위치에 감지기를 삽입할 수 있습니다. 예를 들어:
 
 ```python
 from debug_utils import detect_overflow
@@ -265,14 +240,11 @@ class T5LayerFF(nn.Module):
         return hidden_states + self.dropout(forwarded_states)
 ```
 
-You can see that we added 2 of these and now we track if `inf` or `nan` for `forwarded_states` was detected
-somewhere in between.
+여기서는 이를 추가하여 2개의 것을 추적하고 이제 forwarded_states의 inf 또는 nan이 중간에 감지되었는지를 추적합니다.
 
-Actually, the detector already reports these because each of the calls in the example above is a `nn.Module`, but
-let's say if you had some local direct calculations this is how you'd do that.
+실제로, 예시에서 각 호출이 nn.Module인 경우 감지기가 이미 이를 보고합니다. 그러나 가정해 봅시다. 만약 로컬 직접 계산이 있는 경우, 다음과 같이 수행할 수 있습니다.
 
-Additionally, if you're instantiating the debugger in your own code, you can adjust the number of frames printed from
-its default, e.g.:
+또한, 자체 코드에서 디버거를 인스턴스화하는 경우 기본값에서 출력되는 프레임 수를 조정할 수 있습니다. 예를 들어:
 
 ```python
 from transformers.debug_utils import DebugUnderflowOverflow
@@ -280,23 +252,21 @@ from transformers.debug_utils import DebugUnderflowOverflow
 debug_overflow = DebugUnderflowOverflow(model, max_frames_to_save=100)
 ```
 
-### Specific batch absolute min and max value tracing
+### 특정 배치의 절댓값 최소 및 최대 값 추적 
 
-The same debugging class can be used for per-batch tracing with the underflow/overflow detection feature turned off.
+동일한 디버깅 클래스는 언더플로우/오버플로우 감지 기능이 꺼진 상태에서 배치별 추적에도 사용할 수 있습니다.
 
-Let's say you want to watch the absolute min and max values for all the ingredients of each `forward` call of a given
-batch, and only do that for batches 1 and 3. Then you instantiate this class as:
+예를 들어, 특정 배치의 각 forward 호출의 모든 구성 성분에 대한 절대 최솟값과 최댓값을 확인하고, 이를 배치 1과 3에 대해서만 수행하려면 다음과 같이 이 클래스를 인스턴스화합니다.
 
 ```python
 debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1, 3])
 ```
 
-And now full batches 1 and 3 will be traced using the same format as the underflow/overflow detector does.
+그러면 이제 배치 1과 3 전체가 언더플로우/오버플로우 감지기와 동일한 형식으로 추적됩니다.
 
-Batches are 0-indexed.
+배치는 0부터 시작합니다.
 
-This is helpful if you know that the program starts misbehaving after a certain batch number, so you can fast-forward
-right to that area. Here is a sample truncated output for such configuration:
+이는 프로그램이 특정 배치 번호 이후에 오작동하기 시작하는 것을 알고 있는 경우에 유용합니다. 그렇기 때문에 해당 영역으로 바로 이동할 수 있습니다. 이런 구성에 대한 샘플 축소된 출력은 다음과 같습니다.
 
 ```
                   *** Starting batch number=1 ***
@@ -327,12 +297,9 @@ abs min  abs max  metadata
 [...]
 ```
 
-Here you will get a huge number of frames dumped - as many as there were forward calls in your model, so it may or may
-not what you want, but sometimes it can be easier to use for debugging purposes than a normal debugger. For example, if
-a problem starts happening at batch number 150. So you can dump traces for batches 149 and 150 and compare where
-numbers started to diverge.
+여기에서는 모델의 forward 호출 수와 동일한 수의 프레임이 덤프되므로 많은 수의 프레임이 생성됩니다. 따라서 원하는 것일 수도 있고 아닐 수도 있습니다. 그러나 때로는 일반 디버거보다 디버깅 목적으로 더 쉽게 사용할 수 있습니다. 예를 들어, 문제가 배치 번호 150에서 시작하는 경우 149와 150의 추적을 덤프하고 숫자가 어디서부터 다르게 되었는지 비교할 수 있습니다.
 
-You can also specify the batch number after which to stop the training, with:
+또한, 훈련을 중지할 배치 번호를 지정할 수도 있습니다. 다음과 같이 지정할 수 있습니다.
 
 ```python
 debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1, 3], abort_after_batch_num=3)
