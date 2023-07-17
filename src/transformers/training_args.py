@@ -298,7 +298,7 @@ class TrainingArguments:
             This should not be activated when the different nodes use the same storage as the files will be saved with
             the same names for each node.
         no_cuda (`bool`, *optional*, defaults to `False`):
-            This argument is deprecated. Use `use_cpu` instead. Do not use CUDA even when it is available
+            This argument is deprecated. Use `use_cpu` instead.
         use_cpu (`bool`, *optional*, defaults to `False`):
             Whether or not to use cpu. If set to False, we will use cuda or mps device if available.
         seed (`int`, *optional*, defaults to 42):
@@ -798,8 +798,7 @@ class TrainingArguments:
     no_cuda: bool = field(
         default=False,
         metadata={
-            "help": "This argument is deprecated. It will be removed in version 5.0 of 🤗 Transformers"
-            "Do not use CUDA even when it is available"
+            "help": "This argument is deprecated. It will be removed in version 5.0 of 🤗 Transformers."
         },
     )
     use_cpu: bool = field(
