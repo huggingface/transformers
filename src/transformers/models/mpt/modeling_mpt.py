@@ -79,6 +79,7 @@ def _expand_mask(mask: torch.Tensor, tgt_length: int) -> torch.BoolTensor:
     expanded_mask = ~(mask[:, None, None, :].to(torch.bool))
     return expanded_mask.expand(batch_size, 1, tgt_length, src_length)
 
+
 # TODO: docstring
 def build_attn_bias(n_heads, seq_len, alibi_bias_max=8):
     attn_bias = torch.zeros((1, n_heads, 1, seq_len), dtype=torch.float32)
@@ -811,7 +812,6 @@ class MptForCausalLM(MptPreTrainedModel):
     """,
     MPT_START_DOCSTRING,
 )
-# Copied from transformers.models.bloom.modeling_bloom.BloomForSequenceClassification with BLOOM->MPT,Bloom->Mpt
 class MptForSequenceClassification(MptPreTrainedModel):
     def __init__(self, config: MptConfig):
         super().__init__(config)
@@ -936,7 +936,6 @@ class MptForSequenceClassification(MptPreTrainedModel):
     """,
     MPT_START_DOCSTRING,
 )
-# Copied from transformers.models.bloom.modeling_bloom.BloomForTokenClassification with BLOOM->MPT,Bloom->Mpt
 class MptForTokenClassification(MptPreTrainedModel):
     def __init__(self, config: MptConfig):
         super().__init__(config)
@@ -1036,7 +1035,6 @@ class MptForTokenClassification(MptPreTrainedModel):
     """,
     MPT_START_DOCSTRING,
 )
-# Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering with BLOOM->MPT,Bloom->Mpt
 class MptForQuestionAnswering(MptPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
