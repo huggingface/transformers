@@ -60,7 +60,7 @@ class CpmAntLayerNorm(nn.Module):
             hidden_states (`torch.Tensor` of shape `(batch, seq_len, dim_in)`)
         """
         if hidden_states.size(-1) != self.dim_norm:
-            raise ValueError("hidden_states.size(-1) != self.dim_norm")
+            raise AssertionError("hidden_states.size(-1) != self.dim_norm")
         old_dtype = hidden_states.dtype
         variance = hidden_states.to(torch.float32).pow(2).mean(dim=-1, keepdim=True)
         hidden_states = (hidden_states * torch.rsqrt(variance + self.eps)).to(old_dtype) * self.weight
@@ -450,15 +450,15 @@ class CpmAntSegmentPositionEmbedding(nn.Module):
             querylen = query_pos.size(1)
 
             if key_pos.size(0) != query_pos.size(0):
-                raise ValueError(
+                raise AssertionError(
                     f"key_pos.size(0) should be equal to query_pos.size(0), but got {key_pos.size(0)} and {query_pos.size(0)}!"
                 )
             if keylen != key_segment.size(1) or querylen != query_segment.size(1):
-                raise ValueError(
+                raise AssertionError(
                     f"keylen should be equal to key_segment.size(1), but got {keylen} and {key_segment.size(1)}!"
                 )
             if querylen != query_segment.size(1):
-                raise ValueError(
+                raise AssertionError(
                     f"querylen should be equal to query_segment.size(1), but got {querylen} and {query_segment.szie(1)}!"
                 )
 
