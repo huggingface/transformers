@@ -795,9 +795,7 @@ class TrainingArguments:
     )
     no_cuda: bool = field(
         default=False,
-        metadata={
-            "help": "This argument is deprecated. It will be removed in version 5.0 of 🤗 Transformers."
-        },
+        metadata={"help": "This argument is deprecated. It will be removed in version 5.0 of 🤗 Transformers."},
     )
     use_cpu: bool = field(
         default=False,
