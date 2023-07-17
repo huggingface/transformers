@@ -728,7 +728,7 @@ class BatchEncoding(UserDict):
                     value = [value]
 
                 if not is_tensor(value):
-                    tensor = as_tensor(value)
+                    tensor = as_tensor(np.asarray(value))
 
                     # Removing this for now in favor of controlling the shape with `prepend_batch_axis`
                     # # at-least2d
