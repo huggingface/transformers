@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 HuggingFace Inc. team and BigScience workshop.
+# Copyright 2023 HuggingFace Inc. team and MosaicML NLP team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -79,14 +79,17 @@ def _expand_mask(mask: torch.Tensor, tgt_length: int) -> torch.BoolTensor:
     expanded_mask = ~(mask[:, None, None, :].to(torch.bool))
     return expanded_mask.expand(batch_size, 1, tgt_length, src_length)
 
-
+# TODO: docstring
 def build_attn_bias(n_heads, seq_len, alibi_bias_max=8):
     attn_bias = torch.zeros((1, n_heads, 1, seq_len), dtype=torch.float32)
     (device, dtype) = (attn_bias.device, attn_bias.dtype)
-    attn_bias = attn_bias.add(build_alibi_bias(n_heads, seq_len, alibi_bias_max=alibi_bias_max, device=device, dtype=dtype))
+    attn_bias = attn_bias.add(
+        build_alibi_bias(n_heads, seq_len, alibi_bias_max=alibi_bias_max, device=device, dtype=dtype)
+    )
     return attn_bias
 
 
+# TODO: docstring
 def gen_slopes(n_heads, alibi_bias_max=8, device=None):
     _n_heads = 2 ** math.ceil(math.log2(n_heads))
     m = torch.arange(1, _n_heads + 1, dtype=torch.float32, device=device)
@@ -96,6 +99,8 @@ def gen_slopes(n_heads, alibi_bias_max=8, device=None):
         slopes = torch.concat([slopes[1::2], slopes[::2]])[:n_heads]
     return slopes.view(1, n_heads, 1, 1)
 
+
+# TODO: docstring + refactor
 def build_alibi_bias(n_heads, seq_len, alibi_bias_max=8, device=None, dtype=None):
 
     alibi_bias = torch.arange(1 - seq_len, 1, dtype=torch.int32, device=device).view(1, 1, 1, seq_len)
@@ -182,11 +187,11 @@ class MptAttention(nn.Module):
         self.n_heads = config.n_heads
         self.max_seq_length = config.max_seq_len
         self.head_dim = self.hidden_size // self.n_heads
-        self.softmax_scale = config.attn_config["softmax_scale"]
+        self.softmax_scale = config.attn_config.softmax_scale
         if self.softmax_scale is None:
             self.softmax_scale = 1 / math.sqrt(self.hidden_size / self.n_heads)
 
-        self.attn_dropout_p = config.attn_config["attn_pdrop"]
+        self.attn_dropout_p = config.attn_config.attn_pdrop
         self.Wqkv = nn.Linear(self.hidden_size, 3 * self.hidden_size, bias=False)
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
 
@@ -201,14 +206,16 @@ class MptAttention(nn.Module):
 
         mixed_qkv = self.Wqkv(hidden_states)
         query_states, key_states, value_states = mixed_qkv.chunk(3, dim=2)
-        query_states = query_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1,2)
+        query_states = query_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).permute(0, 2, 3, 1)
-        value_states = value_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1,2)
+        value_states = value_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1, 2)
 
         if past_key_value is not None:
             if len(past_key_value) != 0:
                 key_states = torch.cat([past_key_value[0], key_states], dim=3)
                 value_states = torch.cat([past_key_value[1], value_states], dim=2)
+            past_key_value = (key_states, value_states)
+        else:
             past_key_value = (key_states, value_states)
 
         attention_scores = torch.matmul(query_states, key_states) * self.softmax_scale
@@ -217,11 +224,10 @@ class MptAttention(nn.Module):
         if past_key_value is not None:
             query_length += past_key_value[0].shape[2]
 
-
         if position_bias is not None:
             if len(position_bias.shape) != 3:
                 raise ValueError(f"Expecting position_bias shape to be 3 dimensions, got {len(position_bias.shape)}")
-            query_length = query_states.shape[-2]
+            # query_length = query_states.shape[-2]
             key_length = key_states.shape[-1]
 
             position_bias_query_index = max(0, position_bias.size(1) - query_length)
@@ -229,7 +235,7 @@ class MptAttention(nn.Module):
 
             position_bias = position_bias[:, position_bias_query_index:, position_bias_key_index:]
 
-            attention_scores = (attention_scores + position_bias) 
+            attention_scores = attention_scores + position_bias
 
         if attention_mask is not None:
             attention_scores = attention_scores.masked_fill(attention_mask, torch.finfo(query_states.dtype).min)
@@ -245,7 +251,6 @@ class MptAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.bloom.modeling_bloom.BloomMLP with Bloom->Mpt
 class MptMLP(nn.Module):
     def __init__(self, config: MptConfig):
         super().__init__()
@@ -254,7 +259,7 @@ class MptMLP(nn.Module):
         self.up_proj = nn.Linear(hidden_size, 4 * hidden_size, bias=False)
         self.gelu_impl = MptGelu()
         self.down_proj = nn.Linear(4 * hidden_size, hidden_size, bias=False)
-        self.hidden_dropout = config.attn_config["attn_pdrop"]
+        self.hidden_dropout = config.attn_config.attn_pdrop
 
     def forward(self, hidden_states: torch.Tensor, residual: torch.Tensor) -> torch.Tensor:
         hidden_states = self.gelu_impl(self.up_proj(hidden_states))
@@ -279,7 +284,7 @@ class MptBlock(nn.Module):
 
         self.ffn = MptMLP(config)
 
-        self.dropout_rate = config.attn_config["attn_pdrop"]
+        self.dropout_rate = config.attn_config.attn_pdrop
         self.resid_attn_dropout = nn.Dropout(self.dropout_rate)
 
     def forward(
@@ -300,10 +305,10 @@ class MptBlock(nn.Module):
 
         # Self attention.
         attn_outputs, attn_weights, past_key_value = self.attn(
-            layernorm_output, 
-            position_bias=position_bias, 
-            attention_mask=attention_mask, 
-            past_key_value=layer_past
+            layernorm_output,
+            position_bias=position_bias,
+            attention_mask=attention_mask,
+            past_key_value=layer_past,
         )
 
         hidden_states = self.resid_attn_dropout(attn_outputs) + residual
@@ -318,23 +323,20 @@ class MptBlock(nn.Module):
         outputs = (output,)
 
         if use_cache:
-            outputs += outputs
+            outputs += (past_key_value,)
 
         if output_attentions:
-            outputs += outputs
+            outputs += (attn_weights,)
 
         return outputs  # hidden_states, present, attentions
 
 
-# Copied from transformers.models.bloom.modeling_bloom.BloomPreTrainedModel with Bloom->Mpt,bloom->mpt
 class MptPreTrainedModel(PreTrainedModel):
     config_class = MptConfig
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MptBlock"]
     _skip_keys_device_placement = "past_key_values"
-    _keys_to_ignore_on_load_unexpected = [r".*.blocks\.(\d+)\.norm_1\.bias", r".*.blocks\.(\d+)\.norm_2\.bias"]
-    _keys_to_ignore_on_load_missing = [r".*.blocks\.(\d+)\.norm_1\.weight", r".*.blocks\.(\d+)\.norm_2\.weight"]
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -361,26 +363,6 @@ class MptPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
     @staticmethod
-    def _convert_to_standard_cache(
-        past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]], batch_size: int
-    ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
-        """
-        Standardizes the format of the cache so as to match most implementations, i.e. to tuple(tuple([batch_size,
-        num_heads, ...]))
-        """
-        batch_size_times_num_heads, head_dim, seq_length = past_key_value[0][0].shape
-        num_heads = batch_size_times_num_heads // batch_size
-        # key: [batch_size * num_heads, head_dim, seq_length] -> [batch_size, num_heads, head_dim, seq_length]
-        # value: [batch_size * num_heads, seq_length, head_dim] -> [batch_size, num_heads, seq_length, head_dim]
-        return tuple(
-            (
-                layer_past[0].view(batch_size, num_heads, head_dim, seq_length),
-                layer_past[1].view(batch_size, num_heads, seq_length, head_dim),
-            )
-            for layer_past in past_key_value
-        )
-
-    @staticmethod
     def _convert_to_mpt_cache(
         past_key_value: Tuple[Tuple[torch.Tensor, torch.Tensor]]
     ) -> Tuple[Tuple[torch.Tensor, torch.Tensor]]:
@@ -393,8 +375,8 @@ class MptPreTrainedModel(PreTrainedModel):
         # value: [batch_size, num_heads, seq_length, head_dim] -> [batch_size * num_heads, seq_length, head_dim]
         return tuple(
             (
-                layer_past[0].view(batch_size_times_num_heads, head_dim, seq_length),
-                layer_past[1].view(batch_size_times_num_heads, seq_length, head_dim),
+                layer_past[0].reshape(batch_size_times_num_heads, head_dim, seq_length),
+                layer_past[1].reshape(batch_size_times_num_heads, seq_length, head_dim),
             )
             for layer_past in past_key_value
         )
@@ -469,7 +451,6 @@ MPT_INPUTS_DOCSTRING = r"""
     "The bare Mpt Model transformer outputting raw hidden-states without any specific head on top.",
     MPT_START_DOCSTRING,
 )
-# Copied from transformers.models.bloom.modeling_bloom.BloomModel with BLOOM->MPT,Bloom->Mpt
 class MptModel(MptPreTrainedModel):
     def __init__(self, config: MptConfig):
         super().__init__(config)
@@ -499,6 +480,12 @@ class MptModel(MptPreTrainedModel):
     ) -> torch.BoolTensor:
         # create causal mask
         # [batch_size, seq_length] -> [batch_size, 1, tgt_length, src_length]
+        if input_shape[1] + past_key_values_length != attention_mask.shape[1]:
+            raise ValueError(
+                "Attention mask shape should be (batch_size, seq_length + past_key_values_length)"
+                f" but is {attention_mask.shape} with input_ids shape {input_shape} and past length"
+                f" {past_key_values_length}."
+            )
         combined_attention_mask = None
         device = attention_mask.device
         _, src_length = input_shape
@@ -586,14 +573,16 @@ class MptModel(MptPreTrainedModel):
         seq_length_with_past = seq_length
         past_key_values_length = 0
         if past_key_values[0] is not None:
-            past_key_values_length = past_key_values[0][0].shape[2]
+            past_key_values_length = past_key_values[0][0].shape[3]
             seq_length_with_past = seq_length_with_past + past_key_values_length
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length_with_past), device=hidden_states.device)
         else:
             attention_mask = attention_mask.to(hidden_states.device)
 
-        alibi = build_alibi_bias(self.num_heads, self.config.max_seq_len, dtype=hidden_states.dtype)
+        alibi = build_alibi_bias(
+            self.num_heads, self.config.max_seq_len, dtype=hidden_states.dtype, device=hidden_states.device
+        )
 
         causal_mask = self._prepare_attn_mask(
             attention_mask,
@@ -662,7 +651,6 @@ class MptModel(MptPreTrainedModel):
     """,
     MPT_START_DOCSTRING,
 )
-# Copied from transformers.models.bloom.modeling_bloom.BloomForCausalLM with BLOOM->MPT,Bloom->Mpt,bloom->mpt
 class MptForCausalLM(MptPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -691,10 +679,6 @@ class MptForCausalLM(MptPreTrainedModel):
         # only last token for input_ids if past is not None
         if past_key_values:
             input_ids = input_ids[:, -1].unsqueeze(-1)
-
-            # the cache may be in the stardard format (e.g. in contrastive search), convert to mpt's format if needed
-            if past_key_values[0][0].shape[0] == input_ids.shape[0]:
-                past_key_values = self._convert_to_mpt_cache(past_key_values)
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -798,8 +782,6 @@ class MptForCausalLM(MptPreTrainedModel):
 
         Output shares the same memory storage as `past`.
         """
-        standardized_past = self._convert_to_standard_cache(past, batch_size=len(beam_idx))
-
         # Get a copy of `beam_idx` on all the devices where we need those indices.
         device_to_beam_idx = {
             past_state.device: beam_idx.to(past_state.device) for layer_past in past for past_state in layer_past
@@ -809,9 +791,9 @@ class MptForCausalLM(MptPreTrainedModel):
                 layer_past[0].index_select(0, device_to_beam_idx[layer_past[0].device]),
                 layer_past[1].index_select(0, device_to_beam_idx[layer_past[0].device]),
             )
-            for layer_past in standardized_past
+            for layer_past in past
         )
-        return self._convert_to_mpt_cache(reordered_past)
+        return reordered_past
 
 
 @add_start_docstrings(

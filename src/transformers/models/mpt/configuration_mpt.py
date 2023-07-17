@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 the Big Science Workshop and HuggingFace Inc. team.  All rights reserved.
+# Copyright 2023 HuggingFace Inc. team and MosaicML NLP team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -154,6 +154,11 @@ class MptIntializerConfig(PretrainedConfig):
 
 class MptConfig(PretrainedConfig):
     model_type = "mpt"
+    attribute_map = {
+        "num_attention_heads": "n_heads",
+        "hidden_size": "d_model",
+        "num_hidden_layers": "n_layers",
+    }
 
     def __init__(
         self,
@@ -265,7 +270,6 @@ class MptConfig(PretrainedConfig):
             >>> # Accessing the model configuration
             >>> configuration = model.config
             ```"""
-
         self.d_model = d_model
         self.n_heads = n_heads
         self.n_layers = n_layers
@@ -275,7 +279,6 @@ class MptConfig(PretrainedConfig):
         self.resid_pdrop = resid_pdrop
         self.emb_pdrop = emb_pdrop
         self.learned_pos_emb = learned_pos_emb
-        self.attn_config = attn_config
         self.init_device = init_device
         self.logit_scale = logit_scale
         self.no_bias = no_bias
@@ -284,53 +287,32 @@ class MptConfig(PretrainedConfig):
         self.norm_type = norm_type
         self.layer_norm_epsilon = layer_norm_epsilon
         self.use_cache = use_cache
-        self.init_config = init_config
         self.initializer_range = initializer_range
         self.num_key_value_heads = num_key_value_heads
 
-        # for backward compatiblity
-        self.hidden_size = self.d_model
-
-        if self.attn_config is None:
+        if attn_config is None:
             self.attn_config = MptAttentionConfig()
+        elif isinstance(attn_config, dict):
+            self.attn_config = MptAttentionConfig(**attn_config)
+        elif isinstance(attn_config, MptAttentionConfig):
+            self.attn_config = attn_config
+        else:
+            raise ValueError(
+                f"`attn_config` has to be either a `MptAttentionConfig` or a dictionary. Received: {attn_config}"
+            )
 
-        if self.init_config is None:
+        if init_config is None:
             self.init_config = MptIntializerConfig()
+        elif isinstance(init_config, dict):
+            self.init_config = MptIntializerConfig(**init_config)
+        elif isinstance(init_config, MptIntializerConfig):
+            self.init_config = init_config
+        else:
+            raise ValueError(
+                f"`init_config` has to be either a `MptIntializerConfig` or a dictionary. Received: {init_config}"
+            )
 
-        if "name" in kwargs:
-            del kwargs["name"]
-        if "loss_fn" in kwargs:
-            del kwargs["loss_fn"]
         super().__init__(**kwargs)
-        # self._validate_config()
-
-    def _validate_config(self):
-        if self.d_model % self.n_heads != 0:
-            raise ValueError("d_model must be divisible by n_heads")
-        if any((prob < 0 or prob > 1 for prob in [self.attn_config.attn_pdrop, self.resid_pdrop, self.emb_pdrop])):
-            raise ValueError(
-                "self.attn_config['attn_pdrop'], resid_pdrop, emb_pdrop are probabilities and must be between 0 and 1"
-            )
-        if self.attn_config.attn_impl not in ["torch", "flash", "triton"]:
-            raise ValueError(f"Unknown attn_impl={self.attn_config['attn_impl']}")
-        if self.attn_config.prefix_lm and self.attn_config["attn_impl"] not in ["torch", "triton"]:
-            raise NotImplementedError("prefix_lm only implemented with torch and triton attention.")
-        if self.attn_config.alibi and self.attn_config["attn_impl"] not in ["torch", "triton"]:
-            raise NotImplementedError("alibi only implemented with torch and triton attention.")
-        if self.attn_config["attn_uses_sequence_id"] and self.attn_config["attn_impl"] not in ["torch", "triton"]:
-            raise NotImplementedError("attn_uses_sequence_id only implemented with torch and triton attention.")
-        if self.embedding_fraction > 1 or self.embedding_fraction <= 0:
-            raise ValueError("model.embedding_fraction must be between 0 (exclusive) and 1 (inclusive)!")
-        if isinstance(self.logit_scale, str) and self.logit_scale != "inv_sqrt_d_model":
-            raise ValueError(
-                f"self.logit_scale={self.logit_scale!r} is not recognized as an option; use numeric value or 'inv_sqrt_d_model'."
-            )
-        if self.init_config.get("name", None) is None:
-            raise ValueError(f"self.init_config={self.init_config!r} 'name' needs to be set.")
-        if not self.learned_pos_emb and (not self.attn_config["alibi"]):
-            raise ValueError(
-                "Positional information must be provided to the model using either learned_pos_emb or alibi."
-            )
 
     def to_dict(self):
         """
