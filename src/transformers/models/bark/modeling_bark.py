@@ -1429,27 +1429,27 @@ class BarkModel(BarkPreTrainedModel):
         fine_generation_config = BarkFineGenerationConfig(**self.generation_config.fine_acoustics_config)
 
         kwargs_semantic = {}
-	kwargs_coarse = {}
-	kwargs_fine = {}
-	for key, value in kwargs.items():
-		if key.startswith("semantic_"):
-			key = key[len("semantic_"):]
-			kwargs_semantic[key] = value
-		elif key.startswith("coarse_"):
-			key = key[len("coarse_"):]
-			kwargs_coarse[key] = value
-		elif key.startswith("fine_"):
-			key = key[len("fine_"):]
-			kwargs_fine[key] = value
-		else:
-			# If the key is already in a specific config, then it's been set with a 
-			# submodules specific value and we don't override
-			if key not in kwargs_semantic:
-				kwargs_semantic[key] = value
-			if key not in kwargs_coarse:
-				kwargs_coarse[key] = value
-			if key not in kwargs_fine:
-				kwargs_fine[key] = value
+        kwargs_coarse = {}
+        kwargs_fine = {}
+        for key, value in kwargs.items():
+            if key.startswith("semantic_"):
+                key = key[len("semantic_") :]
+                kwargs_semantic[key] = value
+            elif key.startswith("coarse_"):
+                key = key[len("coarse_") :]
+                kwargs_coarse[key] = value
+            elif key.startswith("fine_"):
+                key = key[len("fine_") :]
+                kwargs_fine[key] = value
+            else:
+                # If the key is already in a specific config, then it's been set with a
+                # submodules specific value and we don't override
+                if key not in kwargs_semantic:
+                    kwargs_semantic[key] = value
+                if key not in kwargs_coarse:
+                    kwargs_coarse[key] = value
+                if key not in kwargs_fine:
+                    kwargs_fine[key] = value
 
         # 1. Generate from the semantic model
         semantic_output = self.semantic.generate(
