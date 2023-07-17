@@ -167,6 +167,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "SpeechT5SpeechEncoder",  # Building part of bigger (tested) model.
     "SpeechT5TextDecoder",  # Building part of bigger (tested) model.
     "SpeechT5TextEncoder",  # Building part of bigger (tested) model.
+    "BarkCausalModel",  # Building part of bigger (tested) model.
+    "BarkModel",  # Does not have a forward signature - generation tested with integration tests
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -188,6 +190,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/vision_text_dual_encoder/test_modeling_tf_vision_text_dual_encoder.py",
     "models/vision_text_dual_encoder/test_modeling_flax_vision_text_dual_encoder.py",
     "models/decision_transformer/test_modeling_decision_transformer.py",
+    "models/bark/test_modeling_bark.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
@@ -332,11 +335,15 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "AltCLIPVisionModel",
     "AltRobertaModel",
     "TvltForAudioVisualClassification",
+    "BarkCausalModel",
+    "BarkCoarseModel",
+    "BarkFineModel",
+    "BarkSemanticModel",
+    "MusicgenModel",
+    "MusicgenForConditionalGeneration",
     "SpeechT5ForSpeechToSpeech",
     "SpeechT5ForTextToSpeech",
     "SpeechT5HifiGan",
-    "MusicgenModel",
-    "MusicgenForConditionalGeneration",
 ]
 
 # DO NOT edit this list!
