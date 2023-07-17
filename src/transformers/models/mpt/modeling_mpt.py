@@ -80,49 +80,74 @@ def _expand_mask(mask: torch.Tensor, tgt_length: int) -> torch.BoolTensor:
     return expanded_mask.expand(batch_size, 1, tgt_length, src_length)
 
 
-# Copied from transformers.models.bloom.modeling_bloom.build_alibi_tensor
-def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
-    """
-    Link to paper: https://arxiv.org/abs/2108.12409 Alibi tensor is not causal as the original paper mentions, it
-    relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value
-    `softmax(l+a) = softmax(l)`. Based on
-    https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
-    TODO @thomasw21 this doesn't work as nicely due to the masking strategy, and so masking varies slightly.
+# # Copied from transformers.models.bloom.modeling_bloom.build_alibi_tensor
+# def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
+#     """
+#     Link to paper: https://arxiv.org/abs/2108.12409 Alibi tensor is not causal as the original paper mentions, it
+#     relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value
+#     `softmax(l+a) = softmax(l)`. Based on
+#     https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
+#     TODO @thomasw21 this doesn't work as nicely due to the masking strategy, and so masking varies slightly.
 
-    Args:
-    Returns tensor shaped (batch_size * num_heads, 1, max_seq_len)
-        attention_mask (`torch.Tensor`):
-            Token-wise attention mask, this should be of shape (batch_size, max_seq_len).
-        num_heads (`int`, *required*):
-            number of heads
-        dtype (`torch.dtype`, *optional*, default=`torch.bfloat16`):
-            dtype of the output tensor
-    """
-    batch_size, seq_length = attention_mask.shape
-    closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
-    base = torch.tensor(
-        2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32
-    )
-    powers = torch.arange(1, 1 + closest_power_of_2, device=attention_mask.device, dtype=torch.int32)
-    slopes = torch.pow(base, powers)
+#     Args:
+#     Returns tensor shaped (batch_size * num_heads, 1, max_seq_len)
+#         attention_mask (`torch.Tensor`):
+#             Token-wise attention mask, this should be of shape (batch_size, max_seq_len).
+#         num_heads (`int`, *required*):
+#             number of heads
+#         dtype (`torch.dtype`, *optional*, default=`torch.bfloat16`):
+#             dtype of the output tensor
+#     """
+#     batch_size, seq_length = attention_mask.shape
+#     closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
+#     base = torch.tensor(
+#         2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32
+#     )
+#     powers = torch.arange(1, 1 + closest_power_of_2, device=attention_mask.device, dtype=torch.int32)
+#     slopes = torch.pow(base, powers)
 
-    if closest_power_of_2 != num_heads:
-        extra_base = torch.tensor(
-            2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32
-        )
-        num_remaining_heads = min(closest_power_of_2, num_heads - closest_power_of_2)
-        extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, device=attention_mask.device, dtype=torch.int32)
-        slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
+#     if closest_power_of_2 != num_heads:
+#         extra_base = torch.tensor(
+#             2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32
+#         )
+#         num_remaining_heads = min(closest_power_of_2, num_heads - closest_power_of_2)
+#         extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, device=attention_mask.device, dtype=torch.int32)
+#         slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
 
-    # Note: alibi will added to the attention bias that will be applied to the query, key product of attention
-    # => therefore alibi will have to be of shape (batch_size, num_heads, query_length, key_length)
-    # => here we set (batch_size=1, num_heads=num_heads, query_length=1, key_length=max_length)
-    # => the query_length dimension will then be broadcasted correctly
-    # This is more or less identical to T5's relative position bias:
-    # https://github.com/huggingface/transformers/blob/f681437203baa7671de3174b0fa583c349d9d5e1/src/transformers/models/t5/modeling_t5.py#L527
-    arange_tensor = ((attention_mask.cumsum(dim=-1) - 1) * attention_mask)[:, None, :]
-    alibi = slopes[..., None] * arange_tensor
-    return alibi.reshape(batch_size * num_heads, 1, seq_length).to(dtype)
+#     # Note: alibi will added to the attention bias that will be applied to the query, key product of attention
+#     # => therefore alibi will have to be of shape (batch_size, num_heads, query_length, key_length)
+#     # => here we set (batch_size=1, num_heads=num_heads, query_length=1, key_length=max_length)
+#     # => the query_length dimension will then be broadcasted correctly
+#     # This is more or less identical to T5's relative position bias:
+#     # https://github.com/huggingface/transformers/blob/f681437203baa7671de3174b0fa583c349d9d5e1/src/transformers/models/t5/modeling_t5.py#L527
+#     arange_tensor = ((attention_mask.cumsum(dim=-1) - 1) * attention_mask)[:, None, :]
+#     alibi = slopes[..., None] * arange_tensor
+#     return alibi.reshape(batch_size * num_heads, 1, seq_length).to(dtype)
+
+
+def build_attn_bias(n_heads, seq_len, alibi_bias_max=8):
+    attn_bias = torch.zeros((1, n_heads, 1, seq_len), dtype=torch.float32)
+    (device, dtype) = (attn_bias.device, attn_bias.dtype)
+    attn_bias = attn_bias.add(build_alibi_bias(n_heads, seq_len, alibi_bias_max=alibi_bias_max, device=device, dtype=dtype))
+    return attn_bias
+
+
+def gen_slopes(n_heads, alibi_bias_max=8, device=None):
+    _n_heads = 2 ** math.ceil(math.log2(n_heads))
+    m = torch.arange(1, _n_heads + 1, dtype=torch.float32, device=device)
+    m = m.mul(alibi_bias_max / _n_heads)
+    slopes = 1.0 / torch.pow(2, m)
+    if _n_heads != n_heads:
+        slopes = torch.concat([slopes[1::2], slopes[::2]])[:n_heads]
+    return slopes.view(1, n_heads, 1, 1)
+
+def build_alibi_bias(n_heads, seq_len, alibi_bias_max=8, device=None, dtype=None):
+
+    alibi_bias = torch.arange(1 - seq_len, 1, dtype=torch.int32, device=device).view(1, 1, 1, seq_len)
+
+    slopes = gen_slopes(n_heads, alibi_bias_max, device=device)
+    alibi_bias = alibi_bias * slopes
+    return alibi_bias.to(dtype=dtype).squeeze(0)
 
 
 # Copied from transformers.models.bloom.modeling_bloom.bloom_gelu_forward with bloom->mpt
@@ -200,6 +225,7 @@ class MptAttention(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.n_heads = config.n_heads
+        self.max_seq_length = config.max_seq_len
         self.head_dim = self.hidden_size // self.n_heads
         self.softmax_scale = config.attn_config["softmax_scale"]
         if self.softmax_scale is None:
@@ -221,7 +247,7 @@ class MptAttention(nn.Module):
         mixed_qkv = self.Wqkv(hidden_states)
         query_states, key_states, value_states = mixed_qkv.chunk(3, dim=2)
         query_states = query_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1,2)
-        key_states = key_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1,2)
+        key_states = key_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).permute(0, 2, 3, 1)
         value_states = value_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1,2)
 
         if past_key_value is not None:
@@ -230,15 +256,28 @@ class MptAttention(nn.Module):
                 value_states = torch.cat([past_key_value[1], value_states], dim=2)
             past_key_value = (key_states, value_states)
 
-        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2))
+        attention_scores = torch.matmul(query_states, key_states) * self.softmax_scale
 
         query_length = seq_length
         if past_key_value is not None:
             query_length += past_key_value[0].shape[2]
 
-        attention_scores = (attention_scores + position_bias) * self.softmax_scale
+
+        if position_bias is not None:
+            if len(position_bias.shape) != 3:
+                raise ValueError(f"Expecting position_bias shape to be 3 dimensions, got {len(position_bias.shape)}")
+            query_length = query_states.shape[-2]
+            key_length = key_states.shape[-1]
+
+            position_bias_query_index = max(0, position_bias.size(1) - query_length)
+            position_bias_key_index = max(0, position_bias.size(2) - key_length)
+
+            position_bias = position_bias[:, position_bias_query_index:, position_bias_key_index:]
+
+            attention_scores = (attention_scores + position_bias) 
+
         if attention_mask is not None:
-            attention_scores = attention_scores + attention_mask
+            attention_scores = attention_scores.masked_fill(attention_mask, torch.finfo(query_states.dtype).min)
 
         # (batch_size, n_heads, seq_length, key_length)
         attn_weights = nn.functional.softmax(attention_scores.float(), dim=-1).type_as(attention_scores)
@@ -312,9 +351,9 @@ class MptBlock(nn.Module):
             past_key_value=layer_past
         )
 
-        hidden_states = self.resid_attn_dropout(residual) + attn_outputs
+        hidden_states = self.resid_attn_dropout(attn_outputs) + residual
 
-        layernorm_output = self.norm_2(attn_outputs)
+        layernorm_output = self.norm_2(hidden_states)
 
         # Get residual
         residual = hidden_states
@@ -602,7 +641,8 @@ class MptModel(MptPreTrainedModel):
         else:
             attention_mask = attention_mask.to(hidden_states.device)
 
-        alibi = self.build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
+        # alibi = self.build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
+        alibi = build_alibi_bias(self.num_heads, self.config.max_seq_len, dtype=hidden_states.dtype)
 
         causal_mask = self._prepare_attn_mask(
             attention_mask,
