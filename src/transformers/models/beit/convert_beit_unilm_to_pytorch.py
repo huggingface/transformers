@@ -344,6 +344,10 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
             assert torch.allclose(
                 logits[0, :3, :3, :3], expected_logits, atol=1e-3
             ), "First elements of logits not as expected"
+            if not torch.allclose(
+                logits[0, :3, :3, :3], expected_logits, atol=1e-3
+            ):
+                raise ValueError(f"First elements of logits not as expected")
         else:
             print("Predicted class idx:", logits.argmax(-1).item())
             assert torch.allclose(
