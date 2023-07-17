@@ -300,7 +300,7 @@ class TrainingArguments:
         no_cuda (`bool`, *optional*, defaults to `False`):
             This argument is deprecated. Use `use_cpu` instead. Do not use CUDA even when it is available
         use_cpu (`bool`, *optional*, defaults to `False`):
-            Whether or not to use cpu. If set to False, we will use cuda or mps device if available. 
+            Whether or not to use cpu. If set to False, we will use cuda or mps device if available.
         seed (`int`, *optional*, defaults to 42):
             Random seed that will be set at the beginning of training. To ensure reproducibility across runs, use the
             [`~Trainer.model_init`] function to instantiate the model if it has some randomly initialized parameters.
@@ -795,9 +795,17 @@ class TrainingArguments:
             )
         },
     )
-    no_cuda: bool = field(default=False, metadata={"help": "This argument is deprecated. It will be removed in version 5.0 of 🤗 Transformers"
-                                                   "Do not use CUDA even when it is available"})
-    use_cpu : bool = field(default=False, metadata={"help": " Whether or not to use cpu. If set to False, we will use cuda or mps device if available."})
+    no_cuda: bool = field(
+        default=False,
+        metadata={
+            "help": "This argument is deprecated. It will be removed in version 5.0 of 🤗 Transformers"
+            "Do not use CUDA even when it is available"
+        },
+    )
+    use_cpu: bool = field(
+        default=False,
+        metadata={"help": " Whether or not to use cpu. If set to False, we will use cuda or mps device if available."},
+    )
     use_mps_device: bool = field(
         default=False,
         metadata={
@@ -1230,7 +1238,6 @@ class TrainingArguments:
                 FutureWarning,
             )
             self.use_cpu = self.no_cuda
-            
 
         if self.xpu_backend is not None:
             warnings.warn(
