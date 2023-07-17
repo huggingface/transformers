@@ -27,7 +27,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseTSModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_outputs import BaseTSModelOutputWithPast, CausalTSOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -915,22 +915,22 @@ class LlamaForPrediction(LagLlamaPreTrainedModel):
         return self.model
 
     @add_start_docstrings_to_model_forward(LAGLLAMA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=CausalTSOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        past_values: torch.LongTensor = None,
+        past_values: torch.Tensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         loc: Optional[torch.FloatTensor] = None,
         scale: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        future_values: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[Tuple, CausalTSOutputWithPast]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -979,31 +979,32 @@ class LlamaForPrediction(LagLlamaPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
+        loc = outputs[-2]
+        scale = outputs[-1]
+        # params of the chosen distribution
+        params = self.parameter_projection(hidden_states)
 
         loss = None
-        if labels is not None:
+        if future_values is not None:
             # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+            shift_params = [p[..., :-1].contiguous() for p in params]
+            distribution = self.output_distribution(shift_params, loc, scale)
+
+            shift_future_values = future_values[..., 1:].contiguous()
+            loss = self.loss(distribution, shift_future_values)
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (params,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        return CausalLMOutputWithPast(
+        return CausalTSOutputWithPast(
             loss=loss,
-            logits=logits,
+            params=params,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            loc=loc,
+            scale=scale,
         )
 
     def prepare_inputs_for_generation(
