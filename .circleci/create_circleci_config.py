@@ -581,13 +581,13 @@ def create_circleci_config(folder=None):
     example_file = os.path.join(folder, "examples_test_list.txt")
     if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
         with open(example_file, "r", encoding="utf-8") as f:
-            example_tests = f.read().split(" ")
+            example_tests = f.read()
         for job in EXAMPLES_TESTS:
             framework = job.name.replace("examples_", "").replace("torch", "pytorch")
             if example_tests == "all":
                 job.tests_to_run = [f"examples/{framework}"]
             else:
-                job.tests_to_run = [f for f in example_tests if f.startswith(f"examples/{framework}")]
+                job.tests_to_run = [f for f in example_tests.split(" ") if f.startswith(f"examples/{framework}")]
             
             if len(job.tests_to_run) > 0:
                 jobs.append(job)
