@@ -208,18 +208,18 @@ class MptAttention(nn.Module):
         mixed_qkv = self.Wqkv(hidden_states)
         query_states, key_states, value_states = mixed_qkv.chunk(3, dim=2)
         query_states = query_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).permute(0, 2, 3, 1)
+        key_states = key_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.reshape(batch_size, seq_length, self.n_heads, self.head_dim).transpose(1, 2)
 
         if past_key_value is not None:
             if len(past_key_value) != 0:
-                key_states = torch.cat([past_key_value[0], key_states], dim=3)
+                key_states = torch.cat([past_key_value[0], key_states], dim=2)
                 value_states = torch.cat([past_key_value[1], value_states], dim=2)
             past_key_value = (key_states, value_states)
         else:
             past_key_value = (key_states, value_states)
 
-        attention_scores = torch.matmul(query_states, key_states) * self.softmax_scale
+        attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2)) * self.softmax_scale
 
         query_length = seq_length
         if past_key_value is not None:
@@ -228,8 +228,7 @@ class MptAttention(nn.Module):
         if position_bias is not None:
             if len(position_bias.shape) != 3:
                 raise ValueError(f"Expecting position_bias shape to be 3 dimensions, got {len(position_bias.shape)}")
-            # query_length = query_states.shape[-2]
-            key_length = key_states.shape[-1]
+            key_length = key_states.shape[-2]
 
             position_bias_query_index = max(0, position_bias.size(1) - query_length)
             position_bias_key_index = max(0, position_bias.size(2) - key_length)
@@ -574,7 +573,7 @@ class MptModel(MptPreTrainedModel):
         seq_length_with_past = seq_length
         past_key_values_length = 0
         if past_key_values[0] is not None:
-            past_key_values_length = past_key_values[0][0].shape[3]
+            past_key_values_length = past_key_values[0][0].shape[2]
             seq_length_with_past = seq_length_with_past + past_key_values_length
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length_with_past), device=hidden_states.device)
