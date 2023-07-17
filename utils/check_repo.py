@@ -1076,6 +1076,32 @@ def check_docstrings_are_in_md():
         )
 
 
+def check_deprecated_constant_is_up_to_date():
+    deprecated_folder = os.path.join(PATH_TO_TRANSFORMERS, "models", "deprecated")
+    deprecated_models = [m for m in os.listdir(deprecated_folder) if not m.startswith("_")]
+
+    constant_to_check = transformers.models.auto.configuration_auto.DEPRECATED_MODELS
+    message = []
+    missing_models = sorted(set(deprecated_models) - set(constant_to_check))
+    if len(missing_models) != 0:
+        missing_models = ", ".join(missing_models)
+        message.append(
+            "The following models are in the deprecated folder, make sur to add them to `DEPRECATED_MODELS` in "
+            f"`models/auto/configuration_auto.py`: {missing_models}."
+        )
+
+    extra_models = sorted(set(constant_to_check) - set(deprecated_models))
+    if len(extra_models) != 0:
+        extra_models = ", ".join(extra_models)
+        message.append(
+            "The following models are in the `DEPRECATED_MODELS` constant but not in the deprecated folder. Either "
+            f"remove them from the constant or move to the deprecated folder: {extra_models}."
+        )
+
+    if len(message) > 0:
+        raise Exception("\n".join(message))
+
+
 def check_repo_quality():
     """Check all models are properly tested and documented."""
     print("Checking all models are included.")
@@ -1097,6 +1123,8 @@ def check_repo_quality():
     check_all_auto_mappings_importable()
     print("Checking all objects are equally (across frameworks) in the main __init__.")
     check_objects_being_equally_in_main_init()
+    print("Checking the DEPRECATED_MODELS constant is up to date.")
+    check_deprecated_constant_is_up_to_date()
 
 
 if __name__ == "__main__":

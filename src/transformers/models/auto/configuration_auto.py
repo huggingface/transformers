@@ -646,6 +646,7 @@ DEPRECATED_MODELS = [
     "mctct",
     "mmbt",
     "retribert",
+    "tapex",
     "trajectory_transformer",
     "van",
 ]
