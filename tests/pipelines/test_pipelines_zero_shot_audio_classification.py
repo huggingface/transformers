@@ -27,8 +27,6 @@ class ZeroShotAudioClassificationPipelineTests(unittest.TestCase):
     # and only CLAP would be there for now.
     # model_mapping = {CLAPConfig: CLAPModel}
 
-    # TODO: fix me (ydshieh)
-    @unittest.skip("currently failing (probably due to `datasets` issue)")
     @require_torch
     def test_small_model_pt(self):
         audio_classifier = pipeline(
