@@ -36,35 +36,39 @@ class MptAttentionConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [*MptAttention*] class. It is used to instantiate
     attention layers according to the specified arguments, defining the layers architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MPT
-    [mosaicml/mpt-7b](https://huggingface.co/mosaicml/mpt-7b) architecture.
+    [mosaicml/mpt-7b](https://huggingface.co/mosaicml/mpt-7b) architecture. Most of the arguments are kept for backward
+    compatibility with previous MPT models that are hosted on the Hub (previously with `trust_remote_code=True`).
 
     Configuration objects inherit from [*PretrainedConfig*] and can be used to control the model outputs. Read the
     documentation from [*PretrainedConfig*] for more information.
 
     Args:
-        attn_type (str):
-            type of attention to use. Options: multihead_attention, multiquery_attention
-        attn_pdrop (float):
+        attn_type (`str`, *optional*, defaults to `"multihead_attention"`):
+            type of attention to use. Options: `"multihead_attention"`, `"multiquery_attention"`.
+        attn_pdrop (`float`, *optional*, defaults to 0.0):
             The dropout probability for the attention layers. attn_impl (str): The attention implementation to use. One
             of 'torch', 'flash', or 'triton'.
-        qk_ln (bool):
-            Whether to apply layer normalization to the queries and keys in the attention layer.
-        clip_qkv (Optional[float]):
+        attn_impl (`str`, *optional*, defaults to `"torch"`):
+            The attention implementation to use. One of `"torch"`, `"flash"`, or `"triton"`.
+        clip_qkv (`float`, *optional*, defaults to `None`):
             If not None, clip the queries, keys, and values in the attention layer to this value.
-        softmax_scale (Optional[float]):
+        softmax_scale (`float`, *optional*, defaults to `None`):
             If not None, scale the softmax in the attention layer by this value. If None, use the default scale of
-            `1/sqrt(d_keys)`.
-        prefix_lm (Optional[bool]):
+            `1/sqrt(hidden_size)`.
+        prefix_lm (`bool`, *optional*, defaults to `False`)):
             Whether the model should operate as a Prefix LM. This requires passing an extra *prefix_mask* argument
             which indicates which tokens belong to the prefix. Tokens in the prefix can attend to one another
             bi-directionally. Tokens outside the prefix use causal attention.
-        attn_uses_sequence_id (Optional[bool]):
+        qk_ln (`bool`, *optional*, defaults to `False`):
+            Whether to apply layer normalization to the queries and keys in the attention layer.
+        attn_uses_sequence_id (`bool`, *optional*, defaults to `False`)):
             Whether to restrict attention to tokens that have the same sequence_id. When the model is in *train* mode,
             this requires passing an extra *sequence_id* argument which indicates which sub-sequence each token belongs
             to. Defaults to `False` meaning any provided *sequence_id* will be ignored.
-        alibi (bool):
-            Whether to use the alibi bias instead of position embeddings. alibi_bias_max (int): The maximum value of
-            the alibi bias.
+        alibi (`bool`, *optional*, defaults to `True`):
+            Whether to use the alibi bias instead of position embeddings.
+        alibi_bias_max (`int`, *optional*, defaults to 8):
+            The maximum value of the alibi bias.
     """
 
     def __init__(
@@ -72,12 +76,12 @@ class MptAttentionConfig(PretrainedConfig):
         attn_type="multihead_attention",
         attn_pdrop=0,
         attn_impl="triton",
-        normalise_query_key=False,
-        clip_query_key_value=None,
-        softmax_scale=None,  # TODO rename
-        prefix_lm=False,  # TODO what is this
+        clip_qkv=None,
+        softmax_scale=None,
+        prefix_lm=False,
+        qk_ln=False,
         attn_uses_sequence_id=False,
-        alibi=False,
+        alibi=True,
         alibi_bias_max=8,
         **kwargs,
     ):
@@ -85,59 +89,58 @@ class MptAttentionConfig(PretrainedConfig):
         self.attn_type = attn_type
         self.attn_pdrop = attn_pdrop
         self.attn_impl = attn_impl
-        self.normalise_query_key = normalise_query_key
-        self.clip_query_key_value = clip_query_key_value
+        self.clip_qkv = clip_qkv
         self.softmax_scale = softmax_scale
         self.prefix_lm = prefix_lm
         self.attn_uses_sequence_id = attn_uses_sequence_id
         self.alibi = alibi
+        self.qk_ln = qk_ln
         self.alibi_bias_max = alibi_bias_max
 
 
 class MptIntializerConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [*MptAttention*] class. It is used to instantiate
-    attention layers according to the specified arguments, defining the layers architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the MPT
-    [mosaicml/mpt-7b](https://huggingface.co/mosaicml/mpt-7b) architecture.
+    This is the configuration class to store the configuration of the initialization parameters of the Mpt
+    architecture. It is used to instantiate model weights according to the specified arguments, with respect to the
+    original implementation. Instantiating a configuration with the defaults will yield a similar configuration to that
+    of the MPT [mosaicml/mpt-7b](https://huggingface.co/mosaicml/mpt-7b) architecture. Most of the arguments are kept
+    for backward compatibility with previous MPT models that are hosted on the Hub (previously with
+    `trust_remote_code=True`).
 
-    Configuration objects inherit from [*PretrainedConfig*] and can be used to control the model outputs. Read the
-    documentation from [*PretrainedConfig*] for more information.
 
     Args:
-        init_config.name:
-            The parameter initialization scheme to use. Options: 'default_', 'baseline_',
-                'kaiming_uniform_', 'kaiming_normal_', 'neox_init_', 'small_init_', 'xavier_uniform_', or
-                'xavier_normal_'. These mimic the parameter initialization methods in PyTorch.
-            init_div_is_residual (Union[int, float, str, bool]):
-                Value to divide initial weights by if `module._is_residual` is True.
-            emb_init_std (Optional[float]):
-                The standard deviation of the normal distribution used to initialize the embedding layer.
-            emb_init_uniform_lim (Optional[Union[Tuple[float,float], float]]):
-                The lower and upper limits of the uniform distribution used to initialize the embedding layer. Mutually
-                exclusive with `emb_init_std`.
-            init_std (float):
-                The standard deviation of the normal distribution used to initialize the model, if using the baseline_
-                parameter initialization scheme.
-            init_gain (float):
-                The gain to use for parameter initialization with kaiming or xavier initialization schemes.
-            fan_mode (str): The fan mode to use for parameter initialization with kaiming initialization
-                schemes.
-            init_nonlinearity (str):
-                The nonlinearity to use for parameter initialization with kaiming initialization schemes. --- See
-                llmfoundry.models.utils.param_init_fns.py for info on other param init config options
+        name (`str`, *optional*, defaults to `"kaiming_normal_"`):
+            The parameter initialization scheme to use. Options: `'default_'`, `'baseline_'`, `'kaiming_uniform_'`,
+            `'kaiming_normal_'`, `'neox_init_'`, `'small_init_'`, `'xavier_uniform_'`, or `'xavier_normal_'`.
+        init_div_is_residual (`bool`, *optional*, defaults to `False`):
+            Value to divide initial weights by if `module._is_residual` is True.
+        emb_init_std (`float`, *optional*, defaults to `None`):
+            The standard deviation of the normal distribution used to initialize the embedding layer.
+        emb_init_uniform_lim (`float`, *optional*, defaults to `None`):
+            The lower and upper limits of the uniform distribution used to initialize the embedding layer. Mutually
+            exclusive with `emb_init_std`.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the normal distribution used to initialize the model, if using the baseline_
+            parameter initialization scheme.
+        init_gain (`float`, *optional*, defaults to 0.0):
+            The gain to use for parameter initialization with kaiming or xavier initialization schemes.
+        fan_mode (`str`, *optional*, defaults to `"fan_in"`):
+            The fan mode to use for parameter initialization with kaiming initialization schemes.
+        init_nonlinearity (`str`, *optional*, defaults to `"relu"`):
+            The nonlinearity to use for parameter initialization with kaiming initialization schemes. --- See
+            llmfoundry.models.utils.param_init_fns.py for info on other param init config options
     """
 
     def __init__(
         self,
         name="kaiming_normal_",
-        fan_mode="fan_in",
-        init_nonlinearity="relu",
         init_div_is_residual=True,
         emb_init_std=None,
         emb_init_uniform_lim=None,
         init_std=None,
         init_gain=0.0,
+        fan_mode="fan_in",
+        init_nonlinearity="relu",
         **kwargs,
     ):
         super().__init__()
@@ -153,6 +156,79 @@ class MptIntializerConfig(PretrainedConfig):
 
 
 class MptConfig(PretrainedConfig):
+    """
+    This is the configuration class to store the configuration of a [`MptModel`]. It is used to instantiate a Mpt model
+    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to the Mpt architecture
+    [bigscience/mpt](https://huggingface.co/bigscience/mpt).
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+
+    Args:
+        d_model (`int`, *optional*, defaults to 2048):
+            Dimensionality of the embeddings and hidden states.
+        n_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        n_layers (`int`, *optional*, defaults to 24):
+            Number of hidden layers in the Transformer encoder.
+        expansion_ratio (`int`, *optional*, defaults to 4):
+            The ratio of the up/down scale in the MLP.
+        max_seq_len (`int`, *optional*, defaults to 2048):
+            The maximum sequence length of the model.
+        vocab_size (`int`, *optional*, defaults to 50368):
+            Vocabulary size of the Mpt model. Defines the maximum number of different tokens that can be represented by
+            the `inputs_ids` passed when calling [`MptModel`]. Check [this
+            discussion](https://huggingface.co/bigscience/mpt/discussions/120#633d28389addb8530b406c2a) on how the
+            `vocab_size` has been defined.
+        resid_pdrop (`float`, *optional*, defaults to 0.1):
+            The dropout probability applied to the attention output before combining with residual.
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
+            The epsilon to use in the layer normalization layers.
+        emb_pdrop (`float`, *optional*, defaults to 0.1):
+            The dropout probability for the embedding layer.
+        learned_pos_emb (`bool`, *optional*, defaults to `False`):
+            Whether to use learned positional embeddings.
+        attn_config (`dict`, *optional*, defaults to `None`):
+            A dictionary used to configure the model's attention module.
+        init_device (`str`, *optional*, defaults to `None`):
+            The device to use for parameter initialization. Defined for backward compatibility
+        logit_scale (`float`, *optional*, defaults to `None`):
+            If not None, scale the logits by this value.
+        no_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in all layers.
+        verbose (`int`, *optional*, defaults to 0):
+            The verbosity level to use for logging. Used in the previous versions of MPT models for logging. This
+            argument is deprecated.
+        embedding_fraction (`float`, *optional*, defaults to 1.0):
+            The fraction to scale the gradients of the embedding layer by.
+        norm_type (`str`, *optional*, defaults to "low_precision_layernorm"):
+            Type of layer norm to use. All MPT models uses the same layer norm implementation. Defined for backward
+            compatibility.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
+        init_config (`dict`, *optional*, defaults to `None`):
+            A dictionary used to configure the model initialization.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+
+    Example:
+
+    ```python
+    >>> from transformers import MptConfig, MptModel
+
+    >>> # Initializing a Mpt configuration
+    >>> configuration = MptConfig()
+
+    >>> # Initializing a model (with random weights) from the configuration
+    >>> model = MptModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
     model_type = "mpt"
     attribute_map = {
         "num_attention_heads": "n_heads",
@@ -168,7 +244,6 @@ class MptConfig(PretrainedConfig):
         expansion_ratio: int = 4,
         max_seq_len: int = 2048,
         vocab_size: int = 50368,
-        num_key_value_heads: int = 16,
         resid_pdrop: float = 0.0,
         layer_norm_epsilon: float = 1e-5,
         emb_pdrop: float = 0.0,
@@ -176,7 +251,7 @@ class MptConfig(PretrainedConfig):
         attn_config: MptAttentionConfig = None,
         init_device: str = "cpu",
         logit_scale: Optional[Union[float, str]] = None,
-        no_bias: bool = False,
+        no_bias: bool = True,
         verbose: int = 0,
         embedding_fraction: float = 1.0,
         norm_type: str = "low_precision_layernorm",
@@ -185,91 +260,6 @@ class MptConfig(PretrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        """
-        This is the configuration class to store the configuration of a [`MptModel`]. It is used to instantiate a Mpt
-        model according to the specified arguments, defining the model architecture. Instantiating a configuration with
-        the defaults will yield a similar configuration to the Mpt architecture
-        [bigscience/mpt](https://huggingface.co/bigscience/mpt).
-
-        Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-        documentation from [`PretrainedConfig`] for more information.
-
-
-        Args:
-            vocab_size (`int`, *optional*, defaults to 250880):
-                Vocabulary size of the Mpt model. Defines the maximum number of different tokens that can be
-                represented by the `inputs_ids` passed when calling [`MptModel`]. Check [this
-                discussion](https://huggingface.co/bigscience/mpt/discussions/120#633d28389addb8530b406c2a) on how the
-                `vocab_size` has been defined.
-            d_model (`int`, *optional*, defaults to 64):
-                Dimensionality of the embeddings and hidden states.
-            n_layer (`int`, *optional*, defaults to 2):
-                Number of hidden layers in the Transformer encoder.
-            n_head (`int`, *optional*, defaults to 8):
-                Number of attention heads for each attention layer in the Transformer encoder.
-            layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
-                The epsilon to use in the layer normalization layers.
-            initializer_range (`float`, *optional*, defaults to 0.02):
-                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-            apply_residual_connection_post_layernorm (`bool`, *optional*, defaults to `False`):
-                If enabled, use the layer norm of the hidden states as the residual in the transformer blocks
-            hidden_dropout (`float`, *optional*, defaults to 0.1):
-                Dropout rate of the dropout function on the bias dropout.
-            attention_dropout (`float`, *optional*, defaults to 0.1):
-                Dropout rate applied to the attention probs
-            use_cache (`bool`, *optional*, defaults to `True`):
-                Whether or not the model should return the last key/values attentions (not used by all models).
-            pretraining_tp (`int`, *optional*, defaults to `1`):
-                Experimental feature. Tensor parallelism rank used during pretraining with Megatron. Please refer to
-                [this document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This
-                value is necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
-                issue](https://github.com/pytorch/pytorch/issues/76232). Note also that this is enabled only when
-                `slow_but_exact=True`.
-
-            expansion_ratio (int):
-                The ratio of the up/down scale in the MLP.
-            max_seq_len (int):
-                The maximum sequence length of the model.
-            resid_pdrop (float):
-                The dropout probability applied to the attention output before combining with residual.
-            emb_pdrop (float):
-                The dropout probability for the embedding layer.
-            learned_pos_emb (bool):
-                Whether to use learned positional embeddings
-            attn_config (Dict):  A dictionary used to configure the model's attention module:
-
-            init_device (str):
-                The device to use for parameter initialization. logit_scale (Optional[Union[float, str]]): If not None,
-                scale the logits by this value.
-            no_bias (bool):
-                Whether to use bias in all layers.
-            verbose (int):
-                The verbosity level. 0 is silent.
-            embedding_fraction (float):
-                The fraction to scale the gradients of the embedding layer by.
-            norm_type (str):
-                choose type of norm to use
-            multiquery_attention (bool):
-                Whether to use multiquery attention implementation.
-            use_cache (bool):
-                Whether or not the model should return the last key/values attentions
-            init_config (Dict):
-                A dictionary used to configure the model initialization.
-
-        Example:
-
-            ```python
-            >>> from transformers import MptConfig, MptModel
-
-            >>> # Initializing a Mpt configuration
-            >>> configuration = MptConfig()
-
-            >>> # Initializing a model (with random weights) from the configuration
-            >>> model = MptModel(configuration)
-
-            >>> # Accessing the model configuration
-            >>> configuration = model.config
-            ```"""
         self.d_model = d_model
         self.n_heads = n_heads
         self.n_layers = n_layers
@@ -288,7 +278,6 @@ class MptConfig(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.use_cache = use_cache
         self.initializer_range = initializer_range
-        self.num_key_value_heads = num_key_value_heads
 
         if attn_config is None:
             self.attn_config = MptAttentionConfig()
