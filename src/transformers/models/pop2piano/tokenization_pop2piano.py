@@ -392,9 +392,9 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
                 Whether to return midi object or not.
         Returns:
             If `return_midi` is True:
-                - `Dict` containing both `notes` and `pretty_midi.pretty_midi.PrettyMIDI` objects.
+                - `BatchFeature` containing both `notes` and `pretty_midi.pretty_midi.PrettyMIDI` objects.
             If `return_midi` is False:
-                - `Dict` containing `notes`.
+                - `BatchFeature` containing `notes`.
         """
 
         # check if they have attention_masks(attention_mask, attention_mask_beatsteps, attention_mask_extrapolated_beatstep) or not
