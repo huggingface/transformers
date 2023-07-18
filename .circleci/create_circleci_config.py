@@ -431,6 +431,9 @@ peft_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[torch,testing,sentencepiece,vision,peft]",
     ],
     pytest_num_workers=1,
+    tests_to_run=[
+        "tests/peft_integration/test_peft_models.py"
+    ]
 )
 
 
