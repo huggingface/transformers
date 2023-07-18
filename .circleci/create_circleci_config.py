@@ -86,6 +86,11 @@ class CircleCIJob:
     def to_dict(self):
         env = COMMON_ENV_VARIABLES.copy()
         env.update(self.additional_env)
+
+        cache_branch_prefix = os.environ.get("CIRCLE_BRANCH", "pull")
+        if cache_branch_prefix != "main":
+            cache_branch_prefix = "pull"
+
         job = {
             "working_directory": self.working_directory,
             "docker": self.docker_image,
@@ -101,16 +106,21 @@ class CircleCIJob:
             {
                 "restore_cache": {
                     "keys": [
-                        f"v{self.cache_version}-{self.cache_name}-pip-" + '{{ checksum "setup.py" }}',
-                        f"v{self.cache_version}-{self.cache_name}-pip-",
+                        # check the fully-matched cache first
+                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
+                        # try the partially-matched cache from `main`
+                        f"v{self.cache_version}-{self.cache_name}-main-pip-",
+                        # try the general partially-matched cache
+                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-",
                     ]
                 }
             },
             {
                 "restore_cache": {
                     "keys": [
-                        f"v{self.cache_version}-{self.cache_name}-site-packages-" + '{{ checksum "setup.py" }}',
-                        f"v{self.cache_version}-{self.cache_name}-site-packages-",
+                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
+                        f"v{self.cache_version}-{self.cache_name}-main-site-packages-",
+                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-",
                     ]
                 }
             },
@@ -119,7 +129,7 @@ class CircleCIJob:
         steps.append(
             {
                 "save_cache": {
-                    "key": f"v{self.cache_version}-{self.cache_name}-pip-" + '{{ checksum "setup.py" }}',
+                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
                     "paths": ["~/.cache/pip"],
                 }
             }
@@ -127,7 +137,7 @@ class CircleCIJob:
         steps.append(
             {
                 "save_cache": {
-                    "key": f"v{self.cache_version}-{self.cache_name}-site-packages-" + '{{ checksum "setup.py" }}',
+                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
                     "paths": ["~/.pyenv/versions/"],
                 }
             }
