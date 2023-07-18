@@ -695,10 +695,7 @@ def main():
         if isinstance(eval_dataset, dict):
             metrics = {}
             for eval_ds_name, eval_ds in eval_dataset.items():
-                dataset_metrics = trainer.evaluate(
-                    eval_dataset=eval_ds,
-                    metric_key_prefix=f"eval_{eval_ds_name}",
-                )
+                dataset_metrics = trainer.evaluate(eval_dataset=eval_ds, metric_key_prefix=f"eval_{eval_ds_name}")
                 metrics.update(dataset_metrics)
         else:
             metrics = trainer.evaluate(metric_key_prefix="eval")
