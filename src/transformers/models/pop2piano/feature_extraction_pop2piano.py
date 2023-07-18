@@ -25,7 +25,7 @@ import scipy
 from ...audio_utils import mel_filter_bank, spectrogram
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, is_essentia_available, is_tensor, logging, requires_backends
+from ...utils import TensorType, is_essentia_available, logging, requires_backends
 
 
 if is_essentia_available():
@@ -144,14 +144,14 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
         return log_mel_specs
 
-    def extract_rhythm(self, audio):
+    def extract_rhythm(self, audio: np.ndarray):
         """
         This algorithm(`RhythmExtractor2013`) extracts the beat positions and estimates their confidence as well as
         tempo in bpm for an audio signal. For more information please visit
         https://essentia.upf.edu/reference/std_RhythmExtractor2013.html .
 
         Args:
-            audio:
+            audio(`numpy.ndarray`):
                 raw audio waveform which is passed to the Rhythm Extractor.
         """
         requires_backends(self, ["essentia"])
@@ -195,19 +195,18 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         Preprocessing for log-mel-spectrogram
 
         Args:
-            audio (`numpy.ndarray`):
-                raw audio waveform to be processed.
+            audio (`numpy.ndarray` of shape `(audio_length, )` ):
+                Raw audio waveform to be processed.
             beatstep (`numpy.ndarray`):
-                interpolated values of the raw audio.
+                Interpolated values of the raw audio. If beatstep[0] is greater than 0.0, then it will be shifted by
+                the value at beatstep[0].
         """
 
-        if audio is not None:
-            if len(audio.shape) != 1:
-                raise ValueError(
-                    f"Expected `audio` to be a single channel audio input of shape (n, ) but found shape {audio.shape}."
-                )
-        if beatstep[0] > 0.01:
-            logger.warning(f"`beatstep[0]` is not 0. All beatstep will be shifted by {beatstep[0]}.")
+        if audio is not None and len(audio.shape) != 1:
+            raise ValueError(
+                f"Expected `audio` to be a single channel audio input of shape (n, ) but found shape {audio.shape}."
+            )
+        if beatstep[0] > 0.0:
             beatstep = beatstep - beatstep[0]
 
         num_steps = self.num_bars * 4
@@ -216,24 +215,25 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             beat_times=beatstep, steps_per_beat=1, n_extend=(self.num_bars + 1) * 4 + 1
         )
 
-        batch, feature_lengths = [], []
+        sample_indices = []
+        max_feature_length = 0
         for i in range(0, num_target_steps, num_steps):
             start_idx = i
             end_idx = min(i + num_steps, num_target_steps)
-
             start_sample = int(extrapolated_beatstep[start_idx] * self.sampling_rate)
             end_sample = int(extrapolated_beatstep[end_idx] * self.sampling_rate)
-            feature = audio[start_sample:end_sample]
-            batch.append(feature)
-            feature_lengths.append(feature.shape[0])
-
-        pad_max_length = max(feature_lengths)
-
+            sample_indices.append((start_sample, end_sample))
+            max_feature_length = max(max_feature_length, end_sample - start_sample)
         padded_batch = []
-        for feature in batch:
-            feature = np.pad(feature, ((0, pad_max_length - feature.shape[0]),), "constant", constant_values=0)
-
-            padded_batch.append(feature)
+        for start_sample, end_sample in sample_indices:
+            feature = audio[start_sample:end_sample]
+            padded_feature = np.pad(
+                feature,
+                ((0, max_feature_length - feature.shape[0]),),
+                "constant",
+                constant_values=0,
+            )
+            padded_batch.append(padded_feature)
 
         padded_batch = np.asarray(padded_batch)
         return padded_batch, extrapolated_beatstep
@@ -268,7 +268,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                     [each_padded_feature, np.zeros([1, zero_array_len, self.feature_size])], axis=0
                 )
                 attention_mask = np.concatenate(
-                    [attention_mask, np.zeros([1, zero_array_len], dtype=np.int64)], axis=0
+                    [attention_mask, np.zeros([1, zero_array_len], dtype=attention_mask.dtype)], axis=0
                 )
 
             padded_features.append(each_padded_feature)
@@ -317,9 +317,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 processed_features_dict[feature_name] = padded_feature_values
                 processed_features_dict[f"attention_mask_{feature_name}"] = attention_mask
 
-        inputs.update(processed_features_dict)
-
-        return inputs
+        outputs = BatchFeature(processed_features_dict)
+        return outputs
 
     def __call__(
         self,
@@ -349,10 +348,11 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask (`bool` *optional*, defaults to `False`):
                 Denotes if attention_mask for input_features, beatsteps and extrapolated_beatstep will be given as
                 output or not. Automatically set to True for batched inputs.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'pt'`):
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
+                If nothing is specified, it will return `np.ndarray` objects.
         """
         is_batched = bool(isinstance(audio, (list, tuple)) and isinstance(audio[0], (np.ndarray, tuple, list)))
         if is_batched:
@@ -368,26 +368,21 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             sampling_rate = [sampling_rate]
             return_attention_mask = False if return_attention_mask is None else return_attention_mask
 
-        batch_size = 0
         batch_input_features, batch_beatsteps, batch_ext_beatstep = [], [], []
         for single_raw_audio, single_sampling_rate in zip(audio, sampling_rate):
-            if isinstance(single_raw_audio, list) and is_tensor(single_raw_audio[0]):
-                single_raw_audio = single_raw_audio[0]
-
             bpm, beat_times, confidence, estimates, essentia_beat_intervals = self.extract_rhythm(
                 audio=single_raw_audio
             )
             beatsteps = self.interpolate_beat_times(beat_times=beat_times, steps_per_beat=steps_per_beat, n_extend=1)
 
-            if do_infer_resample:
-                if self.sampling_rate != single_sampling_rate and self.sampling_rate is not None:
-                    # Change sampling_rate to self.sampling_rate
-                    single_raw_audio = librosa.core.resample(
-                        single_raw_audio,
-                        orig_sr=single_sampling_rate,
-                        target_sr=self.sampling_rate,
-                        res_type="kaiser_best",
-                    )
+            if do_infer_resample and self.sampling_rate != single_sampling_rate and self.sampling_rate is not None:
+                # Change sampling_rate to self.sampling_rate
+                single_raw_audio = librosa.core.resample(
+                    single_raw_audio,
+                    orig_sr=single_sampling_rate,
+                    target_sr=self.sampling_rate,
+                    res_type="kaiser_best",
+                )
 
             single_sampling_rate = self.sampling_rate
             start_sample = int(beatsteps[0] * single_sampling_rate)
@@ -402,7 +397,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             batch_input_features.append(input_features)
             batch_beatsteps.append(beatsteps)
             batch_ext_beatstep.append(extrapolated_beatstep)
-            batch_size += 1
 
         output = BatchFeature(
             {

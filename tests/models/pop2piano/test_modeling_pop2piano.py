@@ -18,10 +18,19 @@ import copy
 import tempfile
 import unittest
 
+import numpy as np
+
 from transformers import Pop2PianoConfig
 from transformers.feature_extraction_utils import BatchFeature
-from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import is_torch_available
+from transformers.testing_utils import (
+    require_essentia,
+    require_librosa,
+    require_scipy,
+    require_torch,
+    slow,
+    torch_device,
+)
+from transformers.utils import is_essentia_available, is_librosa_available, is_scipy_available, is_torch_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -33,6 +42,10 @@ if is_torch_available():
 
     from transformers import Pop2PianoForConditionalGeneration
     from transformers.models.pop2piano.modeling_pop2piano import POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.pytorch_utils import is_torch_1_8_0
+
+else:
+    is_torch_1_8_0 = True
 
 
 @require_torch
@@ -94,18 +107,11 @@ class Pop2PianoModelTester:
             attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
             decoder_attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
 
-        lm_labels = None
-        if self.use_labels:
-            lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
-
-        return (
-            self.get_config(),
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-            lm_labels,
+        lm_labels = (
+            ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size) if self.use_labels else None
         )
+
+        return self.get_config(), input_ids, decoder_input_ids, attention_mask, decoder_attention_mask, lm_labels
 
     def get_pipeline_config(self):
         return Pop2PianoConfig(
@@ -603,7 +609,10 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
             model = Pop2PianoForConditionalGeneration.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    @unittest.skip("Test has a segmentation fault on torch 1.8.0")
+    @unittest.skipIf(
+        is_torch_1_8_0,
+        reason="Test has a segmentation fault on torch 1.8.0",
+    )
     def test_export_to_onnx(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         model = Pop2PianoForConditionalGeneration(config_and_inputs[0]).to(torch_device)
@@ -686,16 +695,26 @@ class Pop2PianoModelIntegrationTests(unittest.TestCase):
         )
 
     @slow
+    @require_essentia
+    @require_librosa
+    @require_scipy
     def test_full_model_integration(self):
-        model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
-        model.eval()
-        input_features = BatchFeature({"input_features": torch.ones([75, 66, 512])})
-        outputs = model.generate(
-            input_features=input_features["input_features"], return_dict_in_generate=True
-        ).sequences
+        if is_librosa_available() and is_scipy_available() and is_essentia_available() and is_torch_available():
+            from transformers import Pop2PianoFeatureExtractor
 
-        # check for shapes
-        self.assertEqual(outputs.size(0), 75)
+            speech_input1 = np.zeros([1_000_000], dtype=np.float32)
+            sampling_rate = 44_100
 
-        # check for values
-        self.assertEqual(outputs[0, :3].detach().cpu().numpy().tolist(), [0, 1])
+            feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
+            input_features = feature_extractor(speech_input1, sampling_rate=sampling_rate, return_tensors="pt")
+
+            model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
+            outputs = model.generate(
+                input_features=input_features["input_features"], return_dict_in_generate=True
+            ).sequences
+
+            # check for shapes
+            self.assertEqual(outputs.size(0), 70)
+
+            # check for values
+            self.assertEqual(outputs[0, :2].detach().cpu().numpy().tolist(), [0, 1])
