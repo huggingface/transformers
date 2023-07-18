@@ -335,6 +335,8 @@
         title: LED
       - local: model_doc/llama
         title: LLaMA
+      - local: model_doc/llama2
+        title: Llama2
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
