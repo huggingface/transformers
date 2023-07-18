@@ -17,97 +17,97 @@ rendered properly in your Markdown viewer.
 
 <Tip>
 
-If you don't need long explanations and just want TPU code samples to get started with, check out [our TPU example notebook!](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb)
+자세한 설명이 필요하지 않고 바로 TPU 샘플 코드을 시작하고 싶다면 [우리의 TPU 예제 노트북!](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb)을 확인하세요.
 
 </Tip>
 
 ### TPU가 무엇인가요?[[what-is-a-tpu]]
 
-A TPU is a **Tensor Processing Unit.** They are hardware designed by Google, which are used to greatly speed up the tensor computations within neural networks, much like GPUs. They can be used for both network training and inference. They are generally accessed through Google’s cloud services, but small TPUs can also be accessed directly for free through Google Colab and Kaggle Kernels.
+TPU는 **텐서 처리 장치**입니다. Google에서 설계한 하드웨어로, GPU처럼 신경망 내에서 텐서 연산을 더욱 빠르게 처리하기 위해 사용됩니다. 네트워크 훈련과 추론 모두에 사용할 수 있습니다. 일반적으로 Google의 클라우드 서비스를 통해 이용할 수 있지만, Google Colab과 Kaggle Kernel를 통해 소규모 TPU를 무료로 직접 이용할 수도 있습니다.
 
-Because [all TensorFlow models in 🤗 Transformers are Keras models](https://huggingface.co/blog/tensorflow-philosophy), most of the methods in this document are generally applicable to TPU training for any Keras model! However, there are a few points that are specific to the HuggingFace ecosystem (hug-o-system?) of Transformers and Datasets, and we’ll make sure to flag them up when we get to them.
+[🤗 Transformers의 모든 Tensorflow 모델은 Keras 모델](https://huggingface.co/blog/tensorflow-philosophy)이기 때문에, 이 문서에서 다루는 대부분의 메소드는 대체로 모든 Keras 모델을 위한 TPU 훈련에 적용할 수 있습니다! 하지만 Transformer와 데이터 세트의 HuggingFace 생태계(hug-o-system?)에 특화된 몇 가지 사항이 있으며, 해당 사항에 대해 설명할 때 반드시 언급하도록 하겠습니다.
 
 ### 어떤 종류의 TPU가 있나요?[[what-kinds-of-tpu-are-available]]
 
-New users are often very confused by the range of TPUs, and the different ways to access them. The first key distinction to understand is the difference between **TPU Nodes** and **TPU VMs.**
+신규 사용자는 TPU의 범위와 다양한 이용 방법에 대해 매우 혼란스러워하는 경우가 많습니다. **TPU 노드**와 **TPU VM**의 차이점은 가장 먼저 이해해야 할 핵심적인 구분 사항입니다.
 
-When you use a **TPU Node**, you are effectively indirectly accessing a remote TPU. You will need a separate VM, which will initialize your network and data pipeline and then forward them to the remote node. When you use a TPU on Google Colab, you are accessing it in the **TPU Node** style.
+**TPU 노드**를 사용한다면, 실제로는 원격 TPU를 간접적으로 이용하는 것입니다. 네트워크와 데이터 파이프라인을 초기화한 다음, 이를 원격 노드로 전달할 별도의 VM이 필요합니다. Google Colab에서 TPU를 사용하는 경우, **TPU 노드** 방식으로 이용하게 됩니다.
 
-Using TPU Nodes can have some quite unexpected behaviour for people who aren’t used to them! In particular, because the TPU is located on a physically different system to the machine you’re running your Python code on, your data cannot be local to your machine - any data pipeline that loads from your machine’s internal storage will totally fail! Instead, data must be stored in Google Cloud Storage where your data pipeline can still access it, even when the pipeline is running on the remote TPU node.
+TPU 노드를 사용하는 것은 이를 사용하지 않는 사용자에게 예기치 않은 현상이 발생하기도 합니다! 특히, TPU는 파이썬 코드를 실행하는 기기(machine)와 물리적으로 다른 시스템에 있기 때문에 로컬 기기에 데이터를 저장할 수 없습니다. 즉, 컴퓨터의 내부 저장소에서 가져오는 데이터 파이프라인은 완전히 실패합니다! 로컬 기기에 데이터를 저장하는 대신에, 데이터 파이프라인이 원격 TPU 노드에서 실행 중일 때에도 데이터 파이프라인이 계속 이용할 수 있는 Google Cloud Storage에 데이터를 저장해야 합니다.
 
 <Tip>
 
-If you can fit all your data in memory as `np.ndarray` or `tf.Tensor`, then you can `fit()` on that data even when using Colab or a TPU Node, without needing to upload it to Google Cloud Storage.
+메모리에 있는 모든 데이터를 `np.ndarray` 또는 `tf.Tensor`로 맞출 수 있다면, Google Cloud Storage에 업로드할 필요 없이, Colab 또는 TPU 노드를 사용해서 해당 데이터에 `fit()` 할 수 있습니다.
 
 </Tip>
 
 <Tip>
 
-**🤗Specific Hugging Face Tip🤗:** The methods `Dataset.to_tf_dataset()` and its higher-level wrapper `model.prepare_tf_dataset()` , which you will see throughout our TF code examples, will both fail on a TPU Node. The reason for this is that even though they create a `tf.data.Dataset` it is not a “pure” `tf.data` pipeline and uses `tf.numpy_function` or `Dataset.from_generator()` to stream data from the underlying HuggingFace `Dataset`. This HuggingFace `Dataset` is backed by data that is on a local disc and which the remote TPU Node will not be able to read.
+**🤗특수한 Hugging Face 팁🤗:** TF 코드 예제에서 볼 수 있는 `Dataset.to_tf_dataset()` 메소드와 그 상위 래퍼(wrapper)인 `model.prepare_tf_dataset()`는 모두 TPU 노드에서 실패합니다. 그 이유는 `tf.data.Dataset`을 생성하더라도 “순수한” `tf.data` 파이프라인이 아니며 `tf.numpy_function` 또는 `Dataset.from_generator()`를 사용하여 기본 HuggingFace `Dataset`에서 데이터를 전송하기 때문입니다. 이 HuggingFace `Dataset`는 로컬 디스크에 있는 데이터로 지원되며 원격 TPU 노드가 읽을 수 없습니다.
 
 </Tip>
 
-The second way to access a TPU is via a **TPU VM.** When using a TPU VM, you connect directly to the machine that the TPU is attached to, much like training on a GPU VM. TPU VMs are generally easier to work with, particularly when it comes to your data pipeline. All of the above warnings do not apply to TPU VMs!
+TPU를 이용하는 두 번째 방법은 **TPU VM**을 사용하는 것입니다. TPU VM을 사용할 때, GPU VM에서 훈련하는 것과 같이 TPU가 장착된 기기에 직접 연결합니다. 특히 데이터 파이프라인과 관련하여, TPU VM은 대체로 작업하기 더 쉽습니다. 위의 모든 경고는 TPU VM에는 해당되지 않습니다!
 
-This is an opinionated document, so here’s our opinion: **Avoid using TPU Node if possible.** It is more confusing and more difficult to debug than TPU VMs. It is also likely to be unsupported in future - Google’s latest TPU, TPUv4, can only be accessed as a TPU VM, which suggests that TPU Nodes are increasingly going to become a “legacy” access method. However, we understand that the only free TPU access is on Colab and Kaggle Kernels, which uses TPU Node - so we’ll try to explain how to handle it if you have to! Check the [TPU example notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb) for code samples that explain this in more detail.
+이 문서는 의견이 포함된 문서이며, 저희의 의견이 여기에 있습니다: **가능하면 TPU 노드를 사용하지 마세요.** TPU 노드는 TPU VM보다 더 복잡하고 디버깅하기가 더 어렵습니다. 또한 향후에는 지원되지 않을 가능성이 높습니다. Google의 최신 TPU인 TPUv4는 TPU VM으로만 이용할 수 있으므로, TPU 노드는 점점 더 "구식" 이용 방법이 될 것으로 전망됩니다. 그러나 TPU 노드를 사용하는 Colab과 Kaggle Kernels에서만 무료 TPU 이용이 가능한 것으로 확인되어, 필요한 경우 이를 다루는 방법을 설명해 드리겠습니다! 이에 대한 자세한 설명이 담긴 코드 샘플은 [TPU 예제 노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb)에서 확인하시기 바랍니다.
 
 ### 어떤 크기의 TPU를 사용할 수 있나요?[[what-sizes-of-tpu-are-available]]
 
-A single TPU (a v2-8/v3-8/v4-8) runs 8 replicas. TPUs exist in **pods** that can run hundreds or thousands of replicas simultaneously. When you use more than a single TPU but less than a whole pod (for example, a v3-32), your TPU fleet is referred to as a **pod slice.**
+단일 TPU(v2-8/v3-8/v4-8)는 8개의 복제본(replicas)을 실행합니다. TPU는 수백 또는 수천 개의 복제본을 동시에 실행할 수 있는 **pod**로 존재합니다. 단일 TPU를 하나 이상 사용하지만 전체 Pod보다 적게 사용하는 경우(예를 들면, v3-32), TPU 구성을 **pod 슬라이스**라고 합니다.
 
-When you access a free TPU via Colab, you generally get a single v2-8 TPU.
+Colab을 통해 무료 TPU에 이용하는 경우, 기본적으로 단일 v2-8 TPU를 제공받습니다.
 
 ### XLA에 대해 들어본 적이 있습니다. XLA란 무엇이고 TPU와 어떤 관련이 있나요?[[i-keep-hearing-about-this-xla-thing-whats-xla-and-how-does-it-relate-to-tpus]]
 
-XLA is an optimizing compiler, used by both TensorFlow and JAX. In JAX it is the only compiler, whereas in TensorFlow it is optional (but mandatory on TPU!). The easiest way to enable it when training a Keras model is to pass the argument `jit_compile=True` to `model.compile()`. If you don’t get any errors and performance is good, that’s a great sign that you’re ready to move to TPU!
+XLA는 최적화 컴파일러로, TensorFlow와 JAX에서 모두 사용됩니다. JAX에서는 유일한 컴파일러이지만, TensorFlow에서는 선택 사항입니다(하지만 TPU에서는 필수입니다!). Keras 모델을 훈련할 때 이를 활성화하는 가장 쉬운 방법은 `jit_compile=True` 인수를 `model.compile()`에 전달하는 것입니다. 오류가 없고 성능이 양호하다면, TPU로 전환할 준비가 되었다는 좋은 신호입니다!
 
-Debugging on TPU is generally a bit harder than on CPU/GPU, so we recommend getting your code running on CPU/GPU with XLA first before trying it on TPU. You don’t have to train for long, of course - just for a few steps to make sure that your model and data pipeline are working like you expect them to.
+TPU에서 디버깅하는 것은 대개 CPU/GPU보다 조금 더 어렵기 때문에, TPU에서 시도하기 전에 먼저 XLA로 CPU/GPU에서 코드를 실행하는 것을 권장합니다. 물론 오래 학습할 필요는 없습니다. 즉, 모델과 데이터 파이프라인이 예상대로 작동하는지 확인하기 위해 몇 단계만 거치면 됩니다.
 
 <Tip>
 
-XLA compiled code is usually faster - so even if you’re not planning to run on TPU, adding `jit_compile=True` can improve your performance. Be sure to note the caveats below about XLA compatibility, though!
+XLA로 컴파일된 코드는 대체로 더 빠릅니다. 따라서 TPU에서 실행할 계획이 없더라도, `jit_compile=True`를 추가하면 성능이 향상될 수 있습니다. 하지만 XLA 호환성에 대한 아래 주의 사항을 반드시 확인하세요!
 
 </Tip>
 
 <Tip warning={true}>
 
-**Tip born of painful experience:** Although using `jit_compile=True` is a good way to get a speed boost and test if your CPU/GPU code is XLA-compatible, it can actually cause a lot of problems if you leave it in when actually training on TPU. XLA compilation will happen implicitly on TPU, so remember to remove that line before actually running your code on a TPU!
+**뼈아픈 경험에서 얻은 팁:** `jit_compile=True`를 사용하면 속도를 높이고 CPU/GPU 코드가 XLA와 호환되는지 검증할 수 있는 좋은 방법이지만, 실제 TPU에서 훈련할 때 그대로 남겨두면 많은 문제를 초래할 수 있습니다. XLA 컴파일은 TPU에서 암시적으로 이뤄지므로, 실제 TPU에서 코드를 실행하기 전에 해당 줄을 제거하는 것을 잊지 마세요!
 
 </Tip>
 
 ### 제 XLA 모델과 호환하려면 어떻게 해야 하나요?[[how-do-i-make-my-model-xla-compatible]]
 
-In many cases, your code is probably XLA-compatible already! However, there are a few things that work in normal TensorFlow that don’t work in XLA. We’ve distilled them into three core rules below:
+대부분의 경우, 여러분의 코드는 이미 XLA와 호환될 것입니다! 그러나 표준 TensorFlow에서 작동하지만, XLA에서는 작동하지 않는 몇 가지 사항이 있습니다. 이를 아래 세 가지 핵심 규칙으로 간추렸습니다:
 
 <Tip>
 
-**🤗Specific HuggingFace Tip🤗:** We’ve put a lot of effort into rewriting our TensorFlow models and loss functions to be XLA-compatible. Our models and loss functions generally obey rule #1 and #2 by default, so you can skip over them if you’re using `transformers` models. Don’t forget about these rules when writing your own models and loss functions, though!
+**특수한 HuggingFace 팁🤗:** 저희는 TensorFlow 모델과 손실 함수를 XLA와 호환되도록 재작성하는 데 많은 노력을 기울였습니다. 저희의 모델과 손실 함수는 대개 기본적으로 규칙 #1과 #2를 따르므로 `transformers` 모델을 사용하는 경우, 이를 건너뛸 수 있습니다. 하지만 자체 모델과 손실 함수를 작성할 때는 이러한 규칙을 잊지 마세요!
 
 </Tip>
 
-#### XLA 규칙 #1: 코드에서 “데이터 의존 조건문”을 사용할 수 없습니다[[xla-rule-1-your-code-cannot-have-datadependent-conditionals]]
+#### XLA 규칙 #1: 코드에서 “데이터 종속 조건문”을 사용할 수 없습니다[[xla-rule-1-your-code-cannot-have-datadependent-conditionals]]
 
-What that means is that any `if` statement cannot depend on values inside a `tf.Tensor`. For example, this code block cannot be compiled with XLA!
+어떤 `if`문도 `tf.Tensor` 내부의 값에 종속될 수 없다는 것을 의미합니다. 예를 들어, 이 코드 블록은 XLA로 컴파일할 수 없습니다!
 
 ```python
 if tf.reduce_sum(tensor) > 10:
     tensor = tensor / 2.0
 ```
 
-This might seem very restrictive at first, but most neural net code doesn’t need to do this. You can often get around this restriction by using `tf.cond` (see the documentation [here](https://www.tensorflow.org/api_docs/python/tf/cond)) or by removing the conditional and finding a clever math trick with indicator variables instead, like so:
+처음에는 매우 제한적으로 보일 수 있지만, 대부분의 신경망 코드에서는 이를 수행할 필요가 없습니다. `tf.cond`를 사용하거나([여기](https://www.tensorflow.org/api_docs/python/tf/cond) 문서를 참조), 다음과 같이 조건문을 제거하고 대신 지표 변수를 사용하는 영리한 수학 트릭을 찾아내어 이 제한을 우회할 수 있습니다:
 
 ```python
 sum_over_10 = tf.cast(tf.reduce_sum(tensor) > 10, tf.float32)
 tensor = tensor / (1.0 + sum_over_10)
 ```
 
-This code has exactly the same effect as the code above, but by avoiding a conditional, we ensure it will compile with XLA without problems!
+이 코드는 위의 코드와 정확히 동일한 효과를 구현하지만, 조건문을 제거하여 문제 없이 XLA로 컴파일되도록 합니다!
 
-#### XLA 규칙 #2: 코드에서 "데이터 의존 크기"를 가질 수 없습니다[[xla-rule-2-your-code-cannot-have-datadependent-shapes]]
+#### XLA 규칙 #2: 코드에서 "데이터 종속 크기"를 가질 수 없습니다[[xla-rule-2-your-code-cannot-have-datadependent-shapes]]
 
-What this means is that the shape of all of the `tf.Tensor` objects in your code cannot depend on their values. For example, the function `tf.unique` cannot be compiled with XLA, because it returns a `tensor` containing one instance of each unique value in the input. The shape of this output will obviously be different depending on how repetitive the input `Tensor` was, and so XLA refuses to handle it!
+코드에서 모든 `tf.Tensor` 객체의 크기가 해당 값에 종속될 수 없다는 것을 의미합니다. 예를 들어, `tf.unique` 함수는 입력에서 각 고유 값의 인스턴스 하나를 포함하는 `tensor`를 반환하기 때문에 XLA로 컴파일할 수 없습니다. 이 출력의 크기는 입력 `Tensor`가 얼마나 반복적인지에 따라 분명히 달라질 것이므로, XLA는 이를 처리하지 못합니다!
 
-In general, most neural network code obeys rule #2 by default. However, there are a few common cases where it becomes a problem. One very common one is when you use **label masking**, setting your labels to a negative value to indicate that those positions should be ignored when computing the loss. If you look at NumPy or PyTorch loss functions that support label masking, you will often see code like this that uses [boolean indexing](https://numpy.org/doc/stable/user/basics.indexing.html#boolean-array-indexing):
+일반적으로, 대부분의 신경망 코드는 기본값으로 규칙 2를 따릅니다. 그러나 문제가 되는 몇 가지 대표적인 사례가 있습니다. 가장 흔한 사례 중 하나는 **레이블 마스킹**을 사용하여 손실(loss)을 계산할 때, 해당 위치를 무시하도록 나타내기 위해 레이블을 음수 값으로 설정하는 경우입니다. 레이블 마스킹을 지원하는 NumPy나 PyTorch 손실 함수를 보면 [불 인덱싱](https://numpy.org/doc/stable/user/basics.indexing.html#boolean-array-indexing)을 사용하는 다음과 같은 코드를 자주 접할 수 있습니다:
 
 ```python
 label_mask = labels >= 0
@@ -117,7 +117,7 @@ loss = compute_loss(masked_outputs, masked_labels)
 mean_loss = torch.mean(loss)
 ```
 
-This code is totally fine in NumPy or PyTorch, but it breaks in XLA! Why? Because the shape of `masked_outputs` and `masked_labels` depends on how many positions are masked - that makes it a **data-dependent shape.** However, just like for rule #1, we can often rewrite this code to yield exactly the same output without any data-dependent shapes.
+이 코드는 NumPy나 PyTorch에서는 문제 없이 작동하지만, XLA에서는 손상됩니다! 왜 그럴까요? 얼마나 많은 위치가 마스킹되는지에 따라 `masked_outputs`와 `masked_labels`의 크기가 달라져서, **데이터 종속 크기**가 되기 때문입니다. 그러나 규칙 #1과 마찬가지로, 이 코드를 다시 작성하면 데이터 종속적 모양 크기가 정확히 동일한 출력을 산출할 수 있습니다.
 
 ```python
 label_mask = tf.cast(labels >= 0, tf.float32)
@@ -126,37 +126,37 @@ loss = loss * label_mask  # Set negative label positions to 0
 mean_loss = tf.reduce_sum(loss) / tf.reduce_sum(label_mask)
 ```
 
-Here, we avoid data-dependent shapes by computing the loss for every position, but zeroing out the masked positions in both the numerator and denominator when we calculate the mean, which yields exactly the same result as the first block while maintaining XLA compatibility. Note that we use the same trick as in rule #1 - converting a `tf.bool` to `tf.float32` and using it as an indicator variable. This is a really useful trick, so remember it if you need to convert your own code to XLA!
+여기서, 모든 위치에 대한 손실을 계산하지만, 평균을 계산할 때 분자와 분모 모두에서 마스크된 위치를 0으로 처리합니다. 이는 데이터 종속 크기를 방지하고 XLA 호환성을 유지하면서 첫 번째 블록과 정확히 동일한 결과를 산출합니다. 규칙 #1에서와 동일한 트릭을 사용하여 `tf.bool`을 `tf.float32`로 변환하고 이를 지표 변수로 사용합니다. 해당 트릭은 매우 유용하며, 자체 코드를 XLA로 변환해야 할 경우 기억해 두세요!
 
 #### XLA 규칙 #3: XLA는 각기 다른 입력 크기가 나타날 때마다 모델을 다시 컴파일해야 합니다[[xla-rule-3-xla-will-need-to-recompile-your-model-for-every-different-input-shape-it-sees]]
 
-This is the big one. What this means is that if your input shapes are very variable, XLA will have to recompile your model over and over, which will create huge performance problems. This commonly arises in NLP models, where input texts have variable lengths after tokenization. In other modalities, static shapes are more common and this rule is much less of a problem.
+이것은 가장 큰 문제입니다. 입력 크기가 매우 가변적인 경우, XLA는 모델을 반복해서 다시 컴파일해야 하므로 성능에 큰 문제가 발생할 수 있습니다. 이 문제는 토큰화 후 입력 텍스트의 길이가 가변적인 NLP 모델에서 주로 발생합니다. 다른 모달리티에서는 정적 크기가 더 흔하며, 해당 규칙이 훨씬 덜 문제시 됩니다.
 
-How can you get around rule #3? The key is **padding** - if you pad all your inputs to the same length, and then use an `attention_mask`, you can get the same results as you’d get from variable shapes, but without any XLA issues. However, excessive padding can cause severe slowdown too - if you pad all your samples to the maximum length in the whole dataset, you might end up with batches consisting endless padding tokens, which will waste a lot of compute and memory!
+규칙 #3을 어떻게 우회할 수 있을까요? 핵심은 **패딩**입니다. 모든 입력을 동일한 길이로 패딩한 다음, `attention_mask`를 사용하면 어떤 XLA 문제도 없이 가변 크기에서 가져온 것과 동일한 결과를 가져올 수 있습니다. 그러나 과도한 패딩은 심각한 속도 저하를 야기할 수도 있습니다. 모든 샘플을 전체 데이터 세트의 최대 길이로 패딩하면, 무한한 패딩 토큰으로 구성된 배치가 생성되어 많은 연산과 메모리가 낭비될 수 있습니다!
 
-There isn’t a perfect solution to this problem. However, you can try some tricks. One very useful trick is to **pad batches of samples up to a multiple of a number like 32 or 64 tokens.** This often only increases the number of tokens by a small amount, but it hugely reduces the number of unique input shapes, because every input shape now has to be a multiple of 32 or 64. Fewer unique input shapes means fewer XLA compilations!
+이 문제에 대한 완벽한 해결책은 없습니다. 하지만, 몇 가지 트릭을 시도해볼 수 있습니다. 한 가지 유용한 트릭은 **샘플 배치를 32 또는 64 토큰과 같은 숫자의 배수까지 패딩하는 것입니다.** 이는 토큰 수가 소폭 증가하지만, 모든 입력 크기가 32 또는 64의 배수여야 하기 때문에 고유한 입력 크기의 수가 대폭 줄어듭니다. 고유한 입력 크기가 적다는 것은 XLA 컴파일 횟수가 적어진다는 것을 의미합니다!
 
 <Tip>
 
-**🤗Specific HuggingFace Tip🤗:** Our tokenizers and data collators have methods that can help you here. You can use `padding="max_length"` or `padding="longest"` when calling tokenizers to get them to output padded data. Our tokenizers and data collators also have a `pad_to_multiple_of` argument that you can use to reduce the number of unique input shapes you see!
+**🤗특수한 HuggingFace 팁🤗:** 토크나이저와 데이터 콜레이터에 도움이 될 수 있는 메소드가 있습니다. 토크나이저를 불러올 때 `padding="max_length"` 또는 `padding="longest"`를 사용하여 패딩된 데이터를 출력하도록 할 수 있습니다. 토크나이저와 데이터 콜레이터는 나타나는 고유한 입력 크기의 수를 줄이기 위해 사용할 수 있는 `pad_to_multiple_of` 인수도 있습니다!
 
 </Tip>
 
 ### 실제 TPU로 모델을 훈련하려면 어떻게 해야 하나요?[[how-do-i-actually-train-my-model-on-tpu]]
 
-Once your training is XLA-compatible and (if you’re using TPU Node / Colab) your dataset has been prepared appropriately, running on TPU is surprisingly easy! All you really need to change in your code is to add a few lines to initialize your TPU, and to ensure that your model and dataset are created inside a `TPUStrategy` scope. Take a look at [our TPU example notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb) to see this in action!
+훈련이 XLA와 호환되고 (TPU 노드/Colab을 사용하는 경우) 데이터 세트가 적절하게 준비되었다면, TPU에서 실행하는 것은 놀랍도록 쉽습니다! 코드에서 몇 줄만 추가하여, TPU를 초기화하고 모델과 데이터 세트가 `TPUStrategy` 범위 내에 생성되도록 변경하면 됩니다. [우리의 TPU 예제 노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb)을 참조하여 실제로 작동하는 모습을 확인해 보세요!
 
 ### 요약[[summary]]
 
-There was a lot in here, so let’s summarize with a quick checklist you can follow when you want to get your model ready for TPU training:
+여기에 많은 내용이 포함되어 있으므로, TPU 훈련을 위한 모델을 준비할 때 따를 수 있는 간략한 체크리스트로 요약해 보겠습니다:
 
-- Make sure your code follows the three rules of XLA
-- Compile your model with `jit_compile=True` on CPU/GPU and confirm that you can train it with XLA
-- Either load your dataset into memory or use a TPU-compatible dataset loading approach (see [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb))
-- Migrate your code either to Colab (with accelerator set to “TPU”) or a TPU VM on Google Cloud
-- Add TPU initializer code (see [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb))
-- Create your `TPUStrategy` and make sure dataset loading and model creation are inside the `strategy.scope()` (see [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb))
-- Don’t forget to take `jit_compile=True` out again when you move to TPU!
+- 코드가 XLA의 세 가지 규칙을 따르는지 확인합니다.
+- CPU/GPU에서 `jit_compile=True`로 모델을 컴파일하고 XLA로 훈련할 수 있는지 확인합니다.
+- 데이터 세트를 메모리에 가져오거나 TPU 호환 데이터 세트를 가져오는 방식을 사용합니다([노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb) 참조)
+- 코드를 Colab(accelerator가 “TPU”로 설정됨) 또는 Google Cloud의 TPU VM으로 마이그레이션합니다.
+- TPU 초기화 코드를 추가합니다([노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb) 참조)
+- `TPUStrategy`를 생성하고 데이터 세트를 가져오는 것과 모델 생성이 `strategy.scope()` 내에 있는지 확인합니다([노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/tpu_training-tf.ipynb) 참조)
+- TPU로 이동할 때 `jit_compile=True`를 다시 설정하는 것을 잊지 마세요!
 - 🙏🙏🙏🥺🥺🥺
-- Call model.fit()
-- You did it!
+- model.fit()을 불러옵니다.
+- 여러분이 해냈습니다!
