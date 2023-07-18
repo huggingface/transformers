@@ -85,7 +85,8 @@ class LlamaConfig(PretrainedConfig):
             these scaling strategies behave:
             https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
             experimental feature, subject to breaking API changes in future versions.
-
+        oproj_bias (`bool`, *optional*, defaults to `False`):
+            Whether or not the model should have a MHA output projection bias. 
         Example:
 
     ```python
@@ -122,6 +123,7 @@ class LlamaConfig(PretrainedConfig):
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_scaling=None,
+        oproj_bias=False, 
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -143,6 +145,7 @@ class LlamaConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_scaling = rope_scaling
         self._rope_scaling_validation()
+        self.oproj_bias = oproj_bias
 
         super().__init__(
             pad_token_id=pad_token_id,
