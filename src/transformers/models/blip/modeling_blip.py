@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch BLIP model."""
 
+import warnings
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
 
@@ -99,6 +100,15 @@ class BlipForConditionalGenerationModelOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+    @property
+    def decoder_logits(self):
+        warnings.warn(
+            "logits attribute is deprecated and will be removed in version 5 of Transformers."
+            " Please use the reconstruction attribute to retrieve the final output instead.",
+            FutureWarning,
+        )
+        return self.logits
 
 
 @dataclass
