@@ -141,3 +141,7 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 [[autodoc]] Pop2PianoTokenizer
     - __call__
 
+## Pop2PianoProcessor
+
+[[autodoc]] Pop2PianoProcessor
+    - __call__

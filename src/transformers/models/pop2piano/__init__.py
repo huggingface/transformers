@@ -56,6 +56,20 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["tokenization_pop2piano"] = ["Pop2PianoTokenizer"]
 
+try:
+    if not (
+        is_pretty_midi_available()
+        and is_torch_available()
+        and is_librosa_available()
+        and is_essentia_available()
+        and is_scipy_available()
+    ):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["processing_pop2piano"] = ["Pop2PianoProcessor"]
+
 
 if TYPE_CHECKING:
     from .configuration_pop2piano import POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP, Pop2PianoConfig
@@ -87,6 +101,20 @@ if TYPE_CHECKING:
         pass
     else:
         from .tokenization_pop2piano import Pop2PianoTokenizer
+
+    try:
+        if not (
+            is_pretty_midi_available()
+            and is_torch_available()
+            and is_librosa_available()
+            and is_essentia_available()
+            and is_scipy_available()
+        ):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .processing_pop2piano import Pop2PianoProcessor
 
 else:
     import sys

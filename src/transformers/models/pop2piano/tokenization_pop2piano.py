@@ -104,11 +104,6 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
     def __init__(
         self,
         vocab_file,
-        vocab_size_special: int = 4,
-        vocab_size_note: int = 128,
-        vocab_size_velocity: int = 2,
-        vocab_size_time: int = 100,
-        num_bars: int = 2,
         unk_token="-1",
         eos_token="1",
         pad_token="0",
@@ -125,22 +120,17 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             pad_token=pad_token,
             bos_token=bos_token,
-            vocab_size_special=vocab_size_special,
-            vocab_size_note=vocab_size_note,
-            vocab_size_velocity=vocab_size_velocity,
-            vocab_size_time=vocab_size_time,
-            num_bars=num_bars,
             **kwargs,
         )
 
         with open(vocab_file, "rb") as t_file:
             self.encoder = json.load(t_file)
 
-        self.vocab_size_special = vocab_size_special
-        self.vocab_size_note = vocab_size_note
-        self.vocab_size_velocity = vocab_size_velocity
-        self.vocab_size_time = vocab_size_time
-        self.num_bars = num_bars
+        self.vocab_size_special = self.encoder["vocab_size_special"]
+        self.vocab_size_note = self.encoder["vocab_size_note"]
+        self.vocab_size_velocity = self.encoder["vocab_size_velocity"]
+        self.vocab_size_time = self.encoder["vocab_size_time"]
+        self.num_bars = self.encoder["num_bars"]
 
     @property
     def vocab_size(self):
