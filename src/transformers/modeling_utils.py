@@ -2352,7 +2352,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         peft_adapter_model_id = pretrained_model_name_or_path
 
                         logger.info(
-                            f"Found adapter file at {peft_adapter_model_id}. Automatically loading adapter model using the base model from {raw_adapter_config_dict['base_model_name_or_path']}"
+                            f"Found adapter file at {peft_adapter_model_id}. Automatically loading adapter model using" 
+                            f" the base model from {raw_adapter_config_dict['base_model_name_or_path']}"
                         )
                         pretrained_model_name_or_path = raw_adapter_config_dict["base_model_name_or_path"]
                     else:
