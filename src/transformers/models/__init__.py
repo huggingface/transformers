@@ -65,6 +65,7 @@ from . import (
     detr,
     dialogpt,
     dinat,
+    dinov2,
     distilbert,
     dit,
     donut,

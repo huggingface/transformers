@@ -73,6 +73,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("deta", "DetaModel"),
         ("detr", "DetrModel"),
         ("dinat", "DinatModel"),
+        ("dinov2", "Dinov2Model"),
         ("distilbert", "DistilBertModel"),
         ("donut-swin", "DonutSwinModel"),
         ("dpr", "DPRQuestionEncoder"),
@@ -455,6 +456,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("data2vec-vision", "Data2VecVisionForImageClassification"),
         ("deit", ("DeiTForImageClassification", "DeiTForImageClassificationWithTeacher")),
         ("dinat", "DinatForImageClassification"),
+        ("dinov2", "Dinov2ForImageClassification"),
         (
             "efficientformer",
             (

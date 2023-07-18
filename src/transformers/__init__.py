@@ -293,6 +293,7 @@ _import_structure = {
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
     "models.dialogpt": [],
     "models.dinat": ["DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DinatConfig"],
+    "models.dinov2": ["DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Dinov2Config"],
     "models.distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig", "DistilBertTokenizer"],
     "models.dit": [],
     "models.donut": ["DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "DonutProcessor", "DonutSwinConfig"],
@@ -1577,6 +1578,14 @@ else:
             "DinatForImageClassification",
             "DinatModel",
             "DinatPreTrainedModel",
+        ]
+    )
+    _import_structure["models.dinov2"].extend(
+        [
+            "DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Dinov2ForImageClassification",
+            "Dinov2Model",
+            "Dinov2PreTrainedModel",
         ]
     )
     _import_structure["models.distilbert"].extend(
@@ -4244,6 +4253,7 @@ if TYPE_CHECKING:
     from .models.deta import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP, DetaConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DinatConfig
+    from .models.dinov2 import DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Dinov2Config
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
     from .models.donut import DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, DonutProcessor, DonutSwinConfig
     from .models.dpr import (
@@ -5359,6 +5369,12 @@ if TYPE_CHECKING:
             DinatForImageClassification,
             DinatModel,
             DinatPreTrainedModel,
+        )
+        from .models.dinov2 import (
+            DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Dinov2ForImageClassification,
+            Dinov2Model,
+            Dinov2PreTrainedModel,
         )
         from .models.distilbert import (
             DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

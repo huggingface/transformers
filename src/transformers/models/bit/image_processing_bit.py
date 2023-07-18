@@ -76,10 +76,10 @@ class BitImageProcessor(BaseImageProcessor):
             method.
         do_normalize:
             Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+        image_mean (`float` or `List[float]`, *optional*, defaults to `OPENAI_CLIP_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+        image_std (`float` or `List[float]`, *optional*, defaults to `OPENAI_CLIP_MEAN`):
             Image standard deviation.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
