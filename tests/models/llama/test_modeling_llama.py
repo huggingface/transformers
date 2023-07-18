@@ -373,7 +373,7 @@ class LlamaIntegrationTest(unittest.TestCase):
     @slow
     def test_model_7b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = LlamaForCausalLM.from_pretrained("/raid/arthur/llama-7b", device_map="auto")
+        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="auto")
         out = model(torch.tensor([input_ids]))
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-6.6550, -4.1227, -4.9859, -3.2406, 0.8262, -3.0033, 1.2964, -3.3699]])
@@ -388,7 +388,7 @@ class LlamaIntegrationTest(unittest.TestCase):
     @slow
     def test_model_13b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = LlamaForCausalLM.from_pretrained("/raid/arthur/llama-13b", device_map="auto")
+        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-13b-hf", device_map="auto")
         out = model(torch.tensor(input_ids))
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-2.0622, -1.2794, -1.1638, -0.9788, -1.4603, -1.0238, -1.7893, -1.4411]])
@@ -403,7 +403,7 @@ class LlamaIntegrationTest(unittest.TestCase):
     @slow
     def test_model_13bf_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = LlamaForCausalLM.from_pretrained("/raid/arthur/llama-13bf", device_map="auto")
+        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-13b-chat-hf", device_map="auto")
         out = model(torch.tensor(input_ids))
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-0.8562, -1.8520, -0.7551, -0.4162, -1.5161, -1.2038, -2.4823, -2.3254]])
@@ -420,7 +420,7 @@ class LlamaIntegrationTest(unittest.TestCase):
     @slow
     def test_model_70b_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
-        model = LlamaForCausalLM.from_pretrained("/raid/arthur/llama-13bf", device_map="auto")
+        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-70b-hf", device_map="auto")
         out = model(torch.tensor(input_ids))
 
         EXPECTED_MEAN = torch.tensor(
@@ -432,13 +432,16 @@ class LlamaIntegrationTest(unittest.TestCase):
         # fmt: on
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
 
+    @unittest.skip("Model is curently gated")
     @slow
     def test_model_13b_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that 1) the laws of physics are the same everywhere in the universe and 2) the passage of time and the length of objects can vary depending on the observer\'s frame of reference.\n\nThe first part of the theory, that the laws of physics are the same everywhere, is known as the "princi"""
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-13b-chat-hf")
         input_ids = tokenizer.encode(prompt, return_tensors="pt")
-        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-13b-chat-hf", device_map="sequential", use_safetensors=False)
+        model = LlamaForCausalLM.from_pretrained(
+            "meta-llama/Llama-2-13b-chat-hf", device_map="sequential", use_safetensors=False
+        )
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
