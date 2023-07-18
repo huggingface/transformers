@@ -2109,6 +2109,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             use_safetensors (`bool`, *optional*, defaults to `None`):
                 Whether or not to use `safetensors` checkpoints. Defaults to `None`. If not specified and `safetensors`
                 is not installed, it will be set to `False`.
+            peft_adapter_name (`str`, *optional*, defaults to `"default"`):
+                The default PEFT adapter name to load, in case the `pretrained_model_name_or_path` contains adapter
+                weights. The default adapter name (supported by PEFT library) is `"default"`.
+            _peft_adapter_model_id (`str`, *optional*, defaults to `None`):
+                The adapter model id retrieved by the `_BaseAutoModelClass` class in case users load the model through
+                auto mapping. This argument is exclusively created and passed by that class. Therefore, we advise users
+                to not manually pass this argumet unless they know what they are doing.
+
 
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
@@ -2352,7 +2360,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         peft_adapter_model_id = pretrained_model_name_or_path
 
                         logger.info(
-                            f"Found adapter file at {peft_adapter_model_id}. Automatically loading adapter model using" 
+                            f"Found adapter file at {peft_adapter_model_id}. Automatically loading adapter model using"
                             f" the base model from {raw_adapter_config_dict['base_model_name_or_path']}"
                         )
                         pretrained_model_name_or_path = raw_adapter_config_dict["base_model_name_or_path"]
