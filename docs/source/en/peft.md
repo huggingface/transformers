@@ -56,9 +56,40 @@ model = AutoModelForCausalLM.from_pretrained(peft_model_id)
 
 <Tip>
 
-You can still load a PEFT adapter even if your model isn't an auto-mapped model as long as the Hub repository or your local directory contains an `adapter_config.json` file with the `base_model_name_or_path` key.
+You can load a PEFT adapter with either an `AutoModelFor` class or the base model class like `OPTForCausalLM` or `LlamaForCausalLM`.
 
 </Tip>
+
+## Load in 8bit or 4bit
+
+The `bitsandbytes` integration supports 8bit and 4bit precision data types, which are useful for loading large models because it saves memory (see the `bitsandbytes` integration [guide](./quantization#bitsandbytes-integration) to learn more). Add the `load_in_8bit` or `load_in_4bit` parameters to [`PreTrainedModel.from_pretrained`] and set `device_map="auto"` to effectively distribute the model to your hardware:
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+peft_model_id = "ybelkada/opt-350m-lora"
+model = AutoModelForCausalLM.from_pretrained(peft_model_id, device_map="auto", load_in_8bit=True)
+```
+
+## Train a PEFT adapter
+
+You can also train a PEFT adapter for your specific use-case with the [`Trainer`] class. For example, to train a `roberta-large` model for token classification with LoRA:
+
+1. setup a configuration with the task type and some hyperparameters (see [`~peft.LoraConfig`] for more details about what the hyperparameters do)
+2. create a [`~peft.PeftModel`] class with the `get_peft_model()` function which takes the base `roberta-large` model and the configuration
+3. pass the newly created [`~peft.PeftModel`] to the [`Trainer`] to start finetuning the model
+
+```py
+model_name = "roberta-large"
+peft_config = LoraConfig(
+    task_type=TaskType.TOKEN_CLS, inference_mode=False, r=16, lora_alpha=16, lora_dropout=0.1, bias="all"
+)
+
+model = AutoModelForTokenClassification.from_pretrained(model_name)
+model = get_peft_model(model, peft_config)
+trainer = Trainer(model=model, ...)
+trainer.train()
+```
 
 <!--
 
