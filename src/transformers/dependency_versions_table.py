@@ -88,4 +88,5 @@ deps = {
     "unidic_lite": "unidic_lite>=1.0.7",
     "urllib3": "urllib3<2.0.0",
     "uvicorn": "uvicorn",
+    "peft": "peft>=0.4.0",
 }

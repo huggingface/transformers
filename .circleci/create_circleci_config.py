@@ -428,7 +428,7 @@ peft_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y cmake",
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[torch,testing,sentencepiece,vision,peft]",
+        "pip install -U --upgrade-strategy eager .[torch,testing,sentencepiece,peft]",
     ],
     pytest_num_workers=1,
     tests_to_run=[

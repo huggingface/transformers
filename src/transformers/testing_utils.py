@@ -374,7 +374,7 @@ def require_peft(test_case):
     These tests are skipped when PEFT isn't installed.
 
     """
-    return unittest.skipUnless(is_peft_available(), "test requires PyTorch")(test_case)
+    return unittest.skipUnless(is_peft_available(), "test requires PEFT")(test_case)
 
 
 def require_torchvision(test_case):
