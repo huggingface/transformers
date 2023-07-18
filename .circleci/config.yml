@@ -136,20 +136,20 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.7-code_quality-{{ checksum "setup.py" }}
-                      - v0.7-code-quality
+                      - v0.7-code_quality-pip-{{ checksum "setup.py" }}
+                      - v0.7-code-quality-pip
             - restore_cache:
                   keys:
-                      - v0.7-code_quality-{{ checksum "setup.py" }}-site-packages
+                      - v0.7-code_quality-site-packages-{{ checksum "setup.py" }}
                       - v0.7-code-quality-site-packages
             - run: pip install --upgrade --upgrade-strategy eager pip
             - run: pip install -U --upgrade-strategy eager .[all,quality]
             - save_cache:
-                  key: v0.7-code_quality-{{ checksum "setup.py" }}
+                  key: v0.7-code_quality-pip-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - save_cache:
-                  key: v0.7-code_quality-{{ checksum "setup.py" }}-site-packages
+                  key: v0.7-code_quality-site-packages-{{ checksum "setup.py" }}
                   paths:
                       - '~/.pyenv/versions/'
             - run:
@@ -177,20 +177,20 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.7-repository_consistency-{{ checksum "setup.py" }}
-                      - v0.7-repository_consistency
+                      - v0.7-repository_consistency-pip-{{ checksum "setup.py" }}
+                      - v0.7-repository_consistency-pip
             - restore_cache:
                   keys:
-                      - v0.7-repository_consistency-{{ checksum "setup.py" }}-site-packages
+                      - v0.7-repository_consistency-site-packages-{{ checksum "setup.py" }}
                       - v0.7-repository_consistency-site-packages
             - run: pip install --upgrade --upgrade-strategy eager pip
             - run: pip install -U --upgrade-strategy eager .[all,quality]
             - save_cache:
-                  key: v0.7-repository_consistency-{{ checksum "setup.py" }}
+                  key: v0.7-repository_consistency-pip-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - save_cache:
-                  key: v0.7-repository_consistency-{{ checksum "setup.py" }}-site-packages
+                  key: v0.7-repository_consistency-site-packages-{{ checksum "setup.py" }}
                   paths:
                       - '~/.pyenv/versions/'
             - run:
