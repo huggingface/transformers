@@ -26,7 +26,7 @@ The abstract from the paper is the following:
 
 Tips:
 
-- Weights for the Llama2 models can be obtained from by filling out [this form](TO COME)
+- Weights for the Llama2 models can be obtained from by filling out [this form](https://ai.meta.com/resources/models-and-libraries/llama-downloads/)
 - The architecture is very similar to the first Llama, with the addition of Groupe Query Attention (GQA) following this [paper](https://arxiv.org/pdf/2305.13245.pdf)
 - Setting `config.pretraining_tp` to a value different than 1 will activate the more accurate but slower computation of the linear layers, which should better match the original logits.
 - The original model uses `pad_id = -1` which means that there is not padding token. We can't have the same logic, so we decide to pad with `0` by default. Then, the `model.config.pad_token_id` was properly set with the padding index. The `embed_tokens` layer of the model is initialized with`self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.config.padding_idx)`, which makes sure that encoding the padding token will output zeros.
