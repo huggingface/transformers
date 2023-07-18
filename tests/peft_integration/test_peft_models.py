@@ -29,13 +29,13 @@ if is_torch_available():
 
 @require_peft
 @require_torch
-@slow
 class PeftTesterMixin:
     # one safetensors adapters and one pickle adapter
     peft_test_model_ids = ("peft-internal-testing/opt-350m-lora-pickle", "peft-internal-testing/opt-350m-lora")
     transformers_test_model_classes = (AutoModelForCausalLM, OPTForCausalLM)
 
 
+@slow
 class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
     r"""
     A testing suite that makes sure that the PeftModel class is correctly integrated into the transformers library.
@@ -77,6 +77,31 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # `Linear8bitLt` class from bnb.
                 # here `module` should be `peft/src/peft/tuners/lora.py` thus contain the class `LoraModel`
                 self.assertTrue("LoraModel" in dir(module))
+
+                # dummy generation
+                _ = peft_model.generate(input_ids=torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device))
+
+
+class PeftFastIntegrationTester(unittest.TestCase, PeftTesterMixin):
+    r"""
+    A testing suite that makes sure that the PeftModel class is correctly integrated into the transformers library.
+    "Fast" version with tiny random models
+
+    - test_peft_from_pretrained:
+        Tests if the peft model is correctly loaded through `from_pretrained` method
+    - test_peft_from_pretrained_kwargs:
+        Tests if the kwargs are correctly passed to the peft model
+    """
+    peft_test_model_ids = ("peft-internal-testing/tiny-OPTForCausalLM-lora",)
+
+    def test_peft_from_pretrained(self):
+        r"""
+        Simple test that tests the basic usage of PEFT model through `from_pretrained`
+        """
+        for model_id in self.peft_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                self.assertTrue(isinstance(peft_model, PeftModel))
 
                 # dummy generation
                 _ = peft_model.generate(input_ids=torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device))
