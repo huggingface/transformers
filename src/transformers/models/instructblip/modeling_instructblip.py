@@ -666,7 +666,7 @@ class InstructBlipQFormerMultiHeadAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores.float()).to(attention_scores_dtype)
+        attention_probs = nn.Softmax(dim=-1)(attention_scores).to(attention_scores_dtype)
 
         if is_cross_attention and self.save_attention:
             self.save_attention_map(attention_probs)
