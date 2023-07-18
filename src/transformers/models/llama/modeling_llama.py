@@ -287,13 +287,10 @@ class LlamaAttention(nn.Module):
         bsz, q_len, _ = hidden_states.size()
 
         if self.pretraining_tp > 1:
+            key_value_slicing = (self.num_key_value_heads * self.head_dim) // self.pretraining_tp
             query_slices = self.q_proj.weight.split((self.num_heads * self.head_dim) // self.pretraining_tp, dim=0)
-            key_slices = self.k_proj.weight.split(
-                (self.num_key_value_heads * self.head_dim) // self.pretraining_tp, dim=0
-            )
-            value_slices = self.v_proj.weight.split(
-                (self.num_key_value_heads * self.head_dim) // self.pretraining_tp, dim=0
-            )
+            key_slices = self.k_proj.weight.split(key_value_slicing, dim=0)
+            value_slices = self.v_proj.weight.split(key_value_slicing, dim=0)
 
             query_states = [F.linear(hidden_states, query_slices[i]) for i in range(self.pretraining_tp)]
             query_states = torch.cat(query_states, dim=-1)
