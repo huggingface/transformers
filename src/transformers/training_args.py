@@ -1720,7 +1720,7 @@ class TrainingArguments:
         self.distributed_state = None
         if not self.use_ipex and "ACCELERATE_USE_IPEX" not in os.environ:
             os.environ["ACCELERATE_USE_IPEX"] = "false"
-        if self.use_cpu:
+        if self.use_cpu or os.environ.get("ACCELERATE_USE_CPU", False):
             self.distributed_state = PartialState(cpu=True, backend=self.ddp_backend)
             self._n_gpu = 0
         elif is_sagemaker_mp_enabled():
