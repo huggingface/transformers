@@ -101,16 +101,16 @@ class CircleCIJob:
             {
                 "restore_cache": {
                     "keys": [
-                        f"v{self.cache_version}-{self.cache_name}-" + '{{ checksum "setup.py" }}',
-                        f"v{self.cache_version}-{self.cache_name}-",
+                        f"v{self.cache_version}-{self.cache_name}-pip-" + '{{ checksum "setup.py" }}',
+                        f"v{self.cache_version}-{self.cache_name}-pip-",
                     ]
                 }
             },
             {
                 "restore_cache": {
                     "keys": [
-                        f"v{self.cache_version}-{self.cache_name}-" + '{{ checksum "setup.py" }}-site-packages',
-                        f"v{self.cache_version}-{self.cache_name}-site-packages",
+                        f"v{self.cache_version}-{self.cache_name}-site-packages-" + '{{ checksum "setup.py" }}',
+                        f"v{self.cache_version}-{self.cache_name}-site-packages-",
                     ]
                 }
             },
@@ -119,7 +119,7 @@ class CircleCIJob:
         steps.append(
             {
                 "save_cache": {
-                    "key": f"v{self.cache_version}-{self.cache_name}-" + '{{ checksum "setup.py" }}',
+                    "key": f"v{self.cache_version}-{self.cache_name}-pip-" + '{{ checksum "setup.py" }}',
                     "paths": ["~/.cache/pip"],
                 }
             }
@@ -127,7 +127,7 @@ class CircleCIJob:
         steps.append(
             {
                 "save_cache": {
-                    "key": f"v{self.cache_version}-{self.cache_name}-" + '{{ checksum "setup.py" }}-site-packages',
+                    "key": f"v{self.cache_version}-{self.cache_name}-site-packages-" + '{{ checksum "setup.py" }}',
                     "paths": ["~/.pyenv/versions/"],
                 }
             }
