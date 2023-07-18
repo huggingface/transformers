@@ -773,7 +773,7 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
             seq_length_with_past = seq_length_with_past + past_key_values_length
 
         if position_ids is None:
-            device = past_values.device if past_values is not None else inputs_embeds.device
+            device = past_values.device if past_values is not None else device
             position_ids = torch.arange(
                 past_key_values_length, seq_length + past_key_values_length, dtype=torch.long, device=device
             )
@@ -783,9 +783,7 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
 
         # embed positions
         if attention_mask is None:
-            attention_mask = torch.ones(
-                (batch_size, seq_length_with_past), dtype=torch.bool, device=inputs_embeds.device
-            )
+            attention_mask = torch.ones((batch_size, seq_length_with_past), dtype=torch.bool, device=device)
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, (batch_size, seq_length), dtype, device, past_key_values_length
         )
@@ -869,23 +867,23 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
         )
 
 
-class LlamaForPrediction(LagLlamaPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+class LagLlamaForPrediction(LagLlamaPreTrainedModel):
+    _tied_weights_keys = ["parameter_projection.weight"]
 
     def __init__(self, config):
         super().__init__(config)
         self.model = LagLlamaModel(config)
 
         if config.distribution_output == "student_t":
-            self.distribution_output = StudentTOutput(dim=config.hidden_size)
+            self.distribution_output = StudentTOutput(dim=config.input_size)
         elif config.distribution_output == "normal":
-            self.distribution_output = NormalOutput(dim=config.hidden_size)
+            self.distribution_output = NormalOutput(dim=config.input_size)
         elif config.distribution_output == "negative_binomial":
-            self.distribution_output = NegativeBinomialOutput(dim=config.hidden_size)
+            self.distribution_output = NegativeBinomialOutput(dim=config.input_size)
         else:
             raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
-        self.parameter_projection = self.distribution_output.get_parameter_projection(self.model.config.d_model)
+        self.parameter_projection = self.distribution_output.get_parameter_projection(self.model.config.hidden_size)
         self.target_shape = self.distribution_output.event_shape
 
         if config.loss == "nll":
@@ -901,12 +899,6 @@ class LlamaForPrediction(LagLlamaPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
@@ -1062,7 +1054,7 @@ class LlamaForPrediction(LagLlamaPreTrainedModel):
     """,
     LAGLLAMA_START_DOCSTRING,
 )
-class LlamaForSequenceClassification(LagLlamaPreTrainedModel):
+class LagLlamaForSequenceClassification(LagLlamaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

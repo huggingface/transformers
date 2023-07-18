@@ -31,11 +31,11 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_llama"] = [
-        "LlamaForCausalLM",
-        "LlamaModel",
-        "LlamaPreTrainedModel",
-        "LlamaForSequenceClassification",
+    _import_structure["modeling_lagllama"] = [
+        "LagLlamaForPrediction",
+        "LagLlamaModel",
+        "LagLlamaPreTrainedModel",
+        "LagLlamaForSequenceClassification",
     ]
 
 
