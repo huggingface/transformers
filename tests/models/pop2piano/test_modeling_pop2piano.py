@@ -25,6 +25,7 @@ from transformers.feature_extraction_utils import BatchFeature
 from transformers.testing_utils import (
     require_essentia,
     require_librosa,
+    require_onnx,
     require_scipy,
     require_torch,
     slow,
@@ -609,6 +610,7 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
             model = Pop2PianoForConditionalGeneration.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @require_onnx
     @unittest.skipIf(
         is_torch_1_8_0,
         reason="Test has a segmentation fault on torch 1.8.0",
