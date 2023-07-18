@@ -258,7 +258,7 @@ And here is the equivalent code for TensorFlow:
 
 ### pipにて
 
-このリポジトリは、Python 3.8+, Flax 0.4.1+, PyTorch 1.10+, TensorFlow 2.4+ でテストされています。
+このリポジトリは、Python 3.8+, Flax 0.4.1+, PyTorch 1.10+, TensorFlow 2.6+ でテストされています。
 
 🤗Transformersは[仮想環境](https://docs.python.org/3/library/venv.html)にインストールする必要があります。Pythonの仮想環境に慣れていない場合は、[ユーザーガイド](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/)を確認してください。
 
