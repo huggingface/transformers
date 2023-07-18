@@ -64,9 +64,8 @@ correct. If you don't know the answer to a question, please don't share false in
 
 class LlamaTokenizer(PreTrainedTokenizer):
     """
-    Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding. The padding token is unset as there is not
-    padding token in the original model. Inputs are padded using `-1`, which is similar to masking the inputs with
-    attention masks. Feel free to set a padding token.
+    Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as there is no
+    padding token in the original model. 
 
     Args:
         vocab_file (`str`):
