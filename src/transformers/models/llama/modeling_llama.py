@@ -210,9 +210,8 @@ class LlamaMLP(nn.Module):
             up_proj = torch.cat([F.linear(x, up_proj_slices[i]) for i in range(self.pretraining_tp)], dim=-1)
 
             intermediate_states = (self.act_fn(gate_proj) * up_proj).split(slice, dim=2)
-            down_proj = sum(
-                [F.linear(intermediate_states[i], down_proj_slices[i]) for i in range(self.pretraining_tp)]
-            )
+            down_proj = [F.linear(intermediate_states[i], down_proj_slices[i]) for i in range(self.pretraining_tp)]
+            down_proj = sum(down_proj)
         else:
             down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
@@ -296,17 +295,15 @@ class LlamaAttention(nn.Module):
                 (self.num_key_value_heads * self.head_dim) // self.pretraining_tp, dim=0
             )
 
-            query_states = torch.cat(
-                [F.linear(hidden_states, query_slices[i]) for i in range(self.pretraining_tp)],
-                dim=-1,
-            )
-            key_states = torch.cat(
-                [F.linear(hidden_states, key_slices[i]) for i in range(self.pretraining_tp)], dim=-1
-            )
-            value_states = torch.cat(
-                [F.linear(hidden_states, value_slices[i]) for i in range(self.pretraining_tp)],
-                dim=-1,
-            )
+            query_states = [F.linear(hidden_states, query_slices[i]) for i in range(self.pretraining_tp)]
+            query_states = torch.cat(query_states, dim=-1)
+
+            key_states = [F.linear(hidden_states, key_slices[i]) for i in range(self.pretraining_tp)]
+            key_states = torch.cat(key_states, dim=-1)
+
+            value_states = [F.linear(hidden_states, value_slices[i]) for i in range(self.pretraining_tp)]
+            value_states = torch.cat(value_slices, dim=-1)
+
         else:
             query_states = self.q_proj(hidden_states)
             key_states = self.k_proj(hidden_states)
@@ -824,9 +821,8 @@ class LlamaForCausalLM(LlamaPreTrainedModel):
         hidden_states = outputs[0]
         if self.pretraining_tp > 1:
             lm_head_slices = self.lm_head.weight.split(self.vocab_size // self.pretraining_tp, dim=0)
-            logits = torch.cat(
-                [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.pretraining_tp)], dim=-1
-            )
+            logits = [F.linear(hidden_states, lm_head_slices[i]) for i in range(self.pretraining_tp)]
+            logits = torch.cat(logits, dim=-1)
         else:
             logits = self.lm_head(hidden_states)
         logits = logits.float()
