@@ -2199,7 +2199,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if has_adapter_file:
             logger.info(
-                f"Found adapter file at {peft_adapter_model_id}. Automatically loading adapter model using the base model from {pretrained_model_name_or_path}"
+                f"Found adapter file at {peft_adapter_model_id}. Automatically loading adapter model "
+                f"using the base model from {pretrained_model_name_or_path}"
             )
 
         if use_auth_token is not None:
@@ -2336,14 +2337,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if not isinstance(config, PretrainedConfig):
             # In case users load models without auto mapping
             if is_peft_available() and peft_adapter_model_id is None:
-                raw_adapter_config_dict_path = cls._check_and_return_if_adapter_model(
+                raw_adapter_config_dict_path = cls._find_adapter_config_file(
                     pretrained_model_name_or_path,
                     revision=revision,
                     use_auth_token=use_auth_token,
                 )
 
                 if raw_adapter_config_dict_path is not None:
-                    raw_adapter_config_dict = json.load(open(raw_adapter_config_dict_path, "r"))
+                    with open(raw_adapter_config_dict_path, "r") as json_file:
+                        raw_adapter_config_dict = json.load(json_file)
 
                     if "base_model_name_or_path" in raw_adapter_config_dict:
                         has_adapter_file = True
@@ -3459,8 +3461,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return error_msgs
 
     @classmethod
-    # Copied from transformers.models.auto.auto_factory._BaseAutoModelClass._check_and_return_if_adapter_model
-    def _check_and_return_if_adapter_model(
+    # Copied from transformers.models.auto.auto_factory._BaseAutoModelClass._find_adapter_config_file
+    def _find_adapter_config_file(
         cls,
         model_id: str,
         revision: str = None,

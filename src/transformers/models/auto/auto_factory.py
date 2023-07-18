@@ -461,7 +461,7 @@ class _BaseAutoModelClass:
                 _ = kwargs.pop("torch_dtype")
 
             if is_peft_available():
-                raw_adapter_config_dict_path = cls._check_and_return_if_adapter_model(
+                raw_adapter_config_dict_path = cls._find_adapter_config_file(
                     pretrained_model_name_or_path,
                     revision=hub_kwargs.get("revision", None),
                     use_auth_token=hub_kwargs.get("use_auth_token", None),
@@ -543,7 +543,7 @@ class _BaseAutoModelClass:
         cls._model_mapping.register(config_class, model_class, exist_ok=exist_ok)
 
     @classmethod
-    def _check_and_return_if_adapter_model(
+    def _find_adapter_config_file(
         cls,
         model_id: str,
         revision: str = None,
