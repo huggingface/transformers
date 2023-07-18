@@ -423,6 +423,17 @@ onnx_job = CircleCIJob(
 )
 
 
+peft_job = CircleCIJob(
+    "peft",
+    install_steps=[
+        "sudo apt-get -y update && sudo apt-get install -y cmake",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager .[torch,testing,sentencepiece,vision,peft]",
+    ],
+    pytest_num_workers=1,
+)
+
+
 exotic_models_job = CircleCIJob(
     "exotic_models",
     install_steps=[
@@ -512,6 +523,7 @@ REGULAR_TESTS = [
     hub_job,
     onnx_job,
     exotic_models_job,
+    peft_job,
 ]
 EXAMPLES_TESTS = [
     examples_torch_job,
