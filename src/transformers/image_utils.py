@@ -67,9 +67,10 @@ class ChannelDimension(ExplicitEnum):
 
 def _output_wrapper(output):
     """
-    Utility function to wrap the output of a method to cast the output to an `ImageArray` if it is a NumPy array.
+    Utility function to wrap the output of an ImageArray method, returning an equivalent `ImageArray` if it is a NumPy
+    array.
 
-    If the output is a method, we need to wrap it with a decorator to cast the output to an `ImageArray`.
+    If the output is a method, we need to wrap it with a decorator to cast its output to an `ImageArray`.
     """
 
     def _cast_to_image_object(result):
