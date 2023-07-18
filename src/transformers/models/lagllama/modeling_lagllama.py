@@ -678,37 +678,93 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
 
         return combined_attention_mask
 
-    def get_lagged_subsequences(
-        self, sequence: torch.Tensor, subsequences_length: int, shift: int = 0
+    @staticmethod
+    def slice_along_dim(a: torch.Tensor, dim: int, slice_: slice) -> torch.Tensor:
+        """
+        Slice a tensor along a given dimension.
+
+        Parameters
+        ----------
+        a
+            Original tensor to slice.
+        dim
+            Dimension to slice over.
+        slice_
+            Slice to take.
+
+        Returns
+        -------
+        torch.Tensor
+            A tensor with the same size as the input one, except dimension
+            ``dim`` which has length equal to the slice length.
+        """
+        idx = [slice(None)] * len(a.shape)
+        idx[dim] = slice_
+        return a[idx]
+
+    def lagged_sequence_values(
+        self,
+        prior_sequence: torch.Tensor,
+        sequence: torch.Tensor,
+        dim: int = 1,
+        keepdim: bool = False,
     ) -> torch.Tensor:
         """
-        Returns lagged subsequences of a given sequence. Returns a tensor of shape (N, S, C, I),
-            where S = subsequences_length and I = len(indices), containing lagged subsequences. Specifically, lagged[i,
-            j, :, k] = sequence[i, -indices[k]-S+j, :].
+        Constructs an array of lagged values from a given sequence.
 
-        Args:
-            sequence: Tensor
-                The sequence from which lagged subsequences should be extracted. Shape: (N, T, C).
-            subsequences_length : int
-                Length of the subsequences to be extracted.
-            shift: int
-                Shift the lags by this amount back.
+        Parameters
+        ----------
+        indices
+            Indices of the lagged observations. For example, ``[0]`` indicates
+            that, at any time ``t``, the will have only the observation from
+            time ``t`` itself; instead, ``[0, 24]`` indicates that the output
+            will have observations from times ``t`` and ``t-24``.
+        prior_sequence
+            Tensor containing the input sequence prior to the time range for
+            which the output is required.
+        sequence
+            Tensor containing the input sequence in the time range where the
+            output is required.
+        dim
+            Time dimension.
+        keepdim
+            Whether to keep the last dimension of the output tensor.
+
+        Returns
+        -------
+        Tensor
+            A tensor of shape (*sequence.shape, len(indices)).
         """
-        sequence_length = sequence.shape[1]
-        indices = [lag - shift for lag in self.config.lags_sequence]
+        indices = self.config.lags_sequence
+        assert max(indices) <= prior_sequence.shape[dim], (
+            f"lags cannot go further than prior sequence length, found lag"
+            f" {max(indices)} while prior sequence is only"
+            f"{prior_sequence.shape[dim]}-long"
+        )
 
-        if max(indices) + subsequences_length > sequence_length:
-            raise ValueError(
-                f"lags cannot go further than history length, found lag {max(indices)} "
-                f"while history length is only {sequence_length}"
+        # if prior_sequence is a 2-tensor add an extra dimension
+        if len(prior_sequence.shape) == 2:
+            prior_sequence = prior_sequence.unsqueeze(-1)
+        if len(sequence.shape) == 2:
+            sequence = sequence.unsqueeze(-1)
+
+        full_sequence = torch.cat((prior_sequence, sequence), dim=dim)
+
+        lags_values = []
+        for lag_index in indices:
+            begin_index = -lag_index - sequence.shape[dim]
+            end_index = -lag_index if lag_index > 0 else None
+            lags_values.append(
+                self.slice_along_dim(full_sequence, dim=dim, slice_=slice(begin_index, end_index)).unsqueeze(-1)
             )
 
-        lagged_values = []
-        for lag_index in indices:
-            begin_index = -lag_index - subsequences_length
-            end_index = -lag_index if lag_index > 0 else None
-            lagged_values.append(sequence[:, begin_index:end_index, ...])
-        return torch.stack(lagged_values, dim=-1)
+        lags_values = torch.cat(lags_values, dim=-1)
+
+        if not keepdim:
+            # merge the last two dimensions
+            lags_values = lags_values.reshape(*lags_values.shape[:-2], -1)
+
+        return lags_values
 
     def prepare_input(
         self,
@@ -721,7 +777,7 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
         scaled_past_target = (past_target - loc) / scale
         input = scaled_past_target[..., max(self.config.lags_sequence) :]
         prior_input = scaled_past_target[..., : max(self.config.lags_sequence)]
-        lags = self.get_lagged_subsequences(prior_input, input, dim=-1)
+        lags = self.lagged_sequence_values(prior_input, input, dim=1)
 
         static_feat = torch.cat((loc.abs().log1p(), scale.log()), dim=-1)
         expanded_static_feat = static_feat.unsqueeze(1).expand(-1, lags.shape[-2], -1)
@@ -784,13 +840,14 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length_with_past), dtype=torch.bool, device=device)
-        attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, (batch_size, seq_length), dtype, device, past_key_values_length
-        )
 
         if inputs_embeds is None:
             transformer_inputs, loc, scale = self.prepare_input(past_values, attention_mask)
-            inputs_embeds = self.embed_tokens(transformer_inputs)
+            inputs_embeds = self.embed_inputs(transformer_inputs)
+
+        attention_mask = self._prepare_decoder_attention_mask(
+            attention_mask, (batch_size, seq_length), dtype, device, past_key_values_length
+        )
 
         hidden_states = inputs_embeds
 
