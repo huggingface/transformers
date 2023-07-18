@@ -219,7 +219,7 @@ class ConversationalPipelineTests(unittest.TestCase):
     @require_torch
     @slow
     def test_integration_torch_conversation_llama2_input_ids(self):
-        tokenizer = AutoTokenizer.from_pretrained("llamaste/Llama-2-7b-chat-hf")
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
 
         conversation = Conversation(
             "What is so great about #1?",
@@ -241,7 +241,7 @@ These are just a few of the many attractions that Paris has to offer. With so mu
         # fmt: on
         self.assertEqual(inputs, EXPECTED_INPUTS_IDS)
 
-        model = AutoModelForCausalLM.from_pretrained("llamaste/Llama-2-7b-chat-hf")
+        model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
         conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer)
 
         conversation = Conversation(

@@ -366,13 +366,10 @@ class LlamaTokenizer(PreTrainedTokenizer):
             )
 
         dialog_tokens: List[int] = []
-        if (
-            len(conversation.past_user_inputs) > 0
-            and not conversation.past_user_inputs[0].startswith(B_SYS)
-            or E_SYS not in conversation.past_user_inputs[0]
-        ):
-            conversation.past_user_inputs[0] = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
-        elif not conversation.past_user_inputs[0].startswith(B_SYS) or E_SYS not in conversation.past_user_inputs[0]:
+        if (len(conversation.past_user_inputs) > 0):
+            if not conversation.past_user_inputs[0].startswith(B_SYS) or E_SYS not in conversation.past_user_inputs[0]:
+                conversation.past_user_inputs[0] = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
+        elif not dialogue[0][1].startswith(B_SYS) or E_SYS not in dialogue[0][1]:
             dialogue[0][1] = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + dialogue[0][1]
 
         dialog_tokens += sum(

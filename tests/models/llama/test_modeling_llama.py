@@ -547,9 +547,9 @@ class LlamaIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT_COMPLETION = """1) the laws of physics are the same everywhere in the universe, and 2) the speed of light is constant.\nThe theory of relativity is a set of two theories in physics: special relativity and general relativity.\nSpecial relativity was developed by Albert Einstein in 1905. It describes the laws of physics as they apply to objects that are moving at a consistent speed in a straight line.\nGeneral relativity was developed by Einstein in 1"""
 
         prompt = "Simply put, the theory of relativity states that "
-        tokenizer = LlamaTokenizer.from_pretrained("llamaste/Llama-2-13b-chat-hf")
+        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-13b-chat-hf")
         input_ids = tokenizer.encode(prompt, return_tensors="pt")
-        model = LlamaForCausalLM.from_pretrained("llamaste/Llama-2-13b-chat-hf", device_map="auto")
+        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-13b-chat-hf", device_map="auto")
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=64)
