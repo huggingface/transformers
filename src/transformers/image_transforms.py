@@ -20,7 +20,6 @@ import numpy as np
 
 from .image_utils import (
     ChannelDimension,
-    ImageArray,
     ImageInput,
     get_channel_dimension_axis,
     get_image_size,
