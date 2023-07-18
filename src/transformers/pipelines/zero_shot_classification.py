@@ -1,3 +1,4 @@
+import inspect
 from typing import List, Union
 
 import numpy as np
@@ -221,6 +222,13 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         candidate_label = inputs["candidate_label"]
         sequence = inputs["sequence"]
         model_inputs = {k: inputs[k] for k in self.tokenizer.model_input_names}
+        # `XXXForSequenceClassification` models should not use `use_cache=True` even if it's supported
+        if hasattr(self.model, "forward") and "use_cache" in set(
+            inspect.signature(self.model.forward).parameters.keys()
+        ):
+            model_inputs["use_cache"] = False
+        elif hasattr(self.model, "call") and "use_cache" in set(inspect.signature(self.model.call).parameters.keys()):
+            model_inputs["use_cache"] = False
         outputs = self.model(**model_inputs)
 
         model_outputs = {
