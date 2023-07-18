@@ -299,7 +299,7 @@ class LlamaAttention(nn.Module):
             key_states = torch.cat(key_states, dim=-1)
 
             value_states = [F.linear(hidden_states, value_slices[i]) for i in range(self.pretraining_tp)]
-            value_states = torch.cat(value_slices, dim=-1)
+            value_states = torch.cat(value_states, dim=-1)
 
         else:
             query_states = self.q_proj(hidden_states)
