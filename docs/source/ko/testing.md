@@ -26,20 +26,20 @@ rendered properly in your Markdown viewer.
 
 ## Transformers 테스트 방법
 
-1. PR이 제출되면 9개의 CircleCi 작업으로 테스트가 진행됩니다. 해당 PR에 대한 모든 새로운 커밋은 다시 테스트됩니다. 이 작업들은 
-   이 [config 파일](https://github.com/huggingface/transformers/tree/main/.circleci/config.yml)에 정의되어 있으므로 필요하다면, 
-   동일한 환경을 로컬 머신에서 재현할 수 있습니다.
+1. PR이 제출되면 9개의 CircleCi 작업으로 테스트가 진행됩니다. 해당 PR에 대해 새로운 커밋이 생성될 때마다 테스트는 다시 진행됩니다. 이 작업들은 
+   이 [config 파일](https://github.com/huggingface/transformers/tree/main/.circleci/config.yml)에 정의되어 있으므로 필요하다면 
+   사용자의 로컬 환경에서 동일하게 재현해 볼 수 있습니다.
 
    이 CI 작업은 `@slow` 테스트를 실행하지 않습니다.
 
-2. [github actions](https://github.com/huggingface/transformers/actions)에 의해 실행되는 3개의 작업이 있습니다:
+2. [github actions](https://github.com/huggingface/transformers/actions)에 의해 실행되는 작업은 3개입니다:
 
    - [torch hub integration](https://github.com/huggingface/transformers/tree/main/.github/workflows/github-torch-hub.yml): 
     torch hub integration이 작동하는지 확인합니다.
 
-   - [self-hosted (push)](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-push.yml): `main` 브랜치에서 커밋이 업데이트된 경우에만 GPU에서 빠른 테스트를 실행합니다. 
+   - [self-hosted (push)](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-push.yml): `main` 브랜치에서 커밋이 업데이트된 경우에만 GPU를 이용한 빠른 테스트를 실행합니다. 
     이는 `src`, `tests`, `.github` 폴더 중 하나에 코드가 업데이트된 경우에만 실행됩니다. 
-    (model card, notebook 등을 추가한 경우 실행되지 않도록 하기 위한 목적입니다)
+    (model card, notebook, 기타 등등을 추가한 경우 실행되지 않도록 하기 위해서입니다)
 
    - [self-hosted runner](https://github.com/huggingface/transformers/tree/main/.github/workflows/self-scheduled.yml): `tests` 및 `examples`에서
    GPU를 이용한 일반 테스트, 느린 테스트를 실행합니다.
@@ -62,7 +62,7 @@ RUN_SLOW=1 pytest examples/
 ### 실행할 테스트 선택
 
 이 문서는 테스트를 실행하는 다양한 방법에 대해 자세히 설명합니다. 
-모든 내용을 읽은 후에도, 더 자세한 내용이 필요하다면 [여기](https://docs.pytest.org/en/latest/usage.html)에서 그것들을 찾을 수 있습니다.
+모든 내용을 읽은 후에도, 더 자세한 내용이 필요하다면 [여기](https://docs.pytest.org/en/latest/usage.html)에서 확인할 수 있습니다.
 
 다음은 가장 유용한 테스트 실행 방법 몇 가지입니다.
 
@@ -117,7 +117,7 @@ pytest tests/test_logging.py
 
 ### 특정 테스트 실행
 
-대부분의 테스트 내부에서는 unittest가 사용됩니다. 따라서 특정 하위 테스트를 실행하려면 해당 테스트를 포함하는 unittest 클래스의 이름을 알아야합니다.
+대부분의 테스트 내부에서는 unittest가 사용됩니다. 따라서 특정 하위 테스트를 실행하려면 해당 테스트를 포함하는 unittest 클래스의 이름을 알아야 합니다.
 예를 들어 다음과 같을 수 있습니다:
 
 ```bash
@@ -138,7 +138,7 @@ pytest tests/test_optimization.py::OptimizationTest
 
 이 명령어는 해당 클래스 내부의 모든 테스트를 실행합니다.
 
-위에서 언급한 것처럼 `OptimizationTest` 클래스에 포함된 테스트를 확인할 수 있습니다.
+앞에서 언급한 것처럼 `OptimizationTest` 클래스에 포함된 테스트를 확인할 수 있습니다.
 
 ```bash
 pytest tests/test_optimization.py::OptimizationTest --collect-only -q
@@ -175,7 +175,7 @@ pytest -k "test_adam_w or test_adam_w" tests/test_optimization.py
 
 여기서 `or`를 사용하는 것에 유의하세요. 두 키워드 중 하나가 일치하도록 하기 위한 목적으로 사용하기 때문입니다.
 
-두 패턴이 모두 포함되어야 하는 테스트만 포함하려면, `and`를 사용해야 합니다:
+두 패턴이 모두 포함되어야 하는 테스트만 실행하려면, `and`를 사용해야 합니다:
 
 ```bash
 pytest -k "test and ada" tests/test_optimization.py
@@ -251,7 +251,7 @@ pip install pytest-xdist
 
 재귀적 모드의 사용: `pytest -f` 또는 `pytest --looponfail`
 
-파일의 변경 사항은 `looponfailroots` 루트 디렉토리와 해당 내용을 (재귀적으로) 확인하여 감지됩니다.
+파일의 변경 사항은 `looponfailroots` 루트 디렉터리와 해당 내용을 (재귀적으로) 확인하여 감지됩니다.
 이 값의 기본값이 작동하지 않는 경우, 
 `setup.cfg`의 설정 옵션을 변경하여 프로젝트에서 변경할 수 있습니다:
 
@@ -275,7 +275,7 @@ looponfailroots = transformers tests
 
 ### 특정 테스트 모듈 건너뛰기
 
-모든 테스트 모듈을 실행하되 특정 모듈을 제외하려면 실행할 테스트 목록을 명시적으로 지정할 수 있습니다. 
+모든 테스트 모듈을 실행하되 특정 모듈을 제외하려면, 실행할 테스트 목록을 명시적으로 지정할 수 있습니다. 
 예를 들어, `test_modeling_*.py` 테스트를 제외한 모든 테스트를 실행하려면 다음을 사용할 수 있습니다:
 
 ```bash
@@ -383,7 +383,7 @@ pytest --random-order-bucket=none
 
 또 다른 무작위화의 대안은 [`pytest-randomly`](https://github.com/pytest-dev/pytest-randomly)입니다.
 이 모듈은 매우 유사한 기능/인터페이스를 가지고 있지만, `pytest-random-order`에 있는 버킷 모드를 사용할 수는 없습니다. 
-설치 후에도 자동으로 적용되는 동일한 문제를 가지고 있습니다.
+설치 후에는 자동으로 적용되는 문제도 동일하게 가집니다.
 
 ### 외관과 느낌 변경
 
@@ -466,7 +466,7 @@ GPU 요구 사항을 표로 정리하면 아래와 같습니디ㅏ:
 | `< 3`  | `@require_torch_up_to_2_gpus`  |
 
 
-예를 들어, 다음과 같이 2개 이상의 GPU가 있고 pytorch가 설치되어 있을 때에만 실행되어야 하는 테스트가 있습니다:
+예를 들어, 2개 이상의 GPU가 있고 pytorch가 설치되어 있을 때에만 실행되어야 하는 테스트는 다음과 같습니다:
 
 ```python no-style
 @require_torch_multi_gpu
@@ -499,7 +499,7 @@ def test_integration_foo():
 ```
 
 `@pytest.mark.parametrize`에는 이러한 순서 문제는 없으므로 처음 혹은 마지막에 위치시킬 수 있고 이러한 경우에도 잘 작동할 것입니다. 
-하지만 unittest가 아닌 경우에만작동하지 않습니다.
+하지만 unittest가 아닌 경우에만 작동합니다.
 
 테스트 내부에서 다음을 사용할 수 있습니다:
 
@@ -577,9 +577,9 @@ pytest --pastebin=all tests/test_logging.py
 🤗 transformers 테스트는 대부분 `unittest`를 기반으로 하지만, 
 `pytest`에서 실행되므로 대부분의 경우 두 시스템의 기능을 사용할 수 있습니다.
 
-지원되는 기능에 대해 [여기](https://docs.pytest.org/en/stable/unittest.html)에서 읽을 수 있지만, 
+지원되는 기능에 대해 [여기](https://docs.pytest.org/en/stable/unittest.html)에서 확인할 수 있지만, 
 기억해야 할 중요한 점은 대부분의 `pytest` fixture가 작동하지 않는다는 것입니다.
-파라미터화도 작동하지 않지만, 비슷한 방식으로 작동하는 `parameterized` 모듈을 사용합니다.
+파라미터화도 작동하지 않지만, 우리는 비슷한 방식으로 작동하는 `parameterized` 모듈을 사용합니다.
 
 
 ### 파라미터화
@@ -621,7 +621,7 @@ pytest -k "not negative" tests/test_mytest.py
 ```
 
 앞에서 언급한 `-k` 필터를 사용하는 것 외에도, 
-각 서브 테스트의 정확한 이름을 확인하고 해당하는 테스트의 모든 서브 테스트 또는 모든 서브 테스트를 실행할 수 있습니다.
+각 서브 테스트의 정확한 이름을 확인한 후에 일부 혹은 전체 서브 테스트를 실행할 수 있습니다.
 
 ```bash
 pytest test_this1.py --collect-only -q
@@ -635,7 +635,7 @@ test_this1.py::TestMathUnitTest::test_floor_1_integer
 test_this1.py::TestMathUnitTest::test_floor_2_large_fraction
 ```
 
-이제 특정한 2개의 서브 테스트만 실행할 수도 있습니다:
+2개의 특정한 서브 테스트만 실행할 수도 있습니다:
 
 ```bash
 pytest test_this1.py::TestMathUnitTest::test_floor_0_negative  test_this1.py::TestMathUnitTest::test_floor_1_integer
@@ -667,8 +667,8 @@ def test_floor(name, input, expected):
 ```
 
 `parameterized`와 마찬가지로 `pytest.mark.parametrize`를 사용하면 
-`-k` 필터가 작업하지 않는 경우에도 실행할 서브 테스트를 정확하게 지정할 수 있습니다. 
-이렇게 작성된 서브 테스트의 이름 집합이 약간 다르게 생성됩니다. 다음과 같은 모습입니다:
+`-k` 필터가 작동하지 않는 경우에도 실행할 서브 테스트를 정확하게 지정할 수 있습니다. 
+단, 이 매개변수화 함수는 서브 테스트의 이름 집합을 약간 다르게 생성합니다. 다음과 같은 모습입니다:
 
 ```bash
 pytest test_this2.py --collect-only -q
@@ -682,7 +682,7 @@ test_this2.py::test_floor[negative--1.5--2.0]
 test_this2.py::test_floor[large fraction-1.6-1]
 ```
 
-이제 특정한 테스트에 대해서만 실행할 수도 있습니다:
+특정한 테스트에 대해서만 실행할 수도 있습니다:
 
 ```bash
 pytest test_this2.py::test_floor[negative--1.5--2.0] test_this2.py::test_floor[integer-1-1.0]
@@ -692,23 +692,23 @@ pytest test_this2.py::test_floor[negative--1.5--2.0] test_this2.py::test_floor[i
 
 
 
-### 파일 및 디렉토리
+### 파일 및 디렉터리
 
 테스트에서 종종 현재 테스트 파일과 관련된 상대적인 위치를 알아야 하는 경우가 있습니다. 
 테스트가 여러 디렉터리에서 호출되거나 깊이가 다른 하위 디렉터리에 있을 수 있기 때문에 그 위치를 아는 것은 간단하지 않습니다.
-`transformers.test_utils.TestCasePlus`라는 헬퍼 클래스가 모든 기본 경로를 처리하고 간단한 액세서를 제공하여 이 문제를 해결합니다:
+`transformers.test_utils.TestCasePlus`라는 헬퍼 클래스는 모든 기본 경로를 처리하고 간단한 액세서를 제공하여 이 문제를 해결합니다:
 
 
 - `pathlib` 객체(완전히 정해진 경로)
 
   - `test_file_path` - 현재 테스트 파일 경로 (예: `__file__`)
-  - test_file_dir` - 현재 테스트 파일이 포함된 디렉토리
-  - tests_dir` - `tests` 테스트 스위트의 디렉토리
-  - examples_dir` - `examples` 테스트 스위트의 디렉토리
+  - test_file_dir` - 현재 테스트 파일이 포함된 디렉터리
+  - tests_dir` - `tests` 테스트 스위트의 디렉터리
+  - examples_dir` - `examples` 테스트 스위트의 디렉터리
   - repo_root_dir` - 저장소 디렉터리
-  - src_dir` - `src`의 디렉토리(예: `transformers` 하위 디렉터리가 있는 곳)
+  - src_dir` - `src`의 디렉터리(예: `transformers` 하위 디렉터리가 있는 곳)
 
-- 문자열로 변환된 경로---위와 동일하지만 `pathlib` 객체가 아닌 문자열로 경로를 반환합니다:
+- 문자열로 변환된 경로---위와 동일하지만, `pathlib` 객체가 아닌 문자열로 경로를 반환합니다:
 
   - `test_file_path_str`
   - `test_file_dir_str`
@@ -741,16 +741,16 @@ class PathExampleTest(TestCasePlus):
         examples_dir = self.examples_dir_str
 ```
 
-### 임시 파일 및 디렉토리
+### 임시 파일 및 디렉터리
 
-고유한 임시 파일 및 디렉토리를 사용하는 것은 병렬 테스트 실행에 있어 필수적입니다. 
-이렇게 함으로써 테스트들이 서로의 데이터를 덮어쓰지 않게 할 수 있습니다. 또한 우리는 이러한 임시 파일 및 디렉토리를 생성한 테스트의 종료 단계에서 제거하고 싶습니다.  
+고유한 임시 파일 및 디렉터리를 사용하는 것은 병렬 테스트 실행에 있어 필수적입니다. 
+이렇게 함으로써 테스트들이 서로의 데이터를 덮어쓰지 않게 할 수 있습니다. 또한 우리는 생성된 테스트의 종료 단계에서 이러한 임시 파일 및 디렉터리를 제거하고 싶습니다.  
 따라서 이러한 요구 사항을 충족시켜주는 `tempfile`과 같은 패키지를 사용하는 것이 중요합니다.
 
-그러나 테스트를 디버깅할 때는 임시 파일이나 디렉토리에 들어가는 내용을 확인할 수 있어야 하며, 
-각 테스트를 실행할 때마다 임시 파일이나 디렉토리의 경로가 무작위가 아닌 정확히 알 수 있는 경로여야 합니다.
+그러나 테스트를 디버깅할 때는 임시 파일이나 디렉터리에 들어가는 내용을 확인할 수 있어야 하며, 
+재실행되는 각 테스트마다 임시 파일이나 디렉터리의 경로에 대해 무작위 값이 아닌 정확한 값을 알고 싶을 것입니다.
 
-`transformers.test_utils.TestCasePlus`라는 도우미 클래스가 이러한 목적에 가장 적합합니다. 
+`transformers.test_utils.TestCasePlus`라는 도우미 클래스는 이러한 목적에 가장 적합합니다. 
 이 클래스는 `unittest.TestCase`의 하위 클래스이므로, 우리는 이것을 테스트 모듈에서 쉽게 상속할 수 있습니다.
 
 다음은 해당 클래스를 사용하는 예시입니다:
@@ -764,35 +764,35 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
 ```
 
-이 코드는 고유한 임시 디렉토리를 생성하고 `tmp_dir`을 해당 위치로 설정합니다.
+이 코드는 고유한 임시 디렉터리를 생성하고 `tmp_dir`을 해당 위치로 설정합니다.
 
-- 고유한 임시 디렉토리를 생성합니다:
+- 고유한 임시 디렉터리를 생성합니다:
 
 ```python
 def test_whatever(self):
     tmp_dir = self.get_auto_remove_tmp_dir()
 ```
 
-`tmp_dir`에는 생성된 임시 디렉토리의 경로가 포함됩니다. 
+`tmp_dir`에는 생성된 임시 디렉터리의 경로가 포함됩니다. 
 이는 테스트의 종료 단계에서 자동으로 제거됩니다.
 
-- 선택한 경로로 임시 디렉토리 생성 후에 테스트 시작 전에 비어 있는 상태인지 확인하고, 테스트 후에는 비우지 마세요.
+- 선택한 경로로 임시 디렉터리 생성 후에 테스트 시작 전에 비어 있는 상태인지 확인하고, 테스트 후에는 비우지 마세요.
 
 ```python
 def test_whatever(self):
     tmp_dir = self.get_auto_remove_tmp_dir("./xxx")
 ```
 
-이것은 디버깅을 할 때 특정 디렉토리를 모니터링하고, 
-그 디렉토리에 이전에 실행된 테스트가 데이터를 남기지 않도록 할 때에 유용합니다.
+이것은 디버깅할 때 특정 디렉터리를 모니터링하고, 
+그 디렉터리에 이전에 실행된 테스트가 데이터를 남기지 않도록 하는 데에 유용합니다.
 
 - `before` 및 `after` 인수를 직접 오버라이딩하여 기본 동작을 변경할 수 있으며 
 다음 중 하나의 동작으로 이어집니다:
 
-  - `before=True`: 테스트 시작 시 임시 디렉토리가 항상 지워집니다.
-  - `before=False`: 임시 디렉토리가 이미 존재하는 경우 기존 파일은 그대로 남습니다.
-  - `after=True`: 테스트 종료 시 임시 디렉토리가 항상 삭제됩니다.
-  - `after=False`: 테스트 종료 시 임시 디렉토리가 항상 그대로 유지됩니다.
+  - `before=True`: 테스트 시작 시 임시 디렉터리가 항상 지워집니다.
+  - `before=False`: 임시 디렉터리가 이미 존재하는 경우 기존 파일은 그대로 남습니다.
+  - `after=True`: 테스트 종료 시 임시 디렉터리가 항상 삭제됩니다.
+  - `after=False`: 테스트 종료 시 임시 디렉터리가 항상 그대로 유지됩니다.
 
 <Tip>
 
@@ -804,8 +804,8 @@ def test_whatever(self):
 
 <Tip>
 
-각 테스트는 여러 개의 임시 디렉토리를 등록할 수 있으며, 
-요청하지 않는 한 모두 자동으로 제거됩니다.
+각 테스트는 여러 개의 임시 디렉터리를 등록할 수 있으며, 
+별도로 요청하지 않는 한 모두 자동으로 제거됩니다.
 
 </Tip>
 
@@ -831,7 +831,7 @@ with ExtendSysPath(f"{bindir}/.."):
 
 방법:
 
-- **skip**은 테스트가 일부 조건이 충족될 경우에만 통과되는 것으로, 그렇지 않으면 pytest가 전체 테스트를 건너뛰도록 기대하는 것을 의미합니다. 
+- **skip**은 테스트가 일부 조건이 충족될 경우에만 통과될 것으로 예상되고, 그렇지 않으면 pytest가 전체 테스트를 건너뛰어야 함을 의미합니다. 
 일반적인 예로는 Windows가 아닌 플랫폼에서 Windows 전용 테스트를 건너뛰거나 
 외부 리소스(예를 들어 데이터베이스)에 의존하는 테스트를 건너뛰는 것이 있습니다.
 
@@ -844,7 +844,7 @@ with ExtendSysPath(f"{bindir}/.."):
 
 #### 구현
 
-- 전체 테스트를 조건 없이 건너뛰려면 다음과 같이 할 수 있습니다:
+- 전체 테스트를 무조건 건너뛰려면 다음과 같이 할 수 있습니다:
 
 ```python no-style
 @unittest.skip("this bug needs to be fixed")
@@ -922,7 +922,7 @@ class TestClass():
 
 테스트 라이브러리는 지속적으로 확장되고 있으며, 일부 테스트는 실행하는 데 몇 분이 걸립니다. 
 그리고 우리에게는 테스트 스위트가 CI를 통해 완료되기까지 한 시간을 기다릴 여유가 없습니다.
-따라서 필수 테스트에 있어 일부 예외가 있지만, 느린 테스트인 경우 다음 예시와 같이 표시되어야 합니다.
+따라서 필수 테스트를 위한 일부 예외를 제외하고 느린 테스트는 다음과 같이 표시해야 합니다.
 
 ```python no-style
 from transformers.testing_utils import slow
@@ -937,7 +937,7 @@ RUN_SLOW=1 pytest tests
 ```
 
 `@parameterized`와 같은 몇 가지 데코레이터는 테스트 이름을 다시 작성합니다. 
-그러므로 `@slow`와 나머지 건너뛰기 데코레이터 `@require_*`가 올바르게 작동되기 위해서는 마지막에 나열되어야 합니다. 다음은 올바른 사용 예입니다.
+그러므로 `@slow`와 나머지 건너뛰기 데코레이터 `@require_*`가 올바르게 작동되려면 마지막에 나열되어야 합니다. 다음은 올바른 사용 예입니다.
 
 ```python no-style
 @parameterized.expand(...)
@@ -946,8 +946,8 @@ def test_integration_foo():
 ```
 
 이 문서의 초반부에 설명된 것처럼 느린 테스트는 PR의 CI 확인이 아닌 예약된 일정 기반으로 실행됩니다. 
-따라서 PR 제출 중에 일부 문제를 놓치고 병합될 수 있습니다.
-이러한 문제들은 다음 예정된 CI 작업 중에 감지됩니다. 
+따라서 PR 제출 중에 일부 문제를 놓친 채로 병합될 수 있습니다.
+이러한 문제들은 다음번의 예정된 CI 작업 중에 감지됩니다. 
 하지만 PR을 제출하기 전에 자신의 컴퓨터에서 느린 테스트를 실행하는 것 또한 중요합니다.
 
 느린 테스트로 표시해야 하는지 여부를 결정하는 대략적인 결정 기준은 다음과 같습니다.
@@ -965,7 +965,7 @@ def test_integration_foo():
 - 느리지 않아야 할 테스트 중 일부가 극도로 느린 경우 
   예외를 도입하고 이를 `@slow`로 설정할 수 있습니다. 
   대용량 파일을 디스크에 저장하고 불러오는 자동 모델링 테스트는 `@slow`으로 표시된 테스트의 좋은 예입니다.
-- CI에서 1초 이내에 테스트가 완료되는 경우(다운로드 포함) 느린 테스트가 아니어야 합니다.
+- CI에서 1초 이내에 테스트가 완료되는 경우(다운로드 포함)에는 느린 테스트가 아니어야 합니다.
 
 느린 테스트가 아닌 경우에는 다양한 내부를 완전히 커버하면서 빠르게 유지되어야 합니다.
 예를 들어, 무작위 가중치를 사용하여 특별히 생성된 작은 모델로 테스트하면 상당한 커버리지를 얻을 수 있습니다.
@@ -1108,7 +1108,7 @@ with CaptureStd() as cs:
 print(cs.err, cs.out)
 ```
 
-또한, 테스트의  디버깅을 지원하기 위해 
+또한, 테스트의 디버깅을 지원하기 위해 
 이러한 컨텍스트 관리자는 기본적으로 컨텍스트에서 종료할 때 캡처된 스트림을 자동으로 다시 실행합니다.
 
 
@@ -1223,19 +1223,19 @@ CI 기능을 테스트하는 것은 일반 CI 작동에 방해가 될 수 있기
 따라서 새로운 CI 기능을 추가하는 경우 다음과 같이 수행해야 합니다.
 
 1. 테스트해야 할 내용을 테스트하는 새로운 전용 작업을 생성합니다.
-2. 새로운 작업은 항상 성공해야 하며, 그렇게 하여 우리에게 녹색 ✓를 제공해야 합니다(아래에 자세한 내용이 있습니다).
-3. 다양한 PR 유형이 실행되는지 확인하기 위해 몇 일 동안 실행을 진행합니다.
-   (사용자 포크 브랜치, 포크되지 않은 브랜치, github.com UI 직접 파일 편집에서 생성된 브랜치, 강제 푸시 등 
-   PR의 유형은 아주 다양합니다.)
-   실험 작업의 로그를 모니터링하면서 의도적으로 항상 녹색을 표시하므로 전체 작업이 녹색은 아니라는 점에 유의합니다.
-4. 모든 것이 안정적인지 확인한 후 새로운 변경 사항을 기존 작업에 통합합니다.
+2. 새로운 작업은 항상 성공해야만 녹색 ✓를 받을 수 있습니다(아래에 자세한 내용이 있습니다).
+3. 다양한 PR 유형에 대한 확인을  위해 
+   (사용자 포크 브랜치, 포크되지 않은 브랜치, github.com UI 직접 파일 편집에서 생성된 브랜치, 강제 푸시 등 PR의 유형은 아주 다양합니다.) 
+   며칠 동안 실험 작업의 로그를 모니터링하면서 실행해봅니다.
+   (의도적으로 항상 녹색을 표시하므로 작업 전체가 녹색은 아니라는 점에 유의합니다.)
+4. 모든 것이 안정적인지 확인한 후, 새로운 변경 사항을 기존 작업에 병합합니다.
 
 이렇게 하면 CI 기능 자체에 대한 실험이 일반 작업 흐름에 방해가 되지 않습니다.
 
 그러나 새로운 CI 기능이 개발 중인 동안, 항상 성공하도록 할 수 있는 방법은 무엇일까요?
 
-TravisCI와 같은 일부 CI는 `ignore-step-failure`를 지원하며 전체 작업을 성공으로 보고할 수 있지만, 
-현재 우리가 사용하는 CircleCI와 Github Actions는 그렇지 않습니다.
+TravisCI와 같은 일부 CI는 `ignore-step-failure`를 지원하며 전체 작업을 성공한 것으로 보고하지만, 
+현재 우리가 사용하는 CircleCI와 Github Actions는 이를 지원하지 않습니다.
 
 따라서 다음과 같은 해결책을 사용할 수 있습니다.
 
