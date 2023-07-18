@@ -145,11 +145,11 @@ jobs:
             - run: pip install --upgrade --upgrade-strategy eager pip
             - run: pip install -U --upgrade-strategy eager .[all,quality]
             - save_cache:
-                  key: v0.7-code_quality-{{ checksum "setup.py" }}
+                  key: v0.7-code_quality-pip-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - save_cache:
-                  key: v0.7-code_quality-{{ checksum "setup.py" }}-site-packages
+                  key: v0.7-code_quality-site-packages-{{ checksum "setup.py" }}
                   paths:
                       - '~/.pyenv/versions/'
             - run:
@@ -186,11 +186,11 @@ jobs:
             - run: pip install --upgrade --upgrade-strategy eager pip
             - run: pip install -U --upgrade-strategy eager .[all,quality]
             - save_cache:
-                  key: v0.7-repository_consistency-{{ checksum "setup.py" }}
+                  key: v0.7-repository_consistency-pip-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - save_cache:
-                  key: v0.7-repository_consistency-{{ checksum "setup.py" }}-site-packages
+                  key: v0.7-repository_consistency-site-packages-{{ checksum "setup.py" }}
                   paths:
                       - '~/.pyenv/versions/'
             - run:
