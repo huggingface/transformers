@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.31.0.dev0"
+__version__ = "4.32.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -160,6 +160,13 @@ _import_structure = {
         "AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "AutoformerConfig",
     ],
+    "models.bark": [
+        "BarkCoarseConfig",
+        "BarkConfig",
+        "BarkFineConfig",
+        "BarkProcessor",
+        "BarkSemanticConfig",
+    ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
     "models.bartpho": [],
@@ -286,6 +293,7 @@ _import_structure = {
     "models.detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
     "models.dialogpt": [],
     "models.dinat": ["DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DinatConfig"],
+    "models.dinov2": ["DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Dinov2Config"],
     "models.distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig", "DistilBertTokenizer"],
     "models.dit": [],
     "models.donut": ["DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "DonutProcessor", "DonutSwinConfig"],
@@ -714,6 +722,7 @@ _import_structure = {
         "is_tokenizers_available",
         "is_torch_available",
         "is_torch_neuroncore_available",
+        "is_torch_npu_available",
         "is_torch_tpu_available",
         "is_torchvision_available",
         "is_vision_available",
@@ -1134,6 +1143,17 @@ else:
             "AutoformerForPrediction",
             "AutoformerModel",
             "AutoformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.bark"].extend(
+        [
+            "BARK_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BarkCausalModel",
+            "BarkCoarseModel",
+            "BarkFineModel",
+            "BarkModel",
+            "BarkPreTrainedModel",
+            "BarkSemanticModel",
         ]
     )
     _import_structure["models.bart"].extend(
@@ -1558,6 +1578,14 @@ else:
             "DinatForImageClassification",
             "DinatModel",
             "DinatPreTrainedModel",
+        ]
+    )
+    _import_structure["models.dinov2"].extend(
+        [
+            "DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Dinov2ForImageClassification",
+            "Dinov2Model",
+            "Dinov2PreTrainedModel",
         ]
     )
     _import_structure["models.distilbert"].extend(
@@ -4098,6 +4126,13 @@ if TYPE_CHECKING:
         AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AutoformerConfig,
     )
+    from .models.bark import (
+        BarkCoarseConfig,
+        BarkConfig,
+        BarkFineConfig,
+        BarkProcessor,
+        BarkSemanticConfig,
+    )
     from .models.bart import BartConfig, BartTokenizer
     from .models.beit import BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, BeitConfig
     from .models.bert import (
@@ -4218,6 +4253,7 @@ if TYPE_CHECKING:
     from .models.deta import DETA_PRETRAINED_CONFIG_ARCHIVE_MAP, DetaConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.dinat import DINAT_PRETRAINED_CONFIG_ARCHIVE_MAP, DinatConfig
+    from .models.dinov2 import DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Dinov2Config
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
     from .models.donut import DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, DonutProcessor, DonutSwinConfig
     from .models.dpr import (
@@ -4618,6 +4654,7 @@ if TYPE_CHECKING:
         is_tokenizers_available,
         is_torch_available,
         is_torch_neuroncore_available,
+        is_torch_npu_available,
         is_torch_tpu_available,
         is_torchvision_available,
         is_vision_available,
@@ -4978,6 +5015,15 @@ if TYPE_CHECKING:
             AutoformerModel,
             AutoformerPreTrainedModel,
         )
+        from .models.bark import (
+            BARK_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BarkCausalModel,
+            BarkCoarseModel,
+            BarkFineModel,
+            BarkModel,
+            BarkPreTrainedModel,
+            BarkSemanticModel,
+        )
         from .models.bart import (
             BART_PRETRAINED_MODEL_ARCHIVE_LIST,
             BartForCausalLM,
@@ -5323,6 +5369,12 @@ if TYPE_CHECKING:
             DinatForImageClassification,
             DinatModel,
             DinatPreTrainedModel,
+        )
+        from .models.dinov2 import (
+            DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Dinov2ForImageClassification,
+            Dinov2Model,
+            Dinov2PreTrainedModel,
         )
         from .models.distilbert import (
             DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

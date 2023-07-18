@@ -31,7 +31,7 @@ from huggingface_hub import cached_download, hf_hub_download
 from torch import Tensor
 
 from transformers import AutoImageProcessor, VanConfig, VanForImageClassification
-from transformers.models.van.modeling_van import VanLayerScaling
+from transformers.models.deprecated.van.modeling_van import VanLayerScaling
 from transformers.utils import logging
 
 
