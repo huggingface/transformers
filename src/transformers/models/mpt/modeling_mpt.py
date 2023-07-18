@@ -44,6 +44,11 @@ _CONFIG_FOR_DOC = "MptConfig"
 
 MPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "mosaicml/mpt-7b",
+    "mosaicml/mpt-7b-storywriter",
+    "mosaicml/mpt-7b-instruct",
+    "mosaicml/mpt-30b",
+    "mosaicml/mpt-30b-instruct",
+    "mosaicml/mpt-30b-chat"
     # See all MPT models at https://huggingface.co/models?filter=mpt
 ]
 
@@ -108,72 +113,6 @@ def build_alibi_bias(n_heads, seq_len, alibi_bias_max=8, device=None, dtype=None
     slopes = gen_slopes(n_heads, alibi_bias_max, device=device)
     alibi_bias = alibi_bias * slopes
     return alibi_bias.to(dtype=dtype).squeeze(0)
-
-
-# Copied from transformers.models.bloom.modeling_bloom.bloom_gelu_forward with bloom->mpt
-def mpt_gelu_forward(x: torch.Tensor) -> torch.Tensor:
-    """
-    Custom bias GELU function. Adapted from Megatron-DeepSpeed code. Here we use a simple implementation (inference) to
-    make the model jitable.
-
-    Args:
-        x (`torch.tensor`, *required*):
-            input hidden states
-    """
-    return x * 0.5 * (1.0 + torch.tanh(0.79788456 * x * (1 + 0.044715 * x * x)))
-
-
-# Copied from transformers.models.bloom.modeling_bloom.bloom_gelu_back with bloom->mpt
-def mpt_gelu_back(g: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
-    """
-    gradient of tanh approximation of gelu gradient of actual gelu is: 0.5 * (1. + torch.erf(x * 0.70710678)) +
-    0.3989423 * x * torch.exp(-0.5 * x * x)
-
-    Args:
-        g (`torch.tensor`, *required*):
-            gradient output tensor
-        x (`torch.tensor`, *required*):
-            input tensor
-    """
-    x = x[0]  # x is a tuple of 1 element, needs to unpack it first
-    tanh_out = torch.tanh(0.79788456 * x * (1 + 0.044715 * x * x))
-    # sqrt(2/pi) * 3 * 0.044715 -> 0.1070322243
-    ff = 0.5 * x * ((1 - tanh_out * tanh_out) * (0.79788456 + 0.1070322243 * x * x)) + 0.5 * (1 + tanh_out)
-    return ff * g
-
-
-# Copied from transformers.models.bloom.modeling_bloom.GeLUFunction with bloom->mpt
-class GeLUFunction(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, input: torch.Tensor) -> torch.Tensor:
-        ctx.save_for_backward(input)
-        return mpt_gelu_forward(input)
-
-    @staticmethod
-    def backward(ctx, grad_output: torch.Tensor) -> torch.Tensor:
-        input = ctx.saved_tensors
-        tmp = mpt_gelu_back(grad_output, input)
-        return tmp
-
-
-# Copied from transformers.models.bloom.modeling_bloom.BloomGelu with Bloom->Mpt,bloom->mpt
-class MptGelu(nn.Module):
-    """
-    MptBiasGelu wrapper function that make use of the simple function on inference mode to make the model
-    torchscriptable and use the autograd function in training mode to get the accurate results of the gradients Partly
-    copied from Megatron-DeepSpeed code and adapted for our needs
-
-    See here why autograd functions are not torchscriptable: https://github.com/pytorch/pytorch/issues/22329
-    """
-
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.training:
-            return GeLUFunction.apply(x)
-        else:
-            return mpt_gelu_forward(x)
 
 
 class MptAttention(nn.Module):
@@ -256,12 +195,12 @@ class MptMLP(nn.Module):
         hidden_size = config.hidden_size
 
         self.up_proj = nn.Linear(hidden_size, 4 * hidden_size, bias=False)
-        self.gelu_impl = MptGelu()
+        self.act = nn.GELU(approximate="none")
         self.down_proj = nn.Linear(4 * hidden_size, hidden_size, bias=False)
         self.hidden_dropout = config.attn_config.attn_pdrop
 
     def forward(self, hidden_states: torch.Tensor, residual: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.gelu_impl(self.up_proj(hidden_states))
+        hidden_states = self.act(self.up_proj(hidden_states))
 
         intermediate_output = self.down_proj(hidden_states)
 
@@ -336,6 +275,8 @@ class MptPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MptBlock"]
     _skip_keys_device_placement = "past_key_values"
+    # TODO: properly deal with that
+    # _keys_to_ignore_on_load_missing = [r".*.norm_(\d).bias", r".*.norm_f.bias"]
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
