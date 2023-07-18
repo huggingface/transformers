@@ -106,9 +106,11 @@ class CircleCIJob:
             {
                 "restore_cache": {
                     "keys": [
-                        # Use the cache found in the `main` branch first. If not found, use the one given by `pull`
-                        f"v{self.cache_version}-{self.cache_name}-main-pip-" + '{{ checksum "setup.py" }}',
+                        # check the fully-matched cache first
                         f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
+                        # try the partially-matched cache from `main`
+                        f"v{self.cache_version}-{self.cache_name}-main-pip-",
+                        # try the general partially-matched cache
                         f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-",
                     ]
                 }
@@ -116,7 +118,8 @@ class CircleCIJob:
             {
                 "restore_cache": {
                     "keys": [
-                        f"v{self.cache_version}-{self.cache_name}-main-site-packages-" + '{{ checksum "setup.py" }}',
+                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
+                        f"v{self.cache_version}-{self.cache_name}-main-site-packages-",
                         f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-",
                     ]
                 }
