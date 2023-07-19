@@ -15,9 +15,8 @@
 """Convert FastSpeech2Conformer checkpoint."""
 
 import argparse
-import json
+import re
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import torch
 import yaml
@@ -25,7 +24,6 @@ import yaml
 from transformers import (
     FastSpeech2ConformerConfig,
     FastSpeech2ConformerModel,
-    FastSpeech2ConformerTokenizer,
     logging,
 )
 
@@ -124,6 +122,9 @@ def convert_espnet_state_dict_to_hf(state_dict):
             if "w_2" in key:
                 new_key = new_key.replace("w_2", "conv2")
             if "predictor.conv" in key:
+                pattern = r"(\d)\.(\d)"
+                replacement = r"\1.layer.\2"
+                new_key = re.sub(pattern, replacement, new_key)
                 new_key = new_key.replace(".conv", ".conv_layers")
                 new_key = new_key.replace("2.weight", "2.layer_norm.weight")
                 new_key = new_key.replace("2.bias", "2.layer_norm.bias")
@@ -156,23 +157,23 @@ def convert_FastSpeech2ConformerModel_checkpoint(
 
     model.save_pretrained(pytorch_dump_folder_path)
 
-    # Prepare the tokenizer
-    with TemporaryDirectory() as tempdir:
-        vocab = {token: id for id, token in enumerate(vocab)}
-        vocab_file = Path(tempdir) / "vocab.json"
-        with open(vocab_file, "w") as f:
-            json.dump(vocab, f)
-        should_strip_spaces = "no_space" in tokenizer_name
-        print(tokenizer_name, should_strip_spaces)
-        tokenizer = FastSpeech2ConformerTokenizer(str(vocab_file), should_strip_spaces=should_strip_spaces)
-        print(tokenizer.should_strip_spaces)
+    # # Prepare the tokenizer
+    # with TemporaryDirectory() as tempdir:
+    #     vocab = {token: id for id, token in enumerate(vocab)}
+    #     vocab_file = Path(tempdir) / "vocab.json"
+    #     with open(vocab_file, "w") as f:
+    #         json.dump(vocab, f)
+    #     should_strip_spaces = "no_space" in tokenizer_name
+    #     print(tokenizer_name, should_strip_spaces)
+    #     tokenizer = FastSpeech2ConformerTokenizer(str(vocab_file), should_strip_spaces=should_strip_spaces)
+    #     print(tokenizer.should_strip_spaces)
 
-    tokenizer.save_pretrained(pytorch_dump_folder_path)
+    # tokenizer.save_pretrained(pytorch_dump_folder_path)
 
-    if repo_id:
-        print("Pushing to the hub...")
-        model.push_to_hub(repo_id)
-        tokenizer.push_to_hub(repo_id)
+    # if repo_id:
+    #     print("Pushing to the hub...")
+    #     model.push_to_hub(repo_id)
+    #     tokenizer.push_to_hub(repo_id)
 
 
 if __name__ == "__main__":

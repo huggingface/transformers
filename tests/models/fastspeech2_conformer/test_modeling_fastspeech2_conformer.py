@@ -198,7 +198,6 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
             "pitch_labels",
             "energy_labels",
             "utterance_embedding",
-            "alpha",
             "lang_id",
             "return_dict",
             "output_attentions",

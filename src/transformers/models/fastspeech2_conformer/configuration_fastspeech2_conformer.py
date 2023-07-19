@@ -38,8 +38,122 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
+        hidden_size (`int`, *optional*, defaults to 384):
+            The dimensionality of the hidden layers.
+        vocab_size (`int`, *optional*, defaults to 78):
+            The size of the vocabulary.
+        num_mel_bins (`int`, *optional*, defaults to 80):
+            The number of mel filters used in the filter bank.
+        encoder_num_attention_heads (`int`, *optional*, defaults to 2):
+            The number of attention heads in the encoder.
+        encoder_layers (`int`, *optional*, defaults to 4):
+            The number of layers in the encoder.
+        encoder_linear_units (`int`, *optional*, defaults to 1536):
+            The number of units in the linear layer of the encoder.
+        decoder_num_attention_heads (`int`, *optional*, defaults to 2):
+            The number of attention heads in the decoder.
+        decoder_layers (`int`, *optional*, defaults to 4):
+            The number of layers in the decoder.
+        decoder_linear_units (`int`, *optional*, defaults to 1536):
+            The number of units in the linear layer of the decoder.
+        speech_decoder_postnet_layers (`int`, *optional*, defaults to 5):
+            The number of layers in the post-net of the speech decoder.
+        speech_decoder_postnet_units (`int`, *optional*, defaults to 256):
+            The number of units in the post-net layers of the speech decoder.
+        speech_decoder_postnet_kernel (`int`, *optional*, defaults to 5):
+            The kernel size in the post-net of the speech decoder.
+        positionwise_conv_kernel_size (`int`, *optional*, defaults to 3):
+            The size of the convolution kernel used in the position-wise layer.
+        encoder_normalize_before (`bool`, *optional*, defaults to `False`):
+            Specifies whether to normalize before encoder layers.
+        decoder_normalize_before (`bool`, *optional*, defaults to `False`):
+            Specifies whether to normalize before decoder layers.
+        encoder_concat_after (`bool`, *optional*, defaults to `False`):
+            Specifies whether to concatenate after encoder layers.
+        decoder_concat_after (`bool`, *optional*, defaults to `False`):
+            Specifies whether to concatenate after decoder layers.
+        reduction_factor (`int`, *optional*, defaults to 1):
+            The factor by which the speech frame rate is reduced.
+        use_macaron_style_in_conformer (`bool`, *optional*, defaults to `True`):
+            Specifies whether to use macaron style in the conformer.
+        use_cnn_in_conformer (`bool`, *optional*, defaults to `True`):
+            Specifies whether to use convolutional neural networks in the conformer.
+        encoder_kernel_size (`int`, *optional*, defaults to 7):
+            The kernel size used in the encoder.
+        decoder_kernel_size (`int`, *optional*, defaults to 31):
+            The kernel size used in the decoder.
+        duration_predictor_layers (`int`, *optional*, defaults to 2):
+            The number of layers in the duration predictor.
+        duration_predictor_channels (`int`, *optional*, defaults to 256):
+            The number of channels in the duration predictor.
+        duration_predictor_kernel_size (`int`, *optional*, defaults to 3):
+            The kernel size used in the duration predictor.
+        energy_predictor_layers (`int`, *optional*, defaults to 2):
+            The number of layers in the energy predictor.
+        energy_predictor_channels (`int`, *optional*, defaults to 256):
+            The number of channels in the energy predictor.
+        energy_predictor_kernel_size (`int`, *optional*, defaults to 3):
+            The kernel size used in the energy predictor.
+        energy_predictor_dropout (`float`, *optional*, defaults to 0.5):
+            The dropout rate in the energy predictor.
+        energy_embed_kernel_size (`int`, *optional*, defaults to 1):
+            The kernel size used in the energy embed layer.
+        energy_embed_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout rate in the energy embed layer.
+        stop_gradient_from_energy_predictor (`bool`, *optional*, defaults to `False`):
+            Specifies whether to stop gradients from the energy predictor.
+        pitch_predictor_layers (`int`, *optional*, defaults to 5):
+            The number of layers in the pitch predictor.
+        pitch_predictor_channels (`int`, *optional*, defaults to 256):
+            The number of channels in the pitch predictor.
+        pitch_predictor_kernel_size (`int`, *optional*, defaults to 5):
+            The kernel size used in the pitch predictor.
+        pitch_predictor_dropout (`float`, *optional*, defaults to 0.5):
+            The dropout rate in the pitch predictor.
+        pitch_embed_kernel_size (`int`, *optional*, defaults to 1):
+            The kernel size used in the pitch embed layer.
+        pitch_embed_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout rate in the pitch embed layer.
+        stop_gradient_from_pitch_predictor (`bool`, *optional*, defaults to `True`):
+            Specifies whether to stop gradients from the pitch predictor.
+        encoder_dropout_rate (`float`, *optional*, defaults to 0.2):
+            The dropout rate in the encoder.
+        encoder_positional_dropout_rate (`float`, *optional*, defaults to 0.2):
+            The positional dropout rate in the encoder.
+        encoder_attention_dropout_rate (`float`, *optional*, defaults to 0.2):
+            The attention dropout rate in the encoder.
+        decoder_dropout_rate (`float`, *optional*, defaults to 0.2):
+            The dropout rate in the decoder.
+        decoder_positional_dropout_rate (`float`, *optional*, defaults to 0.2):
+            The positional dropout rate in the decoder.
+        decoder_attention_dropout_rate (`float`, *optional*, defaults to 0.2):
+            The attention dropout rate in the decoder.
+        duration_predictor_dropout_rate (`float`, *optional*, defaults to 0.2):
+            The dropout rate in the duration predictor.
+        speech_decoder_postnet_dropout (`float`, *optional*, defaults to 0.5):
+            The dropout rate in the speech decoder postnet.
+        max_source_positions (`int`, *optional*, defaults to 5000):
+            if `"relative"` position embeddings are used, defines the maximum source input positions.
+        use_masking (`bool`, *optional*, defaults to `True`):
+            Specifies whether to use masking in the model.
+        use_weighted_masking (`bool`, *optional*, defaults to `False`):
+            Specifies whether to use weighted masking in the model.
+        lang_id (`int`, *optional*, defaults to `None`):
+            Language id to condition the model.
+        utt_embed_dim (`int`, *optional*, defaults to `None`):
+            The dimensionality of the utterance embeddings, used to determine if the model is multi-speaker.
+        lang_embs (`int`, *optional*, defaults to `None`):
+            Number of embeddings for the language embedding, used to determine if the model is multi-lingual.
+        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
+            Specifies whether the model is an encoder-decoder.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            The ID of the padding token in the vocabulary.
+        bos_token_id (`int`, *optional*, defaults to 77):
+            The ID of the beginning-of-sentence token in the vocabulary.
+        eos_token_id (`int`, *optional*, defaults to 77):
+            The ID of the end-of-sentence token in the vocabulary
+
     Example:
 
     ```python
@@ -55,28 +169,29 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
     model_type = "fastspeech2_conformer"
-    attribute_map = {"num_hidden_layers": "encoder_layers"}
+    attribute_map = {"num_hidden_layers": "encoder_layers", "num_attention_heads": "encoder_num_attention_heads"}
 
     def __init__(
         self,
         hidden_size=384,
-        input_dim=78,
+        vocab_size=78,
         num_mel_bins=80,
-        num_attention_heads=2,
+        encoder_num_attention_heads=2,
         encoder_layers=4,
         encoder_linear_units=1536,
         decoder_layers=4,
+        decoder_num_attention_heads=2,
         decoder_linear_units=1536,
         speech_decoder_postnet_layers=5,
         speech_decoder_postnet_units=256,
         speech_decoder_postnet_kernel=5,
         positionwise_conv_kernel_size=3,
-        use_batch_norm=True,
         encoder_normalize_before=False,
         decoder_normalize_before=False,
         encoder_concat_after=False,
         decoder_concat_after=False,
         reduction_factor=1,
+        speaking_speed=1.0,
         use_macaron_style_in_conformer=True,
         use_cnn_in_conformer=True,
         encoder_kernel_size=7,
@@ -106,11 +221,12 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         decoder_attention_dropout_rate=0.2,
         duration_predictor_dropout_rate=0.2,
         speech_decoder_postnet_dropout=0.5,
+        max_source_positions=5000,
         use_masking=True,
         use_weighted_masking=False,
         utt_embed_dim=None,
+        lang_id=None,
         lang_embs=None,
-        vocab_size=78,
         is_encoder_decoder=True,
         pad_token_id=0,
         bos_token_id=77,
@@ -141,19 +257,22 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
             )
         if pitch_embed_kernel_size % 2 == 0:
             raise ValueError(f"pitch_embed_kernel_size must be odd, but got {pitch_embed_kernel_size} instead.")
-        if hidden_size % num_attention_heads != 0:
-            raise ValueError("The hidden_size must be evenly divisible by num_attention_heads.")
+        if hidden_size % encoder_num_attention_heads != 0:
+            raise ValueError("The hidden_size must be evenly divisible by encoder_num_attention_heads.")
+        if hidden_size % decoder_num_attention_heads != 0:
+            raise ValueError("The hidden_size must be evenly divisible by decoder_num_attention_heads.")
         if use_masking and use_weighted_masking:
             raise ValueError("Either use_masking or use_weighted_masking can be True, but not both.")
 
         self.hidden_size = hidden_size
-        self.input_dim = input_dim
+        self.vocab_size = vocab_size
         self.num_mel_bins = num_mel_bins
-        self.num_attention_heads = num_attention_heads
+        self.encoder_num_attention_heads = encoder_num_attention_heads
         self.decoder_kernel_size = decoder_kernel_size
         self.encoder_kernel_size = encoder_kernel_size
-        self.decoder_normalize_before = decoder_normalize_before
+        self.decoder_num_attention_heads = decoder_num_attention_heads
         self.decoder_layers = decoder_layers
+        self.decoder_normalize_before = decoder_normalize_before
         self.decoder_linear_units = decoder_linear_units
         self.duration_predictor_channels = duration_predictor_channels
         self.duration_predictor_kernel_size = duration_predictor_kernel_size
@@ -179,8 +298,8 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         self.speech_decoder_postnet_dropout = speech_decoder_postnet_dropout
         self.speech_decoder_postnet_kernel = speech_decoder_postnet_kernel
         self.speech_decoder_postnet_layers = speech_decoder_postnet_layers
-        self.should_postnet_compute_logits = False
         self.reduction_factor = reduction_factor
+        self.speaking_speed = speaking_speed
         self.stop_gradient_from_energy_predictor = stop_gradient_from_energy_predictor
         self.stop_gradient_from_pitch_predictor = stop_gradient_from_pitch_predictor
         self.decoder_attention_dropout_rate = decoder_attention_dropout_rate
@@ -189,16 +308,16 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         self.encoder_attention_dropout_rate = encoder_attention_dropout_rate
         self.encoder_dropout_rate = encoder_dropout_rate
         self.encoder_positional_dropout_rate = encoder_positional_dropout_rate
-        self.use_batch_norm = use_batch_norm
+        self.max_source_positions = max_source_positions
         self.use_cnn_in_conformer = use_cnn_in_conformer
         self.use_macaron_style_in_conformer = use_macaron_style_in_conformer
         self.use_masking = use_masking
         self.use_weighted_masking = use_weighted_masking
         self.utt_embed_dim = utt_embed_dim
+        self.lang_id = lang_id
         self.encoder_concat_after = encoder_concat_after
         self.decoder_concat_after = decoder_concat_after
         self.duration_predictor_dropout_rate = duration_predictor_dropout_rate
-        self.vocab_size = vocab_size
         self.is_encoder_decoder = is_encoder_decoder
 
         super().__init__(
