@@ -112,7 +112,7 @@ def build_alibi_bias(n_heads, seq_len, alibi_bias_max=8, device=None, dtype=None
 
     slopes = gen_slopes(n_heads, alibi_bias_max, device=device)
     alibi_bias = alibi_bias * slopes
-    return alibi_bias.to(dtype=dtype).squeeze(0)
+    return alibi_bias.squeeze(0)
 
 
 class MptAttention(nn.Module):
@@ -179,7 +179,7 @@ class MptAttention(nn.Module):
             attention_scores = attention_scores.masked_fill(attention_mask, torch.finfo(query_states.dtype).min)
 
         # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = nn.functional.softmax(attention_scores.float(), dim=-1).type_as(attention_scores)
+        attn_weights = nn.functional.softmax(attention_scores.float(), dim=-1).to(value_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.attn_dropout_p, training=self.training)
 
         context_states = torch.matmul(attn_weights, value_states)
