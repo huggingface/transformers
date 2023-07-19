@@ -166,13 +166,13 @@ Below you can find inference durations in milliseconds for each model with and w
 | Image Segmentation/Segformer | 37.005 | 31.144 |
 | Image Classification/BeiT | 41.854 | 41.048 | 
 | Object Detection/DETR | 164.382 | 161.902 |
-| Image Classification/ConvNeXT | 82.258 / 75.561 | 
-| Image Classification/ResNet | 7.018 / 5.024 |
-| Image Segmentation/Mask2former | 178.945 / 154.814 |
-| Image Segmentation/Maskformer | 638.570 / 579.826 | 
-| Image Segmentation/MobileNet | 51.693 / 30.310 |
-| Object Detection/Resnet-101 | 232.887 / 155.021 |
-| Object Detection/Conditional-DETR | 180.491 / 124.032 |
+| Image Classification/ConvNeXT | 82.258 | 75.561 | 
+| Image Classification/ResNet | 7.018 | 5.024 |
+| Image Segmentation/Mask2former | 178.945 | 154.814 |
+| Image Segmentation/Maskformer | 638.570 | 579.826 | 
+| Image Segmentation/MobileNet | 51.693 | 30.310 |
+| Object Detection/Resnet-101 | 232.887 | 155.021 |
+| Object Detection/Conditional-DETR | 180.491 | 124.032 |
 
 ### V100 (batch size: 1)
 
