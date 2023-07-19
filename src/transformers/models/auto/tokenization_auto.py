@@ -684,6 +684,8 @@ class AutoTokenizer:
                 class_ref = tokenizer_auto_map[0]
             tokenizer_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
+            if os.path.isdir(pretrained_model_name_or_path):
+                tokenizer_class.register_for_auto_class()
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif config_tokenizer_class is not None:
             tokenizer_class = None
