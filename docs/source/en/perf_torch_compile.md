@@ -111,6 +111,16 @@ Below you can find the list of the models we benchmarked.
 - facebook/detr-resnet-101
 - microsoft/conditional-detr-resnet-50
 
+Below you can find visualization of inference durations with and without `torch.compile()` and percentage improvements for each model in different hardware and batch sizes. 
+
+![Duration Comparison on A100 with Batch Size of 1](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/torch_compile/A100_1_duration.png)
+
+![Percentage Improvement on A100 with Batch Size of 1](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/torch_compile/A100_1_percentage.png)
+
+![Duration Comparison on V100 with Batch Size of 1](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/torch_compile/v100_1_duration.png)
+
+![Percentage Improvement on T4 with Batch Size of 4](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/torch_compile/T4_4_percentage.png)
+
 
 Below you can find inference durations in milliseconds for each model with and without `compile()`. Note that OwlViT results in OOM in larger batch sizes.
 
@@ -222,7 +232,6 @@ Below you can find inference durations in milliseconds for each model with and w
 | Object Detection/OwlViT | 53.634 | 51.105 |
 | Image Classification/BeiT | 16.464 | 15.710 | 
 | Object Detection/DETR | 73.100 | 53.99 |
-
 | Image Classification/ConvNeXT | 32.932 | 30.845 | 
 | Image Classification/ResNet | 6.031 | 4.321 |
 | Image Segmentation/Mask2former | 79.192 | 66.815 |
@@ -262,5 +271,6 @@ Below you can find inference durations in milliseconds for each model with and w
 | Image Segmentation/MobileNet | 299.003 | 201.942 |
 | Object Detection/Resnet-101 |  1619.505 | 1262.758 | 
 | Object Detection/Conditional-DETR | 1137.513 | 897.390|
+
 
 
