@@ -25,6 +25,12 @@ You can do so by running the following command: `pip install -U transformers==4.
 
 </Tip>
 
+<Tip warning={true}>
+
+This model differs from the [OpenLLaMA models](https://huggingface.co/models?search=openllama) on the Hugging Face Hub, which primarily use the [LLaMa](llama) architecture.
+
+</Tip>
+
 ## Overview
 
 The Open-Llama model was proposed in [Open-Llama project](https://github.com/s-JoL/Open-Llama) by community developer s-JoL.
