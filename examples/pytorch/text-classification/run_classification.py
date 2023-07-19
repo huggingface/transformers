@@ -511,7 +511,8 @@ def main():
     # Some models have set the order of the labels to use, so let's make sure we do use it.
     # for training ,we will update the config with label infos,
     # if do_train is not set, we will use the label infos in the config
-    if training_args.do_train and not is_regression:
+
+    if training_args.do_train and not is_regression:  # classification, training
         label_to_id = {v: i for i, v in enumerate(label_list)}
         # update config with label infos
         if model.config.label2id != label_to_id:
@@ -521,10 +522,12 @@ def main():
             )
         model.config.label2id = label_to_id
         model.config.id2label = {id: label for label, id in config.label2id.items()}
-    else:
+    elif not is_regression:  # classification, but not training
         logger.info("using label infos in the model config")
         logger.info("label2id: {}".format(model.config.label2id))
         label_to_id = model.config.label2id
+    else:  # regression
+        label_to_id = None
 
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(
