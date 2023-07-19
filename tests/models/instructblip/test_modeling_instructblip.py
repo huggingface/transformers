@@ -544,7 +544,6 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
 
         # verify generation
         outputs = model.generate(**inputs, max_new_tokens=30)
-        outputs[outputs == 0] = 2
         generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
 
         # fmt: off

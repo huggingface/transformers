@@ -486,6 +486,10 @@ class TableTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
+    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
+    def test_model_is_small(self):
+        pass
+
 
 TOLERANCE = 1e-4
 

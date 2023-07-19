@@ -28,6 +28,9 @@ src/transformers/models/auto/feature_extraction_auto.py
 src/transformers/models/auto/image_processing_auto.py
 src/transformers/models/auto/processing_auto.py
 src/transformers/models/auto/tokenization_auto.py
+src/transformers/models/bark/configuration_bark.py
+src/transformers/models/bark/modeling_bark.py
+src/transformers/models/bark/processing_bark.py
 src/transformers/models/bart/configuration_bart.py
 src/transformers/models/bart/modeling_bart.py
 src/transformers/models/bart/tokenization_bart.py
@@ -277,9 +280,6 @@ src/transformers/models/mbart/tokenization_mbart.py
 src/transformers/models/mbart/tokenization_mbart_fast.py
 src/transformers/models/mbart50/tokenization_mbart50.py
 src/transformers/models/mbart50/tokenization_mbart50_fast.py
-src/transformers/models/mctct/configuration_mctct.py
-src/transformers/models/mctct/feature_extraction_mctct.py
-src/transformers/models/mctct/processing_mctct.py
 src/transformers/models/megatron_bert/configuration_megatron_bert.py
 src/transformers/models/mgp_str/processing_mgp_str.py
 src/transformers/models/mgp_str/tokenization_mgp_str.py
@@ -299,6 +299,8 @@ src/transformers/models/mobilevit/feature_extraction_mobilevit.py
 src/transformers/models/mobilevit/image_processing_mobilevit.py
 src/transformers/models/mobilevit/modeling_mobilevit.py
 src/transformers/models/mobilevit/modeling_tf_mobilevit.py
+src/transformers/models/mobilevitv2/configuration_mobilevitv2.py
+src/transformers/models/mobilevitv2/modeling_mobilevitv2.py
 src/transformers/models/mpnet/tokenization_mpnet.py
 src/transformers/models/mpnet/tokenization_mpnet_fast.py
 src/transformers/models/musicgen/configuration_musicgen.py
@@ -360,8 +362,6 @@ src/transformers/models/rembert/tokenization_rembert_fast.py
 src/transformers/models/resnet/configuration_resnet.py
 src/transformers/models/resnet/modeling_resnet.py
 src/transformers/models/resnet/modeling_tf_resnet.py
-src/transformers/models/retribert/tokenization_retribert.py
-src/transformers/models/retribert/tokenization_retribert_fast.py
 src/transformers/models/roberta/configuration_roberta.py
 src/transformers/models/roberta/modeling_roberta.py
 src/transformers/models/roberta/modeling_tf_roberta.py
@@ -411,12 +411,10 @@ src/transformers/models/t5/tokenization_t5.py
 src/transformers/models/t5/tokenization_t5_fast.py
 src/transformers/models/table_transformer/modeling_table_transformer.py
 src/transformers/models/tapas/tokenization_tapas.py
-src/transformers/models/tapex/tokenization_tapex.py
 src/transformers/models/time_series_transformer/configuration_time_series_transformer.py
 src/transformers/models/time_series_transformer/modeling_time_series_transformer.py
 src/transformers/models/timesformer/configuration_timesformer.py
 src/transformers/models/timesformer/modeling_timesformer.py
-src/transformers/models/trajectory_transformer/configuration_trajectory_transformer.py
 src/transformers/models/transfo_xl/configuration_transfo_xl.py
 src/transformers/models/transfo_xl/tokenization_transfo_xl.py
 src/transformers/models/trocr/configuration_trocr.py
@@ -429,7 +427,6 @@ src/transformers/models/unispeech/configuration_unispeech.py
 src/transformers/models/unispeech/modeling_unispeech.py
 src/transformers/models/unispeech_sat/modeling_unispeech_sat.py
 src/transformers/models/upernet/modeling_upernet.py
-src/transformers/models/van/modeling_van.py
 src/transformers/models/videomae/feature_extraction_videomae.py
 src/transformers/models/videomae/image_processing_videomae.py
 src/transformers/models/videomae/modeling_videomae.py
