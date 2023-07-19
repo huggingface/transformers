@@ -1147,6 +1147,21 @@ class GenerationMixin:
         # `prepare_inputs_for_generation` doesn't accept them, then a stricter check can be made ;)
         if "kwargs" in model_args or "model_kwargs" in model_args:
             model_args |= set(inspect.signature(self.forward).parameters)
+
+        # Generic composite models need information from its 2 components
+        if self.__class__.__name__ in {
+            "EncoderDecoderModel",
+            "VisionEncoderDecoderModel",
+            "SpeechEncoderDecoderModel",
+        }:
+            # allow encoder kwargs
+            encoder_model_args = set(inspect.signature(self.encoder.forward).parameters)
+            model_args |= encoder_model_args
+
+            # allow decoder kwargs
+            decoder_model_args = set(inspect.signature(self.decoder.forward).parameters)
+            model_args |= {f"decoder_{x}" for x in decoder_model_args}
+
         for key, value in model_kwargs.items():
             if value is not None and key not in model_args:
                 unused_model_args.append(key)
