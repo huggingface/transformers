@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # TensorFlow 모델을 위한 XLA 통합 [[xla-integration-for-tensorflow-models]]
 
-[[Colab에서 열기]]
+[[open-in-colab]]
 
 XLA(Accelerated Linear Algebra)는 TensorFlow 모델의 실행 시간을 가속화하기 위한 컴파일러입니다. [공식 문서](https://www.tensorflow.org/xla)에 따르면 다음과 같습니다:
 
