@@ -793,3 +793,13 @@ class ImageArrayFunctionTester(unittest.TestCase):
         image[:, :, 0] = new_channel
         self.assertIsInstance(image_array, ImageArray)
         self.assertTrue(np.array_equal(image, image_array))
+
+    def test_image_array_robust_getitem(self):
+        # Test that the output is only cast to an image array if possible
+        np_data = np.ones(shape=(3, 224, 224), dtype=np.uint8)
+        img_array = ImageArray(np_data)
+
+        self.assertIsInstance(img_array[0], ImageArray)
+        self.assertNotIsInstance(img_array[0, 0], ImageArray)
+        self.assertIsInstance(img_array[0, 0], np.ndarray)
+        self.assertIsInstance(img_array[0, 0, 0], np.uint8)

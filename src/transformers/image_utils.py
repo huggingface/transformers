@@ -65,6 +65,19 @@ class ChannelDimension(ExplicitEnum):
     NONE = "none"
 
 
+def _can_be_image_array(arr):
+    """
+    Utility function to check if `arr` can be converted to an `ImageArray`.
+    """
+    if not isinstance(arr, (np.ndarray, ImageArray)):
+        return False
+
+    if len(arr.shape) <= 1:
+        return False
+
+    return True
+
+
 def _output_wrapper(output):
     """
     Utility function to wrap the output of an ImageArray method, returning an equivalent `ImageArray` if it is a NumPy
@@ -77,7 +90,10 @@ def _output_wrapper(output):
         """
         Casts `result` to an `ImageArray` if it is a NumPy array.
         """
-        return ImageArray(result) if isinstance(result, np.ndarray) else result
+        if _can_be_image_array(result):
+            return ImageArray(result)
+
+        return result
 
     def _method_decorator(*args, **kwargs):
         """
@@ -113,9 +129,12 @@ class ImageArray(np.lib.mixins.NDArrayOperatorsMixin):
         self, data: ImageInput, data_format: Optional[ChannelDimension] = None, num_channels: int = None
     ) -> None:
         if isinstance(data, ImageArray):
-            data = data._data
-            data_format = data._data_format
-            num_channels = data._num_channels
+            self._data = data._data
+            self._data_format = data._data_format
+            self._num_channels = data._num_channels
+            self._height = data._height
+            self._width = data._width
+            return
 
         if isinstance(data, PIL.Image.Image):
             if data.mode in ("1", "L", "P", "I;16", "I", "F"):
@@ -125,6 +144,9 @@ class ImageArray(np.lib.mixins.NDArrayOperatorsMixin):
                 data_format = ChannelDimension.LAST
 
         data = np.array(data)
+
+        if not _can_be_image_array(data):
+            raise ValueError("Invalid image data")
 
         if data_format is None:
             data_format = infer_channel_dimension_format(data)
