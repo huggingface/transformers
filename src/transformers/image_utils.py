@@ -183,7 +183,8 @@ class ImageArray(np.lib.mixins.NDArrayOperatorsMixin):
         self._width = width
 
     def __getattribute__(self, __name: str) -> Any:
-        if __name in ("_data",):
+        if __name == "_data":
+            # We need to access the private attribute directly to avoid infinite recursion
             return super().__getattribute__(__name)
 
         if hasattr(self._data, __name):
@@ -230,11 +231,12 @@ class ImageArray(np.lib.mixins.NDArrayOperatorsMixin):
 
         This allows us to use array functions on ImageArrays, e.g. `np.sum(image)` and return an `ImageArray` instead
         of a `np.ndarray` when possible.
+
+        See: https://numpy.org/doc/stable/reference/arrays.classes.html#numpy.class.__array_function__
         """
         if not all(issubclass(_type, (np.ndarray, ImageArray) + np.ScalarType) for _type in types):
             return NotImplemented
 
-        types = tuple(_type for _type in types if not issubclass(_type, ImageArray))
         args = tuple(arg._data if isinstance(arg, ImageArray) else arg for arg in args)
         result = func(*args, **kwargs)
         return _output_wrapper(result)
