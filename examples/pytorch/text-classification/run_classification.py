@@ -465,23 +465,20 @@ def main():
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         num_labels=num_labels,
-        finetuning_task=None,
+        finetuning_task="text-classification",
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-    # task tax
+
     if is_regression:
         config.problem_type = "regression"
-        config.finetuning_task = "text-regression"
         logger.info("setting problem type to regression")
     elif is_multi_label:
         config.problem_type = "multi_label_classification"
-        config.finetuning_task = "multi-label-text-classification"
         logger.info("setting problem type to multi label classification")
     else:
         config.problem_type = "single_label_classification"
-        config.finetuning_task = "text-classification"
         logger.info("setting problem type to single label classification")
 
     tokenizer = AutoTokenizer.from_pretrained(
