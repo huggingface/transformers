@@ -475,6 +475,16 @@ class LlamaPreTrainedModel(PreTrainedModel):
         if isinstance(module, LlamaModel):
             module.gradient_checkpointing = value
 
+    def _disable_pretraining_tp(self):
+        for _, module in self.named_modules():
+            if isinstance(module, (LlamaAttention, LlamaMLP)):
+                module.pretraining_tp = 1
+
+    def _set_pretraining_tp(self, value):
+        for _, module in self.named_modules():
+            if isinstance(module, (LlamaAttention, LlamaMLP)):
+                module.pretraining_tp = value
+
 
 LLAMA_INPUTS_DOCSTRING = r"""
     Args:
