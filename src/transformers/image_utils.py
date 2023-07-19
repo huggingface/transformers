@@ -106,6 +106,10 @@ def _output_wrapper(output):
     if callable(output) and not isinstance(output, type):
         return _method_decorator
 
+    # Recusively wrap the output if it is a list or tuple
+    if isinstance(output, (list, tuple)):
+        return type(output)(_output_wrapper(item) for item in output)
+
     return _cast_to_image_object(output)
 
 

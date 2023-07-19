@@ -794,6 +794,16 @@ class ImageArrayFunctionTester(unittest.TestCase):
         self.assertIsInstance(image_array, ImageArray)
         self.assertTrue(np.array_equal(image, image_array))
 
+    def test_image_array_recursive_image_array_cast(self):
+        image = np.random.randint(0, 256, (32, 64, 3))
+        image_array = ImageArray(image)
+
+        # Test we can return multiple arrays, and all are converted to ImageArray
+        split_arrays = np.split(image_array, 3, axis=2)
+        self.assertTrue(isinstance(split_arrays[0], ImageArray))
+        self.assertTrue(isinstance(split_arrays[1], ImageArray))
+        self.assertTrue(isinstance(split_arrays[2], ImageArray))
+
     def test_image_array_robust_getitem(self):
         # Test that the output is only cast to an image array if possible
         np_data = np.ones(shape=(3, 224, 224), dtype=np.uint8)
