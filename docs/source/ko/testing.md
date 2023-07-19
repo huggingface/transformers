@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 테스트
+# 테스트[[Testing]]
 
 
 먼저 🤗 Transformers 모델이 어떻게 테스트되는지 살펴보고, 새로운 테스트를 작성 및 기존 테스트를 개선하는 방법을 알아봅시다.
@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 1. `tests` - 일반 API에 대한 테스트
 2. `examples` - API의 일부가 아닌 다양한 응용 프로그램에 대한 테스트
 
-## Transformers 테스트 방법
+## Transformers 테스트 방법[[How transformers are tested]]
 
 1. PR이 제출되면 9개의 CircleCi 작업으로 테스트가 진행됩니다. 해당 PR에 대해 새로운 커밋이 생성될 때마다 테스트는 다시 진행됩니다. 이 작업들은 
    이 [config 파일](https://github.com/huggingface/transformers/tree/main/.circleci/config.yml)에 정의되어 있으므로 필요하다면 
@@ -53,13 +53,13 @@ RUN_SLOW=1 pytest examples/
    결과는 [여기](https://github.com/huggingface/transformers/actions)에서 확인할 수 있습니다.
 
 
-## 테스트 실행
+## 테스트 실행[[Running tests]]
 
 
 
 
 
-### 실행할 테스트 선택
+### 실행할 테스트 선택[[Choosing which tests to run]]
 
 이 문서는 테스트를 실행하는 다양한 방법에 대해 자세히 설명합니다. 
 모든 내용을 읽은 후에도, 더 자세한 내용이 필요하다면 [여기](https://docs.pytest.org/en/latest/usage.html)에서 확인할 수 있습니다.
@@ -93,7 +93,7 @@ python -m pytest -n auto --dist=loadfile -s -v ./tests/
 
 
 
-### 모든 테스트 목록 가져오기
+### 모든 테스트 목록 가져오기[[Getting the list of all tests]]
 
 테스트 스위트의 모든 테스트:
 
@@ -107,7 +107,7 @@ pytest --collect-only -q
 pytest tests/test_optimization.py --collect-only -q
 ```
 
-### 특정 테스트 모듈 실행
+### 특정 테스트 모듈 실행[[Run a specific test module]]
 
 개별 테스트 모듈 실행하기:
 
@@ -115,7 +115,7 @@ pytest tests/test_optimization.py --collect-only -q
 pytest tests/test_logging.py
 ```
 
-### 특정 테스트 실행
+### 특정 테스트 실행[[Run specific tests]]
 
 대부분의 테스트 내부에서는 unittest가 사용됩니다. 따라서 특정 하위 테스트를 실행하려면 해당 테스트를 포함하는 unittest 클래스의 이름을 알아야 합니다.
 예를 들어 다음과 같을 수 있습니다:
@@ -181,7 +181,7 @@ pytest -k "test_adam_w or test_adam_w" tests/test_optimization.py
 pytest -k "test and ada" tests/test_optimization.py
 ```
 
-### `accelerate` 테스트 실행
+### `accelerate` 테스트 실행[[Run `accelerate` tests]]
 
 모델에서 `accelerate` 테스트를 실행해야 할 때가 있습니다. 이를 위해서는 명령어에 `-m accelerate_tests`를 추가하면 됩니다.
 예를 들어, `OPT`에서 이러한 테스트를 실행하려면 다음과 같습니다:
@@ -189,7 +189,7 @@ pytest -k "test and ada" tests/test_optimization.py
 RUN_SLOW=1 pytest -m accelerate_tests tests/models/opt/test_modeling_opt.py 
 ```
 
-### 문서 테스트 실행
+### 문서 테스트 실행[[Run documentation tests]]
 
 예시 문서가 올바른지 테스트하려면 `doctests`가 통과하는지 확인해야 합니다.
 예를 들어, [`WhisperModel.forward`'s docstring](https://github.com/huggingface/transformers/blob/main/src/transformers/models/whisper/modeling_whisper.py#L1017-L1035)를 사용해 봅시다:
@@ -223,7 +223,7 @@ pytest --doctest-modules <path_to_file_or_dir>
 ```
 파일의 확장자가 markdown인 경우 `--doctest-glob="*.md"` 인수를 추가해야 합니다.
 
-### 수정된 테스트만 실행
+### 수정된 테스트만 실행[[Run only modified tests]]
 
 수정된 파일 또는 현재 브랜치 (Git 기준)와 관련된 테스트를 실행하려면 [pytest-picked](https://github.com/anapaulagomes/pytest-picked)을 사용할 수 있습니다.
 이는 변경한 내용이 테스트에 영향을 주지 않았는지 빠르게 확인할 수 있는 좋은 방법입니다.
@@ -238,7 +238,7 @@ pytest --picked
 
 수정되었지만, 아직 커밋되지 않은 모든 파일 및 폴더에서 테스트가 실행됩니다.
 
-### 소스 수정 시 실패한 테스트 자동 재실행
+### 소스 수정 시 실패한 테스트 자동 재실행[[Automatically rerun failed tests on source modification]]
 
 [pytest-xdist](https://github.com/pytest-dev/pytest-xdist)는 모든 실패한 테스트를 감지하고, 
 파일을 수정한 후에 파일을 계속 재실행하여 테스트가 성공할 때까지 기다리는 매우 유용한 기능을 제공합니다.
@@ -273,7 +273,7 @@ looponfailroots = transformers tests
 이 기능을 대체할 수 있는 구현 방법인 [pytest-watch](https://github.com/joeyespo/pytest-watch)도 있습니다.
 
 
-### 특정 테스트 모듈 건너뛰기
+### 특정 테스트 모듈 건너뛰기[[Skip a test module]]
 
 모든 테스트 모듈을 실행하되 특정 모듈을 제외하려면, 실행할 테스트 목록을 명시적으로 지정할 수 있습니다. 
 예를 들어, `test_modeling_*.py` 테스트를 제외한 모든 테스트를 실행하려면 다음을 사용할 수 있습니다:
@@ -282,7 +282,7 @@ looponfailroots = transformers tests
 pytest *ls -1 tests/*py | grep -v test_modeling*
 ```
 
-### 상태 초기화
+### 상태 초기화[[Clearing state]]
 
 CI 빌드 및 (속도에 대한) 격리가 중요한 경우, 캐시를 지워야 합니다:
 
@@ -290,7 +290,7 @@ CI 빌드 및 (속도에 대한) 격리가 중요한 경우, 캐시를 지워야
 pytest --cache-clear tests
 ```
 
-### 병렬로 테스트 실행
+### 테스트를 병렬로 실행[[Running tests in parallel]]
 
 이전에 언급한 것처럼 `make test`는 테스트를 병렬로 실행하기 위해 
 `pytest-xdist` 플러그인(`-n X` 인수, 예를 들어 `-n 2`를 사용하여 2개의 병렬 작업 실행)을 통해 실행됩니다.
@@ -302,14 +302,14 @@ pytest --cache-clear tests
 이 경우 [pytest-replay](https://github.com/ESSS/pytest-replay)를 사용하면 동일한 순서로 테스트를 다시 실행해서 
 실패하는 시퀀스를 최소화하는 데에 도움이 됩니다.
 
-### 테스트 순서와 반복
+### 테스트 순서와 반복[[Test order and repetition]]
 
 잠재적인 종속성 및 상태 관련 버그(tear down)를 감지하기 위해 
 테스트를 여러 번, 연속으로, 무작위로 또는 세트로 반복하는 것이 좋습니다.
 그리고 직접적인 여러 번의 반복은 DL의 무작위성에 의해 발견되는 일부 문제를 감지하는 데에도 유용합니다.
 
 
-#### 테스트를 반복
+#### 테스트를 반복[[Repeat tests]]
 
 - [pytest-flakefinder](https://github.com/dropbox/pytest-flakefinder):
 
@@ -335,7 +335,7 @@ pytest --flake-finder --flake-runs=5 tests/test_failing_test.py
 
 </Tip>
 
-#### 테스트를 임의의 순서로 실행
+#### 테스트를 임의의 순서로 실행[[Run tests in a random order]]
 
 ```bash
 pip install pytest-random-order
@@ -385,9 +385,9 @@ pytest --random-order-bucket=none
 이 모듈은 매우 유사한 기능/인터페이스를 가지고 있지만, `pytest-random-order`에 있는 버킷 모드를 사용할 수는 없습니다. 
 설치 후에는 자동으로 적용되는 문제도 동일하게 가집니다.
 
-### 외관과 느낌 변경
+### 외관과 느낌을 변경[[Look and feel variations]
 
-#### pytest-sugar 사용
+#### pytest-sugar 사용[[pytest-sugar]]
 
 [pytest-sugar](https://github.com/Frozenball/pytest-sugar)는 테스트가 보여지는 형태를 개선하고, 
 진행 상황 바를 추가하며, 실패한 테스트와 검증을 즉시 표시하는 플러그인입니다. 설치하면 자동으로 활성화됩니다.
@@ -406,7 +406,7 @@ pytest -p no:sugar
 
 
 
-#### 각 하위 테스트 이름과 진행 상황 보고
+#### 각 하위 테스트 이름과 진행 상황 보고[[Report each sub-test name and its progress]]
 
 `pytest`를 통해 단일 또는 그룹의 테스트를 실행하는 경우(`pip install pytest-pspec` 이후):
 
@@ -414,7 +414,7 @@ pytest -p no:sugar
 pytest --pspec tests/test_optimization.py
 ```
 
-#### 실패한 테스트 즉시 표시
+#### 실패한 테스트 즉시 표시[[Instantly shows failed tests]]
 
 [pytest-instafail](https://github.com/pytest-dev/pytest-instafail)은 테스트 세션의 끝까지 기다리지 않고 
 실패 및 오류를 즉시 표시합니다.
@@ -427,7 +427,7 @@ pip install pytest-instafail
 pytest --instafail
 ```
 
-### GPU 사용 여부
+### GPU 사용 여부[[To GPU or not to GPU]]
 
 GPU가 활성화된 환경에서, CPU 전용 모드로 테스트하려면 `CUDA_VISIBLE_DEVICES=""`를 추가합니다:
 
@@ -511,7 +511,7 @@ from transformers.testing_utils import get_gpu_count
 n_gpu = get_gpu_count()  #torch와 tf와 함께 작동
 ```
 
-### 분산 훈련
+### 분산 훈련[[Distributed training]]
 
 `pytest`는 분산 훈련을 직접적으로 다루지 못합니다. 
 이를 시도하면 하위 프로세스가 올바른 작업을 수행하지 않고 `pytest`라고 생각하기에 테스트 스위트를 반복해서 실행하게 됩니다.
@@ -530,7 +530,7 @@ n_gpu = get_gpu_count()  #torch와 tf와 함께 작동
 CUDA_VISIBLE_DEVICES=0,1 RUN_SLOW=1 pytest -sv tests/test_trainer_distributed.py
 ```
 
-### 출력 캡처
+### 출력 캡처[[Output capture]]
 
 테스트 실행 중 `stdout` 및 `stderr`로 전송된 모든 출력이 캡처됩니다. 
 테스트나 설정 메서드가 실패하면 캡처된 출력은 일반적으로 실패 추적 정보와 함께 표시됩니다.
@@ -547,7 +547,7 @@ pytest -s tests/test_logging.py
 py.test tests --junitxml=result.xml
 ```
 
-### 색상 제어
+### 색상 조절[[Color control]]
 
 색상이 없게 하려면 다음과 같이 설정하세요(예를 들어 흰색 배경에 노란색 글씨는 가독성이 좋지 않습니다):
 
@@ -555,7 +555,7 @@ py.test tests --junitxml=result.xml
 pytest --color=no tests/test_logging.py
 ```
 
-### online pastebin service에 테스트 보고서 전송
+### online pastebin service에 테스트 보고서 전송[[Sending test report to online pastebin service]]
 
 각 테스트 실패에 대한 URL을 만듭니다:
 
@@ -572,7 +572,7 @@ pytest --pastebin=failed tests/test_logging.py
 pytest --pastebin=all tests/test_logging.py
 ```
 
-## 테스트 작성
+## 테스트 작성[[Writing tests]]
 
 🤗 transformers 테스트는 대부분 `unittest`를 기반으로 하지만, 
 `pytest`에서 실행되므로 대부분의 경우 두 시스템의 기능을 사용할 수 있습니다.
@@ -582,7 +582,7 @@ pytest --pastebin=all tests/test_logging.py
 파라미터화도 작동하지 않지만, 우리는 비슷한 방식으로 작동하는 `parameterized` 모듈을 사용합니다.
 
 
-### 파라미터화
+### 파라미터화[[Parametrization]]
 
 동일한 테스트를 다른 인수로 여러 번 실행해야 하는 경우가 종종 있습니다. 
 테스트 내에서 이 작업을 수행할 수 있지만, 그렇게 하면 하나의 인수 세트에 대해 테스트를 실행할 수 없습니다.
@@ -692,7 +692,7 @@ pytest test_this2.py::test_floor[negative--1.5--2.0] test_this2.py::test_floor[i
 
 
 
-### 파일 및 디렉터리
+### 파일 및 디렉터리[[Files and directories]]
 
 테스트에서 종종 현재 테스트 파일과 관련된 상대적인 위치를 알아야 하는 경우가 있습니다. 
 테스트가 여러 디렉터리에서 호출되거나 깊이가 다른 하위 디렉터리에 있을 수 있기 때문에 그 위치를 아는 것은 간단하지 않습니다.
@@ -741,7 +741,7 @@ class PathExampleTest(TestCasePlus):
         examples_dir = self.examples_dir_str
 ```
 
-### 임시 파일 및 디렉터리
+### 임시 파일 및 디렉터리[[Temporary files and directories]]
 
 고유한 임시 파일 및 디렉터리를 사용하는 것은 병렬 테스트 실행에 있어 필수적입니다. 
 이렇게 함으로써 테스트들이 서로의 데이터를 덮어쓰지 않게 할 수 있습니다. 또한 우리는 생성된 테스트의 종료 단계에서 이러한 임시 파일 및 디렉터리를 제거하고 싶습니다.  
@@ -809,7 +809,7 @@ def test_whatever(self):
 
 </Tip>
 
-### 임시 sys.path 오버라이드
+### 임시 sys.path 오버라이드[[Temporary sys.path override]]
 
 `sys.path`를 다른 테스트로 임시로 오버라이드하기 위해 예를 들어 `ExtendSysPath` 컨텍스트 매니저를 사용할 수 있습니다.
 예를 들어 다음과 같습니다:
@@ -824,7 +824,7 @@ with ExtendSysPath(f"{bindir}/.."):
     from test_trainer import TrainerIntegrationCommon  # noqa
 ```
 
-### 테스트 건너뛰기
+### 테스트 건너뛰기[[Skipping tests]]
 
 이것은 버그가 발견되어 새로운 테스트가 작성되었지만 아직 그 버그가 수정되지 않은 경우에 유용합니다. 
 이 테스트를 주 저장소에 커밋하려면 `make test` 중에 건너뛰도록 해야 합니다.
@@ -842,7 +842,7 @@ with ExtendSysPath(f"{bindir}/.."):
 두 가지 중요한 차이점 중 하나는 `skip`은 테스트를 실행하지 않지만 `xfail`은 실행한다는 것입니다.
 따라서 오류가 있는 코드가 일부 테스트에 영향을 미칠 수 있는 경우 `xfail`을 사용하지 마세요.
 
-#### 구현
+#### 구현[[Implementation]]
 
 - 전체 테스트를 무조건 건너뛰려면 다음과 같이 할 수 있습니다:
 
@@ -918,7 +918,7 @@ class TestClass():
 
 보다 자세한 예제 및 방법은 [여기](https://docs.pytest.org/en/latest/skipping.html)에서 확인할 수 있습니다.
 
-### 느린 테스트
+### 느린 테스트[[Slow tests]]
 
 테스트 라이브러리는 지속적으로 확장되고 있으며, 일부 테스트는 실행하는 데 몇 분이 걸립니다. 
 그리고 우리에게는 테스트 스위트가 CI를 통해 완료되기까지 한 시간을 기다릴 여유가 없습니다.
@@ -989,7 +989,7 @@ CI에서 테스트 스위트가 느려지기 시작하면 이 보고서의 맨 �
 
 
 
-### stdout/stderr 출력 테스트
+### stdout/stderr 출력 테스트[[Testing the stdout/stderr output]]
 
 `stdout` 및/또는 `stderr`로 쓰는 함수를 테스트하려면 `pytest`의 [capsys 시스템](https://docs.pytest.org/en/latest/capture.html)을 사용하여 해당 스트림에 액세스할 수 있습니다. 
 다음과 같이 수행할 수 있습니다.
@@ -1112,7 +1112,7 @@ print(cs.err, cs.out)
 이러한 컨텍스트 관리자는 기본적으로 컨텍스트에서 종료할 때 캡처된 스트림을 자동으로 다시 실행합니다.
 
 
-### 로거 스트림 캡처
+### 로거 스트림 캡처[[Capturing logger stream]]
 
 로거 출력을 검증해야 하는 경우 `CaptureLogger`를 사용할 수 있습니다.
 
@@ -1128,7 +1128,7 @@ with CaptureLogger(logger) as cl:
 assert cl.out, msg + "\n"
 ```
 
-### 환경 변수를 이용하여 테스트
+### 환경 변수를 이용하여 테스트[[Testing with environment variables]]
 
 특정 테스트의 환경 변수 영향을 검증하려면 
 `transformers.testing_utils.mockenv`라는 도우미 데코레이터를 사용할 수 있습니다.
@@ -1164,7 +1164,7 @@ class EnvExampleTest(TestCasePlus):
 이 헬퍼 메서드는 `os.environ` 객체의 사본을 생성하므로 원본은 그대로 유지됩니다.
 
 
-### 재현 가능한 결과 얻기
+### 재현 가능한 결과 얻기[[Getting reproducible results]]
 
 일부 상황에서 테스트에서 임의성을 제거하여 동일하게 재현 가능한 결과를 얻고 싶을 수 있습니다. 
 이를 위해서는 다음과 같이 시드를 고정해야 합니다.
@@ -1194,7 +1194,7 @@ np.random.seed(seed)
 tf.random.set_seed(seed)
 ```
 
-### 테스트 디버깅
+### 테스트 디버깅[[Debugging tests]]
 
 경고가 있는 곳에서 디버거를 시작하려면 다음을 수행하세요.
 
@@ -1202,7 +1202,7 @@ tf.random.set_seed(seed)
 pytest tests/test_logging.py -W error::UserWarning --pdb
 ```
 
-## Github Actions 워크플로우 작업 처리
+## Github Actions 워크플로우 작업 처리[[Working with github actions workflows]]
 
 셀프 푸시 워크플로우 CI 작업을 트리거하려면, 다음을 수행해야 합니다.
 
@@ -1217,7 +1217,7 @@ pytest tests/test_logging.py -W error::UserWarning --pdb
 
 
 
-## 실험적인 CI 기능 테스트
+## 실험적인 CI 기능 테스트[[Testing Experimental CI Features]]
 
 CI 기능을 테스트하는 것은 일반 CI 작동에 방해가 될 수 있기 때문에 잠재적으로 문제가 발생할 수 있습니다. 
 따라서 새로운 CI 기능을 추가하는 경우 다음과 같이 수행해야 합니다.
