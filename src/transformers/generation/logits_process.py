@@ -651,7 +651,9 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
                 input_ids[:, -prefix_length:],
                 torch.tensor(sequence_ids[:-1], dtype=input_ids.dtype, device=input_ids.device),
             ).prod(dim=1)
-            bias[:, last_token] += sequence_bias * matching_rows
+            bias[:, last_token] += torch.where(
+                matching_rows.bool(), sequence_bias, torch.tensor(0.0, device=input_ids.device)
+            )
 
         # 5 - apply the bias to the scores
         scores = scores + bias
