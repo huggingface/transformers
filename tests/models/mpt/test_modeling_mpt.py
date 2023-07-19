@@ -18,7 +18,7 @@ import math
 import unittest
 
 from transformers import MptConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -31,6 +31,7 @@ if is_torch_available():
 
     from transformers import (
         MPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        AutoTokenizer,
         MptForCausalLM,
         MptForQuestionAnswering,
         MptForSequenceClassification,
@@ -403,4 +404,41 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             self.assertIsNotNone(model)
 
 
-# TODO: @younesbelkada add integration tests
+@slow
+@require_torch_gpu
+class MptIntegrationTests(unittest.TestCase):
+    def test_generation_8k(self):
+        model_id = "mosaicml/mpt-7b-8k"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+        # Load in 4bit to fit the daily CI runner GPU RAM
+        model = MptForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
+        )
+
+        input_text = "Hello"
+        expected_output = "Hello my name is [name] and I am a [type] at [company]. I have a [number]"
+
+        inputs = tokenizer(input_text, return_tensors="pt")
+        outputs = model.generate(**inputs, max_new_tokens=20)
+
+        decoded_output = tokenizer.decode(outputs[0])
+        self.assertEqual(decoded_output, expected_output)
+
+    def test_generation(self):
+        model_id = "mosaicml/mpt-7b"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+        # Load in 4bit to fit the daily CI runner GPU RAM
+        model = MptForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
+        )
+
+        input_text = "Hello"
+        expected_output = "Hello my name is Kaitlyn and I am a senior at the University of Wisconsin-Stout. I am major"
+
+        inputs = tokenizer(input_text, return_tensors="pt")
+        outputs = model.generate(**inputs, max_new_tokens=20)
+
+        decoded_output = tokenizer.decode(outputs[0])
+        self.assertEqual(decoded_output, expected_output)
