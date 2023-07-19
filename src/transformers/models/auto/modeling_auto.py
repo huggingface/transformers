@@ -1002,6 +1002,14 @@ MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_TEXT_TO_SPEECH_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Text-To-Speech mapping
+        ("bark", "BarkModel"),
+        ("speecht5", "SpeechT5ForTextToSpeech"),
+    ]
+)
+
 MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Zero Shot Image Classification mapping
@@ -1139,6 +1147,8 @@ MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES
 )
 MODEL_FOR_AUDIO_XVECTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES)
+
+MODEL_FOR_TEXT_TO_SPEECH_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TEXT_TO_SPEECH_MAPPING_NAMES)
 
 MODEL_FOR_BACKBONE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_BACKBONE_MAPPING_NAMES)
 
@@ -1393,6 +1403,10 @@ AutoModelForAudioFrameClassification = auto_class_update(
 
 class AutoModelForAudioXVector(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_AUDIO_XVECTOR_MAPPING
+
+
+class AutoModelForTextToSpeech(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TEXT_TO_SPEECH_MAPPING
 
 
 class AutoBackbone(_BaseAutoBackboneClass):
