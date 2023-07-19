@@ -2,7 +2,6 @@ from typing import List, Union
 
 from ..utils import (
     add_end_docstrings,
-    is_tf_available,
     is_torch_available,
     is_vision_available,
     logging,
@@ -16,13 +15,9 @@ if is_vision_available():
 
     from ..image_utils import load_image
 
-if is_tf_available():
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_VISION_2_SEQ_MAPPING
-
 if is_torch_available():
     import torch
 
-    from ..models.auto.modeling_auto import MODEL_FOR_VISION_2_SEQ_MAPPING
 
 logger = logging.get_logger(__name__)
 
@@ -54,9 +49,6 @@ class ImageToTextPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
-        self.check_model_type(
-            TF_MODEL_FOR_VISION_2_SEQ_MAPPING if self.framework == "tf" else MODEL_FOR_VISION_2_SEQ_MAPPING
-        )
 
     def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, prompt=None):
         forward_kwargs = {}

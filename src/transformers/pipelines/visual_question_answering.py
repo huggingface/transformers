@@ -1,6 +1,6 @@
 from typing import Union
 
-from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
+from ..utils import add_end_docstrings, is_vision_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
@@ -8,9 +8,6 @@ if is_vision_available():
     from PIL import Image
 
     from ..image_utils import load_image
-
-if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING
 
 logger = logging.get_logger(__name__)
 
@@ -53,7 +50,6 @@ class VisualQuestionAnsweringPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.check_model_type(MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING)
 
     def _sanitize_parameters(self, top_k=None, padding=None, truncation=None, **kwargs):
         preprocess_params, postprocess_params = {}, {}

@@ -3,7 +3,6 @@ from typing import List, Union
 from ..utils import (
     add_end_docstrings,
     is_tf_available,
-    is_torch_available,
     is_vision_available,
     logging,
     requires_backends,
@@ -19,11 +18,8 @@ if is_vision_available():
 if is_tf_available():
     import tensorflow as tf
 
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
     from ..tf_utils import stable_softmax
 
-if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
 
 logger = logging.get_logger(__name__)
 
@@ -56,11 +52,6 @@ class ImageClassificationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
-        self.check_model_type(
-            TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
-            if self.framework == "tf"
-            else MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
-        )
 
     def _sanitize_parameters(self, top_k=None):
         postprocess_params = {}

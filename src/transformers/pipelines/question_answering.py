@@ -31,15 +31,11 @@ if TYPE_CHECKING:
 if is_tf_available():
     import tensorflow as tf
 
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
-
     Dataset = None
 
 if is_torch_available():
     import torch
     from torch.utils.data import Dataset
-
-    from ..models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
 
 def decode_spans(
@@ -268,9 +264,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         )
 
         self._args_parser = QuestionAnsweringArgumentHandler()
-        self.check_model_type(
-            TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING if self.framework == "tf" else MODEL_FOR_QUESTION_ANSWERING_MAPPING
-        )
 
     @staticmethod
     def create_sample(

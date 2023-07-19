@@ -1,16 +1,12 @@
 import enum
 import warnings
 
-from .. import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
-from ..utils import add_end_docstrings, is_peft_available, is_tf_available
+from ..utils import add_end_docstrings, is_tf_available
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
 if is_tf_available():
     import tensorflow as tf
-
-if is_peft_available():
-    from peft import PeftModelForCausalLM
 
 
 class ReturnType(enum.Enum):
@@ -64,15 +60,6 @@ class TextGenerationPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        models_mapping_to_check = (
-            TF_MODEL_FOR_CAUSAL_LM_MAPPING if self.framework == "tf" else MODEL_FOR_CAUSAL_LM_MAPPING
-        )
-        if self.framework == "pt" and is_peft_available():
-            extra_custom_model_classes = [PeftModelForCausalLM]
-        else:
-            extra_custom_model_classes = None
-
-        self.check_model_type(models_mapping_to_check, extra_custom_model_classes)
         if "prefix" not in self._preprocess_params:
             # This is very specific. The logic is quite complex and needs to be done
             # as a "default".

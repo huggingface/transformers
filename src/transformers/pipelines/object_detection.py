@@ -11,7 +11,6 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
-    from ..models.auto.modeling_auto import MODEL_FOR_OBJECT_DETECTION_MAPPING, MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
 logger = logging.get_logger(__name__)
 
@@ -53,9 +52,6 @@ class ObjectDetectionPipeline(Pipeline):
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
         requires_backends(self, "vision")
-        self.check_model_type(
-            dict(MODEL_FOR_OBJECT_DETECTION_MAPPING.items() + MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.items())
-        )
 
     def _sanitize_parameters(self, **kwargs):
         postprocess_kwargs = {}

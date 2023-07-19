@@ -8,10 +8,10 @@ from .base import PIPELINE_INIT_ARGS, GenericTensor, Pipeline
 
 
 if is_tf_available():
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+    pass
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
+    pass
 
 
 def sigmoid(_outputs):
@@ -81,12 +81,6 @@ class TextClassificationPipeline(Pipeline):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-
-        self.check_model_type(
-            TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
-            if self.framework == "tf"
-            else MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
-        )
 
     def _sanitize_parameters(self, return_all_scores=None, function_to_apply=None, top_k="", **tokenizer_kwargs):
         # Using "" as default argument because we're going to use `top_k=None` in user code to declare

@@ -971,9 +971,7 @@ class Pipeline(_ScikitCompat):
         else:
             return inputs
 
-    def check_model_type(
-        self, supported_models: Union[List[str], dict], extra_custom_model_classes: Optional[dict] = None
-    ):
+    def check_model_type(self, supported_models: Union[List[str], dict]):
         """
         Check if the model class is in supported by the pipeline.
 
@@ -990,11 +988,6 @@ class Pipeline(_ScikitCompat):
                 else:
                     supported_models_names.append(model.__name__)
             supported_models = supported_models_names
-
-        if extra_custom_model_classes is not None and not isinstance(extra_custom_model_classes, list):
-            raise ValueError("extra_custom_models must be a list of model classes")
-        elif extra_custom_model_classes is not None:
-            supported_models = supported_models + [model_class.__name__ for model_class in extra_custom_model_classes]
 
         if self.model.__class__.__name__ not in supported_models:
             logger.error(
