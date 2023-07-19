@@ -359,6 +359,12 @@ _import_structure = {
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
+    "models.idefics": [
+        "IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "IdeficsConfig",
+        "IdeficsImageProcessor",
+        "IdeficsProcessor",
+    ],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
     "models.informer": ["INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "InformerConfig"],
     "models.instructblip": [
@@ -1913,6 +1919,15 @@ else:
             "IBertForTokenClassification",
             "IBertModel",
             "IBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.idefics"].extend(
+        [
+            "IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "IdeficsForCausalLM",
+            "IdeficsGatedCrossAttentionLayer",
+            "IdeficsModel",
+            "IdeficsPreTrainedModel",
         ]
     )
     _import_structure["models.imagegpt"].extend(
@@ -4314,6 +4329,12 @@ if TYPE_CHECKING:
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
+    from .models.idefics import (
+        IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        IdeficsConfig,
+        IdeficsImageProcessor,
+        IdeficsProcessor,
+    )
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
     from .models.instructblip import (
@@ -5638,6 +5659,14 @@ if TYPE_CHECKING:
             IBertForTokenClassification,
             IBertModel,
             IBertPreTrainedModel,
+        )
+        from .models.idefics import (
+            IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            IdeficsForCausalLM,
+            IdeficsGatedCrossAttentionLayer,
+            IdeficsLayer,
+            IdeficsModel,
+            IdeficsPreTrainedModel,
         )
         from .models.imagegpt import (
             IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
