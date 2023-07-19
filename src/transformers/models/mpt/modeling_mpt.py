@@ -216,9 +216,15 @@ class MptBlock(nn.Module):
         hidden_size = config.hidden_size
 
         self.norm_1 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        # backward compatibility with weights on the Hub
+        self.norm_1.bias = None
+
         self.num_heads = config.n_heads
         self.attn = MptAttention(config)
+
         self.norm_2 = LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
+        # backward compatibility with weights on the Hub
+        self.norm_2.bias = None
 
         self.ffn = MptMLP(config)
 
@@ -274,9 +280,7 @@ class MptPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MptBlock"]
-    _skip_keys_device_placement = "past_key_values"
-    # TODO: properly deal with that
-    # _keys_to_ignore_on_load_missing = [r".*.norm_(\d).bias", r".*.norm_f.bias"]
+    _keys_to_ignore_on_load_missing = [r"lm_head.*."]
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -406,6 +410,8 @@ class MptModel(MptPreTrainedModel):
 
         # Final Layer Norm
         self.norm_f = LayerNorm(self.hidden_size, eps=config.layer_norm_epsilon)
+        # backward compatibility with weights on the Hub
+        self.norm_f.bias = None
 
         self.gradient_checkpointing = False
 
