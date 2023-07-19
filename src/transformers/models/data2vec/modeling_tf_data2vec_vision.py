@@ -1026,13 +1026,7 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(DATA2VEC_VISION_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_IMAGE_PROCESSOR_FOR_DOC,
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=TFSequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
@@ -1048,7 +1042,30 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
+        Returns:
+        Examples:
+        ```python
+        >>> from transformers import AutoImageProcessor, TFData2VecVisionForImageClassification
+        >>> import tensorflow as tf
+        >>> from datasets import load_dataset
+
+        >>> dataset = load_dataset("huggingface/cats-image")
+        >>> image = dataset["test"]["image"][0]
+
+        >>> image_processor = AutoImageProcessor.from_pretrained(
+        ...     "microsoft/data2vec_vision-base-patch16-224-pt22k-ft22k", from_pt=True
+        ... )
+        >>> model = TFData2VecVisionForImageClassification.from_pretrained(
+        ...     "microsoft/data2vec_vision-base-patch16-224-pt22k-ft22k", from_pt=True
+        ... )
+
+        >>> inputs = image_processor(image, return_tensors="tf")
+        >>> logits = model(**inputs).logits
+
+        >>> # model predicts one of the 1000 ImageNet classes
+        >>> predicted_label = int(tf.math.argmax(logits, axis=-1))
+        >>> print(model.config.id2label[predicted_label])
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.data2vec_vision(
