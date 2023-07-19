@@ -392,8 +392,8 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mpt_weight_initialization(*config_and_inputs)
 
-    @unittest.skip("Mpt has a non-standard KV cache format.")
-    def test_past_key_values_format(self):
+    @unittest.skip("For backward compatibility the lm_head is not in the model's state dict on the Hub.")
+    def test_model_weights_reload_no_missing_tied_weights(self):
         pass
 
     @slow
