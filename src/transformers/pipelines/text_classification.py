@@ -1,7 +1,7 @@
+import inspect
 import warnings
 from typing import Dict
 
-import inspect
 import numpy as np
 
 from ..utils import ExplicitEnum, add_end_docstrings, is_tf_available, is_torch_available
