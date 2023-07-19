@@ -34,11 +34,7 @@ if is_torch_available():
 
     from transformers import (
         MODEL_MAPPING,
-        IdeficsForImageAndTextRetrieval,
-        IdeficsForImagesAndTextClassification,
-        IdeficsForMaskedLM,
-        IdeficsForQuestionAnswering,
-        IdeficsForTokenClassification,
+        IdeficsForCausalLM,
         IdeficsModel,
     )
     from transformers.models.idefics.modeling_idefics import IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST
@@ -175,23 +171,6 @@ class IdeficsModelTester:
             result.last_hidden_state.shape, (self.batch_size, self.expected_seq_len, self.hidden_size)
         )
 
-    def create_and_check_for_token_classification(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        pixel_values,
-        token_labels,
-    ):
-        model = IdeficsForTokenClassification(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, pixel_values=pixel_values)
-        result = model(input_ids, token_type_ids=token_type_ids, pixel_values=pixel_values)
-        result = model(input_ids, pixel_values=pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -219,10 +198,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_model_classes = (
         (
             IdeficsModel,
-            IdeficsForQuestionAnswering,
-            IdeficsForImageAndTextRetrieval,
-            IdeficsForMaskedLM,
-            IdeficsForTokenClassification,
+            IdeficsForCausalLM,
         )
         if is_torch_available()
         else ()
@@ -511,11 +487,13 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
 
 @require_torch
-class IdeficsForImagesAndTextClassificationModelTest(IdeficsModelTest, unittest.TestCase):
-    all_model_classes = (IdeficsForImagesAndTextClassification,) if is_torch_available() else ()
+class IdeficsForCausalLMTest(IdeficsModelTest, unittest.TestCase):
+    all_model_classes = (IdeficsForCausalLM) if is_torch_available() else ()
 
     def setUp(self):
-        self.model_tester = IdeficsModelTester(self, modality_type_vocab_size=3, add_multiple_images=True, num_images=2)
+        self.model_tester = IdeficsModelTester(
+            self, modality_type_vocab_size=3, add_multiple_images=True, num_images=2
+        )
         self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
 
     @unittest.skip("We only test the model that takes in multiple images")
