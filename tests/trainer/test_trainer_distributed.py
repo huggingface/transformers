@@ -21,6 +21,7 @@ from transformers.testing_utils import (
     get_torch_dist_unique_port,
     require_torch_multi_gpu,
     require_torch_neuroncore,
+    require_torch_npu,
 )
 from transformers.training_args import ParallelMode
 from transformers.utils import logging
@@ -65,6 +66,20 @@ if is_torch_available():
 
 class TestTrainerDistributedNeuronCore(TestCasePlus):
     @require_torch_neuroncore
+    def test_trainer(self):
+        distributed_args = f"""--nproc_per_node=2
+            --master_port={get_torch_dist_unique_port()}
+            {self.test_file_dir}/test_trainer_distributed.py
+        """.split()
+        output_dir = self.get_auto_remove_tmp_dir()
+        args = f"--output_dir {output_dir}".split()
+        cmd = ["torchrun"] + distributed_args + args
+        execute_subprocess_async(cmd, env=self.get_env())
+        # successful return here == success - any errors would have caused an error in the sub-call
+
+
+class TestTrainerDistributedNPU(TestCasePlus):
+    @require_torch_npu
     def test_trainer(self):
         distributed_args = f"""--nproc_per_node=2
             --master_port={get_torch_dist_unique_port()}

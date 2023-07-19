@@ -629,20 +629,7 @@ class Trainer:
                     #  bf16 does not need grad scaling
                     self.do_grad_scaling = self.amp_dtype == torch.float16
                     if self.do_grad_scaling:
-                        if self.sharded_ddp is not None:
-                            self.scaler = ShardedGradScaler()
-                        elif self.fsdp is not None:
-                            from torch.distributed.fsdp.sharded_grad_scaler import (
-                                ShardedGradScaler as FSDPShardedGradScaler,
-                            )
-
-                            self.scaler = FSDPShardedGradScaler()
-                        elif is_torch_tpu_available():
-                            from torch_xla.amp import GradScaler
-
-                            self.scaler = GradScaler()
-                        else:
-                            self.scaler = torch.cuda.amp.GradScaler()
+                        self.scaler = ShardedGradScaler()
                 elif args.half_precision_backend == "cpu_amp":
                     self.use_cpu_amp = True
                     self.amp_dtype = torch.bfloat16
@@ -2621,7 +2608,7 @@ class Trainer:
                 else torch.cuda.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
             )
         else:
-            ctx_manager = contextlib.nullcontext() if sys.version_info >= (3, 7) else contextlib.suppress()
+            ctx_manager = contextlib.nullcontext()
 
         return ctx_manager
 

@@ -135,7 +135,7 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_
             try:
                 if pointer.shape != array.shape:
                     raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
-            except AssertionError as e:
+            except ValueError as e:
                 e.args += (pointer.shape, array.shape)
                 raise
             print(f"Initialize PyTorch weight {name}", original_name)
