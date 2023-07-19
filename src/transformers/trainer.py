@@ -2298,6 +2298,7 @@ class Trainer:
                 # Needs to be called on all ranks to gather all states.
                 # full_optim_state_dict will be deprecated after Pytorch 2.2!
                 full_osd = self.model.__class__.full_optim_state_dict(self.model, self.optimizer)
+                torch.save(full_osd, os.path.join(output_dir, OPTIMIZER_NAME))
 
         if is_torch_tpu_available():
             xm.rendezvous("saving_optimizer_states")
@@ -2321,12 +2322,9 @@ class Trainer:
                 reissue_pt_warnings(caught_warnings)
                 if self.do_grad_scaling:
                     torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
-        elif self.args.should_save and not self.is_deepspeed_enabled:
+        elif self.args.should_save and not self.is_deepspeed_enabled and not (self.fsdp or self.is_fsdp_enabled):
             # deepspeed.save_checkpoint above saves model/optim/sched
-            if self.fsdp and not self.is_fsdp_enabled:
-                torch.save(full_osd, os.path.join(output_dir, OPTIMIZER_NAME))
-            else:
-                torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
+            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
 
             with warnings.catch_warnings(record=True) as caught_warnings:
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
