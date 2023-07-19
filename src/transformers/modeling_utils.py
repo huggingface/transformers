@@ -1254,8 +1254,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def disable_pretraining_tp(self):
         r"""
-        For some setups, one might want to disable the tensor parallelism behavior
-        (e.g. when fine-tuning models with PEFT).
+        For some setups, one might want to disable the tensor parallelism behavior (e.g. when fine-tuning models with
+        PEFT).
         """
         config = getattr(self, "config", None)
         if config is not None and not hasattr(config, "pretraining_tp"):
@@ -1271,8 +1271,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def set_pretraining_tp(self, value):
         r"""
-        This method is intended for users that want to enable back the tensor parallelism behavior
-        (e.g. after fine-tuning models with PEFT).
+        This method is intended for users that want to enable back the tensor parallelism behavior (e.g. after
+        fine-tuning models with PEFT).
         """
         config = getattr(self, "config", None)
         if config is not None and not hasattr(config, "pretraining_tp"):
