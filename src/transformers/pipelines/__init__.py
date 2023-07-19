@@ -734,6 +734,10 @@ def pipeline(
 
     elif config is None and isinstance(model, str):
         if has_adapter_config:
+            logger.info(
+                f"Detected an adapter model in the specified path ({model}). Will use PEFT library to load the model."
+            )
+
             peft_config = PeftConfig.from_pretrained(model, **hub_kwargs)
             config = AutoConfig.from_pretrained(
                 peft_config.base_model_name_or_path, _from_pipeline=task, **hub_kwargs, **model_kwargs
