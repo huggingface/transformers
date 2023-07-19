@@ -18,19 +18,16 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Idefics model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The Idefics model was proposed in [OBELISC: An Open Web-Scale Filtered Dataset of Interleaved Image-Text Documents
+](https://huggingface.co/papers/2306.16527
+) by Hugo Laurençon, Lucile Saulnier, Léo Tronchon, Stas Bekman, Amanpreet Singh, Anton Lozhkov, Thomas Wang, Siddharth Karamcheti, Alexander M. Rush, Douwe Kiela, Matthieu Cord, Victor Sanh
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+Large multimodal models trained on natural documents, which interleave images and text, outperform models trained on image-text pairs on various multimodal benchmarks that require reasoning over one or multiple images to generate a text. However, the datasets used to train these models have not been released, and the collection process has not been fully specified. We introduce the OBELISC dataset, an open web-scale filtered dataset of interleaved image-text documents comprising 141 million web pages extracted from Common Crawl, 353 million associated images, and 115 billion text tokens. We describe the dataset creation process, present comprehensive filtering rules, and provide an analysis of the dataset's content. To show the viability of OBELISC, we train an 80 billion parameters vision and language model on the dataset and obtain competitive performance on various multimodal benchmarks. We release the code to reproduce the dataset along with the dataset itself.
 
-Tips:
+This model was contributed by [HuggingFaceM4](https://huggingface.co/HuggingFaceM4). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>). (TODO: don't have a public link yet).
 
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 
 ## IdeficsConfig
@@ -42,27 +39,17 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 [[autodoc]] IdeficsModel
     - forward
 
-## IdeficsForMaskedLM
+## IdeficsForCausalLM
 
-[[autodoc]] IdeficsForMaskedLM
+[[autodoc]] IdeficsForCausalLM
     - forward
 
-## IdeficsForQuestionAnswering
+## IdeficsImageProcessor
 
-[[autodoc]] IdeficsForQuestionAnswering
-    - forward
+[[autodoc]] IdeficsImageProcessor
+    - preprocess
 
-## IdeficsForImagesAndTextClassification
+## IdeficsProcessor
 
-[[autodoc]] IdeficsForImagesAndTextClassification
-    - forward
-
-## IdeficsForImageAndTextRetrieval
-
-[[autodoc]] IdeficsForImageAndTextRetrieval
-    - forward
-
-## IdeficsForTokenClassification
-
-[[autodoc]] IdeficsForTokenClassification
-    - forward
+[[autodoc]] IdeficsProcessor
+    - __call__
