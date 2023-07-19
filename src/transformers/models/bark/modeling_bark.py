@@ -48,7 +48,7 @@ _CONFIG_FOR_DOC = "BarkConfig"
 
 BARK_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "suno/bark-small",
-    "suno/barh",
+    "suno/bark",
     # See all Bark models at https://huggingface.co/models?filter=bark
 ]
 
