@@ -91,8 +91,8 @@ dataset="amazon_reviews_multi"
 subset="en"
 python run_classification.py \
     --model_name_or_path  bert-base-uncased \
-    --dataset_name $dataset \
-    --dataset_config_name $subset \
+    --dataset_name ${dataset} \
+    --dataset_config_name ${subset} \
     --shuffle_train_dataset \
     --metric_name accuracy \
     --text_column_name "review_title,review_body,product_category" \
@@ -104,7 +104,7 @@ python run_classification.py \
     --per_device_train_batch_size 32 \
     --learning_rate 2e-5 \
     --num_train_epochs 1 \
-    --output_dir /tmp/$dataset_$subset/
+    --output_dir /tmp/${dataset}_${subset}/
 ```
 Training for 1 epoch results in acc of around 0.5958 for review_body only and 0.659 for title+body+category.
 
@@ -114,8 +114,8 @@ dataset="reuters21578"
 subset="ModApte"
 python run_classification.py \
     --model_name_or_path bert-base-uncased \
-    --dataset_name $dataset \
-    --dataset_config_name $subset \
+    --dataset_name ${dataset} \
+    --dataset_config_name ${subset} \
     --shuffle_train_dataset \
     --remove_splits "unused" \
     --metric_name f1 \
@@ -127,7 +127,7 @@ python run_classification.py \
     --per_device_train_batch_size 32 \
     --learning_rate 2e-5 \
     --num_train_epochs 15 \
-    --output_dir /tmp/$dataset_$subset/ 
+    --output_dir /tmp/${dataset}_${subset}/ 
 ```
  It results in a Micro F1 score of around 0.82 without any text and label filtering. Note that you have to explictly remove the "unused" split from the dataset, since it is not used for classification.
 
