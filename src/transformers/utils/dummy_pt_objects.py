@@ -2396,6 +2396,34 @@ class ModalEmbeddings(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class OpenLlamaForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OpenLlamaForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OpenLlamaModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class OpenLlamaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -5455,34 +5483,6 @@ class OneFormerModel(metaclass=DummyObject):
 
 
 class OneFormerPreTrainedModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class OpenLlamaForCausalLM(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class OpenLlamaForSequenceClassification(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class OpenLlamaModel(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class OpenLlamaPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
