@@ -2115,7 +2115,7 @@ class Trainer:
                         state_dict["_smp_is_partial"] = False
                         load_result = model.load_state_dict(state_dict, strict=True)
                 elif self.is_fsdp_enabled:
-                    load_fsdp_model(
+                    load_result = load_fsdp_model(
                         self.accelerator.state.fsdp_plugin, self.accelerator, model, self.state.best_model_checkpoint
                     )
                 else:
