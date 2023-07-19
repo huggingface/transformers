@@ -945,13 +945,7 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_IMAGE_PROCESSOR_FOR_DOC,
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=TFMaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
+    @replace_return_docstrings(output_type=TFMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         pixel_values: Optional[TFModelInputType] = None,
@@ -968,6 +962,33 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        Returns:
+        Examples:
+        ```python
+        >>> from transformers import AutoTokenizer, TFBeitForMaskedImageModeling
+        >>> import tensorflow as tf
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k", from_pt=True)
+        >>> model = TFBeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k", from_pt=True)
+
+        >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="tf")
+        >>> logits = model(**inputs).logits
+
+        >>> # retrieve index of {mask}
+        >>> mask_token_index = tf.where((inputs.input_ids == tokenizer.mask_token_id)[0])
+        >>> selected_logits = tf.gather_nd(logits[0], indices=mask_token_index)
+
+        >>> predicted_token_id = tf.math.argmax(selected_logits, axis=-1)
+        >>> tokenizer.decode(predicted_token_id)
+        ```
+
+        ```python
+        >>> labels = tokenizer("The capital of France is Paris.", return_tensors="tf")["input_ids"]
+        >>> # mask labels of non-{mask} tokens
+        >>> labels = tf.where(inputs.input_ids == tokenizer.mask_token_id, labels, -100)
+
+        >>> outputs = model(**inputs, labels=labels)
+        >>> round(float(outputs.loss), 2)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
