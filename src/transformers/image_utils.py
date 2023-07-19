@@ -53,6 +53,9 @@ if TYPE_CHECKING:
     if is_torch_available():
         import torch
 
+    if is_tf_tensor():
+        import tensorflow as tf
+
 
 ImageInput = Union[
     "PIL.Image.Image", np.ndarray, "torch.Tensor", List["PIL.Image.Image"], List[np.ndarray], List["torch.Tensor"]
@@ -121,16 +124,19 @@ class ImageArray(np.lib.mixins.NDArrayOperatorsMixin):
     See: https://numpy.org/doc/stable/user/basics.dispatch.html
 
     Args:
-        data (`ImageInput`):
+        data (`Union["PIL.Image.Image", np.ndarray, "torch.Tensor", "tf.Tensor"]`):
             The image data.
         data_format (`ChannelDimension`, *optional*):
-            The channel dimension format of the image. If `None`, will be inferred from the image data.
+            The channel dimension format of the image. If unset, will be inferred from the image data.
         num_channels (`int`, *optional*):
-            The number of channels in the image. If `None`, will be inferred from the image data.
+            The number of channels in the image. If unset, will be inferred from the image data.
     """
 
     def __init__(
-        self, data: ImageInput, data_format: Optional[ChannelDimension] = None, num_channels: int = None
+        self,
+        data: Union["PIL.Image.Image", np.ndarray, "torch.Tensor", "tf.Tensor"],
+        data_format: Optional[ChannelDimension] = None,
+        num_channels: int = None,
     ) -> None:
         if isinstance(data, ImageArray):
             self._data = data._data
