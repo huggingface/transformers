@@ -23,12 +23,10 @@ import sys
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-
 import datasets
-from datasets import Features, Value
 import evaluate
 import numpy as np
-from datasets import load_dataset
+from datasets import Value, load_dataset
 
 import transformers
 from transformers import (
@@ -38,7 +36,6 @@ from transformers import (
     DataCollatorWithPadding,
     EvalPrediction,
     HfArgumentParser,
-    PretrainedConfig,
     Trainer,
     TrainingArguments,
     default_data_collator,
@@ -519,8 +516,8 @@ def main():
         # update config with label infos
         if model.config.label2id != label_to_id:
             logger.warning(
-                f"The label2id key in the model config.json is not equal to the label2id key of this "
-                f"run. You can ignore this if you are doing finetuning."
+                "The label2id key in the model config.json is not equal to the label2id key of this "
+                "run. You can ignore this if you are doing finetuning."
             )
         model.config.label2id = label_to_id
         model.config.id2label = {id: label for label, id in config.label2id.items()}
