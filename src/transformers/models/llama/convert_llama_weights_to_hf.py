@@ -62,13 +62,10 @@ INTERMEDIATE_SIZE_MAP = {
 }
 NUM_SHARDS = {
     "7B": 1,
-    "7Bf": 1,
     "13B": 2,
-    "13Bf": 2,
     "30B": 4,
     "65B": 8,
     "70B": 8,
-    "70Bf": 8,
 }
 
 
@@ -281,7 +278,7 @@ def main():
     )
     parser.add_argument(
         "--model_size",
-        choices=["7B", "7Bf", "13B", "13Bf", "30B", "65B", "70B", "70Bf", "tokenizer_only"],
+        choices=["7B", "13B", "30B", "65B", "70B", "tokenizer_only"],
     )
     parser.add_argument(
         "--output_dir",
