@@ -31,6 +31,7 @@ Read more about it [in the release blogpost](https://www.mosaicml.com/blog/mpt-7
 Tips:
 
 - Learn more about some techniques behind training of the model [in this section of llm-foundry repository](https://github.com/mosaicml/llm-foundry/blob/main/TUTORIAL.md#faqs)
+- If you want to use the advanced version of the model (triton kernels, direct flash attention integration), you can still use the original model implementation by adding `trust_remote_code=True` when calling `from_pretrained`.
 
 
 ## MptConfig
