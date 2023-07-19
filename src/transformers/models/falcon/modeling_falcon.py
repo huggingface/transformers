@@ -1048,7 +1048,7 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
 
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths.to(logits.device)]
 
         loss = None
         if labels is not None:
