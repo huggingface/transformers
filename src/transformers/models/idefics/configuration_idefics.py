@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" LLaMA model configuration"""
+""" Idefics model configuration"""
 import os
 from typing import Tuple, Union
 
@@ -28,7 +28,7 @@ from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
 
-LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
 class IdeficsConfig(PretrainedConfig):

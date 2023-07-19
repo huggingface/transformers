@@ -21,48 +21,57 @@
 from typing import List, Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
+
+from transformers import PreTrainedModel
 from transformers.activations import ACT2FN
+from transformers.deepspeed import is_deepspeed_zero3_enabled
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from transformers.modeling_utils import PretrainedConfig
+from transformers.models.clip.configuration_clip import CLIPConfig
+from transformers.models.clip.modeling_clip import CLIPVisionTransformer
 from transformers.utils import (
     ContextManagers,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    logging,
     replace_return_docstrings,
 )
 
-from .perceiver import PerceiverResampler
 from .configuration_idefics import IdeficsConfig
-from transformers.utils import logging
-from transformers import PreTrainedModel
-from transformers.deepspeed import is_deepspeed_zero3_enabled
+from .perceiver import PerceiverResampler
+
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "IdeficsConfig"
+
+IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "HuggingFaceM4/idefics-9b",
+    "HuggingFaceM4/idefics-80b",
+    # See all ViLT models at https://huggingface.co/models?filter=idefics
+]
 
 
 def deepspeed_gathered_parameters_context_manager(params, modify=True):
     """
     Under zero.Init returns a context manager that will gather the sharded param, otherwise returns an empty list
 
-    If `modify` is `True`, gather the shards and once the context exits update the shards with the
-    modified data - one wants that when modifying the gathered param. If one wants to just gather
-    the shards in order to read the param and no modifications are done to it, use `modify=False` as
-    it's more efficient.
+    If `modify` is `True`, gather the shards and once the context exits update the shards with the modified data - one
+    wants that when modifying the gathered param. If one wants to just gather the shards in order to read the param and
+    no modifications are done to it, use `modify=False` as it's more efficient.
 
     `params` - can be a single parameter, a list, or a tuple of parameters to collect.
 
     Example:
 
-    from transformers.utils import ContextManagers
-    from m4.training.utils import deepspeed_gathered_parameters_context_manager
-    with ContextManagers(deepspeed_gathered_parameters_context_manager(module.weight, modify=True)):
-        module.weight.data.normal_(mean=0.0, std=std)
-        if module.padding_idx is not None:
+    from transformers.utils import ContextManagers from m4.training.utils import
+    deepspeed_gathered_parameters_context_manager with
+    ContextManagers(deepspeed_gathered_parameters_context_manager(module.weight, modify=True)):
+        module.weight.data.normal_(mean=0.0, std=std) if module.padding_idx is not None:
             module.weight.data[module.padding_idx].zero_()
 
 
@@ -75,7 +84,6 @@ def deepspeed_gathered_parameters_context_manager(params, modify=True):
         return [deepspeed.zero.GatheredParameters(params, modifier_rank=modifier_rank)]
     else:
         return []
-
 
 
 def expand_inputs_for_generation(
@@ -199,9 +207,10 @@ def freeze_model(model, module_exceptions=[]):
 class DecoupledEmbedding(nn.Embedding):
     # Derived from https://pytorch.org/docs/stable/_modules/torch/nn/modules/sparse.html#Embedding
     """
-    Implements a decoupling of parameters to allow freezing (or not) a subset of the embeddings.
-    In practise, the regular `weight` can be trained or frozen (i.e. `partially_freeze=True`), and if `num_additional_embeddings` > 0, then it will create `num_additional_embeddings` additional parameters that are always trained.
-    If `num_additional_embeddings=0`, then the module defaults back to the regular behavior of `nn.Embedding`.
+    Implements a decoupling of parameters to allow freezing (or not) a subset of the embeddings. In practise, the
+    regular `weight` can be trained or frozen (i.e. `partially_freeze=True`), and if `num_additional_embeddings` > 0,
+    then it will create `num_additional_embeddings` additional parameters that are always trained. If
+    `num_additional_embeddings=0`, then the module defaults back to the regular behavior of `nn.Embedding`.
     """
 
     def __init__(
@@ -219,7 +228,8 @@ class DecoupledEmbedding(nn.Embedding):
         num_additional_embeddings: int. Number of additional embeddings. Only useful when you `partially_freeze=True`.
         partially_freeze: bool. If True, the regular `weight` will be frozen. `additional_weight` is never frozen.
 
-        Note: there are a lot of other parameters to initialize a standard `nn.Embedding` such as `padding_idx`, `max_norm` or `norm_type`. We are not supporting these.
+        Note: there are a lot of other parameters to initialize a standard `nn.Embedding` such as `padding_idx`,
+        `max_norm` or `norm_type`. We are not supporting these.
         """
         if padding_idx is not None and padding_idx > num_embeddings:
             raise ValueError(f"padding_idx must be within num_embeddings. Got {padding_idx} and {num_embeddings}")
@@ -254,18 +264,18 @@ class DecoupledEmbedding(nn.Embedding):
 
         in order to make a lookup of the input ids, we:
         1. find out the indices of the entries belonging to the 2nd embedding
-        2. extract those values while subtracting the size of the first embedding (num_embeddings),
-           since the 2nd embedding starts from 0 and not num_embeddings
+        2. extract those values while subtracting the size of the first embedding (num_embeddings), since the 2nd
+           embedding starts from 0 and not num_embeddings
         3. perform the 2nd embedding lookup
         4. now we handle the 1st embedding, we overwrite indices belonging to the 2nd embedding with a padding index
         5. perform the 1st embedding lookup
         6. now we overwrite the values in the 1st embedding lookup with the values of the 2nd embedding lookup
 
-        note: for the 1st embedding lookup we could have looked up only the low indices and not do
-        the padding, but then we have to create a new tensor and populate it with 2 tensors that are
-        spread out across various indices - i.e. not a simple concat - I haven't benchmarked the
-        complex case if it's any faster, given that seqlens are usually relatively short it's
-        probably not faster or if faster not by much - but might be a good idea to measure.
+        note: for the 1st embedding lookup we could have looked up only the low indices and not do the padding, but
+        then we have to create a new tensor and populate it with 2 tensors that are spread out across various indices -
+        i.e. not a simple concat - I haven't benchmarked the complex case if it's any faster, given that seqlens are
+        usually relatively short it's probably not faster or if faster not by much - but might be a good idea to
+        measure.
 
         """
         if self.num_additional_embeddings == 0:
@@ -302,9 +312,10 @@ class DecoupledEmbedding(nn.Embedding):
 class DecoupledLinear(nn.Linear):
     # Derived from https://pytorch.org/docs/stable/_modules/torch/nn/modules/linear.html#Linear
     """
-    Implements a decoupling of parameters to allow freezing (or not) a subset of the parameters.
-    In practise, the regular `weight` can be trained or frozen (i.e. `partially_freeze=True`), and if `out_additional_features` > 0, then it will create `out_additional_features * in_features` additional parameters that are always trained.
-    If `out_additional_features=0`, then the module defaults back to the regular behavior of `nn.Linear`.
+    Implements a decoupling of parameters to allow freezing (or not) a subset of the parameters. In practise, the
+    regular `weight` can be trained or frozen (i.e. `partially_freeze=True`), and if `out_additional_features` > 0,
+    then it will create `out_additional_features * in_features` additional parameters that are always trained. If
+    `out_additional_features=0`, then the module defaults back to the regular behavior of `nn.Linear`.
     """
 
     def __init__(
@@ -318,8 +329,9 @@ class DecoupledLinear(nn.Linear):
         dtype=None,
     ) -> None:
         """
-        out_additional_features: int. Number of additional trainable dimensions. Only makes sense when `partially_freeze=True`.
-        partially_freeze: bool. If True, the regular `weight` will be frozen and extra parameters (if any) will be trainable. If False, default to the regular behavior of nn.Linear.
+        out_additional_features: int. Number of additional trainable dimensions. Only makes sense when
+        `partially_freeze=True`. partially_freeze: bool. If True, the regular `weight` will be frozen and extra
+        parameters (if any) will be trainable. If False, default to the regular behavior of nn.Linear.
         """
         super().__init__(in_features, out_features, bias, device, dtype)
         self.out_additional_features = out_additional_features
@@ -811,7 +823,7 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
             output_attentions=output_attentions,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.config, training=self.training)
-        hidden_states = residual + 0. * self.act_cross_attn(self.alpha_cross_attn) * hidden_states
+        hidden_states = residual + self.act_cross_attn(self.alpha_cross_attn) * hidden_states
 
         # Fully Connected
         residual = hidden_states
@@ -860,7 +872,6 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
 
     def _init_weights(self, module):
-
         def init_a_linear(module, mean=0.0, std=self.config.initializer_range):
             with ContextManagers(deepspeed_gathered_parameters_context_manager(module.weight, modify=True)):
                 module.weight.data.normal_(mean=mean, std=std)
@@ -939,8 +950,7 @@ LLAMA_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`.
-            [What are position IDs?](../glossary#position-ids)
+            config.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
             `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
@@ -970,9 +980,6 @@ LLAMA_INPUTS_DOCSTRING = r"""
 """
 
 
-from transformers.models.clip.modeling_clip import CLIPVisionTransformer
-from transformers.models.clip.configuration_clip import CLIPConfig
-
 @add_start_docstrings(
     "The bare LLaMA Model outputting raw hidden-states without any specific head on top.",
     LLAMA_START_DOCSTRING,
@@ -1000,9 +1007,9 @@ class IdeficsModel(IdeficsPreTrainedModel):
         )
 
         # XXX: this is unsafe - needs to be fixed
-        vision_model_params = dict(id2label={}, label2id={})
+        vision_model_params = {"id2label": {}, "label2id": {}}
         clip_config = CLIPConfig.from_pretrained(config.vision_model_name, **vision_model_params)
-        #print(clip_config)
+        # print(clip_config.vision_config)
         self.vision_model = CLIPVisionTransformer(clip_config.vision_config)
 
         # Perceiver Resampler
@@ -1130,17 +1137,25 @@ class IdeficsModel(IdeficsPreTrainedModel):
         else:
             position_ids = position_ids.view(-1, seq_length).long()
 
-        if pixel_values is None and image_embeddings is None:
-            # Hack to use the model in full language modeling mode. The value 224 is hard-coded.
-            pixel_values = torch.ones(batch_size, 1, 3, 224, 224)
+        # if pixel_values is None and image_embeddings is None:
+        #     # Hack to use the model in full language modeling mode. The value 224 is hard-coded.
+        #     pixel_values = torch.ones(batch_size, 1, 3, 224, 224)
         if pixel_values is not None and image_embeddings is not None:
             raise ValueError("You cannot specify both pixel_values and image_embeddings at the same time")
         elif pixel_values is not None:
             pixel_values = pixel_values.to(dtype=self.dtype, device=input_ids.device)  # fp16 compatibility
             batch_size, num_images = pixel_values.size(0), pixel_values.size(1)
             pixel_values = pixel_values.contiguous().view(batch_size * num_images, *pixel_values.shape[2:])
+
+            # print(pixel_values.shape)
+            # print(pixel_values)
+
             # Get sequence from the vision encoder
             image_hidden_states = self.vision_model(pixel_values=pixel_values).last_hidden_state
+
+            # print(image_hidden_states)
+            # print(image_hidden_states.shape)
+
         elif image_embeddings is not None:
             batch_size, num_images, image_seq_len, image_hidden_size = image_embeddings.size()
             image_hidden_states = image_embeddings.to(dtype=self.dtype, device=input_ids.device)
@@ -1150,8 +1165,8 @@ class IdeficsModel(IdeficsPreTrainedModel):
             image_hidden_states = self.perceiver_resampler(image_hidden_states)
         image_seq_len, image_hidden_size = image_hidden_states.size(1), image_hidden_states.size(2)
         image_hidden_states = image_hidden_states.view(batch_size, num_images * image_seq_len, image_hidden_size)
-        # Hack to use the model in full language modeling mode
-        image_attention_mask = torch.zeros(batch_size, seq_length, 1, dtype=torch.long, device=image_hidden_states.device)
+        # # Hack to use the model in full language modeling mode
+        # image_attention_mask = torch.zeros(batch_size, seq_length, 1, dtype=torch.long, device=image_hidden_states.device)
         # Make image_attention_mask compatible with hidden states
         text_seq_len = image_attention_mask.size(1)
         image_attention_mask = image_attention_mask.unsqueeze(-1)
@@ -1339,7 +1354,8 @@ class IdeficsForCausalLM(IdeficsPreTrainedModel):
 
     def tie_weights(self):
         """
-        Overwrite `transformers.modeling_utils.PreTrainedModel.tie_weights` to handle the case of DecoupledLinear and DecoupledEmbedding.
+        Overwrite `transformers.modeling_utils.PreTrainedModel.tie_weights` to handle the case of DecoupledLinear and
+        DecoupledEmbedding.
         """
         output_embeddings = self.get_output_embeddings()
         input_embeddings = self.get_input_embeddings()
