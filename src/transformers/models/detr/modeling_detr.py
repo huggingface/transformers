@@ -764,10 +764,10 @@ class DetrDecoderLayer(nn.Module):
 
             hidden_states, cross_attn_weights = self.encoder_attn(
                 hidden_states=hidden_states,
-                object_queries=object_queries,
+                object_queries=query_position_embeddings,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                spatial_position_embeddings=query_position_embeddings,
+                spatial_position_embeddings=object_queries,
                 output_attentions=output_attentions,
             )
 
