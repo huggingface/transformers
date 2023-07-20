@@ -207,7 +207,7 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
 
     Examples:
 
-    ```python
+    ```
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
     >>> # Initializing the model and tokenizer for it
