@@ -141,7 +141,6 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             mask_token=mask_token,
             sp_model_kwargs=sp_model_kwargs,
-            # additional_special_tokens=to_add,
             **kwargs,
         )
 
