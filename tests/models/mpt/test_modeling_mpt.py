@@ -467,3 +467,20 @@ class MptIntegrationTests(unittest.TestCase):
         decoded_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         for i, predicted_output in enumerate(decoded_outputs):
             self.assertEqual(predicted_output, expected_output[i])
+
+    def test_model_logits(self):
+        model_id = "mosaicml/mpt-7b"
+
+        # Load in 4bit to fit the daily CI runner GPU RAM
+        model = MptForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
+        )
+
+        dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
+
+        outputs = model(dummy_input, output_hidden_states=True)
+
+        expected_slice = torch.Tensor([-0.2559, -0.2197, -0.2480]).to(torch_device, torch.bfloat16)
+        predicted_slice = outputs.hidden_states[-1][0, 0, :3]
+
+        self.assertTrue(torch.allclose(expected_slice, predicted_slice, atol=1e-3, rtol=1e-3))
