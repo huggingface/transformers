@@ -178,8 +178,7 @@ class TemperatureLogitsWarper(LogitsWarper):
     <Tip>
 
     Make sure that `do_sample=True` is included in the `generate` arguments otherwise the temperature value won't have
-    any effect. As noted in `generation_strategies#Assisted-Decoding`, this parameter along with assisted decoding will
-    help improving the latency.
+    any effect. 
 
     </Tip>
 
