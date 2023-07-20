@@ -1,9 +1,14 @@
 from typing import List, Union
 
-import torch
 from datasets import load_dataset
 
 from transformers import Pipeline, SpeechT5HifiGan
+
+from ..utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 ONLY_ONE_SPEAKER_EMBEDDINGS_LIST = ["bark"]
