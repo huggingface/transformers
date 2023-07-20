@@ -13,10 +13,10 @@ if is_vision_available():
 
 if is_torch_available():
     from ..models.auto.modeling_auto import (
-        MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
-        MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
-        MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
-        MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING,
+        MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES,
+        MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES,
+        MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES,
+        MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING_NAMES,
     )
 
 
@@ -73,10 +73,10 @@ class ImageSegmentationPipeline(Pipeline):
         requires_backends(self, "vision")
         self.check_model_type(
             dict(
-                MODEL_FOR_IMAGE_SEGMENTATION_MAPPING.items()
-                + MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING.items()
-                + MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING.items()
-                + MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING.items()
+                MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES.items()
+                + MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES.items()
+                + MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES.items()
+                + MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING_NAMES.items()
             )
         )
 

@@ -11,7 +11,10 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
-    from ..models.auto.modeling_auto import MODEL_FOR_OBJECT_DETECTION_MAPPING, MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+    from ..models.auto.modeling_auto import (
+        MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES,
+        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
+    )
 
 logger = logging.get_logger(__name__)
 
@@ -54,7 +57,9 @@ class ObjectDetectionPipeline(Pipeline):
 
         requires_backends(self, "vision")
         self.check_model_type(
-            dict(MODEL_FOR_OBJECT_DETECTION_MAPPING.items() + MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.items())
+            dict(
+                MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES.items() + MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES.items()
+            )
         )
 
     def _sanitize_parameters(self, **kwargs):
