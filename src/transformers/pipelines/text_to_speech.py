@@ -26,7 +26,7 @@ class TextToSpeechPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> classifier = pipeline(model="suno/bark-large")
+    >>> classifier = pipeline(model="suno/bark")
     >>> audio = pipeline("Hey it's HuggingFace on the phone!", speaker_embeddings="v2/en_speaker_1")
     ```
 
