@@ -50,6 +50,19 @@ class LlamaConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
+        num_key_value_heads (`int`, *optional*):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+            `num_key_value_heads=1 the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+            by meanpooling all the original heads within that group. For more details checkout [this
+            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
+            `num_attention_heads`.
+        pretraining_tp (`int`, *optional*, defaults to `1`):
+            Experimental feature. Tensor parallelism rank used during pretraining. Please refer to [this
+            document](https://huggingface.co/docs/transformers/parallelism) to understand more about it. This value is
+            necessary to ensure exact reproducibility of the pretraining results. Please refer to [this
+            issue](https://github.com/pytorch/pytorch/issues/76232).
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
@@ -97,6 +110,7 @@ class LlamaConfig(PretrainedConfig):
         intermediate_size=11008,
         num_hidden_layers=32,
         num_attention_heads=32,
+        num_key_value_heads=None,
         hidden_act="silu",
         max_position_embeddings=2048,
         initializer_range=0.02,
@@ -105,6 +119,7 @@ class LlamaConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
+        pretraining_tp=1,
         tie_word_embeddings=False,
         rope_scaling=None,
         **kwargs,
@@ -115,9 +130,16 @@ class LlamaConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
+        self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
         self.rope_scaling = rope_scaling
         self._rope_scaling_validation()

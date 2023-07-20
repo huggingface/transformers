@@ -47,11 +47,13 @@ from .utils import (
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
     is_torch_neuroncore_available,
+    is_torch_npu_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     logging,
     requires_backends,
 )
+from .utils.generic import strtobool
 from .utils.import_utils import is_optimum_neuron_available
 
 
@@ -404,7 +406,7 @@ class TrainingArguments:
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to `True`, the training will begin faster (as that skipping step
             can take a long time) but will not yield the same results as the interrupted training would have.
-        sharded_ddp (`bool`, `str` or list of [`~trainer_utils.ShardedDDPOption`], *optional*, defaults to `False`):
+        sharded_ddp (`bool`, `str` or list of [`~trainer_utils.ShardedDDPOption`], *optional*, defaults to `''`):
             Use Sharded DDP training from [FairScale](https://github.com/facebookresearch/fairscale) (in distributed
             training only). This is an experimental feature.
 
@@ -419,7 +421,7 @@ class TrainingArguments:
 
             If a string is passed, it will be split on space. If a bool is passed, it will be converted to an empty
             list for `False` and `["simple"]` for `True`.
-        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `False`):
+        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `''`):
             Use PyTorch Distributed Parallel Training (in distributed training only).
 
             A list of options along the following:
@@ -967,7 +969,7 @@ class TrainingArguments:
             )
         },
     )
-    sharded_ddp: str = field(
+    sharded_ddp: Optional[Union[List[ShardedDDPOption], str]] = field(
         default="",
         metadata={
             "help": (
@@ -978,7 +980,7 @@ class TrainingArguments:
             ),
         },
     )
-    fsdp: str = field(
+    fsdp: Optional[Union[List[FSDPOption], str]] = field(
         default="",
         metadata={
             "help": (
@@ -1003,8 +1005,8 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The  value is either a"
-                "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded  json file as `dict`."
+                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The value is either a"
+                "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`."
             )
         },
     )
@@ -1017,11 +1019,11 @@ class TrainingArguments:
             )
         },
     )
-    deepspeed: Optional[str] = field(
+    deepspeed: Optional[Union[str, Dict]] = field(
         default=None,
         metadata={
             "help": (
-                "Enable deepspeed and pass the path to deepspeed json config file (e.g. ds_config.json) or an already"
+                "Enable deepspeed and pass the path to deepspeed json config file (e.g. `ds_config.json`) or an already"
                 " loaded json file as a dict"
             )
         },
@@ -1368,12 +1370,13 @@ class TrainingArguments:
             self.framework == "pt"
             and is_torch_available()
             and (self.device.type != "cuda")
+            and (self.device.type != "npu")
             and (get_xla_device_type(self.device) != "GPU")
             and (self.fp16 or self.fp16_full_eval)
         ):
             raise ValueError(
                 "FP16 Mixed precision training with AMP or APEX (`--fp16`) and FP16 half precision evaluation"
-                " (`--fp16_full_eval`) can only be used on CUDA devices."
+                " (`--fp16_full_eval`) can only be used on CUDA or NPU devices."
             )
 
         if (
@@ -1716,7 +1719,9 @@ class TrainingArguments:
                 )
             AcceleratorState._reset_state(reset_partial_state=True)
         self.distributed_state = None
-        if self.use_cpu:
+        if not self.use_ipex and "ACCELERATE_USE_IPEX" not in os.environ:
+            os.environ["ACCELERATE_USE_IPEX"] = "false"
+        if self.use_cpu or strtobool(os.environ.get("ACCELERATE_USE_CPU", "False")):
             self.distributed_state = PartialState(cpu=True, backend=self.ddp_backend)
             self._n_gpu = 0
         elif is_sagemaker_mp_enabled():
@@ -1769,6 +1774,10 @@ class TrainingArguments:
             elif self.use_cpu:
                 device = torch.device("cpu")
                 self._n_gpu = 0
+            elif is_torch_npu_available():
+                device = torch.device("npu:0")
+                torch.npu.set_device(device)
+                self._n_gpu = 1
             else:
                 # if n_gpu is > 1 we'll use nn.DataParallel.
                 # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`

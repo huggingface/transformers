@@ -21,13 +21,16 @@
 """Tokenization classes for LLaMA."""
 import os
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
+
+if TYPE_CHECKING:
+    from transformers.pipelines.conversational import Conversation
 
 logger = logging.get_logger(__name__)
 
@@ -46,10 +49,23 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 SPIECE_UNDERLINE = "▁"
 
+B_INST, E_INST = "[INST]", "[/INST]"
+B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
+
+# fmt: off
+DEFAULT_SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your\
+answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure\
+that your responses are socially unbiased and positive in nature.
+
+If a question does not make any sense, or is not factually coherent, explain why instead of answering something not\
+correct. If you don't know the answer to a question, please don't share false information."""
+# fmt: on
+
 
 class LlamaTokenizer(PreTrainedTokenizer):
     """
-    Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding.
+    Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as there is
+    no padding token in the original model.
 
     Args:
         vocab_file (`str`):
@@ -314,3 +330,63 @@ class LlamaTokenizer(PreTrainedTokenizer):
             output += [1] * len(bos_token_id + token_ids_1 + eos_token_id)
 
         return output
+
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
+        """Builds the input ids for a conversation.
+        This is the format used in the provided examples. System prompts should be manually added at the beginning of
+        the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
+        ```
+        <bos>[INST] B_SYS SytemPrompt E_SYS Prompt [/INST] Answer <eos>
+        <bos>[INST] Prompt [/INST] Answer <eos>
+        <bos>[INST] Prompt [/INST]
+        ```
+
+        If you want to use your own system prompt, make sure to use both `B_SYS` and `E_SYS` use the following:
+        ```python
+        >>> from transformers import Conversation
+
+        >>> Conversation(
+        ...     "<<SYS>>\n Only answer with emojis, and charades\n<</SYS>>\n\nHow can I build a house in 10 septs?"
+        ... )
+        ```
+        Args:
+            conversation (`Conversation`):
+                Conversation to build input ids for.
+        Returns:
+            `List[int]`:
+                Input ids for the conversation.
+        """
+        dialogue = list(conversation.iter_texts())
+        if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
+            [not is_user for is_user, msg in dialogue[1::2]]
+        ):
+            raise ValueError(
+                "The model only supports 'user' and 'assistant' roles, starting with user and alternating (u/a/u/a/u...)"
+            )
+
+        dialog_tokens: List[int] = []
+        if len(conversation.past_user_inputs) > 0:
+            if not conversation.past_user_inputs[0].startswith(B_SYS) or E_SYS not in conversation.past_user_inputs[0]:
+                conversation.past_user_inputs[0] = (
+                    B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
+                )
+        elif not dialogue[0][1].startswith(B_SYS) or E_SYS not in dialogue[0][1]:
+            dialogue[0] = (dialogue[0][0], B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + dialogue[0][1])
+
+        dialog_tokens += sum(
+            [
+                [self.bos_token_id]
+                + self.encode(
+                    f"{B_INST} {(prompt[1]).strip()} {E_INST} {(answer[1]).strip()} ", add_special_tokens=False
+                )
+                + [self.eos_token_id]
+                for prompt, answer in zip(dialogue[::2], dialogue[1::2])
+            ],
+            [],
+        )
+        if not (dialogue[-1][0]):
+            raise ValueError(f"Last message must be from user, got {dialogue[-1]['role']}")
+        dialog_tokens += [self.bos_token_id] + self.encode(
+            f"{B_INST} {(dialogue[-1][1]).strip()} {E_INST}", add_special_tokens=False
+        )
+        return dialog_tokens
