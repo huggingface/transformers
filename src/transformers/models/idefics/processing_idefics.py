@@ -188,18 +188,20 @@ class IdeficsProcessor(ProcessorMixin):
         encoding_image_processor = self.image_processor(
             real_images, eval_mode=eval_mode, return_tensors=return_tensors
         )
-        print(encoding_image_processor)
+        # print(encoding_image_processor)
         # die
-        print(f"{encoding_image_processor['pixel_values'].shape}")
+        # print(f"{encoding_image_processor['pixel_values'].shape}")
 
         encoding.update(encoding_image_processor)
 
         # XXX: for some reason need to add yet another dimension here?
         encoding["pixel_values"] = encoding["pixel_values"].unsqueeze(0)
 
-        print(encoding_image_processor)
+        # print(encoding_image_processor)
         print(f"{encoding_image_processor['pixel_values'].shape}")
         # die
+
+        print(encoding)
 
         return encoding
 

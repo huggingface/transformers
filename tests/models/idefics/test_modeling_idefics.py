@@ -20,7 +20,6 @@ from datasets import load_dataset
 from packaging import version
 
 from transformers import IdeficsConfig, is_torch_available, is_vision_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
@@ -33,7 +32,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_MAPPING,
         IdeficsForCausalLM,
         IdeficsModel,
     )
@@ -43,14 +41,14 @@ if is_vision_available():
     import PIL
     from PIL import Image
 
-    from transformers import ViltProcessor
+    from transformers import IdeficsProcessor
 
 
 class IdeficsModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=1,
         seq_length=7,
         image_size=30,
         patch_size=2,
@@ -109,26 +107,35 @@ class IdeficsModelTester:
         self.expected_seq_len = self.seq_length + (self.image_size // self.patch_size) ** 2 + 1
 
     def prepare_config_and_inputs(self):
+        self.seq_length = 41
+
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         if self.add_multiple_images:
-            pixel_values = floats_tensor([self.batch_size, 2, self.num_channels, self.image_size, self.image_size])
+            pixel_values = floats_tensor([1, self.batch_size, 2, self.num_channels, self.image_size, self.image_size])
+            num_classes = 2
         else:
-            pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+            pixel_values = floats_tensor([1, self.batch_size, self.num_channels, self.image_size, self.image_size])
+            num_classes = 1
 
         input_mask = None
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+        image_attention_mask = random_attention_mask([self.batch_size, self.seq_length, num_classes])
 
-        if self.use_labels:
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+        # inputs["input_ids"].shape=torch.Size([1, 41])
+        # inputs["attention_mask"].shape=torch.Size([1, 41])
+        # inputs["pixel_values"].shape=torch.Size([1, 2, 3, 30, 30])
+        # inputs["image_attention_mask"].shape=torch.Size([1, 41, 2])
+
+        # input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        # input_mask = random_attention_mask([self.batch_size, self.seq_length])
+        # pixel_values =
+        # image_attention_mask =
 
         config = self.get_config()
 
-        return (config, input_ids, token_type_ids, input_mask, pixel_values, token_labels)
+        return (config, input_ids, input_mask, pixel_values, image_attention_mask)
 
     def get_config(self):
         return IdeficsConfig(
@@ -176,16 +183,15 @@ class IdeficsModelTester:
         (
             config,
             input_ids,
-            token_type_ids,
             input_mask,
             pixel_values,
-            token_labels,
+            image_attention_mask,
         ) = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
-            "token_type_ids": token_type_ids,
             "attention_mask": input_mask,
             "pixel_values": pixel_values,
+            "image_attention_mask": image_attention_mask,
         }
         return config, inputs_dict
 
@@ -250,13 +256,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
 
-            if model_class.__name__ == "IdeficsForImagesAndTextClassification":
-                config.modality_type_vocab_size = 3
-
-            # IdeficsForImageAndTextRetrieval doesn't support training for now
-            if model_class in [*get_values(MODEL_MAPPING), IdeficsForImageAndTextRetrieval]:
-                continue
-
             model = model_class(config)
             model.to(torch_device)
             model.train()
@@ -274,13 +273,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.use_cache = False
             config.return_dict = True
-
-            # IdeficsForImageAndTextRetrieval doesn't support training for now
-            if (
-                model_class in [*get_values(MODEL_MAPPING), IdeficsForImageAndTextRetrieval]
-                or not model_class.supports_gradient_checkpointing
-            ):
-                continue
 
             model = model_class(config)
             model.to(torch_device)
@@ -516,73 +508,14 @@ def prepare_img():
 class IdeficsModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        return ViltProcessor.from_pretrained("dandelin/idefics-b32-finetuned-vqa") if is_vision_available() else None
+        return (
+            IdeficsProcessor.from_pretrained("dandelin/idefics-b32-finetuned-vqa") if is_vision_available() else None
+        )
 
-    @slow
-    def test_inference_masked_lm(self):
-        model = IdeficsForMaskedLM.from_pretrained("HuggingFaceM4/idefics-9b").to(torch_device)
-
-        processor = self.default_processor
-        image = prepare_img()
-        text = "a bunch of [MASK] laying on a [MASK]."
-        inputs = processor(image, text, return_tensors="pt").to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        # verify the logits
-        expected_shape = torch.Size([1, 11, 30522])
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor([-12.5061, -12.5123, -12.5174]).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, 0, :3], expected_slice, atol=1e-4))
-
-        # verify masked token prediction equals "cats"
-        predicted_id = outputs.logits[0, 4, :].argmax(-1).item()
-        assert processor.decode([predicted_id]) == "cats"
-
-    @slow
-    def test_inference_visual_question_answering(self):
-        model = IdeficsForQuestionAnswering.from_pretrained("dandelin/idefics-b32-finetuned-vqa").to(torch_device)
-
-        processor = self.default_processor
-        image = prepare_img()
-        text = "How many cats are there?"
-        inputs = processor(image, text, return_tensors="pt").to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 3129))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor([-15.9495, -18.1472, -10.3041]).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
-
-        # compute loss
-        vqa_labels = [[2, 3, 155, 800]]
-        vqa_scores = [[1.0, 0.3, 0.3, 0.3]]
-        labels = torch.zeros(1, model.config.num_labels).to(torch_device)
-
-        for i, (labels_example, scores_example) in enumerate(zip(vqa_labels, vqa_scores)):
-            for l, s in zip(labels_example, scores_example):
-                labels[i, l] = s
-
-        # forward pass
-        outputs = model(**inputs, labels=labels)
-
-        # verify we have a positive loss
-        self.assertTrue(outputs.loss > 0)
-
+    # XXX: convert to CausalLM
     @slow
     def test_inference_natural_language_visual_reasoning(self):
-        model = IdeficsForImagesAndTextClassification.from_pretrained("dandelin/idefics-b32-finetuned-nlvr2").to(
-            torch_device
-        )
+        model = IdeficsForCausalLM.from_pretrained("dandelin/idefics-b32-finetuned-nlvr2").to(torch_device)
 
         processor = self.default_processor
 

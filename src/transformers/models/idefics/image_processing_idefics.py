@@ -17,7 +17,6 @@
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
-
 import torchvision.transforms as transforms
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
