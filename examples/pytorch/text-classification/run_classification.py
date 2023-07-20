@@ -505,10 +505,8 @@ def main():
         # We will pad later, dynamically at batch creation, to the max sequence length in each batch
         padding = False
 
-    # Some models have set the order of the labels to use, so let's make sure we do use it.
     # for training ,we will update the config with label infos,
     # if do_train is not set, we will use the label infos in the config
-
     if training_args.do_train and not is_regression:  # classification, training
         label_to_id = {v: i for i, v in enumerate(label_list)}
         # update config with label infos
