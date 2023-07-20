@@ -713,7 +713,7 @@ def main():
                     else:
                         item = label_list[item]
                         writer.write(f"{index}\t{item}\n")
-
+        logger.info("Predict results saved at {}".format(output_predict_file))
     kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "text-classification"}
 
     if training_args.push_to_hub:
