@@ -179,8 +179,8 @@ class MptConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`MptModel`]. It is used to instantiate a Mpt model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to the Mpt architecture
-    [bigscience/mpt](https://huggingface.co/bigscience/mpt).
+    defaults will yield a similar configuration to the Mpt-7b architecture
+    [mosaicml/mpt-7b](https://huggingface.co/mosaicml/mpt-7b).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -217,7 +217,7 @@ class MptConfig(PretrainedConfig):
         logit_scale (`float`, *optional*):
             If not None, scale the logits by this value.
         no_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in all layers.
+            Whether to use bias in all linear layers.
         verbose (`int`, *optional*, defaults to 0):
             The verbosity level to use for logging. Used in the previous versions of MPT models for logging. This
             argument is deprecated.
