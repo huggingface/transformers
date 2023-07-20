@@ -76,13 +76,6 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
 
-def get_setup_file():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-f")
-    args = parser.parse_args()
-    return args.f
-
-
 def get_results(output_dir):
     results = {}
     path = os.path.join(output_dir, "all_results.json")
