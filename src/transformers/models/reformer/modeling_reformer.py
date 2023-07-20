@@ -892,10 +892,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         # bucket_idx has shape: BatchSize x NumAttnHeads x NumHashes x SequenceLength
         assert bucket_idx.shape == (
-            
-            batch_size, 
-            self.num_attention_heads, 
-            num_hashes, 
+            batch_size,
+            self.num_attention_heads,
+            num_hashes,
+
             sequence_length,
         ), (
             f"bucket_idx should have shape {(batch_size, self.num_attention_heads, num_hashes, sequence_length)}, but"

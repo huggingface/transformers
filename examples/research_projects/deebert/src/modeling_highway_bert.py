@@ -230,7 +230,7 @@ class DeeBertModel(BertPreTrainedModel):
         pooled_output = self.pooler(sequence_output)
 
         outputs = (
-            sequence_output, 
+            sequence_output,
             pooled_output,
         ) + encoder_outputs[
             1:
