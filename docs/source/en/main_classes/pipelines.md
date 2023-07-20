@@ -302,6 +302,56 @@ That should enable you to do all the custom code you want.
 
 [Implementing a new pipeline](../add_new_pipeline)
 
+## Integration with PEFT library
+
+You can use adapter models that have been trained using the PEFT library with the pipelines. Currently the supported tasks for adapters are:
+
+- `text-generation`
+- `text2text-generation`
+- `question-answering`
+- `token-classification`
+- `feature-extraction`
+
+Make sure to first install the PEFT library:
+
+```bash
+pip install peft
+```
+and double check that you have passed a valid Hub model name with PEFT adapters:
+```python
+from transformers import pipeline
+
+model_id = "ybelkada/opt-350m-lora"
+pipe = pipeline("text-generation", model=model_id)
+
+output = pipe("Hello")
+```
+Or a `PeftModel` to the pipeline:
+```python
+from transformers import pipeline, AutoTokenizer
+from peft import AutoPeftModelForCausalLM
+
+model_id = "ybelkada/opt-350m-lora"
+
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+peft_model = AutoPeftModelForCausalLM.from_pretrained(model_id)
+
+pipe = pipeline("text-generation", peft_model, tokenizer=tokenizer)
+
+output = pipe("Hello")
+```
+You can handle the key word arguments that you want to pass to a `PeftModel` by passing the argument `peft_model_kwargs` to the pipeline:
+
+```python
+from transformers import pipeline
+
+model_id = "ybelkada/opt-350m-lora"
+pipe = pipeline("text-generation", model=model_id, peft_model_kwargs={"adapter_name": "default"})
+
+output = pipe("Hello")
+```
+
+
 ## Audio
 
 Pipelines available for audio tasks include the following.

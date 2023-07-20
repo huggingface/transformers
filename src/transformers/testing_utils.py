@@ -68,6 +68,7 @@ from .utils import (
     is_onnx_available,
     is_optimum_available,
     is_pandas_available,
+    is_peft_available,
     is_phonemizer_available,
     is_pyctcdecode_available,
     is_pytesseract_available,
@@ -419,6 +420,13 @@ def require_torchaudio(test_case):
     Decorator marking a test that requires torchaudio. These tests are skipped when torchaudio isn't installed.
     """
     return unittest.skipUnless(is_torchaudio_available(), "test requires torchaudio")(test_case)
+
+
+def require_peft(test_case):
+    """
+    Decorator marking a test that requires PEFT. These tests are skipped when PEFT isn't installed.
+    """
+    return unittest.skipUnless(is_peft_available(), "test requires PEFT")(test_case)
 
 
 def require_tf(test_case):
