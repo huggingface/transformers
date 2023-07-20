@@ -1148,12 +1148,8 @@ class GenerationMixin:
         if "kwargs" in model_args or "model_kwargs" in model_args:
             model_args |= set(inspect.signature(self.forward).parameters)
 
-        # Generic composite models need information from its 2 components
-        if self.__class__.__name__ in {
-            "EncoderDecoderModel",
-            "VisionEncoderDecoderModel",
-            "SpeechEncoderDecoderModel",
-        }:
+        # Encoder-Decoder models may also need Encoder arguments from `model_kwargs`
+        if self.config.is_encoder_decoder:
             # allow encoder kwargs
             encoder_model_args = set(inspect.signature(self.encoder.forward).parameters)
             model_args |= encoder_model_args
