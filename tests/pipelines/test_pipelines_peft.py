@@ -17,16 +17,18 @@ import unittest
 from transformers.pipelines import pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
-    require_torch,
     require_peft,
+    require_torch,
     slow,
 )
 from transformers.utils import is_peft_available
 
 from .test_pipelines_common import ANY
 
+
 if is_peft_available():
-    from peft import PeftModel, AutoPeftModelForCausalLM
+    from peft import AutoPeftModelForCausalLM, PeftModel
+
 
 @is_pipeline_test
 @slow
@@ -36,6 +38,7 @@ class PeftIntegrationPipelineTests(unittest.TestCase):
     r"""
     Few tests to check if pipeline is compatible with PEFT models.
     """
+
     def test_pipeline_text_generation_with_kwargs(self):
         model_id = "peft-internal-testing/tiny-OPTForCausalLM-lora"
         peft_model_kwargs = {"adapter_name": "default"}
@@ -78,7 +81,6 @@ class PeftIntegrationPipelineTests(unittest.TestCase):
                 {"generated_text": ANY(str)},
             ],
         )
-    
 
     def test_pipeline_question_answering(self):
         model_id = "peft-internal-testing/tiny_OPTForQuestionAnswering-lora"
@@ -122,7 +124,7 @@ class PeftIntegrationPipelineTests(unittest.TestCase):
                 for i in range(len(output))
             ],
         )
-    
+
     def test_pipeline_text2text_generation(self):
         model_id = "peft-internal-testing/tiny_T5ForSeq2SeqLM-lora"
 
@@ -136,7 +138,6 @@ class PeftIntegrationPipelineTests(unittest.TestCase):
                 {"generated_text": ANY(str)},
             ],
         )
-    
 
     def test_pipeline_feature_extraction(self):
         model_id = "peft-internal-testing/tiny_OPTForFeatureExtraction-lora"
@@ -145,4 +146,9 @@ class PeftIntegrationPipelineTests(unittest.TestCase):
         output = pipe("Hello")
 
         self.assertTrue(isinstance(pipe.model, PeftModel))
-        self.assertTrue(isinstance(output, list) and isinstance(output[0], list) and isinstance(output[0][0], list) and isinstance(output[0][0][0], float))
+        self.assertTrue(
+            isinstance(output, list)
+            and isinstance(output[0], list)
+            and isinstance(output[0][0], list)
+            and isinstance(output[0][0][0], float)
+        )
