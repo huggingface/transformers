@@ -115,6 +115,18 @@ Below you can find visualization of inference durations with and without `torch.
 
 <div class="flex">
   <div>
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/torch_compile/a100_batch_comp.png" />
+  </div>
+  <div>
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/torch_compile/v100_batch_comp.png" />
+  </div>
+   <div>
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/torch_compile/t4_batch_comp.png" />
+  </div>
+</div>
+
+<div class="flex">
+  <div>
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/torch_compile/A100_1_duration.png" />
   </div>
   <div>
