@@ -202,9 +202,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         """
         Performs any necessary transformations before tokenization.
 
-        This method should pop the arguments from kwargs and return the remaining `kwargs` as well. We test the
-        `kwargs` at the end of the encoding process to be sure all the arguments have been used.
-
         Args:
             artist (`str`):
                 The artist name to prepare. This will mostly lower the string
@@ -216,8 +213,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 Whether or not the input is already pre-tokenized (e.g., split into words). If set to `True`, the
                 tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
                 which it will tokenize. This is useful for NER or token classification.
-            kwargs:
-                Keyword arguments to use for the tokenization.
         """
         for idx in range(len(self.version)):
             if self.version[idx] == "v3":

@@ -25,6 +25,8 @@ Learn more about the quantization method in the [LLM.int8()](https://arxiv.org/a
 
 Since its `0.39.0` release, you can load any model that supports `device_map` using 4-bit quantization, leveraging FP4 data type.
 
+If you want to quantize your own pytorch model, check out this [documentation](https://huggingface.co/docs/accelerate/main/en/usage_guides/quantization) from 🤗 Accelerate library. 
+
 Here are the things you can do using `bitsandbytes` integration
 
 ### FP4 quantization 
@@ -36,11 +38,21 @@ Make sure that you have installed the requirements below before running any of t
 - Latest `bitsandbytes` library
 `pip install bitsandbytes>=0.39.0`
 
-- Install latest `accelerate` from source
-`pip install git+https://github.com/huggingface/accelerate.git`
+- Install latest `accelerate`
+`pip install --upgrade accelerate`
 
 - Install latest `transformers` from source 
-`pip install git+https://github.com/huggingface/transformers.git`
+`pip install --upgrade transformers`
+
+#### Tips and best practices
+
+- **Advanced usage:** Refer to [this Google Colab notebook](https://colab.research.google.com/drive/1ge2F1QSK8Q7h0hn3YKuBCOAS0bK8E0wf) for advanced usage of 4-bit quantization with all the possible options.
+
+- **Faster inference with `batch_size=1` :** Since the `0.40.0` release of bitsandbytes, for `batch_size=1` you can benefit from fast inference. Check out [these release notes](https://github.com/TimDettmers/bitsandbytes/releases/tag/0.40.0) and make sure to have a version that is greater than `0.40.0` to benefit from this feature out of the box. 
+
+- **Training:** According to [QLoRA paper](https://arxiv.org/abs/2305.14314), for training 4-bit base models (e.g. using LoRA adapters) one should use `bnb_4bit_quant_type='nf4'`. 
+
+- **Inference:** For inference, `bnb_4bit_quant_type` does not have a huge impact on the performance. However for consistency with the model's weights, make sure you use the same `bnb_4bit_compute_dtype` and `torch_dtype` arguments.
 
 #### Load a large model in 4bit
 
@@ -269,4 +281,3 @@ Note that you don't need to pass `device_map` when loading the model for trainin
 ## Quantization with 🤗 `optimum` 
 
 Please have a look at [Optimum documentation](https://huggingface.co/docs/optimum/index) to learn more about quantization methods that are supported by `optimum` and see if these are applicable for your usecase.
-

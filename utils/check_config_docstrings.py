@@ -74,6 +74,9 @@ def check_config_docstrings_have_checkpoints():
     configs_without_checkpoint = []
 
     for config_class in list(CONFIG_MAPPING.values()):
+        # Skip deprecated models
+        if "models.deprecated" in config_class.__module__:
+            continue
         checkpoint = get_checkpoint_from_config_class(config_class)
 
         name = config_class.__name__

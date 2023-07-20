@@ -167,6 +167,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "SpeechT5SpeechEncoder",  # Building part of bigger (tested) model.
     "SpeechT5TextDecoder",  # Building part of bigger (tested) model.
     "SpeechT5TextEncoder",  # Building part of bigger (tested) model.
+    "BarkCausalModel",  # Building part of bigger (tested) model.
+    "BarkModel",  # Does not have a forward signature - generation tested with integration tests
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -188,6 +190,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/vision_text_dual_encoder/test_modeling_tf_vision_text_dual_encoder.py",
     "models/vision_text_dual_encoder/test_modeling_flax_vision_text_dual_encoder.py",
     "models/decision_transformer/test_modeling_decision_transformer.py",
+    "models/bark/test_modeling_bark.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
@@ -332,11 +335,15 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "AltCLIPVisionModel",
     "AltRobertaModel",
     "TvltForAudioVisualClassification",
+    "BarkCausalModel",
+    "BarkCoarseModel",
+    "BarkFineModel",
+    "BarkSemanticModel",
+    "MusicgenModel",
+    "MusicgenForConditionalGeneration",
     "SpeechT5ForSpeechToSpeech",
     "SpeechT5ForTextToSpeech",
     "SpeechT5HifiGan",
-    "MusicgenModel",
-    "MusicgenForConditionalGeneration",
 ]
 
 # DO NOT edit this list!
@@ -400,6 +407,8 @@ def check_model_list():
     models_dir = os.path.join(PATH_TO_TRANSFORMERS, "models")
     _models = []
     for model in os.listdir(models_dir):
+        if model == "deprecated":
+            continue
         model_dir = os.path.join(models_dir, model)
         if os.path.isdir(model_dir) and "__init__.py" in os.listdir(model_dir):
             _models.append(model)
@@ -445,6 +454,8 @@ def get_model_modules():
     ]
     modules = []
     for model in dir(transformers.models):
+        if model == "deprecated":
+            continue
         # There are some magic dunder attributes in the dir, we ignore them
         if not model.startswith("__"):
             model_module = getattr(transformers.models, model)
@@ -767,6 +778,8 @@ def check_objects_being_equally_in_main_init():
         obj = getattr(transformers, attr)
         if hasattr(obj, "__module__"):
             module_path = obj.__module__
+            if "models.deprecated" in module_path:
+                continue
             module_name = module_path.split(".")[-1]
             module_dir = ".".join(module_path.split(".")[:-1])
             if (
@@ -914,6 +927,12 @@ UNDOCUMENTED_OBJECTS = [
     "logging",  # External module
     "requires_backends",  # Internal function
     "AltRobertaModel",  # Internal module
+    "FalconConfig",  # TODO Matt Remove this and re-add the docs once TGI is ready
+    "FalconForCausalLM",
+    "FalconForQuestionAnswering",
+    "FalconForSequenceClassification",
+    "FalconForTokenClassification",
+    "FalconModel",
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
@@ -1064,6 +1083,32 @@ def check_docstrings_are_in_md():
         )
 
 
+def check_deprecated_constant_is_up_to_date():
+    deprecated_folder = os.path.join(PATH_TO_TRANSFORMERS, "models", "deprecated")
+    deprecated_models = [m for m in os.listdir(deprecated_folder) if not m.startswith("_")]
+
+    constant_to_check = transformers.models.auto.configuration_auto.DEPRECATED_MODELS
+    message = []
+    missing_models = sorted(set(deprecated_models) - set(constant_to_check))
+    if len(missing_models) != 0:
+        missing_models = ", ".join(missing_models)
+        message.append(
+            "The following models are in the deprecated folder, make sure to add them to `DEPRECATED_MODELS` in "
+            f"`models/auto/configuration_auto.py`: {missing_models}."
+        )
+
+    extra_models = sorted(set(constant_to_check) - set(deprecated_models))
+    if len(extra_models) != 0:
+        extra_models = ", ".join(extra_models)
+        message.append(
+            "The following models are in the `DEPRECATED_MODELS` constant but not in the deprecated folder. Either "
+            f"remove them from the constant or move to the deprecated folder: {extra_models}."
+        )
+
+    if len(message) > 0:
+        raise Exception("\n".join(message))
+
+
 def check_repo_quality():
     """Check all models are properly tested and documented."""
     print("Checking all models are included.")
@@ -1085,6 +1130,8 @@ def check_repo_quality():
     check_all_auto_mappings_importable()
     print("Checking all objects are equally (across frameworks) in the main __init__.")
     check_objects_being_equally_in_main_init()
+    print("Checking the DEPRECATED_MODELS constant is up to date.")
+    check_deprecated_constant_is_up_to_date()
 
 
 if __name__ == "__main__":
