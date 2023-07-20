@@ -17,7 +17,6 @@
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
-import torchvision.transforms as transforms
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import PaddingMode, pad
@@ -31,8 +30,11 @@ from ...image_utils import (
     make_list_of_images,
     valid_images,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, is_torchvision_available, is_vision_available, logging
 
+
+if is_torchvision_available():
+    import torchvision.transforms as transforms
 
 if is_vision_available():
     import PIL
