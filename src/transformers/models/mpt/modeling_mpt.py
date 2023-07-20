@@ -610,6 +610,7 @@ class MptForCausalLM(MptPreTrainedModel):
         past_key_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
         **kwargs,
     ) -> dict:
         # only last token for input_ids if past is not None
@@ -625,7 +626,7 @@ class MptForCausalLM(MptPreTrainedModel):
         model_inputs.update(
             {
                 "past_key_values": past_key_values,  # NITS should it be layer_past?
-                "use_cache": kwargs.get("use_cache"),
+                "use_cache": use_cache,
                 "attention_mask": attention_mask,
             }
         )
