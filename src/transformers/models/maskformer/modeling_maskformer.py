@@ -407,7 +407,7 @@ class DetrAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper.
 
-    Here, we add position embeddings to the queries and keys (as explained in the DETR paper).
+    Here, we add object_queries to the queries and keys (as explained in the DETR paper).
     """
 
     def __init__(
@@ -437,16 +437,16 @@ class DetrAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
         return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
-        return tensor if position_embeddings is None else tensor + position_embeddings
+    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Optional[Tensor]):
+        return tensor if object_queries is None else tensor + object_queries
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        object_queries: Optional[torch.Tensor] = None,
         key_value_states: Optional[torch.Tensor] = None,
-        key_value_position_embeddings: Optional[torch.Tensor] = None,
+        spatial_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -456,15 +456,15 @@ class DetrAttention(nn.Module):
         is_cross_attention = key_value_states is not None
         batch_size, target_len, embed_dim = hidden_states.size()
 
-        # add position embeddings to the hidden states before projecting to queries and keys
-        if position_embeddings is not None:
+        # add object_queries to the hidden states before projecting to queries and keys
+        if object_queries is not None:
             hidden_states_original = hidden_states
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = self.with_pos_embed(hidden_states, object_queries)
 
-        # add key-value position embeddings to the key value states
-        if key_value_position_embeddings is not None:
+        # add key-value object_queries to the key value states
+        if spatial_position_embeddings is not None:
             key_value_states_original = key_value_states
-            key_value_states = self.with_pos_embed(key_value_states, key_value_position_embeddings)
+            key_value_states = self.with_pos_embed(key_value_states, spatial_position_embeddings)
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -563,7 +563,7 @@ class DetrDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        object_queries: Optional[torch.Tensor] = None,
         query_position_embeddings: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
@@ -575,11 +575,11 @@ class DetrDecoderLayer(nn.Module):
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
-            position_embeddings (`torch.FloatTensor`, *optional*):
-                position embeddings that are added to the queries and keys
+            object_queries (`torch.FloatTensor`, *optional*):
+                object_queries that are added to the hidden states
             in the cross-attention layer.
             query_position_embeddings (`torch.FloatTensor`, *optional*):
-                position embeddings that are added to the queries and keys
+                object_queries that are added to the queries and keys
             in the self-attention layer.
             encoder_hidden_states (`torch.FloatTensor`):
                 cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -595,7 +595,7 @@ class DetrDecoderLayer(nn.Module):
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=query_position_embeddings,
+            object_queries=query_position_embeddings,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
         )
@@ -611,10 +611,10 @@ class DetrDecoderLayer(nn.Module):
 
             hidden_states, cross_attn_weights = self.encoder_attn(
                 hidden_states=hidden_states,
-                position_embeddings=query_position_embeddings,
+                object_queries=query_position_embeddings,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                key_value_position_embeddings=position_embeddings,
+                spatial_position_embeddings=object_queries,
                 output_attentions=output_attentions,
             )
 
@@ -662,7 +662,7 @@ class DetrDecoder(nn.Module):
 
     Some small tweaks for DETR:
 
-    - position_embeddings and query_position_embeddings are added to the forward pass.
+    - object_queries and query_position_embeddings are added to the forward pass.
     - if self.config.auxiliary_loss is set to True, also returns a stack of activations from all decoding layers.
 
     Args:
@@ -687,7 +687,7 @@ class DetrDecoder(nn.Module):
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        position_embeddings=None,
+        object_queries=None,
         query_position_embeddings=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -715,7 +715,7 @@ class DetrDecoder(nn.Module):
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Position embeddings that are added to the queries and keys in each cross-attention layer.
             query_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
                 , *optional*): Position embeddings that are added to the queries and keys in each self-attention layer.
@@ -788,7 +788,7 @@ class DetrDecoder(nn.Module):
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=combined_attention_mask,
-                    position_embeddings=position_embeddings,
+                    object_queries=object_queries,
                     query_position_embeddings=query_position_embeddings,
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
@@ -1418,23 +1418,23 @@ class MaskFormerTransformerModule(nn.Module):
     ) -> DetrDecoderOutput:
         if self.input_projection is not None:
             image_features = self.input_projection(image_features)
-        position_embeddings = self.position_embedder(image_features)
+        object_queries = self.position_embedder(image_features)
         # repeat the queries "q c -> b q c"
         batch_size = image_features.shape[0]
         queries_embeddings = self.queries_embedder.weight.unsqueeze(0).repeat(batch_size, 1, 1)
         inputs_embeds = torch.zeros_like(queries_embeddings, requires_grad=True)
 
         batch_size, num_channels, height, width = image_features.shape
-        # rearrange both image_features and position_embeddings "b c h w -> b (h w) c"
+        # rearrange both image_features and object_queries "b c h w -> b (h w) c"
         image_features = image_features.view(batch_size, num_channels, height * width).permute(0, 2, 1)
-        position_embeddings = position_embeddings.view(batch_size, num_channels, height * width).permute(0, 2, 1)
+        object_queries = object_queries.view(batch_size, num_channels, height * width).permute(0, 2, 1)
 
         decoder_output: DetrDecoderOutput = self.decoder(
             inputs_embeds=inputs_embeds,
             attention_mask=None,
             encoder_hidden_states=image_features,
             encoder_attention_mask=None,
-            position_embeddings=position_embeddings,
+            object_queries=object_queries,
             query_position_embeddings=queries_embeddings,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
