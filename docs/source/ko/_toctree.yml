@@ -128,8 +128,8 @@
     - local: in_translation
       title: (번역중) Inference on Specialized Hardware
     - local: in_translation
-      title: (번역중) Custom hardware for training
-    - local: in_translation
+      title: 훈련용 맞춤 하드웨어
+    - local: perf_hardware
       title: (번역중) Instantiating a big model
     - local: in_translation
       title: (번역중) Debugging
