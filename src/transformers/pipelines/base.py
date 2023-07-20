@@ -866,6 +866,9 @@ class Pipeline(_ScikitCompat):
         if self.feature_extractor is not None:
             self.feature_extractor.save_pretrained(save_directory)
 
+        if self.processor is not None:
+            self.processor.save_pretrained(save_directory)
+
         if self.modelcard is not None:
             self.modelcard.save_pretrained(save_directory)
 
@@ -1048,9 +1051,19 @@ class Pipeline(_ScikitCompat):
         if "TOKENIZERS_PARALLELISM" not in os.environ:
             logger.info("Disabling tokenizer parallelism, we're using DataLoader multithreading already")
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+        tokenizer = self.tokenizer
+
         # TODO hack by collating feature_extractor and image_processor
         feature_extractor = self.feature_extractor if self.feature_extractor is not None else self.image_processor
-        collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, feature_extractor)
+
+        # TODO hack if processor exists by using the processor tokenizer and/or feature extractor
+        if feature_extractor is None and self.processor.feature_extractor_class is not None:
+            feature_extractor = self.processor.feature_extractor
+        if tokenizer is None and self.processor.tokenizer_class is not None:
+            tokenizer = self.processor.tokenizer
+
+        collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(tokenizer, feature_extractor)
         dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn=collate_fn)
         model_iterator = PipelineIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size)
         final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)

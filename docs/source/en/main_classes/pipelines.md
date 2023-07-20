@@ -318,6 +318,13 @@ Pipelines available for audio tasks include the following.
     - __call__
     - all
 
+### TextToSpeechPipeline
+
+[[autodoc]] TextToSpeechPipeline
+    - __call__
+    - all
+
+
 ### ZeroShotAudioClassificationPipeline
 
 [[autodoc]] ZeroShotAudioClassificationPipeline
