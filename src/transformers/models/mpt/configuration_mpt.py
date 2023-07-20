@@ -49,7 +49,7 @@ class MptAttentionConfig(PretrainedConfig):
             The dropout probability for the attention layers.
         attn_impl (`str`, *optional*, defaults to `"torch"`):
             The attention implementation to use. One of `"torch"`, `"flash"`, or `"triton"`.
-        clip_qkv (`float`, *optional*, defaults to `None`):
+        clip_qkv (`float`, *optional*):
             If not `None`, clip the queries, keys, and values in the attention layer to this value.
         softmax_scale (`float`, *optional*, defaults to `None`):
             If not `None`, scale the softmax in the attention layer by this value. If `None`, will default to
