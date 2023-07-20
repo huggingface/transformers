@@ -161,9 +161,9 @@ class MptAttention(nn.Module):
 
         attention_scores = torch.matmul(query_states, key_states.transpose(-1, -2)) * self.softmax_scale
 
-        query_length = seq_length
+        kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            query_length += past_key_value[0].shape[2]
+            kv_seq_len += past_key_value[0].shape[-2]
 
         if position_bias is not None:
             if len(position_bias.shape) != 3:
@@ -171,7 +171,7 @@ class MptAttention(nn.Module):
             key_length = key_states.shape[-2]
 
             position_bias_query_index = max(0, position_bias.size(1) - query_length)
-            position_bias_key_index = max(0, position_bias.size(2) - key_length)
+            position_bias_key_index = max(0, position_bias.size(2) - kv_seq_len)
 
             position_bias = position_bias[:, position_bias_query_index:, position_bias_key_index:]
 
