@@ -461,16 +461,16 @@ class TableTransformerAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
         return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Optional[Tensor]):
-        return tensor if object_queries is None else tensor + object_queries
+    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+        return tensor if position_embeddings is None else tensor + position_embeddings
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        object_queries: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
         key_value_states: Optional[torch.Tensor] = None,
-        spatial_position_embeddings: Optional[torch.Tensor] = None,
+        key_value_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -481,14 +481,14 @@ class TableTransformerAttention(nn.Module):
         batch_size, target_len, embed_dim = hidden_states.size()
 
         # add position embeddings to the hidden states before projecting to queries and keys
-        if object_queries is not None:
+        if position_embeddings is not None:
             hidden_states_original = hidden_states
-            hidden_states = self.with_pos_embed(hidden_states, object_queries)
+            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
 
         # add key-value position embeddings to the key value states
-        if spatial_position_embeddings is not None:
+        if key_value_position_embeddings is not None:
             key_value_states_original = key_value_states
-            key_value_states = self.with_pos_embed(key_value_states, spatial_position_embeddings)
+            key_value_states = self.with_pos_embed(key_value_states, key_value_position_embeddings)
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -962,7 +962,7 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
 
     Some small tweaks for TABLE_TRANSFORMER:
 
-    - object_queries and query_position_embeddings are added to the forward pass.
+    - position_embeddings and query_position_embeddings are added to the forward pass.
     - if self.config.auxiliary_loss is set to True, also returns a stack of activations from all decoding layers.
 
     Args:
@@ -988,7 +988,7 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        object_queries=None,
+        position_embeddings=None,
         query_position_embeddings=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1016,11 +1016,10 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Object queries that are added to the queries and keys in each cross-attention layer.
+            position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Position embeddings that are added to the queries and keys in each cross-attention layer.
             query_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                , *optional*): Position embeddings that are added to the values and keys in each self-attention layer.
-
+                , *optional*): Position embeddings that are added to the queries and keys in each self-attention layer.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1092,7 +1091,7 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=combined_attention_mask,
-                    object_queries=object_queries,
+                    position_embeddings=position_embeddings,
                     query_position_embeddings=query_position_embeddings,
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
@@ -1151,8 +1150,8 @@ class TableTransformerModel(TableTransformerPreTrainedModel):
 
         # Create backbone + positional encoding
         backbone = TableTransformerConvEncoder(config)
-        object_queries = build_position_encoding(config)
-        self.backbone = TableTransformerConvModel(backbone, object_queries)
+        position_embeddings = build_position_encoding(config)
+        self.backbone = TableTransformerConvModel(backbone, position_embeddings)
 
         # Create projection layer
         self.input_projection = nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1)
