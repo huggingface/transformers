@@ -335,6 +335,8 @@
         title: LED
       - local: model_doc/llama
         title: LLaMA
+      - local: model_doc/llama2
+        title: Llama2
       - local: model_doc/longformer
         title: Longformer
       - local: model_doc/longt5
@@ -472,6 +474,8 @@
         title: DETR
       - local: model_doc/dinat
         title: DiNAT
+      - local: model_doc/dinov2
+        title: DINO V2
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
@@ -545,6 +549,8 @@
       sections:
       - local: model_doc/audio-spectrogram-transformer
         title: Audio Spectrogram Transformer
+      - local: model_doc/bark
+        title: Bark
       - local: model_doc/clap
         title: CLAP
       - local: model_doc/encodec
