@@ -135,11 +135,25 @@ class IdeficsProcessor(ProcessorMixin):
         **kwargs,
     ) -> BatchEncoding:
         """
+
         This method uses [`IdeficsImageProcessor.__call__`] method to prepare image(s) for the model, and
         [`LlamaTokenizerFast.__call__`] to prepare text for the model.
 
         Please refer to the docstring of the above two methods for more information.
+
+        Additional documentation about `texts` and `images` arguments:
+
+        `images` could be either images or urls or `None`s - urls will be automatically converted to images.
+
+        When generating the prompt `texts` and `images` will be interleaved (zipped) as following: `texts[0]`,
+        `images[0]`, `texts[1]`, `images[1]`, etc.. `texts` will be first. If any of the entries in either of the lists
+        is to be skipped insert a `None`. If the image entry is not `None`, the same
+        `<fake_token_around_image><image><fake_token_around_image>` entry will be inserted.
+
         """
+
+        # convert any potential urls into images
+        images = self.image_processor.fetch_images(images)
 
         # texts and images are interleaved
         # a. texts is an array of texts and Nones and they come first
@@ -148,8 +162,6 @@ class IdeficsProcessor(ProcessorMixin):
 
         # the model was trained on samples starting with <s>
         full_text = f"{self.tokenizer.bos_token}"
-
-        images = self.image_processor.fetch_images(images)
 
         real_images = []
         for text, image in zip(texts, images):
