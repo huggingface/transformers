@@ -30,7 +30,7 @@ the `token_ids` with the help of those latent representation. After that Pop2Pia
 `token_ids` to MIDI tokens and with the help of the `pretty_midi` library, we generate MIDI files(Piano covers). 
 For your reliance we have bundled the `Pop2PianoFeatureExtractor` and `Pop2PianoTokenizer` into a single class `Pop2PianoProcessor`. 
 
-Feel free to try it on your favourite music! We have included variety of examples down below in case.
+Feel free to try it on your favourite music! We have included variety of examples down below.
 
 
 The abstract from the paper is the following:
