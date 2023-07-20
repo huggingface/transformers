@@ -18,8 +18,6 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-# from m4.training.packing import image_attention_mask_for_packed_input_ids, incremental_to_binary_attention_mask
-# from m4.training.utils import build_image_transform
 import torchvision.transforms as transforms
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
