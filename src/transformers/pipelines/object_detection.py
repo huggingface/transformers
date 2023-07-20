@@ -56,11 +56,9 @@ class ObjectDetectionPipeline(Pipeline):
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
         requires_backends(self, "vision")
-        self.check_model_type(
-            dict(
-                MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES.items() + MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES.items()
-            )
-        )
+        mapping = MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES.copy()
+        mapping.update(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES)
+        self.check_model_type(mapping)
 
     def _sanitize_parameters(self, **kwargs):
         postprocess_kwargs = {}

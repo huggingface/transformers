@@ -122,17 +122,13 @@ class TableQuestionAnsweringPipeline(Pipeline):
         super().__init__(*args, **kwargs)
         self._args_parser = args_parser
 
-        self.check_model_type(
-            dict(
-                TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES.items()
-                + TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES.items()
-            )
-            if self.framework == "tf"
-            else dict(
-                MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES.items()
-                + MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES.items()
-            )
-        )
+        if self.framework == "tf":
+            mapping = TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES.copy()
+            mapping.update(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES)
+        else:
+            mapping = MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES.copy()
+            mapping.update(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES)
+        self.check_model_type(mapping)
 
         self.aggregate = bool(getattr(self.model.config, "aggregation_labels", None)) and bool(
             getattr(self.model.config, "num_aggregation_labels", None)

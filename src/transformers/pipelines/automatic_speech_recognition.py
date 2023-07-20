@@ -220,9 +220,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         if self.framework == "tf":
             raise ValueError("The AutomaticSpeechRecognitionPipeline is only available in PyTorch.")
 
-        self.check_model_type(
-            dict(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES.items() + MODEL_FOR_CTC_MAPPING_NAMES.items())
-        )
+        mapping = MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES.copy()
+        mapping.update(MODEL_FOR_CTC_MAPPING_NAMES)
+        self.check_model_type(mapping)
 
     def __call__(
         self,
