@@ -20,7 +20,7 @@ Transformers와 관련하여 어떤 도구와 에이전트가 있는지 잘 모�
 
 <Tip warning={true}>
 
-Transformers Agent는 실험 중인 API로 언제든지 변경될 수 있습니다. 
+Transformers Agents는 실험 중인 API로 언제든지 변경될 수 있습니다. 
 API 또는 기반 모델이 변경되기 쉽기 때문에 에이전트가 반환하는 결과도 달라질 수 있습니다.
 
 </Tip>
