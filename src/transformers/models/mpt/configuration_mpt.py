@@ -102,79 +102,6 @@ class MptAttentionConfig(PretrainedConfig):
             )
 
 
-class MptIntializerConfig(PretrainedConfig):
-    """
-    This is the configuration class to store the configuration of the initialization parameters of the Mpt
-    architecture. It is used to instantiate model weights according to the specified arguments, with respect to the
-    original implementation. Instantiating a configuration with the defaults will yield a similar configuration to that
-    of the MPT [mosaicml/mpt-7b](https://huggingface.co/mosaicml/mpt-7b) architecture. Most of the arguments are kept
-    for backward compatibility with previous MPT models that are hosted on the Hub (previously with
-    `trust_remote_code=True`).
-
-
-    Args:
-        name (`str`, *optional*, defaults to `"kaiming_normal_"`):
-            The parameter initialization scheme to use. Options: `'default_'`, `'baseline_'`, `'kaiming_uniform_'`,
-            `'kaiming_normal_'`, `'neox_init_'`, `'small_init_'`, `'xavier_uniform_'`, or `'xavier_normal_'`.
-        init_div_is_residual (`bool`, *optional*, defaults to `True`):
-            Value to divide initial weights by if `module._is_residual` is True.
-        emb_init_std (`float`, *optional*, defaults to `None`):
-            The standard deviation of the normal distribution used to initialize the embedding layer.
-        emb_init_uniform_lim (`float`, *optional*, defaults to `None`):
-            The lower and upper limits of the uniform distribution used to initialize the embedding layer. Mutually
-            exclusive with `emb_init_std`.
-        init_std (`float`, *optional*, defaults to `None`):
-            The standard deviation of the normal distribution used to initialize the model, if using the baseline_
-            parameter initialization scheme.
-        init_gain (`float`, *optional*, defaults to 0.0):
-            The gain to use for parameter initialization with kaiming or xavier initialization schemes.
-        fan_mode (`str`, *optional*, defaults to `"fan_in"`):
-            The fan mode to use for parameter initialization with kaiming initialization schemes.
-        init_nonlinearity (`str`, *optional*, defaults to `"relu"`):
-            The nonlinearity to use for parameter initialization with kaiming initialization schemes. See
-            https://github.com/mosaicml/llm-foundry/blob/main/llmfoundry/models/utils/param_init_fns.py for info on
-            other param init config options
-    """
-
-    def __init__(
-        self,
-        name="kaiming_normal_",
-        init_div_is_residual=True,
-        emb_init_std=None,
-        emb_init_uniform_lim=None,
-        init_std=None,
-        init_gain=0.0,
-        fan_mode="fan_in",
-        init_nonlinearity="relu",
-        **kwargs,
-    ):
-        super().__init__()
-
-        self.name = name
-        self.fan_mode = fan_mode
-        self.init_nonlinearity = init_nonlinearity
-        self.init_div_is_residual = init_div_is_residual
-        self.emb_init_std = emb_init_std
-        self.emb_init_uniform_lim = emb_init_uniform_lim
-        self.init_std = init_std
-        self.init_gain = init_gain
-
-        if name not in [
-            "default_",
-            "baseline_",
-            "kaiming_uniform_",
-            "kaiming_normal_",
-            "neox_init_",
-            "small_init_",
-            "xavier_uniform_",
-            "xavier_normal_",
-        ]:
-            raise ValueError(
-                f"`name` has to be either `default_`, `baseline_`, `kaiming_uniform_`, `kaiming_normal_`,"
-                f"`neox_init_`, `small_init_`, `xavier_uniform_`, or `xavier_normal_`. Received: {name}"
-            )
-
-
 class MptConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`MptModel`]. It is used to instantiate a Mpt model
@@ -228,8 +155,6 @@ class MptConfig(PretrainedConfig):
             compatibility.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        init_config (`dict`, *optional*):
-            A dictionary used to configure the model initialization.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
@@ -276,7 +201,6 @@ class MptConfig(PretrainedConfig):
         embedding_fraction: float = 1.0,
         norm_type: str = "low_precision_layernorm",
         use_cache: bool = False,
-        init_config: MptIntializerConfig = None,
         initializer_range=0.02,
         **kwargs,
     ):
@@ -310,17 +234,6 @@ class MptConfig(PretrainedConfig):
                 f"`attn_config` has to be either a `MptAttentionConfig` or a dictionary. Received: {type(attn_config)}"
             )
 
-        if init_config is None:
-            self.init_config = MptIntializerConfig()
-        elif isinstance(init_config, dict):
-            self.init_config = MptIntializerConfig(**init_config)
-        elif isinstance(init_config, MptIntializerConfig):
-            self.init_config = init_config
-        else:
-            raise ValueError(
-                f"`init_config` has to be either a `MptIntializerConfig` or a dictionary. Received: {type(init_config)}"
-            )
-
         super().__init__(**kwargs)
 
     def to_dict(self):
@@ -333,9 +246,6 @@ class MptConfig(PretrainedConfig):
         output = copy.deepcopy(self.__dict__)
         output["attn_config"] = (
             self.attn_config.to_dict() if not isinstance(self.attn_config, dict) else self.attn_config
-        )
-        output["init_config"] = (
-            self.init_config.to_dict() if not isinstance(self.init_config, dict) else self.init_config
         )
         output["model_type"] = self.__class__.model_type
         return output

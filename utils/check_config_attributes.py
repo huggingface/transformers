@@ -101,7 +101,6 @@ SPECIAL_CASES_TO_ALLOW.update(
         # For backward compatibility with trust remote code models
         "MptConfig": True,
         "MptAttentionConfig": True,
-        "MptIntializerConfig": True,
         "NatConfig": True,
         "OneFormerConfig": True,
         "PerceiverConfig": True,
