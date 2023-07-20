@@ -14,30 +14,29 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Instantiating a big model
+# 큰 모델 인스턴스화 [[instantiating-a-big-model]]
 
-When you want to use a very big pretrained model, one challenge is to minimize the use of the RAM. The usual workflow
-from PyTorch is:
+매우 큰 사전 훈련된 모델을 사용하려면, RAM 사용을 최소화하는 것이 도전이 됩니다. 일반적인 PyTorch 작업 흐름은 다음과 같습니다:
 
-1. Create your model with random weights.
-2. Load your pretrained weights.
-3. Put those pretrained weights in your random model.
+1. 무작위 가중치로 모델을 생성합니다.
+2. 사전 훈련된 가중치를 불러옵니다.
+3. 사전 훈련된 가중치를 무작위 모델에 적용합니다.
 
-Step 1 and 2 both require a full version of the model in memory, which is not a problem in most cases, but if your model starts weighing several GigaBytes, those two copies can make you got our of RAM. Even worse, if you are using `torch.distributed` to launch a distributed training, each process will load the pretrained model and store these two copies in RAM.
+1단계와 2단계 모두 메모리에 모델의 전체 버전을 요구하며, 대부분의 경우에는 문제가 없지만 모델이 여러 기가바이트의 용량을 차지하기 시작하면 두 복사본은 RAM을 초과하여 메모리 부족 문제를 야기할 수 있습니다. 더 심각한 문제는 분산 훈련을 위해 `torch.distributed`를 사용하는 경우, 각 프로세스가 사전 훈련된 모델을 로드하고 이 두 복사본을 RAM에 저장한다는 것입니다.
 
-<Tip>
+<팁>
 
-Note that the randomly created model is initialized with "empty" tensors, which take the space in memory without filling it (thus the random values are whatever was in this chunk of memory at a given time). The random initialization following the appropriate distribution for the kind of model/parameters instatiated (like a normal distribution for instance) is only performed after step 3 on the non-initialized weights, to be as fast as possible! 
+무작위로 생성된 모델은 "비어 있는" 텐서로 초기화되며 메모리 공간을 차지하지만 (무작위 값은 주어진 시간에 이 메모리 청크에 있던 내용입니다), 적절한 분포를 따르는 무작위 초기화 (예: 정규 분포)는 오직 3단계에서 비어 있던 가중치에 대해 수행되며 최대한 빠르게 수행됩니다!
 
-</Tip>
+</팁>
 
-In this guide, we explore the solutions Transformers offer to deal with this issue. Note that this is an area of active development, so the APIs explained here may change slightly in the future.
+이 안내서에서는 Transformers가 이 문제를 해결하기 위해 제공하는 솔루션을 살펴봅니다. 주의할 점은 이는 활발히 개발 중인 분야이므로 여기서 설명하는 API가 앞으로 약간 변경될 수 있다는 것입니다.
 
-## Sharded checkpoints
+## 샤드 체크포인트 [[sharded-checkpoints]]
 
-Since version 4.18.0, model checkpoints that end up taking more than 10GB of space are automatically sharded in smaller pieces. In terms of having one single checkpoint when you do `model.save_pretrained(save_dir)`, you will end up with several partial checkpoints (each of which being of size < 10GB) and an index that maps parameter names to the files they are stored in.
+4.18.0 버전 이후, 10GB 이상의 공간을 차지하는 모델 체크포인트는 자동으로 작은 조각들로 샤딩됩니다. `model.save_pretrained(save_dir)`를 실행할 때 하나의 단일 체크포인트를 가지게 될 대신, 여러 부분 체크포인트(각각의 크기는 10GB 미만)와 매개변수 이름을 해당 파일에 매핑하는 인덱스가 생성됩니다.
 
-You can control the maximum size before sharding with the `max_shard_size` parameter, so for the sake of an example, we'll use a normal-size models with a small shard size: let's take a traditional BERT model.
+`max_shard_size` 매개변수로 샤딩 전 최대 크기를 제어할 수 있으므로, 이 예제를 위해 일반 크기의 모델과 작은 샤드 크기를 사용하겠습니다: 전통적인 BERT 모델을 사용해 봅시다.
 
 ```py
 from transformers import AutoModel
@@ -45,7 +44,7 @@ from transformers import AutoModel
 model = AutoModel.from_pretrained("bert-base-cased")
 ```
 
-If you save it using [`~PreTrainedModel.save_pretrained`], you will get a new folder with two files: the config of the model and its weights:
+[`~PreTrainedModel.save_pretrained`]을 사용하여 모델을 저장하면, 모델의 구성과 가중치가 들어있는 두 개의 파일이 있는 새 폴더가 생성됩니다:
 
 ```py
 >>> import os
@@ -57,7 +56,7 @@ If you save it using [`~PreTrainedModel.save_pretrained`], you will get a new fo
 ['config.json', 'pytorch_model.bin']
 ```
 
-Now let's use a maximum shard size of 200MB:
+이제 최대 샤드 크기를 200MB로 사용해 봅시다:
 
 ```py
 >>> with tempfile.TemporaryDirectory() as tmp_dir:
@@ -66,7 +65,7 @@ Now let's use a maximum shard size of 200MB:
 ['config.json', 'pytorch_model-00001-of-00003.bin', 'pytorch_model-00002-of-00003.bin', 'pytorch_model-00003-of-00003.bin', 'pytorch_model.bin.index.json']
 ```
 
-On top of the configuration of the model, we see three different weights files, and an `index.json` file which is our index. A checkpoint like this can be fully reloaded using the [`~PreTrainedModel.from_pretrained`] method:
+모델의 구성에 더해, 세 개의 다른 가중치 파일과 파라미터 이름과 해당 파일의 매핑이 포함된 `index.json` 파일을 볼 수 있습니다. 이러한 체크포인트는 [`~PreTrainedModel.from_pretrained`] 메서드를 사용하여 완전히 다시 로드할 수 있습니다:
 
 ```py
 >>> with tempfile.TemporaryDirectory() as tmp_dir:
@@ -74,9 +73,9 @@ On top of the configuration of the model, we see three different weights files, 
 ...     new_model = AutoModel.from_pretrained(tmp_dir)
 ```
 
-The main advantage of doing this for big models is that during step 2 of the workflow shown above, each shard of the checkpoint is loaded after the previous one, capping the memory usage in RAM to the model size plus the size of the biggest shard.
+큰 모델의 경우 이러한 방식으로 처리하는 주된 장점은 위에서 보여준 흐름의 2단계에서, 각 샤드가 이전 샤드 다음에 로드되므로 메모리 사용량이 모델 크기와 가장 큰 샤드의 크기를 초과하지 않는다는 점입니다.
 
-Behind the scenes, the index file is used to determine which keys are in the checkpoint, and where the corresponding weights are stored. We can load that index like any json and get a dictionary:
+이 인덱스 파일은 키가 체크포인트에 있는지, 그리고 해당 가중치가 어디에 저장되어 있는지를 결정하는 데 사용됩니다. 이 인덱스를 json과 같이 로드하고 딕셔너리를 얻을 수 있습니다:
 
 ```py
 >>> import json
@@ -90,14 +89,14 @@ Behind the scenes, the index file is used to determine which keys are in the che
 dict_keys(['metadata', 'weight_map'])
 ```
 
-The metadata just consists of the total size of the model for now. We plan to add other information in the future:
+메타데이터는 현재 모델의 총 크기만 포함됩니다. 앞으로 다른 정보를 추가할 계획입니다:
 
 ```py
 >>> index["metadata"]
 {'total_size': 433245184}
 ```
 
-The weights map is the main part of this index, which maps each parameter name (as usually found in a PyTorch model `state_dict`) to the file it's stored in:
+가중치 맵은 이 인덱스의 주요 부분으로, 각 매개변수 이름(PyTorch 모델 `state_dict`에서 보통 찾을 수 있는)을 해당 파일에 매핑합니다:
 
 ```py
 >>> index["weight_map"]
@@ -106,7 +105,7 @@ The weights map is the main part of this index, which maps each parameter name (
  ...
 ```
 
-If you want to directly load such a sharded checkpoint inside a model without using [`~PreTrainedModel.from_pretrained`] (like you would do `model.load_state_dict()` for a full checkpoint) you should use [`~modeling_utils.load_sharded_checkpoint`]:
+만약 [`~PreTrainedModel.from_pretrained`]를 사용하지 않고 모델 내에서 이러한 샤드 체크포인트를 직접로드하려면 (전체 체크포인트를 위해 `model.load_state_dict()`를 수행할 것처럼), [`~modeling_utils.load_sharded_checkpoint`]를 사용해야 합니다.
 
 ```py
 >>> from transformers.modeling_utils import load_sharded_checkpoint
@@ -116,8 +115,8 @@ If you want to directly load such a sharded checkpoint inside a model without us
 ...     load_sharded_checkpoint(model, tmp_dir)
 ```
 
-## Low memory loading
+## 저 메모리 로딩 [[low-memory-loading]]
 
-Sharded checkpoints reduce the memory usage during step 2 of the workflow mentioned above, but in order to use that model in a low memory setting, we recommend leveraging our tools based on the Accelerate library.
+샤드 체크포인트는 위에서 언급한 작업 흐름의 2단계에서 메모리 사용량을 줄이지만, 저 메모리 설정에서 모델을 사용하기 위해 우리의 Accelerate 라이브러리를 기반으로 한 도구를 활용하는 것이 좋습니다.
 
-Please read the following guide for more information: [Large model loading using Accelerate](./main_classes/model#large-model-loading)
+더 많은 정보를 위해 다음 가이드를 읽어보세요: [Large model loading using Accelerate](./main_classes/model#large-model-loading)
