@@ -317,7 +317,7 @@ class TableTransformerConvEncoder(nn.Module):
 # Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->TableTransformer
 class TableTransformerConvModel(nn.Module):
     """
-    This module adds 2D object queries to all intermediate feature maps of the convolutional encoder.
+    This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
     """
 
     def __init__(self, conv_encoder, position_embedding):
@@ -431,7 +431,7 @@ class TableTransformerAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper.
 
-    Here, we add object queries to the queries and keys (as explained in the TABLE_TRANSFORMER paper).
+    Here, we add position embeddings to the queries and keys (as explained in the TABLE_TRANSFORMER paper).
     """
 
     def __init__(
@@ -480,12 +480,12 @@ class TableTransformerAttention(nn.Module):
         is_cross_attention = key_value_states is not None
         batch_size, target_len, embed_dim = hidden_states.size()
 
-        # add object queries to the hidden states before projecting to queries and keys
+        # add position embeddings to the hidden states before projecting to queries and keys
         if object_queries is not None:
             hidden_states_original = hidden_states
             hidden_states = self.with_pos_embed(hidden_states, object_queries)
 
-        # add key-value object queries to the key value states
+        # add key-value position embeddings to the key value states
         if spatial_position_embeddings is not None:
             key_value_states_original = key_value_states
             key_value_states = self.with_pos_embed(key_value_states, spatial_position_embeddings)

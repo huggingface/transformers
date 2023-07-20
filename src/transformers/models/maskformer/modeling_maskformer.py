@@ -407,7 +407,7 @@ class DetrAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper.
 
-    Here, we add object_queries to the queries and keys (as explained in the DETR paper).
+    Here, we add position embeddings to the queries and keys (as explained in the DETR paper).
     """
 
     def __init__(
@@ -456,12 +456,12 @@ class DetrAttention(nn.Module):
         is_cross_attention = key_value_states is not None
         batch_size, target_len, embed_dim = hidden_states.size()
 
-        # add object_queries to the hidden states before projecting to queries and keys
+        # add position embeddings to the hidden states before projecting to queries and keys
         if object_queries is not None:
             hidden_states_original = hidden_states
             hidden_states = self.with_pos_embed(hidden_states, object_queries)
 
-        # add key-value object_queries to the key value states
+        # add key-value position embeddings to the key value states
         if spatial_position_embeddings is not None:
             key_value_states_original = key_value_states
             key_value_states = self.with_pos_embed(key_value_states, spatial_position_embeddings)
@@ -579,7 +579,7 @@ class DetrDecoderLayer(nn.Module):
                 object_queries that are added to the hidden states
             in the cross-attention layer.
             query_position_embeddings (`torch.FloatTensor`, *optional*):
-                object_queries that are added to the queries and keys
+                position embeddings that are added to the queries and keys
             in the self-attention layer.
             encoder_hidden_states (`torch.FloatTensor`):
                 cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
