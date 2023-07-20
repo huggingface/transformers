@@ -33,40 +33,39 @@ MPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class MptAttentionConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a [*MptAttention*] class. It is used to instantiate
+    This is the configuration class to store the configuration of a [`MptAttention`] class. It is used to instantiate
     attention layers according to the specified arguments, defining the layers architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MPT
     [mosaicml/mpt-7b](https://huggingface.co/mosaicml/mpt-7b) architecture. Most of the arguments are kept for backward
     compatibility with previous MPT models that are hosted on the Hub (previously with `trust_remote_code=True`).
 
-    Configuration objects inherit from [*PretrainedConfig*] and can be used to control the model outputs. Read the
-    documentation from [*PretrainedConfig*] for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         attn_type (`str`, *optional*, defaults to `"multihead_attention"`):
             type of attention to use. Options: `"multihead_attention"`, `"multiquery_attention"`.
         attn_pdrop (`float`, *optional*, defaults to 0.0):
-            The dropout probability for the attention layers. attn_impl (str): The attention implementation to use. One
-            of 'torch', 'flash', or 'triton'.
+            The dropout probability for the attention layers. 
         attn_impl (`str`, *optional*, defaults to `"torch"`):
             The attention implementation to use. One of `"torch"`, `"flash"`, or `"triton"`.
         clip_qkv (`float`, *optional*, defaults to `None`):
-            If not None, clip the queries, keys, and values in the attention layer to this value.
+            If not `None`, clip the queries, keys, and values in the attention layer to this value.
         softmax_scale (`float`, *optional*, defaults to `None`):
-            If not None, scale the softmax in the attention layer by this value. If None, use the default scale of
+            If not `None`, scale the softmax in the attention layer by this value. If `None`, will default to
             `1/sqrt(hidden_size)`.
         prefix_lm (`bool`, *optional*, defaults to `False`)):
-            Whether the model should operate as a Prefix LM. This requires passing an extra *prefix_mask* argument
+            Whether the model should operate as a Prefix LM. This requires passing an extra `prefix_mask` argument
             which indicates which tokens belong to the prefix. Tokens in the prefix can attend to one another
             bi-directionally. Tokens outside the prefix use causal attention.
         qk_ln (`bool`, *optional*, defaults to `False`):
             Whether to apply layer normalization to the queries and keys in the attention layer.
         attn_uses_sequence_id (`bool`, *optional*, defaults to `False`)):
-            Whether to restrict attention to tokens that have the same sequence_id. When the model is in *train* mode,
-            this requires passing an extra *sequence_id* argument which indicates which sub-sequence each token belongs
-            to. Defaults to `False` meaning any provided *sequence_id* will be ignored.
+            Whether to restrict attention to tokens that have the same token_type_ids. When the model is in `train` mode,
+            this requires passing an extra *token_type_ids* argument which indicates which sub-sequence each token belongs
+            to. Defaults to `False` meaning any provided *token_type_ids* will be ignored.
         alibi (`bool`, *optional*, defaults to `True`):
-            Whether to use the alibi bias instead of position embeddings.
+            Whether or not to use the alibi bias instead of positional embedding.
         alibi_bias_max (`int`, *optional*, defaults to 8):
             The maximum value of the alibi bias.
     """
@@ -112,7 +111,7 @@ class MptIntializerConfig(PretrainedConfig):
         name (`str`, *optional*, defaults to `"kaiming_normal_"`):
             The parameter initialization scheme to use. Options: `'default_'`, `'baseline_'`, `'kaiming_uniform_'`,
             `'kaiming_normal_'`, `'neox_init_'`, `'small_init_'`, `'xavier_uniform_'`, or `'xavier_normal_'`.
-        init_div_is_residual (`bool`, *optional*, defaults to `False`):
+        init_div_is_residual (`bool`, *optional*, defaults to `True`):
             Value to divide initial weights by if `module._is_residual` is True.
         emb_init_std (`float`, *optional*, defaults to `None`):
             The standard deviation of the normal distribution used to initialize the embedding layer.
@@ -190,11 +189,11 @@ class MptConfig(PretrainedConfig):
             The dropout probability for the embedding layer.
         learned_pos_emb (`bool`, *optional*, defaults to `False`):
             Whether to use learned positional embeddings.
-        attn_config (`dict`, *optional*, defaults to `None`):
+        attn_config (`dict`, *optional*):
             A dictionary used to configure the model's attention module.
-        init_device (`str`, *optional*, defaults to `None`):
+        init_device (`str`, *optional*):
             The device to use for parameter initialization. Defined for backward compatibility
-        logit_scale (`float`, *optional*, defaults to `None`):
+        logit_scale (`float`, *optional*):
             If not None, scale the logits by this value.
         no_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in all layers.
@@ -203,12 +202,12 @@ class MptConfig(PretrainedConfig):
             argument is deprecated.
         embedding_fraction (`float`, *optional*, defaults to 1.0):
             The fraction to scale the gradients of the embedding layer by.
-        norm_type (`str`, *optional*, defaults to "low_precision_layernorm"):
+        norm_type (`str`, *optional*, defaults to `"low_precision_layernorm"`):
             Type of layer norm to use. All MPT models uses the same layer norm implementation. Defined for backward
             compatibility.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        init_config (`dict`, *optional*, defaults to `None`):
+        init_config (`dict`, *optional*):
             A dictionary used to configure the model initialization.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -287,7 +286,7 @@ class MptConfig(PretrainedConfig):
             self.attn_config = attn_config
         else:
             raise ValueError(
-                f"`attn_config` has to be either a `MptAttentionConfig` or a dictionary. Received: {attn_config}"
+                f"`attn_config` has to be either a `MptAttentionConfig` or a dictionary. Received: {type(attn_config)}"
             )
 
         if init_config is None:
@@ -298,7 +297,7 @@ class MptConfig(PretrainedConfig):
             self.init_config = init_config
         else:
             raise ValueError(
-                f"`init_config` has to be either a `MptIntializerConfig` or a dictionary. Received: {init_config}"
+                f"`init_config` has to be either a `MptIntializerConfig` or a dictionary. Received: {type(init_config)}"
             )
 
         super().__init__(**kwargs)
