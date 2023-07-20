@@ -86,7 +86,7 @@ from transformers import SegformerImageProcessor, SegformerForSemanticSegmentati
 processor = SegformerImageProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
 model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512").to("cuda")
 model = torch.compile(model)
-inputs = processor(images=image, return_tensors="pt").to("cuda")
+seg_inputs = processor(images=image, return_tensors="pt").to("cuda")
 
 with torch.no_grad():
     _ = model(**seg_inputs)
