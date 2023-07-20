@@ -688,8 +688,9 @@ def main():
 
     if training_args.do_predict:
         logger.info("*** Predict ***")
-        # Removing the `label` columns because it contains -1 and Trainer won't like that.
-        predict_dataset = predict_dataset.remove_columns("label")
+        # Removing the `label` columns if exists because it might contains -1 and Trainer won't like that.
+        if "label" in predict_dataset.features:
+            predict_dataset = predict_dataset.remove_columns("label")
         predictions = trainer.predict(predict_dataset, metric_key_prefix="predict").predictions
         if is_regression:
             predictions = np.squeeze(predictions)
