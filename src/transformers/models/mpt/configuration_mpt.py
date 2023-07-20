@@ -46,7 +46,7 @@ class MptAttentionConfig(PretrainedConfig):
         attn_type (`str`, *optional*, defaults to `"multihead_attention"`):
             type of attention to use. Options: `"multihead_attention"`, `"multiquery_attention"`.
         attn_pdrop (`float`, *optional*, defaults to 0.0):
-            The dropout probability for the attention layers. 
+            The dropout probability for the attention layers.
         attn_impl (`str`, *optional*, defaults to `"torch"`):
             The attention implementation to use. One of `"torch"`, `"flash"`, or `"triton"`.
         clip_qkv (`float`, *optional*, defaults to `None`):
@@ -61,9 +61,9 @@ class MptAttentionConfig(PretrainedConfig):
         qk_ln (`bool`, *optional*, defaults to `False`):
             Whether to apply layer normalization to the queries and keys in the attention layer.
         attn_uses_sequence_id (`bool`, *optional*, defaults to `False`)):
-            Whether to restrict attention to tokens that have the same token_type_ids. When the model is in `train` mode,
-            this requires passing an extra *token_type_ids* argument which indicates which sub-sequence each token belongs
-            to. Defaults to `False` meaning any provided *token_type_ids* will be ignored.
+            Whether to restrict attention to tokens that have the same token_type_ids. When the model is in `train`
+            mode, this requires passing an extra *token_type_ids* argument which indicates which sub-sequence each
+            token belongs to. Defaults to `False` meaning any provided *token_type_ids* will be ignored.
         alibi (`bool`, *optional*, defaults to `True`):
             Whether or not to use the alibi bias instead of positional embedding.
         alibi_bias_max (`int`, *optional*, defaults to 8):
@@ -74,7 +74,7 @@ class MptAttentionConfig(PretrainedConfig):
         self,
         attn_type="multihead_attention",
         attn_pdrop=0,
-        attn_impl="triton",
+        attn_impl="torch",
         clip_qkv=None,
         softmax_scale=None,
         prefix_lm=False,
@@ -95,6 +95,11 @@ class MptAttentionConfig(PretrainedConfig):
         self.alibi = alibi
         self.qk_ln = qk_ln
         self.alibi_bias_max = alibi_bias_max
+
+        if attn_type not in ["multihead_attention", "multiquery_attention"]:
+            raise ValueError(
+                f"`attn_type` has to be either `multihead_attention` or `multiquery_attention`. Received: {attn_type}"
+            )
 
 
 class MptIntializerConfig(PretrainedConfig):
@@ -118,7 +123,7 @@ class MptIntializerConfig(PretrainedConfig):
         emb_init_uniform_lim (`float`, *optional*, defaults to `None`):
             The lower and upper limits of the uniform distribution used to initialize the embedding layer. Mutually
             exclusive with `emb_init_std`.
-        init_std (`float`, *optional*, defaults to 0.02):
+        init_std (`float`, *optional*, defaults to `None`):
             The standard deviation of the normal distribution used to initialize the model, if using the baseline_
             parameter initialization scheme.
         init_gain (`float`, *optional*, defaults to 0.0):
@@ -126,8 +131,9 @@ class MptIntializerConfig(PretrainedConfig):
         fan_mode (`str`, *optional*, defaults to `"fan_in"`):
             The fan mode to use for parameter initialization with kaiming initialization schemes.
         init_nonlinearity (`str`, *optional*, defaults to `"relu"`):
-            The nonlinearity to use for parameter initialization with kaiming initialization schemes. --- See
-            llmfoundry.models.utils.param_init_fns.py for info on other param init config options
+            The nonlinearity to use for parameter initialization with kaiming initialization schemes. See
+            https://github.com/mosaicml/llm-foundry/blob/main/llmfoundry/models/utils/param_init_fns.py for info on
+            other param init config options
     """
 
     def __init__(
@@ -152,6 +158,21 @@ class MptIntializerConfig(PretrainedConfig):
         self.emb_init_uniform_lim = emb_init_uniform_lim
         self.init_std = init_std
         self.init_gain = init_gain
+
+        if name not in [
+            "default_",
+            "baseline_",
+            "kaiming_uniform_",
+            "kaiming_normal_",
+            "neox_init_",
+            "small_init_",
+            "xavier_uniform_",
+            "xavier_normal_",
+        ]:
+            raise ValueError(
+                f"`name` has to be either `default_`, `baseline_`, `kaiming_uniform_`, `kaiming_normal_`,"
+                f"`neox_init_`, `small_init_`, `xavier_uniform_`, or `xavier_normal_`. Received: {name}"
+            )
 
 
 class MptConfig(PretrainedConfig):
