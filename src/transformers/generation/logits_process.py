@@ -193,22 +193,17 @@ class TemperatureLogitsWarper(LogitsWarper):
 
 class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     r"""
-<<<<<<< HEAD
     [`LogitsProcessor`] that prevents the repetition of previous tokens through an exponential penalty. This technique
     shares some similarities with coverage mechanisms and other aimed at reducing repetition. During the text
     generation process, the probability distribution for the next token is determined using a formula that incorporates
     token scores based on their occurrence in the generated sequence. Tokens with higher scores are less likely to be
     selected. The formula can be seen in the original [paper](https://arxiv.org/pdf/1909.05858.pdf). According to the
     paper a penalty of around 1.2 yields a good balance between truthful generation and lack of repetition.
-=======
-    [`LogitsProcessor`] enforcing an exponential penalty on repeated sequences.
->>>>>>> parent of 0275628 (make docs)
 
     Args:
         repetition_penalty (`float`):
             The parameter for repetition penalty. 1.0 means no penalty. See [this
             paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
-<<<<<<< HEAD
 
     Examples:
 
@@ -230,8 +225,6 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     >>> print(tokenizer.batch_decode(biased_ids, skip_special_tokens=True)[0])
     I'm not going to lie, I was really excited about this. It's a great game
     ```
-=======
->>>>>>> parent of 0275628 (make docs)
     """
 
     def __init__(self, penalty: float):
