@@ -17,9 +17,12 @@ import copy
 import json
 import os
 import warnings
+from io import BytesIO
 from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import numpy as np
+import requests
+from PIL import Image
 
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
@@ -483,6 +486,19 @@ class ImageProcessingMixin(PushToHubMixin):
             raise ValueError(f"{auto_class} is not a valid auto class.")
 
         cls._auto_class = auto_class
+
+    def fetch_images(self, url_images):
+        """
+        Any image entries that are a string will be assumed to be a url and fetched and loaded as `PIL.Image`. Any
+        `None` entries will remain as such
+        """
+        images = []
+        for url in url_images:
+            if isinstance(url, str):
+                images.append(Image.open(BytesIO(requests.get(url, stream=True).content)))
+            else:
+                images.append(url)
+        return images
 
 
 class BaseImageProcessor(ImageProcessingMixin):

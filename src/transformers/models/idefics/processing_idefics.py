@@ -149,6 +149,8 @@ class IdeficsProcessor(ProcessorMixin):
         # the model was trained on samples starting with <s>
         full_text = f"{self.tokenizer.bos_token}"
 
+        images = self.image_processor.fetch_images(images)
+
         real_images = []
         for text, image in zip(texts, images):
             if text is not None:
