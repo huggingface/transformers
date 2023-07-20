@@ -39,7 +39,7 @@ We benchmarked `torch.compile` with different computer vision models, tasks, typ
 
 Below you can find the benchmarking code for each task. We warm up the GPU before inference and take the mean time of 300 inferences, using the same image each time.
 
-#### Image Classification with ViT
+### Image Classification with ViT
 
 ```python 
 import torch
