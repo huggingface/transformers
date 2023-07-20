@@ -251,10 +251,12 @@ class DataTrainingArguments:
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, a json or a txt file."
+                if extension not in ["csv", "json", "txt"]:
+                    raise ValueError("train_file` should be a csv, json or text file.")
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
+                if extension not in ["csv", "json", "txt"]:
+                    raise ValueError("`validation_file` should be a csv, json or text file.")
 
 
 class TrainState(train_state.TrainState):
