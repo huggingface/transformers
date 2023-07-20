@@ -16,6 +16,23 @@ specific language governing permissions and limitations under the License.
 
 The Pop2Piano model was proposed in [Pop2Piano : Pop Audio-based Piano Cover Generation](https://arxiv.org/abs/2211.00895) by Jongho Choi and Kyogu Lee.
 
+Piano covers of pop music are one of the widely enjoyed forms of music. But generating a Piano cover from a music is not 
+a trivial task, it requires great expertise with playing Piano as well as knowing different characteristics and melodies 
+of a song. For these reasons it is very difficult for anyone to create Piano covers for their favourite music.
+
+Don't worry, Pop2Piano got you covered! 
+
+Pop2Piano is an encoder-decoder Transformer model based on [T5](https://arxiv.org/pdf/1910.10683.pdf). It is the first model to 
+directly generate a piano cover from pop audio without melody and chord extraction modules. Pop2Piano has a
+Feature Extractor which converts the provided audio file to `log-mel-spectrogram` representation. The encoder 
+part of the Pop2Piano model takes those values and converts them to a latent representation and the decoder generates 
+the `token_ids` with the help of those latent representation. After that Pop2Piano Tokenizer converts those generated 
+`token_ids` to MIDI tokens and with the help of the `pretty_midi` library, we generate MIDI files(Piano covers). 
+For your reliance we have bundled the `Pop2PianoFeatureExtractor` and `Pop2PianoTokenizer` into a single class `Pop2PianoProcessor`. 
+
+Feel free to try it on your favourite music! We have included variety of examples down below in case.
+
+
 The abstract from the paper is the following:
 
 *Piano covers of pop music are enjoyed by many people. However, the
@@ -53,18 +70,17 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 
 ```python
 >>> from datasets import load_dataset
->>> from transformers import Pop2PianoForConditionalGeneration, Pop2PianoTokenizer, Pop2PianoFeatureExtractor
+>>> from transformers import Pop2PianoForConditionalGeneration, Pop2PianoProcessor
 
 >>> model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
->>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
->>> tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
+>>> processor = Pop2PianoProcessor.from_pretrained("sweetcocoa/pop2piano")
 >>> ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
 
->>> feature_extractor_output = feature_extractor(
+>>> feature_extractor_output = processor.feature_extractor(
 ...     audio=ds["audio"][0]["array"], sampling_rate=ds["audio"][0]["sampling_rate"], return_tensors="pt"
 ... )
 >>> model_output = model.generate(input_features=feature_extractor_output["input_features"], composer="composer1")
->>> tokenizer_output = tokenizer(
+>>> tokenizer_output = processor.tokenizer(
 ...     token_ids=model_output, feature_extractor_output=feature_extractor_output, return_midi=True
 ... )["pretty_midi_objects"][0]
 >>> tokenizer_output.write("./Outputs/midi_output.mid")
@@ -74,16 +90,15 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 
 ```python
 >>> import librosa
->>> from transformers import Pop2PianoFeatureExtractor, Pop2PianoForConditionalGeneration, Pop2PianoTokenizer
+>>> from transformers import Pop2PianoForConditionalGeneration, Pop2PianoProcessor
 
 >>> audio, sr = librosa.load("<your_audio_file_here>", sr=44100)  # feel free to change the sr to a suitable value.
 >>> model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
->>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
->>> tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
+>>> processor = Pop2PianoProcessor.from_pretrained("sweetcocoa/pop2piano")
 
->>> feature_extractor_output = feature_extractor(audio=audio, sampling_rate=sr, return_tensors="pt")
+>>> feature_extractor_output = processor.feature_extractor(audio=audio, sampling_rate=sr, return_tensors="pt")
 >>> model_output = model.generate(input_features=feature_extractor_output["input_features"], composer="composer1")
->>> tokenizer_output = tokenizer(
+>>> tokenizer_output = processor.tokenizer(
 ...     token_ids=model_output, feature_extractor_output=feature_extractor_output, return_midi=True
 ... )["pretty_midi_objects"][0]
 >>> tokenizer_output.write("./Outputs/midi_output.mid")
@@ -93,7 +108,36 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 
 ```python
 >>> import librosa
->>> from transformers import Pop2PianoFeatureExtractor, Pop2PianoForConditionalGeneration, Pop2PianoTokenizer
+>>> from transformers import Pop2PianoForConditionalGeneration, Pop2PianoProcessor
+
+>>> # feel free to change the sr to a suitable value.
+>>> audio1, sr1 = librosa.load("<your_first_audio_file_here>", sr=44100)  
+>>> audio2, sr2 = librosa.load("<your_second_audio_file_here>", sr=44100)
+>>> model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
+>>> processor = Pop2PianoProcessor.from_pretrained("sweetcocoa/pop2piano")
+
+>>> feature_extractor_output = processor.feature_extractor(audio=[audio1, audio2], sampling_rate=[sr1, sr2], return_tensors="pt")
+>>> # Since we now generating in batch(2 audios) we must pass the attention_mask
+>>> model_output = model.generate(
+...     input_features=feature_extractor_output["input_features"],
+...     attention_mask=feature_extractor_output["attention_mask"],
+...     composer="composer1",
+... )
+>>> tokenizer_output = processor.tokenizer(
+...     token_ids=model_output, feature_extractor_output=feature_extractor_output, return_midi=True
+... )["pretty_midi_objects"]
+
+>>> # Since we now have 2 generated MIDI files
+>>> tokenizer_output[0].write("./Outputs/midi_output1.mid")
+>>> tokenizer_output[1].write("./Outputs/midi_output2.mid")
+```
+
+
+- Example of processing multiple audio files in batch (Using `Pop2PianoFeatureExtractor` and `Pop2PianoTokenizer`):
+
+```python
+>>> import librosa
+>>> from transformers import Pop2PianoForConditionalGeneration, Pop2PianoFeatureExtractor, Pop2PianoTokenizer
 
 >>> # feel free to change the sr to a suitable value.
 >>> audio1, sr1 = librosa.load("<your_first_audio_file_here>", sr=44100)  
@@ -117,6 +161,7 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 >>> tokenizer_output[0].write("./Outputs/midi_output1.mid")
 >>> tokenizer_output[1].write("./Outputs/midi_output2.mid")
 ```
+
 
 ## Pop2PianoConfig
 

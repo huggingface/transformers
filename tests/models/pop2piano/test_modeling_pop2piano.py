@@ -46,7 +46,7 @@ if is_torch_available():
     from transformers.pytorch_utils import is_torch_1_8_0
 
 else:
-    is_torch_1_8_0 = True
+    is_torch_1_8_0 = False
 
 
 @require_torch
@@ -702,13 +702,15 @@ class Pop2PianoModelIntegrationTests(unittest.TestCase):
     @require_scipy
     def test_full_model_integration(self):
         if is_librosa_available() and is_scipy_available() and is_essentia_available() and is_torch_available():
-            from transformers import Pop2PianoFeatureExtractor
+            from transformers import Pop2PianoProcessor
 
             speech_input1 = np.zeros([1_000_000], dtype=np.float32)
             sampling_rate = 44_100
 
-            feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
-            input_features = feature_extractor(speech_input1, sampling_rate=sampling_rate, return_tensors="pt")
+            processor = Pop2PianoProcessor.from_pretrained("sweetcocoa/pop2piano")
+            input_features = processor.feature_extractor(
+                speech_input1, sampling_rate=sampling_rate, return_tensors="pt"
+            )
 
             model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
             outputs = model.generate(

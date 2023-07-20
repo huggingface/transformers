@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import shutil
 import tempfile
 import unittest
 
@@ -71,6 +72,9 @@ class Pop2PianoProcessorTest(unittest.TestCase):
 
     def get_feature_extractor(self, **kwargs):
         return Pop2PianoFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdirname)
 
     def test_save_load_pretrained_additional_features(self):
         processor = Pop2PianoProcessor(

@@ -17,24 +17,31 @@
 import copy
 from typing import List, Optional, Union
 
-import librosa
 import numpy
 import numpy as np
-import scipy
 
 from ...audio_utils import mel_filter_bank, spectrogram
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import TensorType, is_essentia_available, logging, requires_backends
+from ...utils import (
+    TensorType,
+    is_essentia_available,
+    is_librosa_available,
+    is_scipy_available,
+    logging,
+    requires_backends,
+)
 
 
 if is_essentia_available():
     import essentia
     import essentia.standard
-else:
-    raise ModuleNotFoundError(
-        "essentia was not found in your environment! Please use `pip install essentia==2.1b6.dev1034`"
-    )
+
+if is_librosa_available():
+    import librosa
+
+if is_scipy_available():
+    import scipy
 
 
 logger = logging.get_logger(__name__)
@@ -242,12 +249,14 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         features_shapes = [each_feature.shape for each_feature in features]
         attention_masks, padded_features = [], []
         for i, each_feature in enumerate(features):
+            # To pad "input_features".
             if len(each_feature.shape) == 3:
                 features_pad_value = max([*zip(*features_shapes)][1]) - features_shapes[i][1]
                 attention_mask = np.ones(features_shapes[i][:2], dtype=np.int64)
                 feature_padding = ((0, 0), (0, features_pad_value), (0, 0))
                 attention_mask_padding = (feature_padding[0], feature_padding[1])
 
+            # To pad "beatsteps" and "extrapolated_beatstep".
             else:
                 each_feature = each_feature.reshape(1, -1)
                 features_pad_value = max([*zip(*features_shapes)][0]) - features_shapes[i][0]
@@ -274,18 +283,33 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             padded_features.append(each_padded_feature)
             attention_masks.append(attention_mask)
 
-        padded_features = np.concatenate(padded_features, axis=0)
-        attention_masks = np.concatenate(attention_masks, axis=0)
+        padded_features = np.concatenate(padded_features, axis=0).astype(np.float32)
+        attention_masks = np.concatenate(attention_masks, axis=0).astype(np.int64)
 
         return padded_features, attention_masks
 
-    def pad(self, inputs: BatchFeature):
+    def pad(
+        self,
+        inputs: BatchFeature,
+        is_batched: bool,
+        return_attention_mask: bool,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+    ):
         """
         Pads the inputs to same length and returns attention_mask.
 
         Args:
             inputs (`BatchFeature`):
-                processed audio features.
+                Processed audio features.
+            is_batched (`bool`):
+                Whether inputs are batched or not.
+            return_attention_mask (`bool`):
+                Whether to return attention mask or not.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors instead of list of python integers. Acceptable values are:
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
+                If nothing is specified, it will return list of `np.ndarray` arrays.
         Return:
             `BatchFeature` with attention_mask, attention_mask_beatsteps and attention_mask_extrapolated_beatstep added
             to it:
@@ -311,18 +335,26 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             if feature_name == "input_features":
                 padded_feature_values, attention_mask = self._pad(feature_value, add_zero_line=True)
                 processed_features_dict[feature_name] = padded_feature_values
-                processed_features_dict["attention_mask"] = attention_mask
+                if return_attention_mask:
+                    processed_features_dict["attention_mask"] = attention_mask
             else:
                 padded_feature_values, attention_mask = self._pad(feature_value, add_zero_line=False)
                 processed_features_dict[feature_name] = padded_feature_values
-                processed_features_dict[f"attention_mask_{feature_name}"] = attention_mask
+                if return_attention_mask:
+                    processed_features_dict[f"attention_mask_{feature_name}"] = attention_mask
 
-        outputs = BatchFeature(processed_features_dict)
+        # If we are processing only one example, we should remove the zero array line since we don't need it to
+        # seperate examples from each other.
+        if not is_batched and not return_attention_mask:
+            processed_features_dict["input_features"] = processed_features_dict["input_features"][:-1, ...]
+
+        outputs = BatchFeature(processed_features_dict).convert_to_tensors(return_tensors)
+
         return outputs
 
     def __call__(
         self,
-        audio: Union[np.ndarray, List[float], List[np.ndarray]],
+        audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
         sampling_rate: Union[int, List[int]],
         steps_per_beat: int = 2,
         do_infer_resample: Optional[bool] = True,
@@ -352,7 +384,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
-                If nothing is specified, it will return `np.ndarray` objects.
+                If nothing is specified, it will return list of `np.ndarray` arrays.
         """
         is_batched = bool(isinstance(audio, (list, tuple)) and isinstance(audio[0], (np.ndarray, tuple, list)))
         if is_batched:
@@ -406,14 +438,12 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             }
         )
 
-        if return_attention_mask:
-            output = self.pad(output)
-
-        if not is_batched and not return_attention_mask:
-            output["input_features"] = output["input_features"][0]
-
-        if return_tensors is not None:
-            output = output.convert_to_tensors(return_tensors)
+        output = self.pad(
+            output,
+            is_batched=is_batched,
+            return_attention_mask=return_attention_mask,
+            return_tensors=return_tensors,
+        )
 
         return output
 
