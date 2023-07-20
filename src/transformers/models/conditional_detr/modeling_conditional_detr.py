@@ -555,16 +555,16 @@ class DetrAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
         return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
-        return tensor if position_embeddings is None else tensor + position_embeddings
+    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Optional[Tensor]):
+        return tensor if object_queries is None else tensor + object_queries
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        object_queries: Optional[torch.Tensor] = None,
         key_value_states: Optional[torch.Tensor] = None,
-        key_value_position_embeddings: Optional[torch.Tensor] = None,
+        spatial_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -575,14 +575,14 @@ class DetrAttention(nn.Module):
         batch_size, target_len, embed_dim = hidden_states.size()
 
         # add position embeddings to the hidden states before projecting to queries and keys
-        if position_embeddings is not None:
+        if object_queries is not None:
             hidden_states_original = hidden_states
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = self.with_pos_embed(hidden_states, object_queries)
 
         # add key-value position embeddings to the key value states
-        if key_value_position_embeddings is not None:
+        if spatial_position_embeddings is not None:
             key_value_states_original = key_value_states
-            key_value_states = self.with_pos_embed(key_value_states, key_value_position_embeddings)
+            key_value_states = self.with_pos_embed(key_value_states, spatial_position_embeddings)
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -790,7 +790,7 @@ class ConditionalDetrEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
+        object_queries: torch.Tensor = None,
         output_attentions: bool = False,
     ):
         """
@@ -799,7 +799,8 @@ class ConditionalDetrEncoderLayer(nn.Module):
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
-            position_embeddings (`torch.FloatTensor`, *optional*): position embeddings, to be added to hidden_states.
+            object_queries (`torch.FloatTensor`, *optional*):
+                Object queries (also called content embeddings), to be added to the hidden states.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -808,7 +809,7 @@ class ConditionalDetrEncoderLayer(nn.Module):
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            position_embeddings=position_embeddings,
+            object_queries=object_queries,
             output_attentions=output_attentions,
         )
 
@@ -1150,7 +1151,7 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
 
     Small tweak for ConditionalDETR:
 
-    - position_embeddings are added to the forward pass.
+    - object_queries are added to the forward pass.
 
     Args:
         config: ConditionalDetrConfig
@@ -1173,7 +1174,7 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
         self,
         inputs_embeds=None,
         attention_mask=None,
-        position_embeddings=None,
+        object_queries=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1191,8 +1192,8 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
 
                 [What are attention masks?](../glossary#attention-mask)
 
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
+            object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Object queries that are added to the queries in each self-attention layer.
 
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -1232,11 +1233,11 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
             if to_drop:
                 layer_outputs = (None, None)
             else:
-                # we add position_embeddings as extra input to the encoder_layer
+                # we add object_queries as extra input to the encoder_layer
                 layer_outputs = encoder_layer(
                     hidden_states,
                     attention_mask,
-                    position_embeddings=position_embeddings,
+                    object_queries=object_queries,
                     output_attentions=output_attentions,
                 )
 
