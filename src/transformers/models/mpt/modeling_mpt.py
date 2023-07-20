@@ -247,7 +247,6 @@ class MptBlock(nn.Module):
         # Layer norm at the beginning of the transformer layer.
         layernorm_output = self.norm_1(hidden_states)
 
-        # Layer norm post the self attention.
         residual = hidden_states
 
         # Self attention.
