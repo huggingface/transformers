@@ -132,23 +132,6 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        # =================================================================
-
-        self.tag_tokens = [
-            '</doc>', '<image>', '</image>', '</chunk>', '</line>', '<phrase>', '</phrase>', '<object>', '</object>',
-            '</delimiter_of_multi_objects/>', '<grounding>'
-        ]
-        self.patch_index_tokens = [f"<patch_index_{str(x).zfill(4)}>" for x in range(1024)]
-
-        # =================================================================
-
-        # to_add = []
-        # for idx, token in enumerate(self.location_tokens + self.patch_index_tokens):
-        #     # to_add.append(AddedToken(token, lstrip=True, rstrip=False))
-        #     to_add.append(token)
-
-        # =================================================================
-
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -185,6 +168,12 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
 
         # =================================================================
         # Original repo. also has `(` issue
+
+        self.tag_tokens = [
+            '</doc>', '<image>', '</image>', '</chunk>', '</line>', '<phrase>', '</phrase>',
+            '<object>', '</object>', '</delimiter_of_multi_objects/>', '<grounding>',
+        ]
+        self.patch_index_tokens = [f"<patch_index_{str(x).zfill(4)}>" for x in range(1024)]
 
         for idx, token in enumerate(self.location_tokens + self.patch_index_tokens):
             self.add_tokens(AddedToken(token, lstrip=True, rstrip=False), special_tokens=True)
