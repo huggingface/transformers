@@ -1,3 +1,5 @@
+from typing import List, Union
+
 import torch
 from datasets import load_dataset
 
@@ -10,6 +12,28 @@ SPEAKER_EMBEDDINGS_KEY_MAPPING = {"bark": "history_prompt"}
 
 
 class TextToSpeechPipeline(Pipeline):
+    """
+    Text-to-speech generation pipeline using any `AutoModelForTextToSpeech`. This pipeline generates an audio file from
+    an input text and optional other conditional inputs.
+
+    Example:
+
+    ```python
+    >>> from transformers import pipeline
+
+    >>> classifier = pipeline(model="suno/bark-large")
+    >>> audio = pipeline("Hey it's HuggingFace on the phone!", speaker_embeddings="v2/en_speaker_1")
+    ```
+
+    Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
+
+
+    This pipeline can currently be loaded from [`pipeline`] using the following task identifiers: `"text-to-speech"` or
+    `"text-to-audio"`.
+
+    See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=text-to-speech).
+    """
+
     def __init__(self, *args, vocoder=None, processor=None, sampling_rate=None, sample_rate_name=None, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -40,12 +64,6 @@ class TextToSpeechPipeline(Pipeline):
                 """Must pass a valid vocoder to the TTSPipeline if speecht5 is used.
                               Try passing a repo_id or an instance of SpeechT5HifiGan."""
             )
-
-        #        if processor is None:
-        #            processor = self.model.config._name_or_path
-        #            if processor is None:
-        #                raise ValueError("Must pass a processor to the TTSPipeline.")
-        #            processor = AutoProcessor.from_pretrained(processor)
 
         self.processor = processor
         self.vocoder = vocoder
@@ -110,6 +128,28 @@ class TextToSpeechPipeline(Pipeline):
                 speech = self.model.generate(**model_inputs, **kwargs)
 
         return speech
+
+    def __call__(
+        self,
+        input_texts: Union[str, List[str]],
+        **generate_kwargs,
+    ):
+        """
+        Generates speech/audio from the inputs. See the [`TextToSpeechPipeline`] documentation for more information.
+
+        Args:
+            input_texts (`str` or `List[str]`):
+                The text(s) to generate.
+            speaker_embeddings (`str` or `torch.Tensor` or `Dict[np.ndarray]`, *optional*):
+                The speaker prompt, i.e the speaker embeddings conditionning the inputs.
+            generate_kwargs (*optional*):
+                Remaining parameters passed to the model generation method.
+
+        Return:
+            A `torch.Tensor` or a list of `torch.Tensor`: Each result comes as a `torch.Tensor` corresponding to the
+            generated audio.
+        """
+        return super().__call__(input_texts, **generate_kwargs)
 
     def _sanitize_parameters(
         self,
