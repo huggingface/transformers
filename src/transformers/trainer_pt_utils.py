@@ -1040,19 +1040,17 @@ def get_model_param_count(model, trainable_only=False):
     """
     Calculate model's total param count. If trainable_only is True then count only those requiring grads
     """
-    zero3_enabled = is_deepspeed_zero3_enabled()
-    total_params = 0
+    if is_deepspeed_zero3_enabled():
 
-    for p in model.parameters():
-        if trainable_only and p.requires_grad is False:
-            continue
+        def numel(p):
+            return p.ds_numel if hasattr(p, "ds_numel") else p.numel()
 
-        if zero3_enabled and hasattr(p, "ds_numel"):
-            total_params += p.ds_numel
-        else:
-            total_params += p.numel()
+    else:
 
-    return total_params
+        def numel(p):
+            return p.numel()
+
+    return sum(numel(p) for p in model.parameters() if not trainable_only or p.requires_grad)
 
 
 def get_parameter_names(model, forbidden_layer_types):
