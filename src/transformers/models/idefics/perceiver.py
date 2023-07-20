@@ -12,7 +12,6 @@ from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
-from einops import rearrange, repeat
 
 
 class PerceiverResampler(nn.Module):
@@ -24,10 +23,11 @@ class PerceiverResampler(nn.Module):
         to the Perceiver Resampler (also dimensionality of
                           latent embeddings *returned* by the Perceiver Resampler. Could be e.g., VIT embed_dim, ResNet
                           pool dim, and so on.
-        :param depth: Depth of the Perceiver Resampler (Transformer w/ cross attention). Should be shallow (< 3).
-        :param n_heads: Number of heads in each Transformer block (for multi-headed self-attention). :param head_dim:
-        Dimensionality of each head projection in the Transformer block. :param n_latents: Number of latent embeddings
-        to resample ("compress") the input sequence to (usually < 128).
+        Args:
+            depth: Depth of the Perceiver Resampler (Transformer w/ cross attention). Should be shallow (< 3).
+            n_heads: Number of heads in each Transformer block (for multi-headed self-attention).
+            head_dim: Dimensionality of each head projection in the Transformer block.
+            n_latents: Number of latent embeddings to resample ("compress") the input sequence to (usually < 128).
         """
         super().__init__()
         self.embed_dim, self.n_heads, self.head_dim, self.n_latents = embed_dim, n_heads, head_dim, n_latents
@@ -55,7 +55,8 @@ class PerceiverResampler(nn.Module):
 
     def forward(self, context: torch.Tensor) -> torch.Tensor:
         """Resample arbitrary length context & *compress* down to self.n_latents latent embeddings"""
-        latents = repeat(self.latents, "seq embed -> bsz seq embed", bsz=context.shape[0])
+        # einsum.repeat(self.latents, "seq embed -> bsz seq embed", bsz=context.shape[0])
+        latents = self.latents.repeat(context.shape[0], 1, 1)
 
         # Feed through Perceiver Attention blocks...
         for attn, ff in self.blocks:
@@ -89,13 +90,17 @@ class PerceiverAttention(nn.Module):
 
     def forward(self, context: torch.Tensor, latents: torch.Tensor) -> torch.Tensor:
         """
-        Runs Perceiver Self-Attention, with special (context, latents) appended along the `seq` dimension! :param
-        context: Tensor of shape [bsz, seq, embed_dim] representing long-form context to resample. :param latents:
-        Tensor of shape [bsz, n_latents, embed_dim] representing fixed length latents to compress to. :return: Tensor
-        of shape [bsz, n_latents, embed_dim] representing attention over latents w/ cross from context.
+        Runs Perceiver Self-Attention, with special (context, latents) appended along the `seq` dimension!
+
+        Args:
+            context: Tensor of shape [bsz, seq, embed_dim] representing long-form context to resample.
+            latents: Tensor of shape [bsz, n_latents, embed_dim] representing fixed length latents to compress to.
+
+        Returns: Tensor of shape [bsz, n_latents, embed_dim] representing attention over latents w/ cross from context.
         """
         context = self.context_layer_norm(context)
         latents = self.latents_layer_norm(latents)
+        batch_size, seq_length, embed_dim = context.shape[:3]
 
         # Query, Key, Value Projections --> Note that in Flamingo, latents are *concatenated* with context prior to attn!
         #   Note: This results in queries w/ `seq = n_latents`, and keys, values with `seq = len(context) + n_latents`
@@ -105,7 +110,9 @@ class PerceiverAttention(nn.Module):
 
         # Multiheaded Self-Attention w/ stable softmax (subtract per-row max -- `amax` -- before softmax call)
         #   =>> `attn` should be a 2D matrix of shape [n_latents x (context + n_latents)]
-        q, k, v = [rearrange(x, "bsz seq (heads embed) -> bsz heads seq embed", heads=self.n_heads) for x in (q, k, v)]
+        # einsum.rearrange(x, "bsz seq (heads embed) -> bsz heads seq embed", heads=self.n_heads)
+        q, k, v = [x.reshape(batch_size, x.shape[1], self.n_heads, self.head_dim).transpose(1, 2) for x in (q, k, v)]
+
         if self.qk_layer_norms:
             q = self.q_layer_norm(q)
             k = self.k_layer_norm(k)
@@ -116,9 +123,8 @@ class PerceiverAttention(nn.Module):
 
         # Attend & project back to output...
         resampled = torch.einsum("... i j, ... j d -> ... i d", attn, v)
-        return self.output_proj(
-            rearrange(resampled, "bsz heads seq embed -> bsz seq (heads embed)", heads=self.n_heads)
-        )
+        # einsum.rearrange(resampled, "bsz heads seq embed -> bsz seq (heads embed)", heads=self.n_heads)
+        return self.output_proj(resampled.transpose(1, 2).flatten(-2))
 
 
 class MLP(nn.Module):
