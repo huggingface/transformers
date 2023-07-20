@@ -46,6 +46,9 @@ MPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "mosaicml/mpt-7b",
     "mosaicml/mpt-7b-storywriter",
     "mosaicml/mpt-7b-instruct",
+    "mosaicml/mpt-7b-8k",
+    "mosaicml/mpt-7b-8k-instruct",
+    "mosaicml/mpt-7b-8k-chat",
     "mosaicml/mpt-30b",
     "mosaicml/mpt-30b-instruct",
     "mosaicml/mpt-30b-chat"
