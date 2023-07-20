@@ -422,7 +422,7 @@ class MptIntegrationTests(unittest.TestCase):
         inputs = tokenizer(input_text, return_tensors="pt")
         outputs = model.generate(**inputs, max_new_tokens=20)
 
-        decoded_output = tokenizer.decode(outputs[0])
+        decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
         self.assertEqual(decoded_output, expected_output)
 
     def test_generation(self):
@@ -440,5 +440,30 @@ class MptIntegrationTests(unittest.TestCase):
         inputs = tokenizer(input_text, return_tensors="pt")
         outputs = model.generate(**inputs, max_new_tokens=20)
 
-        decoded_output = tokenizer.decode(outputs[0])
+        decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
         self.assertEqual(decoded_output, expected_output)
+
+    def test_generation_batched(self):
+        model_id = "mosaicml/mpt-7b"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+        # Load in 4bit to fit the daily CI runner GPU RAM
+        model = MptForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
+        )
+
+        input_texts = ["Hello my name is", "Today I am going at the gym and"]
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        tokenizer.padding_side = "left"
+
+        inputs = tokenizer(input_texts, return_tensors="pt", padding=True).to(torch_device)
+
+        expected_output = [
+            "Hello my name is Tiffany and I am a mother of two beautiful children. I have been a nanny for over",
+            "Today I am going at the gym and then I am going to go to the grocery store. I am going to get some food and then",
+        ]
+        outputs = model.generate(**inputs, max_new_tokens=20)
+
+        decoded_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        for i, predicted_output in enumerate(decoded_outputs):
+            self.assertEqual(predicted_output, expected_output[i])
