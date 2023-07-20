@@ -58,7 +58,7 @@ model = torch.compile(model)
 processed_input = processor(image, return_tensors='pt').to(device="cuda")
 
 with torch.no_grad():
-    _ = model(**extracted_input)
+    _ = model(**processed_input)
 
 ```
 
