@@ -1093,7 +1093,7 @@ def check_deprecated_constant_is_up_to_date():
     if len(missing_models) != 0:
         missing_models = ", ".join(missing_models)
         message.append(
-            "The following models are in the deprecated folder, make sur to add them to `DEPRECATED_MODELS` in "
+            "The following models are in the deprecated folder, make sure to add them to `DEPRECATED_MODELS` in "
             f"`models/auto/configuration_auto.py`: {missing_models}."
         )
 
