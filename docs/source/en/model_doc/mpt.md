@@ -26,7 +26,7 @@ MPT models are GPT-style decoder-only transformers with several improvements: pe
 - MPT instruct: MPT base models fine-tuned on instruction based tasks
 - MPT storywriter: MPT base models fine-tuned for 2500 steps on 65k-token excerpts of fiction books contained in the books3 corpus, this enables the model to handle very long sequences
 
-The models have been trained using [`llm-foundry`](https://github.com/mosaicml/llm-foundry/tree/main) repository.
+The original code is available at the  [`llm-foundry`](https://github.com/mosaicml/llm-foundry/tree/main) repository.
 
 Read more about it [in the release blogpost](https://www.mosaicml.com/blog/mpt-7b)
 
