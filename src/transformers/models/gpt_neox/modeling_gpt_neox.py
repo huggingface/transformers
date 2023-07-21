@@ -926,7 +926,7 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).armax(-1)).to(logits.device)
+                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).argmax(-1)).to(logits.device)
             else:
                 sequence_lengths = -1
                 logger.warning(
