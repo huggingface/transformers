@@ -1001,6 +1001,7 @@ class TrainingArguments:
             )
         },
     )
+    # Do not touch this type annotation or it will stop working in CLI
     fsdp_config: Optional[str] = field(
         default=None,
         metadata={
@@ -1019,7 +1020,8 @@ class TrainingArguments:
             )
         },
     )
-    deepspeed: Optional[Union[str, Dict]] = field(
+    # Do not touch this type annotation or it will stop working in CLI
+    deepspeed: Optional[str] = field(
         default=None,
         metadata={
             "help": (
