@@ -1,3 +1,4 @@
+import inspect
 import warnings
 from typing import Dict
 
@@ -179,6 +180,10 @@ class TextClassificationPipeline(Pipeline):
         return self.tokenizer(inputs, return_tensors=return_tensors, **tokenizer_kwargs)
 
     def _forward(self, model_inputs):
+        # `XXXForSequenceClassification` models should not use `use_cache=True` even if it's supported
+        model_forward = self.model.forward if self.framework == "pt" else self.model.call
+        if "use_cache" in inspect.signature(model_forward).parameters.keys():
+            model_inputs["use_cache"] = False
         return self.model(**model_inputs)
 
     def postprocess(self, model_outputs, function_to_apply=None, top_k=1, _legacy=True):

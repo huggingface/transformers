@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
 
@@ -84,7 +85,7 @@ class TFBlipForConditionalGenerationModelOutput(ModelOutput):
     Args:
         loss (`tf.Tensor`, *optional*, returned when `labels` is provided, `tf.Tensor` of shape `(1,)`):
             Languge modeling loss from the text decoder.
-        decoder_logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`, *optional*):
+        logits (`tf.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`, *optional*):
             Prediction scores of the language modeling head of the text decoder model.
         image_embeds (`tf.Tensor` of shape `(batch_size, output_dim)`, *optional*):
             The image embeddings obtained after applying the Vision Transformer model to the input image.
@@ -104,11 +105,20 @@ class TFBlipForConditionalGenerationModelOutput(ModelOutput):
     """
 
     loss: Tuple[tf.Tensor] | None = None
-    decoder_logits: Tuple[tf.Tensor] | None = None
+    logits: Tuple[tf.Tensor] | None = None
     image_embeds: tf.Tensor | None = None
     last_hidden_state: tf.Tensor = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
+
+    @property
+    def decoder_logits(self):
+        warnings.warn(
+            "`decoder_logits` attribute is deprecated and will be removed in version 5 of Transformers."
+            " Please use the `logits` attribute to retrieve the final output instead.",
+            FutureWarning,
+        )
+        return self.logits
 
 
 @dataclass
@@ -1078,7 +1088,7 @@ class TFBlipForConditionalGeneration(TFBlipPreTrainedModel):
 
         return TFBlipForConditionalGenerationModelOutput(
             loss=outputs.loss,
-            decoder_logits=outputs.logits,
+            logits=outputs.logits,
             image_embeds=image_embeds,
             last_hidden_state=vision_outputs.last_hidden_state,
             hidden_states=vision_outputs.hidden_states,

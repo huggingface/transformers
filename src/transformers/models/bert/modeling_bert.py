@@ -169,7 +169,7 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
         try:
             if pointer.shape != array.shape:
                 raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
-        except AssertionError as e:
+        except ValueError as e:
             e.args += (pointer.shape, array.shape)
             raise
         logger.info(f"Initialize PyTorch weight {name}")

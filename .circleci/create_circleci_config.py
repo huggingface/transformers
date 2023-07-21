@@ -86,6 +86,11 @@ class CircleCIJob:
     def to_dict(self):
         env = COMMON_ENV_VARIABLES.copy()
         env.update(self.additional_env)
+
+        cache_branch_prefix = os.environ.get("CIRCLE_BRANCH", "pull")
+        if cache_branch_prefix != "main":
+            cache_branch_prefix = "pull"
+
         job = {
             "working_directory": self.working_directory,
             "docker": self.docker_image,
@@ -101,16 +106,21 @@ class CircleCIJob:
             {
                 "restore_cache": {
                     "keys": [
-                        f"v{self.cache_version}-{self.cache_name}-" + '{{ checksum "setup.py" }}',
-                        f"v{self.cache_version}-{self.cache_name}-",
+                        # check the fully-matched cache first
+                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
+                        # try the partially-matched cache from `main`
+                        f"v{self.cache_version}-{self.cache_name}-main-pip-",
+                        # try the general partially-matched cache
+                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-",
                     ]
                 }
             },
             {
                 "restore_cache": {
                     "keys": [
-                        f"v{self.cache_version}-{self.cache_name}-" + '{{ checksum "setup.py" }}-site-packages',
-                        f"v{self.cache_version}-{self.cache_name}-site-packages",
+                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
+                        f"v{self.cache_version}-{self.cache_name}-main-site-packages-",
+                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-",
                     ]
                 }
             },
@@ -119,7 +129,7 @@ class CircleCIJob:
         steps.append(
             {
                 "save_cache": {
-                    "key": f"v{self.cache_version}-{self.cache_name}-" + '{{ checksum "setup.py" }}',
+                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
                     "paths": ["~/.cache/pip"],
                 }
             }
@@ -127,7 +137,7 @@ class CircleCIJob:
         steps.append(
             {
                 "save_cache": {
-                    "key": f"v{self.cache_version}-{self.cache_name}-" + '{{ checksum "setup.py" }}-site-packages',
+                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
                     "paths": ["~/.pyenv/versions/"],
                 }
             }
@@ -398,12 +408,13 @@ examples_flax_job = CircleCIJob(
 
 hub_job = CircleCIJob(
     "hub",
+    additional_env={"HUGGINGFACE_CO_STAGING": True},
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install git-lfs",
         'git config --global user.email "ci@dummy.com"',
         'git config --global user.name "ci"',
         "pip install --upgrade --upgrade-strategy eager pip",
-        "pip install -U --upgrade-strategy eager .[torch,sentencepiece,testing]",
+        "pip install -U --upgrade-strategy eager .[torch,sentencepiece,testing,vision]",
     ],
     marker="is_staging_test",
     pytest_num_workers=1,
@@ -580,13 +591,13 @@ def create_circleci_config(folder=None):
     example_file = os.path.join(folder, "examples_test_list.txt")
     if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
         with open(example_file, "r", encoding="utf-8") as f:
-            example_tests = f.read().split(" ")
+            example_tests = f.read()
         for job in EXAMPLES_TESTS:
             framework = job.name.replace("examples_", "").replace("torch", "pytorch")
             if example_tests == "all":
                 job.tests_to_run = [f"examples/{framework}"]
             else:
-                job.tests_to_run = [f for f in example_tests if f.startswith(f"examples/{framework}")]
+                job.tests_to_run = [f for f in example_tests.split(" ") if f.startswith(f"examples/{framework}")]
             
             if len(job.tests_to_run) > 0:
                 jobs.append(job)

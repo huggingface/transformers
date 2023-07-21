@@ -67,11 +67,12 @@ class ClapAudioModelTester:
         freq_ratio=2,
         num_channels=3,
         is_training=True,
-        hidden_size=256,
-        patch_embeds_hidden_size=32,
+        hidden_size=32,
+        patch_embeds_hidden_size=16,
         projection_dim=32,
-        num_hidden_layers=4,
-        num_heads=[2, 2, 2, 2],
+        depths=[2, 2],
+        num_hidden_layers=2,
+        num_heads=[2, 2],
         intermediate_size=37,
         dropout=0.1,
         attention_dropout=0.1,
@@ -89,6 +90,7 @@ class ClapAudioModelTester:
         self.hidden_size = hidden_size
         self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
+        self.depths = depths
         self.num_heads = num_heads
         self.num_attention_heads = num_heads[0]
         self.seq_length = seq_length
@@ -118,6 +120,7 @@ class ClapAudioModelTester:
             hidden_size=self.hidden_size,
             patch_stride=self.patch_stride,
             projection_dim=self.projection_dim,
+            depths=self.depths,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_heads,
             intermediate_size=self.intermediate_size,
@@ -203,7 +206,7 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [self.model_tester.patch_embeds_hidden_size, self.model_tester.patch_embeds_hidden_size],
+                [2 * self.model_tester.patch_embeds_hidden_size, 2 * self.model_tester.patch_embeds_hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
