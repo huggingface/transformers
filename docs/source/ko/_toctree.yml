@@ -108,7 +108,7 @@
     - local: in_translation
       title: (번역중) Training on one GPU
     - local: perf_train_gpu_many
-      title: (번역중) 여러 대의 GPU에서 훈련 진행하기
+      title: (번역중) 다중 GPU에서 훈련 진행하기
     - local: in_translation
       title: (번역중) Training on CPU
     - local: in_translation
