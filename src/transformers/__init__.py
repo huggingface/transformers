@@ -178,6 +178,13 @@ _import_structure = {
         "BertTokenizer",
         "WordpieceTokenizer",
     ],
+    "models.geolm": [
+        "GEOLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BasicTokenizer",
+        "GeoLMConfig",
+       
+        "WordpieceTokenizer",
+    ],
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"],
     "models.bertweet": ["BertweetTokenizer"],
@@ -1202,6 +1209,23 @@ else:
             "BertModel",
             "BertPreTrainedModel",
             "load_tf_weights_in_bert",
+        ]
+    )
+    _import_structure["models.geolm"].extend(
+        [
+            "GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GeoLMForMaskedLM",
+            "GeoLMForMultipleChoice",
+            "GeoLMForNextSentencePrediction",
+            "GeoLMForPreTraining",
+            "GeoLMForQuestionAnswering",
+            "GeoLMForSequenceClassification",
+            "GeoLMForTokenClassification",
+            "GeoLMLayer",
+            "GeoLMLMHeadModel",
+            "GeoLMModel",
+            "GeoLMPreTrainedModel",
+            "load_tf_weights_in_geolm",
         ]
     )
     _import_structure["models.bert_generation"].extend(
@@ -3207,6 +3231,23 @@ else:
             "TFBertPreTrainedModel",
         ]
     )
+    _import_structure["models.geolm"].extend(
+        [
+            "TF_GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFGeoLMEmbeddings",
+            "TFGeoLMForMaskedLM",
+            "TFGeoLMForMultipleChoice",
+            "TFGeoLMForNextSentencePrediction",
+            "TFGeoLMForPreTraining",
+            "TFGeoLMForQuestionAnswering",
+            "TFGeoLMForSequenceClassification",
+            "TFGeoLMForTokenClassification",
+            "TFGeoLMLMHeadModel",
+            "TFGeoLMMainLayer",
+            "TFGeoLMModel",
+            "TFGeoLMPreTrainedModel",
+        ]
+    )
     _import_structure["models.blenderbot"].extend(
         ["TFBlenderbotForConditionalGeneration", "TFBlenderbotModel", "TFBlenderbotPreTrainedModel"]
     )
@@ -4227,6 +4268,13 @@ if TYPE_CHECKING:
         BertTokenizer,
         WordpieceTokenizer,
     )
+    from .models.geolm import (
+        GEOLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BasicTokenizer,
+        GeoLMConfig,
+       
+        WordpieceTokenizer,
+    )
     from .models.bert_generation import BertGenerationConfig
     from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
     from .models.bertweet import BertweetTokenizer
@@ -5150,6 +5198,21 @@ if TYPE_CHECKING:
             BertModel,
             BertPreTrainedModel,
             load_tf_weights_in_bert,
+        )
+        from .models.geolm import (
+            GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GeoLMForMaskedLM,
+            GeoLMForMultipleChoice,
+            GeoLMForNextSentencePrediction,
+            GeoLMForPreTraining,
+            GeoLMForQuestionAnswering,
+            GeoLMForSequenceClassification,
+            GeoLMForTokenClassification,
+            GeoLMLayer,
+            GeoLMLMHeadModel,
+            GeoLMModel,
+            GeoLMPreTrainedModel,
+            load_tf_weights_in_geolm,
         )
         from .models.bert_generation import (
             BertGenerationDecoder,
@@ -6788,6 +6851,21 @@ if TYPE_CHECKING:
             TFBertModel,
             TFBertPreTrainedModel,
         )
+        from .models.geolm import (
+            TF_GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFGeoLMEmbeddings,
+            TFGeoLMForMaskedLM,
+            TFGeoLMForMultipleChoice,
+            TFGeoLMForNextSentencePrediction,
+            TFGeoLMForPreTraining,
+            TFGeoLMForQuestionAnswering,
+            TFGeoLMForSequenceClassification,
+            TFGeoLMForTokenClassification,
+            TFGeoLMLMHeadModel,
+            TFGeoLMMainLayer,
+            TFGeoLMModel,
+            TFGeoLMPreTrainedModel,
+        )
         from .models.blenderbot import (
             TFBlenderbotForConditionalGeneration,
             TFBlenderbotModel,
@@ -7343,6 +7421,18 @@ if TYPE_CHECKING:
             FlaxBertForTokenClassification,
             FlaxBertModel,
             FlaxBertPreTrainedModel,
+        )
+        from .models.geolm import (
+            FlaxGeoLMForCausalLM,
+            FlaxGeoLMForMaskedLM,
+            FlaxGeoLMForMultipleChoice,
+            FlaxGeoLMForNextSentencePrediction,
+            FlaxGeoLMForPreTraining,
+            FlaxGeoLMForQuestionAnswering,
+            FlaxGeoLMForSequenceClassification,
+            FlaxGeoLMForTokenClassification,
+            FlaxGeoLMModel,
+            FlaxGeoLMPreTrainedModel,
         )
         from .models.big_bird import (
             FlaxBigBirdForCausalLM,
