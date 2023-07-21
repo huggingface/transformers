@@ -753,7 +753,7 @@ class BatchEncoding(UserDict):
 
         return self
 
-    def to(self, device: Union[str, "torch.device"], dtype=None) -> "BatchEncoding":
+    def to(self, device: Union[str, "torch.device"], dtype: Optional["torch.dtype"] = None) -> "BatchEncoding":
         """
         Send all values to device by calling `v.to(device)` (PyTorch only).
 
