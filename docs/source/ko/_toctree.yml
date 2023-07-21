@@ -150,7 +150,7 @@
     - local: in_translation
       title: (번역중) Testing
     - local: pr_checks
-      title: Pull Request에 대한 확인 사항
+      title: Pull Request에 대한 검사
   title: (번역중) 기여하기
 
 - sections:

@@ -17,35 +17,36 @@ limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-# Pull Request에 대한 확인 사항 [[checks-on-a-pull-request]]
 
-🤗 Transformers에서 Pull Request를 열 때, 기존에 있는 것을 망가뜨리지 않는지 확인하기 위해 상당한 수의 확인 사항이 실행됩니다. 이러한 확인 사항은 다음과 같은 네 가지 유형으로 구성됩니다:
+# Pull Request에 대한 검사 [[checks-on-a-pull-request]]
+
+🤗 Transformers에서 Pull Request를 열 때, 기존에 있는 것을 망가뜨리지 않는지 확인하기 위해 상당한 수의 검사가 실행됩니다. 이러한 검사는 다음과 같은 네 가지 유형으로 구성됩니다:
 - 일반적인 테스트
 - 문서 빌드
 - 코드 및 문서 스타일
 - 일반 저장소 일관성
 
-이 문서에서는 이러한 다양한 확인 사항과 그 이유를 설명하고, PR에서 하나 이상의 확인 사항이 실패한 경우 로컬에서 어떻게 디버그하는지 알아보겠습니다.
+이 문서에서는 이러한 다양한 검사와 그 이유를 설명하고, PR에서 하나 이상의 검사가 실패한 경우 로컬에서 어떻게 디버그하는지 알아보겠습니다.
 
-참고로, 이러한 확인 사항을 사용하려면 개발 설치가 필요합니다:
+참고로, 이러한 검사를 사용하려면 개발 설치가 필요합니다.
 
 ```bash
 pip install transformers[dev]
 ```
 
-또는 편집 가능한 설치의 경우:
+편집 가능한 설치의 경우 다음 명령을 실행하십시오.
 
 ```bash
 pip install -e .[dev]
 ```
 
-Transformers 리포지토리 내에서 작동합니다. Transformers의 선택적 종속성 수가 많이 늘어났기 때문에 모두 설치하지 못할 수도 있습니다. 개발 설치가 실패하는 경우 작업 중인 Deep Learning 프레임워크 (PyTorch, TensorFlow 및/또는 Flax)를 설치하고 다음 명령을 실행하십시오:
+Transformers 저장소 내에서 작동합니다. Transformers의 선택적 종속성 수가 많이 늘어났기 때문에 개발 설치를 실패할 수도 있습니다. 개발 설치가 실패하는 경우, 작업 중인 Deep Learning 프레임워크 (PyTorch, TensorFlow 및/또는 Flax)를 설치하고 다음 명령을 실행하십시오.
 
 ```bash
 pip install transformers[quality]
 ```
 
-또는 편집 가능한 설치의 경우:
+편집 가능한 설치의 경우는 다음 명령을 실행하십시오.
 
 ```bash
 pip install -e .[quality]
@@ -54,15 +55,15 @@ pip install -e .[quality]
 
 ## 테스트 [[tests]]
 
-`ci/circleci: run_tests_`로 시작하는 모든 작업은 Transformers 테스트 스위트의 일부를 실행합니다. 이러한 작업은 특정 환경에서 라이브러리의 일부에 중점을 둡니다. 예를 들어 `ci/circleci: run_tests_pipelines_tf`는 TensorFlow만 설치된 환경에서 파이프라인 테스트를 실행합니다.
+`ci/circleci: run_tests_`로 시작하는 모든 작업은 Transformers 테스트 모음의 일부를 실행합니다. 이러한 작업은 특정 환경에서 일부 라이브러리에 중점을 둡니다. 예를 들어 `ci/circleci: run_tests_pipelines_tf`는 TensorFlow만 설치된 환경에서 파이프라인 테스트를 실행합니다.
 
-테스트 모듈에서 실제로 변경 사항이 없을 때 테스트를 실행하지 않기 위해, 각 테스트 작업은 테스트 스위트의 일부만 실행됩니다. 라이브러리의 변경 전후에 대한 차이를 확인하기 위해 유틸리티가 실행되고, 해당 차이에 영향을 받는 테스트가 선택됩니다. 이 유틸리티는 로컬에서 다음과 같이 실행할 수 있습니다:
+테스트 모듈에서 실제로 변경 사항이 없을 때 테스트를 실행하지 않기 위해, 테스트 모음의 일부만 실행됩니다. 라이브러리의 변경 전후에 대한 차이를 확인하기 위해 유틸리티가 실행되고, 해당 차이에 영향을 받는 테스트가 선택됩니다. 이 유틸리티는 로컬에서 다음과 같이 실행할 수 있습니다:
 
 ```bash
 python utils/tests_fetcher.py
 ```
 
-Transformers 리포지토리의 루트에서 실행합니다. 이 유틸리티는 다음과 같은 작업을 수행합니다:
+Transformers 저장소의 최상단에서 실행합니다. 이 유틸리티는 다음과 같은 작업을 수행합니다:
 
 1. 변경 사항이 있는 파일마다 변경 사항이 코드인지 주석 또는 문서 문자열인지 확인합니다. 실제 코드 변경이 있는 파일만 유지됩니다.
 2. 소스 코드 파일의 각 파일에 대해 재귀적으로 영향을 주는 모든 파일을 제공하는 내부 맵을 작성합니다. 모듈 B가 모듈 A를 가져오면 모듈 A는 모듈 B에 영향을 줍니다. 재귀적인 영향에는 각 모듈이 이전 모듈을 가져오는 모듈 체인이 필요합니다.
@@ -75,7 +76,7 @@ Transformers 리포지토리의 루트에서 실행합니다. 이 유틸리티�
 python -m pytest -n 8 --dist=loadfile -rA -s $(cat test_list.txt)
 ```
 
-잘못된 사항이 누락되었을 경우, 전체 테스트 스위트도 매일 실행됩니다.
+잘못된 사항이 누락되었을 경우, 전체 테스트 모음도 매일 실행됩니다.
 
 ## 문서 빌드 [[documentation-build]]
 
@@ -91,29 +92,29 @@ python -m pytest -n 8 --dist=loadfile -rA -s $(cat test_list.txt)
 make style
 ```
 
-CI는 이러한 사항이 `ci/circleci: check_code_quality` 확인 사항 내에서 적용되었는지 확인합니다. 또한 `ruff`도 실행되며, 정의되지 않은 변수나 사용되지 않은 변수를 발견하면 경고합니다. 이 확인 사항을 로컬에서 실행하려면 다음을 사용하십시오:
+CI는 이러한 사항이 `ci/circleci: check_code_quality` 검사 내에서 적용되었는지 확인합니다. 또한 `ruff`도 실행되며, 정의되지 않은 변수나 사용되지 않은 변수를 발견하면 경고합니다. 이 검사를 로컬에서 실행하려면 다음을 사용하십시오:
 
 ```bash
 make quality
 ```
 
-이 작업은 많은 시간이 소요될 수 있으므로 현재 브랜치에서 수정한 파일에 대해서만 동일한 작업을 실행하려면 다음을 실행하십시오:
+이 작업은 많은 시간이 소요될 수 있으므로 현재 브랜치에서 수정한 파일에 대해서만 동일한 작업을 실행하려면 다음을 실행하십시오.
 
 ```bash
 make fixup
 ```
 
-이 마지막 명령은 현재 브랜치에서 수정한 파일에 대한 모든 추가적인 확인 사항도 실행합니다. 이제 이들을 살펴보겠습니다.
+이 명령은 현재 브랜치에서 수정한 파일에 대한 모든 추가적인 검사도 실행합니다. 이제 이들을 살펴보겠습니다.
 
 ## 저장소 일관성 [[repository-consistency]]
 
-이는 PR이 저장소를 정상적인 상태로 유지하는지 확인하는 모든 테스트를 모은 것이며, `ci/circleci: check_repository_consistency` 확인 사항에서 수행됩니다. 다음을 실행함으로써 로컬에서 이 확인 사항을 실행할 수 있습니다:
+이는 PR이 저장소를 정상적인 상태로 유지하는지 확인하는 모든 테스트를 모은 것이며, `ci/circleci: check_repository_consistency` 검사에서 수행됩니다. 다음을 실행함으로써 로컬에서 이 검사를 실행할 수 있습니다.
 
 ```bash
 make repo-consistency
 ```
 
-다음을 확인합니다:
+이 검사는 다음을 확인합니다.
 
 - init에 추가된 모든 객체가 문서화되었는지 (`utils/check_repo.py`에서 수행)
 - `__init__.py` 파일의 두 섹션에 동일한 내용이 있는지 (`utils/check_inits.py`에서 수행)
@@ -124,13 +125,13 @@ make repo-consistency
 - 문서의 자동 생성된 테이블이 최신 상태인지 (`utils/check_table.py`에서 수행)
 - 라이브러리에는 선택적 종속성이 설치되지 않았더라도 모든 객체가 사용 가능한지 (`utils/check_dummies.py`에서 수행)
 
-이러한 확인 사항이 실패하는 경우, 처음 두 가지 항목은 수동으로 수정해야 하며, 나머지 네 가지 항목은 다음 명령을 실행하여 자동으로 수정할 수 있습니다.
+이러한 검사가 실패하는 경우, 처음 두 가지 항목은 수동으로 수정해야 하며, 나머지 네 가지 항목은 다음 명령을 실행하여 자동으로 수정할 수 있습니다.
 
 ```bash
 make fix-copies
 ```
 
-추가적인 확인 사항은 새로운 모델을 추가하는 PR에 대한 것으로, 주로 다음과 같습니다:
+추가적인 검사는 새로운 모델을 추가하는 PR에 대한 것으로, 주로 다음과 같습니다:
 
 - 추가된 모든 모델이 Auto-mapping에 있는지 (`utils/check_repo.py`에서 수행)
 <!-- TODO Sylvain, add a check that makes sure the common tests are implemented.-->
