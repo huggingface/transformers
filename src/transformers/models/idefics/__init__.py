@@ -38,6 +38,7 @@ else:
         "IdeficsForCausalLM",
         "IdeficsModel",
         "IdeficsPreTrainedModel",
+        "IdeficsGatedCrossAttentionLayer",
     ]
 
 
@@ -64,6 +65,7 @@ if TYPE_CHECKING:
             IdeficsForCausalLM,
             IdeficsModel,
             IdeficsPreTrainedModel,
+            IdeficsGatedCrossAttentionLayer
         )
 
 
