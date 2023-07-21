@@ -135,7 +135,7 @@ model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto",
 
 텍스트 생성의 경우:
 
-* `pipeline()` 함수 대신 모델의 `generate()` 메서드를 사용하는 것을 권장합니다. `pipeline()` 함수로는 추론이 가능하지만, 혼합 8비트 모델에 최적화되지 않았기 때문에 `generate()` 메서드를 사용하는 것보다 느릴 수 있습니다. 또한, nucleus 샘플링과 같은 일부 샘플링 전략은 혼합 8비트 모델에 대해 `pipeline()` 함수에서 지원되지 않습니다.
+* `pipeline()` 함수 대신 모델의 `generate()` 메소드를 사용하는 것을 권장합니다. `pipeline()` 함수로는 추론이 가능하지만, 혼합 8비트 모델에 최적화되지 않았기 때문에 `generate()` 메소드를 사용하는 것보다 느릴 수 있습니다. 또한, nucleus 샘플링과 같은 일부 샘플링 전략은 혼합 8비트 모델에 대해 `pipeline()` 함수에서 지원되지 않습니다.
 * 입력을 모델과 동일한 GPU에 배치하는 것이 좋습니다.
 
 다음은 간단한 예입니다:
