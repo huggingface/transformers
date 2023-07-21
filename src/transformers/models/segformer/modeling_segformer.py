@@ -723,7 +723,7 @@ class SegformerDecodeHead(SegformerPreTrainedModel):
             encoder_hidden_state = nn.functional.interpolate(
                 encoder_hidden_state, size=encoder_hidden_states[0].size()[2:], mode="bilinear", align_corners=False
             )
-            all_hidden_states += (encoder_hidden_state,)
+            all_hidden_states = all_hidden_states + (encoder_hidden_state,)
 
         hidden_states = self.linear_fuse(torch.cat(all_hidden_states[::-1], dim=1))
         hidden_states = self.batch_norm(hidden_states)
