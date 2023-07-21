@@ -278,6 +278,7 @@ _import_structure = {
         "MCTCTProcessor",
     ],
     "models.deprecated.mmbt": ["MMBTConfig"],
+    "models.deprecated.open_llama": ["OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenLlamaConfig"],
     "models.deprecated.retribert": [
         "RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "RetriBertConfig",
@@ -451,7 +452,6 @@ _import_structure = {
         "NystromformerConfig",
     ],
     "models.oneformer": ["ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "OneFormerConfig", "OneFormerProcessor"],
-    "models.open_llama": ["OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenLlamaConfig"],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.opt": ["OPTConfig"],
     "models.owlvit": [
@@ -1542,6 +1542,9 @@ else:
         ]
     )
     _import_structure["models.deprecated.mmbt"].extend(["MMBTForClassification", "MMBTModel", "ModalEmbeddings"])
+    _import_structure["models.deprecated.open_llama"].extend(
+        ["OpenLlamaForCausalLM", "OpenLlamaForSequenceClassification", "OpenLlamaModel", "OpenLlamaPreTrainedModel"]
+    )
     _import_structure["models.deprecated.retribert"].extend(
         ["RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST", "RetriBertModel", "RetriBertPreTrainedModel"]
     )
@@ -2314,9 +2317,6 @@ else:
             "OneFormerModel",
             "OneFormerPreTrainedModel",
         ]
-    )
-    _import_structure["models.open_llama"].extend(
-        ["OpenLlamaForCausalLM", "OpenLlamaForSequenceClassification", "OpenLlamaModel", "OpenLlamaPreTrainedModel"]
     )
     _import_structure["models.openai"].extend(
         [
@@ -4254,6 +4254,7 @@ if TYPE_CHECKING:
         MCTCTProcessor,
     )
     from .models.deprecated.mmbt import MMBTConfig
+    from .models.deprecated.open_llama import OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenLlamaConfig
     from .models.deprecated.retribert import (
         RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         RetriBertConfig,
@@ -4411,7 +4412,6 @@ if TYPE_CHECKING:
     from .models.nllb_moe import NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, NllbMoeConfig
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.oneformer import ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, OneFormerConfig, OneFormerProcessor
-    from .models.open_llama import OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenLlamaConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.opt import OPTConfig
     from .models.owlvit import (
@@ -5355,6 +5355,12 @@ if TYPE_CHECKING:
             MCTCTPreTrainedModel,
         )
         from .models.deprecated.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
+        from .models.deprecated.open_llama import (
+            OpenLlamaForCausalLM,
+            OpenLlamaForSequenceClassification,
+            OpenLlamaModel,
+            OpenLlamaPreTrainedModel,
+        )
         from .models.deprecated.retribert import (
             RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             RetriBertModel,
@@ -5982,12 +5988,6 @@ if TYPE_CHECKING:
             OneFormerForUniversalSegmentation,
             OneFormerModel,
             OneFormerPreTrainedModel,
-        )
-        from .models.open_llama import (
-            OpenLlamaForCausalLM,
-            OpenLlamaForSequenceClassification,
-            OpenLlamaModel,
-            OpenLlamaPreTrainedModel,
         )
         from .models.openai import (
             OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -650,6 +650,7 @@ class _LazyAutoMapping(OrderedDict):
         self._config_mapping = config_mapping
         self._reverse_config_mapping = {v: k for k, v in config_mapping.items()}
         self._model_mapping = model_mapping
+        self._model_mapping._model_mapping = self
         self._extra_content = {}
         self._modules = {}
 
