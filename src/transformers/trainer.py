@@ -1377,18 +1377,26 @@ class Trainer:
                 raise ImportError("Missing XLA FSDP related module; please make sure to use torch-xla >= 2.0.")
             auto_wrap_policy = None
             auto_wrapper_callable = None
+            default_transformer_cls_names_to_wrap = (
+                model._no_split_modules if hasattr(model, "_no_split_modules") else None
+            )
+            fsdp_transformer_layer_cls_to_wrap = self.args.fsdp_config.get(
+                "fsdp_transformer_layer_cls_to_wrap", default_transformer_cls_names_to_wrap
+            )
+
             if self.args.fsdp_config["fsdp_min_num_params"] > 0:
                 auto_wrap_policy = functools.partial(
                     size_based_auto_wrap_policy, min_num_params=self.args.fsdp_config["fsdp_min_num_params"]
                 )
-            elif self.args.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None) is not None:
+            elif fsdp_transformer_layer_cls_to_wrap is not None:
                 transformer_cls_to_wrap = set()
-                for layer_class in self.args.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]:
+                for layer_class in fsdp_transformer_layer_cls_to_wrap:
                     transformer_cls = get_module_class_from_name(model, layer_class)
                     if transformer_cls is None:
                         raise Exception("Could not find the transformer layer class to wrap in the model.")
                     else:
                         transformer_cls_to_wrap.add(transformer_cls)
+
                 auto_wrap_policy = functools.partial(
                     transformer_auto_wrap_policy,
                     # Transformer layer class to wrap
