@@ -71,6 +71,8 @@
         title: 이미지 캡셔닝
       - local: tasks/document_question_answering
         title: 문서 질의 응답(Document Question Answering)
+      - local: tasks/text-to-speech
+        title: 음성합성(TTS)
     title: 멀티모달
     isExpanded: false
   title: 태스크 가이드
