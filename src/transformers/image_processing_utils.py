@@ -22,8 +22,8 @@ from typing import Any, Dict, Iterable, Optional, Tuple, Union
 
 import numpy as np
 import requests
-from PIL import Image
 
+from ...utils import is_vision_available
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .utils import (
@@ -38,6 +38,9 @@ from .utils import (
     logging,
 )
 
+
+if is_vision_available():
+    from PIL import Image
 
 logger = logging.get_logger(__name__)
 
