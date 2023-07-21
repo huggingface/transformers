@@ -427,9 +427,11 @@ _import_structure = {
     "models.fastspeech2_conformer": [
         "FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "FastSpeech2ConformerConfig",
         "FastSpeech2ConformerHifiGanConfig",
         "FastSpeech2ConformerTokenizer",
+        "FastSpeech2ConformerWithHifiGanConfig",
     ],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
@@ -2132,11 +2134,11 @@ else:
     )
     _import_structure["models.fastspeech2_conformer"].extend(
         [
-            "FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP",
             "FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
             "FastSpeech2ConformerHifiGan",
             "FastSpeech2ConformerModel",
             "FastSpeech2ConformerPreTrainedModel",
+            "FastSpeech2ConformerWithHifiGan",
         ]
     )
     _import_structure["models.flaubert"].extend(
@@ -5097,9 +5099,11 @@ if TYPE_CHECKING:
     from .models.fastspeech2_conformer import (
         FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FastSpeech2ConformerConfig,
         FastSpeech2ConformerHifiGanConfig,
         FastSpeech2ConformerTokenizer,
+        FastSpeech2ConformerWithHifiGanConfig,
     )
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
@@ -6669,11 +6673,11 @@ if TYPE_CHECKING:
             FalconPreTrainedModel,
         )
         from .models.fastspeech2_conformer import (
-            FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,
             FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             FastSpeech2ConformerHifiGan,
             FastSpeech2ConformerModel,
             FastSpeech2ConformerPreTrainedModel,
+            FastSpeech2ConformerWithHifiGan,
         )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

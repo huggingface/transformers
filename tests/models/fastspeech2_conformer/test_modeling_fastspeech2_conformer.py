@@ -28,7 +28,7 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_ten
 if is_torch_available():
     import torch
 
-    from transformers import FastSpeech2ConformerModel
+    from transformers import FastSpeech2ConformerModel, FastSpeech2ConformerWithHifiGan
 
 
 class FastSpeech2ConformerModelTester:
@@ -197,8 +197,9 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
             "duration_labels",
             "pitch_labels",
             "energy_labels",
-            "utterance_embedding",
-            "lang_id",
+            "speaker_ids",
+            "lang_ids",
+            "speaker_embedding",
             "return_dict",
             "output_attentions",
             "output_hidden_states",
@@ -353,3 +354,48 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(spectrogram[0, :10, :10], expected_mel_spectrogram, atol=1e-4))
         self.assertEqual(spectrogram.shape, (1, 205, model.config.num_mel_bins))
+
+@require_torch
+@require_g2p_en
+@slow
+class FastSpeech2ConformerWithHifiGanIntegrationTest(unittest.TestCase):
+    def test_inference_integration(self):
+        model = FastSpeech2ConformerWithHifiGan.from_pretrained("connor-henderson/fastspeech2_conformer_with_hifigan")
+        model.to(torch_device)
+        model.eval()
+
+        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("connor-henderson/fastspeech2_conformer")
+        text = "Test that this generates speech"
+        input_ids = tokenizer(text, return_tensors="pt").to(torch_device)["input_ids"]
+
+        waveform = model.generate_speech(input_ids)
+
+        # waveform is too large (1, 52480), so only check first 100 elements
+        expected_waveform = torch.tensor(
+            [
+                [-9.6345e-04,  1.3557e-03,  5.7559e-04,  2.4706e-04,  2.2675e-04,
+                1.2258e-04,  4.7784e-04,  1.0109e-03, -1.9718e-04,  6.3495e-04,
+                3.2106e-04,  6.3620e-05,  9.1713e-04, -2.5664e-05,  1.9596e-04,
+                6.0418e-04,  8.1112e-04,  3.6342e-04, -6.3396e-04, -2.0146e-04,
+                -1.1768e-04,  4.3155e-04,  7.5599e-04, -2.2972e-04, -9.5665e-05,
+                3.3078e-04,  1.3793e-04, -1.4932e-04, -3.9645e-04,  3.6473e-05,
+                -1.7224e-04, -4.5370e-05, -4.8950e-04, -4.3059e-04,  1.0451e-04,
+                -1.0485e-03, -6.0410e-04,  1.6990e-04, -2.1997e-04, -3.8769e-04,
+                -7.6898e-04, -3.2372e-04, -1.9783e-04,  5.2896e-05, -1.0586e-03,
+                -7.8516e-04,  7.6867e-04, -8.5331e-05, -4.8158e-04, -4.5362e-05,
+                -1.0770e-04,  6.6823e-04,  3.0765e-04,  3.3669e-04,  9.5677e-04,
+                1.0458e-03,  5.8129e-04,  3.3737e-04,  1.0816e-03,  7.0346e-04,
+                4.2378e-04,  4.3131e-04,  2.8095e-04,  1.2201e-03,  5.6121e-04,
+                -1.1086e-04,  4.9908e-04,  1.5586e-04,  4.2046e-04, -2.8088e-04,
+                -2.2462e-04, -1.5539e-04, -7.0126e-04, -2.8577e-04, -3.3693e-04,
+                -1.2471e-04, -6.9104e-04, -1.2867e-03, -6.2651e-04, -2.5586e-04,
+                -1.3201e-04, -9.4537e-04, -4.8438e-04,  4.1458e-04,  6.4109e-04,
+                1.0891e-04, -6.3764e-04,  4.5573e-04,  8.2974e-04,  3.2973e-06,
+                -3.8274e-04, -2.0400e-04,  4.9922e-04,  2.1508e-04, -1.1009e-04,
+                -3.9763e-05,  3.0576e-04,  3.1485e-05, -2.7574e-05,  3.3856e-04],
+            ],
+            device=torch_device,
+        )
+
+        self.assertTrue(torch.allclose(waveform[0, :100], expected_waveform, atol=1e-4))
+        self.assertEqual(waveform.shape, (1, 52480))

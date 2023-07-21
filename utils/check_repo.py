@@ -91,6 +91,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "ErnieMForInformationExtraction",
     "FastSpeech2ConformerHifiGan",  # Already tested by SpeechT5HifiGan (# Copied from)
+    "FastSpeech2ConformerWithHifiGan",  # Built with two smaller (tested) models.
     "GraphormerEncoder",  # Building part of bigger (tested) model.
     "GraphormerDecoderHead",  # Building part of bigger (tested) model.
     "JukeboxVQVAE",  # Building part of bigger (tested) model.
@@ -162,6 +163,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Blip2VisionModel",
     "ErnieMForInformationExtraction",
     "FastSpeech2ConformerHifiGan",
+    "FastSpeech2ConformerWithHifiGan",
     "GitVisionModel",
     "GraphormerModel",
     "GraphormerForGraphClassification",

@@ -14,7 +14,14 @@
 # limitations under the License.
 """ FastSpeech2Conformer model configuration"""
 
+import copy
+from typing import Dict
+
 from ...configuration_utils import PretrainedConfig
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -23,6 +30,10 @@ FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "connor-henderson/fastspeech2_conformer_hifigan": "https://huggingface.co/connor-henderson/fastspeech2_conformer_hifigan/raw/main/config.json",
+}
+
+FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "connor-henderson/fastspeech2_conformer_with_hifigan": "https://huggingface.co/connor-henderson/fastspeech2_conformer_with_hifigan/raw/main/config.json",
 }
 
 
@@ -139,20 +150,16 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
             Specifies whether to use masking in the model.
         use_weighted_masking (`bool`, *optional*, defaults to `False`):
             Specifies whether to use weighted masking in the model.
-        lang_id (`int`, *optional*, defaults to `None`):
-            Language id to condition the model.
-        utt_embed_dim (`int`, *optional*, defaults to `None`):
-            The dimensionality of the utterance embeddings, used to determine if the model is multi-speaker.
-        lang_embs (`int`, *optional*, defaults to `None`):
-            Number of embeddings for the language embedding, used to determine if the model is multi-lingual.
+        num_speakers (`int`, *optional*, defaults to `None`):
+            Number of speakers. If set to > 1, assume that the speaker ids will be provided as the input and use
+            speaker id embedding layer.
+        num_languages (`int`, *optional*, defaults to `None`):
+            Number of languages. If set to > 1, assume that the language ids will be provided as the input and use the
+            languge id embedding layer.
+        speaker_embed_dim (`int`, *optional*, defaults to `None`):
+            Speaker embedding dimension. If set to > 0, assume that speaker_embedding will be provided as the input.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Specifies whether the model is an encoder-decoder.
-        pad_token_id (`int`, *optional*, defaults to 0):
-            The ID of the padding token in the vocabulary.
-        bos_token_id (`int`, *optional*, defaults to 77):
-            The ID of the beginning-of-sentence token in the vocabulary.
-        eos_token_id (`int`, *optional*, defaults to 77):
-            The ID of the end-of-sentence token in the vocabulary
 
     Example:
 
@@ -224,13 +231,10 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         max_source_positions=5000,
         use_masking=True,
         use_weighted_masking=False,
-        utt_embed_dim=None,
-        lang_id=None,
-        lang_embs=None,
+        num_speakers=None,
+        num_languages=None,
+        speaker_embed_dim=None,
         is_encoder_decoder=True,
-        pad_token_id=0,
-        bos_token_id=77,
-        eos_token_id=77,
         **kwargs,
     ):
         if positionwise_conv_kernel_size % 2 == 0:
@@ -286,7 +290,6 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         self.energy_predictor_kernel_size = energy_predictor_kernel_size
         self.energy_predictor_layers = energy_predictor_layers
         self.encoder_linear_units = encoder_linear_units
-        self.lang_embs = lang_embs
         self.pitch_embed_dropout = pitch_embed_dropout
         self.pitch_embed_kernel_size = pitch_embed_kernel_size
         self.pitch_predictor_channels = pitch_predictor_channels
@@ -313,17 +316,15 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         self.use_macaron_style_in_conformer = use_macaron_style_in_conformer
         self.use_masking = use_masking
         self.use_weighted_masking = use_weighted_masking
-        self.utt_embed_dim = utt_embed_dim
-        self.lang_id = lang_id
+        self.num_speakers = num_speakers
+        self.num_languages = num_languages
+        self.speaker_embed_dim = speaker_embed_dim
         self.encoder_concat_after = encoder_concat_after
         self.decoder_concat_after = decoder_concat_after
         self.duration_predictor_dropout_rate = duration_predictor_dropout_rate
         self.is_encoder_decoder = is_encoder_decoder
 
         super().__init__(
-            bos_token_id=bos_token_id,
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
@@ -406,3 +407,108 @@ class FastSpeech2ConformerHifiGanConfig(PretrainedConfig):
         self.leaky_relu_slope = leaky_relu_slope
         self.normalize_before = normalize_before
         super().__init__(**kwargs)
+
+
+class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
+    """
+    This is the configuration class to store the configuration of a [`FastSpeech2ConformerWithHifiGan`]. It is used to
+    instantiate a FastSpeech2Conformer model and hifi-gan vocoder according to the specified sub-models configurations,
+    defining the model architecture.
+
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    FastSpeech2ConformerModel
+    [connor-henderson/fastspeech2_conformer](https://huggingface.co/connor-henderson/fastspeech2_conformer) and
+    FastSpeech2ConformerHifiGan
+    [connor-henderson/fastspeech2_conformer_hifigan](https://huggingface.co/connor-henderson/fastspeech2_conformer_hifigan)
+    architectures.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+    model_config ([`FastSpeech2ConformerConfig`], *optional*):
+        Configuration of the text-to-speech model.
+    vocoder_config ([`FastSpeech2ConformerHiFiGanConfig`], *optional*):
+        Configuration of the vocoder model.
+
+    Example:
+
+    ```python
+    >>> from transformers import (
+    ...     FastSpeech2ConformerConfig,
+    ...     FastSpeech2ConformerHiFiGanConfig,
+    ...     FastSpeech2ConformerWithHifiGanConfig,
+    ...     FastSpeech2ConformerModel,
+    ...     FastSpeech2ConformerHifiGan,
+    ... )
+
+    >>> # Initializing FastSpeech2ConformerWithHifiGan sub-modules configurations.
+    >>> model_config = FastSpeech2ConformerConfig()
+    >>> vocoder_config = FastSpeech2ConformerWithHifiGanConfig()
+
+    >>> # Initializing a FastSpeech2ConformerWithHifiGan module style configuration
+    >>> configuration = FastSpeech2ConformerWithHifiGanConfig.from_sub_model_configs(model_config, vocoder_config)
+
+    >>> # Initializing a model (with random weights)
+    >>> model = FastSpeech2ConformerWithHifiGan(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
+    model_type = "fastspeech2_conformer_with_hifigan"
+    is_composition = True
+
+    def __init__(
+        self,
+        model_config: Dict = None,
+        vocoder_config: Dict = None,
+        **kwargs,
+    ):
+        if model_config is None:
+            model_config = {}
+            logger.info("model_config is None. initializing the model with default values.")
+
+        if vocoder_config is None:
+            vocoder_config = {}
+            logger.info("vocoder_config is None. initializing the coarse model with default values.")
+
+        self.model_config = FastSpeech2ConformerConfig(**model_config)
+        self.vocoder_config = FastSpeech2ConformerHifiGanConfig(**vocoder_config)
+
+        super().__init__(**kwargs)
+
+    @classmethod
+    def from_sub_model_configs(
+        cls,
+        model_config: FastSpeech2ConformerConfig,
+        vocoder_config: FastSpeech2ConformerHifiGanConfig,
+        **kwargs,
+    ):
+        r"""
+        Instantiate a [`BarkConfig`] (or a derived class) from bark sub-models configuration.
+
+        Returns:
+            [`BarkConfig`]: An instance of a configuration object
+        """
+        return cls(
+            model_config=model_config.to_dict(),
+            vocoder_config=vocoder_config.to_dict(),
+            **kwargs,
+        )
+
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+
+        Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+
+        output["model_config"] = self.model_config.to_dict()
+        output["vocoder_config"] = self.vocoder_config.to_dict()
+
+        output["model_type"] = self.__class__.model_type
+        return output

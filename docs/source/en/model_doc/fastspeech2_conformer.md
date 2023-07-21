@@ -31,6 +31,10 @@ This model was contributed by [Connor Henderson](https://huggingface.co/connor-h
 
 [[autodoc]] FastSpeech2ConformerHifiGanConfig
 
+## FastSpeech2ConformerWithHifiGanConfig
+
+[[autodoc]] FastSpeech2ConformerWithHifiGanConfig
+
 ## FastSpeech2ConformerTokenizer
 
 [[autodoc]] FastSpeech2ConformerTokenizer
@@ -47,4 +51,9 @@ This model was contributed by [Connor Henderson](https://huggingface.co/connor-h
 ## FastSpeech2ConformerHifiGan
 
 [[autodoc]] FastSpeech2ConformerHifiGan
+    - forward
+
+## FastSpeech2ConformerWithHifiGan
+
+[[autodoc]] FastSpeech2ConformerWithHifiGan
     - forward

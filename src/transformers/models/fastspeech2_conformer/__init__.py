@@ -24,8 +24,10 @@ _import_structure = {
     "configuration_fastspeech2_conformer": [
         "FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "FastSpeech2ConformerConfig",
         "FastSpeech2ConformerHifiGanConfig",
+        "FastSpeech2ConformerWithHifiGanConfig",
     ],
     "tokenization_fastspeech2_conformer": ["FastSpeech2ConformerTokenizer"],
 }
@@ -38,6 +40,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_fastspeech2_conformer"] = [
         "FASTSPEECH2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "FastSpeech2ConformerWithHifiGan",
         "FastSpeech2ConformerHifiGan",
         "FastSpeech2ConformerModel",
         "FastSpeech2ConformerPreTrainedModel",
@@ -47,8 +50,10 @@ if TYPE_CHECKING:
     from .configuration_fastspeech2_conformer import (
         FASTSPEECH2_CONFORMER_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FASTSPEECH2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        FASTSPEECH2_CONFORMER_WITH_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         FastSpeech2ConformerConfig,
         FastSpeech2ConformerHifiGanConfig,
+        FastSpeech2ConformerWithHifiGanConfig,
     )
     from .tokenization_fastspeech2_conformer import FastSpeech2ConformerTokenizer
 
@@ -63,6 +68,7 @@ if TYPE_CHECKING:
             FastSpeech2ConformerHifiGan,
             FastSpeech2ConformerModel,
             FastSpeech2ConformerPreTrainedModel,
+            FastSpeech2ConformerWithHifiGan,
         )
 
 else:
