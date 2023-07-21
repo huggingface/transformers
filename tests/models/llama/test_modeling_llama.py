@@ -122,7 +122,7 @@ class LlamaModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            pad_token_id=self.pad_token_id
+            pad_token_id=self.pad_token_id,
         )
 
     def create_and_check_model(
