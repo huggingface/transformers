@@ -123,7 +123,7 @@ class IdeficsProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        prompts: Union[List[TextInput], [List[List[TextInput]]]],
+        prompts: Union[List[TextInput], List[List[TextInput]]],
         eval_mode: bool = False,
         device: str = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
