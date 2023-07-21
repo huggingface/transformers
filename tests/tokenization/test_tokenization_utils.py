@@ -308,48 +308,48 @@ class TokenizerUtilsTest(unittest.TestCase):
         assert new_encoding["attention_mask"].dtype == dtype
         assert new_encoding["token_type_ids"].dtype == dtype
 
-    # @require_torch
-    # def test_to_method_without_dtype(self):
-    #     import torch
+    @require_torch
+    def test_to_method_without_dtype(self):
+        import torch
 
-    #     # Create a sample BatchEncoding
-    #     data = {
-    #         "input_ids": torch.tensor([[1, 2, 3], [4, 5, 6]]),
-    #         "attention_mask": torch.tensor([[1, 1, 1], [1, 1, 1]]),
-    #         "token_type_ids": torch.tensor([[0, 0, 0], [1, 1, 1]]),
-    #     }
-    #     batch_encoding = BatchEncoding(data)
+        # Create a sample BatchEncoding
+        data = {
+            "input_ids": torch.tensor([[1, 2, 3], [4, 5, 6]]),
+            "attention_mask": torch.tensor([[1, 1, 1], [1, 1, 1]]),
+            "token_type_ids": torch.tensor([[0, 0, 0], [1, 1, 1]]),
+        }
+        batch_encoding = BatchEncoding(data)
 
-    #     # Test to() method without specifying dtype
-    #     new_encoding = batch_encoding.to(device="cuda")
+        # Test to() method without specifying dtype
+        new_encoding = batch_encoding.to(device="cuda")
 
-    #     # Verify that tensors have been moved to the specified device
-    #     assert new_encoding["input_ids"].device == torch.device("cuda")
-    #     assert new_encoding["attention_mask"].device == torch.device("cuda")
-    #     assert new_encoding["token_type_ids"].device == torch.device("cuda")
+        # Verify that tensors have been moved to the specified device
+        assert new_encoding["input_ids"].device == torch.device("cuda")
+        assert new_encoding["attention_mask"].device == torch.device("cuda")
+        assert new_encoding["token_type_ids"].device == torch.device("cuda")
 
-    #     # Verify that dtype remains unchanged (default behavior)
-    #     assert new_encoding["input_ids"].dtype == batch_encoding["input_ids"].dtype
-    #     assert new_encoding["attention_mask"].dtype == batch_encoding["attention_mask"].dtype
-    #     assert new_encoding["token_type_ids"].dtype == batch_encoding["token_type_ids"].dtype
+        # Verify that dtype remains unchanged (default behavior)
+        assert new_encoding["input_ids"].dtype == batch_encoding["input_ids"].dtype
+        assert new_encoding["attention_mask"].dtype == batch_encoding["attention_mask"].dtype
+        assert new_encoding["token_type_ids"].dtype == batch_encoding["token_type_ids"].dtype
 
-    # @require_torch
-    # def test_to_method_unsupported_dtype(self):
-    #     import torch
+    @require_torch
+    def test_to_method_unsupported_dtype(self):
+        import torch
 
-    #     # Create a sample BatchEncoding
-    #     data = {
-    #         "input_ids": torch.tensor([[1, 2, 3], [4, 5, 6]]),
-    #         "attention_mask": torch.tensor([[1, 1, 1], [1, 1, 1]]),
-    #         "token_type_ids": torch.tensor([[0, 0, 0], [1, 1, 1]]),
-    #     }
-    #     batch_encoding = BatchEncoding(data)
+        # Create a sample BatchEncoding
+        data = {
+            "input_ids": torch.tensor([[1, 2, 3], [4, 5, 6]]),
+            "attention_mask": torch.tensor([[1, 1, 1], [1, 1, 1]]),
+            "token_type_ids": torch.tensor([[0, 0, 0], [1, 1, 1]]),
+        }
+        batch_encoding = BatchEncoding(data)
 
-    #     # Test to() method with unsupported dtype
-    #     dtype = torch.int64  # Assuming int64 is not supported by the implementation
-    #     try:
-    #         batch_encoding.to(device="cuda", dtype=dtype)
-    #         # The above line should raise a warning
-    #         assert False, "Expected warning for unsupported dtype but got none."
-    #     except Exception as e:
-    #         assert "Attempting to cast a BatchEncoding to type" in str(e)
+        # Test to() method with unsupported dtype
+        dtype = torch.int64  # Assuming int64 is not supported by the implementation
+        try:
+            batch_encoding.to(device="cuda", dtype=dtype)
+            # The above line should raise a warning
+            assert False, "Expected warning for unsupported dtype but got none."
+        except Exception as e:
+            assert "Attempting to cast a BatchEncoding to type" in str(e)
