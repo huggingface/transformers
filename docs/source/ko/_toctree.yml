@@ -120,7 +120,7 @@
     - local: in_translation
       title: (번역중) Training on Specialized Hardware
     - local: perf_infer_cpu
-      title: 단일 CPU 환경에서 추론하기
+      title: CPU로 추론하기
     - local: in_translation
       title: (번역중) Inference on one GPU
     - local: in_translation
