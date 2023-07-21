@@ -19,7 +19,7 @@ Hugging Face Transformers 라이브러리는 커뮤니티 기여자들 덕분에
 
 <Tip>
 
-TensorFlow 모델을 구현하고자 하는 경우, [Hugging Face Transformers 모델을 TensorFlow로 변환하는 방법](add_tensorflow_model) 가이드를 살펴보세요!
+TensorFlow 모델을 구현하고자 하는 경우, [🤗 Transformers 모델을 TensorFlow로 변환하는 방법](add_tensorflow_model) 가이드를 살펴보세요!
 
 </Tip>
 
