@@ -34,7 +34,7 @@ Hugging Face 팀은 항상 도움을 줄 준비가 되어 있으므로 혼자가
 
 시작에 앞서, 🤗 Transformers에 원하는 모델을 추가하기 위해 [New model addition](https://github.com/huggingface/transformers/issues/new?assignees=&labels=New+model&template=new-model-addition.yml) 이슈를 열어야 합니다. 특정 모델을 기여하는 데 특별히 까다로운 기준을 가지지 않는 경우 [New model label](https://github.com/huggingface/transformers/labels/New%20model)을 필터링하여 요청되지 않은 모델이 있는지 확인하고 작업할 수 있습니다.
 
-새로운 모델 요청을 열었다면 첫 번째 단계는, 🤗 Transformers에 익숙하지 않은 경우 🤗 Transformers에 익숙해지는 것입니다!
+새로운 모델 요청을 열었다면 첫 번째 단계는, 🤗 Transformers에 익숙해지는 것입니다!
 
 ## 🤗 Transformers의 전반적인 개요 
 
