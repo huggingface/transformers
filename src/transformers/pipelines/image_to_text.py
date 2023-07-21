@@ -58,25 +58,13 @@ class ImageToTextPipeline(Pipeline):
             TF_MODEL_FOR_VISION_2_SEQ_MAPPING if self.framework == "tf" else MODEL_FOR_VISION_2_SEQ_MAPPING
         )
 
-    def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, prompt=None):
-        forward_kwargs = {}
+    def _sanitize_parameters(self, prompt=None, **generate_kwargs):
         preprocess_params = {}
-
         if prompt is not None:
             preprocess_params["prompt"] = prompt
 
-        if generate_kwargs is not None:
-            forward_kwargs["generate_kwargs"] = generate_kwargs
-        if max_new_tokens is not None:
-            if "generate_kwargs" not in forward_kwargs:
-                forward_kwargs["generate_kwargs"] = {}
-            if "max_new_tokens" in forward_kwargs["generate_kwargs"]:
-                raise ValueError(
-                    "'max_new_tokens' is defined twice, once in 'generate_kwargs' and once as a direct parameter,"
-                    " please use only one"
-                )
-            forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
-        return preprocess_params, forward_kwargs, {}
+        forward_params = generate_kwargs
+        return preprocess_params, forward_params, {}
 
     def __call__(self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs):
         """
@@ -92,11 +80,12 @@ class ImageToTextPipeline(Pipeline):
 
                 The pipeline accepts either a single image or a batch of images.
 
-            max_new_tokens (`int`, *optional*):
-                The amount of maximum tokens to generate. By default it will use `generate` default.
+            prompt (`str`, *optional*):
+                Text to condition the generation on (only relevant for some models, like GIT).
 
-            generate_kwargs (`Dict`, *optional*):
-                Pass it to send all of these arguments directly to `generate` allowing full control of this function.
+            generate_kwargs:
+                Additional keyword arguments to pass along to the generate method of the model (see the generate method
+                corresponding to your framework [here](./model#generative-models)).
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following key:
@@ -144,7 +133,7 @@ class ImageToTextPipeline(Pipeline):
 
         return model_inputs
 
-    def _forward(self, model_inputs, generate_kwargs=None):
+    def _forward(self, model_inputs, **generate_kwargs):
         # Git model sets `model_inputs["input_ids"] = None` in `preprocess` (when `prompt=None`). In batch model, the
         # pipeline will group them into a list of `None`, which fail `_forward`. Avoid this by checking it first.
         if (
@@ -154,8 +143,6 @@ class ImageToTextPipeline(Pipeline):
         ):
             model_inputs["input_ids"] = None
 
-        if generate_kwargs is None:
-            generate_kwargs = {}
         # FIXME: We need to pop here due to a difference in how `generation.py` and `generation.tf_utils.py`
         #  parse inputs. In the Tensorflow version, `generate` raises an error if we don't use `input_ids` whereas
         #  the PyTorch version matches it with `self.model.main_input_name` or `self.model.encoder.main_input_name`
