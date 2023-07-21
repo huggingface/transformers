@@ -332,7 +332,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         return output
 
     def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        """Builds the input ids for a conversation.
+        r"""Builds the input ids for a conversation.
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
         the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
         ```
@@ -347,7 +347,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         >>> Conversation(
         ...     "<<SYS>>\n Only answer with emojis, and charades\n<</SYS>>\n\nHow can I build a house in 10 septs?"
-        ... )
+        ... )  # doctest: +IGNORE_RESULT
         ```
         Args:
             conversation (`Conversation`):
