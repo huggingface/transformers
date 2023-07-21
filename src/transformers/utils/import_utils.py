@@ -504,7 +504,14 @@ def is_ipex_available():
 
 
 def is_bitsandbytes_available():
-    return _bitsandbytes_available
+    if not is_torch_available():
+        return False
+
+    # bitsandbytes throws an error if cuda is not available
+    # let's avoid that by adding a simple check
+    import torch
+
+    return _bitsandbytes_available and torch.cuda.is_available()
 
 
 def is_torchdistx_available():

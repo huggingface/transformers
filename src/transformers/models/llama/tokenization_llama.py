@@ -53,11 +53,11 @@ B_INST, E_INST = "[INST]", "[/INST]"
 B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
 
 # fmt: off
-DEFAULT_SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your\
+DEFAULT_SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your \
 answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure\
-that your responses are socially unbiased and positive in nature.
+ that your responses are socially unbiased and positive in nature.
 
-If a question does not make any sense, or is not factually coherent, explain why instead of answering something not\
+If a question does not make any sense, or is not factually coherent, explain why instead of answering something not \
 correct. If you don't know the answer to a question, please don't share false information."""
 # fmt: on
 
@@ -332,7 +332,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         return output
 
     def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        """Builds the input ids for a conversation.
+        r"""Builds the input ids for a conversation.
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
         the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
         ```
@@ -347,7 +347,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         >>> Conversation(
         ...     "<<SYS>>\n Only answer with emojis, and charades\n<</SYS>>\n\nHow can I build a house in 10 septs?"
-        ... )
+        ... )  # doctest: +IGNORE_RESULT
         ```
         Args:
             conversation (`Conversation`):
