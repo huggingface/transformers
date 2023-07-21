@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 -->
 
 
-# 훈련용 커스텀 하드웨어 [[custom-hardware-for-training]]
+# 훈련용 사용자 정의 하드웨어 [[custom-hardware-for-training]]
 
 모델 훈련과 추론에 사용하는 하드웨어는 성능에 큰 영향을 미칠 수 있습니다. GPU에 대해 자세히 알아보려면, Tim Dettmer의 훌륭한 블로그 포스트를 확인해보세요. [블로그 포스트 링크](https://timdettmers.com/2020/09/07/which-gpu-for-deep-learning/) (영어로 작성됨).
 
