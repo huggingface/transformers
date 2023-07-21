@@ -359,6 +359,7 @@ Flax), PyTorch, and/or TensorFlow.
 |           GroupViT            |       ✅        |         ✅         |      ❌      |
 |            Hubert             |       ✅        |         ✅         |      ❌      |
 |            I-BERT             |       ✅        |         ❌         |      ❌      |
+|            Idefics            |       ✅        |         ❌         |      ❌      |
 |           ImageGPT            |       ✅        |         ❌         |      ❌      |
 |           Informer            |       ✅        |         ❌         |      ❌      |
 |         InstructBLIP          |       ✅        |         ❌         |      ❌      |
