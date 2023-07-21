@@ -241,19 +241,21 @@ class MptModelTester:
             next_input_ids,
             attention_mask=next_attention_mask,
             output_hidden_states=True,
-        )["hidden_states"][0]
+        )
+        hidden_states_from_no_past = output_from_no_past["hidden_states"][0]
 
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
             past_key_values=past_key_values,
             output_hidden_states=True,
-        )["hidden_states"][0]
+        )
+        hidden_states_from_past = output_from_past["hidden_states"][0]
 
         # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+        random_slice_idx = ids_tensor((1,), hidden_states_from_past.shape[-1]).item()
+        output_from_no_past_slice = hidden_states_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = hidden_states_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
