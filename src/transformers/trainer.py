@@ -1600,6 +1600,7 @@ class Trainer:
             and self.sharded_ddp != ShardedDDPOption.SIMPLE
             or is_sagemaker_mp_enabled()
             or self.fsdp is not None
+            or self.is_fsdp_enabled
         )
 
         # We need to reset the scheduler, as its parameters may be different on subsequent calls
@@ -1631,6 +1632,8 @@ class Trainer:
         use_accelerator_prepare = True if model is self.model else False
 
         if delay_optimizer_creation:
+            if use_accelerator_prepare:
+                self.model = self.accelerator.prepare(self.model)
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
         # prepare using `accelerator` prepare
