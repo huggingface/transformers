@@ -174,7 +174,7 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
         ]
         self.patch_index_tokens = [f"<patch_index_{str(x).zfill(4)}>" for x in range(1024)]
 
-        for idx, token in enumerate(self.location_tokens + self.patch_index_tokens):
+        for idx, token in enumerate(self.tag_tokens + self.patch_index_tokens):
             self.add_tokens(AddedToken(token, lstrip=True, rstrip=False), special_tokens=True)
             self.fairseq_tokens_to_ids[token] = len(self.sp_model) + self.fairseq_offset + 1 + idx
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
