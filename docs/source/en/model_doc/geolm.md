@@ -17,6 +17,7 @@ rendered properly in your Markdown viewer.
 # GeoLM
 
 ## Overview
+<<<<<<< HEAD
 <!-- 
 TODO: 
 The GeoLM model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
@@ -27,6 +28,22 @@ GeoLM is a language model built upon BERT to enhance geospatial understanding fo
 
 <!-- This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
 The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>). -->
+=======
+
+The GeoLM model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+<INSERT SHORT SUMMARY HERE>
+
+The abstract from the paper is the following:
+
+*<INSERT PAPER ABSTRACT HERE>*
+
+Tips:
+
+<INSERT TIPS ABOUT MODEL HERE>
+
+This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
+The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+>>>>>>> 1921a9204 (init geolm)
 
 
 ## GeoLMConfig
@@ -38,12 +55,26 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>). -->
 
 [[autodoc]] models.geolm.modeling_geolm.GeoLMForPreTrainingOutput
 
+<<<<<<< HEAD
+=======
+[[autodoc]] models.geolm.modeling_tf_geolm.TFGeoLMForPreTrainingOutput
+
+[[autodoc]] models.geolm.modeling_flax_geolm.FlaxGeoLMForPreTrainingOutput
+>>>>>>> 1921a9204 (init geolm)
 
 ## GeoLMModel
 
 [[autodoc]] GeoLMModel
     - forward
 
+<<<<<<< HEAD
+=======
+## GeoLMForPreTraining
+
+[[autodoc]] GeoLMForPreTraining
+    - forward
+
+>>>>>>> 1921a9204 (init geolm)
 ## GeoLMLMHeadModel
 
 [[autodoc]] GeoLMLMHeadModel
@@ -54,7 +85,123 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>). -->
 [[autodoc]] GeoLMForMaskedLM
     - forward
 
+<<<<<<< HEAD
+=======
+## GeoLMForNextSentencePrediction
+
+[[autodoc]] GeoLMForNextSentencePrediction
+    - forward
+
+## GeoLMForSequenceClassification
+
+[[autodoc]] GeoLMForSequenceClassification
+    - forward
+
+## GeoLMForMultipleChoice
+
+[[autodoc]] GeoLMForMultipleChoice
+    - forward
+
+>>>>>>> 1921a9204 (init geolm)
 ## GeoLMForTokenClassification
 
 [[autodoc]] GeoLMForTokenClassification
     - forward
+<<<<<<< HEAD
+=======
+
+## GeoLMForQuestionAnswering
+
+[[autodoc]] GeoLMForQuestionAnswering
+    - forward
+
+## TFGeoLMModel
+
+[[autodoc]] TFGeoLMModel
+    - call
+
+## TFGeoLMForPreTraining
+
+[[autodoc]] TFGeoLMForPreTraining
+    - call
+
+## TFGeoLMModelLMHeadModel
+
+[[autodoc]] TFGeoLMLMHeadModel
+    - call
+
+## TFGeoLMForMaskedLM
+
+[[autodoc]] TFGeoLMForMaskedLM
+    - call
+
+## TFGeoLMForNextSentencePrediction
+
+[[autodoc]] TFGeoLMForNextSentencePrediction
+    - call
+
+## TFGeoLMForSequenceClassification
+
+[[autodoc]] TFGeoLMForSequenceClassification
+    - call
+
+## TFGeoLMForMultipleChoice
+
+[[autodoc]] TFGeoLMForMultipleChoice
+    - call
+
+## TFGeoLMForTokenClassification
+
+[[autodoc]] TFGeoLMForTokenClassification
+    - call
+
+## TFGeoLMForQuestionAnswering
+
+[[autodoc]] TFGeoLMForQuestionAnswering
+    - call
+
+## FlaxGeoLMModel
+
+[[autodoc]] FlaxGeoLMModel
+    - __call__
+
+## FlaxGeoLMForPreTraining
+
+[[autodoc]] FlaxGeoLMForPreTraining
+    - __call__
+
+## FlaxGeoLMForCausalLM
+
+[[autodoc]] FlaxGeoLMForCausalLM
+    - __call__
+
+## FlaxGeoLMForMaskedLM
+
+[[autodoc]] FlaxGeoLMForMaskedLM
+    - __call__
+
+## FlaxGeoLMForNextSentencePrediction
+
+[[autodoc]] FlaxGeoLMForNextSentencePrediction
+    - __call__
+
+## FlaxGeoLMForSequenceClassification
+
+[[autodoc]] FlaxGeoLMForSequenceClassification
+    - __call__
+
+## FlaxGeoLMForMultipleChoice
+
+[[autodoc]] FlaxGeoLMForMultipleChoice
+    - __call__
+
+## FlaxGeoLMForTokenClassification
+
+[[autodoc]] FlaxGeoLMForTokenClassification
+    - __call__
+
+## FlaxGeoLMForQuestionAnswering
+
+[[autodoc]] FlaxGeoLMForQuestionAnswering
+    - __call__
+>>>>>>> 1921a9204 (init geolm)
