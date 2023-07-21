@@ -1377,9 +1377,7 @@ class Trainer:
                 raise ImportError("Missing XLA FSDP related module; please make sure to use torch-xla >= 2.0.")
             auto_wrap_policy = None
             auto_wrapper_callable = None
-            default_transformer_cls_names_to_wrap = (
-                model._no_split_modules if hasattr(model, "_no_split_modules") else None
-            )
+            default_transformer_cls_names_to_wrap = getattr(model, "_no_split_modules", None)
             fsdp_transformer_layer_cls_to_wrap = self.args.fsdp_config.get(
                 "fsdp_transformer_layer_cls_to_wrap", default_transformer_cls_names_to_wrap
             )
