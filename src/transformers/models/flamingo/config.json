@@ -1,0 +1,21 @@
+{
+    "model_type": "flamingo",
+    "cross_attn_every_n_layers": 4,
+    "tie_word_embeddings": false,
+    "use_media_placement_augmentation": true,
+    "only_attend_previous": true,
+    "text_config": {
+        "_name_or_path": "luodian/llama-7b-hf",
+        "model_type": "llama"
+    },
+    "vision_config": {
+        "_name_or_path": "openai/clip-vit-large-patch14",
+        "model_type": "clip_vision_model",
+        "hidden_size": 1024,
+        "intermediate_size": 4096,
+        "num_attention_heads": 16,
+        "num_hidden_layers": 24,
+        "image_size": 224,
+        "patch_size": 14
+    }
+}
