@@ -112,6 +112,7 @@ class IdeficsProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
+        self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
 
     def __call__(
         self,
@@ -123,15 +124,8 @@ class IdeficsProcessor(ProcessorMixin):
         max_length: Optional[int] = None,
         stride: int = 0,
         eval_mode: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
-        return_special_tokens_mask: bool = False,
-        return_offsets_mapping: bool = False,
-        return_length: bool = False,
-        verbose: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        device: str = None,
         **kwargs,
     ) -> BatchEncoding:
         """
@@ -150,74 +144,98 @@ class IdeficsProcessor(ProcessorMixin):
         is to be skipped insert a `None`. If the image entry is not `None`, the same
         `<fake_token_around_image><image><fake_token_around_image>` entry will be inserted.
 
+        `eval_mode=True` should be used for inference, and `False` for training
+
+        if `device` is passed, the return dict values will be placed on that device
         """
 
+        # turn non-batched inputs into batched
+        if not any(isinstance(i, list) for i in images):
+            images = [images]
+            texts = [texts]
+
         # convert any potential urls into images
-        images = self.image_processor.fetch_images(images)
+        images = [self.image_processor.fetch_images(x) for x in images]
 
         # texts and images are interleaved
         # a. texts is an array of texts and Nones and they come first
         # b. images is an array of PIL images and Nones and
         img_tokens = "<fake_token_around_image><image><fake_token_around_image>"
 
-        # the model was trained on samples starting with <s>
-        full_text = f"{self.tokenizer.bos_token}"
+        all_texts = []
+        all_images = []
+        for texts_item, images_item in zip(texts, images):
+            # the model was trained on samples starting with <s>
+            full_text = f"{self.tokenizer.bos_token}"
 
-        real_images = []
-        for text, image in zip(texts, images):
-            if text is not None:
-                full_text += text.strip()
-            if image is not None:
-                full_text += img_tokens
-                real_images.append(image)
+            real_images = []
+            for text, image in zip(texts_item, images_item):
+                if text is not None:
+                    full_text += text.strip(" ")
+                if image is not None:
+                    full_text += img_tokens
+                    real_images.append(image)
+            print(f"{full_text=}")
 
-        print(f"{full_text=}")
+            real_images = self.image_processor(real_images, eval_mode=eval_mode, return_tensors=return_tensors)
+            real_images = torch.stack(real_images)
 
-        encoding = self.tokenizer(
-            text=full_text,
-            add_special_tokens=False,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            stride=stride,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_token_type_ids=return_token_type_ids,
-            return_attention_mask=return_attention_mask,
-            return_overflowing_tokens=return_overflowing_tokens,
-            return_special_tokens_mask=return_special_tokens_mask,
-            return_offsets_mapping=return_offsets_mapping,
-            return_length=return_length,
-            verbose=verbose,
-            return_tensors=return_tensors,
-            **kwargs,
-        )
+            encoding = self.tokenizer(
+                text=full_text,
+                add_special_tokens=False,
+            )
 
-        # print(encoding)
+            print(encoding)
+            all_texts.append(encoding["input_ids"])
+            all_images.append(real_images)
 
-        num_classes = len(real_images)
-        image_attention_mask, _ = image_attention_mask_for_packed_input_ids(encoding.input_ids, self.tokenizer)
-        image_attention_mask = incremental_to_binary_attention_mask(image_attention_mask, num_classes=num_classes)
-        encoding["image_attention_mask"] = image_attention_mask
+        max_num_images = max(len(x) for x in all_images)
+        max_seq_len = max(len(x) for x in all_texts)
 
-        encoding_image_processor = self.image_processor(
-            real_images, eval_mode=eval_mode, return_tensors=return_tensors
-        )
-        # print(encoding_image_processor)
-        # die
-        # print(f"{encoding_image_processor['pixel_values'].shape}")
+        output_input_ids = []
+        output_images = []
+        output_attention_masks = []
+        for text, images in zip(all_texts, all_images):
+            padded_input_ids = [self.tokenizer.pad_token_id] * max_seq_len
+            unpadded_seq_len = len(text)
+            start = max_seq_len - unpadded_seq_len
+            padded_input_ids[start:] = text[:max_seq_len]
 
-        encoding.update(encoding_image_processor)
+            attention_mask = torch.zeros((max_seq_len,), dtype=torch.long)
+            attention_mask[start:] = 1
 
-        # XXX: for some reason need to add yet another dimension here?
-        encoding["pixel_values"] = encoding["pixel_values"].unsqueeze(0)
+            image_count = padded_input_ids.count(self.image_token_id)
+            local_max_num_images = min(image_count, max_num_images)
 
-        # print(encoding_image_processor)
-        print(f"{encoding_image_processor['pixel_values'].shape}")
-        # die
+            current_images = images[:local_max_num_images]
 
-        print(encoding)
+            padded_image_tensor = torch.zeros(max_num_images, *current_images.size()[1:])
+            padded_image_tensor[: current_images.size(0)] = current_images
 
-        return encoding
+            output_images.append(padded_image_tensor)
+            output_input_ids.append(torch.tensor(padded_input_ids))
+
+            output_attention_masks.append(attention_mask)
+
+        output_input_ids = torch.stack(output_input_ids)
+        output_images = torch.stack(output_images)
+        output_attention_masks = torch.stack(output_attention_masks)
+
+        image_attention_mask, _ = image_attention_mask_for_packed_input_ids(output_input_ids, self.tokenizer)
+        image_attention_mask = incremental_to_binary_attention_mask(image_attention_mask, num_classes=max_num_images)
+
+        inputs = {
+            "input_ids": output_input_ids,
+            "attention_mask": output_attention_masks,
+            "pixel_values": output_images,
+            "image_attention_mask": image_attention_mask,
+        }
+
+        if device is not None:
+            for k in inputs.keys():
+                inputs[k] = inputs[k].to(device)
+
+        return inputs
 
     def batch_decode(self, *args, **kwargs):
         """

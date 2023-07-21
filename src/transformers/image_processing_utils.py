@@ -23,7 +23,6 @@ from typing import Any, Dict, Iterable, Optional, Tuple, Union
 import numpy as np
 import requests
 
-from .utils import is_vision_available
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
 from .utils import (
@@ -35,6 +34,7 @@ from .utils import (
     download_url,
     is_offline_mode,
     is_remote_url,
+    is_vision_available,
     logging,
 )
 

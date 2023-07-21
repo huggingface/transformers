@@ -222,8 +222,8 @@ class IdeficsImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
 
-        print(f"{image_size}")
-        print(f"{image_mean}")
+        # print(f"{image_size}")
+        # print(f"{image_mean}")
         # die
 
         images = make_list_of_images(images)
@@ -255,9 +255,16 @@ class IdeficsImageProcessor(BaseImageProcessor):
 
         images = [image_transforms(image) for image in images if image is not None]
 
-        if do_pad:
-            encoded_outputs = self.pad(images, return_tensors=return_tensors)
-        else:
-            encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+        # XXX: self.pad() call was removed! is it on the other side?
 
-        return encoded_outputs
+        return images
+
+        # encoded_outputs = self.pad(images)#, return_tensors=return_tensors)
+        # return encoded_outputs
+
+        # if do_pad:
+        #     encoded_outputs = self.pad(images, return_tensors=return_tensors)
+        # else:
+        #     encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
+
+        # return encoded_outputs
