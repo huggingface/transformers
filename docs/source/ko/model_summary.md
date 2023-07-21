@@ -96,7 +96,7 @@ GPT-2 이후, 언어 모델은 더욱 거대해졌고 현재는 *대규모 언�
 
 ### 인코더-디코더[[mm-encoder-decoder]]
 
-광학 문자 인식(OCR)은 이미지를 이해하고 텍스트를 생성하기 위해 다양한 구성 요소를 필요로 하는 전통적인 텍스트 인식 작업입니다. [TrOCR](model_doc/trocr) simplifies the process using an end-to-end Transformer. [TrOCR](model_doc/trocr)은 종단간(end-to-end) Transformer를 사용하여 프로세스를 간소화합니다. 인코더는 이미지 이해를 위한 ViT 방식의 모델이며 이미지를 고정된 크기의 패치로 처리합니다. 디코더는 인코더의 은닉 상태를 받아서 자기회귀 방식으로 텍스트를 생성합니다. [Donut](model_doc/donut)은 OCR 기반 접근 방식에 의존하지 않는 더 일반적인 시각 문서 이해 모델입니다. 이 모델은 Swin Transformer를 인코더로, 다국어 BART를 디코더로 사용합니다. Donut은 이미지와 텍스트 주석을 기반으로 다음 단어를 예측하여 텍스트를 읽도록 사전훈련됩니다. 디코더는 프롬프트가 주어지면 토큰 시퀀스를 생성합니다. 프롬프트는 각 다운스트림 작업에 대한 특수 토큰으로 표현됩니다. 예를 들어, 문서 파싱(parsing)에는 인코더의 은닉 상태와 결합되어 문서를 정형 출력 형식(JSON)으로 파싱하는 특수 `파싱` 토큰이 있습니다.
+광학 문자 인식(OCR)은 이미지를 이해하고 텍스트를 생성하기 위해 다양한 구성 요소를 필요로 하는 전통적인 텍스트 인식 작업입니다. [TrOCR](model_doc/trocr)은 종단간(end-to-end) Transformer를 사용하여 이 프로세스를 간소화합니다. 인코더는 이미지 이해를 위한 ViT 방식의 모델이며 이미지를 고정된 크기의 패치로 처리합니다. 디코더는 인코더의 은닉 상태를 받아서 자기회귀 방식으로 텍스트를 생성합니다. [Donut](model_doc/donut)은 OCR 기반 접근 방식에 의존하지 않는 더 일반적인 시각 문서 이해 모델입니다. 이 모델은 Swin Transformer를 인코더로, 다국어 BART를 디코더로 사용합니다. Donut은 이미지와 텍스트 주석을 기반으로 다음 단어를 예측하여 텍스트를 읽도록 사전훈련됩니다. 디코더는 프롬프트가 주어지면 토큰 시퀀스를 생성합니다. 프롬프트는 각 다운스트림 작업에 대한 특수 토큰으로 표현됩니다. 예를 들어, 문서 파싱(parsing)에는 인코더의 은닉 상태와 결합되어 문서를 정형 출력 형식(JSON)으로 파싱하는 특수 `파싱` 토큰이 있습니다.
 
 ## 강화 학습[[reinforcement-learning]]
 
@@ -104,4 +104,4 @@ GPT-2 이후, 언어 모델은 더욱 거대해졌고 현재는 *대규모 언�
 
 ### 디코더[[rl-decoder]]
 
-Decision 및 Trajectory Transformer는 상태(state), 행동(action), 보상(reward)을 시퀀스 모델링 문제로 표현합니다. [Decision Transformer](model_doc/decision_transformer)는 returns-to-go, 과거 상태 및 행동을 기반으로 미래의 원하는 수익(return)으로 이어지는 일련의 행동을 생성합니다. 마지막 *K* 시간 스텝(timestep)에 대해, 세 가지 모달리티는 각각 토큰 임베딩으로 변환되고 GPT와 같은 모델에 의해 처리되어 미래의 액션 토큰을 예측합니다. [Trajectory Transformer](model_doc/trajectory_transformer)도 상태, 행동, 보상을 토큰화하여 GPT 아키텍처로 처리합니다. 보상 조건에 중점을 둔 Decision Transformer와 달리 Trajectory Transformer는 빔 서치(beam search)로 미래 행동을 생성합니다.
+Decision 및 Trajectory Transformer는 상태(state), 행동(action), 보상(reward)을 시퀀스 모델링 문제로 표현합니다. [Decision Transformer](model_doc/decision_transformer)는 기대 보상(returns-to-go), 과거 상태 및 행동을 기반으로 미래의 원하는 수익(return)으로 이어지는 일련의 행동을 생성합니다. 마지막 *K* 시간 스텝(timestep)에 대해, 세 가지 모달리티는 각각 토큰 임베딩으로 변환되고 GPT와 같은 모델에 의해 처리되어 미래의 액션 토큰을 예측합니다. [Trajectory Transformer](model_doc/trajectory_transformer)도 상태, 행동, 보상을 토큰화하여 GPT 아키텍처로 처리합니다. 보상 조건에 중점을 둔 Decision Transformer와 달리 Trajectory Transformer는 빔 서치(beam search)로 미래 행동을 생성합니다.
