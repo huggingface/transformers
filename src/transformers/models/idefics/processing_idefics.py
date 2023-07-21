@@ -9,9 +9,7 @@ from transformers import is_torch_available
 from transformers.processing_utils import ProcessorMixin
 from transformers.tokenization_utils_base import (
     BatchEncoding,
-    PaddingStrategy,
     TextInput,
-    TruncationStrategy,
 )
 from transformers.utils import TensorType
 
@@ -89,7 +87,7 @@ def image_attention_mask_for_packed_input_ids(input_ids, tokenizer):
 
 def is_url(string):
     """Checks if the passed string contains a valid url and nothing else. e.g. if space is included it's immediately
-invalidated the url"""
+    invalidated the url"""
     if " " in string:
         return False
     result = urlparse(string)
@@ -125,57 +123,96 @@ class IdeficsProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        inputs: List[TextInput] = None,
-        add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        stride: int = 0,
+        prompts: Union[List[TextInput], [List[List[TextInput]]]],
         eval_mode: bool = False,
-        return_tensors: Optional[Union[str, TensorType]] = None,
         device: str = None,
-        **kwargs,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        debug=False,
     ) -> BatchEncoding:
+        """This method takes batched or non-batched prompts made of text and images and converts them into prompts that
+        the model was trained on and prepares the image pixel values for the model to process.
+
+        Args:
+            prompts (`Union[List[TextInput], [List[List[TextInput]]]]`):
+                either a single prompt or a batched list of prompts - see the detailed description immediately after
+                the end of the arguments doc section.
+            eval_mode (`bool`, *optional*, defaults to `True`):
+                `True` should be used for inference, and `False` for training - this option impacts how cropping is
+                performed
+            device (`str`, *optional*, defaults to `None`):
+                 if `device` is passed, the return dict values will be placed on that device
+
+            debug (`bool`, *optional*, defaults to `False`):
+                `True` value will help debug prompt generation by dumping useful information
+
+        Returns:
+            a dict with entries: `input_ids`, `attention_mask`, `pixel_values`, `image_attention_mask` which can be
+            directly passed to `model.generate`
+
+
+        Detailed explanation:
+
+        Each entry in `prompts` is either a text to be passed as is or an image that will be processed.
+
+        An image can be either an image object (`PIL.Image`) or a url from which the image can be retrieved.
+
+        When the processor encounters an image it'll inject `<fake_token_around_image><image><fake_token_around_image>`
+        entry into the prompt.
+
+        Example:
+
+        ```python
+        checkpoint = "HuggingFaceM4/idefics-9b"
+        processor = AutoProcessor.from_pretrained(checkpoint)
+        url = "https://hips.hearstapps.com/hmg-prod/images/cute-photos-of-cats-in-grass-1593184777.jpg"
+        img = processor.image_processor.fetch_images([url])[0]
+
+        prompts = [
+            "User:",
+            img,
+            "Describe this image.\nAssistant: An image of two kittens in grass.\n",
+            "User:",
+            "https://hips.hearstapps.com/hmg-prod/images/dog-puns-1581708208.jpg",
+            "Describe this image.\nAssistant:",
+        ]
+
+        inputs = processor(prompts, eval_mode=True, device=device, return_tensors="pt")
+        generated_ids = model.generate(**inputs, max_length=100)
+        generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        ```
+
+        In this example the `prompts` will be converted into:
+
+        ```
+        <s>User:<fake_token_around_image><image><fake_token_around_image>Describe this image.
+        Assistant: An image of two kittens in grass.
+        User:<fake_token_around_image><image><fake_token_around_image>Describe this image.
+        Assistant:'
+        ```
+
+        and the two images will be massaged using [`IdeficsImageProcessor.__call__`] method and placed inside the
+        `pixel_values` dict entry of the return value.
+
+        This example also examplifies that images can be passed as objects or as text urls. It can be seen that the
+        first image is passed as object and the second one as a url.
+
+        In order to help debug prompt generation enable `debug=True` which will show you what's happening.
+
         """
 
-        This method uses [`IdeficsImageProcessor.__call__`] method to prepare image(s) for the model, and
-        [`LlamaTokenizerFast.__call__`] to prepare text for the model.
+        # turn non-batched prompts into batched
+        if not any(isinstance(i, list) for i in prompts):
+            prompts = [prompts]
 
-        Please refer to the docstring of the above two methods for more information.
-
-        Additional documentation about `texts` and `images` arguments:
-
-        `images` could be either images or urls or `None`s - urls will be automatically converted to images.
-
-        When generating the prompt `texts` and `images` will be interleaved (zipped) as following: `texts[0]`,
-        `images[0]`, `texts[1]`, `images[1]`, etc.. `texts` will be first. If any of the entries in either of the lists
-        is to be skipped insert a `None`. If the image entry is not `None`, the same
-        `<fake_token_around_image><image><fake_token_around_image>` entry will be inserted.
-
-        `eval_mode=True` should be used for inference, and `False` for training
-
-        if `device` is passed, the return dict values will be placed on that device
-        """
-
-        # turn non-batched inputs into batched
-        if not any(isinstance(i, list) for i in inputs):
-            inputs = [inputs]
-
-        # convert any potential urls into images
-        # images = [self.image_processor.fetch_images(x) for x in images]
-
-        # texts and images are interleaved
-        # a. texts is an array of texts and Nones and they come first
-        # b. images is an array of PIL images and Nones and
         img_tokens = "<fake_token_around_image><image><fake_token_around_image>"
 
         all_texts = []
         all_images = []
-        for sample in inputs:
+        for sample in prompts:
             # the model was trained on samples starting with <s>
             full_text = f"{self.tokenizer.bos_token}"
 
-            # an image can either be an image object in the item or the url, everything else is a prompt text
+            # an image can either be an image object in the item or the url, everything else is a verbatim prompt text
             real_images = []
             for item in sample:
                 if isinstance(item, str):
@@ -191,7 +228,8 @@ class IdeficsProcessor(ProcessorMixin):
                     full_text += img_tokens
                     real_images.append(item)
 
-            print(f"{full_text=}")
+            if debug is True:
+                print(f"{full_text=}")
 
             real_images = self.image_processor(real_images, eval_mode=eval_mode, return_tensors=return_tensors)
             real_images = torch.stack(real_images)
