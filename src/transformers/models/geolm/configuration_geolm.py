@@ -80,6 +80,8 @@ class GeoLMConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        use_spatial_distance_embedding (`bool`, *optional*, defaults to `True`):
+            Whether or not add spatial_distance_embedding module to the other embeddings to calculate the final input embeddings. 
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
 
@@ -88,10 +90,10 @@ class GeoLMConfig(PretrainedConfig):
     ```python
     >>> from transformers import GeoLMConfig, GeoLMModel
 
-    >>> # Initializing a GEOLM zekun-li/geolm-base-cased style configuration
+    >>> # Initializing a GEOLM geolm-base-cased style configuration
     >>> configuration = GeoLMConfig()
 
-    >>> # Initializing a model (with random weights) from the zekun-li/geolm-base-cased style configuration
+    >>> # Initializing a model (with random weights) from the geolm-base-cased style configuration
     >>> model = GeoLMModel(configuration)
 
     >>> # Accessing the model configuration
@@ -116,6 +118,7 @@ class GeoLMConfig(PretrainedConfig):
         pad_token_id=0,
         position_embedding_type="absolute",
         use_cache=True,
+        use_spatial_distance_embedding = True,
         classifier_dropout=None,
         **kwargs,
     ):
@@ -135,6 +138,7 @@ class GeoLMConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
+        self.use_spatial_distance_embedding = use_spatial_distance_embedding
         self.classifier_dropout = classifier_dropout
 
 
