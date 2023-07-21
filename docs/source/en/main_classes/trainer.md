@@ -441,7 +441,7 @@ as the model saving with FSDP activated is only available with recent fixes.
 - Remaining FSDP config is passed via `--fsdp_config <path_to_fsdp_config.json>`. It is either a location of
   FSDP json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`. 
   - If auto wrapping is enabled, you can either use transformer based auto wrap policy or size based auto wrap policy.
-    - For transformer based auto wrap policy, please specify `fsdp_transformer_layer_cls_to_wrap` in the config file. 
+    - For transformer based auto wrap policy, it is recommended to specify `fsdp_transformer_layer_cls_to_wrap` in the config file. If not specified, the default value is `model._no_split_modules` when available.
       This specifies the list of transformer layer class name (case-sensitive) to wrap ,e.g, [`BertLayer`], [`GPTJBlock`], [`T5Block`] ....
       This is important because submodules that share weights (e.g., embedding layer) should not end up in different FSDP wrapped units.
       Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers. 
@@ -482,7 +482,7 @@ Pass `--fsdp "full shard"` along with following changes to be made in `--fsdp_co
   This setting can only be used when the xla flag is set to true, and an auto wrapping policy is specified through
   `fsdp_min_num_params` or `fsdp_transformer_layer_cls_to_wrap`. 
 - You can either use transformer based auto wrap policy or size based auto wrap policy.
-  - For transformer based auto wrap policy, please specify `fsdp_transformer_layer_cls_to_wrap` in the config file. 
+  - For transformer based auto wrap policy, it is recommended to specify `fsdp_transformer_layer_cls_to_wrap` in the config file. If not specified, the default value is `model._no_split_modules` when available.
     This specifies the list of transformer layer class name (case-sensitive) to wrap ,e.g, [`BertLayer`], [`GPTJBlock`], [`T5Block`] ....
     This is important because submodules that share weights (e.g., embedding layer) should not end up in different FSDP wrapped units.
     Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers. 
