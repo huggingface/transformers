@@ -29,6 +29,7 @@ from functools import partial
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
+import torch.distributed as dist
 from packaging import version
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
@@ -457,7 +458,7 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             )
         return safe_load_file(checkpoint_file)
     try:
-        if is_deepspeed_zero3_enabled() and torch.distributed.get_rank() > 0:
+        if is_deepspeed_zero3_enabled() and dist.is_initialized() and dist.get_rank() > 0:
             map_location = "meta"
         else:
             map_location = "cpu"
@@ -539,7 +540,7 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
                     # manager gathers (unpartitions) the params of the current layer, then loads from
                     # the state dict and then re-partitions them again
                     with deepspeed.zero.GatheredParameters(params_to_gather, modifier_rank=0):
-                        if torch.distributed.get_rank() == 0:
+                        if dist.get_rank() == 0:
                             module._load_from_state_dict(*args)
             else:
                 module._load_from_state_dict(*args)
@@ -1479,7 +1480,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             import deepspeed
 
             with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=0):
-                if torch.distributed.get_rank() == 0:
+                if dist.get_rank() == 0:
                     new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
         else:
             new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
@@ -1551,7 +1552,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             params = [old_lm_head.weight, old_lm_head.bias, new_lm_head.weight, new_lm_head.bias]
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
-                if torch.distributed.get_rank() == 0:
+                if dist.get_rank() == 0:
                     # Copy old lm head weights to new lm head
                     if not transposed:
                         new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[
