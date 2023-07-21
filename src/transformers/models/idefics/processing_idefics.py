@@ -4,8 +4,7 @@ Processor class for IDEFICS.
 
 from typing import List, Optional, Union
 
-import torch
-
+from transformers import is_torch_available
 from transformers.processing_utils import ProcessorMixin
 from transformers.tokenization_utils_base import (
     BatchEncoding,
@@ -17,7 +16,8 @@ from transformers.tokenization_utils_base import (
 from transformers.utils import TensorType
 
 
-# from transformers import LlamaTokenizer
+if is_torch_available():
+    import torch
 
 
 IMAGE_TOKEN = "<image>"
