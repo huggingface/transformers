@@ -30,9 +30,7 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
 from ..models.auto.modeling_auto import AutoModelForDepthEstimation
-from ..models.auto.processing_auto import PROCESSOR_MAPPING, AutoProcessor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
-from ..processing_utils import ProcessorMixin
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import (
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
@@ -182,7 +180,7 @@ SUPPORTED_TASKS = {
         "tf": (),
         "pt": (AutoModelForTextToAudio,) if is_torch_available() else (),
         "default": {"model": {"pt": ("suno/bark-small", "645cfba")}},
-        "type": "processor",
+        "type": "text",
     },
     "feature-extraction": {
         "impl": FeatureExtractionPipeline,
@@ -410,7 +408,7 @@ SUPPORTED_TASKS = {
 NO_FEATURE_EXTRACTOR_TASKS = set()
 NO_IMAGE_PROCESSOR_TASKS = set()
 NO_TOKENIZER_TASKS = set()
-NO_PROCESSOR_TASKS = set()
+
 # Those model configs are special, they are generic over their task, meaning
 # any tokenizer/feature_extractor might be use for a given model so we cannot
 # use the statically defined TOKENIZER_MAPPING and FEATURE_EXTRACTOR_MAPPING to
@@ -420,18 +418,11 @@ for task, values in SUPPORTED_TASKS.items():
     if values["type"] == "text":
         NO_FEATURE_EXTRACTOR_TASKS.add(task)
         NO_IMAGE_PROCESSOR_TASKS.add(task)
-        NO_PROCESSOR_TASKS.add(task)
     elif values["type"] in {"image", "video"}:
         NO_TOKENIZER_TASKS.add(task)
-        NO_PROCESSOR_TASKS.add(task)
     elif values["type"] in {"audio"}:
         NO_TOKENIZER_TASKS.add(task)
         NO_IMAGE_PROCESSOR_TASKS.add(task)
-        NO_PROCESSOR_TASKS.add(task)
-    elif values["type"] in {"processor"}:
-        NO_FEATURE_EXTRACTOR_TASKS.add(task)
-        NO_IMAGE_PROCESSOR_TASKS.add(task)
-        NO_TOKENIZER_TASKS.add(task)
     elif values["type"] != "multimodal":
         raise ValueError(f"SUPPORTED_TASK {task} contains invalid type {values['type']}")
 
@@ -531,7 +522,6 @@ def pipeline(
     tokenizer: Optional[Union[str, PreTrainedTokenizer, "PreTrainedTokenizerFast"]] = None,
     feature_extractor: Optional[Union[str, PreTrainedFeatureExtractor]] = None,
     image_processor: Optional[Union[str, BaseImageProcessor]] = None,
-    processor: Optional[Union[str, ProcessorMixin]] = None,
     framework: Optional[str] = None,
     revision: Optional[str] = None,
     use_fast: bool = True,
@@ -576,7 +566,7 @@ def pipeline(
             - `"text-classification"` (alias `"sentiment-analysis"` available): will return a
               [`TextClassificationPipeline`].
             - `"text-generation"`: will return a [`TextGenerationPipeline`]:.
-            - `"text-to-speech"` (alias `"text-to-audio"` available): will return a [`TextToAudioPipeline`]:.
+            - `"text-to-audio"` (alias `"text-to-speech"` available): will return a [`TextToAudioPipeline`]:.
             - `"token-classification"` (alias `"ner"` available): will return a [`TokenClassificationPipeline`].
             - `"translation"`: will return a [`TranslationPipeline`].
             - `"translation_xx_to_yy"`: will return a [`TranslationPipeline`].
@@ -823,7 +813,6 @@ def pipeline(
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
     load_image_processor = type(model_config) in IMAGE_PROCESSOR_MAPPING or image_processor is not None
-    load_processor = type(model_config) in PROCESSOR_MAPPING or processor is not None
 
     # If `model` (instance of `PretrainedModel` instead of `str`) is passed (and/or same for config), while
     # `image_processor` or `feature_extractor` is `None`, the loading will fail. This happens particularly for some
@@ -879,8 +868,6 @@ def pipeline(
         load_feature_extractor = False
     if task in NO_IMAGE_PROCESSOR_TASKS:
         load_image_processor = False
-    if task in NO_PROCESSOR_TASKS:
-        load_processor = False
 
     if load_tokenizer:
         # Try to infer tokenizer from model or config name (if provided as str)
@@ -986,34 +973,6 @@ def pipeline(
                     if not is_pyctcdecode_available():
                         logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
 
-    if load_processor:
-        # Try to infer processor from model or config name (if provided as str)
-        if processor is None:
-            if isinstance(model_name, str):
-                processor = model_name
-            elif isinstance(config, str):
-                processor = config
-            else:
-                # Impossible to guess what is the right tokenizer here
-                raise Exception(
-                    "Impossible to guess which processor to use. "
-                    "Please provide a ProcessorMixin class or a path/identifier to a pretrained processor."
-                )
-
-        # Instantiate tokenizer if needed
-        if isinstance(processor, (str, tuple)):
-            if isinstance(processor, tuple):
-                # For tuple we have (tokenizer name, {kwargs})
-                processor_identifier = processor[0]
-                processor_kwargs = processor[1]
-            else:
-                processor_identifier = processor
-                processor_kwargs = model_kwargs.copy()
-                processor_kwargs.pop("torch_dtype", None)
-
-            processor = AutoProcessor.from_pretrained(
-                processor_identifier, _from_pipeline=task, **hub_kwargs, **processor_kwargs
-            )
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:
@@ -1036,9 +995,6 @@ def pipeline(
 
     if image_processor is not None:
         kwargs["image_processor"] = image_processor
-
-    if processor is not None:
-        kwargs["processor"] = processor
 
     if device is not None:
         kwargs["device"] = device

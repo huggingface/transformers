@@ -34,7 +34,6 @@ from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
-from ..processing_utils import ProcessorMixin
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import ModelOutput, add_end_docstrings, infer_framework, is_tf_available, is_torch_available, logging
 
@@ -758,7 +757,6 @@ class Pipeline(_ScikitCompat):
         tokenizer: Optional[PreTrainedTokenizer] = None,
         feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
         image_processor: Optional[BaseImageProcessor] = None,
-        processor: Optional[ProcessorMixin] = None,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
         task: str = "",
@@ -776,7 +774,6 @@ class Pipeline(_ScikitCompat):
         self.tokenizer = tokenizer
         self.feature_extractor = feature_extractor
         self.image_processor = image_processor
-        self.processor = processor
         self.modelcard = modelcard
         self.framework = framework
 
@@ -868,9 +865,6 @@ class Pipeline(_ScikitCompat):
 
         if self.feature_extractor is not None:
             self.feature_extractor.save_pretrained(save_directory)
-
-        if self.processor is not None:
-            self.processor.save_pretrained(save_directory)
 
         if self.modelcard is not None:
             self.modelcard.save_pretrained(save_directory)
@@ -1055,19 +1049,10 @@ class Pipeline(_ScikitCompat):
             logger.info("Disabling tokenizer parallelism, we're using DataLoader multithreading already")
             os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-        tokenizer = self.tokenizer
-
         # TODO hack by collating feature_extractor and image_processor
         feature_extractor = self.feature_extractor if self.feature_extractor is not None else self.image_processor
-
-        # TODO hack if processor exists by using the processor tokenizer and/or feature extractor
-        if self.processor is not None:
-            if feature_extractor is None and self.processor.feature_extractor_class is not None:
-                feature_extractor = self.processor.feature_extractor
-            if tokenizer is None and self.processor.tokenizer_class is not None:
-                tokenizer = self.processor.tokenizer
-
-        collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(tokenizer, feature_extractor)
+        
+        collate_fn = no_collate_fn if batch_size == 1 else pad_collate_fn(self.tokenizer, feature_extractor)
         dataloader = DataLoader(dataset, num_workers=num_workers, batch_size=batch_size, collate_fn=collate_fn)
         model_iterator = PipelineIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size)
         final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)
