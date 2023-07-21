@@ -189,6 +189,9 @@ class GenerationConfig(PushToHubMixin):
             The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale > 1`.
             Higher guidance scale encourages the model to generate samples that are more closely linked to the input
             prompt, usually at the expense of poorer quality.
+        low_memory (`bool`, *optional*):
+            Switch to sequential topk for contrastive search to reduce peak memory. Used with contrastive search.
+
 
         > Parameters that define the output variables of `generate`
 
@@ -270,6 +273,7 @@ class GenerationConfig(PushToHubMixin):
         self.forced_decoder_ids = kwargs.pop("forced_decoder_ids", None)
         self.sequence_bias = kwargs.pop("sequence_bias", None)
         self.guidance_scale = kwargs.pop("guidance_scale", None)
+        self.low_memory = kwargs.pop("low_memory", None)
 
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
