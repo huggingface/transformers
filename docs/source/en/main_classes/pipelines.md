@@ -318,9 +318,9 @@ Pipelines available for audio tasks include the following.
     - __call__
     - all
 
-### TextToSpeechPipeline
+### TextToAudioPipeline
 
-[[autodoc]] TextToSpeechPipeline
+[[autodoc]] TextToAudioPipeline
     - __call__
     - all
 

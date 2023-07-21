@@ -16,9 +16,9 @@ ONLY_ONE_SPEAKER_EMBEDDINGS_LIST = ["bark"]
 SPEAKER_EMBEDDINGS_KEY_MAPPING = {"bark": "history_prompt"}
 
 
-class TextToSpeechPipeline(Pipeline):
+class TextToAudioPipeline(Pipeline):
     """
-    Text-to-speech generation pipeline using any `AutoModelForTextToSpeech`. This pipeline generates an audio file from
+    Text-to-audio generation pipeline using any `AutoModelForTextToAudio`. This pipeline generates an audio file from
     an input text and optional other conditional inputs.
 
     Example:
@@ -43,7 +43,7 @@ class TextToSpeechPipeline(Pipeline):
         super().__init__(*args, **kwargs)
 
         if self.framework == "tf":
-            raise ValueError("The TextToSpeechPipeline is only available in PyTorch.")
+            raise ValueError("The TextToAudioPipeline is only available in PyTorch.")
 
         self.model_type = self.model.config.model_type
 
@@ -140,7 +140,7 @@ class TextToSpeechPipeline(Pipeline):
         **generate_kwargs,
     ):
         """
-        Generates speech/audio from the inputs. See the [`TextToSpeechPipeline`] documentation for more information.
+        Generates speech/audio from the inputs. See the [`TextToAudioPipeline`] documentation for more information.
 
         Args:
             input_texts (`str` or `List[str]`):

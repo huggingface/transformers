@@ -72,7 +72,7 @@ from .table_question_answering import TableQuestionAnsweringArgumentHandler, Tab
 from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
 from .text_classification import TextClassificationPipeline
 from .text_generation import TextGenerationPipeline
-from .text_to_speech import TextToSpeechPipeline
+from .text_to_speech import TextToAudioPipeline
 from .token_classification import (
     AggregationStrategy,
     NerPipeline,
@@ -136,7 +136,7 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         AutoModelForSpeechSeq2Seq,
         AutoModelForTableQuestionAnswering,
-        AutoModelForTextToSpeech,
+        AutoModelForTextToAudio,
         AutoModelForTokenClassification,
         AutoModelForVideoClassification,
         AutoModelForVision2Seq,
@@ -160,7 +160,7 @@ TASK_ALIASES = {
     "sentiment-analysis": "text-classification",
     "ner": "token-classification",
     "vqa": "visual-question-answering",
-    "text-to-audio": "text-to-speech",
+    "text-to-speech": "text-to-audio",
 }
 SUPPORTED_TASKS = {
     "audio-classification": {
@@ -177,10 +177,10 @@ SUPPORTED_TASKS = {
         "default": {"model": {"pt": ("facebook/wav2vec2-base-960h", "55bb623")}},
         "type": "multimodal",
     },
-    "text-to-speech": {
-        "impl": TextToSpeechPipeline,
+    "text-to-audio": {
+        "impl": TextToAudioPipeline,
         "tf": (),
-        "pt": (AutoModelForTextToSpeech,) if is_torch_available() else (),
+        "pt": (AutoModelForTextToAudio,) if is_torch_available() else (),
         "default": {"model": {"pt": ("suno/bark-small", "645cfba")}},
         "type": "processor",
     },
@@ -488,7 +488,7 @@ def check_task(task: str) -> Tuple[str, Dict, Any]:
             - `"text2text-generation"`
             - `"text-classification"` (alias `"sentiment-analysis"` available)
             - `"text-generation"`
-            - `"text-to-speech"` (alias `"text-to-audio"` available)
+            - `"text-to-audio"` (alias `"text-to-speech"` available)
             - `"token-classification"` (alias `"ner"` available)
             - `"translation"`
             - `"translation_xx_to_yy"`
@@ -576,7 +576,7 @@ def pipeline(
             - `"text-classification"` (alias `"sentiment-analysis"` available): will return a
               [`TextClassificationPipeline`].
             - `"text-generation"`: will return a [`TextGenerationPipeline`]:.
-            - `"text-to-speech"` (alias `"text-to-audio"` available): will return a [`TextToSpeechPipeline`]:.
+            - `"text-to-speech"` (alias `"text-to-audio"` available): will return a [`TextToAudioPipeline`]:.
             - `"token-classification"` (alias `"ner"` available): will return a [`TokenClassificationPipeline`].
             - `"translation"`: will return a [`TranslationPipeline`].
             - `"translation_xx_to_yy"`: will return a [`TranslationPipeline`].

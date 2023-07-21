@@ -49,7 +49,7 @@ from .pipelines.test_pipelines_table_question_answering import TQAPipelineTests
 from .pipelines.test_pipelines_text2text_generation import Text2TextGenerationPipelineTests
 from .pipelines.test_pipelines_text_classification import TextClassificationPipelineTests
 from .pipelines.test_pipelines_text_generation import TextGenerationPipelineTests
-from .pipelines.test_pipelines_text_to_speech import TextToSpeechPipelineTests
+from .pipelines.test_pipelines_text_to_speech import TextToAudioPipelineTests
 from .pipelines.test_pipelines_token_classification import TokenClassificationPipelineTests
 from .pipelines.test_pipelines_translation import TranslationPipelineTests
 from .pipelines.test_pipelines_video_classification import VideoClassificationPipelineTests
@@ -79,7 +79,7 @@ pipeline_test_mapping = {
     "text2text-generation": {"test": Text2TextGenerationPipelineTests},
     "text-classification": {"test": TextClassificationPipelineTests},
     "text-generation": {"test": TextGenerationPipelineTests},
-    "text-to-speech": {"test": TextToSpeechPipelineTests},
+    "text-to-audio": {"test": TextToAudioPipelineTests},
     "token-classification": {"test": TokenClassificationPipelineTests},
     "translation": {"test": TranslationPipelineTests},
     "video-classification": {"test": VideoClassificationPipelineTests},

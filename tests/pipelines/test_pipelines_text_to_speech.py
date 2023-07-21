@@ -15,8 +15,8 @@
 import unittest
 
 from transformers import (
-    MODEL_FOR_TEXT_TO_SPEECH_MAPPING,
-    TextToSpeechPipeline,
+    MODEL_FOR_TEXT_TO_AUDIO_MAPPING,
+    TextToAudioPipeline,
     pipeline,
 )
 from transformers.testing_utils import (
@@ -36,13 +36,13 @@ if is_torch_available():
 
 @is_pipeline_test
 @require_torch_or_tf
-class TextToSpeechPipelineTests(unittest.TestCase):
-    model_mapping = MODEL_FOR_TEXT_TO_SPEECH_MAPPING
+class TextToAudioPipelineTests(unittest.TestCase):
+    model_mapping = MODEL_FOR_TEXT_TO_AUDIO_MAPPING
 
     @require_torch
     def test_small_model_pt(self):
         speech_generator = pipeline(
-            task="text-to-speech", model="microsoft/speecht5_tts", framework="pt", vocoder="microsoft/speecht5_hifigan"
+            task="text-to-audio", model="microsoft/speecht5_tts", framework="pt", vocoder="microsoft/speecht5_hifigan"
         )
 
         # test if sampling_rate defined
@@ -76,9 +76,9 @@ class TextToSpeechPipelineTests(unittest.TestCase):
     @slow
     @require_torch
     def test_large_model_pt(self):
-        speech_generator = pipeline(task="text-to-speech", model="suno/bark-small", framework="pt")
+        speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt")
 
-        # test if sampling_rate defined
+        # test if sampling_rate defined, test text-to-speech
 
         # Using `do_sample=False` to force deterministic output
         outputs = speech_generator("This is a test", do_sample=False, semantic_max_new_tokens=100)
@@ -109,7 +109,7 @@ class TextToSpeechPipelineTests(unittest.TestCase):
         )
 
     def get_test_pipeline(self, model, tokenizer, processor):
-        speech_generator = TextToSpeechPipeline(model=model, tokenizer=tokenizer)
+        speech_generator = TextToAudioPipeline(model=model, tokenizer=tokenizer)
         return speech_generator, ["This is a test", "Another test"]
 
     def run_pipeline_test(self, speech_generator, _):
