@@ -189,7 +189,7 @@ class IdeficsProcessor(ProcessorMixin):
                 else:
                     # must be an image obj
                     full_text += img_tokens
-                    real_images.append(image)
+                    real_images.append(item)
 
             print(f"{full_text=}")
 
