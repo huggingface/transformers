@@ -17,14 +17,14 @@ STOPPING_CRITERIA_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         scores (`torch.FloatTensor` of shape `(batch_size, config.vocab_size)`):
             Prediction scores of a language modeling head. These can be scores for each vocabulary token before SoftMax
             or scores for each vocabulary token after SoftMax.
-        kwargs:
+        kwargs (`Dict[str, Any]`, *optional*):
             Additional stopping criteria specific kwargs.
 
     Return:
