@@ -16,11 +16,8 @@
 
 import unittest
 
-from datasets import load_dataset
-from packaging import version
-
 from transformers import IdeficsConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import TestCasePlus, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -38,7 +35,6 @@ if is_torch_available():
     from transformers.models.idefics.modeling_idefics import IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
-    import PIL
     from PIL import Image
 
     from transformers import IdeficsProcessor
@@ -107,21 +103,19 @@ class IdeficsModelTester:
         self.expected_seq_len = self.seq_length + (self.image_size // self.patch_size) ** 2 + 1
 
     def prepare_config_and_inputs(self):
-        self.seq_length = 41
+        self.seq_length = 42
 
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        if self.add_multiple_images:
-            pixel_values = floats_tensor([1, self.batch_size, 2, self.num_channels, self.image_size, self.image_size])
-            num_classes = 2
-        else:
-            pixel_values = floats_tensor([1, self.batch_size, self.num_channels, self.image_size, self.image_size])
-            num_classes = 1
 
+        num_images = 2 if self.add_multiple_images else 1
+        pixel_values = floats_tensor(
+            [self.batch_size, num_images, self.num_channels, self.image_size, self.image_size]
+        )
         input_mask = None
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        image_attention_mask = random_attention_mask([self.batch_size, self.seq_length, num_classes])
+        image_attention_mask = random_attention_mask([self.batch_size, self.seq_length, num_images])
 
         # inputs["input_ids"].shape=torch.Size([1, 41])
         # inputs["attention_mask"].shape=torch.Size([1, 41])
@@ -480,7 +474,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
 @require_torch
 class IdeficsForCausalLMTest(IdeficsModelTest, unittest.TestCase):
-    all_model_classes = (IdeficsForCausalLM) if is_torch_available() else ()
+    all_model_classes = (IdeficsForCausalLM,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = IdeficsModelTester(
@@ -497,62 +491,48 @@ class IdeficsForCausalLMTest(IdeficsModelTest, unittest.TestCase):
         pass
 
 
-# We will verify our results on an image of cute cats
-def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-    return image
-
-
 @require_torch
 @require_vision
-class IdeficsModelIntegrationTest(unittest.TestCase):
+class IdeficsModelIntegrationTest(TestCasePlus):
     @cached_property
     def default_processor(self):
-        return (
-            IdeficsProcessor.from_pretrained("dandelin/idefics-b32-finetuned-vqa") if is_vision_available() else None
-        )
+        return IdeficsProcessor.from_pretrained("HuggingFaceM4/idefics-9b") if is_vision_available() else None
 
-    # XXX: convert to CausalLM
     @slow
     def test_inference_natural_language_visual_reasoning(self):
-        model = IdeficsForCausalLM.from_pretrained("dandelin/idefics-b32-finetuned-nlvr2").to(torch_device)
+        cat_image_path = self.tests_dir / "fixtures/tests_samples/COCO/000000039769.png"
+        cats_image_obj = Image.open(cat_image_path)  # 2 cats
+        dogs_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_nlvr2/raw/main/image1.jpeg"
 
+        prompts = [
+            [
+                "User:",
+                dogs_image_url,
+                "Describe this image.\nAssistant: An image of two dogs.\n",
+                "User:",
+                cats_image_obj,
+                "Describe this image.\nAssistant:",
+            ],
+            [
+                "User:",
+                cats_image_obj,
+                "Describe this image.\nAssistant: An image of two kittens.\n",
+                "User:",
+                dogs_image_url,
+                "Describe this image.\nAssistant:",
+            ],
+        ]
+
+        model = IdeficsForCausalLM.from_pretrained("HuggingFaceM4/idefics-9b").to(torch_device)
         processor = self.default_processor
+        inputs = processor(prompts, eval_mode=True, device=torch_device, return_tensors="pt")
+        generated_ids = model.generate(**inputs, max_length=100)
+        generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
-        dataset = load_dataset("hf-internal-testing/fixtures_nlvr2", split="test")
-        image1 = Image.open(dataset[0]["file"]).convert("RGB")
-        image2 = Image.open(dataset[1]["file"]).convert("RGB")
+        # keep for debugging
+        for i, t in enumerate(generated_text):
+            t = bytes(t, "utf-8").decode("unicode_escape")
+            print(f"{i}:\n{t}\n")
 
-        text = (
-            "The left image contains twice the number of dogs as the right image, and at least two dogs in total are"
-            " standing."
-        )
-        encoding_1 = processor(image1, text, return_tensors="pt")
-        encoding_2 = processor(image2, text, return_tensors="pt")
-
-        pixel_values = torch.stack([encoding_1.pixel_values, encoding_2.pixel_values], dim=1)
-
-        # forward pass
-        outputs = model(
-            input_ids=encoding_1.input_ids.to(torch_device),
-            pixel_values=pixel_values.to(torch_device),
-        )
-
-        # verify the logits
-        expected_shape = torch.Size([1, 2])
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        is_pillow_less_than_9 = version.parse(PIL.__version__) < version.parse("9.0.0")
-
-        if is_pillow_less_than_9:
-            expected_slice = torch.tensor(
-                [-2.4013, 2.9342],
-                device=torch_device,
-            )
-        else:
-            expected_slice = torch.tensor(
-                [-2.3713, 2.9168],
-                device=torch_device,
-            )
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        self.assertIn("image of two cats", generated_text[0])
+        self.assertIn("image of two dogs", generated_text[1])
