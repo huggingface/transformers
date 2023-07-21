@@ -3,13 +3,13 @@ Processor class for IDEFICS.
 """
 
 from typing import List, Optional, Union
+from urllib.parse import urlparse
 
 from transformers import is_torch_available
 from transformers.processing_utils import ProcessorMixin
 from transformers.tokenization_utils_base import (
     BatchEncoding,
     PaddingStrategy,
-    PreTokenizedInput,
     TextInput,
     TruncationStrategy,
 )
@@ -87,6 +87,15 @@ def image_attention_mask_for_packed_input_ids(input_ids, tokenizer):
     return image_attention_mask, next_image_attention_mask
 
 
+def is_url(string):
+    """Checks if the passed string contains a valid url and nothing else. e.g. if space is included it's immediately
+invalidated the url"""
+    if " " in string:
+        return False
+    result = urlparse(string)
+    return all([result.scheme, result.netloc])
+
+
 class IdeficsProcessor(ProcessorMixin):
     r"""
     Constructs a IDEFICS processor which wraps a LLama tokenizer and IDEFICS image processor into a single processor.
@@ -116,8 +125,7 @@ class IdeficsProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images,
-        texts: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        inputs: List[TextInput] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -150,12 +158,11 @@ class IdeficsProcessor(ProcessorMixin):
         """
 
         # turn non-batched inputs into batched
-        if not any(isinstance(i, list) for i in images):
-            images = [images]
-            texts = [texts]
+        if not any(isinstance(i, list) for i in inputs):
+            inputs = [inputs]
 
         # convert any potential urls into images
-        images = [self.image_processor.fetch_images(x) for x in images]
+        # images = [self.image_processor.fetch_images(x) for x in images]
 
         # texts and images are interleaved
         # a. texts is an array of texts and Nones and they come first
@@ -164,17 +171,26 @@ class IdeficsProcessor(ProcessorMixin):
 
         all_texts = []
         all_images = []
-        for texts_item, images_item in zip(texts, images):
+        for sample in inputs:
             # the model was trained on samples starting with <s>
             full_text = f"{self.tokenizer.bos_token}"
 
+            # an image can either be an image object in the item or the url, everything else is a prompt text
             real_images = []
-            for text, image in zip(texts_item, images_item):
-                if text is not None:
-                    full_text += text.strip(" ")
-                if image is not None:
+            for item in sample:
+                if isinstance(item, str):
+                    item = item.strip(" ")
+                    if is_url(item):
+                        image = self.image_processor.fetch_images([item])[0]
+                        full_text += img_tokens
+                        real_images.append(image)
+                    else:
+                        full_text += item
+                else:
+                    # must be an image obj
                     full_text += img_tokens
                     real_images.append(image)
+
             print(f"{full_text=}")
 
             real_images = self.image_processor(real_images, eval_mode=eval_mode, return_tensors=return_tensors)
