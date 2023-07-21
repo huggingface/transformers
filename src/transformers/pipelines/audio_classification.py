@@ -22,7 +22,7 @@ from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -98,7 +98,7 @@ class AudioClassificationPipeline(Pipeline):
         if self.framework != "pt":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
-        self.check_model_type(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING)
+        self.check_model_type(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES)
 
     def __call__(
         self,
