@@ -573,7 +573,7 @@ class MptModel(MptPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The Mpt Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    The MPT Model transformer with a language modeling head on top (linear layer with weights tied to the input
     embeddings).
     """,
     MPT_START_DOCSTRING,
@@ -715,7 +715,7 @@ class MptForCausalLM(MptPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The Mpt Model transformer with a sequence classification head on top (linear layer).
+    The MPT Model transformer with a sequence classification head on top (linear layer).
 
     [`MptForSequenceClassification`] uses the last token in order to do the classification, as other causal models
     (e.g. GPT-1) do.
@@ -836,7 +836,7 @@ class MptForSequenceClassification(MptPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Mpt Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    MPT Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
     Named-Entity-Recognition (NER) tasks.
     """,
     MPT_START_DOCSTRING,
