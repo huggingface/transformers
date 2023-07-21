@@ -21,7 +21,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module
+from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...utils import cached_file, extract_commit_hash, is_sentencepiece_available, is_tokenizers_available, logging
@@ -167,6 +167,7 @@ else:
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("ibert", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+            ("instructblip", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("jukebox", ("JukeboxTokenizer", None)),
             ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlmv2", ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast" if is_tokenizers_available() else None)),
@@ -213,6 +214,7 @@ else:
             ("mluke", ("MLukeTokenizer" if is_sentencepiece_available() else None, None)),
             ("mobilebert", ("MobileBertTokenizer", "MobileBertTokenizerFast" if is_tokenizers_available() else None)),
             ("mpnet", ("MPNetTokenizer", "MPNetTokenizerFast" if is_tokenizers_available() else None)),
+            ("mra", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "mt5",
                 (
@@ -323,6 +325,13 @@ else:
             ("tapas", ("TapasTokenizer", None)),
             ("tapex", ("TapexTokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
+            (
+                "umt5",
+                (
+                    "T5Tokenizer" if is_sentencepiece_available() else None,
+                    "T5TokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("vilt", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("visual_bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),
@@ -608,7 +617,7 @@ class AutoTokenizer:
 
         use_fast = kwargs.pop("use_fast", True)
         tokenizer_type = kwargs.pop("tokenizer_type", None)
-        trust_remote_code = kwargs.pop("trust_remote_code", False)
+        trust_remote_code = kwargs.pop("trust_remote_code", None)
 
         # First, let's see whether the tokenizer_type is passed so that we can leverage it
         if tokenizer_type is not None:
@@ -662,31 +671,30 @@ class AutoTokenizer:
             if hasattr(config, "auto_map") and "AutoTokenizer" in config.auto_map:
                 tokenizer_auto_map = config.auto_map["AutoTokenizer"]
 
-        # If we have the tokenizer class from the tokenizer config or the model config we're good!
-        if config_tokenizer_class is not None:
+        has_remote_code = tokenizer_auto_map is not None
+        has_local_code = config_tokenizer_class is not None or type(config) in TOKENIZER_MAPPING
+        trust_remote_code = resolve_trust_remote_code(
+            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
+        )
+
+        if has_remote_code and trust_remote_code:
+            if use_fast and tokenizer_auto_map[1] is not None:
+                class_ref = tokenizer_auto_map[1]
+            else:
+                class_ref = tokenizer_auto_map[0]
+            tokenizer_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
+            _ = kwargs.pop("code_revision", None)
+            if os.path.isdir(pretrained_model_name_or_path):
+                tokenizer_class.register_for_auto_class()
+            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        elif config_tokenizer_class is not None:
             tokenizer_class = None
-            if tokenizer_auto_map is not None:
-                if not trust_remote_code:
-                    raise ValueError(
-                        f"Loading {pretrained_model_name_or_path} requires you to execute the tokenizer file in that"
-                        " repo on your local machine. Make sure you have read the code there to avoid malicious use,"
-                        " then set the option `trust_remote_code=True` to remove this error."
-                    )
-
-                if use_fast and tokenizer_auto_map[1] is not None:
-                    class_ref = tokenizer_auto_map[1]
-                else:
-                    class_ref = tokenizer_auto_map[0]
-                tokenizer_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
-                _ = kwargs.pop("code_revision", None)
-
-            elif use_fast and not config_tokenizer_class.endswith("Fast"):
+            if use_fast and not config_tokenizer_class.endswith("Fast"):
                 tokenizer_class_candidate = f"{config_tokenizer_class}Fast"
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
             if tokenizer_class is None:
                 tokenizer_class_candidate = config_tokenizer_class
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
-
             if tokenizer_class is None:
                 raise ValueError(
                     f"Tokenizer class {tokenizer_class_candidate} does not exist or is not currently imported."

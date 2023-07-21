@@ -15,7 +15,6 @@
 """ PyTorch SpeechT5 model."""
 
 import math
-import random
 import warnings
 from typing import List, Optional, Tuple, Union
 
@@ -98,7 +97,7 @@ def _make_causal_mask(
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min, device=device), device=device)
+    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
     mask_cond = torch.arange(mask.size(-1), device=device)
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
@@ -401,15 +400,19 @@ class SpeechT5PositionalConvEmbedding(nn.Module):
             groups=config.num_conv_pos_embedding_groups,
         )
 
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
             with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
-                self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+                self.conv = weight_norm(self.conv, name="weight", dim=2)
             deepspeed.zero.register_external_parameter(self, self.conv.weight_v)
             deepspeed.zero.register_external_parameter(self, self.conv.weight_g)
         else:
-            self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+            self.conv = weight_norm(self.conv, name="weight", dim=2)
 
         self.padding = SpeechT5SamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
@@ -438,7 +441,7 @@ class SpeechT5ScaledPositionalEncoding(nn.Module):
         pe[:, 1::2] = torch.cos(position.float() * div_term)
         pe = pe.unsqueeze(0)
         super().__init__()
-        self.register_buffer("pe", pe)
+        self.register_buffer("pe", pe, persistent=False)
         self.dropout = nn.Dropout(p=dropout)
         self.dim = dim
         self.alpha = torch.nn.Parameter(torch.tensor(1.0))
@@ -1248,8 +1251,6 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
 
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, SpeechT5PositionalConvEmbedding):
@@ -1377,9 +1378,11 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = np.random.uniform(0, 1)
+            skip_the_layer = False
+            if self.training:
+                dropout_probability = torch.rand([])
+                skip_the_layer = dropout_probability < self.layerdrop
 
-            skip_the_layer = self.training and (dropout_probability < self.layerdrop)
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
@@ -1702,9 +1705,10 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-
-            skip_the_layer = self.training and (dropout_probability < self.layerdrop)
+            skip_the_layer = False
+            if self.training:
+                dropout_probability = torch.rand([])
+                skip_the_layer = dropout_probability < self.layerdrop
             if skip_the_layer and not deepspeed_zero3_is_enabled:
                 continue
 
@@ -2320,13 +2324,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
     SPEECHT5_START_DOCSTRING,
 )
 class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"speecht5.encoder.prenet.pos_sinusoidal_embed.weights",
-        r"text_decoder_postnet.lm_head.weight",
-    ]
-    _keys_to_ignore_on_save = [
-        r"speecht5.encoder.prenet.pos_sinusoidal_embed.weights",
-    ]
+    _tied_weights_keys = ["text_decoder_postnet.lm_head.weight"]
 
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
@@ -2631,9 +2629,6 @@ def _generate_speech(
     SPEECHT5_START_DOCSTRING,
 )
 class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
-    _keys_to_ignore_on_load_missing = []
-    _keys_to_ignore_on_save = []
-
     main_input_name = "input_ids"
 
     def __init__(self, config: SpeechT5Config):
@@ -2852,13 +2847,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
     SPEECHT5_START_DOCSTRING,
 )
 class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"speecht5.encoder.prenet.pos_sinusoidal_embed.weights",
-    ]
-    _keys_to_ignore_on_save = [
-        r"speecht5.encoder.prenet.pos_sinusoidal_embed.weights",
-    ]
-
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
 

@@ -30,7 +30,6 @@ from ...image_transforms import (
     rescale,
     resize,
     to_channel_dimension_format,
-    to_numpy_array,
 )
 from ...image_utils import (
     ChannelDimension,
@@ -39,6 +38,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     make_list_of_images,
+    to_numpy_array,
     valid_images,
 )
 from ...utils import (
@@ -881,7 +881,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         ignore_index: Optional[int] = None,
         reduce_labels: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs,
     ):
         """
         Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
@@ -935,11 +934,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
             - **text_inputs** -- Optional list of text string entries to be fed to a model (when `annotations` are
               provided). They identify the binary masks present in the image.
         """
-        if "pad_and_return_pixel_mask" in kwargs:
-            warnings.warn(
-                "The `pad_and_return_pixel_mask` argument has no effect and will be removed in v4.27", FutureWarning
-            )
-
         ignore_index = self.ignore_index if ignore_index is None else ignore_index
         reduce_labels = self.do_reduce_labels if reduce_labels is None else reduce_labels
         pixel_values_list = [to_numpy_array(pixel_values) for pixel_values in pixel_values_list]

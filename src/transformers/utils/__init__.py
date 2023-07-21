@@ -133,6 +133,7 @@ from .import_utils import (
     is_py3nvml_available,
     is_pyctcdecode_available,
     is_pytesseract_available,
+    is_pytest_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
     is_sacremoses_available,
@@ -141,6 +142,7 @@ from .import_utils import (
     is_sagemaker_mp_enabled,
     is_scipy_available,
     is_sentencepiece_available,
+    is_seqio_available,
     is_sklearn_available,
     is_soundfile_availble,
     is_spacy_available,
@@ -160,7 +162,9 @@ from .import_utils import (
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
+    is_torch_mps_available,
     is_torch_neuroncore_available,
+    is_torch_npu_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
@@ -177,6 +181,9 @@ from .import_utils import (
 
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
+ADAPTER_CONFIG_NAME = "adapter_config.json"
+ADAPTER_WEIGHTS_NAME = "adapter_model.bin"
+ADAPTER_SAFE_WEIGHTS_NAME = "adapter_model.safetensors"
 TF2_WEIGHTS_NAME = "tf_model.h5"
 TF2_WEIGHTS_INDEX_NAME = "tf_model.h5.index.json"
 TF_WEIGHTS_NAME = "model.ckpt"
@@ -205,13 +212,13 @@ def check_min_version(min_version):
         if "dev" in min_version:
             error_message = (
                 "This example requires a source install from HuggingFace Transformers (see "
-                "`https://huggingface.co/transformers/installation.html#installing-from-source`),"
+                "`https://huggingface.co/docs/transformers/installation#install-from-source`),"
             )
         else:
             error_message = f"This example requires a minimum version of {min_version},"
         error_message += f" but the version found is {__version__}.\n"
         raise ImportError(
             error_message
-            + "Check out https://huggingface.co/transformers/examples.html for the examples corresponding to other "
+            + "Check out https://github.com/huggingface/transformers/tree/main/examples#important-note for the examples corresponding to other "
             "versions of HuggingFace Transformers."
         )

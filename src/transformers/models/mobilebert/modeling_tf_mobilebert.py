@@ -151,6 +151,7 @@ class TFNoNorm(tf.keras.layers.Layer):
     def build(self, input_shape):
         self.bias = self.add_weight("bias", shape=[self.feat_size], initializer="zeros")
         self.weight = self.add_weight("weight", shape=[self.feat_size], initializer="ones")
+        super().build(input_shape)
 
     def call(self, inputs: tf.Tensor):
         return inputs * self.weight + self.bias

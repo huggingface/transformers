@@ -155,7 +155,7 @@ class TFConvNextLayer(tf.keras.layers.Layer):
             else tf.keras.layers.Activation("linear", name="drop_path")
         )
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape: tf.TensorShape = None):
         # PT's `nn.Parameters` must be mapped to a TF layer weight to inherit the same name hierarchy (and vice-versa)
         self.layer_scale_parameter = (
             self.add_weight(

@@ -19,7 +19,7 @@ from pathlib import Path
 
 from packaging import version
 
-from .. import AutoFeatureExtractor, AutoProcessor, AutoTokenizer
+from .. import AutoFeatureExtractor, AutoImageProcessor, AutoProcessor, AutoTokenizer
 from ..utils import logging
 from ..utils.import_utils import is_optimum_available
 from .convert import export, validate_model_outputs
@@ -145,6 +145,8 @@ def export_with_transformers(args):
             preprocessor = get_preprocessor(args.model)
         elif args.preprocessor == "tokenizer":
             preprocessor = AutoTokenizer.from_pretrained(args.model)
+        elif args.preprocessor == "image_processor":
+            preprocessor = AutoImageProcessor.from_pretrained(args.model)
         elif args.preprocessor == "feature_extractor":
             preprocessor = AutoFeatureExtractor.from_pretrained(args.model)
         elif args.preprocessor == "processor":
@@ -213,7 +215,7 @@ def main():
     parser.add_argument(
         "--preprocessor",
         type=str,
-        choices=["auto", "tokenizer", "feature_extractor", "processor"],
+        choices=["auto", "tokenizer", "feature_extractor", "image_processor", "processor"],
         default="auto",
         help="Which type of preprocessor to use. 'auto' tries to automatically detect it.",
     )

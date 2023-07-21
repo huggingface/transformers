@@ -151,7 +151,7 @@ class TFCLIPVisionEmbeddings(tf.keras.layers.Layer):
             name="patch_embedding",
         )
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape: tf.TensorShape = None):
         factor = self.config.initializer_factor
 
         self.class_embedding = self.add_weight(
@@ -204,7 +204,7 @@ class TFCLIPTextEmbeddings(tf.keras.layers.Layer):
 
         self.config = config
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape: tf.TensorShape = None):
         with tf.name_scope("token_embedding"):
             self.weight = self.add_weight(
                 shape=(self.config.vocab_size, self.embed_dim),
@@ -494,6 +494,9 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
             epsilon=config.layer_norm_eps, name="final_layer_norm"
         )
 
+        # For `pooled_output` computation
+        self.eos_token_id = config.eos_token_id
+
     def call(
         self,
         input_ids: TFModelInputType,
@@ -530,14 +533,30 @@ class TFCLIPTextTransformer(tf.keras.layers.Layer):
         sequence_output = encoder_outputs[0]
         sequence_output = self.final_layer_norm(inputs=sequence_output)
 
-        # text_embeds.shape = [batch_size, n_ctx, transformer.width]
-        # take features from the eot embedding (eot_token is the highest number in each sequence)
-        pooled_output = tf.gather_nd(
-            params=sequence_output,
-            indices=tf.stack(
-                values=(tf.range(input_shape[0], dtype=tf.int64), tf.math.argmax(input_ids, axis=-1)), axis=1
-            ),
-        )
+        if self.eos_token_id == 2:
+            # The `eos_token_id` was incorrect before PR #24773: Let's keep what have been done here.
+            # A CLIP model with such `eos_token_id` in the config can't work correctly with extra new tokens added
+            # ------------------------------------------------------------
+            # text_embeds.shape = [batch_size, n_ctx, transformer.width]
+            # take features from the eot embedding (eot_token is the highest number in each sequence)
+            pooled_output = tf.gather_nd(
+                params=sequence_output,
+                indices=tf.stack(
+                    values=(tf.range(input_shape[0], dtype=tf.int64), tf.math.argmax(input_ids, axis=-1)), axis=1
+                ),
+            )
+        else:
+            # The config gets updated `eos_token_id` from PR #24773 (so the use of exta new tokens is possible)
+            pooled_output = tf.gather_nd(
+                params=sequence_output,
+                indices=tf.stack(
+                    values=(
+                        tf.range(input_shape[0], dtype=tf.int64),
+                        tf.math.argmax(tf.cast(input_ids == self.eos_token_id, dtype=tf.int8), axis=-1),
+                    ),
+                    axis=1,
+                ),
+            )
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -739,7 +758,7 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
             name="text_projection",
         )
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape: tf.TensorShape = None):
         self.logit_scale = self.add_weight(
             shape=(1,),
             initializer=tf.keras.initializers.Constant(self.config.logit_scale_init_value),
@@ -943,7 +962,7 @@ CLIP_TEXT_INPUTS_DOCSTRING = r"""
         input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -1000,7 +1019,7 @@ CLIP_INPUTS_DOCSTRING = r"""
         input_ids (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.__call__`] and
             [`PreTrainedTokenizer.encode`] for details.
 
             [What are input IDs?](../glossary#input-ids)

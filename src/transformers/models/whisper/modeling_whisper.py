@@ -15,7 +15,6 @@
 """ PyTorch Whisper model."""
 
 import math
-import random
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -81,7 +80,7 @@ def _make_causal_mask(
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min, device=device), device=device)
+    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
     mask_cond = torch.arange(mask.size(-1), device=device)
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
@@ -224,6 +223,81 @@ def _compute_mask_indices(
     np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
 
     return spec_aug_mask
+
+
+def _median_filter(inputs: torch.Tensor, filter_width: int) -> torch.Tensor:
+    """
+    Applies a median filter of width `filter_width` along the last dimension of the input.
+
+    The `inputs` tensor is assumed to be 3- or 4-dimensional.
+    """
+    if filter_width <= 0 or filter_width % 2 != 1:
+        raise ValueError("`filter_width` should be an odd number")
+
+    pad_width = filter_width // 2
+    if inputs.shape[-1] <= pad_width:
+        return inputs
+
+    # Pad the left and right edges.
+    inputs = nn.functional.pad(inputs, (pad_width, pad_width, 0, 0), mode="reflect")
+
+    # sort() is faster than torch.median (https://github.com/pytorch/pytorch/issues/51450)
+    result = inputs.unfold(-1, filter_width, 1).sort()[0][..., pad_width]
+    return result
+
+
+def _dynamic_time_warping(matrix: np.ndarray):
+    """
+    Measures similarity between two temporal sequences: the input audio and the output tokens. Used to generate
+    token-level timestamps.
+    """
+    output_length, input_length = matrix.shape
+    cost = np.ones((output_length + 1, input_length + 1), dtype=np.float32) * np.inf
+    trace = -np.ones((output_length + 1, input_length + 1), dtype=np.float32)
+
+    cost[0, 0] = 0
+    for j in range(1, input_length + 1):
+        for i in range(1, output_length + 1):
+            c0 = cost[i - 1, j - 1]
+            c1 = cost[i - 1, j]
+            c2 = cost[i, j - 1]
+
+            if c0 < c1 and c0 < c2:
+                c, t = c0, 0
+            elif c1 < c0 and c1 < c2:
+                c, t = c1, 1
+            else:
+                c, t = c2, 2
+
+            cost[i, j] = matrix[i - 1, j - 1] + c
+            trace[i, j] = t
+
+    # backtrace
+    i = trace.shape[0] - 1
+    j = trace.shape[1] - 1
+    trace[0, :] = 2
+    trace[:, 0] = 1
+
+    text_indices = []
+    time_indices = []
+    while i > 0 or j > 0:
+        text_indices.append(i - 1)
+        time_indices.append(j - 1)
+        if trace[i, j] == 0:
+            i -= 1
+            j -= 1
+        elif trace[i, j] == 1:
+            i -= 1
+        elif trace[i, j] == 2:
+            j -= 1
+        else:
+            raise RuntimeError(
+                f"Internal error in dynamic time warping. Unexpected trace[{i}, {j}]. Please file a bug report."
+            )
+
+    text_indices = np.array(text_indices)[::-1]
+    time_indices = np.array(time_indices)[::-1]
+    return text_indices, time_indices
 
 
 class WhisperPositionalEmbedding(nn.Embedding):
@@ -417,7 +491,7 @@ class WhisperEncoderLayer(nn.Module):
     ) -> torch.Tensor:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -841,8 +915,13 @@ class WhisperEncoder(WhisperPreTrainedModel):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
+            to_drop = False
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    to_drop = True
+
+            if to_drop:
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
@@ -1070,9 +1149,10 @@ class WhisperDecoder(WhisperPreTrainedModel):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
@@ -1145,8 +1225,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
     WHISPER_START_DOCSTRING,
 )
 class WhisperModel(WhisperPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"proj_out.weight"]
-
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
 
@@ -1316,14 +1394,7 @@ class WhisperModel(WhisperPreTrainedModel):
 )
 class WhisperForConditionalGeneration(WhisperPreTrainedModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.version",
-        r"decoder.version",
-        r"proj_out.weight",
-    ]
-    _keys_to_ignore_on_save = [
-        r"proj_out.weight",
-    ]
+    _tied_weights_keys = ["proj_out.weight"]
 
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
@@ -1470,6 +1541,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         language=None,
         is_multilingual=None,
         prompt_ids: Optional[torch.Tensor] = None,
+        return_token_timestamps=None,
         **kwargs,
     ):
         """
@@ -1519,10 +1591,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             return_timestamps (`bool`, *optional*):
                 Whether to return the timestamps with the text. This enables the `WhisperTimestampsLogitsProcessor`.
-            task (`bool`, *optional*):
+            task (`str`, *optional*):
                 Task to use for generation, either "translate" or "transcribe". The `model.config.forced_decoder_ids`
                 will be updated accordingly.
-            language (`bool`, *optional*):
+            language (`str`, *optional*):
                 Language token to use for generation, can be either in the form of `<|en|>`, `en` or `english`. You can
                 find all the possible language tokens in the `model.generation_config.lang_to_id` dictionary.
             is_multilingual (`bool`, *optional*):
@@ -1532,7 +1604,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 provided as a prompt to each chunk. This can be used to provide or "prompt-engineer" a context for
                 transcription, e.g. custom vocabularies or proper nouns to make it more likely to predict those words
                 correctly. It cannot be used in conjunction with `decoder_start_token_id` as it overwrites this value.
-            kwargs:
+            return_token_timestamps (`bool`, *optional*):
+                Whether to return token-level timestamps with the text. This can be used with or without the
+                `return_timestamps` option. To get word-level timestamps, use the tokenizer to group the tokens into
+                words.
+            kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
@@ -1639,11 +1715,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             # Set the decoder_start_token_id to <|startofprev|>
             kwargs.update({"decoder_start_token_id": decoder_start_token_id})
 
-            # Update the max generation length to include the prompt
-            specified_max_length = kwargs.pop("max_new_tokens", None) or kwargs.pop("max_length", None)
-            default_max_length = generation_config.max_new_tokens or generation_config.max_length
-            non_prompt_max_length = specified_max_length or default_max_length
-            kwargs["max_new_tokens"] = non_prompt_max_length + len(text_prompt_ids)
+            # If the user passes `max_new_tokens`, increase its number to account for the prompt
+            if kwargs.get("max_new_tokens", None) is not None:
+                kwargs["max_new_tokens"] += len(text_prompt_ids)
 
             # Reformat the forced_decoder_ids to incorporate the prompt
             non_prompt_forced_decoder_ids = (
@@ -1660,7 +1734,19 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if generation_config.return_timestamps:
             logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
 
-        return super().generate(
+        if return_token_timestamps:
+            kwargs["output_attentions"] = True
+            kwargs["return_dict_in_generate"] = True
+
+            if getattr(generation_config, "task", None) == "translate":
+                logger.warning("Token-level timestamps may not be reliable for task 'translate'.")
+            if not hasattr(generation_config, "alignment_heads"):
+                raise ValueError(
+                    "Model generation config has no `alignment_heads`, token-level timestamps not available. "
+                    "See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the generation config."
+                )
+
+        outputs = super().generate(
             inputs,
             generation_config,
             logits_processor,
@@ -1669,6 +1755,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             synced_gpus,
             **kwargs,
         )
+
+        if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
+            outputs["token_timestamps"] = self._extract_token_timestamps(outputs, generation_config.alignment_heads)
+
+        return outputs
 
     def prepare_inputs_for_generation(
         self,
@@ -1691,13 +1782,50 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             "decoder_attention_mask": None,
         }
 
-    #
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
+
+    def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02):
+        """
+        Calculates token-level timestamps using the encoder-decoder cross-attentions and dynamic time-warping (DTW) to
+        map each output token to a position in the input audio.
+
+        Returns:
+            tensor containing the timestamps in seconds for each predicted token
+        """
+        # Create a list with `decoder_layers` elements, each a tensor of shape
+        # (batch size, attention_heads, output length, input length).
+        cross_attentions = []
+        for i in range(self.config.decoder_layers):
+            cross_attentions.append(torch.cat([x[i] for x in generate_outputs.cross_attentions], dim=2))
+
+        # Select specific cross-attention layers and heads. This is a tensor
+        # of shape (batch size, num selected, output length, input length).
+        weights = torch.stack([cross_attentions[l][:, h] for l, h in alignment_heads])
+        weights = weights.permute([1, 0, 2, 3])
+
+        # Normalize and smoothen the weights.
+        std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
+        weights = (weights - mean) / std
+        weights = _median_filter(weights, self.config.median_filter_width)
+
+        # Average the different cross-attention heads.
+        matrix = weights.mean(dim=1)
+
+        timestamps = torch.zeros_like(generate_outputs.sequences, dtype=torch.float32)
+
+        # Perform dynamic time warping on each element of the batch.
+        for batch_idx in range(timestamps.shape[0]):
+            text_indices, time_indices = _dynamic_time_warping(-matrix[batch_idx].double().cpu().numpy())
+            jumps = np.pad(np.diff(text_indices), (1, 0), constant_values=1).astype(bool)
+            jump_times = time_indices[jumps] * time_precision
+            timestamps[batch_idx, 1:] = torch.tensor(jump_times)
+
+        return timestamps
 
 
 @add_start_docstrings(
@@ -1778,7 +1906,7 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
         >>> predicted_class_ids = torch.argmax(logits).item()
         >>> predicted_label = model.config.id2label[predicted_class_ids]
         >>> predicted_label
-        'af_za'
+        'Afrikaans'
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

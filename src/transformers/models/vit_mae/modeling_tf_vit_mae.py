@@ -966,11 +966,8 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         """
         patch_size, num_channels = self.config.patch_size, self.config.num_channels
         # make sure channels are last
-        pixel_values = tf.cond(
-            tf.math.equal(shape_list(pixel_values)[1], num_channels),
-            lambda: tf.transpose(pixel_values, perm=(0, 2, 3, 1)),
-            lambda: pixel_values,
-        )
+        if shape_list(pixel_values)[1] == num_channels:
+            pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
 
         # sanity checks
         tf.debugging.assert_equal(

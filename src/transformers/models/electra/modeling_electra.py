@@ -135,7 +135,7 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_
             try:
                 if pointer.shape != array.shape:
                     raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
-            except AssertionError as e:
+            except ValueError as e:
                 e.args += (pointer.shape, array.shape)
                 raise
             print(f"Initialize PyTorch weight {name}", original_name)
@@ -161,7 +161,9 @@ class ElectraEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer(
             "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
@@ -672,8 +674,6 @@ class ElectraPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_electra
     base_model_prefix = "electra"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-    _keys_to_ignore_on_load_unexpected = [r"electra.embeddings_project.weight", r"electra.embeddings_project.bias"]
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -1166,7 +1166,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
     ELECTRA_START_DOCSTRING,
 )
 class ElectraForMaskedLM(ElectraPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["generator_lm_head.weight"]
+    _tied_weights_keys = ["generator_lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1533,7 +1533,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
     """ELECTRA Model with a `language modeling` head on top for CLM fine-tuning.""", ELECTRA_START_DOCSTRING
 )
 class ElectraForCausalLM(ElectraPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["generator_lm_head.weight"]
+    _tied_weights_keys = ["generator_lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)

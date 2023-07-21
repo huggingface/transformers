@@ -164,7 +164,7 @@ class GPTBigCodeAttention(nn.Module):
             # This is needed because of a bug in pytorch https://github.com/pytorch/pytorch/issues/80588.
             # The bug was fixed in https://github.com/pytorch/pytorch/pull/96086,
             # but the fix has not been released as of pytorch version 2.0.0.
-            attn_weights.zero_()
+            attn_weights = torch.zeros_like(attn_weights)
             beta = 1
         else:
             beta = 0
@@ -500,8 +500,6 @@ GPT_BIGCODE_INPUTS_DOCSTRING = r"""
     GPT_BIGCODE_START_DOCSTRING,
 )
 class GPTBigCodeModel(GPTBigCodePreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
-
     def __init__(self, config):
         super().__init__(config)
         self.multi_query = config.multi_query
@@ -722,7 +720,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
     GPT_BIGCODE_START_DOCSTRING,
 )
 class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -875,8 +873,6 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
     GPT_BIGCODE_START_DOCSTRING,
 )
 class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head.weight"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

@@ -257,7 +257,7 @@ class DistributedSamplerWithLoop(DistributedSampler):
             Dataset used for sampling.
         batch_size (`int`):
             The batch size used with this sampler
-        kwargs:
+        kwargs (`Dict[str, Any]`, *optional*):
             All other keyword arguments passed to `DistributedSampler`.
     """
 
@@ -1043,7 +1043,7 @@ def get_model_param_count(model, trainable_only=False):
     if is_deepspeed_zero3_enabled():
 
         def numel(p):
-            return p.ds_numel
+            return p.ds_numel if hasattr(p, "ds_numel") else p.numel()
 
     else:
 

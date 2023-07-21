@@ -427,8 +427,9 @@ def prepare_dog_img():
     return raw_image
 
 
+@require_tf
 @slow
-class SamModelIntegrationTest(unittest.TestCase):
+class TFSamModelIntegrationTest(unittest.TestCase):
     def test_inference_mask_generation_no_point(self):
         model = TFSamModel.from_pretrained("facebook/sam-vit-base")
         processor = SamProcessor.from_pretrained("facebook/sam-vit-base")

@@ -15,11 +15,12 @@
 """Factory function to build auto-model classes."""
 import copy
 import importlib
+import os
 from collections import OrderedDict
 
 from ...configuration_utils import PretrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module
-from ...utils import copy_func, logging
+from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...utils import copy_func, logging, requires_backends
 from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
 
 
@@ -404,25 +405,24 @@ class _BaseAutoModelClass:
 
     @classmethod
     def from_config(cls, config, **kwargs):
-        trust_remote_code = kwargs.pop("trust_remote_code", False)
-        if hasattr(config, "auto_map") and cls.__name__ in config.auto_map:
-            if not trust_remote_code:
-                raise ValueError(
-                    "Loading this model requires you to execute the modeling file in that repo "
-                    "on your local machine. Make sure you have read the code there to avoid malicious use, then set "
-                    "the option `trust_remote_code=True` to remove this error."
-                )
-            if kwargs.get("revision", None) is None:
-                logger.warning(
-                    "Explicitly passing a `revision` is encouraged when loading a model with custom code to ensure "
-                    "no malicious code has been contributed in a newer revision."
-                )
+        trust_remote_code = kwargs.pop("trust_remote_code", None)
+        has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
+        has_local_code = type(config) in cls._model_mapping.keys()
+        trust_remote_code = resolve_trust_remote_code(
+            trust_remote_code, config._name_or_path, has_local_code, has_remote_code
+        )
+
+        if has_remote_code and trust_remote_code:
             class_ref = config.auto_map[cls.__name__]
             if "--" in class_ref:
                 repo_id, class_ref = class_ref.split("--")
             else:
                 repo_id = config.name_or_path
             model_class = get_class_from_dynamic_module(class_ref, repo_id, **kwargs)
+            if os.path.isdir(config._name_or_path):
+                model_class.register_for_auto_class(cls.__name__)
+            else:
+                cls.register(config.__class__, model_class, exist_ok=True)
             _ = kwargs.pop("code_revision", None)
             return model_class._from_config(config, **kwargs)
         elif type(config) in cls._model_mapping.keys():
@@ -437,7 +437,7 @@ class _BaseAutoModelClass:
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         config = kwargs.pop("config", None)
-        trust_remote_code = kwargs.pop("trust_remote_code", False)
+        trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
         hub_kwargs_names = [
             "cache_dir",
@@ -470,18 +470,21 @@ class _BaseAutoModelClass:
             if kwargs_orig.get("torch_dtype", None) == "auto":
                 kwargs["torch_dtype"] = "auto"
 
-        if hasattr(config, "auto_map") and cls.__name__ in config.auto_map:
-            if not trust_remote_code:
-                raise ValueError(
-                    f"Loading {pretrained_model_name_or_path} requires you to execute the modeling file in that repo "
-                    "on your local machine. Make sure you have read the code there to avoid malicious use, then set "
-                    "the option `trust_remote_code=True` to remove this error."
-                )
+        has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
+        has_local_code = type(config) in cls._model_mapping.keys()
+        trust_remote_code = resolve_trust_remote_code(
+            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
+        )
+        if has_remote_code and trust_remote_code:
             class_ref = config.auto_map[cls.__name__]
             model_class = get_class_from_dynamic_module(
                 class_ref, pretrained_model_name_or_path, **hub_kwargs, **kwargs
             )
             _ = hub_kwargs.pop("code_revision", None)
+            if os.path.isdir(pretrained_model_name_or_path):
+                model_class.register_for_auto_class(cls.__name__)
+            else:
+                cls.register(config.__class__, model_class, exist_ok=True)
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
@@ -496,7 +499,7 @@ class _BaseAutoModelClass:
         )
 
     @classmethod
-    def register(cls, config_class, model_class):
+    def register(cls, config_class, model_class, exist_ok=False):
         """
         Register a new model for this class.
 
@@ -512,7 +515,49 @@ class _BaseAutoModelClass:
                 f"config class you passed (model has {model_class.config_class} and you passed {config_class}. Fix "
                 "one of those so they match!"
             )
-        cls._model_mapping.register(config_class, model_class)
+        cls._model_mapping.register(config_class, model_class, exist_ok=exist_ok)
+
+
+class _BaseAutoBackboneClass(_BaseAutoModelClass):
+    # Base class for auto backbone models.
+    _model_mapping = None
+
+    @classmethod
+    def _load_timm_backbone_from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        requires_backends(cls, ["vision", "timm"])
+        from ...models.timm_backbone import TimmBackboneConfig
+
+        config = kwargs.pop("config", TimmBackboneConfig())
+
+        use_timm = kwargs.pop("use_timm_backbone", True)
+        if not use_timm:
+            raise ValueError("`use_timm_backbone` must be `True` for timm backbones")
+
+        if kwargs.get("out_features", None) is not None:
+            raise ValueError("Cannot specify `out_features` for timm backbones")
+
+        if kwargs.get("output_loading_info", False):
+            raise ValueError("Cannot specify `output_loading_info=True` when loading from timm")
+
+        num_channels = kwargs.pop("num_channels", config.num_channels)
+        features_only = kwargs.pop("features_only", config.features_only)
+        use_pretrained_backbone = kwargs.pop("use_pretrained_backbone", config.use_pretrained_backbone)
+        out_indices = kwargs.pop("out_indices", config.out_indices)
+        config = TimmBackboneConfig(
+            backbone=pretrained_model_name_or_path,
+            num_channels=num_channels,
+            features_only=features_only,
+            use_pretrained_backbone=use_pretrained_backbone,
+            out_indices=out_indices,
+        )
+        return super().from_config(config, **kwargs)
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        if kwargs.get("use_timm_backbone", False):
+            return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
 
 def insert_head_doc(docstring, head_doc=""):
@@ -681,13 +726,13 @@ class _LazyAutoMapping(OrderedDict):
         model_type = self._reverse_config_mapping[item.__name__]
         return model_type in self._model_mapping
 
-    def register(self, key, value):
+    def register(self, key, value, exist_ok=False):
         """
         Register a new model in this mapping.
         """
         if hasattr(key, "__name__") and key.__name__ in self._reverse_config_mapping:
             model_type = self._reverse_config_mapping[key.__name__]
-            if model_type in self._model_mapping.keys():
+            if model_type in self._model_mapping.keys() and not exist_ok:
                 raise ValueError(f"'{key}' is already used by a Transformers model.")
 
         self._extra_content[key] = value

@@ -346,7 +346,7 @@ class GroupedLinearLayer(tf.keras.layers.Layer):
         self.group_in_dim = self.input_size // self.num_groups
         self.group_out_dim = self.output_size // self.num_groups
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         self.kernel = self.add_weight(
             "kernel",
             shape=[self.group_out_dim, self.group_in_dim, self.num_groups],
@@ -357,6 +357,7 @@ class GroupedLinearLayer(tf.keras.layers.Layer):
         self.bias = self.add_weight(
             "bias", shape=[self.output_size], initializer=self.kernel_initializer, dtype=self.dtype, trainable=True
         )
+        super().build(input_shape)
 
     def call(self, hidden_states):
         batch_size = shape_list(hidden_states)[0]

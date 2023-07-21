@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Wav2Vec2 model. """
 
+import gc
 import math
 import multiprocessing
 import os
@@ -297,7 +298,7 @@ class Wav2Vec2ModelTester:
         config.adapter_attn_dim = 16
         model = Wav2Vec2ForCTC(config=config)
 
-        self.parent.assertIsNotNone(model._adapters)
+        self.parent.assertIsNotNone(model._get_adapters())
 
         model.to(torch_device)
         model.eval()
@@ -636,7 +637,7 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                     "objective.weight",
                 ]
                 if param.requires_grad:
-                    if any([x in name for x in uniform_init_parms]):
+                    if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
@@ -970,7 +971,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
                     "objective.weight",
                 ]
                 if param.requires_grad:
-                    if any([x in name for x in uniform_init_parms]):
+                    if any(x in name for x in uniform_init_parms):
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
@@ -1116,6 +1117,40 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
+    def test_load_and_set_attn_adapter(self):
+        processor = Wav2Vec2Processor.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2", return_attention_mask=True
+        )
+
+        def get_logits(model, input_features):
+            model = model.to(torch_device)
+            batch = processor(
+                input_features,
+                padding=True,
+                sampling_rate=processor.feature_extractor.sampling_rate,
+                return_tensors="pt",
+            )
+
+            with torch.no_grad():
+                logits = model(
+                    input_values=batch["input_values"].to(torch_device),
+                    attention_mask=batch["attention_mask"].to(torch_device),
+                ).logits
+            return logits
+
+        input_features = [np.random.random(16_000 * s) for s in [1, 3, 2, 6]]
+
+        model = Wav2Vec2ForCTC.from_pretrained("hf-internal-testing/tiny-random-wav2vec2-adapter", target_lang="it")
+
+        logits = get_logits(model, input_features)
+
+        model_2 = Wav2Vec2ForCTC.from_pretrained("hf-internal-testing/tiny-random-wav2vec2-adapter")
+        model_2.load_adapter("it")
+
+        logits_2 = get_logits(model_2, input_features)
+
+        self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
+
     def test_load_attn_adapter(self):
         processor = Wav2Vec2Processor.from_pretrained(
             "hf-internal-testing/tiny-random-wav2vec2", return_attention_mask=True
@@ -1146,7 +1181,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
             model = Wav2Vec2ForCTC.from_pretrained(tempdir)
 
             logits = get_logits(model, input_features)
-            adapter_weights = model._adapters
+            adapter_weights = model._get_adapters()
 
             # save safe weights
             safe_filepath = os.path.join(tempdir, WAV2VEC2_ADAPTER_SAFE_FILE.format("eng"))
@@ -1168,7 +1203,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
             model = Wav2Vec2ForCTC.from_pretrained(tempdir)
 
             logits = get_logits(model, input_features)
-            adapter_weights = model._adapters
+            adapter_weights = model._get_adapters()
 
             # save pt weights
             pt_filepath = os.path.join(tempdir, WAV2VEC2_ADAPTER_PT_FILE.format("eng"))
@@ -1374,6 +1409,12 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
 @require_soundfile
 @slow
 class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        torch.cuda.empty_cache()
+
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
