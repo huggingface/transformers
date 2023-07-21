@@ -36,7 +36,7 @@ Hugging Face 팀은 항상 도움을 줄 준비가 되어 있으므로 혼자가
 
 새로운 모델 요청을 열었다면 첫 번째 단계는, 🤗 Transformers에 익숙해지는 것입니다!
 
-## 🤗 Transformers의 전반적인 개요 
+## 🤗 Transformers의 전반적인 개요  [[general-overview-of-transformers]]
 
 먼저, 🤗 Transformers에 대한 전반적인 개요를 파악해야 합니다. 🤗 Transformers는 매우 주관적인 라이브러리이기 때문에 해당 라이브러리의 철학이나 설계 선택 사항에 동의하지 않을 수도 있습니다. 그러나 우리의 경험상 라이브러리의 기본적인 설계 선택과 철학은 🤗 Transformers의 규모를 효율적으로 확장하면서 유지 보수 비용을 합리적인 수준으로 유지하는 것입니다.
 
@@ -50,7 +50,7 @@ Hugging Face 팀은 항상 도움을 줄 준비가 되어 있으므로 혼자가
 
 이를 염두에 두고 일반적인 라이브러리 설계에 대해 조금 더 자세히 알아보겠습니다.
 
-### 모델 개요 
+### 모델 개요 [[overview-of-models]]
 
 모델을 성공적으로 추가하려면 모델과 해당 구성인 [`PreTrainedModel`] 및 [`PretrainedConfig`] 간의 상호작용을 이해하는 것이 중요합니다. 예를 들어, 🤗 Transformers에 추가하려는 모델을 `BrandNewBert`라고 부르겠습니다.
 
@@ -68,7 +68,7 @@ model.config  # model has access to its config
 모델과 마찬가지로 구성은 [`PretrainedConfig`]에서 기본 직렬화 및 역직렬화 기능을 상속받습니다. 구성과 모델은 항상 *pytorch_model.bin* 파일과 *config.json* 파일로 각각 별도로 직렬화됩니다. [`~PreTrainedModel.save_pretrained`]를 호출하면 자동으로 [`~PretrainedConfig.save_pretrained`]도 호출되므로 모델과 구성이 모두 저장됩니다.
 
 
-### 코드 스타일
+### 코드 스타일 [[code-style]]
 
 새로운 모델을 작성할 때, Transformers는 주관적인 라이브러리이며 몇 가지 독특한 코딩 스타일이 있습니다:
 
@@ -78,11 +78,11 @@ model.config  # model has access to its config
 4. PyTorch에서 `nn.Sequential`을 하위 클래스로 만들지 말고 `nn.Module`을 하위 클래스로 만들고 forward pass를 작성하여 다른 사람이 코드를 빠르게 디버그할 수 있도록 합니다. print 문이나 중단점을 추가할 수 있습니다.
 5. 함수 시그니처에는 타입 주석을 사용해야 합니다. 그 외에는 타입 주석보다 변수 이름이 훨씬 읽기 쉽고 이해하기 쉽습니다.
 
-### 토크나이저 개요
-
+### 토크나이저 개요 [[overview-of-tokenizers]]
+ 
 아직 준비되지 않았습니다 :-( 이 섹션은 곧 추가될 예정입니다!
 
-## 🤗 Transformers에 모델 추가하는 단계별 방법
+## 🤗 Transformers에 모델 추가하는 단계별 방법  [[stepbystep-recipe-to-add-a-model-to-transformers]]
 
 각자 모델을 이식하는 방법에 대한 선호가 다르기 때문에 다른 기여자들이 Hugging Face에 모델을 이식하는 방법에 대한 요약을 살펴보는 것이 매우 유용할 수 있습니다. 다음은 모델을 이식하는 방법에 대한 커뮤니티 블로그 게시물 목록입니다:
 
@@ -116,7 +116,7 @@ model.config  # model has access to its config
 
 우선, 일반적으로는 `BrandNewBert`의 이론적인 이해로 시작하는 것을 권장합니다. 그러나 이론적 측면을 직접 이해하는 대신 *직접 해보면서* 모델의 이론적 측면을 이해하는 것을 선호하는 경우 바로 `BrandNewBert` 코드 베이스로 빠져드는 것도 괜찮습니다. 이 옵션은 엔지니어링 기술이 이론적 기술보다 더 뛰어난 경우, `BrandNewBert`의 논문을 이해하는 데 어려움이 있는 경우, 또는 과학적인 논문을 읽는 것보다 프로그래밍에 훨씬 더 흥미 있는 경우에 더 적합할 수 있습니다.
 
-### 1. (선택 사항) BrandNewBert의 이론적 측면
+### 1. (선택 사항) BrandNewBert의 이론적 측면 [[1-optional-theoretical-aspects-of-brandnewbert]]
 
 만약 그런 서술적인 작업이 존재한다면, *BrandNewBert*의 논문을 읽어보는 시간을 가져야 합니다. 이해하기 어려운 섹션이 많을 수 있습니다. 그렇더라도 걱정하지 마세요! 목표는 논문의 깊은 이론적 이해가 아니라 *BrandNewBert*를 🤗 Transformers에서 효과적으로 재구현하기 위해 필요한 정보를 추출하는 것입니다. 이를 위해 이론적 측면에 너무 많은 시간을 투자할 필요는 없지만 다음과 같은 실제적인 측면에 집중해야 합니다:
 
@@ -128,7 +128,7 @@ model.config  # model has access to its config
 
 모델의 아키텍처에 대해 충분히 이해했다는 생각이 든 후, 궁금한 사항이 있으면 Hugging Face 팀에 문의하십시오. 이는 모델의 아키텍처, 어텐션 레이어 등에 관한 질문을 포함할 수 있습니다. Hugging Face의 유지 관리자들은 보통 코드를 검토하는 것에 대해 매우 기뻐하므로 당신을 돕는 일을 매우 환영할 것입니다!
 
-### 2. 개발 환경 설정 
+### 2. 개발 환경 설정 [[2-next-prepare-your-environment]]
 
 1. 리포지토리 페이지에서 "Fork" 버튼을 클릭하여 리포지토리의 사본을 GitHub 사용자 계정으로 만듭니다.
 
@@ -174,7 +174,7 @@ pip install -e .
 
 이제 *brand_new_bert*를 🤗 Transformers로 이식하기 위한 개발 환경을 설정하였습니다.
 
-### 3.-4. 원본 저장소에서 사전 훈련된 체크포인트 실행하기
+### 3.-4. 원본 저장소에서 사전 훈련된 체크포인트 실행하기 [[3.-4.-run-a-pretrained-checkpoint-using-the-original-repository]]
 
 먼저, 원본 *brand_new_bert* 저장소에서 작업을 시작합니다. 원본 구현은 보통 "연구용"으로 많이 사용됩니다. 즉, 문서화가 부족하고 코드가 이해하기 어려울 수 있습니다. 그러나 이것이 바로 *brand_new_bert*를 다시 구현하려는 동기가 되어야 합니다. Hugging Face에서의 주요 목표 중 하나는 **거인의 어깨 위에 서는 것**이며, 이는 여기에서 쉽게 해석되어 동작하는 모델을 가져와서 가능한 한 **접근 가능하고 사용자 친화적이며 아름답게** 만드는 것입니다. 이것은 🤗 Transformers에서 모델을 다시 구현하는 가장 중요한 동기입니다 - 새로운 복잡한 NLP 기술을 **모두에게** 접근 가능하게 만드는 것을 목표로 합니다.
 
@@ -264,7 +264,7 @@ original_output = model.predict(input_ids)
 
 다음 섹션에서는 *brand_new_bert*에 대해 이 작업을 수행하는 데 더 구체적인 세부 사항/팁을 제공합니다.
 
-### 5.-14. 🤗 Transformers에 BrandNewBert를 이식하기
+### 5.-14. 🤗 Transformers에 BrandNewBert를 이식하기 [[5.-14.-port-brandnewbert-to-transformers]]
 
 이제, 마침내 🤗 Transformers에 새로운 코드를 추가할 수 있습니다. 🤗 Transformers 포크의 클론으로 이동하세요:
 
@@ -623,7 +623,7 @@ brand_new_bert.push_to_hub("brand_new_bert")
 
 이제 프로그래밍을 마쳤으며, 마지막 단계로 PR을 메인 브랜치에 병합해야 합니다. 보통 Hugging Face 팀은 이미 여기까지 도움을 주었을 것입니다. 그러나 PR에 멋진 설명을 추가하고 리뷰어에게 특정 디자인 선택 사항을 강조하려면 완료된 PR에 약간의 설명을 추가하는 시간을 할애하는 것이 가치가 있습니다.
 
-### 작업물을 공유하세요!!
+### 작업물을 공유하세요!! [[share-your-work]]
 
 이제 커뮤니티에서 작업물을 인정받을 시간입니다! 모델 추가 작업을 완료하는 것은 Transformers와 전체 NLP 커뮤니티에 큰 기여입니다. 당신의 코드와 이식된 사전 훈련된 모델은 수백, 심지어 수천 명의 개발자와 연구원에 의해 확실히 사용될 것입니다. 당신의 작업에 자랑스러워해야 하며 이를 커뮤니티와 공유해야 합니다.
 
