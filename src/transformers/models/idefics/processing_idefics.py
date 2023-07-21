@@ -149,7 +149,6 @@ class IdeficsProcessor(ProcessorMixin):
             a dict with entries: `input_ids`, `attention_mask`, `pixel_values`, `image_attention_mask` which can be
             directly passed to `model.generate`
 
-
         Detailed explanation:
 
         Each entry in `prompts` is either a text to be passed as is or an image that will be processed.

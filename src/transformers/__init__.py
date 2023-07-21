@@ -5670,7 +5670,6 @@ if TYPE_CHECKING:
             IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST,
             IdeficsForCausalLM,
             IdeficsGatedCrossAttentionLayer,
-            IdeficsLayer,
             IdeficsModel,
             IdeficsPreTrainedModel,
         )
