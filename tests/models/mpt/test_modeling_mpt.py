@@ -241,9 +241,8 @@ class MptModelTester:
             next_input_ids,
             attention_mask=next_attention_mask,
             output_hidden_states=True,
-        )[
-            "hidden_states"
-        ][0]
+        )["hidden_states"][0]
+
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
