@@ -28,7 +28,10 @@ from transformers.utils import logging
 
 logger = logging.get_logger(__name__)
 
-IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "HuggingFaceM4/idefics-9b": "https://huggingface.co/HuggingFaceM4/idefics-9b/blob/main/config.json",
+    "HuggingFaceM4/idefics-80b": "https://huggingface.co/HuggingFaceM4/idefics-80b/blob/main/config.json",
+}
 
 
 class IdeficsConfig(PretrainedConfig):
