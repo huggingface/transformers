@@ -1868,7 +1868,7 @@ def check_model_with_dog_sample(model):
         past_key_values=past_key_values,
         img_features=None,
         img_attn_mask=None,
-        # not sure why we get one more token being generated
+        # we already generated the first token (step 71 -> 72)
         max_new_tokens=len(expected_generation) - 1,
     )
 
@@ -1928,30 +1928,30 @@ def check_real_model_with_dog_sample(model):
 
     expected_block_1 = torch.tensor(
         [
-            [15.605998  , -5.156513  ,  8.00637],
-            [ 8.577738  , -4.9635577 ,  7.6196694],
-            [ 5.5543556 , -4.5773745 ,  4.523568],
+            [2.920926332473755, -5.4380574226379395, 2.8645224571228027],
+            [0.004667307715862989, -5.0997819900512695, 4.338554382324219],
+            [-0.5761765837669373, -4.547626972198486, 3.8142454624176025],
         ],
     )
     expected_block_2 = torch.tensor(
         [
-            [-2.2804384 , -2.0610392 , -1.0114111],
-            [-2.2657313 , -1.9836413 , -1.3702303],
-            [-1.2256985 , -1.2151622 , -1.9965916],
+            [-2.61974835395813, -2.6742029190063477, -1.6856958866119385],
+            [-2.251966714859009, -2.242988348007202, -1.5341331958770752],
+            [-2.3858885765075684, -1.5038200616836548, -1.013083577156067],
         ],
     )
     expected_block_3 = torch.tensor(
         [
-            [ 7.4827657 , -5.6471753 ,  5.3313484],
-            [ 6.3412886 , -4.821356  ,  5.9151964],
-            [ 7.3028603 , -5.5100656 ,  6.581722],
+            [-1.3929418325424194, -4.623406410217285, 3.7545101642608643],
+            [0.522249698638916, -4.5460662841796875, 7.236062526702881],
+            [-1.7789695262908936, -5.221266746520996, 3.770735740661621],
         ],
     )
     expected_block_4 = torch.tensor(
         [
-            [-2.835022  , -2.887678  , -1.3593428 ],
-            [-1.830313  , -1.4463289 , -1.2882515 ],
-            [-2.29154   , -1.9426216 , -0.93513656],
+            [-2.3952505588531494, -2.878037452697754, -1.3662471771240234],
+            [-3.3000922203063965, -3.0199999809265137, -0.24584506452083588],
+            [-2.8502795696258545, -3.096112012863159, -0.771698534488678],
         ],
     )
 
@@ -1963,10 +1963,17 @@ def check_real_model_with_dog_sample(model):
     max_diff = torch.max(torch.tensor([diff_1, diff_2, diff_3, diff_4]))
     assert max_diff < 3e-5
 
+    expected_next_token = 64007
+    predicted_next_token = torch.argmax(logits[0, -1, :]).detach().to("cpu").numpy().tolist()
+
+    assert predicted_next_token == expected_next_token
+
     # --------------------------------------------------------------------
     # next step: without `past_key_values`
 
-    new_decoder_input_ids = torch.cat((decoder_input_ids, torch.tensor([[9]], dtype=torch.long, device="cpu")), dim=1)
+    next_token = expected_next_token
+
+    new_decoder_input_ids = torch.cat((decoder_input_ids, torch.tensor([[next_token]], dtype=torch.long, device="cpu")), dim=1)
     new_img_attn_mask = torch.cat((img_attn_mask, torch.tensor([[False]], dtype=torch.bool, device="cpu")), dim=1)
     new_model_output = model(pixel_values=pixel_values, decoder_input_ids=new_decoder_input_ids, img_attn_mask=new_img_attn_mask)
 
@@ -1980,7 +1987,7 @@ def check_real_model_with_dog_sample(model):
     # --------------------------------------------------------------------
     # next step: with `past_key_values`
 
-    next_decoder_input_ids = torch.tensor([[9]], dtype=torch.long, device="cpu")
+    next_decoder_input_ids = torch.tensor([[next_token]], dtype=torch.long, device="cpu")
     # no need to pass `pixel_values`
     next_pixel_values = None
     next_img_attn_mask = None
@@ -2005,8 +2012,8 @@ def check_real_model_with_dog_sample(model):
 
     assert list(next_logits.shape) == [1, 1, 65037]
 
-    expected_block_1 = torch.tensor([[[ 7.6893177 , -5.576222  ,  6.5033607]]])
-    expected_block_2 = torch.tensor([[[ -2.398699  , -2.1435356 , -0.98740137]]])
+    expected_block_1 = torch.tensor([[[-1.3323104, -5.1079516,  5.359114 ]]])
+    expected_block_2 = torch.tensor([[[-2.8319776, -3.5213413, -1.8274367]]])
 
     diff_1 = torch.max(torch.abs(next_logits[0, 0, :+3] - expected_block_1))
     diff_2 = torch.max(torch.abs(next_logits[0, 0, -3:] - expected_block_2))
@@ -2014,36 +2021,138 @@ def check_real_model_with_dog_sample(model):
     max_diff = torch.max(torch.tensor([diff_1, diff_2]))
     assert max_diff < 3e-5
 
+    expected_next_token = 94
+    predicted_next_token = torch.argmax(next_logits[0, -1, :]).detach().to("cpu").numpy().tolist()
+
+    assert predicted_next_token == expected_next_token
+
+    # --------------------------------------------------------------------
+    # repeat the above check with more extra steps (step 73 -> step 74)
+    # check with the original kosmos-2 output: next step
+
+    # steps: 73 -> 74 -> .. -> 83 (-> 84)
+    steps = list(range(73, 83 + 1))
+
+    next_tokens = [94, 17772, 64008, 64009, 64092, 65029, 64011, 64148, 65021, 64010, 1280, 12]
+
+    expected_blocks = [
+        ([-1.5333264, -5.0365257,  5.595204 ], [-2.1252668, -2.9195867, -1.3610152]),
+        ([-1.14558  , -4.6416078,  8.611397 ], [-1.9524179, -2.3943331, -1.2364707]),
+        ([ 2.1540604, -2.713409 ,  1.8866036], [ 1.631276 ,  0.8916559, -0.4697148]),
+        ([-1.1833401, -3.1272492, -1.4443989], [2.75421  , 2.1421206, 1.2756062]),
+        ([-1.429662 , -4.2857313,  1.123333 ], [13.215454, 13.476381, 14.000856]),
+        ([-0.10423064, -4.0805306 ,  7.669438  ], [1.3264995 , 0.37444258, 2.872366  ]),
+        ([-1.9969933, -4.391607 , -3.4535604], [ 0.15055317,  0.05899912, -0.0650674 ]),
+        ([-2.1537013, -4.2108035,  2.163306 ], [8.790059, 8.622845, 9.70795 ]),
+        ([-0.10536906, -2.7584782 ,  5.857536  ], [4.7097054, 3.5752287, 6.4874005]),
+        ([-0.40761316, -4.65115   , 16.127958  ], [-3.0172224, -3.2040298, -2.283117 ]),
+        ([ 0.4004581, -4.4891667, 14.7836075], [-0.9358875, -1.006671 , -0.1364981]),
+    ]
+
+    for (step, next_token, expected_next_token, (expected_block_1, expected_block_2)) in zip(steps, next_tokens[:-1], next_tokens[1:], expected_blocks):
+
+        print(f"step: {step}")
+
+        new_decoder_input_ids = torch.cat((new_decoder_input_ids, torch.tensor([[next_token]], dtype=torch.long, device="cpu")), dim=1)
+        new_img_attn_mask = torch.cat((new_img_attn_mask, torch.tensor([[False]], dtype=torch.bool, device="cpu")), dim=1)
+        new_model_output = model(pixel_values=pixel_values, decoder_input_ids=new_decoder_input_ids, img_attn_mask=new_img_attn_mask)
+    
+        new_logits = new_model_output.logits
+        new_past_key_values = new_model_output.past_key_values
+    
+        assert new_past_key_values is None
+    
+        print(new_logits[:, -1, :])
+    
+        # --------------------------------------------------------------------
+        # next step: with `past_key_values`
+    
+        next_decoder_input_ids = torch.tensor([[next_token]], dtype=torch.long, device="cpu")
+        # no need to pass `pixel_values`
+        next_pixel_values = None
+        next_img_attn_mask = None
+        next_model_output = model(pixel_values=next_pixel_values, decoder_input_ids=next_decoder_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=next_past_key_values, use_cache=True)
+    
+        next_logits = next_model_output.logits
+        next_past_key_values = next_model_output.past_key_values
+    
+        assert next_past_key_values is not None
+    
+        print(next_logits[:, -1, :])
+    
+        # --------------------------------------------------------------------
+        # verify the results between with/without using `past_key_values`
+    
+        max_diff = torch.max(torch.abs(new_logits[:, -1, :] - next_logits[:, -1, :]))
+        # step 75 has a slightly bigger diff
+        allowed_max_diff = 3e-5 if step != 75 else 5e-5
+
+        assert max_diff < torch.tensor(allowed_max_diff)
+    
+        # --------------------------------------------------------------------
+        # check with the original kosmos-2 output: next step
+    
+        assert list(next_logits.shape) == [1, 1, 65037]
+    
+        expected_block_1 = torch.tensor([[expected_block_1]])
+        expected_block_2 = torch.tensor([[expected_block_2]])
+    
+        diff_1 = torch.max(torch.abs(next_logits[0, 0, :+3] - expected_block_1))
+        diff_2 = torch.max(torch.abs(next_logits[0, 0, -3:] - expected_block_2))
+    
+        max_diff = torch.max(torch.tensor([diff_1, diff_2]))
+        allowed_max_diff = 3e-5
+
+        assert max_diff < allowed_max_diff
+
+        predicted_next_token = torch.argmax(next_logits[0, -1, :]).detach().to("cpu").numpy().tolist()
+
+        assert predicted_next_token == expected_next_token
+
     # --------------------------------------------------------------------
     # generation
 
+    new_decoder_input_ids = torch.cat((new_decoder_input_ids, torch.tensor([[predicted_next_token]], dtype=torch.long, device="cpu")), dim=1)
+
     expected_generation = [
-        9,     9,     5,     5,     5,    10,    10,    10,     5,
-        5,   106,   106,   106,     6,     6,     6,     8,     8,     8,
-        6,     6,   106,   106,    10,    10,    42,    42,    42,    10,
-        10,   106,   106,    19,    19,    19,     6,     6,    12,    12,
-        12,    20,    20,    20,    12,    12,    10,    10,    12,    12,
-        106,   106,    43,    43,    43,  2115,  2115,  2115,    43,    43,
-        106,   106,    12,    12,
+         64007,    94, 17772, 64008, 64009, 64092, 65029, 64011, 64148,
+         65021, 64010,  1280,    12, 64007,     5,  4464, 64008, 64009, 64013,
+         65036, 64010, 2
     ]
 
     # use `text_model` directly
     # with `past_key_values` being passed as the initialized
     # no need to pass `img_features` (`pixel_values`) and `img_attn_mask`
     generated_output = model.text_model.generate(
-        # we need to provide the full `input_ids` not just the trailing one!
         input_ids=new_decoder_input_ids,
-        use_cache=True,
-        past_key_values=past_key_values,
+        use_cache=True, past_key_values=next_past_key_values,
         img_features=None,
         img_attn_mask=None,
-        # not sure why we get one more token being generated
-        max_new_tokens=len(expected_generation) - 1,
+        # we already generated 13 tokens: from `64007` (step 71 -> 72) to `12` (step 83 -> 84)
+        max_new_tokens=len(expected_generation) - 13,
     )
 
     # --------------------------------------------------------------------
-    # check with the original kosmos-2 output generation output: (step 72 -> step X)
+    # check with the original kosmos-2 output generation output: (step 84 -> step X)
 
+    assert generated_output[0, 71:].tolist() == expected_generation
+
+    # --------------------------------------------------------------------
+    # Use `eos_token_id`
+
+    # or we can specify `eos_token_id` to stop earlier.
+    generated_output = model.text_model.generate(
+        input_ids=new_decoder_input_ids,
+        use_cache=True, past_key_values=next_past_key_values,
+        img_features=None,
+        img_attn_mask=None,
+        # we already generated 13 tokens: from `64007` (step 71 -> 72) to `12` (step 83 -> 84)
+        # use `eos_token_id=2` to stop earlier
+        # TODO: specify this in the config file
+        # we still need to specify this: so we get long enough generations
+        max_new_tokens=len(expected_generation),
+        eos_token_id=2,
+    )
     assert generated_output[0, 71:].tolist() == expected_generation
 
 
@@ -2059,7 +2168,7 @@ def check_head_base_model_loading(config):
     loaded_config = Kosmos2Config.from_pretrained(ckpt)
     print(loaded_config.architectures)
 
-    base_model = Kosmos2Model.from_pretrained(ckpt)
+    _ = Kosmos2Model.from_pretrained(ckpt)
 
 
     base_model = Kosmos2Model(config=config)
@@ -2072,7 +2181,7 @@ def check_head_base_model_loading(config):
     loaded_config = Kosmos2Config.from_pretrained(ckpt)
     print(loaded_config.architectures)
 
-    model = Kosmos2ForConditionalGeneration.from_pretrained(ckpt)
+    _ = Kosmos2ForConditionalGeneration.from_pretrained(ckpt)
 
 
 def create_model(num_layers=2):
