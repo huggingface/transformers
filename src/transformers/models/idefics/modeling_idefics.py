@@ -491,8 +491,8 @@ class LlamaMLP(nn.Module):
     def forward(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
-
-class LlamaAttention(nn.Module):
+# this was adapted from LlamaAttention
+class IdeficsAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -633,9 +633,10 @@ class LlamaAttention(nn.Module):
         attn_output = self.o_proj(attn_output)
 
         attn_weights = None
-        logger.warning_once(
-            "attn_weights are not extracted in scaled_dot_product_attention. The model returns None instead"
-        )
+        if output_attentions:
+            logger.warning_once(
+                "attn_weights are not extracted in scaled_dot_product_attention. The model returns None instead"
+            )
 
         return attn_output, attn_weights, past_key_value
 
@@ -644,7 +645,7 @@ class LlamaDecoderLayer(nn.Module):
     def __init__(self, config: IdeficsConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = LlamaAttention(
+        self.self_attn = IdeficsAttention(
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
             dropout=config.dropout,
@@ -720,7 +721,7 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
     def __init__(self, config: IdeficsConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.cross_attn = LlamaAttention(
+        self.cross_attn = IdeficsAttention(
             hidden_size=self.hidden_size,
             num_heads=config.num_attention_heads,
             is_cross_attention=True,
