@@ -20,6 +20,7 @@ from collections import OrderedDict
 from ...utils import logging
 from .auto_factory import _BaseAutoBackboneClass, _BaseAutoModelClass, _LazyAutoMapping, auto_class_update
 from .configuration_auto import CONFIG_MAPPING_NAMES
+from ...saffu.modeling_saffu import SAFFUModel, SAFFULMHeadModel
 
 
 logger = logging.get_logger(__name__)
@@ -166,6 +167,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("roc_bert", "RoCBertModel"),
         ("roformer", "RoFormerModel"),
         ("rwkv", "RwkvModel"),
+        ("saffu", "SAFFUModel"),
         ("sam", "SamModel"),
         ("segformer", "SegformerModel"),
         ("sew", "SEWModel"),
@@ -414,6 +416,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("roc_bert", "RoCBertForCausalLM"),
         ("roformer", "RoFormerForCausalLM"),
         ("rwkv", "RwkvForCausalLM"),
+        ("saffu", "SAFFULMHeadModel"),
         ("speech_to_text_2", "Speech2Text2ForCausalLM"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
         ("trocr", "TrOCRForCausalLM"),

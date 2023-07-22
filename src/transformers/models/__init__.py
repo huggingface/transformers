@@ -168,6 +168,7 @@ from . import (
     roc_bert,
     roformer,
     rwkv,
+    saffu,
     sam,
     segformer,
     sew,

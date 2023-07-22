@@ -23,6 +23,7 @@ from typing import List, Union
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, logging
+from ...saffu.configuration_saffu import SAFFUConfig
 
 
 logger = logging.get_logger(__name__)
@@ -174,6 +175,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("roc_bert", "RoCBertConfig"),
         ("roformer", "RoFormerConfig"),
         ("rwkv", "RwkvConfig"),
+        ("saffu", "SAFFUConfig"),
         ("sam", "SamConfig"),
         ("segformer", "SegformerConfig"),
         ("sew", "SEWConfig"),
@@ -368,6 +370,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("roc_bert", "ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("roformer", "ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("rwkv", "RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("saffu", "SAFFU_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sam", "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("segformer", "SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew", "SEW_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -584,6 +587,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("roc_bert", "RoCBert"),
         ("roformer", "RoFormer"),
         ("rwkv", "RWKV"),
+        ("saffu", "SAFFU"),
         ("sam", "SAM"),
         ("segformer", "SegFormer"),
         ("sew", "SEW"),
