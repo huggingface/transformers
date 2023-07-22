@@ -85,9 +85,11 @@ def check_config_docstrings_have_checkpoints():
 
     if len(configs_without_checkpoint) > 0:
         message = "\n".join(sorted(configs_without_checkpoint))
-        raise ValueError(f"The following configurations don't contain any valid checkpoint:\n{message}\n\n"
-                        "Hint: ensure to include [foo/bar](https://huggingface.co/foo/bar) link pointing to "
-                         "one of the models of this architecture in the docstring of the config classes listed above.")
+        raise ValueError(
+            f"The following configurations don't contain any valid checkpoint:\n{message}\n\n"
+            "Hint: ensure to include [foo/bar](https://huggingface.co/foo/bar) link pointing to "
+            "one of the models of this architecture in the docstring of the config classes listed above."
+        )
 
 
 if __name__ == "__main__":
