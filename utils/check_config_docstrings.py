@@ -87,8 +87,9 @@ def check_config_docstrings_have_checkpoints():
         message = "\n".join(sorted(configs_without_checkpoint))
         raise ValueError(
             f"The following configurations don't contain any valid checkpoint:\n{message}\n\n"
-            "Hint: ensure to include [foo/bar](https://huggingface.co/foo/bar) link pointing to "
-            "one of the models of this architecture in the docstring of the config classes listed above."
+            "The requirements is to include a link pointing to one of the models of this architecture in the "
+            "docstring of the config classes listed above. The link should have be a markdown format like "
+            "[myorg/mymodel](https://huggingface.co/myorg/mymodel)."
         )
 
 
