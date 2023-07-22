@@ -93,18 +93,7 @@ class SAFFUModel(SAFFUPreTrainedModel):
         self.dot = torch.matmul
         self.log = torch.log
         self.exp = torch.exp
-        ##
 
-        # Initialize weights and apply final processing
-        # self.post_init()
-
-    # def _prune_heads(self, heads_to_prune: Dict[int, List[List[int]]]):
-    #     """
-    #     Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-    #     class PreTrainedModel
-    #     """
-    #     for layer, heads in heads_to_prune.items():
-    #         self.transformer.layer[layer].attention.prune_heads(heads)
 
     @staticmethod
     def outer(x, y):
@@ -130,7 +119,7 @@ class SAFFUModel(SAFFUPreTrainedModel):
     @add_start_docstrings_to_model_forward(SAFFU_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput, ########################
+        output_type=BaseModelOutput, 
         config_class=_CONFIG_FOR_DOC,
     )
     # for training and validation/development
@@ -187,17 +176,3 @@ class SAFFULMHeadModel(SAFFUPreTrainedModel):
             hidden_states=H,
             attentions=A,
         )
-
-    # @staticmethod
-    # def _reorder_cache(
-    #     past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
-    # ) -> Tuple[Tuple[torch.Tensor]]:
-    #     """
-    #     This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
-    #     [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
-    #     beam_idx at every generation step.
-    #     """
-    #     return tuple(
-    #         tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
-    #         for layer_past in past_key_values
-    #     )

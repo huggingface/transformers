@@ -20,7 +20,9 @@ from collections import OrderedDict
 from ...utils import logging
 from .auto_factory import _BaseAutoBackboneClass, _BaseAutoModelClass, _LazyAutoMapping, auto_class_update
 from .configuration_auto import CONFIG_MAPPING_NAMES
-from ...saffu.modeling_saffu import SAFFUModel, SAFFULMHeadModel
+import sys
+sys.path.append("..")
+from saffu.modeling_saffu import SAFFUModel, SAFFULMHeadModel
 
 
 logger = logging.get_logger(__name__)

@@ -10,8 +10,6 @@ SAFFU_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class SAFFUConfig(PretrainedConfig):
     model_type = "saffu"
-    # model_type = "encoder"
-    # model_type = "decoder"
     def __init__(
         self,
         r = 2,

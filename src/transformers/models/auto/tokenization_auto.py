@@ -19,8 +19,9 @@ import json
 import os
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
-
-from ...saffu.tokenization_saffu import SAFFUTokenizer
+import sys
+sys.path.append("..")
+from saffu.tokenization_saffu import SAFFUTokenizer
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...tokenization_utils import PreTrainedTokenizer
