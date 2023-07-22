@@ -247,7 +247,8 @@ class Kosmos2Processor(ProcessorMixin):
             # A <phrase> </phrase> without any associated bbox
             bbox = bboxes.pop()
             if bbox is not None:
-                buffer.append(self.convert_bbox_to_patch_index_tokens(image, bbox))
+                patch_index_1, patch_index_2 = self.convert_bbox_to_patch_index_tokens(bbox)
+                buffer.append(f"<object> {patch_index_1} {patch_index_2} </object>")
             text = text[pos + len("</phrase>"):]
             pos = text.find("</phrase>")
         # remaining
@@ -258,27 +259,28 @@ class Kosmos2Processor(ProcessorMixin):
 
         return text
 
-    def convert_bbox_to_patch_index_tokens(self, image, bbox):
+    def convert_bbox_to_patch_index_tokens(self, bbox):
 
         if not isinstance(bbox, tuple):
             raise ValueError(f"`bbox` needs to be a tuple. Got {type(bbox)} instead.")
-        elif len(bbox) != 2:
-            raise ValueError(f"`bbox` needs to be a tuple of 2 elements. Got a tuple of {len(bbox)} elements instead.")
+        elif len(bbox) not in [2, 4]:
+            raise ValueError(f"`bbox` needs to be a tuple of 2 or 4 elements. Got a tuple of {len(bbox)} elements instead.")
 
-        bbox_0, bbox_1 = bbox
-
-        if isinstance(bbox_0, float) and isinstance(bbox_1, float):
-            bbox_0 = None
-            bbox_1 = None
-        elif isinstance(bbox_0, int) and isinstance(bbox_1, int):
-            bbox_0 = f"<patch_index_{str(bbox_0).zfill(4)}>"
-            bbox_1 = f"<patch_index_{str(bbox_1).zfill(4)}>"
-        elif isinstance(bbox_0, str) and isinstance(bbox_1, str):
-            pass
+        # already computed patch indices
+        if len(bbox) == 2:
+            if not all(isinstance(c, int) for c in bbox):
+                raise ValueError(f"`bbox` needs to be a tuple of the same type `int` when it has 2 elements. Got `{tuple(type(c) for c in bbox)}` instead.")
+            idx_1, idx_2 = bbox
+        # bbox specified with coordinates
         else:
-            raise ValueError(f"`bbox` needs to be a tuple of 2 elements of the same type `float`, `int` or `str`. Got `({type(bbox_0)}, {type(bbox_1)})` instead.")
+            if not all(isinstance(c, float) for c in bbox):
+                raise ValueError(f"`bbox` needs to be a tuple of the same type `float` when it has 4 elements. Got `{tuple(type(c) for c in bbox)}` instead.")
+            idx_1, idx_2 = self.coordinate_to_patch_index(bbox)
 
-        return f"<object> {bbox_0} {bbox_1} </object>"
+        token_1 = f"<patch_index_{str(idx_1).zfill(4)}>"
+        token_2 = f"<patch_index_{str(idx_2).zfill(4)}>"
+
+        return token_1, token_2
 
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
     def batch_decode(self, *args, **kwargs):
@@ -303,7 +305,7 @@ class Kosmos2Processor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
-    def bbox_to_patch_index(self, bbox, P=32):
+    def coordinate_to_patch_index(self, bbox, P=32):
         # TODO: un-normalized version
 
         # The assumption is: x2 > x1 and  y1 > y2
@@ -323,7 +325,7 @@ class Kosmos2Processor(ProcessorMixin):
 
     # copied from https://github.com/microsoft/unilm/blob/97e4923e97d3ee10b57e97013556e3fd0d207a9b/kosmos-2/demo/decode_string.py#L35C1-L75C38
     # TODO: clean up + un-normalized version
-    def patch_index_to_bbox(self, ul_idx, lr_idx, P=32):
+    def patch_index_to_coordinate(self, ul_idx, lr_idx, P=32):
         """
         Given a grid of length P and the indices of the upper-left and lower-right corners of a bounding box,
         returns the normalized coordinates of the bounding box, in the form [x1, y1, x2, y2].
@@ -363,5 +365,4 @@ class Kosmos2Processor(ProcessorMixin):
             x2 = lr_x * cell_size + cell_size / 2
             y2 = lr_y * cell_size + cell_size / 2
 
-        import numpy as np
-        return np.array([x1, y1, x2, y2])
+        return x1, y1, x2, y2
