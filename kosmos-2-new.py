@@ -16,7 +16,7 @@ from transformers.utils.generic import ModelOutput
 
 # Get this from the original kosmos-2 demo
 original_kosmos2_checkpoint_only_2_layers = "kosmos-2-state-dict-num-layers-2.bin"
-dog_sample_file = "sample"
+dog_sample_file = "sample.bin"
 
 # ==============================================================================================================
 # Config class
@@ -830,6 +830,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
         super().__init__(config)
 
         self.model = Kosmos2TextTransformer(config)
+        # TODO: deal with shared embedding!
         self.lm_head = nn.Linear(in_features=config.hidden_size, out_features=config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
@@ -1305,11 +1306,11 @@ def load_and_check_vision_model():
     assert(set(hf_clip_vision_keys).issubset(renamed_keys))
 
 
-def load_and_check_model(model):
+def load_and_check_model(model, ckpt_path):
 
     # ================================================================================
     # load (small) state dict
-    state_dict = torch.load(original_kosmos2_checkpoint_only_2_layers)
+    state_dict = torch.load(ckpt_path)
     state_dict_keys = list(state_dict.keys())
 
     # ================================================================================
@@ -1877,52 +1878,176 @@ def check_model_with_dog_sample(model):
     assert generated_output[0, 71:].tolist() == expected_generation
 
 
-if __name__ == "__main__":
+def check_real_model_with_dog_sample(model):
 
-    # ================================================================================
-    # config & model creation
+    # --------------------------------------------------------------------
+    # real input: (dog)
 
-    text_config = {
-        "use_cache": False,
-        "scale_embedding": True,
-        "layernorm_embedding": False,
-        "dropout": 0.1,
-        "subln": True,
-        "attention_dropout": 0.1,
-        "decoder_normalize_before": True,
-        "activation_function": "gelu",
-        "activation_dropout": 0.0,
-        "add_cross_attention": False,
-        "decoder_attention_heads": 32,
-        "decoder_ffn_dim": 8192,
-        "embed_dim": 2048,
-        "decoder_layers": 2,
-        "layer_norm_eps": 1e-5,
-        "gradient_checkpointing": False,
-        # to match the demo
-        "no_repeat_ngram_size": 3,
-        # "use_cache": True,
+    sample = torch.load(dog_sample_file, map_location=torch.device('cpu'))
 
-    }
-    clip_config = CLIPConfig()
-    #  2 layers
-    clip_config.vision_config.num_hidden_layers = 2
-    clip_config.vision_config.hidden_size = 1024
-    clip_config.vision_config.intermediate_size = 4096
-    clip_config.vision_config.num_attention_heads = 16
-    clip_config.vision_config.patch_size = 14
-    clip_config = clip_config.to_dict()
+    pixel_values = sample["net_input"]["img_src_tokens"]
+    # It's of shape [1, 1, 3, 224, 224]. Change it to `[1, 3, 224, 224]`
+    pixel_values = pixel_values[0]
 
-    latent_query_num = 64
+    decoder_input_ids = sample["net_input"]["src_tokens"]
+    img_attn_mask = sample["net_input"]["img_gpt_input_mask"]
+    # We need a `bool` value
+    img_attn_mask = img_attn_mask.bool()
 
-    config = Kosmos2Config(text_config=text_config, vision_config=clip_config, latent_query_num=latent_query_num)
-    model = Kosmos2ForConditionalGeneration(config=config)
-    model.eval()
+    # --------------------------------------------------------------------
+    # `use_cache=False`
 
-    print(model)
+    model_output_no_cache = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids, img_attn_mask=img_attn_mask, use_cache=False)
 
-    # ================================================================================
-    # check the head model's checkpoint could be loaded into the base model and vice-versa
+    logits_no_cache = model_output_no_cache.logits
+    past_key_values_no_cache = model_output_no_cache.past_key_values
+    image_features_no_cache = model_output_no_cache.image_features
+
+    # --------------------------------------------------------------------
+    # `use_cache=True` to get the initial `past_key_values`
+
+    model_output = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids, img_attn_mask=img_attn_mask, use_cache=True)
+
+    logits = model_output.logits
+    past_key_values = model_output.past_key_values
+    image_features = model_output.image_features
+
+    # --------------------------------------------------------------------
+    # verify the results between with/without using `cache`
+
+    assert past_key_values_no_cache is None
+    assert past_key_values is not None
+
+    assert torch.max(torch.abs(image_features - image_features_no_cache)) < 1e-12
+    assert torch.max(torch.abs(logits - logits_no_cache)) < 1e-12
+
+    # --------------------------------------------------------------------
+    # check with the original kosmos-2 output: initial step (step 71 -> step 72)
+
+    assert list(logits.shape) == [1, 71, 65037]
+
+    expected_block_1 = torch.tensor(
+        [
+            [15.605998  , -5.156513  ,  8.00637],
+            [ 8.577738  , -4.9635577 ,  7.6196694],
+            [ 5.5543556 , -4.5773745 ,  4.523568],
+        ],
+    )
+    expected_block_2 = torch.tensor(
+        [
+            [-2.2804384 , -2.0610392 , -1.0114111],
+            [-2.2657313 , -1.9836413 , -1.3702303],
+            [-1.2256985 , -1.2151622 , -1.9965916],
+        ],
+    )
+    expected_block_3 = torch.tensor(
+        [
+            [ 7.4827657 , -5.6471753 ,  5.3313484],
+            [ 6.3412886 , -4.821356  ,  5.9151964],
+            [ 7.3028603 , -5.5100656 ,  6.581722],
+        ],
+    )
+    expected_block_4 = torch.tensor(
+        [
+            [-2.835022  , -2.887678  , -1.3593428 ],
+            [-1.830313  , -1.4463289 , -1.2882515 ],
+            [-2.29154   , -1.9426216 , -0.93513656],
+        ],
+    )
+
+    diff_1 = torch.max(torch.abs(logits[0, :+3, :+3] - expected_block_1))
+    diff_2 = torch.max(torch.abs(logits[0, :+3, -3:] - expected_block_2))
+    diff_3 = torch.max(torch.abs(logits[0, -3:, :+3] - expected_block_3))
+    diff_4 = torch.max(torch.abs(logits[0, -3:, -3:] - expected_block_4))
+
+    max_diff = torch.max(torch.tensor([diff_1, diff_2, diff_3, diff_4]))
+    assert max_diff < 3e-5
+
+    # --------------------------------------------------------------------
+    # next step: without `past_key_values`
+
+    new_decoder_input_ids = torch.cat((decoder_input_ids, torch.tensor([[9]], dtype=torch.long, device="cpu")), dim=1)
+    new_img_attn_mask = torch.cat((img_attn_mask, torch.tensor([[False]], dtype=torch.bool, device="cpu")), dim=1)
+    new_model_output = model(pixel_values=pixel_values, decoder_input_ids=new_decoder_input_ids, img_attn_mask=new_img_attn_mask)
+
+    new_logits = new_model_output.logits
+    new_past_key_values = new_model_output.past_key_values
+
+    assert new_past_key_values is None
+
+    print(new_logits[:, -1, :])
+
+    # --------------------------------------------------------------------
+    # next step: with `past_key_values`
+
+    next_decoder_input_ids = torch.tensor([[9]], dtype=torch.long, device="cpu")
+    # no need to pass `pixel_values`
+    next_pixel_values = None
+    next_img_attn_mask = None
+    next_model_output = model(pixel_values=next_pixel_values, decoder_input_ids=next_decoder_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=past_key_values, use_cache=True)
+
+    next_logits = next_model_output.logits
+    next_past_key_values = next_model_output.past_key_values
+
+    assert next_past_key_values is not None
+
+    print(next_logits[:, -1, :])
+
+    # --------------------------------------------------------------------
+    # verify the results between with/without using `past_key_values`
+
+    max_diff = torch.max(torch.abs(new_logits[:, -1, :] - next_logits[:, -1, :]))
+    print(max_diff)
+    assert max_diff < torch.tensor(3e-5)
+
+    # --------------------------------------------------------------------
+    # check with the original kosmos-2 output: next step (step 72 -> step 73)
+
+    assert list(next_logits.shape) == [1, 1, 65037]
+
+    expected_block_1 = torch.tensor([[[ 7.6893177 , -5.576222  ,  6.5033607]]])
+    expected_block_2 = torch.tensor([[[ -2.398699  , -2.1435356 , -0.98740137]]])
+
+    diff_1 = torch.max(torch.abs(next_logits[0, 0, :+3] - expected_block_1))
+    diff_2 = torch.max(torch.abs(next_logits[0, 0, -3:] - expected_block_2))
+
+    max_diff = torch.max(torch.tensor([diff_1, diff_2]))
+    assert max_diff < 3e-5
+
+    # --------------------------------------------------------------------
+    # generation
+
+    expected_generation = [
+        9,     9,     5,     5,     5,    10,    10,    10,     5,
+        5,   106,   106,   106,     6,     6,     6,     8,     8,     8,
+        6,     6,   106,   106,    10,    10,    42,    42,    42,    10,
+        10,   106,   106,    19,    19,    19,     6,     6,    12,    12,
+        12,    20,    20,    20,    12,    12,    10,    10,    12,    12,
+        106,   106,    43,    43,    43,  2115,  2115,  2115,    43,    43,
+        106,   106,    12,    12,
+    ]
+
+    # use `text_model` directly
+    # with `past_key_values` being passed as the initialized
+    # no need to pass `img_features` (`pixel_values`) and `img_attn_mask`
+    generated_output = model.text_model.generate(
+        # we need to provide the full `input_ids` not just the trailing one!
+        input_ids=new_decoder_input_ids,
+        use_cache=True,
+        past_key_values=past_key_values,
+        img_features=None,
+        img_attn_mask=None,
+        # not sure why we get one more token being generated
+        max_new_tokens=len(expected_generation) - 1,
+    )
+
+    # --------------------------------------------------------------------
+    # check with the original kosmos-2 output generation output: (step 72 -> step X)
+
+    assert generated_output[0, 71:].tolist() == expected_generation
+
+
+def check_head_base_model_loading(config):
 
     model = Kosmos2ForConditionalGeneration(config=config)
     ckpt = "Kosmos2ForConditionalGeneration"
@@ -1949,13 +2074,68 @@ if __name__ == "__main__":
 
     model = Kosmos2ForConditionalGeneration.from_pretrained(ckpt)
 
-    exit(0)
+
+def create_model(num_layers=2):
+
+    text_config = {
+        "use_cache": False,
+        "scale_embedding": True,
+        "layernorm_embedding": False,
+        "dropout": 0.1,
+        "subln": True,
+        "attention_dropout": 0.1,
+        "decoder_normalize_before": True,
+        "activation_function": "gelu",
+        "activation_dropout": 0.0,
+        "add_cross_attention": False,
+        "decoder_attention_heads": 32,
+        "decoder_ffn_dim": 8192,
+        "embed_dim": 2048,
+        "decoder_layers": num_layers,
+        "layer_norm_eps": 1e-5,
+        "gradient_checkpointing": False,
+        # to match the demo
+        "no_repeat_ngram_size": 3,
+        # "use_cache": True,
+
+    }
+    clip_config = CLIPConfig()
+    #  2 layers
+    clip_config.vision_config.num_hidden_layers = num_layers
+    clip_config.vision_config.hidden_size = 1024
+    clip_config.vision_config.intermediate_size = 4096
+    clip_config.vision_config.num_attention_heads = 16
+    clip_config.vision_config.patch_size = 14
+    clip_config = clip_config.to_dict()
+
+    latent_query_num = 64
+
+    config = Kosmos2Config(text_config=text_config, vision_config=clip_config, latent_query_num=latent_query_num)
+    model = Kosmos2ForConditionalGeneration(config=config)
+    model.eval()
+
+    print(model)
+
+    return model
+
+
+if __name__ == "__main__":
+
+    # ================================================================================
+    # config & model creation
+
+    dummy_model = create_model(num_layers=2)
+
+    # ================================================================================
+    # check the head model's checkpoint could be loaded into the base model and vice-versa
+
+    check_head_base_model_loading(dummy_model.config)
 
     # ================================================================================
     # check model keys and loading
 
     load_and_check_vision_model()
-    load_and_check_model(model)
+    load_and_check_model(dummy_model, ckpt_path=original_kosmos2_checkpoint_only_2_layers)
 
     # ================================================================================
     # check loaded text model outputs
@@ -1968,5 +2148,23 @@ if __name__ == "__main__":
     # Including the padding token id `1`  in `input_ids` to make sure everything work
     # (especially the positional embedding)
 
-    check_model_with_dummy_inputs(model)
-    check_model_with_dog_sample(model)
+    check_model_with_dummy_inputs(dummy_model)
+    check_model_with_dog_sample(dummy_model)
+
+    # ================================================================================
+    # real config & model creation
+
+    real_model = create_model(num_layers=24)
+
+    # need to create this checkpoint
+    load_and_check_model(real_model, ckpt_path="kosmos2_state_dict.bin")
+    real_model.save_pretrained("HF_Kosmos2")
+
+    # check we can load
+    real_model = Kosmos2ForConditionalGeneration.from_pretrained("HF_Kosmos2")
+
+    # ================================================================================
+
+    check_real_model_with_dog_sample(real_model)
+
+    # ================================================================================
