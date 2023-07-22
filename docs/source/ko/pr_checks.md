@@ -28,25 +28,25 @@ rendered properly in your Markdown viewer.
 
 이 문서에서는 이러한 다양한 검사와 그 이유를 설명하고, PR에서 하나 이상의 검사가 실패한 경우 로컬에서 어떻게 디버그하는지 알아보겠습니다.
 
-참고로, 이러한 검사를 사용하려면 개발 설치가 필요합니다.
+참고로, 이러한 검사를 사용하려면 개발 설치가 필요합니다:
 
 ```bash
 pip install transformers[dev]
 ```
 
-편집 가능한 설치의 경우 다음 명령을 실행하십시오.
+또는 Transformers 저장소 내에 편집 가능한 설치가 필요합니다:
 
 ```bash
 pip install -e .[dev]
 ```
 
-Transformers 저장소 내에서 작동합니다. Transformers의 선택적 종속성 수가 많이 늘어났기 때문에 개발 설치를 실패할 수도 있습니다. 개발 설치가 실패하는 경우, 작업 중인 Deep Learning 프레임워크 (PyTorch, TensorFlow 및/또는 Flax)를 설치하고 다음 명령을 실행하십시오.
+Transformers의 선택적 종속성 수가 많이 늘어났기 때문에 개발 설치를 실패할 수도 있습니다. 개발 설치가 실패하는 경우, 작업 중인 Deep Learning 프레임워크 (PyTorch, TensorFlow 및/또는 Flax)를 설치하고 다음 명령을 실행하세요.
 
 ```bash
 pip install transformers[quality]
 ```
 
-편집 가능한 설치의 경우는 다음 명령을 실행하십시오.
+편집 가능한 설치의 경우는 다음 명령을 실행하세요.
 
 ```bash
 pip install -e .[quality]
@@ -80,9 +80,9 @@ python -m pytest -n 8 --dist=loadfile -rA -s $(cat test_list.txt)
 
 ## 문서 빌드 [[documentation-build]]
 
-`build_pr_documentation` 작업은 문서를 빌드하고 미리 보기를 생성하여 PR이 병합된 후 모든 것이 제대로 보이는지 확인합니다. 로봇은 PR에 문서 미리 보기 링크를 추가합니다. PR에서 만든 변경 사항은 자동으로 미리 보기에 업데이트됩니다. 문서 빌드에 실패한 경우 **세부 정보**를 클릭하여 어디에서 문제가 발생했는지 확인할 수 있습니다. 오류는 주로 `toctree`에 누락된 파일과 같이 간단한 오류입니다.
+`build_pr_documentation` 작업은 문서를 빌드하고 미리 보기를 생성하여 PR이 병합된 후 모든 것이 제대로 보이는지 확인합니다. 로봇은 PR에 문서 미리보기 링크를 추가합니다. PR에서 만든 변경 사항은 자동으로 미리보기에 업데이트됩니다. 문서 빌드에 실패한 경우 **세부 정보**를 클릭하여 어디에서 문제가 발생했는지 확인할 수 있습니다. 오류는 주로 `toctree`에 누락된 파일과 같이 간단한 오류입니다.
 
-로컬에서 문서를 빌드하거나 미리 볼 경우, docs 폴더의 [`README.md`](https://github.com/huggingface/transformers/tree/main/docs)를 참조하십시오.
+로컬에서 문서를 빌드하거나 미리 볼 경우, docs 폴더의 [`README.md`](https://github.com/huggingface/transformers/tree/main/docs)를 참조하세요.
 
 ## 코드 및 문서 스타일 [[code-and-documentation-style]]
 
@@ -92,13 +92,13 @@ python -m pytest -n 8 --dist=loadfile -rA -s $(cat test_list.txt)
 make style
 ```
 
-CI는 이러한 사항이 `ci/circleci: check_code_quality` 검사 내에서 적용되었는지 확인합니다. 또한 `ruff`도 실행되며, 정의되지 않은 변수나 사용되지 않은 변수를 발견하면 경고합니다. 이 검사를 로컬에서 실행하려면 다음을 사용하십시오:
+CI는 이러한 사항이 `ci/circleci: check_code_quality` 검사 내에서 적용되었는지 확인합니다. 또한 `ruff`도 실행되며, 정의되지 않은 변수나 사용되지 않은 변수를 발견하면 경고합니다. 이 검사를 로컬에서 실행하려면 다음을 사용하세요:
 
 ```bash
 make quality
 ```
 
-이 작업은 많은 시간이 소요될 수 있으므로 현재 브랜치에서 수정한 파일에 대해서만 동일한 작업을 실행하려면 다음을 실행하십시오.
+이 작업은 많은 시간이 소요될 수 있으므로 현재 브랜치에서 수정한 파일에 대해서만 동일한 작업을 실행하려면 다음을 실행하세요.
 
 ```bash
 make fixup
