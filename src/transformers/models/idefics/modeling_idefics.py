@@ -406,10 +406,11 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-class LlamaRMSNorm(nn.Module):
+# this was adapted from LlamaRMSNorm
+class IdeficsRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        LlamaRMSNorm is equivalent to T5LayerNorm
+        IdeficsRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -426,7 +427,8 @@ class LlamaRMSNorm(nn.Module):
         return self.weight * hidden_states
 
 
-class LlamaRotaryEmbedding(torch.nn.Module):
+# this was adapted from LlamaRotaryEmbedding
+class IdeficsEmbedding(torch.nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
@@ -475,7 +477,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     return q_embed, k_embed
 
 
-class LlamaMLP(nn.Module):
+# this was adapted from LlamaMLP
+class IdeficsMLP(nn.Module):
     def __init__(
         self,
         hidden_size: int,
@@ -490,6 +493,7 @@ class LlamaMLP(nn.Module):
 
     def forward(self, x):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+
 
 # this was adapted from LlamaAttention
 class IdeficsAttention(nn.Module):
@@ -552,12 +556,12 @@ class IdeficsAttention(nn.Module):
             hidden_size,
             bias=False,
         )
-        self.rotary_emb = LlamaRotaryEmbedding(self.head_dim)
+        self.rotary_emb = IdeficsEmbedding(self.head_dim)
 
         self.qk_layer_norms = qk_layer_norms
         if self.qk_layer_norms:
-            self.q_layer_norm = LlamaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-            self.k_layer_norm = LlamaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.q_layer_norm = IdeficsRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+            self.k_layer_norm = IdeficsRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -641,7 +645,8 @@ class IdeficsAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-class LlamaDecoderLayer(nn.Module):
+# this was adapted from LlamaDecoderLayer
+class IdeficsDecoderLayer(nn.Module):
     def __init__(self, config: IdeficsConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -651,13 +656,13 @@ class LlamaDecoderLayer(nn.Module):
             dropout=config.dropout,
             config=config,
         )
-        self.mlp = LlamaMLP(
+        self.mlp = IdeficsMLP(
             hidden_size=self.hidden_size,
             intermediate_size=config.intermediate_size,
             hidden_act=config.hidden_act,
         )
-        self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = IdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = IdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.dropout = config.dropout
 
     def forward(
@@ -729,13 +734,13 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
             config=config,
             qk_layer_norms=config.qk_layer_norms,
         )
-        self.mlp = LlamaMLP(
+        self.mlp = IdeficsMLP(
             hidden_size=self.hidden_size,
             intermediate_size=config.intermediate_size,
             hidden_act=config.hidden_act,
         )
-        self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = IdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = IdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.config = config.dropout
 
         self.act_cross_attn = nn.Tanh()
@@ -872,7 +877,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     config_class = IdeficsConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
+    _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
     _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
 
     def _init_weights(self, module):
@@ -990,7 +995,7 @@ LLAMA_INPUTS_DOCSTRING = r"""
 )
 class IdeficsModel(IdeficsPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`IdeficsDecoderLayer`]
 
     Args:
         config: IdeficsConfig
@@ -1031,7 +1036,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
                 config.resampler_n_latents,
             )
 
-        self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([IdeficsDecoderLayer(config) for _ in range(config.num_hidden_layers)])
 
         self.cross_layer_interval = config.cross_layer_interval
         num_cross_layers = config.num_hidden_layers // self.cross_layer_interval
@@ -1040,7 +1045,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         )
         self.gradient_checkpointing = False
 
-        self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = IdeficsRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
