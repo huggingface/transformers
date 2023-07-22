@@ -40,9 +40,9 @@ class IdeficsConfig(PretrainedConfig):
 
     e.g. [HuggingFaceM4/idefics-80b](https://huggingface.co/HuggingFaceM4/idefics-80b)
 
-    This is the configuration class to store the configuration of a [`~IdeficsModel`]. It is used to instantiate an Idefics
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Idefics-9B.
+    This is the configuration class to store the configuration of a [`~IdeficsModel`]. It is used to instantiate an
+    Idefics model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the Idefics-9B.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -108,16 +108,13 @@ class IdeficsConfig(PretrainedConfig):
         eos_token_id=2,
         tie_word_embeddings=False,
         cross_layer_interval=1,
-        cross_layer_activation_function="swiglu",
         qk_layer_norms=False,
-        qk_layer_norms_perceiver=False,
         freeze_text_layers=True,
         freeze_text_module_exceptions=[],
         freeze_lm_head=False,
         freeze_vision_layers=True,
         freeze_vision_module_exceptions=[],
         vision_model_name="google/vit-base-patch16-224",
-        vision_model_params="{}",
         vision_embed_dim=768,
         vision_image_size=224,
         use_resampler=False,
@@ -150,12 +147,9 @@ class IdeficsConfig(PretrainedConfig):
         )
 
         self.cross_layer_interval = cross_layer_interval
-        self.cross_layer_activation_function = cross_layer_activation_function
         self.qk_layer_norms = qk_layer_norms
-        self.qk_layer_norms_perceiver = qk_layer_norms_perceiver
         self.freeze_vision_layers = freeze_vision_layers
         self.vision_model_name = vision_model_name
-        self.vision_model_params = vision_model_params
 
         self.freeze_text_layers = freeze_text_layers
         self.freeze_text_module_exceptions = freeze_text_module_exceptions

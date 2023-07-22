@@ -1009,6 +1009,10 @@ class IdeficsModel(IdeficsPreTrainedModel):
             padding_idx=self.padding_idx,
         )
 
+        # workaround for including `vision_image_size` config and not have transformers checks
+        # complain that it's not used
+        self.image_size = config.vision_image_size
+
         # XXX: this is unsafe - needs to be fixed
         vision_model_params = {"id2label": {}, "label2id": {}}
         clip_config = CLIPConfig.from_pretrained(config.vision_model_name, **vision_model_params)
