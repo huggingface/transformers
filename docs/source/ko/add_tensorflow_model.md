@@ -38,7 +38,7 @@ rendered properly in your Markdown viewer.
 
 </팁>
 
-## TensorFlow 모델 아키텍처 코드 추가하는 단계별 가이드 
+## TensorFlow 모델 아키텍처 코드 추가하는 단계별 가이드 [[step-by-step-guide-to add-tensorFlow-model-architecture-code]]
 
 큰 아키텍처 모델 설계하는 방법이 여러가지 있으며, 해당 설계를 구현하는 방법도 여러 가지 있습니다. 
 그러나 우리는 [🤗 Transformers 일반 개요](add_new_model#general-overview-of-transformers)에서 언급한 대로 일관된 설계 선택에 따라 🤗 Transformers 사용 편의성이 달려 있다는 확고한 의견을 가지고 있습니다.
@@ -57,7 +57,7 @@ TensorFlow 모델 아키텍처를 추가하는 데 필요한 단계의 개요를
 6. pull 요청 제출
 7. (선택 사항) 데모 빌드 및 공유
 
-### 1.-3. 모델 기여 준비 [[13-prepare-your-model-contribution]]
+### 1.-3. 모델 기여 준비 [[1.-3.-prepare-your-model-contribution]]
 
 **1. 변환하려는 모델 선택**
 
@@ -208,7 +208,7 @@ py.test -vv tests/models/brand_new_bert/test_modeling_tf_brand_new_bert.py
 
 테스트를 추가하는 방법에 대한 자세한 내용은 [🤗 Transformers의 테스트 가이드](https://huggingface.co/transformers/contributing.html#running-tests)를 참조하세요.
 
-### 6.-7. 모든 사용자가 당신의 모델을 사용할 수 있게 하기
+### 6.-7. 모든 사용자가 당신의 모델을 사용할 수 있게 하기 [[6.-7.-ensure-everyone -can-use-your-model]]
 
 **6. 풀 요청 제출하기**
 
@@ -236,7 +236,7 @@ py.test -vv tests/models/brand_new_bert/test_modeling_tf_brand_new_bert.py
 - Twitter와 LinkedIn과 같은 소셜 미디어에 이야기 공유하기. 당신의 작업에 자랑스러워하고 커뮤니티와 당신의 업적을 공유해야 합니다. 이제 당신의 모델은 전 세계의 수천 명의 엔지니어와 연구원들에 의해 사용될 수 있습니다 🌍! 우리는 당신의 게시물을 리트윗하고 커뮤니티와 함께 당신의 작업을 공유하는 데 도움이 될 것입니다.
 
 
-## 🤗 허브에 TensorFlow 가중치 추가하기
+## 🤗 허브에 TensorFlow 가중치 추가하기 [[adding-tensorFlow-weights-to-🤗-hub]]
 
 가정하에 TensorFlow 모델 아키텍처가 🤗 Transformers에서 사용 가능하다고 가정하고, PyTorch 가중치를 TensorFlow 가중치로 변환하는 것은 쉽습니다!
 
@@ -248,7 +248,7 @@ py.test -vv tests/models/brand_new_bert/test_modeling_tf_brand_new_bert.py
 그게 다입니다! 🎉
 
 
-## ML 프레임워크 간 디버깅 🐛
+## ML 프레임워크 간 디버깅 🐛[[debugging-mismatches-across-ml-frameworks]]
 
 새로운 아키텍처를 추가하거나 기존 아키텍처에 대한 TensorFlow 가중치를 생성할 때, PyTorch와 TensorFlow 간의 불일치로 인한 오류가 발생할 수 있습니다. 심지어 두 프레임워크의 모델 아키텍처 코드가 동일해 보일 수도 있습니다. 무슨 일이 벌어지고 있는 걸까요? 🤔
 
