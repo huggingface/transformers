@@ -15,21 +15,21 @@ rendered properly in your Markdown viewer.
 
 # 단일 GPU에서 효율적인 추론 [[efficient-inference-on-a-single-gpu]]
 
-이 가이드 외에도, 단일 GPU에서 훈련하는 가이드와 CPU에서 추론하는 가이드에서도 관련 정보를 찾을 수 있습니다.
+이 가이드 외에도, [단일 GPU에서의 훈련 가이드](perf_train_gpu_one)와 [CPU에서의 추론 가이드](perf_infer_cpu)에서도 관련 정보를 찾을 수 있습니다.
 
-## 더 나은 Transformer: PyTorch 네이티브 Transformer 고속 경로 [[better-transformer-pytorchnative-transformer-fastpath]]
+## Better Transformer: PyTorch 네이티브 Transformer 고속 경로 [[better-transformer-pytorchnative-transformer-fastpath]]
 
 PyTorch 네이티브 [`nn.MultiHeadAttention`](https://pytorch.org/blog/a-better-transformer-for-fast-transformer-encoder-inference/) 어텐션 고속 경로인 BetterTransformer는 [🤗 Optimum 라이브러리](https://huggingface.co/docs/optimum/bettertransformer/overview)의 통합을 통해 Transformers와 함께 사용할 수 있습니다.
 
 PyTorch의 어텐션 고속 경로는 커널 퓨전과 [중첩된 텐서](https://pytorch.org/docs/stable/nested.html)의 사용을 통해 추론 속도를 높일 수 있습니다. 자세한 벤치마크는 [이 블로그 글](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2)에서 확인할 수 있습니다.
 
-[`optimum`](https://github.com/huggingface/optimum) 패키지를 설치한 후에는 추론 중 Better Transformer를 사용하기 위해 관련 내부 모듈을 호출하여 대체합니다.:
+[`optimum`](https://github.com/huggingface/optimum) 패키지를 설치한 후에는 추론 중 Better Transformer를 사용할 수 있도록 [`~PreTrainedModel.to_bettertransformer`]를 호출하여 관련 내부 모듈을 대체합니다:
 
 ```python
 model = model.to_bettertransformer()
 ```
 
-[`~PreTrainedModel.reverse_bettertransformer`] 메소드는 정규화된 transformers 모델링을 사용하기 위해 모델을 저장하기 전에 원래의 모델링으로 돌아갈 수 있도록 해줍니다.:
+[`~PreTrainedModel.reverse_bettertransformer`] 메소드는 정규화된 transformers 모델링을 사용하기 위해 모델을 저장하기 전 원래의 모델링으로 돌아갈 수 있도록 해줍니다:
 
 ```python
 model = model.reverse_bettertransformer()
@@ -40,7 +40,7 @@ PyTorch 2.0부터는 어텐션 고속 경로가 인코더와 디코더 모두에
 
 ## FP4 혼합 정밀도 추론을 위한 `bitsandbytes` 통합 [[bitsandbytes-integration-for-fp4-mixedprecision-inference]]
 
-`bitsandbytes`를 설치하고 GPU에서 쉬운 모델 압축의 이점을 얻을 수 있습니다. FP4 양자화를 사용하면 원래의 전체 정밀도 버전과 비교하여 모델 크기를 최대 8배 줄일 수 있습니다. 아래에서 시작하는 방법을 확인하세요.
+`bitsandbytes`를 설치하면 GPU에서 손쉽게 모델을 압축할 수 있습니다. FP4 양자화를 사용하면 원래의 전체 정밀도 버전과 비교하여 모델 크기를 최대 8배 줄일 수 있습니다. 아래에서 시작하는 방법을 확인하세요.
 
 <Tip>
 
@@ -73,12 +73,12 @@ model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto",
 
 ### FP4 모델 실행 - 다중 GPU 설정 [[running-fp4-models-multi-gpu-setup]]
 
-다중 GPU에서 혼합 4비트 모델을 로드하는 방법은 단일 GPU 설정과 동일합니다(동일한 명령어 사용):
+다중 GPU에서 혼합 4비트 모델을 가져오는 방법은 단일 GPU 설정과 동일합니다(동일한 명령어 사용):
 ```py
 model_name = "bigscience/bloom-2b5"
 model_4bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_4bit=True)
 ```
-하지만 `accelerate`를 사용하여 각 GPU에 할당할 GPU RAM을 제어할 수 있습니다. 다음과 같이 `max_memory` 인자를 사용하세요:
+하지만 `accelerate`를 사용하여 각 GPU에 할당할 GPU RAM을 제어할 수 있습니다. 다음과 같이 `max_memory` 인수를 사용하세요:
 
 ```py
 max_memory_mapping = {0: "600MB", 1: "1GB"}
@@ -106,7 +106,7 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
 
 ![HFxbitsandbytes.png](https://s3.amazonaws.com/moonup/production/uploads/1659861207959-62441d1d9fdefb55a0b7d12c.png)
 
-Int8 혼합 정밀도 행렬 분해는 행렬 곱셈을 두 개의 스트림으로 분리합니다: (1) fp16로 곱해지는 체계적인 특이값 이상치 스트림 행렬(0.01%) 및 (2) int8 행렬 곱셈의 일반적인 스트림(99.9%). 이 방법을 사용하면 매우 큰 모델에 대해 예측적인 저하 없이 int8 추론이 가능합니다.
+Int8 혼합 정밀도 행렬 분해는 행렬 곱셈을 두 개의 스트림으로 분리합니다: (1) fp16로 곱해지는 체계적인 특이값 이상치 스트림 행렬(0.01%) 및 (2) int8 행렬 곱셈의 일반적인 스트림(99.9%). 이 방법을 사용하면 매우 큰 모델에 대해 예측 저하 없이 int8 추론이 가능합니다.
 이 방법에 대한 자세한 내용은 [논문](https://arxiv.org/abs/2208.07339)이나 [통합에 관한 블로그 글](https://huggingface.co/blog/hf-bitsandbytes-integration)에서 확인할 수 있습니다.
 
 ![MixedInt8.gif](https://s3.amazonaws.com/moonup/production/uploads/1660567469965-62441d1d9fdefb55a0b7d12c.gif)
@@ -124,7 +124,7 @@ Int8 혼합 정밀도 행렬 분해는 행렬 곱셈을 두 개의 스트림으�
 
 ### 혼합 Int8 모델 실행 - 단일 GPU 설정 [[running-mixedint8-models-single-gpu-setup]]
 
-필요한 라이브러리를 설치한 후 혼합 8비트 모델을 로드하는 방법은 다음과 같습니다:
+필요한 라이브러리를 설치한 후 혼합 8비트 모델을 가져오는 방법은 다음과 같습니다:
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -161,7 +161,7 @@ outputs = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 model_name = "bigscience/bloom-2b5"
 model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
 ```
-하지만 `accelerate`를 사용하여 각 GPU에 할당할 GPU RAM을 제어할 수 있습니다. 다음과 같이 `max_memory` 인자를 사용하세요:
+하지만 `accelerate`를 사용하여 각 GPU에 할당할 GPU RAM을 제어할 수 있습니다. 다음과 같이 `max_memory` 인수를 사용하세요:
 
 ```py
 max_memory_mapping = {0: "1GB", 1: "2GB"}
@@ -170,15 +170,15 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
     model_name, device_map="auto", load_in_8bit=True, max_memory=max_memory_mapping
 )
 ```
-이 예에서는 첫 번째 GPU가 1GB의 메모리를 사용하고 두 번째 GPU가 2GB를 사용합니다.
+이 예시에서는 첫 번째 GPU가 1GB의 메모리를 사용하고 두 번째 GPU가 2GB를 사용합니다.
 
 ### Colab 데모 [[colab-demos]]
 
 이 방법을 사용하면 이전에 Google Colab에서 추론할 수 없었던 모델에 대해 추론할 수 있습니다.
-Google Colab에서 T5-11b(42GB in fp32)를 실행하는 데모를 확인하세요. Google Colab에서 8비트 양자화를 사용:
+Google Colab에서 8비트 양자화를 사용하여 T5-11b(42GB in fp32)를 실행하는 데모를 확인하세요:
 
 [![Open In Colab: T5-11b demo](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1YORPWx4okIHXnjW7MSAidXN29mPVNT7F?usp=sharing)
 
-또는 BLOOM-3B에 대한 데모:
+또는 BLOOM-3B에 대한 데모를 확인하세요:
 
 [![Open In Colab: BLOOM-3b demo](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1qOjXfQIAULfKvZqwCen8-MoWKGdSatZ4?usp=sharing)
