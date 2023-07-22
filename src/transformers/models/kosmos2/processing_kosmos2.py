@@ -302,3 +302,66 @@ class Kosmos2Processor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+    def bbox_to_patch_index(self, bbox, P=32):
+        # TODO: un-normalized version
+
+        # The assumption is: x2 > x1 and  y1 > y2
+        (x1, y1, x2, y2) = bbox
+
+        import math
+        ul_x = math.floor(x1 * P)
+        ul_y = math.floor(y1 * P)
+
+        lr_x = math.floor(x2 * P - 1)
+        lr_y = math.floor(y2 * P - 1)
+
+        ul_idx = ul_y * P + ul_x
+        lr_idx = lr_y * P + lr_x
+
+        return ul_idx, lr_idx
+
+    # copied from https://github.com/microsoft/unilm/blob/97e4923e97d3ee10b57e97013556e3fd0d207a9b/kosmos-2/demo/decode_string.py#L35C1-L75C38
+    # TODO: clean up + un-normalized version
+    def patch_index_to_bbox(self, ul_idx, lr_idx, P=32):
+        """
+        Given a grid of length P and the indices of the upper-left and lower-right corners of a bounding box,
+        returns the normalized coordinates of the bounding box, in the form [x1, y1, x2, y2].
+
+        Args:
+        - P (int): the length of the grid
+        - ul_idx (int): the index of the grid cell that corresponds to the upper-left corner of the bounding box
+        - lr_idx (int): the index of the grid cell that corresponds to the lower-right corner of the bounding box
+
+        Returns:
+        - box_coords (np.array of shape (4,)): the normalized coordinates of the bounding box, in the form [x1, y1, x2, y2]
+        """
+        # Compute the size of each cell in the grid
+        cell_size = 1.0 / P
+
+        # Compute the x and y indices of the upper-left and lower-right corners of the bounding box
+        ul_x = ul_idx % P
+        ul_y = ul_idx // P
+
+        lr_x = lr_idx % P
+        lr_y = lr_idx // P
+
+        # Compute the normalized coordinates of the bounding box
+        if ul_idx == lr_idx:
+            x1 = ul_x * cell_size
+            y1 = ul_y * cell_size
+            x2 = lr_x * cell_size + cell_size
+            y2 = lr_y * cell_size + cell_size
+        elif ul_x == lr_x or ul_y == lr_y:
+            x1 = ul_x * cell_size
+            y1 = ul_y * cell_size
+            x2 = lr_x * cell_size + cell_size
+            y2 = lr_y * cell_size + cell_size
+        else:
+            x1 = ul_x * cell_size + cell_size / 2
+            y1 = ul_y * cell_size + cell_size / 2
+            x2 = lr_x * cell_size + cell_size / 2
+            y2 = lr_y * cell_size + cell_size / 2
+
+        import numpy as np
+        return np.array([x1, y1, x2, y2])
