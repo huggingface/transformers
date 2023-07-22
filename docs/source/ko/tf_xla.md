@@ -26,7 +26,7 @@ TensorFlow에서 XLA를 사용하는 것은 간단합니다. XLA는 `tensorflow`
 
 🤗 Transformers에서는 [GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2), [T5](https://huggingface.co/docs/transformers/model_doc/t5), [OPT](https://huggingface.co/docs/transformers/model_doc/opt)와 같은 모델의 텍스트 생성, 그리고 [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper)와 같은 모델의 음성 처리를 포함하여 여러 TensorFlow 메소드가 XLA와 호환되도록 다시 작성되었습니다.
 
-정확한 속도 향상은 모델에 따라 다르지만, 🤗 Transformers 내의 TensorFlow 텍스트 생성 모델의 경우 약 100배의 속도 향상을 확인했습니다. 이 문서에서는 이러한 모델에 대해 XLA를 사용하여 최대 성능을 얻는 방법을 설명합니다. 또한 XLA 통합의 벤치마크 및 디자인 철학에 대한 추가 자료 링크도 제공할 것입니다.
+정확한 속도 향상은 모델에 따라 다르지만, 🤗 Transformers 내의 TensorFlow 텍스트 생성 모델의 경우 최대 100배의 속도 향상을 확인했습니다. 이 문서에서는 이러한 모델에 대해 XLA를 사용하여 최대 성능을 얻는 방법을 설명합니다. 또한 XLA 통합의 벤치마크 및 디자인 철학에 대한 추가 자료 링크도 제공할 것입니다.
 
 ## XLA를 사용하여 TF 함수 실행하기 [[running-tf-functions-with-xla]]
 
@@ -43,12 +43,12 @@ model = tf.keras.Sequential(
 위 모델은 차원이 `(10, )`인 입력을 받습니다. 다음과 같이 모델을 사용하여 순전파를 실행할 수 있습니다:
 
 ```py
-# Generate random inputs for the model.
+# 모델에 대한 임의의 입력을 생성합니다.
 batch_size = 16
 input_vector_dim = 10
 random_inputs = tf.random.normal((batch_size, input_vector_dim))
 
-# Run a forward pass.
+# 순전파를 실행합니다.
 _ = model(random_inputs)
 ```
 
@@ -79,7 +79,7 @@ pip install transformers --upgrade
 import tensorflow as tf
 from transformers import AutoTokenizer, TFAutoModelForCausalLM
 
-# Will error if the minimal version of Transformers is not installed.
+# 최소 버전의 Transformers가 설치되어 있지 않다면 오류가 발생합니다.
 from transformers.utils import check_min_version
 
 check_min_version("4.21.0")
@@ -89,7 +89,7 @@ tokenizer = AutoTokenizer.from_pretrained("gpt2", padding_side="left", pad_token
 model = TFAutoModelForCausalLM.from_pretrained("gpt2")
 input_string = ["TensorFlow is"]
 
-# One line to create an XLA generation function
+# XLA 생성 함수를 만들기 위한 한 줄
 xla_generate = tf.function(model.generate, jit_compile=True)
 
 tokenized_input = tokenizer(input_string, return_tensors="tf")
@@ -120,7 +120,7 @@ input_string = ["TensorFlow is"]
 
 xla_generate = tf.function(model.generate, jit_compile=True)
 
-# Here, we call the tokenizer with padding options.
+# 여기서, padding 옵션이 있는 토크나이저를 호출합니다.
 tokenized_input = tokenizer(input_string, pad_to_multiple_of=8, padding=True, return_tensors="tf")
 
 generated_tokens = xla_generate(**tokenized_input, num_beams=2)
