@@ -871,11 +871,19 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
         cross_attn_head_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if labels is not None:
+            if use_cache:
+                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+            use_cache = False
+
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -892,11 +900,22 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        lm_logits = self.lm_head(outputs[0])
+        logits = self.lm_head(outputs[0])
+
+        loss = None
+        # TODO: change this to shift version
+        if labels is not None:
+            labels = labels.to(logits.device)
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
-            loss=None,
-            logits=lm_logits,
+            loss=loss,
+            logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
@@ -1042,6 +1061,12 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         vision_model_output = None
         image_connector_attention = None
         if img_features is None:
@@ -1070,6 +1095,10 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+        if not return_dict:
+            outputs = outputs + (img_features, image_connector_attention, vision_model_output)
+            return tuple(output for output in outputs if output is not None)
 
         return Kosmos2ModelOutput(
             last_hidden_states=outputs.last_hidden_state,
@@ -1131,11 +1160,18 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         img_features: Optional[List[torch.FloatTensor]] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         vision_model_output = None
         image_connector_attention = None
         if img_features is None:
@@ -1159,14 +1195,19 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
             head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            labels=labels,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
+        if not return_dict:
+            outputs = lm_outputs + (img_features, image_connector_attention, vision_model_output)
+            return tuple(output for output in outputs if output is not None)
+
         return Kosmos2ForConditionalGenerationModelOutput(
-            loss=None,
+            loss=lm_outputs.loss,
             logits=lm_outputs.logits,
             past_key_values=lm_outputs.past_key_values,
             hidden_states=lm_outputs.hidden_states,
@@ -2534,15 +2575,15 @@ if __name__ == "__main__":
     # ================================================================================
     # real config & model creation
 
-    # real_model = create_model(num_layers=24)
-    #
-    # # need to create this checkpoint
-    # load_and_check_model(real_model, ckpt_path="kosmos2_state_dict.bin")
-    # real_model.save_pretrained("HF_Kosmos2")
-    #
-    # # check we can load
-    # real_model = Kosmos2ForConditionalGeneration.from_pretrained("HF_Kosmos2")
-    #
+    real_model = create_model(num_layers=24)
+
+    # need to create this checkpoint
+    load_and_check_model(real_model, ckpt_path="kosmos2_state_dict.bin")
+    real_model.save_pretrained("HF_Kosmos2")
+
+    # check we can load
+    real_model = Kosmos2ForConditionalGeneration.from_pretrained("HF_Kosmos2")
+
     # # If we want to push to the Hub
     # # repo_id = "ydshieh/kosmos-2"
     # # real_model.save_pretrained("HF_Kosmos2", push_to_hub=True, repo_id=repo_id, use_auth_token="XXX")
@@ -2550,10 +2591,10 @@ if __name__ == "__main__":
     # # check we can load from the Hub
     # # real_model = Kosmos2ForConditionalGeneration.from_pretrained(repo_id)
 
-    repo_id = "ydshieh/kosmos-2"
-
-    # check we can load from the Hub
-    real_model = Kosmos2ForConditionalGeneration.from_pretrained(repo_id)
+    # repo_id = "ydshieh/kosmos-2"
+    #
+    # # check we can load from the Hub
+    # real_model = Kosmos2ForConditionalGeneration.from_pretrained(repo_id)
 
     # ================================================================================
 
