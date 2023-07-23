@@ -1024,12 +1024,11 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # # TODO: Do we need this for (somehow vision-text) `Kosmos2Model`?
-    # def get_input_embeddings(self):
-    #     return self.text_model.model.embed_tokens
-    #
-    # def set_input_embeddings(self, value):
-    #     self.text_model.model.embed_tokens = value
+    def get_input_embeddings(self):
+        return self.text_model.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.text_model.model.embed_tokens = value
 
     def forward(
         self,
@@ -1110,19 +1109,20 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # # TODO: Do we need this for (somehow vision-text) `Kosmos2ForConditionalGeneration`?
-    # def get_input_embeddings(self):
-    #     return self.text_model.model.embed_tokens
-    #
-    # def set_input_embeddings(self, value):
-    #     self.text_model.model.embed_tokens = value
+    # TODO: Do we need this for (somehow vision-text) `Kosmos2ForConditionalGeneration`?
+    # (`InstructBlipForConditionalGeneration` has defined these.)
+    def get_input_embeddings(self):
+        return self.text_model.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.text_model.model.embed_tokens = value
 
     # We can't have this (with `config.tie_word_embeddings=True`) if we don't implement `get_input_embeddings` above
-    # def get_output_embeddings(self):
-    #     return self.text_model.lm_head
-    #
-    # def set_output_embeddings(self, new_embeddings):
-    #     self.text_model.lm_head = new_embeddings
+    def get_output_embeddings(self):
+        return self.text_model.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.text_model.set_output_embeddings(new_embeddings)
 
     def forward(
         self,
