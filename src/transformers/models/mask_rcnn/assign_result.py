@@ -1,6 +1,4 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-import warnings
-
 import torch
 
 
@@ -27,73 +25,12 @@ class AssignResult:
         # Interface for possible user-defined properties
         self._extra_properties = {}
 
-    def __repr__(self):
-        """str: the string of the module"""
-        try:
-            nice = self.__nice__()
-            classname = self.__class__.__name__
-            return f"<{classname}({nice}) at {hex(id(self))}>"
-        except NotImplementedError as ex:
-            warnings.warn(str(ex), category=RuntimeWarning)
-            return object.__repr__(self)
-
-    def __str__(self):
-        """str: the string of the module"""
-        try:
-            classname = self.__class__.__name__
-            nice = self.__nice__()
-            return f"<{classname}({nice})>"
-        except NotImplementedError as ex:
-            warnings.warn(str(ex), category=RuntimeWarning)
-            return object.__repr__(self)
-
     @property
     def num_preds(self):
         """int: the number of predictions in this assignment"""
         return len(self.gt_indices)
 
-    def set_extra_property(self, key, value):
-        """Set user-defined new property."""
-        if key in self.info:
-            raise KeyError(f"Key {key} already exists in the info dict")
-        self._extra_properties[key] = value
-
-    def get_extra_property(self, key):
-        """Get user-defined property."""
-        return self._extra_properties.get(key, None)
-
-    @property
-    def info(self):
-        """dict: a dictionary of info about the object"""
-        basic_info = {
-            "num_gts": self.num_gts,
-            "num_preds": self.num_preds,
-            "gt_indices": self.gt_indices,
-            "max_overlaps": self.max_overlaps,
-            "labels": self.labels,
-        }
-        basic_info.update(self._extra_properties)
-        return basic_info
-
-    def __nice__(self):
-        """str: a "nice" summary string describing this assign result"""
-        parts = []
-        parts.append(f"num_gts={self.num_gts!r}")
-        if self.gt_indices is None:
-            parts.append(f"gt_indices={self.gt_indices!r}")
-        else:
-            parts.append(f"gt_indices.shape={tuple(self.gt_indices.shape)!r}")
-        if self.max_overlaps is None:
-            parts.append(f"max_overlaps={self.max_overlaps!r}")
-        else:
-            parts.append(f"max_overlaps.shape={tuple(self.max_overlaps.shape)!r}")
-        if self.labels is None:
-            parts.append(f"labels={self.labels!r}")
-        else:
-            parts.append(f"labels.shape={tuple(self.labels.shape)!r}")
-        return ", ".join(parts)
-
-    def add_gt_(self, gt_labels):
+    def add_ground_truth(self, gt_labels):
         """Add ground truth as assigned results.
 
         Args:

@@ -1,6 +1,4 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-import warnings
-
 import torch
 
 
@@ -37,24 +35,6 @@ class SamplingResult:
         else:
             self.pos_gt_labels = None
 
-    def __repr__(self):
-        try:
-            nice = self.__nice__()
-            classname = self.__class__.__name__
-            return f"<{classname}({nice}) at {hex(id(self))}>"
-        except NotImplementedError as ex:
-            warnings.warn(str(ex), category=RuntimeWarning)
-            return object.__repr__(self)
-
-    def __str__(self):
-        try:
-            classname = self.__class__.__name__
-            nice = self.__nice__()
-            return f"<{classname}({nice})>"
-        except NotImplementedError as ex:
-            warnings.warn(str(ex), category=RuntimeWarning)
-            return object.__repr__(self)
-
     @property
     def bboxes(self):
         """torch.Tensor: concatenated positive and negative boxes"""
@@ -67,24 +47,3 @@ class SamplingResult:
             if isinstance(value, torch.Tensor):
                 _dict[key] = value.to(device)
         return self
-
-    def __nice__(self):
-        data = self.info.copy()
-        data["pos_bboxes"] = data.pop("pos_bboxes").shape
-        data["neg_bboxes"] = data.pop("neg_bboxes").shape
-        parts = [f"'{k}': {v!r}" for k, v in sorted(data.items())]
-        body = "    " + ",\n    ".join(parts)
-        return "{\n" + body + "\n}"
-
-    @property
-    def info(self):
-        """Returns a dictionary of info about the object."""
-        return {
-            "pos_indices": self.pos_indices,
-            "neg_indices": self.neg_indices,
-            "pos_bboxes": self.pos_bboxes,
-            "neg_bboxes": self.neg_bboxes,
-            "pos_is_gt": self.pos_is_gt,
-            "num_gts": self.num_gts,
-            "pos_assigned_gt_indices": self.pos_assigned_gt_indices,
-        }

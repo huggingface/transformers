@@ -830,11 +830,6 @@ class MaskRCNNBboxOverlaps2D:
 
         return bbox_overlaps(bboxes1, bboxes2, mode, is_aligned)
 
-    def __repr__(self):
-        """str: a string describing the module"""
-        repr_str = self.__class__.__name__ + f"(scale={self.scale}, dtype={self.dtype})"
-        return repr_str
-
 
 def bbox_overlaps(bboxes1, bboxes2, mode="iou", is_aligned=False, eps=1e-6):
     """Calculates the overlap between two set of bboxes.
@@ -1228,7 +1223,7 @@ class MaskRCNNRandomSampler:
             if gt_labels is None:
                 raise ValueError("gt_labels must be given when add_gt_as_proposals is True")
             bboxes = torch.cat([gt_bboxes, bboxes], dim=0)
-            assign_result.add_gt_(gt_labels)
+            assign_result.add_ground_truth(gt_labels)
             gt_ones = bboxes.new_ones(gt_bboxes.shape[0], dtype=torch.uint8)
             gt_flags = torch.cat([gt_ones, gt_flags])
 
@@ -2051,15 +2046,6 @@ class RoIAlign(nn.Module):
         return torchvision.ops.roi_align(
             input, rois, self.output_size, self.spatial_scale, self.sampling_ratio, self.aligned
         )
-
-    def __repr__(self):
-        s = self.__class__.__name__
-        s += f"(output_size={self.output_size}, "
-        s += f"spatial_scale={self.spatial_scale}, "
-        s += f"sampling_ratio={self.sampling_ratio}, "
-        s += f"pool_mode={self.pool_mode}, "
-        s += f"aligned={self.aligned}, "
-        return s
 
 
 class MaskRCNNSingleRoIExtractor(nn.Module):
