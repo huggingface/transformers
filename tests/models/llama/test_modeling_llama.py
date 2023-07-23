@@ -58,6 +58,7 @@ class LlamaModelTester:
         initializer_range=0.02,
         num_labels=3,
         num_choices=4,
+        pad_token_id=0,
         scope=None,
     ):
         self.parent = parent
@@ -81,6 +82,7 @@ class LlamaModelTester:
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.num_choices = num_choices
+        self.pad_token_id = pad_token_id
         self.scope = scope
 
     def prepare_config_and_inputs(self):
@@ -120,6 +122,7 @@ class LlamaModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            pad_token_id=self.pad_token_id,
         )
 
     def create_and_check_model(

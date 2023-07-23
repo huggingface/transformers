@@ -53,6 +53,7 @@ from .utils import (
     logging,
     requires_backends,
 )
+from .utils.generic import strtobool
 from .utils.import_utils import is_optimum_neuron_available
 
 
@@ -405,7 +406,7 @@ class TrainingArguments:
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to `True`, the training will begin faster (as that skipping step
             can take a long time) but will not yield the same results as the interrupted training would have.
-        sharded_ddp (`bool`, `str` or list of [`~trainer_utils.ShardedDDPOption`], *optional*, defaults to `False`):
+        sharded_ddp (`bool`, `str` or list of [`~trainer_utils.ShardedDDPOption`], *optional*, defaults to `''`):
             Use Sharded DDP training from [FairScale](https://github.com/facebookresearch/fairscale) (in distributed
             training only). This is an experimental feature.
 
@@ -420,7 +421,7 @@ class TrainingArguments:
 
             If a string is passed, it will be split on space. If a bool is passed, it will be converted to an empty
             list for `False` and `["simple"]` for `True`.
-        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `False`):
+        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `''`):
             Use PyTorch Distributed Parallel Training (in distributed training only).
 
             A list of options along the following:
@@ -968,7 +969,7 @@ class TrainingArguments:
             )
         },
     )
-    sharded_ddp: str = field(
+    sharded_ddp: Optional[Union[List[ShardedDDPOption], str]] = field(
         default="",
         metadata={
             "help": (
@@ -979,7 +980,7 @@ class TrainingArguments:
             ),
         },
     )
-    fsdp: str = field(
+    fsdp: Optional[Union[List[FSDPOption], str]] = field(
         default="",
         metadata={
             "help": (
@@ -1000,12 +1001,13 @@ class TrainingArguments:
             )
         },
     )
+    # Do not touch this type annotation or it will stop working in CLI
     fsdp_config: Optional[str] = field(
         default=None,
         metadata={
             "help": (
-                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The  value is either a"
-                "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded  json file as `dict`."
+                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The value is either a"
+                "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`."
             )
         },
     )
@@ -1018,11 +1020,12 @@ class TrainingArguments:
             )
         },
     )
+    # Do not touch this type annotation or it will stop working in CLI
     deepspeed: Optional[str] = field(
         default=None,
         metadata={
             "help": (
-                "Enable deepspeed and pass the path to deepspeed json config file (e.g. ds_config.json) or an already"
+                "Enable deepspeed and pass the path to deepspeed json config file (e.g. `ds_config.json`) or an already"
                 " loaded json file as a dict"
             )
         },
@@ -1566,6 +1569,7 @@ class TrainingArguments:
                 elif fsdp_option == FSDPOption.OFFLOAD:
                     os.environ["FSDP_OFFLOAD_PARAMS"] = "true"
                 elif fsdp_option == FSDPOption.AUTO_WRAP:
+                    os.environ["FSDP_AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[0]
                     if self.fsdp_config["fsdp_min_num_params"] > 0:
                         os.environ["FSDP_MIN_NUM_PARAMS"] = str(self.fsdp_config["fsdp_min_num_params"])
                         os.environ["FSDP_AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[1]
@@ -1573,7 +1577,6 @@ class TrainingArguments:
                         os.environ["FSDP_TRANSFORMER_CLS_TO_WRAP"] = ",".join(
                             self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]
                         )
-                        os.environ["FSDP_AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[0]
             prefetch_policy = self.fsdp_config.get("fsdp_backward_prefetch", "NO_PREFETCH")
             os.environ["FSDP_BACKWARD_PREFETCH"] = prefetch_policy.upper()
 
@@ -1720,7 +1723,7 @@ class TrainingArguments:
         self.distributed_state = None
         if not self.use_ipex and "ACCELERATE_USE_IPEX" not in os.environ:
             os.environ["ACCELERATE_USE_IPEX"] = "false"
-        if self.use_cpu or os.environ.get("ACCELERATE_USE_CPU", False):
+        if self.use_cpu or strtobool(os.environ.get("ACCELERATE_USE_CPU", "False")):
             self.distributed_state = PartialState(cpu=True, backend=self.ddp_backend)
             self._n_gpu = 0
         elif is_sagemaker_mp_enabled():

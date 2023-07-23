@@ -655,6 +655,7 @@ DEPRECATED_MODELS = [
     "bort",
     "mctct",
     "mmbt",
+    "open_llama",
     "retribert",
     "tapex",
     "trajectory_transformer",
