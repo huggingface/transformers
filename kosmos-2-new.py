@@ -1036,8 +1036,11 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         img_attn_mask = None,
         decoder_input_ids: Optional[torch.Tensor] = None,
         decoder_attention_mask = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        img_features: Optional[List[torch.FloatTensor]] = None,
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1057,13 +1060,18 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
             img_features, image_connector_attention = self.img_connector(img_features)
 
         # so far not used
-        encoder_outputs = None
+        encoder_hidden_states = None
+        if encoder_outputs is not None:
+            encoder_hidden_states = encoder_outputs[0]
 
         outputs = self.text_model(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             img_features=img_features,
             img_attn_mask=img_attn_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
@@ -1130,9 +1138,11 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         img_attn_mask = None,
         decoder_input_ids: Optional[torch.Tensor] = None,
         decoder_attention_mask = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
         img_features: Optional[List[torch.FloatTensor]] = None,
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1155,13 +1165,18 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
             img_features, image_connector_attention = self.img_connector(img_features)
 
         # so far not used
-        encoder_outputs = None
+        encoder_hidden_states = None
+        if encoder_outputs is not None:
+            encoder_hidden_states = encoder_outputs[0]
 
         lm_outputs = self.text_model(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             img_features=img_features,
             img_attn_mask=img_attn_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
@@ -1187,7 +1202,6 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
     def generate(
         self,
         pixel_values=None,
-        img_attn_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         img_features=None,
@@ -1219,12 +1233,10 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             img_features=img_features,
-            img_attn_mask=img_attn_mask,
             input_embeds=decoder_inputs_embeds,
             **kwargs,
         )
 
-        # TODO: what is the output type?
         return output
 
 # ==============================================================================================================
@@ -2278,9 +2290,15 @@ def check_real_model_with_dog_sample(model):
         img_features=image_features,
         img_attn_mask=img_attn_mask,
         max_new_tokens=len(expected_generation),
+        output_scores=True,
+        return_dict_in_generate=True,
     )
 
-    assert generated_output[0, 71:].tolist() == expected_generation
+    assert generated_output.sequences[0, 71:].tolist() == expected_generation
+
+    for score, expected_block in zip(generated_output.scores[2:12], expected_blocks):
+        assert torch.max(torch.abs(score[0, :+3] - torch.tensor(expected_block[0]))) < 3e-5
+        assert torch.max(torch.abs(score[0, -3:] - torch.tensor(expected_block[1]))) < 3e-5
 
     # --------------------------------------------------------------------
     # generation with `use_cache` (from the start)
@@ -2295,9 +2313,15 @@ def check_real_model_with_dog_sample(model):
         img_features=image_features,
         img_attn_mask=img_attn_mask,
         max_new_tokens=len(expected_generation),
+        output_scores=True,
+        return_dict_in_generate=True,
     )
 
-    assert generated_output[0, 71:].tolist() == expected_generation
+    assert generated_output.sequences[0, 71:].tolist() == expected_generation
+
+    for score, expected_block in zip(generated_output.scores[2:12], expected_blocks):
+        assert torch.max(torch.abs(score[0, :+3] - torch.tensor(expected_block[0]))) < 3e-5
+        assert torch.max(torch.abs(score[0, -3:] - torch.tensor(expected_block[1]))) < 3e-5
 
     # --------------------------------------------------------------------
     # generation without `use_cache` (from the start)
@@ -2312,9 +2336,15 @@ def check_real_model_with_dog_sample(model):
         img_features=None,
         img_attn_mask=img_attn_mask,
         max_new_tokens=len(expected_generation),
+        output_scores=True,
+        return_dict_in_generate=True,
     )
 
-    assert generated_output[0, 71:].tolist() == expected_generation
+    assert generated_output.sequences[0, 71:].tolist() == expected_generation
+
+    for score, expected_block in zip(generated_output.scores[2:12], expected_blocks):
+        assert torch.max(torch.abs(score[0, :+3] - torch.tensor(expected_block[0]))) < 3e-5
+        assert torch.max(torch.abs(score[0, -3:] - torch.tensor(expected_block[1]))) < 3e-5
 
     # --------------------------------------------------------------------
     # generation without `use_cache` (from the start)
@@ -2329,9 +2359,15 @@ def check_real_model_with_dog_sample(model):
         img_features=image_features,
         img_attn_mask=img_attn_mask,
         max_new_tokens=len(expected_generation),
+        output_scores=True,
+        return_dict_in_generate=True,
     )
 
-    assert generated_output[0, 71:].tolist() == expected_generation
+    assert generated_output.sequences[0, 71:].tolist() == expected_generation
+
+    for score, expected_block in zip(generated_output.scores[2:12], expected_blocks):
+        assert torch.max(torch.abs(score[0, :+3] - torch.tensor(expected_block[0]))) < 3e-5
+        assert torch.max(torch.abs(score[0, -3:] - torch.tensor(expected_block[1]))) < 3e-5
 
     # --------------------------------------------------------------------
     # generation with `use_cache` (from the start)
@@ -2346,9 +2382,15 @@ def check_real_model_with_dog_sample(model):
         img_features=None,
         img_attn_mask=img_attn_mask,
         max_new_tokens=len(expected_generation),
+        output_scores=True,
+        return_dict_in_generate=True,
     )
 
-    assert generated_output[0, 71:].tolist() == expected_generation
+    assert generated_output.sequences[0, 71:].tolist() == expected_generation
+
+    for score, expected_block in zip(generated_output.scores[2:12], expected_blocks):
+        assert torch.max(torch.abs(score[0, :+3] - torch.tensor(expected_block[0]))) < 3e-5
+        assert torch.max(torch.abs(score[0, -3:] - torch.tensor(expected_block[1]))) < 3e-5
 
     # --------------------------------------------------------------------
     # generation with `use_cache` (from the start)
@@ -2363,9 +2405,15 @@ def check_real_model_with_dog_sample(model):
         img_features=image_features,
         img_attn_mask=img_attn_mask,
         max_new_tokens=len(expected_generation),
+        output_scores=True,
+        return_dict_in_generate=True,
     )
 
-    assert generated_output[0, 71:].tolist() == expected_generation
+    assert generated_output.sequences[0, 71:].tolist() == expected_generation
+
+    for score, expected_block in zip(generated_output.scores[2:12], expected_blocks):
+        assert torch.max(torch.abs(score[0, :+3] - torch.tensor(expected_block[0]))) < 3e-5
+        assert torch.max(torch.abs(score[0, -3:] - torch.tensor(expected_block[1]))) < 3e-5
 
     # --------------------------------------------------------------------
     # generation with `use_cache` (from step 84)
@@ -2505,10 +2553,6 @@ if __name__ == "__main__":
 
     check_model_with_dummy_inputs(dummy_model)
     check_model_with_dog_sample(dummy_model)
-
-    # ================================================================================
-
-    exit(0)
 
     # ================================================================================
     # real config & model creation
