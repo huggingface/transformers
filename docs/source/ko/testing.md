@@ -533,7 +533,7 @@ CUDA_VISIBLE_DEVICES=0,1 RUN_SLOW=1 pytest -sv tests/test_trainer_distributed.py
 ### 출력 캡처[[output-capture]]
 
 테스트 실행 중 `stdout` 및 `stderr`로 전송된 모든 출력이 캡처됩니다. 
-테스트나 설정 메서드가 실패하면 캡처된 출력은 일반적으로 실패 추적 정보와 함께 표시됩니다.
+테스트나 설정 메소드가 실패하면 캡처된 출력은 일반적으로 실패 추적 정보와 함께 표시됩니다.
 
 출력 캡처를 비활성화하고 `stdout` 및 `stderr`를 정상적으로 받으려면 `-s` 또는 `--capture=no`를 사용하세요:
 
@@ -1161,7 +1161,7 @@ class EnvExampleTest(TestCasePlus):
 현재 저장소에 대해 테스트가 수행되도록 `src` 디렉터리도 포함됩니다.
 테스트 호출 이전에 설정된 경우에는 `env[PYTHONPATH]`를 그대로 사용합니다.
 
-이 헬퍼 메서드는 `os.environ` 객체의 사본을 생성하므로 원본은 그대로 유지됩니다.
+이 헬퍼 메소드는 `os.environ` 객체의 사본을 생성하므로 원본은 그대로 유지됩니다.
 
 
 ### 재현 가능한 결과 얻기[[getting-reproducible-results]]
