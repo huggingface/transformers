@@ -933,7 +933,7 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.bros = BrosModel(config, add_pooling_layer=False)
+        self.bros = BrosModel(config)
         classifier_dropout = (
             config.classifier_dropout if hasattr(config, "classifier_dropout") else config.hidden_dropout_prob
         )
@@ -959,13 +959,15 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
+        box_first_token_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -988,8 +990,11 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         logits = self.classifier(sequence_output)
 
         loss = None
-        if labels is not None:
+        if labels is not None and box_first_token_mask is not None:
             loss_fct = CrossEntropyLoss()
+
+            box_first_token_mask = box_first_token_mask.view(-1)
+
             # Only keep active parts of the loss
             if attention_mask is not None:
                 active_loss = attention_mask.view(-1) == 1
@@ -999,9 +1004,11 @@ class BrosForTokenClassification(BrosPreTrainedModel):
                     labels.view(-1),
                     torch.tensor(loss_fct.ignore_index).type_as(labels),
                 )
-                loss = loss_fct(active_logits, active_labels)
+                loss = loss_fct(active_logits[box_first_token_mask], active_labels[box_first_token_mask])
             else:
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                loss = loss_fct(
+                    logits.view(-1, self.num_labels)[box_first_token_mask], labels.view(-1)[box_first_token_mask]
+                )
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -1011,5 +1018,195 @@ class BrosForTokenClassification(BrosPreTrainedModel):
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+class RelationExtractor(nn.Module):
+    def __init__(
+        self,
+        n_relations,
+        backbone_hidden_size,
+        head_hidden_size,
+        head_p_dropout=0.1,
+    ):
+        super().__init__()
+
+        self.n_relations = n_relations
+        self.backbone_hidden_size = backbone_hidden_size
+        self.head_hidden_size = head_hidden_size
+        self.head_p_dropout = head_p_dropout
+
+        self.drop = nn.Dropout(head_p_dropout)
+        self.q_net = nn.Linear(self.backbone_hidden_size, self.n_relations * self.head_hidden_size)
+
+        self.k_net = nn.Linear(self.backbone_hidden_size, self.n_relations * self.head_hidden_size)
+
+        self.dummy_node = nn.Parameter(torch.Tensor(1, self.backbone_hidden_size))
+        nn.init.normal_(self.dummy_node)
+
+    def forward(self, h_q, h_k):
+        h_q = self.q_net(self.drop(h_q))
+
+        dummy_vec = self.dummy_node.unsqueeze(0).repeat(1, h_k.size(1), 1)
+        h_k = torch.cat([h_k, dummy_vec], axis=0)
+        h_k = self.k_net(self.drop(h_k))
+
+        head_q = h_q.view(h_q.size(0), h_q.size(1), self.n_relations, self.head_hidden_size)
+        head_k = h_k.view(h_k.size(0), h_k.size(1), self.n_relations, self.head_hidden_size)
+
+        relation_score = torch.einsum("ibnd,jbnd->nbij", (head_q, head_k))
+
+        return relation_score
+
+
+@dataclass
+class BrosSpadeOutput(ModelOutput):
+    """
+    Base class for outputs of token classification models.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided) :
+            Classification loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+            Classification scores (before SoftMax).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    itc_logits: torch.FloatTensor = None
+    stc_logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@add_start_docstrings(
+    """
+    Bert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
+    BROS_START_DOCSTRING,
+)
+class BrosSpadeForTokenClassification(BrosPreTrainedModel):
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.n_relations = config.n_relations
+
+        self.bros = BrosModel(config)
+        classifier_dropout = (
+            config.classifier_dropout if hasattr(config, "classifier_dropout") else config.hidden_dropout_prob
+        )
+
+        # (1) Initial token classification
+        self.itc_layer = nn.Sequential(
+            nn.Dropout(classifier_dropout),
+            nn.Linear(config.hidden_size, config.hidden_size),
+            nn.Dropout(classifier_dropout),
+            nn.Linear(config.hidden_size, config.num_labels),
+        )
+
+        # (2) Subsequent token classification
+        self.stc_layer = RelationExtractor(
+            n_relations=config.n_relations,
+            backbone_hidden_size=config.hidden_size,
+            head_hidden_size=config.hidden_size,
+            head_p_dropout=classifier_dropout,
+        )
+
+        self.init_weights()
+
+    @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids=None,
+        bbox=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        itc_mask=None,
+        stc_mask=None,
+        inputs_embeds=None,
+        itc_labels=None,
+        stc_labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.bros(
+            input_ids=input_ids,
+            bbox=bbox,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        last_hidden_states = outputs.last_hidden_state
+        last_hidden_states = last_hidden_states.transpose(0, 1).contiguous()
+        itc_outputs = self.itc_layer(last_hidden_states).transpose(0, 1).contiguous()
+        stc_outputs = self.stc_layer(last_hidden_states, last_hidden_states).squeeze(0)
+
+        loss = None
+        if itc_labels is not None and stc_labels is not None:
+            loss_fct = CrossEntropyLoss()
+
+            # get itc loss
+            if itc_mask is not None:
+                itc_loss = loss_fct(
+                    itc_outputs.view(-1, self.model_cfg.n_classes + 1)[itc_mask], itc_labels.view(-1)[itc_mask]
+                )
+            else:
+                itc_loss = loss_fct(itc_outputs.view(-1, self.model_cfg.n_classes + 1), itc_labels.view(-1))
+
+            # get stc loss
+            if stc_mask is not None:
+                stc_loss = loss_fct(
+                    stc_outputs.view(-1, stc_outputs.shape[-1])[stc_mask], stc_labels.view(-1)[stc_mask]
+                )
+            else:
+                stc_loss = loss_fct(stc_outputs.view(-1, stc_outputs.shape[-1]), stc_labels.view(-1))
+
+            loss = itc_loss + stc_loss
+
+        if not return_dict:
+            output = (itc_logits, stc_logits) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return BrosSpadeOutput(
+            loss=loss,
+            itc_logits=itc_logits,
+            stc_logits=stc_logits,
+            hidden_states=outputs.last_hidden_states,
             attentions=outputs.attentions,
         )
