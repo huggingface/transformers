@@ -916,10 +916,10 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
             input_ids = input_ids[:, -1:]
 
         return {
-            "img_features": img_features,
-            "img_attn_mask": img_attn_mask,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "img_features": img_features,
+            "img_attn_mask": img_attn_mask,
             "past_key_values": past_key_values,
             "use_cache": True,
             # "encoder_hidden_states": model_kwargs.get("encoder_hidden_states", None),
@@ -1131,6 +1131,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         decoder_input_ids: Optional[torch.Tensor] = None,
         decoder_attention_mask = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
+        img_features: Optional[List[torch.FloatTensor]] = None,
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
         decoder_inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
@@ -1139,9 +1140,12 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ):
         vision_model_output = None
-        img_features = None
         image_connector_attention = None
-        if pixel_values is not None:
+        if img_features is None:
+
+            if pixel_values is None:
+                raise ValueError("You have to specify pixel_values")
+
             vision_model_output = self.vision_model(pixel_values)
             # HF CLIP has `last_hidden_state` without through `post_layernorm`
             # Here we want to pass the whole `last_hidden_state` instead of `pooled_output` from clip model
@@ -1180,6 +1184,48 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
             vision_model_output=vision_model_output,
         )
 
+    def generate(
+        self,
+        pixel_values=None,
+        img_attn_mask=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        img_features=None,
+        decoder_inputs_embeds=None,
+        **kwargs,
+    ):
+        # to allow `inputs` argument
+        inputs = kwargs.pop("inputs", None)
+        if pixel_values is not None and inputs is not None:
+            raise ValueError(
+                f"`inputs`: {inputs} were passed alongside `pixel_values` which is not allowed."
+                f"Make sure to either pass `inputs` or pixel_values=..."
+            )
+        if pixel_values is None:
+            if inputs is not None:
+                pixel_values = inputs
+
+        if img_features is None:
+
+            vision_model_output = self.vision_model(pixel_values)
+            # HF CLIP has `last_hidden_state` without through `post_layernorm`
+            # Here we want to pass the whole `last_hidden_state` instead of `pooled_output` from clip model
+            img_features = self.vision_model.post_layernorm(vision_model_output.last_hidden_state)
+            # normalized
+            img_features = nn.functional.normalize(img_features, dim=-1)
+            img_features, image_connector_attention = self.img_connector(img_features)
+
+        output = self.text_model.generate(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            img_features=img_features,
+            img_attn_mask=img_attn_mask,
+            input_embeds=decoder_inputs_embeds,
+            **kwargs,
+        )
+
+        # TODO: what is the output type?
+        return output
 
 # ==============================================================================================================
 # conversion
