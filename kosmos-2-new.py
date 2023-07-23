@@ -825,12 +825,12 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
 
 class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
     config_class = Kosmos2TextConfig
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: Kosmos2TextConfig):
         super().__init__(config)
 
         self.model = Kosmos2TextTransformer(config)
-        # TODO: deal with shared embedding!
         self.lm_head = nn.Linear(in_features=config.hidden_size, out_features=config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
@@ -1062,6 +1062,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
 
 class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
     config_class = Kosmos2Config
+    _tied_weights_keys = ["text_model.lm_head.weight"]
 
     def __init__(
         self,
@@ -2271,6 +2272,13 @@ if __name__ == "__main__":
 
     # check we can load
     real_model = Kosmos2ForConditionalGeneration.from_pretrained("HF_Kosmos2")
+
+    # If we want to push to the Hub
+    # repo_id = "ydshieh/kosmos-2"
+    # real_model.save_pretrained("HF_Kosmos2", push_to_hub=True, repo_id=repo_id, use_auth_token="XXX")
+
+    # check we can load from the Hub
+    # real_model = Kosmos2ForConditionalGeneration.from_pretrained(repo_id)
 
     # ================================================================================
 
