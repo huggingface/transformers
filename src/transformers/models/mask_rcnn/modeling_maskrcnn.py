@@ -30,7 +30,6 @@ from torch.nn.modules.utils import _pair
 # TODO decide whether to define these utilities
 from transformers.models.mask_rcnn.assign_result import AssignResult
 from transformers.models.mask_rcnn.loss_utils import CrossEntropyLoss, L1Loss, accuracy
-from transformers.models.mask_rcnn.sampling_result import SamplingResult
 
 from ... import AutoBackbone
 from ...modeling_utils import PreTrainedModel
@@ -48,7 +47,6 @@ from .configuration_maskrcnn import MaskRCNNConfig
 if is_torchvision_available():
     import torchvision
 
-    from transformers.models.mask_rcnn.mask_target import mask_target
     from transformers.models.mask_rcnn.nms import batched_nms
 
 
@@ -127,6 +125,157 @@ class MaskRCNNModelOutput(ModelOutput):
     fpn_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+class SamplingResult:
+    """Bounding box sampling result.
+
+    Source:
+    https://github.com/open-mmlab/mmdetection/blob/ecac3a77becc63f23d9f6980b2a36f86acd00a8a/mmdet/models/task_modules/samplers/sampling_result.py#L51.
+    """
+
+    def __init__(self, pos_indices, neg_indices, bboxes, gt_bboxes, assign_result, gt_flags):
+        self.pos_indices = pos_indices
+        self.neg_indices = neg_indices
+        self.pos_bboxes = bboxes[pos_indices]
+        self.neg_bboxes = bboxes[neg_indices]
+        self.pos_is_gt = gt_flags[pos_indices]
+
+        self.num_gts = gt_bboxes.shape[0]
+        self.pos_assigned_gt_indices = assign_result.gt_indices[pos_indices] - 1
+
+        if gt_bboxes.numel() == 0:
+            # hack for index error case
+            if self.pos_assigned_gt_indices.numel() != 0:
+                raise ValueError("No gt bboxes available to choose from")
+            self.pos_gt_bboxes = torch.empty_like(gt_bboxes).view(-1, 4)
+        else:
+            if len(gt_bboxes.shape) < 2:
+                gt_bboxes = gt_bboxes.view(-1, 4)
+
+            self.pos_gt_bboxes = gt_bboxes[self.pos_assigned_gt_indices.long(), :]
+
+        if assign_result.labels is not None:
+            self.pos_gt_labels = assign_result.labels[pos_indices]
+        else:
+            self.pos_gt_labels = None
+
+    @property
+    def bboxes(self):
+        """torch.Tensor: concatenated positive and negative boxes"""
+        return torch.cat([self.pos_bboxes, self.neg_bboxes])
+
+    def to(self, device):
+        """Change the device of the data inplace."""
+        _dict = self.__dict__
+        for key, value in _dict.items():
+            if isinstance(value, torch.Tensor):
+                _dict[key] = value.to(device)
+        return self
+
+
+def crop_and_resize(masks, bboxes, out_shape, inds, device="cpu", binarize=True):
+    """See [`BaseInstanceMasks.crop_and_resize`].
+
+    Source:
+    https://github.com/open-mmlab/mmdetection/blob/56e42e72cdf516bebb676e586f408b98f854d84c/mmdet/core/mask/structures.py#L333.
+
+    """
+    if len(masks) == 0:
+        empty_masks = np.empty((0, *out_shape), dtype=np.uint8)
+        return empty_masks
+    
+    # convert bboxes to tensor
+    if isinstance(bboxes, np.ndarray):
+        bboxes = torch.from_numpy(bboxes).to(device=device)
+    if isinstance(inds, np.ndarray):
+        inds = torch.from_numpy(inds).to(device=device)
+
+    num_bbox = bboxes.shape[0]
+    fake_inds = torch.arange(num_bbox, device=device).to(dtype=bboxes.dtype)[:, None]
+    rois = torch.cat([fake_inds, bboxes], dim=1)  # Nx5
+    rois = rois.to(device=device)
+    if num_bbox > 0:
+        gt_masks_th = torch.from_numpy(masks).to(device).index_select(0, inds).to(dtype=rois.dtype)
+        targets = torchvision.ops.roi_align(
+            gt_masks_th[:, None, :, :], rois, output_size=out_shape, spatial_scale=1.0, sampling_ratio=0, aligned=True
+        ).squeeze(1)
+        if binarize:
+            resized_masks = (targets >= 0.5).cpu().numpy()
+        else:
+            resized_masks = targets.cpu().numpy()
+    else:
+        resized_masks = []
+    return resized_masks
+
+
+def mask_target(pos_proposals_list, pos_assigned_gt_inds_list, gt_masks_list, cfg):
+    """Compute mask target for positive proposals in multiple images.
+
+    Args:
+        pos_proposals_list (`List[torch.Tensor]`):
+            Positive proposals in multiple images.
+        pos_assigned_gt_inds_list (`List[torch.Tensor]`):
+            Assigned ground truth indices for each positive proposals.
+        gt_masks_list (`List[BaseInstanceMasks]`):
+            Ground truth masks of each image.
+        cfg (dict):
+            Config dict that specifies the mask size.
+
+    Returns:
+        `List[torch.Tensor]`: Mask target of each image.
+    """
+    cfg_list = [cfg for _ in range(len(pos_proposals_list))]
+    mask_targets = map(mask_target_single, pos_proposals_list, pos_assigned_gt_inds_list, gt_masks_list, cfg_list)
+    mask_targets = list(mask_targets)
+    if len(mask_targets) > 0:
+        mask_targets = torch.cat(mask_targets)
+    return mask_targets
+
+
+def mask_target_single(pos_proposals, pos_assigned_gt_inds, gt_masks, cfg):
+    """Compute mask target for each positive proposal in the image.
+
+    Args:
+        pos_proposals (`torch.Tensor`):
+            Positive proposals.
+        pos_assigned_gt_inds (`torch.Tensor`):
+            Assigned ground truth indices of positive proposals.
+        gt_masks (`BaseInstanceMasks`):
+            Ground truth masks in the format of Bitmap or Polygon.
+        cfg (`dict`):
+            Config dict that indicates the mask size.
+
+    Returns:
+        `torch.Tensor`: Mask target of each positive proposal in the image.
+    """
+    device = pos_proposals.device
+    mask_size = _pair(cfg["mask_size"])
+    binarize = not cfg.get("soft_mask_target", False)
+    num_pos = pos_proposals.size(0)
+    if num_pos > 0:
+        proposals_np = pos_proposals.cpu().numpy()
+        # TODO verify this replacement is correct
+        # maxh, maxw = gt_masks.height, gt_masks.width
+        maxh, maxw = tuple(gt_masks.shape[1:])
+        proposals_np[:, [0, 2]] = np.clip(proposals_np[:, [0, 2]], 0, maxw)
+        proposals_np[:, [1, 3]] = np.clip(proposals_np[:, [1, 3]], 0, maxh)
+        pos_assigned_gt_inds = pos_assigned_gt_inds.cpu().numpy()
+
+        mask_targets = crop_and_resize(
+            gt_masks.cpu().numpy(),
+            proposals_np,
+            mask_size,
+            device=device,
+            inds=pos_assigned_gt_inds,
+            binarize=binarize,
+        )
+
+        mask_targets = torch.from_numpy(mask_targets).float().to(device)
+    else:
+        mask_targets = pos_proposals.new_zeros((0,) + mask_size)
+
+    return mask_targets
 
 
 def unmap(data, count, indices, fill=0):
@@ -2110,14 +2259,10 @@ class MaskRCNNSingleRoIExtractor(nn.Module):
         out_size = self.roi_layers[0].output_size
         num_levels = len(feats)
         expand_dims = (-1, self.out_channels * out_size[0] * out_size[1])
-        if torch.onnx.is_in_onnx_export():
-            # Work around to export mask-rcnn to onnx
-            roi_feats = rois[:, :1].clone().detach()
-            roi_feats = roi_feats.expand(*expand_dims)
-            roi_feats = roi_feats.reshape(-1, self.out_channels, *out_size)
-            roi_feats = roi_feats * 0
-        else:
-            roi_feats = feats[0].new_zeros(rois.size(0), self.out_channels, *out_size)
+        roi_feats = rois[:, :1].clone().detach()
+        roi_feats = roi_feats.expand(*expand_dims)
+        roi_feats = roi_feats.reshape(-1, self.out_channels, *out_size)
+        roi_feats = roi_feats * 0
 
         if num_levels == 1:
             if len(rois) == 0:
@@ -2131,31 +2276,16 @@ class MaskRCNNSingleRoIExtractor(nn.Module):
 
         for i in range(num_levels):
             mask = target_lvls == i
-            if torch.onnx.is_in_onnx_export():
-                # To keep all roi_align nodes exported to onnx
-                # and skip nonzero op
-                mask = mask.float().unsqueeze(-1)
-                # select target level rois and reset the rest rois to zero.
-                rois_i = rois.clone().detach()
-                rois_i *= mask
-                mask_exp = mask.expand(*expand_dims).reshape(roi_feats.shape)
-                roi_feats_t = self.roi_layers[i](feats[i], rois_i)
-                roi_feats_t *= mask_exp
-                roi_feats += roi_feats_t
-                continue
-            indices = mask.nonzero(as_tuple=False).squeeze(1)
-            if indices.numel() > 0:
-                rois_ = rois[indices]
-                roi_feats_t = self.roi_layers[i](feats[i], rois_)
-                roi_feats[indices] = roi_feats_t
-            else:
-                # Sometimes some pyramid levels will not be used for RoI
-                # feature extraction and this will cause an incomplete
-                # computation graph in one GPU, which is different from those
-                # in other GPUs and will cause a hanging error.
-                # Therefore, we add it to ensure each feature pyramid is
-                # included in the computation graph to avoid runtime bugs.
-                roi_feats += sum(x.view(-1)[0] for x in self.parameters()) * 0.0 + feats[i].sum() * 0.0
+            # To keep all roi_align nodes exported to onnx
+            # and skip nonzero op
+            mask = mask.float().unsqueeze(-1)
+            # select target level rois and reset the rest rois to zero.
+            rois_i = rois.clone().detach()
+            rois_i *= mask
+            mask_exp = mask.expand(*expand_dims).reshape(roi_feats.shape)
+            roi_feats_t = self.roi_layers[i](feats[i], rois_i)
+            roi_feats_t *= mask_exp
+            roi_feats += roi_feats_t
 
         return roi_feats
 
