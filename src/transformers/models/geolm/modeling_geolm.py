@@ -58,23 +58,23 @@ _CHECKPOINT_FOR_DOC = "zekun-li/geolm-base-cased"
 _CONFIG_FOR_DOC = "GeoLMConfig"
 
 # TokenClassification docstring
-_CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "dbmdz/geolm-large-cased-finetuned-conll03-english"
+_CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "zekun-li/geolm-base-toponym-recognition"
 _TOKEN_CLASS_EXPECTED_OUTPUT = (
-    "['O', 'I-ORG', 'I-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'I-LOC', 'O', 'I-LOC', 'I-LOC'] "
+    "['O', 'B-Topo', 'I-Topo'] "
 )
 _TOKEN_CLASS_EXPECTED_LOSS = 0.01
 
 # QuestionAnswering docstring
-_CHECKPOINT_FOR_QA = "deepset/geolm-base-cased-squad2"
-_QA_EXPECTED_OUTPUT = "'a nice puppet'"
-_QA_EXPECTED_LOSS = 7.41
-_QA_TARGET_START_INDEX = 14
-_QA_TARGET_END_INDEX = 15
+# _CHECKPOINT_FOR_QA = "deepset/geolm-base-cased-squad2"
+# _QA_EXPECTED_OUTPUT = "'a nice puppet'"
+# _QA_EXPECTED_LOSS = 7.41
+# _QA_TARGET_START_INDEX = 14
+# _QA_TARGET_END_INDEX = 15
 
-# SequenceClassification docstring
-_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "textattack/zekun-li/geolm-base-cased-yelp-polarity"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
-_SEQ_CLASS_EXPECTED_LOSS = 0.01
+# # SequenceClassification docstring
+# _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = " /zekun-li/geolm-base-cased-yelp-polarity"
+# _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
+# _SEQ_CLASS_EXPECTED_LOSS = 0.01
 
 
 GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -156,9 +156,32 @@ def load_tf_weights_in_geolm(model, config, tf_checkpoint_path):
         pointer.data = torch.from_numpy(array)
     return model
 
+class ContinuousSpatialPositionalEmbedding(nn.Module):
+    def __init__(self, hidden_size):
+        super().__init__()
+
+        self.emb_dim = int(hidden_size/2)  # dimension of the embedding
+
+        inv_freq = 1 / (10000 ** (torch.arange(0.0, self.emb_dim) / self.emb_dim)) #(emb_dim)
+
+        self.register_buffer("inv_freq", inv_freq)
+
+    def forward(self, x ):
+        bsz, seq_len = x.shape[0], x.shape[1] # get batch size
+        flat_x = torch.flatten(x) # (bsize, seq_len) -> bsize * seq_len
+        
+        flat_sinusoid_inp = torch.ger(flat_x, self.inv_freq) # outer-product, out_shape: (bsize * seq_len, emb_dim)
+        
+        sinusoid_inp = flat_sinusoid_inp.reshape(bsz, seq_len, self.emb_dim) #(bsize * seq_len, emb_dim) -> (bsize, seq_len, emb_dim)
+        
+        ret_pos_emb = torch.cat([sinusoid_inp.sin(), sinusoid_inp.cos()], dim=-1) # (bsize, seq_len, 2*emb_dim)
+
+        return ret_pos_emb
+
+
 
 class GeoLMEmbeddings(nn.Module):
-    """Construct the embeddings from word, position and token_type embeddings."""
+    """Construct the embeddings from word, position, geolocation and token_type embeddings."""
 
     def __init__(self, config):
         super().__init__()
@@ -166,12 +189,23 @@ class GeoLMEmbeddings(nn.Module):
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
+        self.sent_position_embedding = self.position_embeddings # a trick to simplify the weight loading from Bert
+        self.sent_position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+
+        
+        self.spatial_position_embedding = ContinuousSpatialPositionalEmbedding(hidden_size = config.hidden_size)
+        self.spatial_position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+
+        self.use_spatial_distance_embedding = config.use_spatial_distance_embedding
+
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute") 
+        self.spatial_position_embedding_type = "absolute"
+
         self.register_buffer(
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
@@ -184,6 +218,8 @@ class GeoLMEmbeddings(nn.Module):
         input_ids: Optional[torch.LongTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        spatial_position_list_x: Optional[torch.LongTensor] = None,
+        spatial_position_list_y: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         past_key_values_length: int = 0,
     ) -> torch.Tensor:
@@ -209,13 +245,31 @@ class GeoLMEmbeddings(nn.Module):
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
         if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
+            inputs_embeds = self.word_embeddings(input_ids) 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
+
+        if self.use_spatial_distance_embedding:
+            if len(spatial_position_list_x) != 0 and len(spatial_position_list_y) !=0:
+                if self.spatial_position_embedding_type == "absolute":
+                    pos_emb_x = self.spatial_position_embedding(spatial_position_list_x)
+                    pos_emb_y = self.spatial_position_embedding(spatial_position_list_y)
+                    
+                    embeddings +=  0.01* pos_emb_x
+                    embeddings +=  0.01* pos_emb_y
+                else:
+                    raise NotImplementedError("Invalid spatial position embedding type")
+
+            else:
+                print()
+                pass
+        else:
+            pass
+
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -646,6 +700,29 @@ class GeoLMPooler(nn.Module):
         return pooled_output
 
 
+class PivotEntityPooler(nn.Module):
+    def __init__(self):
+        super().__init__()
+        
+    def forward(self, hidden_states, pivot_token_idx_list):
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the tokens of target entity
+        
+        bsize = hidden_states.shape[0]
+
+        tensor_list = []
+        for i in torch.arange(0, bsize):
+            # pivot_token_full = hidden_states[i, 1:pivot_len_list[i]+1]
+            pivot_token_full = hidden_states[i, pivot_token_idx_list[i][0]:pivot_token_idx_list[i][1]]
+            pivot_token_tensor = torch.mean(torch.unsqueeze(pivot_token_full, 0), dim = 1)
+            tensor_list.append(pivot_token_tensor)
+
+        batch_pivot_tensor = torch.cat(tensor_list, dim = 0)
+
+        return batch_pivot_tensor
+       
+
+
 class GeoLMPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -853,15 +930,7 @@ GEOLM_INPUTS_DOCSTRING = r"""
 )
 class GeoLMModel(GeoLMPreTrainedModel):
     """
-
-    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
-    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-
-    To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
-    to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
-    `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
+    The model behaves as an encoder (with only self-attention).
     """
 
     def __init__(self, config, add_pooling_layer=True):
@@ -1389,102 +1458,6 @@ class GeoLMForMaskedLM(GeoLMPreTrainedModel):
     """GeoLM Model with a `next sentence prediction (classification)` head on top.""",
     GEOLM_START_DOCSTRING,
 )
-class GeoLMForNextSentencePrediction(GeoLMPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.geolm = GeoLMModel(config)
-        self.cls = GeoLMOnlyNSPHead(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(GEOLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=NextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        **kwargs,
-    ) -> Union[Tuple[torch.Tensor], NextSentencePredictorOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
-            (see `input_ids` docstring). Indices should be in `[0, 1]`:
-
-            - 0 indicates sequence B is a continuation of sequence A,
-            - 1 indicates sequence B is a random sequence.
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, GeoLMForNextSentencePrediction
-        >>> import torch
-
-        >>> tokenizer = AutoTokenizer.from_pretrained("zekun-li/geolm-base-cased")
-        >>> model = GeoLMForNextSentencePrediction.from_pretrained("zekun-li/geolm-base-cased")
-
-        >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-        >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-        >>> encoding = tokenizer(prompt, next_sentence, return_tensors="pt")
-
-        >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
-        >>> logits = outputs.logits
-        >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
-        ```
-        """
-
-        if "next_sentence_label" in kwargs:
-            warnings.warn(
-                "The `next_sentence_label` argument is deprecated and will be removed in a future version, use"
-                " `labels` instead.",
-                FutureWarning,
-            )
-            labels = kwargs.pop("next_sentence_label")
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.geolm(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        pooled_output = outputs[1]
-
-        seq_relationship_scores = self.cls(pooled_output)
-
-        next_sentence_loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            next_sentence_loss = loss_fct(seq_relationship_scores.view(-1, 2), labels.view(-1))
-
-        if not return_dict:
-            output = (seq_relationship_scores,) + outputs[2:]
-            return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
-
-        return NextSentencePredictorOutput(
-            loss=next_sentence_loss,
-            logits=seq_relationship_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
 
 
 @add_start_docstrings(
