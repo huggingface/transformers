@@ -1683,9 +1683,9 @@ def check_model_with_dummy_inputs(model):
     dummy_img_attn_mask = torch.cat((torch.ones(size=(1, 64)), torch.zeros(size=(1, 7))), dim=-1).to("cpu").bool()
 
     # pass only text
-    model_output_only_text = model(
-        pixel_values=None,
-        decoder_input_ids=dummy_input_ids,
+    model_output_only_text = model.text_model(
+        # pixel_values=None,
+        input_ids=dummy_input_ids,
         img_attn_mask=None,
     )
     logits_only_text = model_output_only_text.logits
@@ -1899,10 +1899,11 @@ def check_model_with_dog_sample(model):
     # next step: with `past_key_values`
 
     next_decoder_input_ids = torch.tensor([[9]], dtype=torch.long, device="cpu")
-    # no need to pass `pixel_values`
+    # (no need to pass `pixel_values`) -> need to specify it or `image_features`
     next_pixel_values = None
+    next_image_features = image_features
     next_img_attn_mask = None
-    next_model_output = model(pixel_values=next_pixel_values, decoder_input_ids=next_decoder_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=past_key_values, use_cache=True)
+    next_model_output = model(pixel_values=next_pixel_values, img_features=next_image_features, decoder_input_ids=next_decoder_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=past_key_values, use_cache=True)
 
     next_logits = next_model_output.logits
     next_past_key_values = next_model_output.past_key_values
@@ -2075,10 +2076,11 @@ def check_real_model_with_dog_sample(model):
     # next step: with `past_key_values`
 
     next_decoder_input_ids = torch.tensor([[next_token]], dtype=torch.long, device="cpu")
-    # no need to pass `pixel_values`
+    # (no need to pass `pixel_values`) -> need to specify it or `image_features`
     next_pixel_values = None
+    next_image_features = image_features
     next_img_attn_mask = None
-    next_model_output = model(pixel_values=next_pixel_values, decoder_input_ids=next_decoder_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=past_key_values, use_cache=True)
+    next_model_output = model(pixel_values=next_pixel_values, img_features=next_image_features, decoder_input_ids=next_decoder_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=past_key_values, use_cache=True)
 
     next_logits = next_model_output.logits
     next_past_key_values = next_model_output.past_key_values
@@ -2155,10 +2157,11 @@ def check_real_model_with_dog_sample(model):
         # next step: with `past_key_values`
     
         next_decoder_input_ids = torch.tensor([[next_token]], dtype=torch.long, device="cpu")
-        # no need to pass `pixel_values`
+        # (no need to pass `pixel_values`) -> need to specify it or `image_features`
         next_pixel_values = None
+        next_image_features = image_features
         next_img_attn_mask = None
-        next_model_output = model(pixel_values=next_pixel_values, decoder_input_ids=next_decoder_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=next_past_key_values, use_cache=True)
+        next_model_output = model(pixel_values=next_pixel_values, img_features=next_image_features, decoder_input_ids=next_decoder_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=next_past_key_values, use_cache=True)
     
         next_logits = next_model_output.logits
         next_past_key_values = next_model_output.past_key_values
@@ -2200,6 +2203,7 @@ def check_real_model_with_dog_sample(model):
     # generation
 
     new_decoder_input_ids = torch.cat((new_decoder_input_ids, torch.tensor([[predicted_next_token]], dtype=torch.long, device="cpu")), dim=1)
+    new_img_attn_mask = torch.cat((new_img_attn_mask, torch.tensor([[False]], dtype=torch.bool, device="cpu")), dim=1)
 
     expected_generation = [
          64007,    94, 17772, 64008, 64009, 64092, 65029, 64011, 64148,
@@ -2212,7 +2216,8 @@ def check_real_model_with_dog_sample(model):
     # no need to pass `img_features` (`pixel_values`) and `img_attn_mask`
     generated_output = model.text_model.generate(
         input_ids=new_decoder_input_ids,
-        use_cache=True, past_key_values=next_past_key_values,
+        use_cache=True,
+        past_key_values=next_past_key_values,
         img_features=None,
         img_attn_mask=None,
         # we already generated 13 tokens: from `64007` (step 71 -> 72) to `12` (step 83 -> 84)
@@ -2230,7 +2235,8 @@ def check_real_model_with_dog_sample(model):
     # or we can specify `eos_token_id` to stop earlier.
     generated_output = model.text_model.generate(
         input_ids=new_decoder_input_ids,
-        use_cache=True, past_key_values=next_past_key_values,
+        use_cache=True,
+        past_key_values=next_past_key_values,
         img_features=None,
         img_attn_mask=None,
         # we already generated 13 tokens: from `64007` (step 71 -> 72) to `12` (step 83 -> 84)
@@ -2240,6 +2246,57 @@ def check_real_model_with_dog_sample(model):
         max_new_tokens=len(expected_generation),
         eos_token_id=2,
     )
+    assert generated_output[0, 71:].tolist() == expected_generation
+
+    # --------------------------------------------------------------------
+    # generation without `use_cache` (from step 84)
+
+    # use `text_model` directly
+    # with `use_cache=False` and `past_key_values=None`
+    # need to pass `img_features` and `img_attn_mask` (for the `correctness`)
+    generated_output = model.text_model.generate(
+        input_ids=new_decoder_input_ids,
+        use_cache=False,
+        past_key_values=None,
+        img_features=image_features,
+        img_attn_mask=new_img_attn_mask,
+        # we already generated 13 tokens: from `64007` (step 71 -> 72) to `12` (step 83 -> 84)
+        max_new_tokens=len(expected_generation) - 13,
+    )
+    assert generated_output[0, 71:].tolist() == expected_generation
+
+    # --------------------------------------------------------------------
+    # generation without `use_cache` (from the start)
+
+    # use `text_model` directly
+    # with`use_cache=False` (from the start --> `past_key_values=None`)
+    # need to pass `img_features` and `img_attn_mask` (for the `correctness`)
+    generated_output = model.text_model.generate(
+        input_ids=decoder_input_ids,
+        use_cache=False,
+        past_key_values=None,
+        img_features=image_features,
+        img_attn_mask=img_attn_mask,
+        max_new_tokens=len(expected_generation),
+    )
+
+    assert generated_output[0, 71:].tolist() == expected_generation
+
+    # --------------------------------------------------------------------
+    # generation with `use_cache` (from the start)
+
+    # use `text_model` directly
+    # with `use_cache=True` (from the start --> `past_key_values=None`)
+    # need to pass `img_features` and `img_attn_mask` (for the `correctness`)
+    generated_output = model.text_model.generate(
+        input_ids=decoder_input_ids,
+        use_cache=True,
+        past_key_values=None,
+        img_features=image_features,
+        img_attn_mask=img_attn_mask,
+        max_new_tokens=len(expected_generation),
+    )
+
     assert generated_output[0, 71:].tolist() == expected_generation
 
 
