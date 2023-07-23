@@ -384,10 +384,10 @@ class Kosmos2TextFFN(nn.Module):
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.fc1 = nn.Linear(config.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.embed_dim)
+        self.fc1 = nn.Linear(config.embed_dim, config.ffn_dim)
+        self.fc2 = nn.Linear(config.ffn_dim, config.embed_dim)
 
-        self.ffn_layernorm = nn.LayerNorm(config.decoder_ffn_dim, eps=config.layer_norm_eps) if config.subln else None
+        self.ffn_layernorm = nn.LayerNorm(config.ffn_dim, eps=config.layer_norm_eps) if config.subln else None
 
     def forward(self, hidden_states):
         hidden_states = self.activation_fn(self.fc1(hidden_states))
@@ -408,13 +408,13 @@ class Kosmos2TextBlock(nn.Module):
         self.self_attn = KosmosTextAttention(
             config,
             embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
+            num_heads=config.attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
             is_encoder_attn=False,
         )
 
-        self.normalize_before = config.decoder_normalize_before
+        self.normalize_before = config.normalize_before
 
         self.dropout = config.dropout
 
@@ -424,7 +424,7 @@ class Kosmos2TextBlock(nn.Module):
             self.encoder_attn = KosmosTextAttention(
                 config,
                 self.embed_dim,
-                config.decoder_attention_heads,
+                config.attention_heads,
                 dropout=config.attention_dropout,
                 is_decoder=True,
                 is_encoder_attn=True,
@@ -558,9 +558,9 @@ class Kosmos2TextTransformer(nn.Module):
         else:
             self.layernorm_embedding = None
 
-        self.layers = nn.ModuleList([Kosmos2TextBlock(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([Kosmos2TextBlock(config) for _ in range(config.layers)])
 
-        if config.decoder_normalize_before:
+        if config.normalize_before:
             self.layer_norm = nn.LayerNorm(config.hidden_size, config.layer_norm_eps)
         else:
             self.layer_norm = None
@@ -644,7 +644,7 @@ class Kosmos2TextTransformer(nn.Module):
 
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input = input_ids
             input_shape = input.shape
@@ -654,7 +654,7 @@ class Kosmos2TextTransformer(nn.Module):
             # TODO: doesn't make any sense
             # input = inputs_embeds[:, :, -1]
         else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
@@ -912,7 +912,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
-        # cut decoder_input_ids if past_key_values is used
+        # cut input_ids if past_key_values is used
         if past_key_values is not None:
             img_features = None,
             img_attn_mask = None,
@@ -942,7 +942,7 @@ class KosmosConnector(nn.Module):
         self.x_attn = KosmosTextAttention(
             config.text_config,
             config.text_config.embed_dim,
-            config.text_config.decoder_attention_heads,
+            config.text_config.attention_heads,
             # shared with text,
             dropout=config.text_config.attention_dropout,
             # TODO: check - this is strange ?
@@ -974,15 +974,12 @@ class Kosmos2ModelOutput(ModelOutput):
     """
     """
 
+    last_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     past_key_values: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_features: Optional[torch.FloatTensor] = None
     image_connector_attention: Optional[torch.FloatTensor] = None
-    encoder_last_hidden_state: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     vision_model_output: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -994,14 +991,10 @@ class Kosmos2ForConditionalGenerationModelOutput(ModelOutput):
     loss: Optional[Tuple[torch.FloatTensor]] = None
     logits: Optional[Tuple[torch.FloatTensor]] = None
     past_key_values: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_features: Optional[torch.FloatTensor] = None
     image_connector_attention: Optional[torch.FloatTensor] = None
-    encoder_last_hidden_state: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     vision_model_output: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -1038,23 +1031,24 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         img_attn_mask = None,
-        decoder_input_ids: Optional[torch.Tensor] = None,
-        decoder_attention_mask = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask = None,
+        head_mask: Optional[torch.Tensor] = None,
         img_features: Optional[List[torch.FloatTensor]] = None,
-        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
-        decoder_inputs_embeds: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
         vision_model_output = None
-        img_features = None
         image_connector_attention = None
-        if pixel_values is not None:
+        if img_features is None:
+
+            if pixel_values is None:
+                raise ValueError("You have to specify pixel_values")
+
             vision_model_output = self.vision_model(pixel_values)
             # HF CLIP has `last_hidden_state` without through `post_layernorm`
             # Here we want to pass the whole `last_hidden_state` instead of `pooled_output` from clip model
@@ -1063,21 +1057,14 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
             img_features = nn.functional.normalize(img_features, dim=-1)
             img_features, image_connector_attention = self.img_connector(img_features)
 
-        # so far not used
-        encoder_hidden_states = None
-        if encoder_outputs is not None:
-            encoder_hidden_states = encoder_outputs[0]
-
         outputs = self.text_model(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
             img_features=img_features,
             img_attn_mask=img_attn_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
+            head_mask=head_mask,
             past_key_values=past_key_values,
-            inputs_embeds=decoder_inputs_embeds,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1085,14 +1072,12 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         )
 
         return Kosmos2ModelOutput(
+            last_hidden_states=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
-            decoder_hidden_states=outputs.hidden_states,
-            decoder_attentions=outputs.attentions,
-            cross_attentions=outputs.cross_attentions,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
             image_features=img_features,
-            encoder_last_hidden_state=None,
-            encoder_hidden_states=None,
-            encoder_attentions=None,
+            image_connector_attention=image_connector_attention,
             vision_model_output=vision_model_output,
         )
 
@@ -1140,14 +1125,12 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         self,
         pixel_values: Optional[torch.Tensor] = None,
         img_attn_mask = None,
-        decoder_input_ids: Optional[torch.Tensor] = None,
-        decoder_attention_mask = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask = None,
+        head_mask: Optional[torch.Tensor] = None,
         img_features: Optional[List[torch.FloatTensor]] = None,
-        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
-        decoder_inputs_embeds: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1168,21 +1151,14 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
             img_features = nn.functional.normalize(img_features, dim=-1)
             img_features, image_connector_attention = self.img_connector(img_features)
 
-        # so far not used
-        encoder_hidden_states = None
-        if encoder_outputs is not None:
-            encoder_hidden_states = encoder_outputs[0]
-
         lm_outputs = self.text_model(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
             img_features=img_features,
             img_attn_mask=img_attn_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
+            head_mask=head_mask,
             past_key_values=past_key_values,
-            inputs_embeds=decoder_inputs_embeds,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1193,23 +1169,20 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
             loss=None,
             logits=lm_outputs.logits,
             past_key_values=lm_outputs.past_key_values,
-            decoder_hidden_states=lm_outputs.hidden_states,
-            decoder_attentions=lm_outputs.attentions,
-            cross_attentions=lm_outputs.cross_attentions,
+            hidden_states=lm_outputs.hidden_states,
+            attentions=lm_outputs.attentions,
             image_features=img_features,
-            encoder_last_hidden_state=None,
-            encoder_hidden_states=None,
-            encoder_attentions=None,
+            image_connector_attention=image_connector_attention,
             vision_model_output=vision_model_output,
         )
 
     def generate(
         self,
         pixel_values=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
+        input_ids=None,
+        attention_mask=None,
         img_features=None,
-        decoder_inputs_embeds=None,
+        inputs_embeds=None,
         **kwargs,
     ):
         # to allow `inputs` argument
@@ -1234,10 +1207,10 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
             img_features, image_connector_attention = self.img_connector(img_features)
 
         output = self.text_model.generate(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
             img_features=img_features,
-            input_embeds=decoder_inputs_embeds,
+            input_embeds=inputs_embeds,
             **kwargs,
         )
 
@@ -1711,7 +1684,7 @@ def check_model_with_dummy_inputs(model):
     # pass text and vision
     model_output = model(
         pixel_values=dummy_pixel_values,
-        decoder_input_ids=dummy_input_ids,
+        input_ids=dummy_input_ids,
         img_attn_mask=dummy_img_attn_mask
     )
     logits = model_output.logits
@@ -1823,7 +1796,7 @@ def check_model_with_dog_sample(model):
     # It's of shape [1, 1, 3, 224, 224]. Change it to `[1, 3, 224, 224]`
     pixel_values = pixel_values[0]
 
-    decoder_input_ids = sample["net_input"]["src_tokens"]
+    input_ids = sample["net_input"]["src_tokens"]
     img_attn_mask = sample["net_input"]["img_gpt_input_mask"]
     # We need a `bool` value
     img_attn_mask = img_attn_mask.bool()
@@ -1831,7 +1804,7 @@ def check_model_with_dog_sample(model):
     # --------------------------------------------------------------------
     # `use_cache=False`
 
-    model_output_no_cache = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids, img_attn_mask=img_attn_mask, use_cache=False)
+    model_output_no_cache = model(pixel_values=pixel_values, input_ids=input_ids, img_attn_mask=img_attn_mask, use_cache=False)
 
     logits_no_cache = model_output_no_cache.logits
     past_key_values_no_cache = model_output_no_cache.past_key_values
@@ -1840,7 +1813,7 @@ def check_model_with_dog_sample(model):
     # --------------------------------------------------------------------
     # `use_cache=True` to get the initial `past_key_values`
 
-    model_output = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids, img_attn_mask=img_attn_mask, use_cache=True)
+    model_output = model(pixel_values=pixel_values, input_ids=input_ids, img_attn_mask=img_attn_mask, use_cache=True)
 
     logits = model_output.logits
     past_key_values = model_output.past_key_values
@@ -1900,9 +1873,9 @@ def check_model_with_dog_sample(model):
     # --------------------------------------------------------------------
     # next step: without `past_key_values`
 
-    new_decoder_input_ids = torch.cat((decoder_input_ids, torch.tensor([[9]], dtype=torch.long, device="cpu")), dim=1)
+    new_input_ids = torch.cat((input_ids, torch.tensor([[9]], dtype=torch.long, device="cpu")), dim=1)
     new_img_attn_mask = torch.cat((img_attn_mask, torch.tensor([[False]], dtype=torch.bool, device="cpu")), dim=1)
-    new_model_output = model(pixel_values=pixel_values, decoder_input_ids=new_decoder_input_ids, img_attn_mask=new_img_attn_mask)
+    new_model_output = model(pixel_values=pixel_values, input_ids=new_input_ids, img_attn_mask=new_img_attn_mask)
 
     new_logits = new_model_output.logits
     new_past_key_values = new_model_output.past_key_values
@@ -1914,12 +1887,12 @@ def check_model_with_dog_sample(model):
     # --------------------------------------------------------------------
     # next step: with `past_key_values`
 
-    next_decoder_input_ids = torch.tensor([[9]], dtype=torch.long, device="cpu")
+    next_input_ids = torch.tensor([[9]], dtype=torch.long, device="cpu")
     # (no need to pass `pixel_values`) -> need to specify it or `image_features`
     next_pixel_values = None
     next_image_features = image_features
     next_img_attn_mask = None
-    next_model_output = model(pixel_values=next_pixel_values, img_features=next_image_features, decoder_input_ids=next_decoder_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=past_key_values, use_cache=True)
+    next_model_output = model(pixel_values=next_pixel_values, img_features=next_image_features, input_ids=next_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=past_key_values, use_cache=True)
 
     next_logits = next_model_output.logits
     next_past_key_values = next_model_output.past_key_values
@@ -1967,7 +1940,7 @@ def check_model_with_dog_sample(model):
     # no need to pass `img_features` (`pixel_values`) and `img_attn_mask`
     generated_output = model.text_model.generate(
         # we need to provide the full `input_ids` not just the trailing one!
-        input_ids=new_decoder_input_ids,
+        input_ids=new_input_ids,
         use_cache=True,
         past_key_values=past_key_values,
         img_features=None,
@@ -1993,7 +1966,7 @@ def check_real_model_with_dog_sample(model):
     # It's of shape [1, 1, 3, 224, 224]. Change it to `[1, 3, 224, 224]`
     pixel_values = pixel_values[0]
 
-    decoder_input_ids = sample["net_input"]["src_tokens"]
+    input_ids = sample["net_input"]["src_tokens"]
     img_attn_mask = sample["net_input"]["img_gpt_input_mask"]
     # We need a `bool` value
     img_attn_mask = img_attn_mask.bool()
@@ -2001,7 +1974,7 @@ def check_real_model_with_dog_sample(model):
     # --------------------------------------------------------------------
     # `use_cache=False`
 
-    model_output_no_cache = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids, img_attn_mask=img_attn_mask, use_cache=False)
+    model_output_no_cache = model(pixel_values=pixel_values, input_ids=input_ids, img_attn_mask=img_attn_mask, use_cache=False)
 
     logits_no_cache = model_output_no_cache.logits
     past_key_values_no_cache = model_output_no_cache.past_key_values
@@ -2010,7 +1983,7 @@ def check_real_model_with_dog_sample(model):
     # --------------------------------------------------------------------
     # `use_cache=True` to get the initial `past_key_values`
 
-    model_output = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids, img_attn_mask=img_attn_mask, use_cache=True)
+    model_output = model(pixel_values=pixel_values, input_ids=input_ids, img_attn_mask=img_attn_mask, use_cache=True)
 
     logits = model_output.logits
     past_key_values = model_output.past_key_values
@@ -2077,9 +2050,9 @@ def check_real_model_with_dog_sample(model):
 
     next_token = expected_next_token
 
-    new_decoder_input_ids = torch.cat((decoder_input_ids, torch.tensor([[next_token]], dtype=torch.long, device="cpu")), dim=1)
+    new_input_ids = torch.cat((input_ids, torch.tensor([[next_token]], dtype=torch.long, device="cpu")), dim=1)
     new_img_attn_mask = torch.cat((img_attn_mask, torch.tensor([[False]], dtype=torch.bool, device="cpu")), dim=1)
-    new_model_output = model(pixel_values=pixel_values, decoder_input_ids=new_decoder_input_ids, img_attn_mask=new_img_attn_mask)
+    new_model_output = model(pixel_values=pixel_values, input_ids=new_input_ids, img_attn_mask=new_img_attn_mask)
 
     new_logits = new_model_output.logits
     new_past_key_values = new_model_output.past_key_values
@@ -2091,12 +2064,12 @@ def check_real_model_with_dog_sample(model):
     # --------------------------------------------------------------------
     # next step: with `past_key_values`
 
-    next_decoder_input_ids = torch.tensor([[next_token]], dtype=torch.long, device="cpu")
+    next_input_ids = torch.tensor([[next_token]], dtype=torch.long, device="cpu")
     # (no need to pass `pixel_values`) -> need to specify it or `image_features`
     next_pixel_values = None
     next_image_features = image_features
     next_img_attn_mask = None
-    next_model_output = model(pixel_values=next_pixel_values, img_features=next_image_features, decoder_input_ids=next_decoder_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=past_key_values, use_cache=True)
+    next_model_output = model(pixel_values=next_pixel_values, img_features=next_image_features, input_ids=next_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=past_key_values, use_cache=True)
 
     next_logits = next_model_output.logits
     next_past_key_values = next_model_output.past_key_values
@@ -2158,9 +2131,9 @@ def check_real_model_with_dog_sample(model):
 
         print(f"step: {step}")
 
-        new_decoder_input_ids = torch.cat((new_decoder_input_ids, torch.tensor([[next_token]], dtype=torch.long, device="cpu")), dim=1)
+        new_input_ids = torch.cat((new_input_ids, torch.tensor([[next_token]], dtype=torch.long, device="cpu")), dim=1)
         new_img_attn_mask = torch.cat((new_img_attn_mask, torch.tensor([[False]], dtype=torch.bool, device="cpu")), dim=1)
-        new_model_output = model(pixel_values=pixel_values, decoder_input_ids=new_decoder_input_ids, img_attn_mask=new_img_attn_mask)
+        new_model_output = model(pixel_values=pixel_values, input_ids=new_input_ids, img_attn_mask=new_img_attn_mask)
     
         new_logits = new_model_output.logits
         new_past_key_values = new_model_output.past_key_values
@@ -2172,12 +2145,12 @@ def check_real_model_with_dog_sample(model):
         # --------------------------------------------------------------------
         # next step: with `past_key_values`
     
-        next_decoder_input_ids = torch.tensor([[next_token]], dtype=torch.long, device="cpu")
+        next_input_ids = torch.tensor([[next_token]], dtype=torch.long, device="cpu")
         # (no need to pass `pixel_values`) -> need to specify it or `image_features`
         next_pixel_values = None
         next_image_features = image_features
         next_img_attn_mask = None
-        next_model_output = model(pixel_values=next_pixel_values, img_features=next_image_features, decoder_input_ids=next_decoder_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=next_past_key_values, use_cache=True)
+        next_model_output = model(pixel_values=next_pixel_values, img_features=next_image_features, input_ids=next_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=next_past_key_values, use_cache=True)
     
         next_logits = next_model_output.logits
         next_past_key_values = next_model_output.past_key_values
@@ -2218,7 +2191,7 @@ def check_real_model_with_dog_sample(model):
     # --------------------------------------------------------------------
     # generation
 
-    new_decoder_input_ids = torch.cat((new_decoder_input_ids, torch.tensor([[predicted_next_token]], dtype=torch.long, device="cpu")), dim=1)
+    new_input_ids = torch.cat((new_input_ids, torch.tensor([[predicted_next_token]], dtype=torch.long, device="cpu")), dim=1)
     new_img_attn_mask = torch.cat((new_img_attn_mask, torch.tensor([[False]], dtype=torch.bool, device="cpu")), dim=1)
 
     expected_generation = [
@@ -2231,7 +2204,7 @@ def check_real_model_with_dog_sample(model):
     # with `past_key_values` being passed as the initialized
     # no need to pass `img_features` (`pixel_values`) and `img_attn_mask`
     generated_output = model.text_model.generate(
-        input_ids=new_decoder_input_ids,
+        input_ids=new_input_ids,
         use_cache=True,
         past_key_values=next_past_key_values,
         img_features=None,
@@ -2250,7 +2223,7 @@ def check_real_model_with_dog_sample(model):
 
     # or we can specify `eos_token_id` to stop earlier.
     generated_output = model.text_model.generate(
-        input_ids=new_decoder_input_ids,
+        input_ids=new_input_ids,
         use_cache=True,
         past_key_values=next_past_key_values,
         img_features=None,
@@ -2271,7 +2244,7 @@ def check_real_model_with_dog_sample(model):
     # with `use_cache=False` and `past_key_values=None`
     # need to pass `img_features` and `img_attn_mask` (for the `correctness`)
     generated_output = model.text_model.generate(
-        input_ids=new_decoder_input_ids,
+        input_ids=new_input_ids,
         use_cache=False,
         past_key_values=None,
         img_features=image_features,
@@ -2288,7 +2261,7 @@ def check_real_model_with_dog_sample(model):
     # with`use_cache=False` (from the start --> `past_key_values=None`)
     # need to pass `img_features` and `img_attn_mask` (for the `correctness`)
     generated_output = model.text_model.generate(
-        input_ids=decoder_input_ids,
+        input_ids=input_ids,
         use_cache=False,
         past_key_values=None,
         img_features=image_features,
@@ -2311,7 +2284,7 @@ def check_real_model_with_dog_sample(model):
     # with `use_cache=True` (from the start --> `past_key_values=None`)
     # need to pass `img_features` and `img_attn_mask` (for the `correctness`)
     generated_output = model.text_model.generate(
-        input_ids=decoder_input_ids,
+        input_ids=input_ids,
         use_cache=True,
         past_key_values=None,
         img_features=image_features,
@@ -2334,7 +2307,7 @@ def check_real_model_with_dog_sample(model):
     # with`use_cache=False` (from the start --> `past_key_values=None`)
     generated_output = model.generate(
         pixel_values=pixel_values,
-        decoder_input_ids=decoder_input_ids,
+        input_ids=input_ids,
         use_cache=False,
         past_key_values=None,
         img_features=None,
@@ -2357,7 +2330,7 @@ def check_real_model_with_dog_sample(model):
     # with`use_cache=False` (from the start --> `past_key_values=None`)
     generated_output = model.generate(
         pixel_values=pixel_values,
-        decoder_input_ids=decoder_input_ids,
+        input_ids=input_ids,
         use_cache=False,
         past_key_values=None,
         img_features=image_features,
@@ -2380,7 +2353,7 @@ def check_real_model_with_dog_sample(model):
     # with `use_cache=True` (from the start --> `past_key_values=None`)
     generated_output = model.generate(
         pixel_values=pixel_values,
-        decoder_input_ids=decoder_input_ids,
+        input_ids=input_ids,
         use_cache=True,
         past_key_values=None,
         img_features=None,
@@ -2403,7 +2376,7 @@ def check_real_model_with_dog_sample(model):
     # with `use_cache=True` (from the start --> `past_key_values=None`)
     generated_output = model.generate(
         pixel_values=pixel_values,
-        decoder_input_ids=decoder_input_ids,
+        input_ids=input_ids,
         use_cache=True,
         past_key_values=None,
         img_features=image_features,
@@ -2426,7 +2399,7 @@ def check_real_model_with_dog_sample(model):
     # with `use_cache=True`
     generated_output = model.generate(
         pixel_values=pixel_values,
-        decoder_input_ids=new_decoder_input_ids,
+        input_ids=new_input_ids,
         use_cache=True,
         past_key_values=next_past_key_values,
         img_features=None,
@@ -2443,7 +2416,7 @@ def check_real_model_with_dog_sample(model):
     # with `use_cache=True`
     generated_output = model.generate(
         pixel_values=pixel_values,
-        decoder_input_ids=new_decoder_input_ids,
+        input_ids=new_input_ids,
         use_cache=True,
         past_key_values=next_past_key_values,
         img_features=image_features,
@@ -2491,14 +2464,14 @@ def create_model(num_layers=2):
         "dropout": 0.1,
         "subln": True,
         "attention_dropout": 0.1,
-        "decoder_normalize_before": True,
+        "normalize_before": True,
         "activation_function": "gelu",
         "activation_dropout": 0.0,
         "add_cross_attention": False,
-        "decoder_attention_heads": 32,
-        "decoder_ffn_dim": 8192,
+        "attention_heads": 32,
+        "ffn_dim": 8192,
         "embed_dim": 2048,
-        "decoder_layers": num_layers,
+        "layers": num_layers,
         "layer_norm_eps": 1e-5,
         "gradient_checkpointing": False,
         # to match the demo
@@ -2561,21 +2534,26 @@ if __name__ == "__main__":
     # ================================================================================
     # real config & model creation
 
-    real_model = create_model(num_layers=24)
+    # real_model = create_model(num_layers=24)
+    #
+    # # need to create this checkpoint
+    # load_and_check_model(real_model, ckpt_path="kosmos2_state_dict.bin")
+    # real_model.save_pretrained("HF_Kosmos2")
+    #
+    # # check we can load
+    # real_model = Kosmos2ForConditionalGeneration.from_pretrained("HF_Kosmos2")
+    #
+    # # If we want to push to the Hub
+    # # repo_id = "ydshieh/kosmos-2"
+    # # real_model.save_pretrained("HF_Kosmos2", push_to_hub=True, repo_id=repo_id, use_auth_token="XXX")
+    #
+    # # check we can load from the Hub
+    # # real_model = Kosmos2ForConditionalGeneration.from_pretrained(repo_id)
 
-    # need to create this checkpoint
-    load_and_check_model(real_model, ckpt_path="kosmos2_state_dict.bin")
-    real_model.save_pretrained("HF_Kosmos2")
-
-    # check we can load
-    real_model = Kosmos2ForConditionalGeneration.from_pretrained("HF_Kosmos2")
-
-    # If we want to push to the Hub
-    # repo_id = "ydshieh/kosmos-2"
-    # real_model.save_pretrained("HF_Kosmos2", push_to_hub=True, repo_id=repo_id, use_auth_token="XXX")
+    repo_id = "ydshieh/kosmos-2"
 
     # check we can load from the Hub
-    # real_model = Kosmos2ForConditionalGeneration.from_pretrained(repo_id)
+    real_model = Kosmos2ForConditionalGeneration.from_pretrained(repo_id)
 
     # ================================================================================
 
