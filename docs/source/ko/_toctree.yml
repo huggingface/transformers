@@ -133,7 +133,7 @@
       title: (번역중) Custom hardware for training
     - local: in_translation
       title: (번역중) Instantiating a big model
-    - local: Debugging
+    - local: debugging
       title: 디버깅
     - local: in_translation
       title: (번역중) Hyperparameter Search using Trainer API
