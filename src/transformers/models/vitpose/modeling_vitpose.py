@@ -140,4 +140,3 @@ class ViTOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-4
-
