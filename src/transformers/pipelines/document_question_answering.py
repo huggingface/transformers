@@ -37,7 +37,7 @@ if is_vision_available():
 if is_torch_available():
     import torch
 
-    from ..models.auto.modeling_auto import MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES
 
 TESSERACT_LOADED = False
 if is_pytesseract_available():
@@ -142,7 +142,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             if self.model.config.encoder.model_type != "donut-swin":
                 raise ValueError("Currently, the only supported VisionEncoderDecoder model is Donut")
         else:
-            self.check_model_type(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING)
+            self.check_model_type(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES)
             if self.model.config.__class__.__name__ == "LayoutLMConfig":
                 self.model_type = ModelType.LayoutLM
             else:

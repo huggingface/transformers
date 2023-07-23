@@ -238,7 +238,7 @@ def check_config_attributes_being_used(config_class):
     modeling_sources = []
     for path in modeling_paths:
         if os.path.isfile(path):
-            with open(path) as fp:
+            with open(path, encoding="utf8") as fp:
                 modeling_sources.append(fp.read())
 
     unused_attributes = []
