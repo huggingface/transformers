@@ -788,6 +788,7 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor = None,
+        past_observed_values: torch.Tensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -811,7 +812,8 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
         if past_values is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both past_values and inputs_embeds at the same time")
         elif past_values is not None:
-            batch_size, seq_length = past_values.shape
+            batch_size, past_values_seq_length = past_values.shape
+            seq_length = past_values_seq_length - max(self.config.lags_sequence)
             device = past_values.device
             dtype = past_values.dtype
         elif inputs_embeds is not None:
@@ -840,14 +842,15 @@ class LagLlamaModel(LagLlamaPreTrainedModel):
         # embed positions
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length_with_past), dtype=torch.bool, device=device)
-
-        if inputs_embeds is None:
-            transformer_inputs, loc, scale = self.prepare_input(past_values, attention_mask)
-            inputs_embeds = self.embed_inputs(transformer_inputs)
-
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, (batch_size, seq_length), dtype, device, past_key_values_length
         )
+
+        if past_observed_values is None:
+            past_observed_values = torch.ones((batch_size, past_values_seq_length), dtype=torch.bool, device=device)
+        if inputs_embeds is None:
+            transformer_inputs, loc, scale = self.prepare_input(past_values, past_observed_values)
+            inputs_embeds = self.embed_inputs(transformer_inputs)
 
         hidden_states = inputs_embeds
 
