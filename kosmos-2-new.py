@@ -420,11 +420,9 @@ class Kosmos2TextBlock(nn.Module):
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
-        if not config.add_cross_attention:
-            self.encoder_attn = None
-            self.encoder_attn_layer_norm = None
-        else:
+        if config.add_cross_attention:
             self.encoder_attn = KosmosTextAttention(
+                config,
                 self.embed_dim,
                 config.decoder_attention_heads,
                 dropout=config.attention_dropout,
@@ -475,6 +473,12 @@ class Kosmos2TextBlock(nn.Module):
         cross_attn_present_key_value = None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
+            if not hasattr(self, "encoder_attn"):
+                raise ValueError(
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers"
+                    " by setting `config.add_cross_attention=True`"
+                )
+
             residual = hidden_states
 
             if self.normalize_before:
