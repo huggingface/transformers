@@ -786,6 +786,12 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -835,6 +841,19 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    # TODO: could we abuse the usage of `self.base_model_prefix="model"`?
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
 
     def forward(
         self,
@@ -1005,6 +1024,13 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # # TODO: Do we need this for (somehow vision-text) `Kosmos2Model`?
+    # def get_input_embeddings(self):
+    #     return self.text_model.model.embed_tokens
+    #
+    # def set_input_embeddings(self, value):
+    #     self.text_model.model.embed_tokens = value
+
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -1083,6 +1109,20 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    # # TODO: Do we need this for (somehow vision-text) `Kosmos2ForConditionalGeneration`?
+    # def get_input_embeddings(self):
+    #     return self.text_model.model.embed_tokens
+    #
+    # def set_input_embeddings(self, value):
+    #     self.text_model.model.embed_tokens = value
+
+    # We can't have this (with `config.tie_word_embeddings=True`) if we don't implement `get_input_embeddings` above
+    # def get_output_embeddings(self):
+    #     return self.text_model.lm_head
+    #
+    # def set_output_embeddings(self, new_embeddings):
+    #     self.text_model.lm_head = new_embeddings
 
     def forward(
         self,
@@ -2260,6 +2300,10 @@ if __name__ == "__main__":
 
     check_model_with_dummy_inputs(dummy_model)
     check_model_with_dog_sample(dummy_model)
+
+    # ================================================================================
+
+    exit(0)
 
     # ================================================================================
     # real config & model creation
