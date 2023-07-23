@@ -2299,6 +2299,108 @@ def check_real_model_with_dog_sample(model):
 
     assert generated_output[0, 71:].tolist() == expected_generation
 
+    # --------------------------------------------------------------------
+    # generation without `use_cache` (from the start)
+
+    # use `model`
+    # with`use_cache=False` (from the start --> `past_key_values=None`)
+    generated_output = model.generate(
+        pixel_values=pixel_values,
+        decoder_input_ids=decoder_input_ids,
+        use_cache=False,
+        past_key_values=None,
+        img_features=None,
+        img_attn_mask=img_attn_mask,
+        max_new_tokens=len(expected_generation),
+    )
+
+    assert generated_output[0, 71:].tolist() == expected_generation
+
+    # --------------------------------------------------------------------
+    # generation without `use_cache` (from the start)
+
+    # use `model`
+    # with`use_cache=False` (from the start --> `past_key_values=None`)
+    generated_output = model.generate(
+        pixel_values=pixel_values,
+        decoder_input_ids=decoder_input_ids,
+        use_cache=False,
+        past_key_values=None,
+        img_features=image_features,
+        img_attn_mask=img_attn_mask,
+        max_new_tokens=len(expected_generation),
+    )
+
+    assert generated_output[0, 71:].tolist() == expected_generation
+
+    # --------------------------------------------------------------------
+    # generation with `use_cache` (from the start)
+
+    # use `model`
+    # with `use_cache=True` (from the start --> `past_key_values=None`)
+    generated_output = model.generate(
+        pixel_values=pixel_values,
+        decoder_input_ids=decoder_input_ids,
+        use_cache=True,
+        past_key_values=None,
+        img_features=None,
+        img_attn_mask=img_attn_mask,
+        max_new_tokens=len(expected_generation),
+    )
+
+    assert generated_output[0, 71:].tolist() == expected_generation
+
+    # --------------------------------------------------------------------
+    # generation with `use_cache` (from the start)
+
+    # use `model`
+    # with `use_cache=True` (from the start --> `past_key_values=None`)
+    generated_output = model.generate(
+        pixel_values=pixel_values,
+        decoder_input_ids=decoder_input_ids,
+        use_cache=True,
+        past_key_values=None,
+        img_features=image_features,
+        img_attn_mask=img_attn_mask,
+        max_new_tokens=len(expected_generation),
+    )
+
+    assert generated_output[0, 71:].tolist() == expected_generation
+
+    # --------------------------------------------------------------------
+    # generation with `use_cache` (from step 84)
+
+    # use `model`
+    # with `use_cache=True`
+    generated_output = model.generate(
+        pixel_values=pixel_values,
+        decoder_input_ids=new_decoder_input_ids,
+        use_cache=True,
+        past_key_values=next_past_key_values,
+        img_features=None,
+        img_attn_mask=new_img_attn_mask,
+        # we already generated 13 tokens: from `64007` (step 71 -> 72) to `12` (step 83 -> 84)
+        max_new_tokens=len(expected_generation) - 13,
+    )
+    assert generated_output[0, 71:].tolist() == expected_generation
+
+    # --------------------------------------------------------------------
+    # generation with `use_cache` (from step 84)
+
+    # use `model`
+    # with `use_cache=True`
+    generated_output = model.generate(
+        pixel_values=pixel_values,
+        decoder_input_ids=new_decoder_input_ids,
+        use_cache=True,
+        past_key_values=next_past_key_values,
+        img_features=image_features,
+        img_attn_mask=new_img_attn_mask,
+        # we already generated 13 tokens: from `64007` (step 71 -> 72) to `12` (step 83 -> 84)
+        max_new_tokens=len(expected_generation) - 13,
+    )
+    assert generated_output[0, 71:].tolist() == expected_generation
+
 
 def check_head_base_model_loading(config):
 
