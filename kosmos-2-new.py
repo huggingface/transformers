@@ -2322,6 +2322,7 @@ def check_real_model_with_dog_sample(model):
         input_ids=input_ids,
         use_cache=False,
         past_key_values=None,
+        # we can specify `None` here.
         img_features=image_features,
         img_attn_mask=img_attn_mask,
         max_new_tokens=len(expected_generation),
