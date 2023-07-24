@@ -70,6 +70,15 @@ class IdeficsModelTester:
         modality_type_vocab_size=2,
         add_multiple_images=False,
         num_images=-1,
+        vision_embed_dim=32,
+        vision_config={
+            "patch_size": 2,
+            "hidden_size": 32,
+            "image_size": 30,
+            "num_attention_heads": 4,
+            "num_hidden_layers": 5,
+            "intermediate_size": 37,
+        },
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -98,6 +107,8 @@ class IdeficsModelTester:
         self.modality_type_vocab_size = modality_type_vocab_size
         self.add_multiple_images = add_multiple_images
         self.num_images = num_images
+        self.vision_embed_dim = vision_embed_dim
+        self.vision_config = vision_config
         # we set the expected sequence length (which is used in several tests)
         # this is equal to the seq length of the text tokens + number of image patches + 1 for the CLS token
         self.expected_seq_len = self.seq_length + (self.image_size // self.patch_size) ** 2 + 1
@@ -116,16 +127,6 @@ class IdeficsModelTester:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         image_attention_mask = random_attention_mask([self.batch_size, self.seq_length, num_images])
-
-        # inputs["input_ids"].shape=torch.Size([1, 41])
-        # inputs["attention_mask"].shape=torch.Size([1, 41])
-        # inputs["pixel_values"].shape=torch.Size([1, 2, 3, 30, 30])
-        # inputs["image_attention_mask"].shape=torch.Size([1, 41, 2])
-
-        # input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        # input_mask = random_attention_mask([self.batch_size, self.seq_length])
-        # pixel_values =
-        # image_attention_mask =
 
         config = self.get_config()
 
@@ -151,6 +152,8 @@ class IdeficsModelTester:
             num_labels=self.num_labels,
             modality_type_vocab_size=self.modality_type_vocab_size,
             num_images=self.num_images,
+            vision_embed_dim=self.vision_embed_dim,
+            vision_config=self.vision_config,
         )
 
     def create_and_check_model(
@@ -160,13 +163,12 @@ class IdeficsModelTester:
         token_type_ids,
         input_mask,
         pixel_values,
-        token_labels,
     ):
         model = IdeficsModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, pixel_values=pixel_values)
-        result = model(input_ids, token_type_ids=token_type_ids, pixel_values=pixel_values)
+        result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values)
+        result = model(input_ids, pixel_values=pixel_values)
         result = model(input_ids, pixel_values=pixel_values)
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, self.expected_seq_len, self.hidden_size)
@@ -203,28 +205,19 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         if is_torch_available()
         else ()
     )
+    pipeline_model_mapping = (
+        {
+            "visual-question-answering": IdeficsForCausalLM,
+        }
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
 
-    # IdeficsForMaskedLM, IdeficsForQuestionAnswering and IdeficsForImagesAndTextClassification require special treatment
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
-
-        if return_labels:
-            if model_class.__name__ == "IdeficsForQuestionAnswering":
-                inputs_dict["labels"] = torch.zeros(
-                    self.model_tester.batch_size, self.model_tester.num_labels, device=torch_device
-                )
-            elif model_class.__name__ in ["IdeficsForMaskedLM", "IdeficsForTokenClassification"]:
-                inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
-                )
-            elif model_class.__name__ == "IdeficsForImagesAndTextClassification":
-                inputs_dict["labels"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
-                )
-
         return inputs_dict
 
     def setUp(self):
@@ -238,15 +231,16 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_token_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
-
     def test_training(self):
         if not self.model_tester.is_training:
             return
 
         for model_class in self.all_model_classes:
+            # IdeficsModel does not support training, users should use
+            # IdeficsForCausalLM for this purpose
+            if model_class == IdeficsModel:
+                return
+
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.return_dict = True
 
@@ -264,6 +258,11 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             return
 
         for model_class in self.all_model_classes:
+            # IdeficsModel does not support training, users should use
+            # IdeficsForCausalLM for this purpose
+            if model_class == IdeficsModel:
+                return
+
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config.use_cache = False
             config.return_dict = True
