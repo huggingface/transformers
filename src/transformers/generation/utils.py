@@ -1150,12 +1150,22 @@ class GenerationMixin:
 
         # Encoder-Decoder models may also need Encoder arguments from `model_kwargs`
         if self.config.is_encoder_decoder:
+            base_model = getattr(self, self.base_model_prefix, None)
+
             # allow encoder kwargs
-            encoder_model_args = set(inspect.signature(self.encoder.forward).parameters)
+            encoder = getattr(self, "encoder", None)
+            if encoder is None:
+                encoder = getattr(base_model, "encoder")
+
+            encoder_model_args = set(inspect.signature(encoder.forward).parameters)
             model_args |= encoder_model_args
 
             # allow decoder kwargs
-            decoder_model_args = set(inspect.signature(self.decoder.forward).parameters)
+            decoder = getattr(self, "decoder", None)
+            if decoder is None:
+                decoder = getattr(base_model, "decoder")
+
+            decoder_model_args = set(inspect.signature(decoder.forward).parameters)
             model_args |= {f"decoder_{x}" for x in decoder_model_args}
 
         for key, value in model_kwargs.items():
