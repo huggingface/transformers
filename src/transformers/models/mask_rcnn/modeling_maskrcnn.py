@@ -75,7 +75,8 @@ class MaskRCNNRPNOutput(ModelOutput):
             Losses of the RPN head.
         proposal_list (`list[`torch.FloatTensor`]`):
             List of proposals, for each example in the batch. Each proposal is a `torch.FloatTensor` of shape
-            (num_proposals, 5). Each proposal is of the format (x1, y1, x2, y2, score).
+            (num_proposals, 5). Each proposal is of the format (top_left_x, top_left_y, bottom_right_x, bottom_right_y,
+            objectness_score).
         outs (`tuple(List(torch.FloatTensor)`)):
             Tuple of lists, the first list containing the class logits and the second list containing the box
             predictions.
@@ -101,9 +102,11 @@ class MaskRCNNModelOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(num_proposals_per_image stacked on top of each other, num_labels * 4)`):
             Predicted boxes, for each class and each proposal.
         rois (`torch.FloatTensor` of shape `(num_proposals_per_image stacked on top of each other, 5)`):
-            Region of interest proposals. Each contains [batch_index, x1, y1, x2, y2].
+            Region of interest proposals. Each contains [batch_index, top_left_x, top_left_y, bottom_right_x,
+            bottom_right_y].
         proposals (`List[torch.FloatTensor]` of shape `(num_proposals_per_image, 5)`):
-            Proposals as predicted by the RPN. Each contains [x1, y1, x2, y2, score].
+            Proposals as predicted by the RPN. Each contains [top_left_x, top_left_y, bottom_right_x, bottom_right_y,
+            score].
         fpn_hidden_states (`tuple(torch.FloatTensor)` with length = number of scale levels):
             Hidden states of the FPN (Feature Pyramid Network).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -397,14 +400,6 @@ def mask_target_single(pos_proposals, pos_assigned_gt_inds, gt_masks, cfg):
     return mask_targets
 
 
-def unmap(data, count, indices, fill=0):
-    """Unmap a subset of item (data) back to the original set of items (of size count)"""
-    new_size = (count,) + data.size()[1:]
-    ret = data.new_full(new_size, fill)
-    ret[indices.type(torch.bool)] = data
-    return ret
-
-
 def select_single_multilevel(multilevel_tensors, batch_id, detach=True):
     """Extract a multi-scale single image tensor from a multi-scale batch tensor based on batch index.
 
@@ -486,16 +481,16 @@ def bbox2delta(proposals, ground_truth, means=(0.0, 0.0, 0.0, 0.0), stds=(1.0, 1
 
     Args:
         proposals (`torch.Tensor`):
-            Boxes to be transformed, shape (N, ..., 4)
+            Boxes to be transformed, shape (N, ..., 4) with N = number of proposals.
         ground_truth (`torch.Tensor`):
-            Ground truth bboxes to be used as base, shape (N, ..., 4)
+            Ground truth bboxes to be used as base, shape (N, ..., 4) with N = number of boxes.
         means (`Sequence[float]`, *optional*, defaults to `(0.0, 0.0, 0.0, 0.0)`):
             Denormalizing means for delta coordinates
         stds (`Sequence[float]`, *optional*, defaults to `(1.0, 1.0, 1.0, 1.0)`):
             Denormalizing standard deviation for delta coordinates
 
     Returns:
-       `torch.Tensor`: deltas with shape (N, 4), where columns represent dx, dy, dw, dh.
+       `torch.Tensor`: deltas with shape (N, 4), where columns represent delta_x, delta_y, delta_width, delta_height.
     """
     if proposals.size() != ground_truth.size():
         raise ValueError("Should have as many proposals as there are ground truths")
@@ -619,7 +614,7 @@ def bbox2roi(bbox_list):
             A list of bboxes corresponding to a batch of images.
 
     Returns:
-        `torch.Tensor`: shape (n, 5), [batch_ind, x1, y1, x2, y2]
+        `torch.Tensor`: shape (n, 5), [batch_ind, top_left_x, top_left_y, bottom_right_x, bottom_right_y].
     """
     rois_list = []
     for img_id, bboxes in enumerate(bbox_list):
@@ -948,7 +943,8 @@ class MaskRCNNDeltaXYWHBBoxCoder(nn.Module):
 
     Following the practice in [R-CNN](https://arxiv.org/abs/1311.2524), this coder encodes a bounding box (x1, y1, x2,
     y2) into deltas (delta_x, delta_y, delta_width, delta_height) and decodes delta (delta_x, delta_y, delta_width,
-    delta_height) back to original bounding box (x1, y1, x2, y2).
+    delta_height) back to original bounding box (x1, y1, x2, y2). This corresponds to (top_left_x, top_left_y,
+    bottom_right_x, bottom_right_y).
 
     Args:
         target_means (`Sequence[float]`):
@@ -1004,7 +1000,7 @@ class MaskRCNNDeltaXYWHBBoxCoder(nn.Module):
 
         Args:
             bboxes (`torch.Tensor`):
-                Basic boxes. Shape (batch_size, N, 4) or (N, 4)
+                Basic boxes. Shape (batch_size, N, 4) or (N, 4) with N = number of boxes.
             pred_bboxes (`torch.Tensor`):
                 Encoded offsets with respect to each roi. Has shape (batch_size, N, num_classes * 4) or (batch_size, N,
                 4) or (N, num_classes * 4) or (N, 4). Note N = num_anchors * W * H when rois is a grid of anchors.
@@ -1074,11 +1070,13 @@ class MaskRCNNBboxOverlaps2D:
 
         Args:
             bboxes1 (`torch.Tensor`):
-                Bboxes having shape (m, 4) in <x1, y1, x2, y2> format, or shape (m, 5) in <x1, y1, x2, y2, score>
-                format.
+                Bboxes having shape (m, 4) in <top_left_x, top_left_y, bottom_right_x, bottom_right_y> format, or shape
+                (m, 5) in <top_left_x, top_left_y, bottom_right_x, bottom_right_y, score> format.
             bboxes2 (`torch.Tensor`):
-                Boxes having shape (m, 4) in <x1, y1, x2, y2> format, shape (m, 5) in <x1, y1, x2, y2, score> format,
-                or be empty. If `is_aligned ` is `True`, then m and n must be equal.
+                Boxes having shape (m, 4) in <top_left_x, top_left_y, bottom_right_x, bottom_right_y> format, shape (m,
+                5) in <top_left_x, top_left_y, bottom_right_x, bottom_right_y, score> format, or be empty. If
+                `is_aligned ` is `True`, then m and n must be equal. This is (top_left_x, top_left_y, bottom_right_x,
+                bottom_right_y).
             mode (`str`, *optional*, defaults to `"iou"`):
                 "iou" (intersection over union), "iof" (intersection over foreground), or "giou" (generalized
                 intersection over union).
@@ -1121,9 +1119,10 @@ def bbox_overlaps(bboxes1, bboxes2, mode="iou", is_aligned=False, eps=1e-6):
 
     Args:
         bboxes1 (`torch.Tensor`):
-            Shape (B, m, 4) in <x1, y1, x2, y2> format or empty. B indicates the batch dim, in shape (B1, B2, ..., Bn).
+            Shape (B, m, 4) in <top_left_x, top_left_y, bottom_right_x, bottom_right_y> format or empty. B indicates
+            the batch dim, in shape (B1, B2, ..., Bn).
         bboxes2 (`torch.Tensor`):
-            Shape (B, n, 4) in <x1, y1, x2, y2> format or empty.
+            Shape (B, n, 4) in <top_left_x, top_left_y, bottom_right_x, bottom_right_y> format or empty.
         mode (`str`, **optional*, defaults to `"iou"`):
             "iou" (intersection over union), "iof" (intersection over foreground) or "giou" (generalized intersection
             over union).
@@ -1785,13 +1784,6 @@ class MaskRCNNRPN(nn.Module):
         if len(neg_indices) > 0:
             label_weights[neg_indices] = 1.0
 
-        # map outputs up to original set of anchors
-        num_total_anchors = flat_anchors.size(0)
-        labels = unmap(labels, num_total_anchors, inside_flags, fill=self.num_classes)  # fill background label
-        label_weights = unmap(label_weights, num_total_anchors, inside_flags)
-        bbox_targets = unmap(bbox_targets, num_total_anchors, inside_flags)
-        bbox_weights = unmap(bbox_weights, num_total_anchors, inside_flags)
-
         return (labels, label_weights, bbox_targets, bbox_weights, pos_indices, neg_indices, sampling_result)
 
     def get_targets(
@@ -2394,8 +2386,7 @@ class MaskRCNNSingleRoIExtractor(nn.Module):
 
         for i in range(num_levels):
             mask = target_lvls == i
-            # To keep all roi_align nodes exported to onnx
-            # and skip nonzero op
+            # to keep all roi_align nodes exported to onnx and skip nonzero op
             mask = mask.float().unsqueeze(-1)
             # select target level rois and reset the rest rois to zero.
             rois_i = rois.clone().detach()
