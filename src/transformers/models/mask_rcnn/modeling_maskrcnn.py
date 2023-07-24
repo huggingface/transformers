@@ -19,6 +19,7 @@
 import copy
 from collections import OrderedDict
 from dataclasses import dataclass
+import functools
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -29,7 +30,7 @@ from torch.nn.modules.utils import _pair
 
 # TODO decide whether to define these utilities
 from transformers.models.mask_rcnn.assign_result import AssignResult
-from transformers.models.mask_rcnn.loss_utils import CrossEntropyLoss, L1Loss, accuracy
+from transformers.models.mask_rcnn.loss_utils import CrossEntropyLoss, accuracy, weight_reduce_loss
 
 from ... import AutoBackbone
 from ...modeling_utils import PreTrainedModel
@@ -125,6 +126,83 @@ class MaskRCNNModelOutput(ModelOutput):
     fpn_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+def weighted_loss(loss_func):
+    """Create a weighted version of a given loss function.
+
+    To use this decorator, the loss function must have the signature like `loss_func(pred, target, **kwargs)`. The
+    function only needs to compute element-wise loss without any reduction. This decorator will add weight and
+    reduction arguments to the function. The decorated function will have the signature like `loss_func(pred, target,
+    weight=None, reduction='mean', avg_factor=None, **kwargs)`.
+    """
+
+    @functools.wraps(loss_func)
+    def wrapper(pred, target, weight=None, reduction="mean", avg_factor=None, **kwargs):
+        # get element-wise loss
+        loss = loss_func(pred, target, **kwargs)
+        loss = weight_reduce_loss(loss, weight, reduction, avg_factor)
+        return loss
+
+    return wrapper
+
+
+@weighted_loss
+def l1_loss(pred, target):
+    """L1 loss.
+
+    Args:
+        pred (`torch.Tensor`):
+            The prediction.
+        target (`torch.Tensor`):
+            The learning target of the prediction.
+
+    Returns:
+        `torch.Tensor`: Calculated loss
+    """
+    if target.numel() == 0:
+        return pred.sum() * 0
+
+    if pred.size() != target.size():
+        raise ValueError(f"Input arguments' shapes don't match: pred {pred.size()}, target {target.size()}")
+    loss = torch.abs(pred - target)
+    return loss
+
+
+class WeightedL1Loss(nn.Module):
+    """L1 loss with optional weight.
+
+    Args:
+        reduction (`str`, *optional*, defaults to `"mean"`):
+            The method to reduce the loss. Options are `"none"`, `"mean"` and `"sum"`.
+        loss_weight (`float`, *optional*, defaults to 1.0):
+            The weight of loss.
+    """
+
+    def __init__(self, reduction="mean", loss_weight=1.0):
+        super(WeightedL1Loss, self).__init__()
+        self.reduction = reduction
+        self.loss_weight = loss_weight
+
+    def forward(self, pred, target, weight=None, avg_factor=None, reduction_override=None):
+        """
+        Args:
+           pred (`torch.Tensor`):
+               The prediction.
+           target (`torch.Tensor`):
+               The learning target of the prediction.
+           weight (`torch.Tensor`, *optional*):
+               The weight of the loss for each prediction.
+           avg_factor (`int`, *optional*):
+               Average factor that is used to average the loss.
+           reduction_override (`str`, *optional*):
+               The reduction method used to override the original reduction method of the loss.
+        """
+        if reduction_override not in (None, "none", "mean", "sum"):
+            raise ValueError(f"invalid reduction_override, got {reduction_override}")
+        reduction = reduction_override if reduction_override else self.reduction
+        loss_bbox = self.loss_weight * l1_loss(pred, target, weight, reduction=reduction, avg_factor=avg_factor)
+        return loss_bbox
 
 
 class SamplingResult:
@@ -1457,16 +1535,11 @@ class MaskRCNNRPN(nn.Module):
         self.sampling = True
         self.reg_decoded_bbox = reg_decoded_bbox
 
-        # losses
-        # based on config:
-        self.loss_cls = CrossEntropyLoss(
-            use_sigmoid=True
-        )  # this corresponds to dict(type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0))
-        if config.rpn_loss_bbox.get("type") == "L1Loss":
-            loss_weight = config.rpn_loss_bbox.get("loss_weight", 1.0)
-            self.loss_bbox = L1Loss(loss_weight=loss_weight)
-        else:
-            raise ValueError(f"Unsupported rpn_loss_bbox type: {config.rpn_loss_bbox.get('type')}")
+        # losses based on config
+        # this corresponds to dict(type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0))
+        # TODO remove rpn_loss_bbox
+        self.loss_cls = CrossEntropyLoss(use_sigmoid=True)  
+        self.loss_bbox = WeightedL1Loss(loss_weight=config.rpn_loss_bbox.get("loss_weight", 1.0))
 
     def forward_single(self, hidden_state):
         """Forward feature map of a single scale level."""
@@ -1577,7 +1650,6 @@ class MaskRCNNRPN(nn.Module):
         gt_labels,
         img_meta,
         label_channels=1,
-        unmap_outputs=True,
     ):
         """Compute regression and classification targets for anchors in a single image.
 
@@ -1598,8 +1670,6 @@ class MaskRCNNRPN(nn.Module):
                 Meta info of the image.
             label_channels (`int`, *optional*, defaults to 1):
                 Number of channels of the ground truth labels.
-            unmap_outputs (`bool`, *optional*, defaults to `True`):
-                Whether to map outputs back to the original set of anchors.
 
         Returns:
             `tuple` comprising various elements:
@@ -1657,13 +1727,12 @@ class MaskRCNNRPN(nn.Module):
         if len(neg_indices) > 0:
             label_weights[neg_indices] = 1.0
 
-        # map up to original set of anchors
-        if unmap_outputs:
-            num_total_anchors = flat_anchors.size(0)
-            labels = unmap(labels, num_total_anchors, inside_flags, fill=self.num_classes)  # fill bg label
-            label_weights = unmap(label_weights, num_total_anchors, inside_flags)
-            bbox_targets = unmap(bbox_targets, num_total_anchors, inside_flags)
-            bbox_weights = unmap(bbox_weights, num_total_anchors, inside_flags)
+        # map outputs up to original set of anchors
+        num_total_anchors = flat_anchors.size(0)
+        labels = unmap(labels, num_total_anchors, inside_flags, fill=self.num_classes)  # fill bg label
+        label_weights = unmap(label_weights, num_total_anchors, inside_flags)
+        bbox_targets = unmap(bbox_targets, num_total_anchors, inside_flags)
+        bbox_weights = unmap(bbox_weights, num_total_anchors, inside_flags)
 
         return (labels, label_weights, bbox_targets, bbox_weights, pos_indices, neg_indices, sampling_result)
 
@@ -1676,7 +1745,6 @@ class MaskRCNNRPN(nn.Module):
         gt_bboxes_ignore_list=None,
         gt_labels_list=None,
         label_channels=1,
-        unmap_outputs=True,
         return_sampling_results=False,
     ):
         """Compute regression and classification targets for anchors in multiple images.
@@ -1698,8 +1766,6 @@ class MaskRCNNRPN(nn.Module):
                 Ground truth labels of each box.
             label_channels (`int`, *optional*, defaults to 1):
                 Number of channels in the ground truth labels.
-            unmap_outputs (`bool`, *optional*, defaults to `True`):
-                Whether to map outputs back to the original set of anchors.
 
         Returns:
             `tuple` comprising various elements:
@@ -1773,7 +1839,6 @@ class MaskRCNNRPN(nn.Module):
                 gt_labels,
                 img_meta,
                 label_channels=label_channels,
-                unmap_outputs=unmap_outputs,
             )
             all_labels.append(labels)
             all_label_weights.append(label_weights)
@@ -2305,7 +2370,7 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
         reg_class_agnostic (`bool`, *optional*, defaults to `False`):
             Whether the regression is class agnostic.
         reg_decoded_bbox (`bool`, *optional*, defaults to `False`):
-            Whether to apply the regression loss (e.g. `IouLoss`, `GIouLoss`, `DIouLoss`)directly on the decoded
+            Whether to apply the regression loss (e.g. `IouLoss`, `GIouLoss`, `DIouLoss`) directly on the decoded
             bounding boxes.
         custom_activation (`bool`, *optional*, defaults to `False`):
             Whether to use a custom activation function.
@@ -2351,12 +2416,11 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
         self.reg_decoded_bbox = reg_decoded_bbox
         self.custom_activation = custom_activation
 
-        # losses
-        # based on config:
-        self.loss_cls = CrossEntropyLoss(
-            use_sigmoid=False
-        )  # this corresponds to dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0))
-        self.loss_bbox = L1Loss()  # this corresponds to dict(type='L1Loss', loss_weight=1.0)
+        # losses based on config
+        # this corresponds to dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0))
+        self.loss_cls = CrossEntropyLoss(use_sigmoid=False) 
+         # this corresponds to dict(type='L1Loss', loss_weight=1.0)
+        self.loss_bbox = WeightedL1Loss(loss_weight=1.0) 
 
     def forward(self, hidden_states):
         # shared part
@@ -2762,11 +2826,6 @@ class MaskRCNNRoIHead(nn.Module):
 
     def forward_test_mask(self, hidden_states, scale_factors, det_bboxes, rescale=True):
         """Simple test for mask head without augmentation."""
-        # scale_factors = image shapes of images in the batch
-
-        # if all(det_bbox.shape[0] == 0 for det_bbox in det_bboxes):
-        #     segm_results = [[[] for _ in range(self.mask_head.num_classes)] for _ in range(num_imgs)]
-        # else:
 
         # if det_bboxes is rescaled to the original image size, we need to
         # rescale it back to the testing scale to obtain RoIs.

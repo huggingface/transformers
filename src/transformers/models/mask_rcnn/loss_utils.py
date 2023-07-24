@@ -1,61 +1,9 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 
-import functools
 import warnings
 
 import torch
 from torch import nn
-
-
-def accuracy(pred, target, topk=1, thresh=None):
-    """Calculate accuracy according to the prediction and target.
-
-    Args:
-        pred (`torch.Tensor`):
-            The model prediction, shape (N, num_class).
-        target (`torch.Tensor`):
-            The target of each prediction, shape (N, ).
-        topk (`int` or `Tuple[int]`, *optional*, defaults to 1):
-            If the predictions in `topk` matches the target, the predictions will be regarded as correct ones.
-        thresh (`float`, *optional*):
-            If not None, predictions with scores under this threshold are considered incorrect.
-
-    Returns:
-        `float` or `Tuple[float]`: If the input `topk` is a single integer,
-            the function will return a single float as accuracy. If `topk` is a tuple containing multiple integers, the
-            function will return a tuple containing accuracies of each `topk` number.
-    """
-    if not isinstance(topk, (int, tuple)):
-        raise ValueError(f"topk should be int or tuple of int, but got {type(topk)}")
-    if isinstance(topk, int):
-        topk = (topk,)
-        return_single = True
-    else:
-        return_single = False
-
-    maxk = max(topk)
-    if pred.size(0) == 0:
-        accu = [pred.new_tensor(0.0) for i in range(len(topk))]
-        return accu[0] if return_single else accu
-    if not (pred.ndim == 2 and target.ndim == 1):
-        raise ValueError(
-            f"pred and target should be of shape (N, C) and (N, ), but got {pred.shape} and {target.shape}"
-        )
-    if pred.size(0) != target.size(0):
-        raise ValueError(f"pred and target should be of same size, but got {pred.size(0)} and {target.size(0)}")
-    if maxk > pred.size(1):
-        raise ValueError(f"maxk {maxk} exceeds pred dimension {pred.size(1)}")
-    pred_value, pred_label = pred.topk(maxk, dim=1)
-    pred_label = pred_label.t()  # transpose to shape (maxk, N)
-    correct = pred_label.eq(target.view(1, -1).expand_as(pred_label))
-    if thresh is not None:
-        # Only prediction values larger than thresh are counted as correct
-        correct = correct & (pred_value > thresh).t()
-    res = []
-    for k in topk:
-        correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
-        res.append(correct_k.mul_(100.0 / pred.size(0)))
-    return res[0] if return_single else res
 
 
 def reduce_loss(loss, reduction):
@@ -116,81 +64,55 @@ def weight_reduce_loss(loss, weight=None, reduction="mean", avg_factor=None):
     return loss
 
 
-def weighted_loss(loss_func):
-    """Create a weighted version of a given loss function.
-
-    To use this decorator, the loss function must have the signature like `loss_func(pred, target, **kwargs)`. The
-    function only needs to compute element-wise loss without any reduction. This decorator will add weight and
-    reduction arguments to the function. The decorated function will have the signature like `loss_func(pred, target,
-    weight=None, reduction='mean', avg_factor=None, **kwargs)`.
-    """
-
-    @functools.wraps(loss_func)
-    def wrapper(pred, target, weight=None, reduction="mean", avg_factor=None, **kwargs):
-        # get element-wise loss
-        loss = loss_func(pred, target, **kwargs)
-        loss = weight_reduce_loss(loss, weight, reduction, avg_factor)
-        return loss
-
-    return wrapper
-
-
-@weighted_loss
-def l1_loss(pred, target):
-    """L1 loss.
+def accuracy(pred, target, topk=1, thresh=None):
+    """Calculate accuracy according to the prediction and target.
 
     Args:
         pred (`torch.Tensor`):
-            The prediction.
+            The model prediction, shape (N, num_class).
         target (`torch.Tensor`):
-            The learning target of the prediction.
+            The target of each prediction, shape (N, ).
+        topk (`int` or `Tuple[int]`, *optional*, defaults to 1):
+            If the predictions in `topk` matches the target, the predictions will be regarded as correct ones.
+        thresh (`float`, *optional*):
+            If not None, predictions with scores under this threshold are considered incorrect.
 
     Returns:
-        `torch.Tensor`: Calculated loss
+        `float` or `Tuple[float]`: If the input `topk` is a single integer,
+            the function will return a single float as accuracy. If `topk` is a tuple containing multiple integers, the
+            function will return a tuple containing accuracies of each `topk` number.
     """
-    if target.numel() == 0:
-        return pred.sum() * 0
+    if not isinstance(topk, (int, tuple)):
+        raise ValueError(f"topk should be int or tuple of int, but got {type(topk)}")
+    if isinstance(topk, int):
+        topk = (topk,)
+        return_single = True
+    else:
+        return_single = False
 
-    if pred.size() != target.size():
-        raise ValueError(f"Input arguments' shapes don't match: pred {pred.size()}, target {target.size()}")
-    loss = torch.abs(pred - target)
-    return loss
-
-
-class L1Loss(nn.Module):
-    """L1 loss.
-
-    Args:
-        reduction (`str`, *optional*, defaults to `"mean"`):
-            The method to reduce the loss. Options are `"none"`, `"mean"` and `"sum"`.
-        loss_weight (`float`, *optional*, defaults to 1.0):
-            The weight of loss.
-    """
-
-    def __init__(self, reduction="mean", loss_weight=1.0):
-        super(L1Loss, self).__init__()
-        self.reduction = reduction
-        self.loss_weight = loss_weight
-
-    def forward(self, pred, target, weight=None, avg_factor=None, reduction_override=None):
-        """
-        Args:
-           pred (`torch.Tensor`):
-               The prediction.
-           target (`torch.Tensor`):
-               The learning target of the prediction.
-           weight (`torch.Tensor`, *optional*):
-               The weight of the loss for each prediction.
-           avg_factor (`int`, *optional*):
-               Average factor that is used to average the loss.
-           reduction_override (`str`, *optional*):
-               The reduction method used to override the original reduction method of the loss.
-        """
-        if reduction_override not in (None, "none", "mean", "sum"):
-            raise ValueError(f"invalid reduction_override, got {reduction_override}")
-        reduction = reduction_override if reduction_override else self.reduction
-        loss_bbox = self.loss_weight * l1_loss(pred, target, weight, reduction=reduction, avg_factor=avg_factor)
-        return loss_bbox
+    maxk = max(topk)
+    if pred.size(0) == 0:
+        accu = [pred.new_tensor(0.0) for i in range(len(topk))]
+        return accu[0] if return_single else accu
+    if not (pred.ndim == 2 and target.ndim == 1):
+        raise ValueError(
+            f"pred and target should be of shape (N, C) and (N, ), but got {pred.shape} and {target.shape}"
+        )
+    if pred.size(0) != target.size(0):
+        raise ValueError(f"pred and target should be of same size, but got {pred.size(0)} and {target.size(0)}")
+    if maxk > pred.size(1):
+        raise ValueError(f"maxk {maxk} exceeds pred dimension {pred.size(1)}")
+    pred_value, pred_label = pred.topk(maxk, dim=1)
+    pred_label = pred_label.t()  # transpose to shape (maxk, N)
+    correct = pred_label.eq(target.view(1, -1).expand_as(pred_label))
+    if thresh is not None:
+        # Only prediction values larger than thresh are counted as correct
+        correct = correct & (pred_value > thresh).t()
+    res = []
+    for k in topk:
+        correct_k = correct[:k].reshape(-1).float().sum(0, keepdim=True)
+        res.append(correct_k.mul_(100.0 / pred.size(0)))
+    return res[0] if return_single else res
 
 
 def cross_entropy(
@@ -421,11 +343,6 @@ class CrossEntropyLoss(nn.Module):
             self.cls_criterion = mask_cross_entropy
         else:
             self.cls_criterion = cross_entropy
-
-    def extra_repr(self):
-        """Extra repr."""
-        s = f"avg_non_ignore={self.avg_non_ignore}"
-        return s
 
     def forward(
         self, cls_score, label, weight=None, avg_factor=None, reduction_override=None, ignore_index=None, **kwargs
