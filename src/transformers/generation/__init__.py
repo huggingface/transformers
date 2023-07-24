@@ -28,18 +28,6 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["beam_constraints"] = [
-        "Constraint",
-        "ConstraintListState",
-        "DisjunctiveConstraint",
-        "PhrasalConstraint",
-    ]
-    _import_structure["beam_search"] = [
-        "BeamHypotheses",
-        "BeamScorer",
-        "BeamSearchScorer",
-        "ConstrainedBeamSearchScorer",
-    ]
     _import_structure["logits_process"] = [
         "EpsilonLogitsWarper",
         "EtaLogitsWarper",
@@ -77,6 +65,8 @@ else:
     _import_structure["utils"] = [
         "GenerationMixin",
         "top_k_top_p_filtering",
+    ]
+    _import_structure["strategies.utils"] = [
         "GreedySearchEncoderDecoderOutput",
         "GreedySearchDecoderOnlyOutput",
         "SampleEncoderDecoderOutput",
@@ -87,7 +77,44 @@ else:
         "BeamSampleDecoderOnlyOutput",
         "ContrastiveSearchEncoderDecoderOutput",
         "ContrastiveSearchDecoderOnlyOutput",
+        "GenerationStrategy",
     ]
+    _import_structure["strategies.beam_utils"] = [
+        "BeamHypotheses",
+        "BeamScorer",
+        "BeamSearchScorer",
+    ]
+    _import_structure["strategies.beam_constrained_decoder"] = [
+        "Constraint",
+        "ConstraintListState",
+        "DisjunctiveConstraint",
+        "PhrasalConstraint",
+        "ConstrainedBeamSearchScorer",
+        "ConstrainedDecoder"
+    ]
+    _import_structure["strategies.beam_search_decoder"] = [
+        "BeamSearchDecoder",
+    ]
+    _import_structure["strategies.beam_sampling_decoder"] = [
+        "BeamSamplingDecoder",
+    ]
+    _import_structure["strategies.diverse_group_beam_decoder"] = [
+        "DiverseGroupBeamDecoder",
+    ]
+    _import_structure["strategies.contrastive_decoder"] = [
+        "ContrastiveDecoder",
+    ]
+    _import_structure["strategies.greedy_decoder"] = [
+        "GreedyDecoder",
+    ]
+    _import_structure["strategies.sampling_decoder"] = [
+        "SamplingDecoder",
+    ]
+    _import_structure["assisted_decoder"] = [
+        "AssistedDecoder",
+    ]
+
+
 
 try:
     if not is_tf_available():
@@ -161,8 +188,9 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .beam_constraints import Constraint, ConstraintListState, DisjunctiveConstraint, PhrasalConstraint
-        from .beam_search import BeamHypotheses, BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
+        from .strategies.beam_constrained_decoder import Constraint, ConstraintListState, \
+    DisjunctiveConstraint, PhrasalConstraint, ConstrainedBeamSearchScorer
+        from .strategies.beam_utils import BeamHypotheses, BeamScorer, BeamSearchScorer
         from .logits_process import (
             EncoderNoRepeatNGramLogitsProcessor,
             EncoderRepetitionPenaltyLogitsProcessor,
@@ -200,8 +228,6 @@ if TYPE_CHECKING:
         from .utils import (
             BeamSampleDecoderOnlyOutput,
             BeamSampleEncoderDecoderOutput,
-            BeamSearchDecoderOnlyOutput,
-            BeamSearchEncoderDecoderOutput,
             ContrastiveSearchDecoderOnlyOutput,
             ContrastiveSearchEncoderDecoderOutput,
             GenerationMixin,
@@ -211,6 +237,7 @@ if TYPE_CHECKING:
             SampleEncoderDecoderOutput,
             top_k_top_p_filtering,
         )
+        from .strategies.utils import BeamSearchDecoderOnlyOutput, BeamSearchEncoderDecoderOutput
 
     try:
         if not is_tf_available():

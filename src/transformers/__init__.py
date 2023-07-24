@@ -1019,6 +1019,15 @@ else:
             "TopPLogitsWarper",
             "TypicalLogitsWarper",
             "top_k_top_p_filtering",
+            "GenerationStrategy",
+            "GreedyDecoder",
+            "SamplingDecoder",
+            "BeamSearchDecoder",
+            "BeamSamplingDecoder",
+            "DiverseGroupBeamDecoder",
+            "ContrastiveDecoder",
+            "AssistedDecoder",
+            "ConstrainedDecoder",
         ]
     )
     _import_structure["generation_utils"] = []
@@ -4883,8 +4892,6 @@ if TYPE_CHECKING:
             TextDatasetForNextSentencePrediction,
         )
         from .generation import (
-            BeamScorer,
-            BeamSearchScorer,
             ConstrainedBeamSearchScorer,
             Constraint,
             ConstraintListState,
