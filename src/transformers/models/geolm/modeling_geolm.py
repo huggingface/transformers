@@ -189,8 +189,8 @@ class GeoLMEmbeddings(nn.Module):
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
-        self.sent_position_embedding = self.position_embeddings # a trick to simplify the weight loading from Bert
-        self.sent_position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+        # self.position_embedding = self.position_embeddings # a trick to simplify the weight loading from Bert
+        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
         
         self.spatial_position_embedding = ContinuousSpatialPositionalEmbedding(hidden_size = config.hidden_size)
@@ -253,20 +253,23 @@ class GeoLMEmbeddings(nn.Module):
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
 
-        if self.use_spatial_distance_embedding:
-            if len(spatial_position_list_x) != 0 and len(spatial_position_list_y) !=0:
-                if self.spatial_position_embedding_type == "absolute":
-                    pos_emb_x = self.spatial_position_embedding(spatial_position_list_x)
-                    pos_emb_y = self.spatial_position_embedding(spatial_position_list_y)
-                    
-                    embeddings +=  0.01* pos_emb_x
-                    embeddings +=  0.01* pos_emb_y
-                else:
-                    raise NotImplementedError("Invalid spatial position embedding type")
+        if spatial_position_list_x is None or spatial_position_list_y is None:
+            spatial_position_list_x = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
+            spatial_position_list_y = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
+
+        if self.use_spatial_distance_embedding:
+            
+            if self.spatial_position_embedding_type == "absolute":
+                pos_emb_x = self.spatial_position_embedding(spatial_position_list_x)
+                pos_emb_y = self.spatial_position_embedding(spatial_position_list_y)
+                
+                embeddings +=  0.01* pos_emb_x
+                embeddings +=  0.01* pos_emb_y
             else:
-                print()
-                pass
+                raise NotImplementedError("Invalid spatial position embedding type")
+
+            
         else:
             pass
 
@@ -802,6 +805,7 @@ class GeoLMPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_geolm
     base_model_prefix = "geolm"
     supports_gradient_checkpointing = True
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -940,7 +944,7 @@ class GeoLMModel(GeoLMPreTrainedModel):
         self.embeddings = GeoLMEmbeddings(config)
         self.encoder = GeoLMEncoder(config)
 
-        self.pooler = GeoLMPooler(config) if add_pooling_layer else None
+        self.pivot_pooler = PivotEntityPooler() if add_pooling_layer else None # GeoLMPooler(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -971,6 +975,9 @@ class GeoLMModel(GeoLMPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        spatial_position_list_x = None,
+        spatial_position_list_y = None,
+        pivot_token_idx_list = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
@@ -1064,6 +1071,8 @@ class GeoLMModel(GeoLMPreTrainedModel):
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
+            spatial_position_list_x= spatial_position_list_x,
+            spatial_position_list_y = spatial_position_list_y,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
@@ -1081,7 +1090,11 @@ class GeoLMModel(GeoLMPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        # pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        if pivot_token_idx_list is not None:
+            pooled_output = self.pivot_pooler(sequence_output, pivot_token_idx_list) 
+        else:
+            pooled_output = None
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -1467,101 +1480,6 @@ class GeoLMForMaskedLM(GeoLMPreTrainedModel):
     """,
     GEOLM_START_DOCSTRING,
 )
-class GeoLMForSequenceClassification(GeoLMPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.config = config
-
-        self.geolm = GeoLMModel(config)
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
-        self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(GEOLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
-    )
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.geolm(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        pooled_output = outputs[1]
-
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
-
-        loss = None
-        if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
-        return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
 
 @add_start_docstrings(
     """
@@ -1693,6 +1611,8 @@ class GeoLMForTokenClassification(GeoLMPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        spatial_position_list_x: Optional[torch.Tensor] = None,
+        spatial_position_list_y: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
@@ -1711,6 +1631,8 @@ class GeoLMForTokenClassification(GeoLMPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            spatial_position_list_x = spatial_position_list_x,
+            spatial_position_list_y = spatial_position_list_y,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1740,104 +1662,4 @@ class GeoLMForTokenClassification(GeoLMPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    """
-    GeoLM Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    GEOLM_START_DOCSTRING,
-)
-class GeoLMForQuestionAnswering(GeoLMPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
 
-        self.geolm = GeoLMModel(config, add_pooling_layer=False)
-        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(GEOLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_QA,
-        output_type=QuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        qa_target_start_index=_QA_TARGET_START_INDEX,
-        qa_target_end_index=_QA_TARGET_END_INDEX,
-        expected_output=_QA_EXPECTED_OUTPUT,
-        expected_loss=_QA_EXPECTED_LOSS,
-    )
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        start_positions: Optional[torch.Tensor] = None,
-        end_positions: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], QuestionAnsweringModelOutput]:
-        r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.geolm(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        logits = self.qa_outputs(sequence_output)
-        start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1).contiguous()
-        end_logits = end_logits.squeeze(-1).contiguous()
-
-        total_loss = None
-        if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions = start_positions.clamp(0, ignored_index)
-            end_positions = end_positions.clamp(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)
-            end_loss = loss_fct(end_logits, end_positions)
-            total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
-            return ((total_loss,) + output) if total_loss is not None else output
-
-        return QuestionAnsweringModelOutput(
-            loss=total_loss,
-            start_logits=start_logits,
-            end_logits=end_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
