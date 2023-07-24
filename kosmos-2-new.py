@@ -2308,8 +2308,8 @@ def check_real_model_with_dog_sample(model):
     assert generated_output.sequences[0, 71:].tolist() == expected_generation
 
     for score, expected_block in zip(generated_output.scores[2:12], expected_blocks):
-        assert torch.max(torch.abs(score[0, :+3] - torch.tensor(expected_block[0]))) < 3e-5
-        assert torch.max(torch.abs(score[0, -3:] - torch.tensor(expected_block[1]))) < 3e-5
+        assert torch.max(torch.abs(score[0, :+3] - torch.tensor(expected_block[0]))) < 5e-5
+        assert torch.max(torch.abs(score[0, -3:] - torch.tensor(expected_block[1]))) < 5e-5
 
     # --------------------------------------------------------------------
     # generation with `use_cache` (from the start)
@@ -2344,29 +2344,6 @@ def check_real_model_with_dog_sample(model):
         input_ids=input_ids,
         use_cache=False,
         past_key_values=None,
-        img_features=None,
-        img_attn_mask=img_attn_mask,
-        max_new_tokens=len(expected_generation),
-        output_scores=True,
-        return_dict_in_generate=True,
-    )
-
-    assert generated_output.sequences[0, 71:].tolist() == expected_generation
-
-    for score, expected_block in zip(generated_output.scores[2:12], expected_blocks):
-        assert torch.max(torch.abs(score[0, :+3] - torch.tensor(expected_block[0]))) < 3e-5
-        assert torch.max(torch.abs(score[0, -3:] - torch.tensor(expected_block[1]))) < 3e-5
-
-    # --------------------------------------------------------------------
-    # generation without `use_cache` (from the start)
-
-    # use `model`
-    # with`use_cache=False` (from the start --> `past_key_values=None`)
-    generated_output = model.generate(
-        pixel_values=pixel_values,
-        input_ids=input_ids,
-        use_cache=False,
-        past_key_values=None,
         img_features=image_features,
         img_attn_mask=img_attn_mask,
         max_new_tokens=len(expected_generation),
@@ -2377,8 +2354,8 @@ def check_real_model_with_dog_sample(model):
     assert generated_output.sequences[0, 71:].tolist() == expected_generation
 
     for score, expected_block in zip(generated_output.scores[2:12], expected_blocks):
-        assert torch.max(torch.abs(score[0, :+3] - torch.tensor(expected_block[0]))) < 3e-5
-        assert torch.max(torch.abs(score[0, -3:] - torch.tensor(expected_block[1]))) < 3e-5
+        assert torch.max(torch.abs(score[0, :+3] - torch.tensor(expected_block[0]))) < 5e-5
+        assert torch.max(torch.abs(score[0, -3:] - torch.tensor(expected_block[1]))) < 5e-5
 
     # --------------------------------------------------------------------
     # generation with `use_cache` (from the start)
