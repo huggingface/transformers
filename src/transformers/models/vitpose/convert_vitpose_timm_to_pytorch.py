@@ -25,7 +25,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import DeiTImageProcessor, ViTConfig, ViTForImageClassification, ViTImageProcessor, ViTModel
+from transformers import DeiTImageProcessor, ViTPoseConfig, ViTForImageClassification, ViTImageProcessor, ViTModel
 from transformers.utils import logging
 
 
@@ -132,13 +132,13 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
+def convert_vitpose_checkpoint(vitpose_name, pytorch_dump_folder_path):
     """
-    Copy/paste/tweak model's weights to our ViT structure.
+    Copy/paste/tweak model's weights to our ViTPose structure.
     """
 
     # define default ViT configuration
-    config = ViTConfig()
+    config = ViTPoseConfig()
     base_model = False
     # dataset (ImageNet-21k only or also fine-tuned on ImageNet 2012), patch_size and image_size
     if vit_name[-5:] == "in21k":
@@ -237,14 +237,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--vit_name",
-        default="vit_base_patch16_224",
+        "--vitpose_name",
+        default="vitpose_small_simple_coco_256x192",
         type=str,
-        help="Name of the ViT timm model you'd like to convert.",
+        help="Name of the ViTPose timm model from https://github.com/ViTAE-Transformer/ViTPose/tree/main you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
 
     args = parser.parse_args()
-    convert_vit_checkpoint(args.vit_name, args.pytorch_dump_folder_path)
+    convert_vitpose_checkpoint(args.vitpose_name, args.pytorch_dump_folder_path)
