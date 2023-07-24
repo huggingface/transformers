@@ -46,16 +46,18 @@ def create_rename_keys(config, base_model=False):
     )
     for i in range(config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append((f"blocks.{i}.norm1.weight", f"vit.encoder.layer.{i}.layernorm_before.weight"))
-        rename_keys.append((f"blocks.{i}.norm1.bias", f"vit.encoder.layer.{i}.layernorm_before.bias"))
-        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"vit.encoder.layer.{i}.attention.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"vit.encoder.layer.{i}.attention.output.dense.bias"))
-        rename_keys.append((f"blocks.{i}.norm2.weight", f"vit.encoder.layer.{i}.layernorm_after.weight"))
-        rename_keys.append((f"blocks.{i}.norm2.bias", f"vit.encoder.layer.{i}.layernorm_after.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"vit.encoder.layer.{i}.intermediate.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"vit.encoder.layer.{i}.intermediate.dense.bias"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"vit.encoder.layer.{i}.output.dense.weight"))
-        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"vit.encoder.layer.{i}.output.dense.bias"))
+        rename_keys.append((f"backbone.blocks.{i}.norm1.weight", f"vitpose.encoder.layer.{i}.layernorm_before.weight"))
+        rename_keys.append((f"backbone.blocks.{i}.norm1.bias", f"vitpose.encoder.layer.{i}.layernorm_before.bias"))
+        rename_keys.append((f"backbone.blocks.{i}.attn.qkv.weight", f"vitpose.encoder.layer.{i}.attention.output.dense.weight"))
+        rename_keys.append((f"backbone.blocks.{i}.attn.qkv.bias", f"vitpose.encoder.layer.{i}.attention.output.dense.bias"))
+        rename_keys.append((f"backbone.blocks.{i}.attn.proj.weight", f"vitpose.encoder.layer.{i}.attention.output.dense.weight"))
+        rename_keys.append((f"backbone.blocks.{i}.attn.proj.bias", f"vitpose.encoder.layer.{i}.attention.output.dense.bias"))
+        rename_keys.append((f"backbone.blocks.{i}.norm2.weight", f"vitpose.encoder.layer.{i}.layernorm_after.weight"))
+        rename_keys.append((f"backbone.blocks.{i}.norm2.bias", f"vitpose.encoder.layer.{i}.layernorm_after.bias"))
+        rename_keys.append((f"backbone.blocks.{i}.mlp.fc1.weight", f"vitpose.encoder.layer.{i}.intermediate.dense.weight"))
+        rename_keys.append((f"backbone.blocks.{i}.mlp.fc1.bias", f"vitpose.encoder.layer.{i}.intermediate.dense.bias"))
+        rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.weight", f"vitpose.encoder.layer.{i}.output.dense.weight"))
+        rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.bias", f"vitpose.encoder.layer.{i}.output.dense.bias"))
 
     # projection layer + position embeddings
     rename_keys.extend(
