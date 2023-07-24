@@ -128,6 +128,7 @@ class CircleCIJob:
         steps.extend([{"run": l} for l in self.install_steps])
         steps.extend([{"run": 'pip install "fsspec>=2023.5.0,<2023.10.0"'}])
         steps.extend([{"run": "pip install pytest-subtests"}])
+        steps.append({"run": {"name": "Install `datasets@main`", "command": 'pip uninstall datasets -y && pip install "datasets @ git+https://github.com/huggingface/datasets@main#egg=datasets"'}})
         steps.append({"run": {"name": "Show installed libraries and their versions", "command": "pip freeze | tee installed.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/installed.txt"}})
 
