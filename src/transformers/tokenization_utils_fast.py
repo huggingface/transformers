@@ -139,10 +139,11 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         _padding = self._tokenizer.padding
         if _padding is not None:
             self._tokenizer.enable_padding(**_padding)
-            kwargs.update({"pad_token": _padding["pad_token"]})
-            kwargs.update({"padding_side": _padding["direction"]})
-            kwargs.update({"max_length": _padding["length"]})
-            kwargs.update({"pad_to_multiple_of": _padding["pad_to_multiple_of"]})
+            kwargs.setdefault("pad_token", _padding["pad_token"])
+            kwargs.setdefault("padding_side", _padding["direction"])
+            kwargs.setdefault("max_length", _padding["length"])
+            kwargs.setdefault("pad_to_multiple_of", _padding["pad_to_multiple_of"])
+
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
 
