@@ -97,6 +97,7 @@ class BitsAndBytesConfig:
         bnb_4bit_use_double_quant=False,
         **kwargs,
     ):
+        self.quant_method = "bitsandbytes"
         self.load_in_8bit = load_in_8bit
         self.load_in_4bit = load_in_4bit
         self.llm_int8_threshold = llm_int8_threshold
