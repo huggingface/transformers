@@ -69,6 +69,7 @@ class ViTPosePatchEmbed(nn.Module):
     Transformer.
     """
 
+    ## change variable names from config, looks good othervise
     def __init__(self, config):
         super().__init__()
         image_size, patch_size = config.image_size, config.patch_size
@@ -163,6 +164,9 @@ class mlp(nn.Module):
     pass
 
 class ViTPoseBlock(nn.Module):
+    def __init__(self, config: ViTPoseConfig):
+        super().__init__()
+        self.layer1 = nn.LayerNorm()
     pass
 
 class ViTPoseTopDownHeatMap(nn.Module):
