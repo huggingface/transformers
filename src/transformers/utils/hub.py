@@ -433,14 +433,14 @@ def cached_file(
         raise EnvironmentError(
             "You are trying to access a gated repo.\nMake sure to request access at "
             f"https://huggingface.co/{path_or_repo_id} and pass a token having permission to this repo either "
-            "by logging in with `huggingface-cli login` or with `token=<your_token>`."
+            "by logging in with `huggingface-cli login` or by passing `token=<your_token>`."
         ) from e
     except RepositoryNotFoundError as e:
         raise EnvironmentError(
             f"{path_or_repo_id} is not a local folder and is not a valid model identifier "
-            "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
-            "pass a token having permission to this repo with `use_auth_token` or log in with "
-            "`huggingface-cli login`."
+            "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token "
+            "having permission to this repo either by logging in with `huggingface-cli login` or by passing "
+            "`token=<your_token>`"
         ) from e
     except RevisionNotFoundError as e:
         raise EnvironmentError(
@@ -621,8 +621,8 @@ def has_file(
         logger.error(e)
         raise EnvironmentError(
             f"{path_or_repo} is a gated repository. Make sure to request access at "
-            f"https://huggingface.co/{path_or_repo} and pass a token having permission to this repo with "
-            "`use_auth_token` or log in with `huggingface-cli login`."
+            f"https://huggingface.co/{path_or_repo} and pass a token having permission to this repo either by "
+            "logging in with `huggingface-cli login` or by passing `token=<your_token>`."
         ) from e
     except RepositoryNotFoundError as e:
         logger.error(e)
