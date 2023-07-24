@@ -59,16 +59,6 @@ def create_rename_keys(config, base_model=False):
         rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.weight", f"vitpose.encoder.layer.{i}.output.dense.weight"))
         rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.bias", f"vitpose.encoder.layer.{i}.output.dense.bias"))
 
-    # projection layer + position embeddings
-    rename_keys.extend(
-        [
-            ("cls_token", "vit.embeddings.cls_token"),
-            ("patch_embed.proj.weight", "vit.embeddings.patch_embeddings.projection.weight"),
-            ("patch_embed.proj.bias", "vit.embeddings.patch_embeddings.projection.bias"),
-            ("pos_embed", "vit.embeddings.position_embeddings"),
-        ]
-    )
-
     if base_model:
         # layernorm + pooler
         rename_keys.extend(

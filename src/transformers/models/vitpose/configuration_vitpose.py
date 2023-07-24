@@ -92,6 +92,22 @@ class ViTConfig(PretrainedConfig):
 
     def __init__(
         self,
+        img_size = (256, 192),
+        patch_size=16,
+        embed_dim = 384,
+        depth = 12,
+        num_heads = 12,
+        ratio = 1,
+        use_checkpoint = False,
+        mlp_ratio = 4,
+        qkv_bias=True,
+        drop_path_rate = .1,
+        keypoint_in_channels = 382,
+        keypoint_num_deconv_layers = 2,
+        keypoint_num_deconv_filters = (256, 256),
+        keypoint_num_deconv_kernels= (4,4),
+
+
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -102,13 +118,26 @@ class ViTConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         image_size=224,
-        patch_size=16,
         num_channels=3,
-        qkv_bias=True,
         encoder_stride=16,
         **kwargs,
     ):
         super().__init__(**kwargs)
+
+        self.img_size = img_size,
+        self.patch_size = patch_size,
+        self.embed_dim = embed_dim,
+        self.depth = depth,
+        self.num_heads = num_heads,
+        self.ratio = ration,
+        self.use_checkpoint = use_checkpoint,
+        self.mlp_ratio = mlp_ratio,
+        self.qkv_bias = qkv_bias,
+        self.drop_path_rate = drop_path_rate,
+        self.keypoint_in_channels = keypoint_in_channels,
+        self.keypoint_num_deconv_layers = keypoint_num_deconv_layers,
+        self.keypoint_num_deconv_filters = keypoint_num_deconv_filters,
+        self.keypoint_num_deconv_kernels = keypoint_num_deconv_kernels,
 
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
