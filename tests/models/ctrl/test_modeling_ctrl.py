@@ -133,7 +133,7 @@ class CTRLModelTester:
             n_embd=self.hidden_size,
             n_layer=self.num_hidden_layers,
             n_head=self.num_attention_heads,
-            # intermediate_size=self.intermediate_size,
+            dff=self.intermediate_size,
             # hidden_act=self.hidden_act,
             # hidden_dropout_prob=self.hidden_dropout_prob,
             # attention_probs_dropout_prob=self.attention_probs_dropout_prob,
@@ -242,10 +242,6 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_ctrl_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
-
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
-        pass
 
     @slow
     def test_model_from_pretrained(self):
