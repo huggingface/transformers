@@ -217,7 +217,7 @@ class IdeficsProcessor(ProcessorMixin):
                 if isinstance(item, str):
                     item = item.strip(" ")
                     if is_url(item):
-                        image = self.image_processor.fetch_images([item])[0]
+                        image = self.image_processor.fetch_images(item)
                         full_text += img_tokens
                         real_images.append(image)
                     else:

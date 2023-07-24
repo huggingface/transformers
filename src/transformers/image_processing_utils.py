@@ -17,8 +17,9 @@ import copy
 import json
 import os
 import warnings
+from collections.abc import Sequence
 from io import BytesIO
-from typing import Any, Dict, Iterable, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import requests
@@ -490,18 +491,26 @@ class ImageProcessingMixin(PushToHubMixin):
 
         cls._auto_class = auto_class
 
-    def fetch_images(self, url_images):
+    def fetch_images(self, image_url_or_urls: Union[str, List[str]]):
         """
         Any image entries that are a string will be assumed to be a url and fetched and loaded as `PIL.Image`. Any
-        `None` entries will remain as such
+        non-string entries will remain intact.
+
+        If a single url is passed, the return value will be a single item. If a list is passed a list is returned.
         """
-        images = []
-        for url in url_images:
+
+        def convert_url_to_image(url):
             if isinstance(url, str):
-                images.append(Image.open(BytesIO(requests.get(url, stream=True).content)))
+                return Image.open(BytesIO(requests.get(url, stream=True).content))
             else:
-                images.append(url)
-        return images
+                return url
+
+        if isinstance(image_url_or_urls, list):
+            return [convert_url_to_image(x) for x in image_url_or_urls]
+        elif isinstance(image_url_or_urls, Sequence) and not isinstance(image_url_or_urls, str):
+            raise ValueError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
+        else:  # must be single entry
+            return convert_url_to_image(image_url_or_urls)
 
 
 class BaseImageProcessor(ImageProcessingMixin):
