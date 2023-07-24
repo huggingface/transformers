@@ -231,7 +231,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
                 "The model only supports 'user' and 'assistant' roles, starting with user and alternating (u/a/u/a/u...)"
             )
 
-        dialog_tokens: List[int] = []
+        dialog_tokens = []
         dialog_tokens += sum(
             [
                 [self.bos_token_id]
