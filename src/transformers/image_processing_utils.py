@@ -512,6 +512,20 @@ class ImageProcessingMixin(PushToHubMixin):
         else:  # must be single entry
             return convert_url_to_image(image_url_or_urls)
 
+    # # this is an alternative simpler implementation that requires all inputs to be urls
+    # def fetch_images(self, image_url_or_urls: Union[str, List[str]]):
+    #     """
+    #     Convert a single or a list of urls into the corresponding `PIL.Image` objects.
+
+    #     If a single url is passed, the return value will be a single object. If a list is passed a list of objects is returned.
+    #     """
+    #     if isinstance(image_url_or_urls, list):
+    #         return [self.fetch_images(x) for x in image_url_or_urls]
+    #     elif isinstance(image_url_or_urls, str):
+    #         return Image.open(BytesIO(requests.get(image_url_or_urls, stream=True).content))
+    #     else:
+    #         raise ValueError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
+
 
 class BaseImageProcessor(ImageProcessingMixin):
     def __init__(self, **kwargs):
