@@ -386,7 +386,6 @@ class TypicalLogitsWarper(LogitsWarper):
     >>> generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
     >>> print("Generated Text: ", generated_text)
     Once upon a time, there was a beautiful princess who lived in a magical kingdom. She had a loyal and loving family, and they all lived happily ever after.
-
     ```
     """
 
