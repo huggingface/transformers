@@ -514,6 +514,8 @@
         title: NAT
       - local: model_doc/poolformer
         title: PoolFormer
+      - local: model_doc/pvt
+        title: Pyramid Vision Transformer (PVT)
       - local: model_doc/regnet
         title: RegNet
       - local: model_doc/resnet
