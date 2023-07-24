@@ -43,7 +43,7 @@ if is_torch_available():
     from .modeling_maskrcnn import MaskRCNNDeltaXYWHBBoxCoder
 
 if is_torchvision_available():
-    from transformers.models.mask_rcnn.nms import multiclass_nms
+    from transformers.models.mask_rcnn.modeling_maskrcnn import multiclass_nms
 
 
 logger = logging.get_logger(__name__)
