@@ -40,7 +40,7 @@ IPEX 배포 주기는 PyTorch를 따라서 이루어집니다. 자세한 정보�
 
 <Tip warning={true}>
 
-PyTorch >= 1.14.0의 경우 jit 모드는 jit.trace에서 dict 입력이 지원되므로, 모든 모델의 예측 및 평가에 이점을 제공할 수 있습니다.
+PyTorch의 버전이 1.14.0 이상이라면, jit 모드는 jit.trace에서 dict 입력이 지원되므로, 모든 모델의 예측과 평가가 개선될 수 있습니다.
 
 PyTorch < 1.14.0의 경우, 질의 응답 모델과 같이 forward 매개변수의 순서가 jit.trace의 튜플 입력 순서와 일치하는 모델에 이점을 제공할 수 있습니다. 텍스트 분류 모델과 같이 forward 매개변수 순서가 jit.trace의 튜플 입력 순서와 일치하지 않는 경우, jit.trace가 실패하며 예외가 발생합니다. 이를 사용자에게 알리기 위해 Logging이 사용됩니다.
 
