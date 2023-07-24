@@ -61,7 +61,7 @@ rendered properly in your Markdown viewer.
     2. ZeRO를 사용하는 경우에는 위의 "단일 GPU" 항목과 동일
 
 
-**⇨ 멀티-노드 / 멀티-GPU**
+**⇨ 다중 노드 /  다중 GPU**
 
 * 노드 간 연결 속도가 빠른 경우:
 
