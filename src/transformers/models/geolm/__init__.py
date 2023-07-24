@@ -18,7 +18,7 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_flax_available,
-    is_tensorflow_text_available,
+    is_tensorflow_text_available,   
     is_tf_available,
     is_torch_available,
 )
@@ -151,7 +151,6 @@ if TYPE_CHECKING:
     # except OptionalDependencyNotAvailable:
     #     pass
     # else:
-
     try:
         if not is_flax_available():
             raise OptionalDependencyNotAvailable()
