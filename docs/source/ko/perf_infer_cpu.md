@@ -36,7 +36,7 @@ Intel® Extension for PyTorch(IPEX)는 Transformers 계열 모델의 jit 모드�
 IPEX 배포 주기는 PyTorch를 따라서 이루어집니다. 자세한 정보는 [IPEX 설치 방법](https://intel.github.io/intel-extension-for-pytorch/)을 확인하세요.
 
 ### JIT 모드 사용법 [[usage-of-jitmode]]
-평가 또는 예측을 위해 Trainer에서 JIT 모드를 사용하려면 사용자는 Trainer 명령 인수에 `jit_mode_eval`을 추가해야 합니다.
+평가 또는 예측을 위해 Trainer에서 JIT 모드를 사용하려면 Trainer의 명령 인수에 `jit_mode_eval`을 추가해야 합니다.
 
 <Tip warning={true}>
 
