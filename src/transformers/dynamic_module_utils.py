@@ -549,9 +549,9 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
             except AttributeError:
                 # OS which does not support signal.SIGALRM
                 raise ValueError(
-                    "Loading this model requires you to execute execute some code in that repo in that repo on your "
-                    "local machine. Make sure you have read the code there to avoid malicious use, then set the "
-                    "option `trust_remote_code=True` to remove this error."
+                    "Loading this model requires you to execute execute some code in that repo on your local machine. "
+                    f"Make sure you have read the code at https://hf.co/{model_name} to avoid malicious use, then set "
+                    "the option `trust_remote_code=True` to remove this error."
                 )
         elif has_remote_code:
             # For the CI which puts the timeout at 0
