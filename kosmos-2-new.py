@@ -245,7 +245,7 @@ class KosmosTextAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
         self.inner_attn_ln = None
-        if config.subln and not is_encoder_attn:
+        if not is_encoder_attn:
             self.inner_attn_ln = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
@@ -387,13 +387,12 @@ class Kosmos2TextFFN(nn.Module):
         self.fc1 = nn.Linear(config.embed_dim, config.ffn_dim)
         self.fc2 = nn.Linear(config.ffn_dim, config.embed_dim)
 
-        self.ffn_layernorm = nn.LayerNorm(config.ffn_dim, eps=config.layer_norm_eps) if config.subln else None
+        self.ffn_layernorm = nn.LayerNorm(config.ffn_dim, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states):
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        if self.ffn_layernorm is not None:
-            hidden_states = self.ffn_layernorm(hidden_states)
+        hidden_states = self.ffn_layernorm(hidden_states)
         hidden_states = self.fc2(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -413,8 +412,6 @@ class Kosmos2TextBlock(nn.Module):
             is_decoder=True,
             is_encoder_attn=False,
         )
-
-        self.normalize_before = config.normalize_before
 
         self.dropout = config.dropout
 
@@ -453,8 +450,7 @@ class Kosmos2TextBlock(nn.Module):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
 
-        if self.normalize_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # add present self-attn cache to positions 1,2 of present_key_value tuple
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
@@ -466,8 +462,6 @@ class Kosmos2TextBlock(nn.Module):
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        if not self.normalize_before:
-           hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_present_key_value = None
@@ -481,8 +475,7 @@ class Kosmos2TextBlock(nn.Module):
 
             residual = hidden_states
 
-            if self.normalize_before:
-                hidden_states = self.encoder_attn_layer_norm(hidden_states)
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -496,8 +489,6 @@ class Kosmos2TextBlock(nn.Module):
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
-            if not self.normalize_before:
-                hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # add cross-attn to positions 3,4 of present_key_value tuple
             present_key_value = present_key_value + cross_attn_present_key_value
@@ -505,15 +496,11 @@ class Kosmos2TextBlock(nn.Module):
         # Fully Connected
         residual = hidden_states
 
-        if self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.final_layer_norm(hidden_states)
 
         # FFN
         hidden_states = self.ffn(hidden_states)
         hidden_states = residual + hidden_states
-
-        if not self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 
@@ -2168,51 +2155,51 @@ def check_real_model_with_dog_sample(model):
         new_input_ids = torch.cat((new_input_ids, torch.tensor([[next_token]], dtype=torch.long, device="cpu")), dim=1)
         new_img_attn_mask = torch.cat((new_img_attn_mask, torch.tensor([[False]], dtype=torch.bool, device="cpu")), dim=1)
         new_model_output = model(pixel_values=pixel_values, input_ids=new_input_ids, img_attn_mask=new_img_attn_mask)
-    
+
         new_logits = new_model_output.logits
         new_past_key_values = new_model_output.past_key_values
-    
+
         assert new_past_key_values is None
-    
+
         print(new_logits[:, -1, :])
-    
+
         # --------------------------------------------------------------------
         # next step: with `past_key_values`
-    
+
         next_input_ids = torch.tensor([[next_token]], dtype=torch.long, device="cpu")
         # (no need to pass `pixel_values`) -> need to specify it or `image_features`
         next_pixel_values = None
         next_image_features = image_features
         next_img_attn_mask = None
         next_model_output = model(pixel_values=next_pixel_values, img_features=next_image_features, input_ids=next_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=next_past_key_values, use_cache=True)
-    
+
         next_logits = next_model_output.logits
         next_past_key_values = next_model_output.past_key_values
-    
+
         assert next_past_key_values is not None
-    
+
         print(next_logits[:, -1, :])
-    
+
         # --------------------------------------------------------------------
         # verify the results between with/without using `past_key_values`
-    
+
         max_diff = torch.max(torch.abs(new_logits[:, -1, :] - next_logits[:, -1, :]))
         # step 75 has a slightly bigger diff
         allowed_max_diff = 3e-5 if step != 75 else 5e-5
 
         assert max_diff < torch.tensor(allowed_max_diff)
-    
+
         # --------------------------------------------------------------------
         # check with the original kosmos-2 output: next step
-    
+
         assert list(next_logits.shape) == [1, 1, 65037]
-    
+
         expected_block_1 = torch.tensor([[expected_block_1]])
         expected_block_2 = torch.tensor([[expected_block_2]])
-    
+
         diff_1 = torch.max(torch.abs(next_logits[0, 0, :+3] - expected_block_1))
         diff_2 = torch.max(torch.abs(next_logits[0, 0, -3:] - expected_block_2))
-    
+
         max_diff = torch.max(torch.tensor([diff_1, diff_2]))
         allowed_max_diff = 3e-5
 
@@ -2472,9 +2459,7 @@ def create_model(num_layers=2):
         "use_cache": False,
         "scale_embedding": True,
         "dropout": 0.1,
-        "subln": True,
         "attention_dropout": 0.1,
-        "normalize_before": True,
         "activation_function": "gelu",
         "activation_dropout": 0.0,
         "add_cross_attention": False,
