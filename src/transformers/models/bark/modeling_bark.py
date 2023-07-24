@@ -24,7 +24,7 @@ from torch.nn import functional as F
 from ...generation.logits_process import AlternatingCodebooksLogitsProcessor, SuppressTokensLogitsProcessor
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, is_torch_cuda_available, logging
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
@@ -1391,6 +1391,7 @@ class BarkModel(BarkPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         history_prompt: Optional[Dict[str, torch.Tensor]] = None,
+        offload_to_cpu: Optional[bool] = False,
         **kwargs,
     ) -> torch.LongTensor:
         """
@@ -1402,13 +1403,16 @@ class BarkModel(BarkPreTrainedModel):
                 longest generation among the batch.
             history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
                 Optional `Bark` speaker prompt. Note that for now, this model takes only one speaker prompt per batch.
-        kwargs (*optional*): Remaining dictionary of keyword arguments. Keyword arguments are of two types:
+            offload_to_cpu (`Optional[bool]`, *optional*, defaults to `False`):
+                If `True` and when used with a GPU device, each sub-model will be loaded onto the GPU before use and
+                unloaded after use. Efficiency is even greater when the model is initially loaded onto the CPU.
+            kwargs (*optional*): Remaining dictionary of keyword arguments. Keyword arguments are of two types:
 
-            - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model.
-            - With a *semantic_*, *coarse_*, *fine_* prefix, they will be input for the `generate` method of the
-              semantic, coarse and fine respectively. It has the priority over the keywords without a prefix.
+                - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model.
+                - With a *semantic_*, *coarse_*, *fine_* prefix, they will be input for the `generate` method of the
+                semantic, coarse and fine respectively. It has the priority over the keywords without a prefix.
 
-            This means you can, for example, specify a generation strategy for all sub-models except one.
+                This means you can, for example, specify a generation strategy for all sub-models except one.
         Returns:
             torch.LongTensor: Output generated audio.
 
@@ -1461,6 +1465,17 @@ class BarkModel(BarkPreTrainedModel):
                 if key not in kwargs_fine:
                     kwargs_fine[key] = value
 
+        if offload_to_cpu and not is_torch_cuda_available():
+            logger.warning_once(
+                """`offload_to_cpu=True` but no Cuda device was found.
+                    Offload_to_cpu will be set to False and won't be used. Make sure to use a GPU."""
+            )
+
+        offload_to_cpu = offload_to_cpu and is_torch_cuda_available()
+
+        if offload_to_cpu:
+            self.semantic = self.semantic.to("cuda")
+
         # 1. Generate from the semantic model
         semantic_output = self.semantic.generate(
             input_ids,
@@ -1468,6 +1483,10 @@ class BarkModel(BarkPreTrainedModel):
             semantic_generation_config=semantic_generation_config,
             **kwargs_semantic,
         )
+
+        if offload_to_cpu:
+            self.semantic = self.semantic.to("cpu")
+            self.coarse_acoustics = self.coarse_acoustics.to("cuda")
 
         # 2. Generate from the coarse model
         coarse_output = self.coarse_acoustics.generate(
@@ -1478,6 +1497,10 @@ class BarkModel(BarkPreTrainedModel):
             codebook_size=self.generation_config.codebook_size,
             **kwargs_coarse,
         )
+
+        if offload_to_cpu:
+            self.coarse_output = self.coarse_acoustics.to("cpu")
+            self.fine_acoustics = self.fine_acoustics.to("cuda")
 
         # 3. "generate" from the fine model
         output = self.fine_acoustics.generate(
@@ -1490,8 +1513,15 @@ class BarkModel(BarkPreTrainedModel):
             **kwargs_fine,
         )
 
+        if offload_to_cpu:
+            self.fine_acoustics = self.fine_acoustics.to("cpu")
+            self.codec_model = self.codec_model.to("cuda")
+
         # 4. Decode the output and generate audio array
         audio = self.codec_decode(output)
+
+        if offload_to_cpu:
+            self.codec_model = self.codec_model.to("cpu")
 
         return audio
 
