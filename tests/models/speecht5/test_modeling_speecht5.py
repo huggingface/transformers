@@ -238,10 +238,6 @@ class SpeechT5ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         # disabled because this model doesn't have decoder_input_ids
         pass
 
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
-        pass
-
 
 @require_torch
 class SpeechT5ForSpeechToTextTester:
@@ -705,10 +701,6 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
-        pass
-
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
@@ -800,6 +792,9 @@ class SpeechT5ForTextToSpeechTester:
         vocab_size=81,
         num_mel_bins=20,
         reduction_factor=2,
+        speech_decoder_postnet_layers=2,
+        speech_decoder_postnet_units=32,
+        speech_decoder_prenet_units=32,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -813,6 +808,9 @@ class SpeechT5ForTextToSpeechTester:
         self.vocab_size = vocab_size
         self.num_mel_bins = num_mel_bins
         self.reduction_factor = reduction_factor
+        self.speech_decoder_postnet_layers = speech_decoder_postnet_layers
+        self.speech_decoder_postnet_units = speech_decoder_postnet_units
+        self.speech_decoder_prenet_units = speech_decoder_prenet_units
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size).clamp(2)
@@ -847,6 +845,9 @@ class SpeechT5ForTextToSpeechTester:
             vocab_size=self.vocab_size,
             num_mel_bins=self.num_mel_bins,
             reduction_factor=self.reduction_factor,
+            speech_decoder_postnet_layers=self.speech_decoder_postnet_layers,
+            speech_decoder_postnet_units=self.speech_decoder_postnet_units,
+            speech_decoder_prenet_units=self.speech_decoder_prenet_units,
         )
 
     def create_and_check_model_forward(self, config, inputs_dict):
@@ -996,10 +997,6 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
         if hasattr(module, "bias") and module.bias is not None:
             module.bias.data.fill_(3)
 
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
-        pass
-
 
 @require_torch
 @require_sentencepiece
@@ -1046,6 +1043,9 @@ class SpeechT5ForSpeechToSpeechTester:
         vocab_size=81,
         num_mel_bins=20,
         reduction_factor=2,
+        speech_decoder_postnet_layers=2,
+        speech_decoder_postnet_units=32,
+        speech_decoder_prenet_units=32,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -1065,6 +1065,9 @@ class SpeechT5ForSpeechToSpeechTester:
         self.vocab_size = vocab_size
         self.num_mel_bins = num_mel_bins
         self.reduction_factor = reduction_factor
+        self.speech_decoder_postnet_layers = speech_decoder_postnet_layers
+        self.speech_decoder_postnet_units = speech_decoder_postnet_units
+        self.speech_decoder_prenet_units = speech_decoder_prenet_units
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.encoder_seq_length], scale=1.0)
@@ -1105,6 +1108,9 @@ class SpeechT5ForSpeechToSpeechTester:
             vocab_size=self.vocab_size,
             num_mel_bins=self.num_mel_bins,
             reduction_factor=self.reduction_factor,
+            speech_decoder_postnet_layers=self.speech_decoder_postnet_layers,
+            speech_decoder_postnet_units=self.speech_decoder_postnet_units,
+            speech_decoder_prenet_units=self.speech_decoder_prenet_units,
         )
 
     def create_and_check_model_forward(self, config, inputs_dict):
@@ -1416,10 +1422,6 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
-        pass
-
 
 @require_torch
 @require_sentencepiece
@@ -1478,6 +1480,7 @@ class SpeechT5HifiGanTester:
     def get_config(self):
         return SpeechT5HifiGanConfig(
             model_in_dim=self.num_mel_bins,
+            upsample_initial_channel=32,
         )
 
     def create_and_check_model(self, config, input_values):
@@ -1560,10 +1563,6 @@ class SpeechT5HifiGanTest(ModelTesterMixin, unittest.TestCase):
 
     # this model does not output hidden states
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
         pass
 
     # skip because it fails on automapping of SpeechT5HifiGanConfig
