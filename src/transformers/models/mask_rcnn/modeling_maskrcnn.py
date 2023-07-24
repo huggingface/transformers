@@ -2070,9 +2070,6 @@ class MaskRCNNRPN(nn.Module):
         score_factors=None,
         img_metas=None,
         cfg=None,
-        rescale=False,
-        with_nms=True,
-        **kwargs,
     ):
         """Transform network outputs of a batch into bbox results.
         Note: When score_factors is not None, the cls_scores are usually multiplied by it then obtain the real score
@@ -2140,9 +2137,6 @@ class MaskRCNNRPN(nn.Module):
                 multilevel_priors,
                 img_meta,
                 cfg,
-                rescale,
-                with_nms,
-                **kwargs,
             )
             result_list.append(results)
         return result_list
@@ -2155,9 +2149,6 @@ class MaskRCNNRPN(nn.Module):
         multilevel_anchors,
         img_meta,
         cfg,
-        rescale=False,
-        with_nms=True,
-        **kwargs,
     ):
         """Transform outputs of a single image into bbox predictions.
 
@@ -2175,10 +2166,6 @@ class MaskRCNNRPN(nn.Module):
             img_meta (dict): Image meta info.
             cfg (`mmcv.Config`, *optional*):
                 Test / postprocessing configuration. If None, `test_cfg` is used.
-            rescale (bool, *optional*, defaults to `False`):
-                If `True`, return boxes in original image space.
-            with_nms (`bool`, *optional*, defaults to `True`):
-                If True, do NMS (non-maximum suppression) before returning boxes.
 
         Returns:
             `torch.Tensor`:
@@ -2770,7 +2757,6 @@ class MaskRCNNRoIHead(nn.Module):
             rois (`torch.FloatTensor`):
                 RoIs that are used as input to the box head.
         """
-        # TODO: a more flexible way to decide which feature maps to use
         bbox_features = self.bbox_roi_extractor(feature_maps[: self.bbox_roi_extractor.num_inputs], rois)
         cls_score, bbox_pred = self.bbox_head(bbox_features)
 
@@ -3126,8 +3112,6 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
-        # TODO: remove img_metas
-        # and figure out where `scale_factor` and `ori_shape` come from (probably test_pipeline)
         if labels is not None:
             img_metas = [
                 {"img_shape": (3, *target["size"].tolist()), "pad_shape": (3, *target["size"].tolist())}
@@ -3161,7 +3145,7 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
                 img_metas,
                 gt_bboxes=[target["boxes"] for target in labels],
                 gt_labels=None,  # one explicitly sets them to None in TwoStageDetector
-                gt_bboxes_ignore=None,  # TODO remove this
+                gt_bboxes_ignore=None,  # eventually we could add support for boxes to ignore per image
                 proposal_cfg=self.config.rpn_proposal,
             )
             loss_dict.update(rpn_outputs.losses)

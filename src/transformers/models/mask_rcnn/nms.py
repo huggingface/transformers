@@ -235,7 +235,7 @@ def multiclass_nms(
     labels = labels.reshape(-1)
 
     if not torch.onnx.is_in_onnx_export():
-        # NonZero not supported  in TensorRT
+        # NonZero not supported in TensorRT
         # remove low scoring boxes
         valid_mask = scores > score_thr
     # multiply score_factor after threshold to preserve more bboxes, improve
