@@ -64,6 +64,7 @@ from .utils import (
     download_url,
     has_file,
     is_accelerate_available,
+    is_auto_gptq_available,
     is_bitsandbytes_available,
     is_offline_mode,
     is_optimum_available,
@@ -2356,9 +2357,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         gtpq_quantizer = None
         if has_gptq_quantization_config:
-            if not is_optimum_available():
+            if not (is_optimum_available() and is_auto_gptq_available()):
                 raise ImportError(
-                    "Loading GTPQ quantized model requires optimum library : `pip install optimum` and auto_gptq library 'pip install auto_gptq'"
+                    "Loading GTPQ quantized model requires optimum library : `pip install optimum` and auto-gptq library 'pip install auto-gptq'"
                 )
             else:
                 # Need to protect the import
