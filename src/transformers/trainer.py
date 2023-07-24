@@ -3806,7 +3806,9 @@ class Trainer:
 
         # create accelerator object
         self.accelerator = Accelerator(
-            deepspeed_plugin=self.args.deepspeed_plugin, gradient_accumulation_plugin=gradient_accumulation_plugin
+            dispatch_batches=self.args.dispatch_batches,
+            deepspeed_plugin=self.args.deepspeed_plugin,
+            gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
 
         # deepspeed and accelerate flags covering both trainer args and accelerate launcher

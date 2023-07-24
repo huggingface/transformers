@@ -1200,6 +1200,15 @@ class TrainingArguments:
         },
     )
 
+    dispatch_batches: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "Whether to dispatch batches across devices in distributed training. If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"
+            "and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose"
+            "underlying dataset is an `IterableDataset`, `False` otherwise."
+        },
+    )
+
     def __post_init__(self):
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home

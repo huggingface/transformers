@@ -32,6 +32,7 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
+    from test_trainer import FiniteIterableDataset, RegressionModel
     from torch import nn
     from torch.utils.data import Dataset
 
@@ -168,3 +169,14 @@ if __name__ == "__main__":
             exit(1)
 
         trainer.args.eval_accumulation_steps = None
+
+    # Check that `dispatch_batches=False` will work on a finite iterable dataset
+
+    train_dataset = FiniteIterableDataset(label_names=["labels", "extra"], length=1)
+
+    model = RegressionModel()
+    training_args.per_device_train_batch_size = 1
+    training_args.max_steps = 1
+    training_args.dispatch_batches = False
+    trainer = Trainer(model, training_args, train_dataset=train_dataset)
+    trainer.train()
