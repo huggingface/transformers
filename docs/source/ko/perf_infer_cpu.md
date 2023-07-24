@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## 더 빠른 추론을 위한 `BetterTransformer` [[bettertransformer-for-faster-inference]]
 
-우리는 최근 텍스트, 이미지 및 오디오 모델에 대한 CPU에서 빠른 추론을 위해 `BetterTransformer`를 통합했습니다. 이 통합에 대해 더 자세한 내용이 담긴 문서는 [여기](https://huggingface.co/docs/optimum/bettertransformer/overview)에서 확인하세요.
+우리는 최근 CPU에서 텍스트, 이미지 및 오디오 모델의 빠른 추론을 위해 `BetterTransformer`를 통합했습니다. 이 통합에 대한 더 자세한 내용은 [이 문서](https://huggingface.co/docs/optimum/bettertransformer/overview)를 참조하세요.
 
 ## PyTorch JIT 모드 (TorchScript) [[pytorch-jitmode-torchscript]]
 TorchScript는 PyTorch 코드에서 직렬화와 최적화 가능한 모델을 생성하는 방법입니다. TorchScript 프로그램은 Python 프로세스에서 저장한 뒤 Python 종속성이 없는 프로세스에서 로드할 수 있습니다. PyTorch의 기본 설정인 eager 모드와 비교했을때, jit 모드는 연산자 결합과 같은 최적화 방법론을 통해 모델 추론에 대해 일반적으로 더 나은 성능을 제공합니다.
