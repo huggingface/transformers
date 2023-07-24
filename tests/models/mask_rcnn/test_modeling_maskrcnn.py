@@ -49,11 +49,24 @@ class MaskRCNNModelTester:
         parent,
         batch_size=13,
         image_size=32,
+        # backbone attributes
         num_channels=3,
         num_stages=4,
         hidden_sizes=[10, 20, 30, 40],
         depths=[2, 2, 3, 2],
         out_features=["stage1", "stage2", "stage3", "stage4"],
+        # FPN attributes
+        fpn_out_channels=10,
+        # RPN attributes
+        rpn_in_channels=10,
+        rpn_feat_channels=10,
+        # R-CNN attributes
+        bbox_head_in_channels=10,
+        bbox_head_fc_out_channels=10,
+        bbox_roi_extractor_out_channels=10,
+        mask_head_in_channels=10,
+        mask_head_conv_out_channels=10,
+        mask_roi_extractor_out_channels=10,
         is_training=True,
         use_labels=True,
         initializer_range=0.02,
@@ -68,6 +81,15 @@ class MaskRCNNModelTester:
         self.hidden_sizes = hidden_sizes
         self.depths = depths
         self.out_features = out_features
+        self.fpn_out_channels = fpn_out_channels
+        self.rpn_in_channels = rpn_in_channels
+        self.rpn_feat_channels = rpn_feat_channels
+        self.bbox_head_in_channels = bbox_head_in_channels
+        self.bbox_head_fc_out_channels = bbox_head_fc_out_channels
+        self.bbox_roi_extractor_out_channels = bbox_roi_extractor_out_channels
+        self.mask_head_in_channels = mask_head_in_channels
+        self.mask_head_conv_out_channels = mask_head_conv_out_channels
+        self.mask_roi_extractor_out_channels = mask_roi_extractor_out_channels
         self.is_training = is_training
         self.use_labels = use_labels
         self.initializer_range = initializer_range
@@ -112,7 +134,18 @@ class MaskRCNNModelTester:
     def get_config(self):
         backbone_config = self.get_backbone_config()
         return MaskRCNNConfig(
-            backbone_config=backbone_config, initializer_range=self.initializer_range, num_labels=self.num_labels
+            backbone_config=backbone_config,
+            initializer_range=self.initializer_range,
+            num_labels=self.num_labels,
+            fpn_out_channels=self.fpn_out_channels,
+            rpn_in_channels=self.rpn_in_channels,
+            rpn_feat_channels=self.rpn_feat_channels,
+            bbox_head_in_channels=self.bbox_head_in_channels,
+            bbox_head_fc_out_channels=self.bbox_head_fc_out_channels,
+            bbox_roi_extractor_out_channels=self.bbox_roi_extractor_out_channels,
+            mask_head_in_channels=self.mask_head_in_channels,
+            mask_head_conv_out_channels=self.mask_head_conv_out_channels,
+            mask_roi_extractor_out_channels=self.mask_roi_extractor_out_channels,
         )
 
     def create_and_check_model_for_object_detection(self, config, pixel_values, labels):
@@ -126,9 +159,9 @@ class MaskRCNNModelTester:
         # inference
         result = model(pixel_values)
         # expected logits shape: (num_proposals_per_image stacked on top of each other, num_labels + 1)
-        self.parent.assertEqual(result.logits.shape, (404, self.num_labels + 1))
+        self.parent.assertEqual(result.logits.shape, (387, self.num_labels + 1))
         # expected boxes shape: (num_proposals_per_image stacked on top of each other, num_labels * 4)
-        self.parent.assertEqual(result.pred_boxes.shape, (404, self.num_labels * 4))
+        self.parent.assertEqual(result.pred_boxes.shape, (387, self.num_labels * 4))
 
         # training
         result = model(pixel_values, labels=labels)

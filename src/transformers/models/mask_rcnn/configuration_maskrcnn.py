@@ -86,6 +86,8 @@ class MaskRCNNConfig(PretrainedConfig):
             Size of the RoI features of the bounding box head.
         bbox_head_fc_out_channels (`int`, *optional*, defaults to 1024):
             Number of output channels (feature dimension) of the fully-connected layer of the bounding box head.
+        bbox_head_num_shared_fcs (`int`, *optional*, defaults to 2):
+            Number of shared fully-connected layers of the bounding box head.
         bbox_head_bbox_coder_target_means (`List[float]`, *optional*, defaults to `[0.0, 0.0, 0.0, 0.0]`):
             Denormalizing means to use when encoding the targets of the bounding box head as delta coordinates w.r.t.
             ground truth boxes.
@@ -206,6 +208,7 @@ class MaskRCNNConfig(PretrainedConfig):
         bbox_head_in_channels=256,
         bbox_head_roi_feat_size=7,
         bbox_head_fc_out_channels=1024,
+        bbox_head_num_shared_fcs=2,
         bbox_head_bbox_coder_target_means=[0.0, 0.0, 0.0, 0.0],
         bbox_head_bbox_coder_target_stds=[0.1, 0.1, 0.2, 0.2],
         bbox_head_reg_class_agnostic=False,
@@ -282,6 +285,7 @@ class MaskRCNNConfig(PretrainedConfig):
         self.bbox_head_in_channels = bbox_head_in_channels
         self.bbox_head_roi_feat_size = bbox_head_roi_feat_size
         self.bbox_head_fc_out_channels = bbox_head_fc_out_channels
+        self.bbox_head_num_shared_fcs = bbox_head_num_shared_fcs
         self.bbox_head_bbox_coder_target_means = bbox_head_bbox_coder_target_means
         self.bbox_head_bbox_coder_target_stds = bbox_head_bbox_coder_target_stds
         self.bbox_head_reg_class_agnostic = bbox_head_reg_class_agnostic

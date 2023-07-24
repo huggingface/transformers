@@ -2432,16 +2432,9 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
     Args:
         config (`MaskRCNNConfig`):
             Model configuration.
-        num_branch_fcs (`int`, *optional*, defaults to `2`):
-            Number of fully-connected layers in the branch.
-        reg_class_agnostic (`bool`, *optional*, defaults to `False`):
-            Whether the regression is class agnostic.
-        reg_decoded_bbox (`bool`, *optional*, defaults to `False`):
-            Whether to apply the regression loss (e.g. `IouLoss`, `GIouLoss`, `DIouLoss`) directly on the decoded
-            bounding boxes.
     """
 
-    def __init__(self, config, num_branch_fcs=2):
+    def __init__(self, config):
         super().__init__()
 
         self.roi_feat_size = _pair(config.bbox_head_roi_feat_size)
@@ -2453,7 +2446,7 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
 
         # add branch specific fc layers
         branch_fcs = nn.ModuleList()
-        for i in range(num_branch_fcs):
+        for i in range(config.bbox_head_num_shared_fcs):
             fc_in_channels = last_layer_dim if i == 0 else self.fc_out_channels
             branch_fcs.append(nn.Linear(fc_in_channels, self.fc_out_channels))
         self.shared_fcs = branch_fcs
