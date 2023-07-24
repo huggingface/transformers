@@ -1523,7 +1523,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self.model_max_length = model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
 
         # Padding and truncation side are right by default and overridden in subclasses. If specified in the kwargs, it
-        # is changed.
+        # is changed. FIXME this does not work when initializing a fast from a fast
         self.padding_side = kwargs.pop("padding_side", self.padding_side)
         if self.padding_side not in ["right", "left"]:
             raise ValueError(

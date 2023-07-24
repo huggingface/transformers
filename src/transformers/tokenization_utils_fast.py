@@ -132,6 +132,17 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         self._decode_use_source_tokenizer = False
 
+        _truncation = self._tokenizer.truncation
+        if _truncation is not None:
+            self._tokenizer.no_truncation()
+            self._tokenizer.enable_truncation(**_truncation)
+        _padding = self._tokenizer.padding
+        if _padding is not None:
+            self._tokenizer.enable_padding(**_padding)
+            kwargs.update({"pad_token": _padding["pad_token"]})
+            kwargs.update({"padding_side": _padding["direction"]})
+            kwargs.update({"max_length": _padding["length"]})
+            kwargs.update({"pad_to_multiple_of": _padding["pad_to_multiple_of"]})
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
 
@@ -346,7 +357,9 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 the use of Tensor Cores on NVIDIA hardware with compute capability `>= 7.5` (Volta).
         """
         _truncation = self._tokenizer.truncation
+        print(f"_truncation: {_truncation}")
         _padding = self._tokenizer.padding
+        print(f"_padding: {_padding}")
         # Set truncation and padding on the backend tokenizer
         if truncation_strategy == TruncationStrategy.DO_NOT_TRUNCATE:
             if _truncation is not None:
