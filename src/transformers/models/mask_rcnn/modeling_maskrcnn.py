@@ -97,11 +97,11 @@ class MaskRCNNModelOutput(ModelOutput):
             Total loss as a combination of various losses.
         loss_dict (`Dict`, *optional*):
             A dictionary containing the individual losses. Useful for logging.
-        logits (`torch.FloatTensor` of shape `(num_proposals_per_image stacked on top of each other, num_labels + 1)`):
+        logits (`torch.FloatTensor` of shape `(num_proposals_per_image * batch_size, num_labels + 1)`):
             Classification logits (including no-object) for all proposals.
-        pred_boxes (`torch.FloatTensor` of shape `(num_proposals_per_image stacked on top of each other, num_labels * 4)`):
+        pred_boxes (`torch.FloatTensor` of shape `(num_proposals_per_image * batch_size, num_labels * 4)`):
             Predicted boxes, for each class and each proposal.
-        rois (`torch.FloatTensor` of shape `(num_proposals_per_image stacked on top of each other, 5)`):
+        rois (`torch.FloatTensor` of shape `(num_proposals_per_image * batch_size, 5)`):
             Region of interest proposals. Each contains [batch_index, top_left_x, top_left_y, bottom_right_x,
             bottom_right_y].
         proposals (`List[torch.FloatTensor]` of shape `(num_proposals_per_image, 5)`):
@@ -398,6 +398,14 @@ def mask_target_single(pos_proposals, pos_assigned_gt_inds, gt_masks, cfg):
         mask_targets = pos_proposals.new_zeros((0,) + mask_size)
 
     return mask_targets
+
+
+def unmap(data, count, indices, fill=0):
+    """Unmap a subset of item (data) back to the original set of items (of size count)"""
+    new_size = (count,) + data.size()[1:]
+    ret = data.new_full(new_size, fill)
+    ret[indices.type(torch.bool)] = data
+    return ret
 
 
 def select_single_multilevel(multilevel_tensors, batch_id, detach=True):
@@ -1783,6 +1791,13 @@ class MaskRCNNRPN(nn.Module):
                 label_weights[pos_indices] = self.train_cfg["pos_weight"]
         if len(neg_indices) > 0:
             label_weights[neg_indices] = 1.0
+
+        # map outputs up to original set of anchors
+        num_total_anchors = flat_anchors.size(0)
+        labels = unmap(labels, num_total_anchors, inside_flags, fill=self.num_classes)  # fill background label
+        label_weights = unmap(label_weights, num_total_anchors, inside_flags)
+        bbox_targets = unmap(bbox_targets, num_total_anchors, inside_flags)
+        bbox_weights = unmap(bbox_weights, num_total_anchors, inside_flags)
 
         return (labels, label_weights, bbox_targets, bbox_weights, pos_indices, neg_indices, sampling_result)
 
