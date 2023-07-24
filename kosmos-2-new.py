@@ -222,7 +222,7 @@ class KosmosTextAttention(nn.Module):
         num_heads: int,
         dropout: float = 0.0,
         is_decoder: bool = False,
-        is_encoder_attn=False,
+        add_inner_attn_layernorm=False,
         bias: bool = True,
     ):
         super().__init__()
@@ -245,7 +245,7 @@ class KosmosTextAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
         self.inner_attn_ln = None
-        if not is_encoder_attn:
+        if add_inner_attn_layernorm:
             self.inner_attn_ln = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
@@ -410,7 +410,7 @@ class Kosmos2TextBlock(nn.Module):
             num_heads=config.attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
-            is_encoder_attn=False,
+            add_inner_attn_layernorm=True,
         )
 
         self.dropout = config.dropout
@@ -424,7 +424,7 @@ class Kosmos2TextBlock(nn.Module):
                 config.attention_heads,
                 dropout=config.attention_dropout,
                 is_decoder=True,
-                is_encoder_attn=True,
+                add_inner_attn_layernorm=False,
             )
             self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
@@ -571,17 +571,13 @@ class Kosmos2TextTransformer(nn.Module):
 
     def forward_embedding(self, input_ids, inputs_embeds=None, img_features=None, img_input_mask=None, past_key_values_length: int = 0):
 
-        # TODO: different from original code
-        # `Bart` asssumes the passed argument `inputs_embeds` has already been multiplied by `self.embed_scale`
-        # But `Kosmos-2` required the original `token_embedding` being passed.
-        # In both cases, they are only involved with the tokens and not other features
+        # The argument `inputs_embeds` should be the one without being multiplied by `self.embed_scale`
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) #  * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if img_features is not None:
             inputs_embeds[img_input_mask] = img_features
 
-        # TODO: decide where to do scaling
         inputs_embeds = inputs_embeds * self.embed_scale
 
         # We need to use inputs ids! otherwise we don't know where is the padding!
@@ -623,13 +619,10 @@ class Kosmos2TextTransformer(nn.Module):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input = input_ids
-            input_shape = input.shape
+            input_shape = input_ids.shape
             input_ids = input_ids.view(-1, input_shape[-1])
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            # TODO: doesn't make any sense
-            # input = inputs_embeds[:, :, -1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -645,7 +638,6 @@ class Kosmos2TextTransformer(nn.Module):
             input_ids=input_ids, inputs_embeds=inputs_embeds, img_features=img_features, img_input_mask=img_attn_mask, past_key_values_length=past_key_values_length,
         )
 
-        # TODO: not good parameter/argument name
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, hidden_states, past_key_values_length
         )
@@ -946,9 +938,8 @@ class KosmosConnector(nn.Module):
             config.text_config.attention_heads,
             # shared with text,
             dropout=config.text_config.attention_dropout,
-            # TODO: check - this is strange ?
             is_decoder=False,
-            is_encoder_attn=True,
+            add_inner_attn_layernorm=False,
         )
 
     def forward(self, features):
