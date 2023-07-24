@@ -2659,7 +2659,7 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
 
 class MaskRCNNFCNMaskHead(nn.Module):
     """
-    Mask head.
+    Mask head used in R-CNN.
     """
 
     def __init__(self, config, conv_kernel_size=3, scale_factor=2):
@@ -2835,13 +2835,14 @@ class MaskRCNNRoIHead(nn.Module):
         return rois, proposals, logits, pred_boxes
 
     def _mask_forward(self, x, rois=None, pos_indices=None, bbox_feats=None):
-        """Mask head forward function used in both training and testing."""
+        """Mask head forward function used in both training and testing.
+
+        Removed with_shared_head here.
+        """
         if not ((rois is not None) ^ (pos_indices is not None and bbox_feats is not None)):
             raise ValueError("Either rois or (pos_indices and bbox_feats) should be specified")
         if rois is not None:
             mask_feats = self.mask_roi_extractor(x[: self.mask_roi_extractor.num_inputs], rois)
-            # if self.with_shared_head:
-            #     mask_feats = self.shared_head(mask_feats)
         else:
             if bbox_feats is None:
                 raise ValueError("bbox_feats must be specified when pos_indices is specified")
@@ -2852,7 +2853,7 @@ class MaskRCNNRoIHead(nn.Module):
         mask_results = {"mask_pred": mask_pred, "mask_feats": mask_feats}
         return mask_results
 
-    def _mask_forward_train(self, x, sampling_results, bbox_feats, gt_masks, img_metas):
+    def _mask_forward_train(self, x, sampling_results, bbox_feats, gt_masks):
         """Run forward function and calculate loss for mask head in training."""
         if not self.share_roi_extractor:
             pos_rois = bbox2roi([res.pos_bboxes for res in sampling_results])
@@ -2901,7 +2902,6 @@ class MaskRCNNRoIHead(nn.Module):
         gt_labels,
         gt_bboxes_ignore=None,
         gt_masks=None,
-        **kwargs,
     ):
         """
         Args:
@@ -2914,7 +2914,8 @@ class MaskRCNNRoIHead(nn.Module):
             proposals (`List[torch.Tensor]`):
                 List of region proposals.
             gt_bboxes (`List[torch.Tensor]`):
-                Ground truth bboxes for each image with shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
+                Ground truth bboxes for each image with shape (num_ground_truths, 4) in [top_left_x, top_left_y,
+                bottom_right_x, bottom_right_y] format.
             gt_labels (`List[Tensor]`):
                 Class indices corresponding to each box.
             gt_bboxes_ignore (`List[torch.Tensor]`, *optional*):
@@ -2953,7 +2954,7 @@ class MaskRCNNRoIHead(nn.Module):
 
         if self.with_mask:
             mask_results = self._mask_forward_train(
-                feature_maps, sampling_results, bbox_results["bbox_feats"], gt_masks, img_metas
+                feature_maps, sampling_results, bbox_results["bbox_feats"], gt_masks
             )
             losses.update(mask_results["loss_mask"])
 
@@ -2969,7 +2970,7 @@ class MaskRCNNRoIHead(nn.Module):
             hidden_states (`Tuple[torch.Tensor]`):
                 Features from upstream network. Each has shape `(batch_size, num_channels, height, width)`.
             proposal_list (`List[torch.Tensor`]):
-                Proposals from RPN head. Each has shape (num_proposals, 5), last dimension 5 represent (top_left_x,
+                Proposals from RPN head. Each has shape (num_proposals, 5), last dimension 5 represents (top_left_x,
                 top_left_y, bottom_right_x, bottom_right_y, score).
 
         Returns:
@@ -3106,7 +3107,7 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, MaskRCNNForObjectDetection
+        >>> from transformers import MaskRCNNImageProcessor, MaskRCNNForObjectDetection
         >>> import torch
         >>> from PIL import Image
         >>> import requests
@@ -3114,7 +3115,7 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> processor = AutoImageProcessor.from_pretrained("nielsr/maskrcnn-convnext-tiny")
+        >>> processor = MaskRCNNImageProcessor.from_pretrained("nielsr/maskrcnn-convnext-tiny")
         >>> model = MaskRCNNForObjectDetection.from_pretrained("nielsr/maskrcnn-convnext-tiny")
 
         >>> inputs = processor(image, return_tensors="pt")

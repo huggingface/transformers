@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import unittest
 
 from huggingface_hub import hf_hub_download
 
-from transformers import MaskRCNNConfig
+from transformers import ConvNextConfig, MaskRCNNConfig
 from transformers.testing_utils import require_torchvision, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -50,6 +50,10 @@ class MaskRCNNModelTester:
         batch_size=13,
         image_size=32,
         num_channels=3,
+        num_stages=4,
+        hidden_sizes=[10, 20, 30, 40],
+        depths=[2, 2, 3, 2],
+        out_features=["stage1", "stage2", "stage3", "stage4"],
         is_training=True,
         use_labels=True,
         initializer_range=0.02,
@@ -60,6 +64,10 @@ class MaskRCNNModelTester:
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
+        self.num_stages = num_stages
+        self.hidden_sizes = hidden_sizes
+        self.depths = depths
+        self.out_features = out_features
         self.is_training = is_training
         self.use_labels = use_labels
         self.initializer_range = initializer_range
@@ -91,8 +99,21 @@ class MaskRCNNModelTester:
 
         return config, pixel_values, labels
 
+    def get_backbone_config(self):
+        return ConvNextConfig(
+            num_channels=self.num_channels,
+            num_stages=self.num_stages,
+            hidden_sizes=self.hidden_sizes,
+            depths=self.depths,
+            is_training=self.is_training,
+            out_features=self.out_features,
+        )
+
     def get_config(self):
-        return MaskRCNNConfig(initializer_range=self.initializer_range, num_labels=self.num_labels)
+        backbone_config = self.get_backbone_config()
+        return MaskRCNNConfig(
+            backbone_config=backbone_config, initializer_range=self.initializer_range, num_labels=self.num_labels
+        )
 
     def create_and_check_model_for_object_detection(self, config, pixel_values, labels):
         # we are setting a seed to make sure NMS returns the same number of proposals per image
@@ -105,9 +126,9 @@ class MaskRCNNModelTester:
         # inference
         result = model(pixel_values)
         # expected logits shape: (num_proposals_per_image stacked on top of each other, num_labels + 1)
-        self.parent.assertEqual(result.logits.shape, (478, self.num_labels + 1))
+        self.parent.assertEqual(result.logits.shape, (404, self.num_labels + 1))
         # expected boxes shape: (num_proposals_per_image stacked on top of each other, num_labels * 4)
-        self.parent.assertEqual(result.pred_boxes.shape, (478, self.num_labels * 4))
+        self.parent.assertEqual(result.pred_boxes.shape, (404, self.num_labels * 4))
 
         # training
         result = model(pixel_values, labels=labels)

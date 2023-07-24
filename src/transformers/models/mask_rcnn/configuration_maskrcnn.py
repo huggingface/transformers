@@ -110,7 +110,49 @@ class MaskRCNNConfig(PretrainedConfig):
         mask_roi_extractor_featmap_strides (`List[int]`, *optional*, defaults to `[4, 8, 16, 32]`):
             Feature map strides of the RoI layer used by the mask head.
         rpn_train_cfg (`Dict`, *optional*):
-
+            Configuration of the Region Proposal Network (RPN) at training time.
+        rpn_assigner_pos_iou_thr (`float`, *optional*, defaults to 0.7):
+            IoU threshold for positive anchors in the Region Proposal Network (RPN) at training time.
+        rpn_assigner_neg_iou_thr (`float`, *optional*, defaults to 0.3):
+            IoU threshold for negative anchors in the Region Proposal Network (RPN) at training time.
+        rpn_assigner_min_pos_iou (`float`, *optional*, defaults to 0.3):
+            Minimum IoU threshold for positive anchors in the Region Proposal Network (RPN) at training time.
+        rpn_assigner_match_low_quality (`bool`, *optional*, defaults to `True`):
+            Whether to match low quality anchors in the Region Proposal Network (RPN) at training time.
+        rpn_assigner_ignore_iof_thr (`float`, *optional*, defaults to -1):
+            IoU threshold for ignoring anchors in the Region Proposal Network (RPN) at training time.
+        rpn_sampler_num (`int`, *optional*, defaults to 256):
+            Number of samples for the Region Proposal Network (RPN) sampler at training time.
+        rpn_sampler_pos_fraction (`float`, *optional*, defaults to 0.5):
+            Fraction of positive samples for the Region Proposal Network (RPN) sampler at training time.
+        rpn_sampler_neg_pos_ub (`int`, *optional*, defaults to -1):
+            Upper bound of negative/positive ratio for the Region Proposal Network (RPN) sampler at training time.
+        rpn_sampler_add_gt_as_proposals (`bool`, *optional*, defaults to `False`):
+            Whether to add ground truth boxes as proposals for the Region Proposal Network (RPN) sampler at training
+            time.
+        rpn_proposal (`Dict`, *optional*):
+            Configuration of the Region Proposal Network (RPN) proposals at training time.
+        rcnn_train_cfg (`Dict`, *optional*):
+            Configuration of the Region of Interest (RoI) heads at training time.
+        rcnn_assigner_pos_iou_thr (`float`, *optional*, defaults to 0.5):
+            IoU threshold for positive RoIs in the Region of Interest (RoI) heads at training time.
+        rcnn_assigner_neg_iou_thr (`float`, *optional*, defaults to 0.5):
+            IoU threshold for negative RoIs in the Region of Interest (RoI) heads at training time.
+        rcnn_assigner_min_pos_iou (`float`, *optional*, defaults to 0.5):
+            Minimum IoU threshold for positive RoIs in the Region of Interest (RoI) heads at training time.
+        rcnn_assigner_match_low_quality (`bool`, *optional*, defaults to `True`):
+            Whether to match low quality RoIs in the Region of Interest (RoI) heads at training time.
+        rcnn_assigner_ignore_iof_thr (`float`, *optional*, defaults to -1):
+            IoU threshold for ignoring RoIs in the Region of Interest (RoI) heads at training time.
+        rcnn_sampler_num (`int`, *optional*, defaults to 512):
+            Number of samples for the Region of Interest (RoI) heads sampler at training time.
+        rcnn_sampler_pos_fraction (`float`, *optional*, defaults to 0.25):
+            Fraction of positive samples for the Region of Interest (RoI) heads sampler at training time.
+        rcnn_sampler_neg_pos_ub (`int`, *optional*, defaults to -1):
+            Upper bound of negative/positive ratio for the Region of Interest (RoI) heads sampler at training time.
+        rcnn_sampler_add_gt_as_proposals (`bool`, *optional*, defaults to `True`):
+            Whether to add ground truth boxes as proposals for the Region of Interest (RoI) heads sampler at training
+            time.
 
     Example:
 
