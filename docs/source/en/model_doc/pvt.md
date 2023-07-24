@@ -16,7 +16,11 @@ specific language governing permissions and limitations under the License.
 
 The PVT model was proposed in
 [Pyramid Vision Transformer: A Versatile Backbone for Dense Prediction without Convolutions](https://arxiv.org/abs/2102.12122)
-by Wenhai Wang, Enze Xie, Xiang Li, Deng-Ping Fan, Kaitao Song, Ding Liang, Tong Lu, Ping Luo, Ling Shao.
+by Wenhai Wang, Enze Xie, Xiang Li, Deng-Ping Fan, Kaitao Song, Ding Liang, Tong Lu, Ping Luo, Ling Shao. The PVT is a type of
+vision transformer that utilizes a pyramid structure to make it an effective backbone for dense prediction tasks. Specifically
+it allows for more fine-grained inputs (4 x 4 pixels per patch) to be used, while simultaneously shrinking the sequence length
+of the Transformer as it deepens - reducing the computational cost. Additionally, a spatial-reduction attention (SRA) layer
+is used to further reduce the resource consumption when learning high-resolution features.
 
 The abstract from the paper is the following:
 
