@@ -149,8 +149,8 @@
       title: (번역중) How to convert a 🤗 Transformers model to TensorFlow?
     - local: in_translation
       title: (번역중) How to add a pipeline to 🤗 Transformers?
-    - local: in_translation
-      title: (번역중) Testing
+    - local: testing
+      title: 테스트
     - local: in_translation
       title: (번역중) Checks on a Pull Request
   title: (번역중) 기여하기
