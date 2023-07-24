@@ -17,9 +17,9 @@
 """ PyTorch Mask R-CNN model."""
 
 import copy
+import functools
 from collections import OrderedDict
 from dataclasses import dataclass
-import functools
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -262,7 +262,7 @@ def crop_and_resize(masks, bboxes, out_shape, inds, device="cpu", binarize=True)
     if len(masks) == 0:
         empty_masks = np.empty((0, *out_shape), dtype=np.uint8)
         return empty_masks
-    
+
     # convert bboxes to tensor
     if isinstance(bboxes, np.ndarray):
         bboxes = torch.from_numpy(bboxes).to(device=device)
@@ -440,14 +440,14 @@ def anchor_inside_flags(flat_anchors, valid_flags, img_shape, allowed_border=0):
 def bbox2delta(proposals, ground_truth, means=(0.0, 0.0, 0.0, 0.0), stds=(1.0, 1.0, 1.0, 1.0)):
     """Compute deltas of proposals w.r.t. ground truth.
 
-    We usually compute the deltas of x, y, w, h of proposals w.r.t ground truth bboxes to get regression target. This
-    is the inverse function of [`delta2bbox`].
+    We usually compute the deltas of x, y, width, height of proposals w.r.t ground truth bboxes to get regression
+    target. This is the inverse function of [`delta2bbox`].
 
     Args:
         proposals (`torch.Tensor`):
             Boxes to be transformed, shape (N, ..., 4)
         ground_truth (`torch.Tensor`):
-            Gt bboxes to be used as base, shape (N, ..., 4)
+            Ground truth bboxes to be used as base, shape (N, ..., 4)
         means (`Sequence[float]`, *optional*, defaults to `(0.0, 0.0, 0.0, 0.0)`):
             Denormalizing means for delta coordinates
         stds (`Sequence[float]`, *optional*, defaults to `(1.0, 1.0, 1.0, 1.0)`):
@@ -463,22 +463,22 @@ def bbox2delta(proposals, ground_truth, means=(0.0, 0.0, 0.0, 0.0), stds=(1.0, 1
     ground_truth = ground_truth.float()
 
     # predicted boxes
-    px = (proposals[..., 0] + proposals[..., 2]) * 0.5
-    py = (proposals[..., 1] + proposals[..., 3]) * 0.5
-    pw = proposals[..., 2] - proposals[..., 0]
-    ph = proposals[..., 3] - proposals[..., 1]
+    predicted_x = (proposals[..., 0] + proposals[..., 2]) * 0.5
+    predicted_y = (proposals[..., 1] + proposals[..., 3]) * 0.5
+    predicted_width = proposals[..., 2] - proposals[..., 0]
+    predicted_height = proposals[..., 3] - proposals[..., 1]
 
     # ground truth boxes
-    gx = (ground_truth[..., 0] + ground_truth[..., 2]) * 0.5
-    gy = (ground_truth[..., 1] + ground_truth[..., 3]) * 0.5
-    gw = ground_truth[..., 2] - ground_truth[..., 0]
-    gh = ground_truth[..., 3] - ground_truth[..., 1]
+    ground_truth_x = (ground_truth[..., 0] + ground_truth[..., 2]) * 0.5
+    ground_truth_y = (ground_truth[..., 1] + ground_truth[..., 3]) * 0.5
+    ground_truth_width = ground_truth[..., 2] - ground_truth[..., 0]
+    ground_truth_height = ground_truth[..., 3] - ground_truth[..., 1]
 
-    dx = (gx - px) / pw
-    dy = (gy - py) / ph
-    dw = torch.log(gw / pw)
-    dh = torch.log(gh / ph)
-    deltas = torch.stack([dx, dy, dw, dh], dim=-1)
+    delta_x = (ground_truth_x - predicted_x) / predicted_width
+    delta_y = (ground_truth_y - predicted_y) / predicted_height
+    delta_width = torch.log(ground_truth_width / predicted_width)
+    delta_height = torch.log(ground_truth_height / predicted_height)
+    deltas = torch.stack([delta_x, delta_y, delta_width, delta_height], dim=-1)
 
     means = deltas.new_tensor(means).unsqueeze(0)
     stds = deltas.new_tensor(stds).unsqueeze(0)
@@ -540,27 +540,27 @@ def delta2bbox(
     stds = deltas.new_tensor(stds).view(1, -1)
     denorm_deltas = deltas * stds + means
 
-    dxy = denorm_deltas[:, :2]
-    dwh = denorm_deltas[:, 2:]
+    delta_x_y = denorm_deltas[:, :2]
+    delta_width_height = denorm_deltas[:, 2:]
 
     # Compute width/height of each roi
     rois_ = rois.repeat(1, num_classes).reshape(-1, 4)
-    pxy = (rois_[:, :2] + rois_[:, 2:]) * 0.5
-    pwh = rois_[:, 2:] - rois_[:, :2]
+    predicted_x_y = (rois_[:, :2] + rois_[:, 2:]) * 0.5
+    predicted_width_height = rois_[:, 2:] - rois_[:, :2]
 
-    dxy_wh = pwh * dxy
+    dxy_wh = predicted_width_height * delta_x_y
 
     max_ratio = np.abs(np.log(wh_ratio_clip))
     if add_ctr_clamp:
         dxy_wh = torch.clamp(dxy_wh, max=ctr_clamp, min=-ctr_clamp)
-        dwh = torch.clamp(dwh, max=max_ratio)
+        delta_width_height = torch.clamp(delta_width_height, max=max_ratio)
     else:
-        dwh = dwh.clamp(min=-max_ratio, max=max_ratio)
+        delta_width_height = delta_width_height.clamp(min=-max_ratio, max=max_ratio)
 
-    gxy = pxy + dxy_wh
-    gwh = pwh * dwh.exp()
-    x1y1 = gxy - (gwh * 0.5)
-    x2y2 = gxy + (gwh * 0.5)
+    ground_truth_x_y = predicted_x_y + dxy_wh
+    ground_truth_width_height = predicted_width_height * delta_width_height.exp()
+    x1y1 = ground_truth_x_y - (ground_truth_width_height * 0.5)
+    x2y2 = ground_truth_x_y + (ground_truth_width_height * 0.5)
     bboxes = torch.cat([x1y1, x2y2], dim=-1)
     if clip_border and max_shape is not None:
         max_shape = max_shape[-2:]
@@ -597,6 +597,12 @@ class MaskRCNNFPN(nn.Module):
     Feature Pyramid Network (FPN).
 
     This is an implementation of [Feature Pyramid Networks for Object Detection](https://arxiv.org/abs/1612.03144).
+
+    Args:
+        config (`PretrainedConfig`):
+            Mask R-CNN model configuration.
+        hidden_sizes (`List[int]`):
+            List of hidden sizes of the backbone.
     """
 
     def __init__(self, config, hidden_sizes):
@@ -812,12 +818,12 @@ class MaskRCNNAnchorGenerator(nn.Module):
         """
 
         base_anchors = self.base_anchors[level_idx].to(device).to(dtype)
-        feat_h, feat_w = featmap_size
+        feat_height, feat_width = featmap_size
         stride_w, stride_h = self.strides[level_idx]
         # First create Range with the default dtype, than convert to
         # target `dtype` for onnx exporting.
-        shift_x = torch.arange(0, feat_w, device=device).to(dtype) * stride_w
-        shift_y = torch.arange(0, feat_h, device=device).to(dtype) * stride_h
+        shift_x = torch.arange(0, feat_width, device=device).to(dtype) * stride_w
+        shift_y = torch.arange(0, feat_height, device=device).to(dtype) * stride_h
 
         shift_xx, shift_yy = self._meshgrid(shift_x, shift_y)
         shifts = torch.stack([shift_xx, shift_yy, shift_xx, shift_yy], dim=-1)
@@ -850,12 +856,15 @@ class MaskRCNNAnchorGenerator(nn.Module):
         multi_level_flags = []
         for i in range(self.num_levels):
             anchor_stride = self.strides[i]
-            feat_h, feat_w = featmap_sizes[i]
-            h, w = pad_shape[-2:]
-            valid_feat_h = min(int(np.ceil(h / anchor_stride[1])), feat_h)
-            valid_feat_w = min(int(np.ceil(w / anchor_stride[0])), feat_w)
+            feat_height, feat_width = featmap_sizes[i]
+            height, width = pad_shape[-2:]
+            valid_feat_height = min(int(np.ceil(height / anchor_stride[1])), feat_height)
+            valid_feat_width = min(int(np.ceil(width / anchor_stride[0])), feat_width)
             flags = self.single_level_valid_flags(
-                (feat_h, feat_w), (valid_feat_h, valid_feat_w), self.num_base_anchors[i], device=device
+                (feat_height, feat_width),
+                (valid_feat_height, valid_feat_width),
+                self.num_base_anchors[i],
+                device=device,
             )
             multi_level_flags.append(flags)
         return multi_level_flags
@@ -894,9 +903,11 @@ class MaskRCNNAnchorGenerator(nn.Module):
 
 
 class MaskRCNNDeltaXYWHBBoxCoder(nn.Module):
-    """Delta XYWH BBox coder.
-    Following the practice in [R-CNN](https://arxiv.org/abs/1311.2524), this coder encodes bbox (x1, y1, x2, y2) into
-    delta (dx, dy, dw, dh) and decodes delta (dx, dy, dw, dh) back to original bbox (x1, y1, x2, y2).
+    """Delta XYWH bounding box coder.
+
+    Following the practice in [R-CNN](https://arxiv.org/abs/1311.2524), this coder encodes a bounding box (x1, y1, x2,
+    y2) into deltas (delta_x, delta_y, delta_width, delta_height) and decodes delta (delta_x, delta_y, delta_width,
+    delta_height) back to original bounding box (x1, y1, x2, y2).
 
     Args:
         target_means (`Sequence[float]`):
@@ -904,7 +915,7 @@ class MaskRCNNDeltaXYWHBBoxCoder(nn.Module):
         target_stds (`Sequence[float]`):
             Denormalizing standard deviation of target for delta coordinates.
         clip_border (`bool`, *optional*, defaults to `True`):
-            Whether clip the objects outside the border of the image.
+            Whether to clip the objects outside the border of the image.
         add_ctr_clamp (`bool`, *optional*, defaults to `False`):
             Whether to add center clamp, when added, the predicted box is clamped is its center is too far away from
             the original anchor's center. Only used by YOLOF.
@@ -1476,8 +1487,11 @@ class MaskRCNNRandomSampler:
 class MaskRCNNRPN(nn.Module):
     """
     Anchor-based Region Proposal Network (RPN). The RPN learns to convert anchors into region proposals, by 1)
-    classifying anchors as either positive/negative/neutral (based on IoU overlap with ground-truth boxes) 2) for the
-    anchors classified as positive/negative, regressing the anchor box to the ground-truth box.
+    classifying anchors as either foreground/background (based on IoU overlap with ground-truth boxes) 2) for the
+    anchors classified as foreground, regressing the anchor box to the ground-truth box (in the form of deltas).
+
+    The loss function for RPN is a combination of classification loss and regression loss. The classification loss is a
+    binary cross entropy loss, and the regression loss is a smooth L1 loss.
 
     RPN was originally proposed in [Faster R-CNN: Towards Real-Time Object Detection with Region Proposal
     Networks](https://arxiv.org/abs/1506.01497).
@@ -1524,7 +1538,7 @@ class MaskRCNNRPN(nn.Module):
             match_low_quality=config.rpn_assigner_match_low_quality,
             ignore_iof_thr=config.rpn_assigner_ignore_iof_thr,
         )
-        # Sampler
+        # Sampler (during training, one samples a subset of anchors for each image to train on)
         self.sampler = MaskRCNNRandomSampler(
             num=config.rpn_sampler_num,
             pos_fraction=config.rpn_sampler_pos_fraction,
@@ -1536,10 +1550,13 @@ class MaskRCNNRPN(nn.Module):
         self.reg_decoded_bbox = reg_decoded_bbox
 
         # losses based on config
-        # this corresponds to dict(type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0))
-        # TODO remove rpn_loss_bbox
-        self.loss_cls = CrossEntropyLoss(use_sigmoid=True)  
-        self.loss_bbox = WeightedL1Loss(loss_weight=config.rpn_loss_bbox.get("loss_weight", 1.0))
+        if config.rpn_loss_cls.get("type", "CrossEntropyLoss") != "CrossEntropyLoss":
+            raise ValueError("Only CrossEntropyLoss is currently supported for rpn_loss_cls")
+        self.loss_cls = CrossEntropyLoss(use_sigmoid=self.use_sigmoid_cls)
+        if config.rpn_loss_bbox.get("type", "L1Loss") != "L1Loss":
+            raise ValueError("Only L1Loss is currently supported for rpn_loss_bbox")
+        loss_weight = config.rpn_loss_cls.get("loss_weight", 1.0)
+        self.loss_bbox = WeightedL1Loss(loss_weight=loss_weight)
 
     def forward_single(self, hidden_state):
         """Forward feature map of a single scale level."""
@@ -1553,7 +1570,7 @@ class MaskRCNNRPN(nn.Module):
         """Forward features from the upstream network.
 
         Args:
-            hidden_states (tuple[torch.FloatTensor]):
+            hidden_states (`Tuple[torch.FloatTensor]`):
                 Features from the upstream network, each being a 4D-tensor.
         Returns:
             tuple: A tuple of classification scores and bbox prediction.
@@ -1626,12 +1643,12 @@ class MaskRCNNRPN(nn.Module):
             valid_flag_list (`List[torch.Tensor]`):
                 Valid flags of each image.
         """
-        num_imgs = len(img_metas)
+        num_images = len(img_metas)
 
         # since feature map sizes of all images are the same, we only compute
         # anchors for one time
         multi_level_anchors = self.prior_generator.grid_priors(featmap_sizes, device=device)
-        anchor_list = [multi_level_anchors for _ in range(num_imgs)]
+        anchor_list = [multi_level_anchors for _ in range(num_images)]
 
         # for each image, we compute valid flags of multi level anchors
         valid_flag_list = []
@@ -1691,7 +1708,7 @@ class MaskRCNNRPN(nn.Module):
         )
         if not inside_flags.any():
             return (None,) * 7
-        # assign gt and sample anchors
+        # assign ground truth and sample anchors
         anchors = flat_anchors[inside_flags, :]
 
         assign_result = self.assigner.assign(
@@ -1729,7 +1746,7 @@ class MaskRCNNRPN(nn.Module):
 
         # map outputs up to original set of anchors
         num_total_anchors = flat_anchors.size(0)
-        labels = unmap(labels, num_total_anchors, inside_flags, fill=self.num_classes)  # fill bg label
+        labels = unmap(labels, num_total_anchors, inside_flags, fill=self.num_classes)  # fill background label
         label_weights = unmap(label_weights, num_total_anchors, inside_flags)
         bbox_targets = unmap(bbox_targets, num_total_anchors, inside_flags)
         bbox_weights = unmap(bbox_weights, num_total_anchors, inside_flags)
@@ -1848,7 +1865,6 @@ class MaskRCNNRPN(nn.Module):
             neg_indices_list.append(neg_indices)
             sampling_results_list.append(sampling_result)
 
-        # rest_results = []  # user-added return values
         # no valid anchors
         if any([labels is None for labels in all_labels]):
             return None
@@ -1863,9 +1879,6 @@ class MaskRCNNRPN(nn.Module):
         res = (labels_list, label_weights_list, bbox_targets_list, bbox_weights_list, num_total_pos, num_total_neg)
         if return_sampling_results:
             res = res + (sampling_results_list,)
-
-        # for i, r in enumerate(rest_results):  # user-added return values
-        #     rest_results[i] = images_to_levels(r, num_level_anchors)
 
         return res
 
@@ -2180,8 +2193,7 @@ class MaskRCNNRPN(nn.Module):
     ):
         """Bounding box post-processing method.
 
-
-        Do the nms operation for bboxes in same level.
+        Do the NMS operation for bboxes in same level.
 
         Args:
             multilevel_scores (`List[torch.Tensor]`):
@@ -2418,9 +2430,9 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
 
         # losses based on config
         # this corresponds to dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0))
-        self.loss_cls = CrossEntropyLoss(use_sigmoid=False) 
-         # this corresponds to dict(type='L1Loss', loss_weight=1.0)
-        self.loss_bbox = WeightedL1Loss(loss_weight=1.0) 
+        self.loss_cls = CrossEntropyLoss(use_sigmoid=False)
+        # this corresponds to dict(type='L1Loss', loss_weight=1.0)
+        self.loss_bbox = WeightedL1Loss(loss_weight=1.0)
 
     def forward(self, hidden_states):
         # shared part

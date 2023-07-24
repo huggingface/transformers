@@ -21,7 +21,6 @@ import argparse
 import json
 from pathlib import Path
 
-import numpy as np
 import requests
 import torch
 import torchvision.transforms as T

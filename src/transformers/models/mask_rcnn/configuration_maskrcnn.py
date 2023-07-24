@@ -46,7 +46,8 @@ class MaskRCNNConfig(PretrainedConfig):
             The configuration passed to the backbone, if unset, the configuration corresponding to
             `facebook/convnext-tiny-224` will be used.
         fpn_out_channels (`int`, optional, defaults to 256):
-            Number of output channels (feature dimension) of the output feature maps of the Feature Pyramid Network (FPN).
+            Number of output channels (feature dimension) of the output feature maps of the Feature Pyramid Network
+            (FPN).
         fpn_num_outputs (`int`, optional, defaults to 5):
             Number of output feature maps of the Feature Pyramid Network (FPN).
         anchor_generator_scales (`List[int]`, *optional*, defaults to `[8]`):
@@ -56,9 +57,11 @@ class MaskRCNNConfig(PretrainedConfig):
         anchor_generator_strides (`List[int]`, *optional*, defaults to `[4, 8, 16, 32, 64]`):
             Strides of the 2D anchor generator used by the Region Proposal Network (RPN).
         rpn_bbox_coder_target_means (`List[float]`, *optional*, defaults to `[0.0, 0.0, 0.0, 0.0]`):
-            Denormalizing means to use when encoding the targets of the RPN as delta coordinates w.r.t. ground truth boxes.
+            Denormalizing means to use when encoding the targets of the RPN as delta coordinates w.r.t. ground truth
+            boxes.
         rpn_bbox_coder_target_stds (`List[float]`, *optional*, defaults to `[0.0, 0.0, 0.0, 0.0]`):
-            Denormalizing standard deviations to use when encoding the targets of the RPN as delta coordinates w.r.t. ground truth boxes.
+            Denormalizing standard deviations to use when encoding the targets of the RPN as delta coordinates w.r.t.
+            ground truth boxes.
         rpn_in_channels (`int`, *optional*, defaults to 256):
             Number of input channels of the Region Proposal Network (RPN).
         rpn_feat_channels (`int`, *optional*, defaults to 256):
@@ -84,9 +87,11 @@ class MaskRCNNConfig(PretrainedConfig):
         bbox_head_fc_out_channels (`int`, *optional*, defaults to 1024):
             Number of output channels (feature dimension) of the fully-connected layer of the bounding box head.
         bbox_head_bbox_coder_target_means (`List[float]`, *optional*, defaults to `[0.0, 0.0, 0.0, 0.0]`):
-            Denormalizing means to use when encoding the targets of the bounding box head as delta coordinates w.r.t. ground truth boxes.
+            Denormalizing means to use when encoding the targets of the bounding box head as delta coordinates w.r.t.
+            ground truth boxes.
         bbox_head_bbox_coder_target_stds (`List[float]`, *optional*, defaults to `[0.1, 0.1, 0.2, 0.2]`):
-            Denormalizing standard deviations to use when encoding the targets of the bounding box head as delta coordinates w.r.t. ground truth boxes.
+            Denormalizing standard deviations to use when encoding the targets of the bounding box head as delta
+            coordinates w.r.t. ground truth boxes.
         mask_head_num_convs (`int`, *optional*, defaults to 4):
             Number of convolutional layers of the mask head.
         mask_head_in_channels (`int`, *optional*, defaults to 256):
@@ -100,7 +105,7 @@ class MaskRCNNConfig(PretrainedConfig):
         mask_roi_extractor_featmap_strides (`List[int]`, *optional*, defaults to `[4, 8, 16, 32]`):
             Feature map strides of the RoI layer used by the mask head.
         rpn_train_cfg (`Dict`, *optional*):
-        
+
 
     Example:
 
