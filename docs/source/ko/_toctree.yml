@@ -105,8 +105,8 @@
       title: 문제 해결
   title: (번역중) 개발자 가이드
 - sections:
-    - local: in_translation
-      title: (번역중) Overview
+    - local: performance
+      title: 성능 및 확장성
     - local: in_translation
       title: (번역중) Training on one GPU
     - local: in_translation
