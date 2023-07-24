@@ -361,8 +361,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         if len(conversation.past_user_inputs) > 0:
             if not has_sys(conversation.past_user_inputs[0]):
-                conversation.past_user_inputs[0] = add_default_sys(
-                    conversation.past_user_inputs[0])
+                conversation.past_user_inputs[0] = add_default_sys(conversation.past_user_inputs[0])
         elif conversation.new_user_input:
             if not has_sys(conversation.new_user_input):
                 conversation.new_user_input = add_default_sys(conversation.new_user_input)
