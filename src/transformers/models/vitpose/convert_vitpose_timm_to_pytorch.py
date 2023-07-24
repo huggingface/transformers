@@ -36,6 +36,14 @@ logger = logging.get_logger(__name__)
 # here we list all keys to be renamed (original name on the left, our name on the right)
 def create_rename_keys(config, base_model=False):
     rename_keys = []
+    rename_keys.extend(
+        [
+            ("backbone.cls_token","vitpose.embedding.cls_token"),
+            ("backbone.pos_embed","vitpose.embeddings.position_embeddings"),
+            ("backbone.patch_embed.proj.weight","vitpose.embeddings.patch_embeddings.projection.weight"),
+            ("backbone.patch_embed.proj.bias","vitpose.embeddings.patch_embeddings.projection.bias"),
+        ]
+    )
     for i in range(config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
         rename_keys.append((f"blocks.{i}.norm1.weight", f"vit.encoder.layer.{i}.layernorm_before.weight"))
@@ -137,11 +145,12 @@ def convert_vitpose_checkpoint(vitpose_name, pytorch_dump_folder_path):
     Copy/paste/tweak model's weights to our ViTPose structure.
     """
 
-    # define default ViT configuration
+    # define default ViTPose configuration
     config = ViTPoseConfig()
     base_model = False
     # dataset (ImageNet-21k only or also fine-tuned on ImageNet 2012), patch_size and image_size
-    if vit_name[-5:] == "in21k":
+    ## change or remove 
+    if vitpose_name[-5:] == "in21k":
         base_model = True
         config.patch_size = int(vit_name[-12:-10])
         config.image_size = int(vit_name[-9:-6])
