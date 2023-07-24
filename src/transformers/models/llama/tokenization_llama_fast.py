@@ -58,7 +58,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
     ```
     from transformers import LlamaTokenizerFast
 
-    tokenizer = LlaTokenizerFast.from_pretrained("hf-internal-testing/llama-tokenizer")
+    tokenizer = LlamaTokenizerFast.from_pretrained("hf-internal-testing/llama-tokenizer")
     tokenizer.encode("Hello this is a test")
     >>> [1, 15043, 445, 338, 263, 1243]
     ```
