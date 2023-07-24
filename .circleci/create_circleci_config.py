@@ -145,6 +145,7 @@ class CircleCIJob:
                 }
             }
         )
+        steps.append({"run": {"name": "Install `datasets@main`", "command": 'pip uninstall datasets -y && pip install "datasets @ git+https://github.com/huggingface/datasets@main#egg=datasets"'}})
         steps.append({"run": {"name": "Show installed libraries and their versions", "command": "pip freeze | tee installed.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/installed.txt"}})
 
