@@ -2291,6 +2291,16 @@ class RoIAlign(nn.Module):
 
     Based on:
     https://github.com/open-mmlab/mmcv/blob/d71d067da19d71d79e7b4d7ae967891c7bb00c05/mmcv/ops/roi_align.py#L136
+
+    Args:
+        output_size (`int` or `Tuple[int, int]`):
+            The size of the output (in bins or pixels) after the pooling is performed, as (height, width).
+        spatial_scale (`float`, *optional*, defaults to 1.0):
+            Scale the input boxes by this number.
+        sampling_ratio (`int`, *optional*, defaults to 0):
+            Number of inputs samples to take for each output sample. 0 to take samples densely for current models.
+        pool_mode (`str`, *optional*, defaults to `"avg"`):
+            Pooling mode in each bin.
     """
 
     def __init__(
@@ -2299,7 +2309,6 @@ class RoIAlign(nn.Module):
         spatial_scale: float = 1.0,
         sampling_ratio: int = 0,
         pool_mode: str = "avg",
-        aligned: bool = True,
     ):
         super().__init__()
 
@@ -2307,7 +2316,7 @@ class RoIAlign(nn.Module):
         self.spatial_scale = float(spatial_scale)
         self.sampling_ratio = int(sampling_ratio)
         self.pool_mode = pool_mode
-        self.aligned = aligned
+        self.aligned = True  # we use the aligned version by default
 
     def forward(self, input: torch.Tensor, rois: torch.Tensor) -> torch.Tensor:
         """
@@ -2355,8 +2364,7 @@ class MaskRCNNSingleRoIExtractor(nn.Module):
         cfg = layer_cfg.copy()
         cfg.pop("type")
         # we use the RoIAlign op of torchvision inplace of the one in mmcv: https://github.com/open-mmlab/mmcv/blob/master/mmcv/ops/roi_align.py
-        layer_cls = RoIAlign
-        roi_layers = nn.ModuleList([layer_cls(spatial_scale=1 / s, **cfg) for s in featmap_strides])
+        roi_layers = nn.ModuleList([RoIAlign(spatial_scale=1 / s, **cfg) for s in featmap_strides])
         return roi_layers
 
     def map_roi_levels(self, rois, num_levels):
