@@ -553,17 +553,9 @@ class Kosmos2TextTransformer(nn.Module):
 
         self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 
-        if config.layernorm_embedding:
-            self.layernorm_embedding = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        else:
-            self.layernorm_embedding = None
-
         self.layers = nn.ModuleList([Kosmos2TextBlock(config) for _ in range(config.layers)])
 
-        if config.normalize_before:
-            self.layer_norm = nn.LayerNorm(config.hidden_size, config.layer_norm_eps)
-        else:
-            self.layer_norm = None
+        self.layer_norm = nn.LayerNorm(config.hidden_size, config.layer_norm_eps)
 
         self.gradient_checkpointing = False
 
@@ -611,8 +603,6 @@ class Kosmos2TextTransformer(nn.Module):
         positions = positions.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + positions
-        if self.layernorm_embedding is not None:
-            hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -757,9 +747,8 @@ class Kosmos2TextTransformer(nn.Module):
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
 
-        # TODO: should we include this one or the one without layernorm in `all_hidden_states`?
-        if self.layer_norm is not None:
-            hidden_states = self.layer_norm(hidden_states)
+        # add final layer norm
+        hidden_states = self.layer_norm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -846,7 +835,6 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # TODO: could we abuse the usage of `self.base_model_prefix="model"`?
     def get_input_embeddings(self):
         return self.model.embed_tokens
 
@@ -929,9 +917,8 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, img_features, img_attn_mask, past_key_values=None, attention_mask=None, **model_kwargs
+        self, input_ids, img_features, img_attn_mask, past_key_values=None, attention_mask=None, use_cache=None, **model_kwargs
     ):
-        # TODO: Is this necessary
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
@@ -939,21 +926,23 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
 
         # cut input_ids if past_key_values is used
         if past_key_values is not None:
+            input_ids = input_ids[:, -1:]
+            # the image info. is already encoded into the past keys/values
             img_features = None,
             img_attn_mask = None,
-
-            input_ids = input_ids[:, -1:]
+        elif img_attn_mask is not None:
+            # appending `False` to `img_attn_mask` (because `input_ids` grows during generation)
+            batch_size, seq_len = input_ids.size()
+            mask_len = img_attn_mask.size()[-1]
+            img_attn_mask = torch.cat((img_attn_mask, torch.zeros(size=(batch_size, seq_len - mask_len), dtype=torch.bool)), dim=1)
 
         return {
             "input_ids": input_ids,
-            "attention_mask": attention_mask,
             "img_features": img_features,
             "img_attn_mask": img_attn_mask,
             "past_key_values": past_key_values,
-            "use_cache": True,
-            # "encoder_hidden_states": model_kwargs.get("encoder_hidden_states", None),
-            # "encoder_attention_mask": model_kwargs.get("encoder_attention_mask", None),
-            #"is_decoder": True,
+            "attention_mask": attention_mask,
+            "use_cache": use_cache,
         }
 
 
@@ -1141,8 +1130,6 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # TODO: Do we need this for (somehow vision-text) `Kosmos2ForConditionalGeneration`?
-    # (`InstructBlipForConditionalGeneration` has defined these.)
     def get_input_embeddings(self):
         return self.text_model.model.embed_tokens
 
@@ -2507,7 +2494,6 @@ def create_model(num_layers=2):
     text_config = {
         "use_cache": False,
         "scale_embedding": True,
-        "layernorm_embedding": False,
         "dropout": 0.1,
         "subln": True,
         "attention_dropout": 0.1,
