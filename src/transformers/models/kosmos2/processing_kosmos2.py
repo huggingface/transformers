@@ -226,7 +226,7 @@ class Kosmos2Processor(ProcessorMixin):
 
                 # Add `<object> <patch_idx_xxxx> <patch_idx_yyy> </object>` after `<phrase> text </phrase>`
                 if bbox is not None and len(bbox) > 0:
-                    text = self.insert_patch_index_tokens(text, image, bbox)
+                    text = self.insert_patch_index_tokens(text, bbox)
 
             return text
 
@@ -236,29 +236,38 @@ class Kosmos2Processor(ProcessorMixin):
 
         return result
 
-    def insert_patch_index_tokens(self, text, image, bboxes):
+    def insert_patch_index_tokens(self, text, bboxes):
 
+        import re
+        matched_phrases = list(re.finditer(r"<phrase>.+?</phrase>", string=text))
+
+        assert len(matched_phrases) == len(bboxes)
+
+        curr_pos = 0
         buffer = []
-
-        # TODO: add a check of equal number of bboxes and <phrase> </phrase>
-        pos = text.find("</phrase>")
-        while pos > -1:
-            buffer.append(text[:pos + len("</phrase>")])
-            # A <phrase> </phrase> without any associated bbox
-            bbox = bboxes.pop()
+        for matched, bbox in zip(matched_phrases, bboxes):
+            _, end = matched.span()
+            buffer.append(text[curr_pos:end])
+            curr_pos = end
             if bbox is not None:
-                patch_index_1, patch_index_2 = self.convert_bbox_to_patch_index_tokens(bbox)
-                buffer.append(f"<object> {patch_index_1} {patch_index_2} </object>")
-            text = text[pos + len("</phrase>"):]
-            pos = text.find("</phrase>")
+                if isinstance(bbox, tuple):
+                    bbox = [bbox]
+                patch_index_strings = []
+                for box in bbox:
+                    patch_index_1, patch_index_2 = self.convert_bbox_to_patch_index_tokens(box)
+                    patch_index_strings.append(f"{patch_index_1} {patch_index_2}")
+                position_str = " </delimiter_of_multi_objects/> ".join(patch_index_strings)
+                buffer.append(f"<object> {position_str} </object>")
         # remaining
-        if text:
-            buffer.append(text)
+        if curr_pos < len(text):
+            buffer.append(text[curr_pos:])
 
         text = " ".join(buffer)
 
         return text
 
+        # processor.insert_patch_index_tokens2("hello <phrase> I am good </phrase><phrase>dog</phrase>", None, bboxes=[(1, 2), (3, 4)])
+        # processor.insert_patch_index_tokens("hello <phrase> I am good </phrase>", None, bboxes=[(1, 2), (3, 4)])
     def convert_bbox_to_patch_index_tokens(self, bbox):
 
         if not isinstance(bbox, tuple):
@@ -315,8 +324,8 @@ class Kosmos2Processor(ProcessorMixin):
         ul_x = math.floor(x1 * P)
         ul_y = math.floor(y1 * P)
 
-        lr_x = math.floor(x2 * P - 1)
-        lr_y = math.floor(y2 * P - 1)
+        lr_x = math.ceil(x2 * P - 1)
+        lr_y = math.ceil(y2 * P - 1)
 
         ul_idx = ul_y * P + ul_x
         lr_idx = lr_y * P + lr_x
