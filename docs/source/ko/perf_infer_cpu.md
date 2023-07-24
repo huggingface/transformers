@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # CPU에서 효율적인 추론하기 [[efficient-inference-on-cpu]]
 
-이 가이드는 CPU에서 대규모 모델을 효율적으로 추론하는 데 중점을 두고 있습니다.
+이 가이드는 CPU에서 대규모 모델을 효율적으로 추론하는 방법에 중점을 두고 있습니다.
 
 ## 더 빠른 추론을 위한 `BetterTransformer` [[bettertransformer-for-faster-inference]]
 
