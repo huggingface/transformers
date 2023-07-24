@@ -432,8 +432,8 @@ def cached_file(
     except GatedRepoError as e:
         raise EnvironmentError(
             "You are trying to access a gated repo.\nMake sure to request access at "
-            f"https://huggingface.co/{path_or_repo_id} and pass a token having permission to this repo with "
-            "`use_auth_token` or log in with `huggingface-cli login`."
+            f"https://huggingface.co/{path_or_repo_id} and pass a token having permission to this repo either "
+            "by logging in with `huggingface-cli login` or with `token=<your_token>`."
         ) from e
     except RepositoryNotFoundError as e:
         raise EnvironmentError(
