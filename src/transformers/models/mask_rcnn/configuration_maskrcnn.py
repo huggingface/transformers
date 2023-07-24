@@ -92,6 +92,11 @@ class MaskRCNNConfig(PretrainedConfig):
         bbox_head_bbox_coder_target_stds (`List[float]`, *optional*, defaults to `[0.1, 0.1, 0.2, 0.2]`):
             Denormalizing standard deviations to use when encoding the targets of the bounding box head as delta
             coordinates w.r.t. ground truth boxes.
+        bbox_head_reg_class_agnostic (`bool`, *optional*, defaults to `False`):
+            Whether to use class agnostic bounding box regression in the bounding box head.
+        bbox_head_reg_decoded_bbox (`bool`, *optional*, defaults to `False`):
+            Whether to apply the regression loss directly on decoded bounding boxes, converting both the predicted
+            boxes and regression targets to absolute coordinates format.
         mask_head_num_convs (`int`, *optional*, defaults to 4):
             Number of convolutional layers of the mask head.
         mask_head_in_channels (`int`, *optional*, defaults to 256):
@@ -161,6 +166,8 @@ class MaskRCNNConfig(PretrainedConfig):
         bbox_head_fc_out_channels=1024,
         bbox_head_bbox_coder_target_means=[0.0, 0.0, 0.0, 0.0],
         bbox_head_bbox_coder_target_stds=[0.1, 0.1, 0.2, 0.2],
+        bbox_head_reg_class_agnostic=False,
+        bbox_head_reg_decoded_bbox=False,
         # Mask head
         mask_head_num_convs=4,
         mask_head_in_channels=256,
@@ -235,6 +242,8 @@ class MaskRCNNConfig(PretrainedConfig):
         self.bbox_head_fc_out_channels = bbox_head_fc_out_channels
         self.bbox_head_bbox_coder_target_means = bbox_head_bbox_coder_target_means
         self.bbox_head_bbox_coder_target_stds = bbox_head_bbox_coder_target_stds
+        self.bbox_head_reg_class_agnostic = bbox_head_reg_class_agnostic
+        self.bbox_head_reg_decoded_bbox = bbox_head_reg_decoded_bbox
         self.mask_head_num_convs = mask_head_num_convs
         self.mask_head_in_channels = mask_head_in_channels
         self.mask_head_conv_out_channels = mask_head_conv_out_channels

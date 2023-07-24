@@ -29,7 +29,6 @@ from torch import nn
 from torch.nn.modules.utils import _pair
 
 # TODO decide whether to define these utilities
-from transformers.models.mask_rcnn.assign_result import AssignResult
 from transformers.models.mask_rcnn.loss_utils import CrossEntropyLoss, accuracy, weight_reduce_loss
 
 from ... import AutoBackbone
@@ -205,6 +204,50 @@ class WeightedL1Loss(nn.Module):
         return loss_bbox
 
 
+class AssignResult:
+    """Stores assignments between predicted and truth boxes.
+
+    Attributes:
+        num_gts (`int`):
+            The number of truth boxes considered when computing this assignment
+        gt_indices (`torch.LongTensor`):
+            For each predicted box indicates the 1-based index of the assigned truth box. 0 means unassigned and -1
+            means ignore.
+        max_overlaps (`torch.FloatTensor`):
+            The iou between the predicted box and its assigned truth box.
+        labels (`torch.LongTensor`, *optional*):
+            If specified, indicates the category label of the assigned truth box for each predicted box.
+    """
+
+    def __init__(self, num_gts, gt_indices, max_overlaps, labels=None):
+        self.num_gts = num_gts
+        self.gt_indices = gt_indices
+        self.max_overlaps = max_overlaps
+        self.labels = labels
+        # Interface for possible user-defined properties
+        self._extra_properties = {}
+
+    @property
+    def num_preds(self):
+        """int: the number of predictions in this assignment"""
+        return len(self.gt_indices)
+
+    def add_ground_truth(self, gt_labels):
+        """Add ground truth as assigned results.
+
+        Args:
+            gt_labels (`torch.Tensor`):
+                Labels of ground truth boxes.
+        """
+        self_indices = torch.arange(1, len(gt_labels) + 1, dtype=torch.long, device=gt_labels.device)
+        self.gt_indices = torch.cat([self_indices, self.gt_indices])
+
+        self.max_overlaps = torch.cat([self.max_overlaps.new_ones(len(gt_labels)), self.max_overlaps])
+
+        if self.labels is not None:
+            self.labels = torch.cat([gt_labels, self.labels])
+
+
 class SamplingResult:
     """Bounding box sampling result.
 
@@ -333,8 +376,6 @@ def mask_target_single(pos_proposals, pos_assigned_gt_inds, gt_masks, cfg):
     num_pos = pos_proposals.size(0)
     if num_pos > 0:
         proposals_np = pos_proposals.cpu().numpy()
-        # TODO verify this replacement is correct
-        # maxh, maxw = gt_masks.height, gt_masks.width
         maxh, maxw = tuple(gt_masks.shape[1:])
         proposals_np[:, [0, 2]] = np.clip(proposals_np[:, [0, 2]], 0, maxw)
         proposals_np[:, [1, 3]] = np.clip(proposals_np[:, [1, 3]], 0, maxh)
@@ -2384,18 +2425,9 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
         reg_decoded_bbox (`bool`, *optional*, defaults to `False`):
             Whether to apply the regression loss (e.g. `IouLoss`, `GIouLoss`, `DIouLoss`) directly on the decoded
             bounding boxes.
-        custom_activation (`bool`, *optional*, defaults to `False`):
-            Whether to use a custom activation function.
     """
 
-    def __init__(
-        self,
-        config,
-        num_branch_fcs=2,
-        reg_class_agnostic=False,
-        reg_decoded_bbox=False,
-        custom_activation=False,
-    ):
+    def __init__(self, config, num_branch_fcs=2):
         super().__init__()
 
         self.roi_feat_size = _pair(config.bbox_head_roi_feat_size)
@@ -2423,10 +2455,8 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
             target_means=config.bbox_head_bbox_coder_target_means, target_stds=config.bbox_head_bbox_coder_target_stds
         )
 
-        # TODO make these configurable in the future
-        self.reg_class_agnostic = reg_class_agnostic
-        self.reg_decoded_bbox = reg_decoded_bbox
-        self.custom_activation = custom_activation
+        self.reg_class_agnostic = config.bbox_head_reg_class_agnostic
+        self.reg_decoded_bbox = config.bbox_head_reg_decoded_bbox
 
         # losses based on config
         # this corresponds to dict(type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0))
@@ -2582,11 +2612,7 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
                     losses.update(loss_cls_)
                 else:
                     losses["loss_cls"] = loss_cls_
-                if self.custom_activation:
-                    acc_ = self.loss_cls.get_accuracy(cls_score, labels)
-                    losses.update(acc_)
-                else:
-                    losses["acc"] = accuracy(cls_score, labels)
+                losses["acc"] = accuracy(cls_score, labels)
         if bbox_pred is not None:
             bg_class_ind = self.num_classes
             # 0~self.num_classes-1 are FG, self.num_classes is BG
@@ -2701,6 +2727,7 @@ class MaskRCNNRoIHead(nn.Module):
             out_channels=config.mask_roi_extractor_out_channels,
             featmap_strides=config.mask_roi_extractor_featmap_strides,
         )
+        self.share_roi_extractor = False
         self.mask_head = MaskRCNNFCNMaskHead(config)
 
         # assigner
@@ -2718,9 +2745,6 @@ class MaskRCNNRoIHead(nn.Module):
             neg_pos_ub=config.rcnn_sampler_neg_pos_ub,
             add_gt_as_proposals=config.rcnn_sampler_add_gt_as_proposals,
         )
-
-        # TODO remove this hardcoded variable
-        self.share_roi_extractor = False
 
     @property
     def with_bbox(self):
