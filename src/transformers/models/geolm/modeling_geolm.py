@@ -1127,7 +1127,6 @@ class GeoLMModel(GeoLMPreTrainedModel):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
-
 @add_start_docstrings(
     """GeoLM Model with a `language modeling` head on top for CLM fine-tuning.""", GEOLM_START_DOCSTRING
 )
