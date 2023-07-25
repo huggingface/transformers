@@ -24,7 +24,6 @@ import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen import combine_masks, dot_product_attention_weights, make_causal_mask
 from flax.linen.activation import tanh
-from flax.linen.partitioning import scan_with_axes
 from flax.traverse_util import flatten_dict, unflatten_dict
 from jax import lax
 
@@ -42,7 +41,6 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "bigscience/bloom"
 _CONFIG_FOR_DOC = "BloomConfig"
-_TOKENIZER_FOR_DOC = "BloomTokenizerFast"
 
 
 BLOOM_START_DOCSTRING = r"""
@@ -689,9 +687,7 @@ class FlaxBloomModel(FlaxBloomPreTrainedModel):
     module_class = FlaxBloomModule
 
 
-append_call_sample_docstring(
-    FlaxBloomModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBloomModel, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC)
 
 
 class FlaxBloomForCausalLMModule(nn.Module):
@@ -773,6 +769,4 @@ class FlaxBloomForCausalLM(FlaxBloomPreTrainedModel):
         return model_kwargs
 
 
-append_call_sample_docstring(
-    FlaxBloomForCausalLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC
-)
+append_call_sample_docstring(FlaxBloomForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC)

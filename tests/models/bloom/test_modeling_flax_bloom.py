@@ -19,7 +19,7 @@ from transformers import BloomConfig, BloomTokenizerFast, is_flax_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, require_torch, slow
 from transformers.utils.import_utils import is_torch_available
 
-from ...generation.test_generation_flax_utils import FlaxGenerationTesterMixin
+from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor
 
 
@@ -32,6 +32,7 @@ if is_flax_available():
     os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
     import jax.numpy as jnp
+
     from transformers import FlaxBloomForCausalLM, FlaxBloomModel
 
 if is_flax_available() and is_torch_available():
