@@ -696,8 +696,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
                 position_ids = position_ids[:, -1].unsqueeze(-1)
-        else:
-            position_ids = None
+
         return {
             "input_ids": input_ids,
             "past_key_values": past_key_values,

@@ -85,9 +85,15 @@ class MaskFormerModelTester:
         return MaskFormerConfig.from_backbone_and_decoder_configs(
             backbone_config=SwinConfig(
                 depths=[1, 1, 1, 1],
+                embed_dim=16,
+                hidden_size=32,
+                num_heads=[1, 1, 2, 2],
             ),
             decoder_config=DetrConfig(
-                decoder_ffn_dim=128,
+                decoder_ffn_dim=64,
+                decoder_layers=2,
+                encoder_ffn_dim=64,
+                encoder_layers=2,
                 num_queries=self.num_queries,
                 decoder_attention_heads=2,
                 d_model=self.mask_feature_size,
@@ -222,10 +228,6 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         reason="MaskFormer has some layers using `add_module` which doesn't work well with `nn.DataParallel`"
     )
     def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
         pass
 
     def test_forward_signature(self):
