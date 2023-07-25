@@ -273,7 +273,7 @@ def get_keys_to_not_convert(model):
         return []
 
     # otherwise they have an attached head
-    list_modules = list(model.named_children())
+    list_modules = list(model.named_parameters())
     list_last_module = [list_modules[-1][0]]
 
     # add last module together with tied weights

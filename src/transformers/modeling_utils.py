@@ -457,7 +457,11 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             )
         return safe_load_file(checkpoint_file)
     try:
-        return torch.load(checkpoint_file, map_location="cpu")
+        if is_deepspeed_zero3_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0:
+            map_location = "meta"
+        else:
+            map_location = "cpu"
+        return torch.load(checkpoint_file, map_location=map_location)
     except Exception as e:
         try:
             with open(checkpoint_file) as f:
