@@ -238,7 +238,6 @@ class IdeficsProcessor(ProcessorMixin):
                 add_special_tokens=False,
             )
 
-            print(encoding)
             all_texts.append(encoding["input_ids"])
             all_images.append(real_images)
 
