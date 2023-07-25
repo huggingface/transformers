@@ -129,16 +129,16 @@
       title: (번역중) Inference on many GPUs
     - local: in_translation
       title: (번역중) Inference on Specialized Hardware
-    - local: in_translation
-      title: (번역중) Custom hardware for training
+    - local: perf_hardware
+      title: 훈련용 사용자 맞춤형 하드웨어
     - local: in_translation
       title: (번역중) Instantiating a big model
     - local: in_translation
       title: (번역중) Debugging
     - local: in_translation
       title: (번역중) Hyperparameter Search using Trainer API
-    - local: in_translation
-      title: (번역중) XLA Integration for TensorFlow Models
+    - local: tf_xla
+      title: TensorFlow 모델을 위한 XLA 통합
   title: (번역중) 성능 및 확장성
 - sections:
     - local: in_translation
