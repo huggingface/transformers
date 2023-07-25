@@ -55,8 +55,8 @@ class VivitModelTester:
         num_frames=8,  # decreased, because default 32 takes too much RAM at inference
         tubelet_size=[2, 4, 4],
         num_channels=3,
-        hidden_size=768,
-        num_hidden_layers=5,
+        hidden_size=32,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu_fast",
@@ -309,10 +309,6 @@ class VivitModelTest(ModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
-        pass
 
 
 # We will verify our results on a video of eating spaghetti
