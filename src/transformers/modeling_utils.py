@@ -2345,7 +2345,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             model_kwargs = kwargs
 
-        # get the quantization method inside the config of the model if it exist
+        # get the quantization method inside the config of the model if it exists
         quantization_method = None
         if hasattr(config, "quantization_config"):
             if hasattr(config.quantization_config, "load_in_8bit"):
