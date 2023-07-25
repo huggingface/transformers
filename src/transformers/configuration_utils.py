@@ -613,7 +613,7 @@ class PretrainedConfig(PushToHubMixin):
             `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the configuration object.
 
         """
-        self._set_token_in_kwargs(kwargs)
+        cls._set_token_in_kwargs(kwargs)
 
         original_kwargs = copy.deepcopy(kwargs)
         # Get config dict associated with the base config file
