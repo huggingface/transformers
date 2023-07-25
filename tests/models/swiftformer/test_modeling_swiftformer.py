@@ -58,9 +58,9 @@ class SwiftFormerModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         image_size=224,
-        num_labels=1000,
-        layer_depths=[3, 3, 6, 4],
-        embed_dims=[48, 56, 112, 220],
+        num_labels=3,
+        layer_depths=[1, 1, 1, 1],
+        embed_dims=[16, 16, 32, 32],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -271,10 +271,6 @@ class SwiftFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
-
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
-        pass
 
 
 # We will verify our results on an image of cute cats

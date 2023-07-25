@@ -203,7 +203,7 @@ class GitModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=4,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -268,6 +268,10 @@ class GitModelTester:
                 "num_channels": self.num_channels,
                 "image_size": self.image_size,
                 "patch_size": self.patch_size,
+                "hidden_size": self.hidden_size,
+                "projection_dim": 32,
+                "num_hidden_layers": self.num_hidden_layers,
+                "num_attention_heads": self.num_attention_heads,
             },
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
@@ -452,10 +456,6 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @unittest.skip(reason="GIT has pixel values as additional input")
     def test_greedy_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
         pass
 
 

@@ -234,6 +234,7 @@ class GenerationConfig(PushToHubMixin):
 
     def __init__(self, **kwargs):
         # Parameters that control the length of the output
+        # if the default `max_length` is updated here, make sure to update the `generate` tests following https://github.com/huggingface/transformers/pull/25030
         self.max_length = kwargs.pop("max_length", 20)
         self.max_new_tokens = kwargs.pop("max_new_tokens", None)
         self.min_length = kwargs.pop("min_length", 0)

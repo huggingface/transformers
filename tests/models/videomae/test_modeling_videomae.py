@@ -130,6 +130,10 @@ class VideoMAEModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            decoder_hidden_size=self.hidden_size,
+            decoder_intermediate_size=self.intermediate_size,
+            decoder_num_attention_heads=self.num_attention_heads,
+            decoder_num_hidden_layers=self.num_hidden_layers,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -343,10 +347,6 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
-        pass
 
 
 # We will verify our results on a video of eating spaghetti

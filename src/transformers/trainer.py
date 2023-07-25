@@ -2677,7 +2677,11 @@ class Trainer:
             self._past = outputs[self.args.past_index]
 
         if labels is not None:
-            if unwrap_model(model)._get_name() in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
+            if is_peft_available() and isinstance(model, PeftModel):
+                model_name = unwrap_model(model.base_model)._get_name()
+            else:
+                model_name = unwrap_model(model)._get_name()
+            if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
                 loss = self.label_smoother(outputs, labels, shift_labels=True)
             else:
                 loss = self.label_smoother(outputs, labels)
@@ -3806,7 +3810,9 @@ class Trainer:
 
         # create accelerator object
         self.accelerator = Accelerator(
-            deepspeed_plugin=self.args.deepspeed_plugin, gradient_accumulation_plugin=gradient_accumulation_plugin
+            dispatch_batches=self.args.dispatch_batches,
+            deepspeed_plugin=self.args.deepspeed_plugin,
+            gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
 
         # deepspeed and accelerate flags covering both trainer args and accelerate launcher
