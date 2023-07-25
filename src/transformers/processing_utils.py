@@ -127,6 +127,9 @@ class ProcessorMixin(PushToHubMixin):
                 )
             token = use_auth_token
 
+        if token is not None:
+            kwargs["token"] = token
+
         os.makedirs(save_directory, exist_ok=True)
 
         if push_to_hub:
