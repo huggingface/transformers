@@ -1887,7 +1887,7 @@ class Trainer:
                     if optimizer_was_run:
                         # Delay optimizer scheduling until metrics are generated
                         if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                            self.lr_scheduler.step()
+                            self.lr_scheduler.step(self.state.global_step)
 
                     model.zero_grad()
                     self.state.global_step += 1
