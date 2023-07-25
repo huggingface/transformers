@@ -62,6 +62,7 @@ class DPTModelTester:
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
         num_labels=3,
+        neck_hidden_sizes=[16, 16, 32, 32],
         is_hybrid=False,
         scope=None,
     ):
@@ -84,6 +85,7 @@ class DPTModelTester:
         self.num_labels = num_labels
         self.scope = scope
         self.is_hybrid = is_hybrid
+        self.neck_hidden_sizes = neck_hidden_sizes
         # sequence length of DPT = num_patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1
@@ -105,6 +107,7 @@ class DPTModelTester:
             patch_size=self.patch_size,
             num_channels=self.num_channels,
             hidden_size=self.hidden_size,
+            fusion_hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             backbone_out_indices=self.backbone_out_indices,
             num_attention_heads=self.num_attention_heads,
@@ -115,6 +118,7 @@ class DPTModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             is_hybrid=self.is_hybrid,
+            neck_hidden_sizes=self.neck_hidden_sizes,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -274,10 +278,6 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
-
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
-        pass
 
     @slow
     def test_model_from_pretrained(self):

@@ -17,12 +17,12 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_tf_available():
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_VISION_2_SEQ_MAPPING
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES
 
 if is_torch_available():
     import torch
 
-    from ..models.auto.modeling_auto import MODEL_FOR_VISION_2_SEQ_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -55,7 +55,7 @@ class ImageToTextPipeline(Pipeline):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
         self.check_model_type(
-            TF_MODEL_FOR_VISION_2_SEQ_MAPPING if self.framework == "tf" else MODEL_FOR_VISION_2_SEQ_MAPPING
+            TF_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES if self.framework == "tf" else MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES
         )
 
     def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, prompt=None):

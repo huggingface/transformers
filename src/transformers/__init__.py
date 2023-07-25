@@ -278,6 +278,7 @@ _import_structure = {
         "MCTCTProcessor",
     ],
     "models.deprecated.mmbt": ["MMBTConfig"],
+    "models.deprecated.open_llama": ["OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenLlamaConfig"],
     "models.deprecated.retribert": [
         "RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "RetriBertConfig",
@@ -445,7 +446,6 @@ _import_structure = {
         "NystromformerConfig",
     ],
     "models.oneformer": ["ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "OneFormerConfig", "OneFormerProcessor"],
-    "models.open_llama": ["OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenLlamaConfig"],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.opt": ["OPTConfig"],
     "models.owlvit": [
@@ -469,6 +469,7 @@ _import_structure = {
     "models.plbart": ["PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "PLBartConfig"],
     "models.poolformer": ["POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PoolFormerConfig"],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
+    "models.pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtConfig"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.realm": ["REALM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RealmConfig", "RealmTokenizer"],
@@ -948,6 +949,7 @@ else:
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
+    _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
@@ -1536,6 +1538,9 @@ else:
         ]
     )
     _import_structure["models.deprecated.mmbt"].extend(["MMBTForClassification", "MMBTModel", "ModalEmbeddings"])
+    _import_structure["models.deprecated.open_llama"].extend(
+        ["OpenLlamaForCausalLM", "OpenLlamaForSequenceClassification", "OpenLlamaModel", "OpenLlamaPreTrainedModel"]
+    )
     _import_structure["models.deprecated.retribert"].extend(
         ["RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST", "RetriBertModel", "RetriBertPreTrainedModel"]
     )
@@ -2300,9 +2305,6 @@ else:
             "OneFormerPreTrainedModel",
         ]
     )
-    _import_structure["models.open_llama"].extend(
-        ["OpenLlamaForCausalLM", "OpenLlamaForSequenceClassification", "OpenLlamaModel", "OpenLlamaPreTrainedModel"]
-    )
     _import_structure["models.openai"].extend(
         [
             "OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2396,6 +2398,14 @@ else:
             "ProphetNetForConditionalGeneration",
             "ProphetNetModel",
             "ProphetNetPreTrainedModel",
+        ]
+    )
+    _import_structure["models.pvt"].extend(
+        [
+            "PVT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PvtForImageClassification",
+            "PvtModel",
+            "PvtPreTrainedModel",
         ]
     )
     _import_structure["models.qdqbert"].extend(
@@ -4239,6 +4249,7 @@ if TYPE_CHECKING:
         MCTCTProcessor,
     )
     from .models.deprecated.mmbt import MMBTConfig
+    from .models.deprecated.open_llama import OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenLlamaConfig
     from .models.deprecated.retribert import (
         RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         RetriBertConfig,
@@ -4390,7 +4401,6 @@ if TYPE_CHECKING:
     from .models.nllb_moe import NLLB_MOE_PRETRAINED_CONFIG_ARCHIVE_MAP, NllbMoeConfig
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.oneformer import ONEFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, OneFormerConfig, OneFormerProcessor
-    from .models.open_llama import OPEN_LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenLlamaConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.opt import OPTConfig
     from .models.owlvit import (
@@ -4414,6 +4424,7 @@ if TYPE_CHECKING:
     from .models.plbart import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP, PLBartConfig
     from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
+    from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.realm import REALM_PRETRAINED_CONFIG_ARCHIVE_MAP, RealmConfig, RealmTokenizer
@@ -4838,6 +4849,7 @@ if TYPE_CHECKING:
         from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
         from .models.pix2struct import Pix2StructImageProcessor
         from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
+        from .models.pvt import PvtImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
@@ -5334,6 +5346,12 @@ if TYPE_CHECKING:
             MCTCTPreTrainedModel,
         )
         from .models.deprecated.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
+        from .models.deprecated.open_llama import (
+            OpenLlamaForCausalLM,
+            OpenLlamaForSequenceClassification,
+            OpenLlamaModel,
+            OpenLlamaPreTrainedModel,
+        )
         from .models.deprecated.retribert import (
             RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             RetriBertModel,
@@ -5954,12 +5972,6 @@ if TYPE_CHECKING:
             OneFormerModel,
             OneFormerPreTrainedModel,
         )
-        from .models.open_llama import (
-            OpenLlamaForCausalLM,
-            OpenLlamaForSequenceClassification,
-            OpenLlamaModel,
-            OpenLlamaPreTrainedModel,
-        )
         from .models.openai import (
             OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             OpenAIGPTDoubleHeadsModel,
@@ -6039,6 +6051,12 @@ if TYPE_CHECKING:
             ProphetNetForConditionalGeneration,
             ProphetNetModel,
             ProphetNetPreTrainedModel,
+        )
+        from .models.pvt import (
+            PVT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PvtForImageClassification,
+            PvtModel,
+            PvtPreTrainedModel,
         )
         from .models.qdqbert import (
             QDQBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
