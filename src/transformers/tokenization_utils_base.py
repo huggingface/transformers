@@ -1676,7 +1676,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         <Tip>
 
-        Passing `use_auth_token=True` is required when you want to use a private model.
+        Passing `token=True` is required when you want to use a private model.
 
         </Tip>
 
@@ -1768,7 +1768,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     force_download=force_download,
                     resume_download=resume_download,
                     proxies=proxies,
-                    use_auth_token=token,
+                    token=token,
                     revision=revision,
                     local_files_only=local_files_only,
                     subfolder=subfolder,
@@ -1805,7 +1805,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
-                    use_auth_token=token,
+                    token=token,
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
@@ -1843,7 +1843,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             pretrained_model_name_or_path,
             init_configuration,
             *init_inputs,
-            use_auth_token=token,
+            token=token,
             cache_dir=cache_dir,
             local_files_only=local_files_only,
             _commit_hash=commit_hash,
@@ -1858,7 +1858,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         pretrained_model_name_or_path,
         init_configuration,
         *init_inputs,
-        use_auth_token=None,
+        token=None,
         cache_dir=None,
         local_files_only=False,
         _commit_hash=None,
@@ -1875,7 +1875,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 pretrained_model_name_or_path,
                 copy.deepcopy(init_configuration),
                 *init_inputs,
-                use_auth_token=use_auth_token,
+                token=token,
                 cache_dir=cache_dir,
                 local_files_only=local_files_only,
                 _commit_hash=_commit_hash,
@@ -1915,7 +1915,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             try:
                 config = AutoConfig.from_pretrained(
                     pretrained_model_name_or_path,
-                    use_auth_token=use_auth_token,
+                    token=token,
                     cache_dir=cache_dir,
                     local_files_only=local_files_only,
                     _commit_hash=_commit_hash,
@@ -2134,6 +2134,19 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Returns:
             A tuple of `str`: The files saved.
         """
+        token = kwargs.pop("token", None)
+        use_auth_token = kwargs.pop("use_auth_token", None)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
+
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
@@ -2231,7 +2244,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 repo_id,
                 files_timestamps,
                 commit_message=commit_message,
-                token=kwargs.get("use_auth_token"),
+                token=token,
             )
 
         return save_files

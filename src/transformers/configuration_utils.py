@@ -435,6 +435,8 @@ class PretrainedConfig(PushToHubMixin):
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        self._set_token_in_kwargs(kwargs)
+
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
@@ -463,7 +465,7 @@ class PretrainedConfig(PushToHubMixin):
                 repo_id,
                 files_timestamps,
                 commit_message=commit_message,
-                token=kwargs.get("use_auth_token"),
+                token=kwargs.get("token"),
             )
 
     @classmethod
@@ -677,7 +679,7 @@ class PretrainedConfig(PushToHubMixin):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
-                    use_auth_token=token,
+                    token=token,
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
