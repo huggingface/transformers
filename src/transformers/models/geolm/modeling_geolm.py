@@ -18,14 +18,13 @@
 
 import math
 import os
-import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -33,10 +32,6 @@ from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    NextSentencePredictorOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
@@ -47,7 +42,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
 from .configuration_geolm import GeoLMConfig
 
@@ -59,9 +53,7 @@ _CONFIG_FOR_DOC = "GeoLMConfig"
 
 # TokenClassification docstring
 _CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "zekun-li/geolm-base-toponym-recognition"
-_TOKEN_CLASS_EXPECTED_OUTPUT = (
-    "['O', 'B-Topo', 'I-Topo'] "
-)
+_TOKEN_CLASS_EXPECTED_OUTPUT = "['O', 'B-Topo', 'I-Topo'] "
 _TOKEN_CLASS_EXPECTED_LOSS = 0.01
 
 # QuestionAnswering docstring
@@ -81,7 +73,6 @@ GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "zekun-li/geolm-base-cased",
     # See all GeoLM models at https://huggingface.co/models?filter=geolm
 ]
-
 
 
 def load_tf_weights_in_geolm(model, config, tf_checkpoint_path):
@@ -156,28 +147,30 @@ def load_tf_weights_in_geolm(model, config, tf_checkpoint_path):
         pointer.data = torch.from_numpy(array)
     return model
 
+
 class ContinuousSpatialPositionalEmbedding(nn.Module):
     def __init__(self, hidden_size):
         super().__init__()
 
-        self.emb_dim = int(hidden_size/2)  # dimension of the embedding
+        self.emb_dim = int(hidden_size / 2)  # dimension of the embedding
 
-        inv_freq = 1 / (10000 ** (torch.arange(0.0, self.emb_dim) / self.emb_dim)) #(emb_dim)
+        inv_freq = 1 / (10000 ** (torch.arange(0.0, self.emb_dim) / self.emb_dim))  # (emb_dim)
 
         self.register_buffer("inv_freq", inv_freq)
 
-    def forward(self, x ):
-        bsz, seq_len = x.shape[0], x.shape[1] # get batch size
-        flat_x = torch.flatten(x) # (bsize, seq_len) -> bsize * seq_len
-        
-        flat_sinusoid_inp = torch.ger(flat_x, self.inv_freq) # outer-product, out_shape: (bsize * seq_len, emb_dim)
-        
-        sinusoid_inp = flat_sinusoid_inp.reshape(bsz, seq_len, self.emb_dim) #(bsize * seq_len, emb_dim) -> (bsize, seq_len, emb_dim)
-        
-        ret_pos_emb = torch.cat([sinusoid_inp.sin(), sinusoid_inp.cos()], dim=-1) # (bsize, seq_len, 2*emb_dim)
+    def forward(self, x):
+        bsz, seq_len = x.shape[0], x.shape[1]  # get batch size
+        flat_x = torch.flatten(x)  # (bsize, seq_len) -> bsize * seq_len
+
+        flat_sinusoid_inp = torch.ger(flat_x, self.inv_freq)  # outer-product, out_shape: (bsize * seq_len, emb_dim)
+
+        sinusoid_inp = flat_sinusoid_inp.reshape(
+            bsz, seq_len, self.emb_dim
+        )  # (bsize * seq_len, emb_dim) -> (bsize, seq_len, emb_dim)
+
+        ret_pos_emb = torch.cat([sinusoid_inp.sin(), sinusoid_inp.cos()], dim=-1)  # (bsize, seq_len, 2*emb_dim)
 
         return ret_pos_emb
-
 
 
 class GeoLMEmbeddings(nn.Module):
@@ -191,8 +184,7 @@ class GeoLMEmbeddings(nn.Module):
 
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
-        
-        self.spatial_position_embedding = ContinuousSpatialPositionalEmbedding(hidden_size = config.hidden_size)
+        self.spatial_position_embedding = ContinuousSpatialPositionalEmbedding(hidden_size=config.hidden_size)
         self.spatial_position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
         self.use_spatial_distance_embedding = config.use_spatial_distance_embedding
@@ -202,7 +194,7 @@ class GeoLMEmbeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute") 
+        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.spatial_position_embedding_type = "absolute"
 
         self.register_buffer(
@@ -244,7 +236,7 @@ class GeoLMEmbeddings(nn.Module):
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
         if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids) 
+            inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings
@@ -256,19 +248,16 @@ class GeoLMEmbeddings(nn.Module):
             spatial_position_list_x = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
             spatial_position_list_y = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
-
         if self.use_spatial_distance_embedding:
-            
             if self.spatial_position_embedding_type == "absolute":
                 pos_emb_x = self.spatial_position_embedding(spatial_position_list_x)
                 pos_emb_y = self.spatial_position_embedding(spatial_position_list_y)
-                
-                embeddings +=  0.01* pos_emb_x
-                embeddings +=  0.01* pos_emb_y
+
+                embeddings += 0.01 * pos_emb_x
+                embeddings += 0.01 * pos_emb_y
             else:
                 raise NotImplementedError("Invalid spatial position embedding type")
 
-            
         else:
             pass
 
@@ -705,24 +694,23 @@ class GeoLMPooler(nn.Module):
 class PivotEntityPooler(nn.Module):
     def __init__(self):
         super().__init__()
-        
+
     def forward(self, hidden_states, pivot_token_idx_list):
         # We "pool" the model by simply taking the hidden state corresponding
         # to the tokens of target entity
-        
+
         bsize = hidden_states.shape[0]
 
         tensor_list = []
         for i in torch.arange(0, bsize):
             # pivot_token_full = hidden_states[i, 1:pivot_len_list[i]+1]
-            pivot_token_full = hidden_states[i, pivot_token_idx_list[i][0]:pivot_token_idx_list[i][1]]
-            pivot_token_tensor = torch.mean(torch.unsqueeze(pivot_token_full, 0), dim = 1)
+            pivot_token_full = hidden_states[i, pivot_token_idx_list[i][0] : pivot_token_idx_list[i][1]]
+            pivot_token_tensor = torch.mean(torch.unsqueeze(pivot_token_full, 0), dim=1)
             tensor_list.append(pivot_token_tensor)
 
-        batch_pivot_tensor = torch.cat(tensor_list, dim = 0)
+        batch_pivot_tensor = torch.cat(tensor_list, dim=0)
 
         return batch_pivot_tensor
-       
 
 
 class GeoLMPredictionHeadTransform(nn.Module):
@@ -943,7 +931,7 @@ class GeoLMModel(GeoLMPreTrainedModel):
         self.embeddings = GeoLMEmbeddings(config)
         self.encoder = GeoLMEncoder(config)
 
-        self.pivot_pooler = PivotEntityPooler() if add_pooling_layer else None # GeoLMPooler(config)
+        self.pivot_pooler = PivotEntityPooler() if add_pooling_layer else None  # GeoLMPooler(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -974,9 +962,9 @@ class GeoLMModel(GeoLMPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        spatial_position_list_x = Optional[torch.Tensor] = None,
-        spatial_position_list_y = Optional[torch.Tensor] = None,
-        pivot_token_idx_list = Optional[torch.Tensor] = None,
+        spatial_position_list_x: Optional[torch.Tensor] = None,
+        spatial_position_list_y: Optional[torch.Tensor] = None,
+        pivot_token_idx_list: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
@@ -989,14 +977,14 @@ class GeoLMModel(GeoLMPreTrainedModel):
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
         spatial_position_list_x (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Geo-coordinate position corresponds to longitude in the [EPSG:4087](https://epsg.io/4087) coordinate system 
+            Geo-coordinate position corresponds to longitude in the [EPSG:4087](https://epsg.io/4087) coordinate system
             Can be None if the input is natural language sentence.
         spatial_position_list_y (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Geo-coordinate position corresponds to latitude in the [EPSG:4087](https://epsg.io/4087) coordinate system 
+            Geo-coordinate position corresponds to latitude in the [EPSG:4087](https://epsg.io/4087) coordinate system
             Can be None if the input is natural language sentence.
         pivot_token_idx_list = (`torch.IntTensor` of shape `(batch_size, 2)`, *optional*):
-            Stores the start and end token position for a toponym (i.e. place name). 
-            If not None, `pooler_output` will contain the toponym embedding as output.
+            Stores the start and end token position for a toponym (i.e. place name). If not None, `pooler_output` will
+            contain the toponym embedding as output.
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
@@ -1079,8 +1067,8 @@ class GeoLMModel(GeoLMPreTrainedModel):
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
-            spatial_position_list_x= spatial_position_list_x,
-            spatial_position_list_y = spatial_position_list_y,
+            spatial_position_list_x=spatial_position_list_x,
+            spatial_position_list_y=spatial_position_list_y,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
@@ -1100,7 +1088,7 @@ class GeoLMModel(GeoLMPreTrainedModel):
         sequence_output = encoder_outputs[0]
         # pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
         if pivot_token_idx_list is not None:
-            pooled_output = self.pivot_pooler(sequence_output, pivot_token_idx_list) 
+            pooled_output = self.pivot_pooler(sequence_output, pivot_token_idx_list)
         else:
             pooled_output = None
 
@@ -1115,6 +1103,7 @@ class GeoLMModel(GeoLMPreTrainedModel):
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
         )
+
 
 @add_start_docstrings(
     """GeoLM Model with a `language modeling` head on top for CLM fine-tuning.""", GEOLM_START_DOCSTRING
@@ -1411,10 +1400,10 @@ class GeoLMForTokenClassification(GeoLMPreTrainedModel):
     ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
         spatial_position_list_x (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Geo-coordinate position corresponds to longitude in the [EPSG:4087](https://epsg.io/4087) coordinate system 
+            Geo-coordinate position corresponds to longitude in the [EPSG:4087](https://epsg.io/4087) coordinate system
             Can be None if the input is natural language sentence.
         spatial_position_list_y (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Geo-coordinate position corresponds to latitude in the [EPSG:4087](https://epsg.io/4087) coordinate system 
+            Geo-coordinate position corresponds to latitude in the [EPSG:4087](https://epsg.io/4087) coordinate system
             Can be None if the input is natural language sentence.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1426,8 +1415,8 @@ class GeoLMForTokenClassification(GeoLMPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
-            spatial_position_list_x = spatial_position_list_x,
-            spatial_position_list_y = spatial_position_list_y,
+            spatial_position_list_x=spatial_position_list_x,
+            spatial_position_list_y=spatial_position_list_y,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1455,6 +1444,3 @@ class GeoLMForTokenClassification(GeoLMPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
-
