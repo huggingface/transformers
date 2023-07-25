@@ -491,7 +491,7 @@ class PretrainedConfig(PushToHubMixin):
 
         if token is not None:
             # change to `token` in a follow-up PR
-            kwargs["use_auth_token"] = token
+            kwargs["token"] = token
 
     @classmethod
     def from_pretrained(
@@ -635,7 +635,7 @@ class PretrainedConfig(PushToHubMixin):
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
+        token = kwargs.pop("token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
@@ -677,7 +677,7 @@ class PretrainedConfig(PushToHubMixin):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
-                    use_auth_token=use_auth_token,
+                    use_auth_token=token,
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
