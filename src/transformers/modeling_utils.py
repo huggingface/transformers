@@ -2348,10 +2348,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # get the quantization method inside the config of the model if it exists
         quantization_method = None
         if hasattr(config, "quantization_config"):
-            if config.quantization_config.get("load_in_8bit", False):
-                quantization_method = QuantizationMethod.BITS_AND_BYTES
-            else:
-                quantization_method = config.quantization_config.get("quant_method", None)
+            quantization_method = config.quantization_config.get("quant_method", QuantizationMethod.BITS_AND_BYTES)
 
         quantizer = None
         if quantization_method == QuantizationMethod.GPTQ:
