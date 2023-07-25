@@ -137,8 +137,8 @@
       title: (번역중) Debugging
     - local: in_translation
       title: (번역중) Hyperparameter Search using Trainer API
-    - local: in_translation
-      title: (번역중) XLA Integration for TensorFlow Models
+    - local: tf_xla
+      title: TensorFlow 모델을 위한 XLA 통합
   title: (번역중) 성능 및 확장성
 - sections:
     - local: in_translation
