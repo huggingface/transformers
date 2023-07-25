@@ -201,11 +201,11 @@ class ViTPoseBlock(nn.Module):
 a = ViTPoseBlock(config)
 
 
-#class ViTPoseTopDownHeatMap(nn.Module):
-#    # keypoint head - mse loss]
-#    ## deconv layers and all the other remaining things with the final layer
-#    pass
-#
+class ViTPoseTopDownHeatMap(nn.Module):
+    # keypoint head - mse loss]
+    ## deconv layers and all the other remaining things with the final layer
+    pass
+
 #]
 #class ViTBackbone(nn.Module):
 #    """
