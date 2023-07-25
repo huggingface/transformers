@@ -24,6 +24,7 @@ from typing import Any, Dict, Union
 from packaging import version
 
 from ..utils import is_torch_available, logging
+from enum import Enum
 
 
 if is_torch_available():
@@ -32,6 +33,9 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
+class QuantizationMethod(Enum):
+    BITS_AND_BYTES = "bitsandbytes"
+    GPTQ = "gtpq"
 
 @dataclass
 class BitsAndBytesConfig:
@@ -97,7 +101,7 @@ class BitsAndBytesConfig:
         bnb_4bit_use_double_quant=False,
         **kwargs,
     ):
-        self.quant_method = "bitsandbytes"
+        self.quant_method = QuantizationMethod.BITS_AND_BYTES
         self.load_in_8bit = load_in_8bit
         self.load_in_4bit = load_in_4bit
         self.llm_int8_threshold = llm_int8_threshold
