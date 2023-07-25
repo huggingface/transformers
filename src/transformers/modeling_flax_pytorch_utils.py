@@ -339,7 +339,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
         raise
 
     # check if we have bf16 weights
-    is_type_bf16 = flatten_dict(jax.tree_map(lambda x: x.dtype == jnp.bfloat16, flax_state)).values()
+    is_type_bf16 = flatten_dict(jax.tree_util.tree_map(lambda x: x.dtype == jnp.bfloat16, flax_state)).values()
     if any(is_type_bf16):
         # convert all weights to fp32 if the are bf16 since torch.from_numpy can-not handle bf16
         # and bf16 is not fully supported in PT yet.
@@ -347,7 +347,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
             "Found ``bfloat16`` weights in Flax model. Casting all ``bfloat16`` weights to ``float32`` "
             "before loading those in PyTorch model."
         )
-        flax_state = jax.tree_map(
+        flax_state = jax.tree_util.tree_map(
             lambda params: params.astype(np.float32) if params.dtype == jnp.bfloat16 else params, flax_state
         )
 
@@ -387,7 +387,34 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
         elif flax_key_tuple[-1] in ["scale", "embedding"]:
             flax_key_tuple = flax_key_tuple[:-1] + ("weight",)
 
-        flax_key = ".".join(flax_key_tuple)
+        # adding batch stats from flax batch norm to pt
+        elif "mean" in flax_key_tuple[-1]:
+            flax_key_tuple = flax_key_tuple[:-1] + ("running_mean",)
+        elif "var" in flax_key_tuple[-1]:
+            flax_key_tuple = flax_key_tuple[:-1] + ("running_var",)
+
+        if "batch_stats" in flax_state:
+            flax_key = ".".join(flax_key_tuple[1:])  # Remove the params/batch_stats header
+        else:
+            flax_key = ".".join(flax_key_tuple)
+
+        # We also need to look at `pt_model_dict` and see if there are keys requiring further transformation.
+        special_pt_names = {}
+        # New `weight_norm` from https://github.com/huggingface/transformers/pull/24030
+        for key in pt_model_dict:
+            key_components = key.split(".")
+            name = None
+            if key_components[-3::2] == ["parametrizations", "original0"]:
+                name = key_components[-2] + "_g"
+            elif key_components[-3::2] == ["parametrizations", "original1"]:
+                name = key_components[-2] + "_v"
+            if name is not None:
+                key_components = key_components[:-3] + [name]
+                key_to_check = ".".join(key_components)
+                special_pt_names[key_to_check] = key
+
+        if flax_key in special_pt_names:
+            flax_key = special_pt_names[flax_key]
 
         if flax_key in pt_model_dict:
             if flax_tensor.shape != pt_model_dict[flax_key].shape:
