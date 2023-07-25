@@ -3072,9 +3072,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # id function doesn't work for meta tensor so we need this function
             tied_params = find_tied_parameters(model)
 
-        # These are all the pointers of shared tensors.
-        tied_params = [names for _, names in ptrs.items() if len(names) > 1]
-
         for group in tied_params:
             if remove_prefix_from_model:
                 group = [key[len(_prefix) :] if key.startswith(_prefix) else key for key in group]
