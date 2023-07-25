@@ -183,26 +183,6 @@ class IdeficsConfig(PretrainedConfig):
             **kwargs,
         )
 
-    def check_compatibilities(self):
-        vision_model_params = eval(self.vision_model_params)
-        config = AutoConfig.from_pretrained(self.vision_model_name, **vision_model_params)
-        if hasattr(config, "vision_config"):
-            vision_config = config.vision_config
-        else:
-            vision_config = config
-        vision_embed_dim = vision_config.hidden_size
-        if self.vision_embed_dim != vision_embed_dim:
-            raise ValueError(
-                f"vision_embed_dim ({self.vision_embed_dim}) must match the hidden size of the vision model"
-                f" ({vision_embed_dim})"
-            )
-        vision_image_size = vision_config.image_size
-        if self.vision_image_size != vision_image_size:
-            raise ValueError(
-                f"vision_image_size ({self.vision_image_size}) must match the hidden size of the vision model"
-                f" ({vision_image_size})"
-            )
-
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
