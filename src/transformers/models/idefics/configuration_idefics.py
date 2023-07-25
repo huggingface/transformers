@@ -18,10 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Idefics model configuration"""
-import os
-from typing import Union
 
-from transformers import AutoConfig
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
 
