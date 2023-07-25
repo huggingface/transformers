@@ -109,6 +109,45 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
         encoding_ids = new_tokenizer.encode("a🤗")
         self.assertEqual(encoding_ids, [64, 172, 253, 97, 245])
 
+    def test_init_from_tokenizers_model(self):
+        from tokenizers import Tokenizer
+
+        tokenizer = Tokenizer.from_pretrained("t5-base")
+        # Enable padding
+        tokenizer.enable_padding(pad_id=0, pad_token="<pad>", length=512, pad_to_multiple_of=64)
+        self.assertEqual(
+            tokenizer.padding,
+            {
+                "length": None,
+                "pad_to_multiple_of": None,
+                "pad_id": 0,
+                "pad_token": "<pad>",
+                "pad_type_id": 0,
+                "direction": "right",
+            },
+        )
+        fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+
+        self.assertEqual(fast_tokenizer.pad_token_id, 0)
+        self.assertEqual(fast_tokenizer.padding_side, "right")
+        self.assertEqual(fast_tokenizer.pad_token, "<pad>")
+        self.assertEqual(fast_tokenizer.pad_token, "<pad>")
+        self.assertEqual(fast_tokenizer.init_kwargs["max_length"], 512)
+        self.assertEqual(fast_tokenizer.init_kwargs["pad_to_multiple_of"], 64)
+        sentences = ["Hello, y'all!", "How are you 😁 ?"]
+        assert fast_tokenizer(sentences, padding=True)
+
+        # make sure padding and truncation is preserved across
+        tokenizer.enable_truncation(64, stride=3, strategy="only_second", direction="left")
+        self.assertEqual(
+            tokenizer.truncation, {"max_length": 64, "stride": 3, "strategy": "only_second", "direction": "left"}
+        )
+        self.assertEqual(fast_tokenizer.truncation_side, "left")
+        self.assertEqual(fast_tokenizer.init_kwargs["truncation_strategy"], "only_second")
+        self.assertEqual(fast_tokenizer.init_kwargs["max_length"], 64)
+        self.assertEqual(fast_tokenizer.init_kwargs["stride"], 3)
+        # make sure saving and loading also works
+
 
 @require_tokenizers
 class TokenizerVersioningTest(unittest.TestCase):
