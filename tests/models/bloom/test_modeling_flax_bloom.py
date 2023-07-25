@@ -240,15 +240,6 @@ class FlaxBloomGenerationTest(unittest.TestCase):
 
         self.assertEqual(sequences_fx_batch[1][6:].tolist(), sequences_fx_simple[0][:-6].tolist())
 
-    def test_scan_model(self):
-        scan_model = FlaxBloomForCausalLM.from_pretrained("sanchit-gandhi/bloom-350m-scan", use_scan=True)
-        input_ids = np.array([[1, 2, 3, 4, 5, 6]], dtype=np.int32)
-
-        unrolled_logits = self.model(input_ids).logits
-        scan_logits = scan_model(input_ids).logits
-
-        self.assertTrue(np.max(np.abs(unrolled_logits - scan_logits)) <= 1e-3)
-
 
 @require_torch
 @is_pt_flax_cross_test
