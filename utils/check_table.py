@@ -93,8 +93,6 @@ def get_model_table_from_auto_modules():
     model_name_to_prefix = {name: config.replace("Config", "") for name, config in model_name_to_config.items()}
 
     # Dictionaries flagging if each model prefix has a slow/fast tokenizer, backend in PT/TF/Flax.
-    slow_tokenizers = collections.defaultdict(bool)
-    fast_tokenizers = collections.defaultdict(bool)
     pt_models = collections.defaultdict(bool)
     tf_models = collections.defaultdict(bool)
     flax_models = collections.defaultdict(bool)
@@ -102,13 +100,7 @@ def get_model_table_from_auto_modules():
     # Let's lookup through all transformers object (once).
     for attr_name in dir(transformers_module):
         lookup_dict = None
-        if attr_name.endswith("Tokenizer"):
-            lookup_dict = slow_tokenizers
-            attr_name = attr_name[:-9]
-        elif attr_name.endswith("TokenizerFast"):
-            lookup_dict = fast_tokenizers
-            attr_name = attr_name[:-13]
-        elif _re_tf_models.match(attr_name) is not None:
+        if _re_tf_models.match(attr_name) is not None:
             lookup_dict = tf_models
             attr_name = _re_tf_models.match(attr_name).groups()[0]
         elif _re_flax_models.match(attr_name) is not None:
@@ -129,7 +121,7 @@ def get_model_table_from_auto_modules():
     # Let's build that table!
     model_names = list(model_name_to_config.keys())
     model_names.sort(key=str.lower)
-    columns = ["Model", "Tokenizer slow", "Tokenizer fast", "PyTorch support", "TensorFlow support", "Flax Support"]
+    columns = ["Model", "PyTorch support", "TensorFlow support", "Flax Support"]
     # We'll need widths to properly display everything in the center (+2 is to leave one extra space on each side).
     widths = [len(c) + 2 for c in columns]
     widths[0] = max([len(name) for name in model_names]) + 2
@@ -144,8 +136,6 @@ def get_model_table_from_auto_modules():
         prefix = model_name_to_prefix[name]
         line = [
             name,
-            check[slow_tokenizers[prefix]],
-            check[fast_tokenizers[prefix]],
             check[pt_models[prefix]],
             check[tf_models[prefix]],
             check[flax_models[prefix]],

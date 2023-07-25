@@ -15,6 +15,7 @@
 """Factory function to build auto-model classes."""
 import copy
 import importlib
+import os
 from collections import OrderedDict
 
 from ...configuration_utils import PretrainedConfig
@@ -418,7 +419,10 @@ class _BaseAutoModelClass:
             else:
                 repo_id = config.name_or_path
             model_class = get_class_from_dynamic_module(class_ref, repo_id, **kwargs)
-            cls._model_mapping.register(config.__class__, model_class, exist_ok=True)
+            if os.path.isdir(config._name_or_path):
+                model_class.register_for_auto_class(cls.__name__)
+            else:
+                cls.register(config.__class__, model_class, exist_ok=True)
             _ = kwargs.pop("code_revision", None)
             return model_class._from_config(config, **kwargs)
         elif type(config) in cls._model_mapping.keys():
@@ -477,7 +481,10 @@ class _BaseAutoModelClass:
                 class_ref, pretrained_model_name_or_path, **hub_kwargs, **kwargs
             )
             _ = hub_kwargs.pop("code_revision", None)
-            cls._model_mapping.register(config.__class__, model_class, exist_ok=True)
+            if os.path.isdir(pretrained_model_name_or_path):
+                model_class.register_for_auto_class(cls.__name__)
+            else:
+                cls.register(config.__class__, model_class, exist_ok=True)
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
@@ -643,6 +650,7 @@ class _LazyAutoMapping(OrderedDict):
         self._config_mapping = config_mapping
         self._reverse_config_mapping = {v: k for k, v in config_mapping.items()}
         self._model_mapping = model_mapping
+        self._model_mapping._model_mapping = self
         self._extra_content = {}
         self._modules = {}
 
