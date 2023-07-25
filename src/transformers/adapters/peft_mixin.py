@@ -44,7 +44,6 @@ class PeftAdapterMixin:
         from peft.utils.other import TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING
 
         self.peft_config = {}
-        self.modules_to_save = None
 
         adapter_config_file = self._find_adapter_config_file(
             peft_model_id,
