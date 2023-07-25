@@ -469,7 +469,7 @@ class PretrainedConfig(PushToHubMixin):
             )
 
     @classmethod
-    def _set_token_in_kwargs(self, kwargs, token=None):
+    def _set_token_in_kwargs(cls, kwargs, token=None):
         """Temporary method to deal with `token` and `use_auth_token`.
 
         This method is to avoid apply the same changes in all model config classes that overwrite `from_pretrained`.
