@@ -189,7 +189,6 @@ class ImageProcessingMixin(PushToHubMixin):
             token = use_auth_token
 
         if token is not None:
-            # change to `token` in a follow-up PR
             kwargs["token"] = token
 
         image_processor_dict, kwargs = cls.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)

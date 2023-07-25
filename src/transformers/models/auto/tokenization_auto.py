@@ -636,7 +636,6 @@ class AutoTokenizer:
             token = use_auth_token
 
         if token is not None:
-            # change to `token` in a follow-up PR
             kwargs["token"] = token
 
         config = kwargs.pop("config", None)

@@ -467,7 +467,6 @@ class _BaseAutoModelClass:
             token = use_auth_token
 
         if token is not None:
-            # change to `token` in a follow-up PR
             hub_kwargs["token"] = token
 
         if not isinstance(config, PretrainedConfig):

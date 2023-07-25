@@ -222,7 +222,6 @@ class ProcessorMixin(PushToHubMixin):
             token = use_auth_token
 
         if token is not None:
-            # change to `token` in a follow-up PR
             kwargs["use_auth_token"] = token
 
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
