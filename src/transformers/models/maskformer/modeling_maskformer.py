@@ -439,6 +439,7 @@ class DetrAttention(nn.Module):
 
     def with_pos_embed(self, tensor: torch.Tensor, object_queries: Optional[Tensor], **kwargs):
         position_embeddings = kwargs.pop("position_embeddings", None)
+
         if kwargs:
             raise ValueError(f"Unexpected arguments {kwargs.keys()}")
 
@@ -466,6 +467,7 @@ class DetrAttention(nn.Module):
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
+
         position_embeddings = kwargs.pop("position_ebmeddings", None)
         key_value_position_embeddings = kwargs.pop("key_value_position_embeddings", None)
 
@@ -635,6 +637,7 @@ class DetrDecoderLayer(nn.Module):
                 returned tensors for more detail.
         """
         position_embeddings = kwargs.pop("position_embeddings", None)
+
         if kwargs:
             raise ValueError(f"Unexpected arguments {kwargs.keys()}")
 
