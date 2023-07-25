@@ -1267,7 +1267,7 @@ class Mask2FormerPixelDecoder(nn.Module):
         self.lateral_convolutions = lateral_convs[::-1]
         self.output_convolutions = output_convs[::-1]
 
-    def get_valid_ratio(self, mask, dtype = torch.float32):
+    def get_valid_ratio(self, mask, dtype=torch.float32):
         """Get the valid ratio of all feature maps."""
 
         _, height, width = mask.shape
