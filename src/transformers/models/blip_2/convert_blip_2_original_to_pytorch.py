@@ -24,7 +24,8 @@ import requests
 import torch
 
 # pip3 install salesforce-lavis
-# I'm actually installing a slightly modified version: pip3 install git+https://github.com/nielsrogge/LAVIS.git@blip2_float32
+# I'm actually installing a slightly modified version: pip3 install -U git+https://github.com/nielsrogge/LAVIS.git@blip2_float32
+# to make sure we can compare both original and HF implementation in float32
 from lavis.models import load_model_and_preprocess
 from PIL import Image
 
@@ -225,7 +226,7 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     print("Generating a caption...")
     prompt = "Question: what object is in this image? Answer:"
-    prompt = "Question: what is the structure and geometry of this chair?"
+    # prompt = "Question: what is the structure and geometry of this chair?"
     input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(hf_model_device)
 
     from transformers import set_seed
