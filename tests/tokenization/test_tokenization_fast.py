@@ -111,6 +111,7 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_init_from_tokenizers_model(self):
         from tokenizers import Tokenizer
+
         sentences = ["Hello, y'all!", "How are you 😁 ?"]
 
         tokenizer = Tokenizer.from_pretrained("t5-base")
