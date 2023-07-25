@@ -31,7 +31,7 @@ from transformers.activations import ACT2FN
 from transformers.deepspeed import is_deepspeed_zero3_enabled
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from transformers.modeling_utils import PretrainedConfig
-from transformers.models.clip.configuration_clip import CLIPConfig
+from transformers.models.clip.configuration_clip import CLIPConfig, CLIPVisionConfig
 from transformers.models.clip.modeling_clip import CLIPVisionTransformer
 from transformers.utils import (
     ContextManagers,
@@ -617,6 +617,7 @@ class IdeficsAttention(nn.Module):
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
 
+        # TODO: check if PT version is > 2.0
         attn_output = nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
@@ -887,6 +888,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
                 if module.bias is not None:
                     with ContextManagers(deepspeed_gathered_parameters_context_manager(module.bias, modify=True)):
                         module.bias.data.zero_()
+                module._is_hf_initialized = True
 
         if isinstance(module, IdeficsGatedCrossAttentionLayer):
             for sub_module_name, sub_module in module.named_modules():
@@ -896,9 +898,11 @@ class IdeficsPreTrainedModel(PreTrainedModel):
                     else:
                         factor = 1.0
                     init_a_linear(sub_module, std=(0.4 / (sub_module.in_features * factor)) ** 0.5)
+                    sub_module._is_hf_initialized = True
         elif isinstance(module, PerceiverResampler):
             with ContextManagers(deepspeed_gathered_parameters_context_manager(module.latents, modify=True)):
                 module.latents.data.normal_(mean=0.0, std=(1.0 / self.config.vision_embed_dim) ** 0.5)
+                module._is_hf_initialized = True
             for sub_module_name, sub_module in module.named_modules():
                 if isinstance(sub_module, nn.Linear):
                     if "c_proj" in sub_module_name:
@@ -906,14 +910,18 @@ class IdeficsPreTrainedModel(PreTrainedModel):
                     else:
                         factor = 1.0
                     init_a_linear(sub_module, std=(0.4 / (self.config.vision_embed_dim * factor)) ** 0.5)
+                    sub_module._is_hf_initialized = True
         elif isinstance(module, nn.Embedding):
             with ContextManagers(deepspeed_gathered_parameters_context_manager(module.weight, modify=True)):
                 module.weight.data.normal_(mean=0.0, std=(1.0 / self.config.hidden_size) ** 0.5)
                 if module.padding_idx is not None:
                     module.weight.data[module.padding_idx].zero_()
+                module._is_hf_initialized = True
+
         elif isinstance(module, DecoupledLinear):
             if hasattr(module, "additional_fc"):
                 init_a_linear(module.additional_fc, std=(1.0 / (module.additional_fc.in_features)) ** 0.5)
+                module._is_hf_initialized = True
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, IdeficsModel):
@@ -1019,9 +1027,14 @@ class IdeficsModel(IdeficsPreTrainedModel):
         # complain that it's not used
         self.image_size = config.vision_image_size
 
-        # XXX: this is unsafe - needs to be fixed
-        vision_model_params = {"id2label": {}, "label2id": {}}
-        clip_config = CLIPConfig.from_pretrained(config.vision_model_name, **vision_model_params)
+        # TODO: remove the dependency on `vision_model_name`
+        self.vision_config = config.vision_config
+        other_config_kwargs = {"id2label": {}, "label2id": {}}
+        clip_vision_config = CLIPVisionConfig(**self.vision_config)
+
+        clip_config = CLIPConfig.from_pretrained(
+            config.vision_model_name, vision_config=clip_vision_config, **other_config_kwargs
+        )
         # print(clip_config.vision_config)
         self.vision_model = CLIPVisionTransformer(clip_config.vision_config)
 
@@ -1159,7 +1172,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         if pixel_values is not None and image_embeddings is not None:
             raise ValueError("You cannot specify both pixel_values and image_embeddings at the same time")
         elif pixel_values is not None:
-            pixel_values = pixel_values.to(dtype=self.dtype, device=input_ids.device)  # fp16 compatibility
+            pixel_values = pixel_values.to(dtype=self.dtype, device=device)  # fp16 compatibility
             batch_size, num_images = pixel_values.size(0), pixel_values.size(1)
             pixel_values = pixel_values.contiguous().view(batch_size * num_images, *pixel_values.shape[2:])
 
@@ -1334,6 +1347,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
 class IdeficsForCausalLM(IdeficsPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
+    _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config, vision_model=None):
         super().__init__(config)
