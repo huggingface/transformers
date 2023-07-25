@@ -2714,7 +2714,7 @@ class ModelTesterMixin:
             num_params = model.num_parameters()
             assert (
                 num_params < 1000000
-            ), f"{model_class} is too big for the common tests ({num_params})! It should have 200k max."
+            ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
 
 
 global_rng = random.Random()
