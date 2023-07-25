@@ -17,7 +17,6 @@ import copy
 import json
 import os
 import warnings
-from collections.abc import Sequence
 from io import BytesIO
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
@@ -493,38 +492,17 @@ class ImageProcessingMixin(PushToHubMixin):
 
     def fetch_images(self, image_url_or_urls: Union[str, List[str]]):
         """
-        Any image entries that are a string will be assumed to be a url and fetched and loaded as `PIL.Image`. Any
-        non-string entries will remain intact.
+        Convert a single or a list of urls into the corresponding `PIL.Image` objects.
 
-        If a single url is passed, the return value will be a single item. If a list is passed a list is returned.
+        If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
+        returned.
         """
-
-        def convert_url_to_image(url):
-            if isinstance(url, str):
-                return Image.open(BytesIO(requests.get(url, stream=True).content))
-            else:
-                return url
-
         if isinstance(image_url_or_urls, list):
-            return [convert_url_to_image(x) for x in image_url_or_urls]
-        elif isinstance(image_url_or_urls, Sequence) and not isinstance(image_url_or_urls, str):
+            return [self.fetch_images(x) for x in image_url_or_urls]
+        elif isinstance(image_url_or_urls, str):
+            return Image.open(BytesIO(requests.get(image_url_or_urls, stream=True).content))
+        else:
             raise ValueError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
-        else:  # must be single entry
-            return convert_url_to_image(image_url_or_urls)
-
-    # # this is an alternative simpler implementation that requires all inputs to be urls
-    # def fetch_images(self, image_url_or_urls: Union[str, List[str]]):
-    #     """
-    #     Convert a single or a list of urls into the corresponding `PIL.Image` objects.
-
-    #     If a single url is passed, the return value will be a single object. If a list is passed a list of objects is returned.
-    #     """
-    #     if isinstance(image_url_or_urls, list):
-    #         return [self.fetch_images(x) for x in image_url_or_urls]
-    #     elif isinstance(image_url_or_urls, str):
-    #         return Image.open(BytesIO(requests.get(image_url_or_urls, stream=True).content))
-    #     else:
-    #         raise ValueError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
 
 
 class BaseImageProcessor(ImageProcessingMixin):
