@@ -19,6 +19,7 @@ import unittest
 from transformers import IdeficsConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import TestCasePlus, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
+from transformers.utils.versions import require_version
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -33,6 +34,14 @@ if is_torch_available():
         IdeficsModel,
     )
     from transformers.models.idefics.modeling_idefics import IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST
+
+try:
+    # F.scaled_dot_product_attention require pt>=2.0
+    require_version("torch>=2.0")
+    is_torch_greater_or_equal_than_2_0 = True
+except Exception:
+    is_torch_greater_or_equal_than_2_0 = False
+
 
 if is_vision_available():
     from PIL import Image
@@ -195,6 +204,7 @@ class IdeficsModelTester:
         return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
 
+@unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
 class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
@@ -373,6 +383,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             self.assertIsNotNone(model)
 
 
+@unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
 class IdeficsForCausalLMTest(IdeficsModelTest, unittest.TestCase):
     all_model_classes = (IdeficsForCausalLM,) if is_torch_available() else ()
@@ -396,6 +407,7 @@ class IdeficsForCausalLMTest(IdeficsModelTest, unittest.TestCase):
         pass
 
 
+@unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
 @require_vision
 class IdeficsModelIntegrationTest(TestCasePlus):

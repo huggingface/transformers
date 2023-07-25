@@ -522,6 +522,9 @@ class IdeficsAttention(nn.Module):
 
         self.is_cross_attention = is_cross_attention
 
+        if not hasattr(nn.functional, "scaled_dot_product_attention"):
+            raise ValueError("this model requires pytorch 2.0 or higher")
+
         if self.is_cross_attention:
             kv_input_dim = self.hidden_size if not hasattr(config, "vision_embed_dim") else config.vision_embed_dim
             self.q_proj = nn.Linear(
