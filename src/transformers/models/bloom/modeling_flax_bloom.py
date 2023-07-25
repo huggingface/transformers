@@ -108,61 +108,23 @@ BLOOM_INPUTS_DOCSTRING = r"""
 """
 
 
-# def build_alibi_tensor_flax(attention_mask, n_head, dtype):
-#     def get_slopes(n):
-#         def get_slopes_power_of_2(n):
-#             start = 2 ** (-(2 ** -(math.log2(n) - 3)))
-#             ratio = start
-#             return [start * ratio**i for i in range(n)]
-
-#         if math.log2(n).is_integer():
-#             return get_slopes_power_of_2(n)
-#         else:
-#             closest_power_of_2 = 2 ** math.floor(math.log2(n))
-#             return (
-#                 get_slopes_power_of_2(closest_power_of_2)
-#                 + get_slopes(2 * closest_power_of_2)[0::2][: n - closest_power_of_2]
-#             )
-
-#     # Note: alibi will be added to the attention bias that is applied to the query, key product of attention
-#     # => therefore alibi will have to be of shape (batch_size, num_heads, query_length, key_length)
-#     # => here we set (batch_size=1, num_heads=n_head, query_length=1, key_length=max_length)
-#     # => the query_length dimension will then be broadcast correctly
-#     # This is more or less identical to T5's relative position bias:
-#     # https://github.com/huggingface/transformers/blob/f681437203baa7671de3174b0fa583c349d9d5e1/src/transformers/models/t5/modeling_flax_t5.py#L426
-#     # batch_size = 1, n_head = n_head, query_length
-#     batch_size, key_length = attention_mask.shape
-#     num_heads = n_head
-#     query_length = 1
-
-#     slopes = jnp.array(get_slopes(n_head))[None, :, None, None].astype(dtype)
-#     arange_tensor = attention_mask.cumsum(-1, dtype=dtype)[:, None, None, :] - 1
-
-#     slopes_broadcast = jnp.broadcast_to(slopes, (batch_size, num_heads, query_length, key_length))
-#     arange_broadcast = jnp.broadcast_to(arange_tensor, (batch_size, num_heads, query_length, key_length))
-
-#     alibi = slopes_broadcast * arange_broadcast
-#     return alibi
-
-
-def build_alibi_tensor_flax(attention_mask, num_heads, dtype, return_torch_like=False):
+def build_alibi_tensor(attention_mask: jax.Array, num_heads: int, dtype: Optional[jnp.dtype] = jnp.float32):
     """
-    Link to paper: https://arxiv.org/abs/2108.12409 Alibi tensor is not causal as the original paper mentions, it
+    Flax implementation of the BLOOM Alibi tensor. BLOOM Alibi tensor is not causal as the original paper mentions, it
     relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value
     `softmax(l+a) = softmax(l)`. Based on
     https://github.com/ofirpress/attention_with_linear_biases/blob/a35aaca144e0eb6b789dfcb46784c4b8e31b7983/fairseq/models/transformer.py#L742
-    A Flax implementation
+    Link to paper: https://arxiv.org/abs/2108.12409
 
     Args:
-    Returns tensor shaped (batch_size * num_heads, 1, max_seq_len)
         attention_mask (`jnp.ndarray`):
-            Token-wise attention mask, this should be of shape (batch_size, max_seq_len).
-        num_heads (`int`, *required*):
-            number of heads
-        dtype (`jnp.dtype`, *required*):
-             dtype of the output tensor
-        return_torch_like (`bool`, *optional, defaults to `False`*):
-             Whether to return in the same format as pytorch `(batch_size * num_heads, 1, seq_length)`
+            Token-wise attention mask, this should be of shape `(batch_size, max_seq_len)`.
+        num_heads (`int`):
+            Number of attention heads.
+        dtype (`jnp.dtype`, *optional*, defaults to `jnp.float32`):
+            The data type (dtype) of the output tensor.
+
+    Returns: Alibi tensor of shape `(batch_size * num_heads, 1, max_seq_len)`.
     """
     batch_size, seq_length = attention_mask.shape
     closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
@@ -176,18 +138,15 @@ def build_alibi_tensor_flax(attention_mask, num_heads, dtype, return_torch_like=
         extra_powers = jnp.arange(1, 1 + 2 * num_remaining_heads, 2, dtype=jnp.float32)
         slopes = jnp.cat([slopes, jax.lax.pow(extra_base, extra_powers)], axis=0)
 
-    # Note: alibi will added to the attention bias that will be applied to the query, key product of attention
-    # => therefore alibi will have to be of shape (batch_size, num_heads, query_length, key_length)
+    # Note: the Alibi tensor will added to the attention bias that will be applied to the query, key product of attention
+    # therefore, Alibi will have to be of shape (batch_size, num_heads, query_length, key_length)
     # => here we set (batch_size=1, num_heads=num_heads, query_length=1, key_length=max_length)
-    # => the query_length dimension will then be broadcasted correctly
+    # so that the query_length dimension will then be broadcast correctly.
     # This is more or less identical to T5's relative position bias:
     # https://github.com/huggingface/transformers/blob/f681437203baa7671de3174b0fa583c349d9d5e1/src/transformers/models/t5/modeling_t5.py#L527
     arange_tensor = ((attention_mask.cumsum(axis=-1) - 1) * attention_mask)[:, None, :]
     alibi = slopes[..., None] * arange_tensor
-    if return_torch_like:
-        alibi = jnp.reshape(alibi, (batch_size * num_heads, 1, seq_length))
-    else:
-        alibi = jnp.expand_dims(alibi, axis=2)
+    alibi = jnp.expand_dims(alibi, axis=2)
     return jnp.asarray(alibi, dtype)
 
 
@@ -647,7 +606,7 @@ class FlaxBloomModule(nn.Module):
         hidden_states = self.word_embeddings_layernorm(inputs_embeds)
 
         # build alibi depending on `attention_mask`
-        alibi = build_alibi_tensor_flax(attention_mask, self.config.n_head, hidden_states.dtype)
+        alibi = build_alibi_tensor(attention_mask, self.config.n_head, dtype=hidden_states.dtype)
 
         outputs = self.h(
             hidden_states,
@@ -747,7 +706,7 @@ class FlaxBloomForCausalLMModule(nn.Module):
 class FlaxBloomForCausalLM(FlaxBloomPreTrainedModel):
     module_class = FlaxBloomForCausalLMModule
 
-    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jnp.DeviceArray] = None):
+    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jax.Array] = None):
         # initializing the cache
         batch_size, seq_length = input_ids.shape
 
