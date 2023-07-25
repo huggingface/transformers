@@ -172,8 +172,8 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
 
 class TemperatureLogitsWarper(LogitsWarper):
     r"""
-    [`LogitsWarper`] for temperature (exponential scaling output probability distribution), which effectively means that
-    it can control the randomness of the predicted tokens.
+    [`LogitsWarper`] for temperature (exponential scaling output probability distribution), which effectively means
+    that it can control the randomness of the predicted tokens.
 
     <Tip>
 
@@ -184,8 +184,9 @@ class TemperatureLogitsWarper(LogitsWarper):
 
     Args:
         temperature (`float`):
-            Strictly positive float value used to modulate the logits distribution. A value smaller than `1` decreases randomness (and vice
-            versa), with `0` being equivalent to shifting all probability mass to the most likely token. 
+            Strictly positive float value used to modulate the logits distribution. A value smaller than `1` decreases
+            randomness (and vice versa), with `0` being equivalent to shifting all probability mass to the most likely
+            token.
 
     Examples:
 
