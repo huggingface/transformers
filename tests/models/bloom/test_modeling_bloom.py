@@ -501,7 +501,9 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             "Running a quick test with the",
         ]
         inputs = tokenizer(input_sentences, return_tensors="pt", padding=True, truncation=True)
-        generated_ids = model.generate(inputs["input_ids"].cuda(), attention_mask=inputs["attention_mask"], max_length=20)
+        generated_ids = model.generate(
+            inputs["input_ids"].cuda(), attention_mask=inputs["attention_mask"], max_length=20
+        )
         generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 
         # these generations match those of the PyTorch model
