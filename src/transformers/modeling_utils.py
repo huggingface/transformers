@@ -33,6 +33,7 @@ from packaging import version
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
+from . import AutoTokenizer
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
@@ -76,7 +77,7 @@ from .utils import (
 )
 from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 from .utils.import_utils import ENV_VARS_TRUE_VALUES, is_sagemaker_mp_enabled
-from .utils.quantization_config import BitsAndBytesConfig, QuantizationMethod
+from .utils.quantization_config import AutoGPTQConfig, BitsAndBytesConfig, QuantizationMethod
 from .utils.versions import require_version_core
 
 
@@ -2257,13 +2258,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install accelerate`"
                 )
 
-        if quantization_config is None:
+        quantization_method_from_args = None
+        if quantization_config is not None:
+            quantization_method_from_args = quantization_config.get("quant_method", QuantizationMethod.BITS_AND_BYTES)
+
+        if quantization_config is None and (load_in_8bit or load_in_4bit):
             quantization_config, kwargs = BitsAndBytesConfig.from_dict(
                 config_dict={"load_in_8bit": load_in_8bit, "load_in_4bit": load_in_4bit},
                 return_unused_kwargs=True,
                 **kwargs,
             )
-        elif quantization_config is not None:
+        elif quantization_method_from_args == QuantizationMethod.BITS_AND_BYTES:
             load_in_8bit = quantization_config.load_in_8bit
             load_in_4bit = quantization_config.load_in_4bit
 
@@ -2345,13 +2350,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             model_kwargs = kwargs
 
-        # get the quantization method inside the config of the model if it exists
-        quantization_method = None
-        if hasattr(config, "quantization_config"):
-            quantization_method = config.quantization_config.get("quant_method", QuantizationMethod.BITS_AND_BYTES)
-
         quantizer = None
-        if quantization_method == QuantizationMethod.GPTQ:
+        quantization_method_from_config = None
+        if hasattr(config, "quantization_config"):
+            quantization_method_from_config = config.quantization_config.get(
+                "quant_method", QuantizationMethod.BITS_AND_BYTES
+            )
+
+        if quantization_method_from_config == QuantizationMethod.GPTQ and quantization_method_from_args is not None:
+            quantization_method_from_args = None
+            logger.warning(
+                "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a"
+                " `quantization_config` attribute and has already quantized weights. We will not perform quantization"
+                "with the given `quantization config` that you have passed."
+            )
+        if (
+            quantization_method_from_args == QuantizationMethod.GPTQ
+            or quantization_method_from_config == QuantizationMethod.GPTQ
+        ):
             if not (is_optimum_available() and is_auto_gptq_available()):
                 raise ImportError(
                     "Loading GTPQ quantized model requires optimum library : `pip install optimum` and auto-gptq library 'pip install auto-gptq'"
@@ -2359,18 +2375,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 # Need to protect the import
                 from optimum.gptq import GPTQQuantizer
-            quantizer = GPTQQuantizer.from_dict(config.quantization_config)
-            torch_dtype = config.torch_dtype
+            if quantization_method_from_config == QuantizationMethod.GPTQ:
+                quantization_config = AutoGPTQConfig.from_dict(config.quantization_config)
+                torch_dtype = config.torch_dtype
+            quantizer = GPTQQuantizer.from_dict(quantization_config.to_dict())
 
-        if is_8bit_serializable and quantization_config is not None and load_in_8bit:
-            if quantization_method == QuantizationMethod.BITS_AND_BYTES:
+        if (
+            is_8bit_serializable
+            and quantization_method_from_args == QuantizationMethod.BITS_AND_BYTES
+            and load_in_8bit
+        ):
+            if quantization_method_from_config == QuantizationMethod.BITS_AND_BYTES:
                 logger.warning(
                     "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a"
                     " `quantization_config` attribute. The `quantization_config` attribute will be overwritten with the"
                     " one you passed to `from_pretrained`."
                 )
             config.quantization_config = quantization_config
-        elif is_8bit_serializable and not load_in_8bit and quantization_method == QuantizationMethod.BITS_AND_BYTES:
+        elif (
+            is_8bit_serializable
+            and not load_in_8bit
+            and quantization_method_from_config == QuantizationMethod.BITS_AND_BYTES
+        ):
             quantization_config = config.quantization_config
             if isinstance(quantization_config, dict):
                 quantization_config = BitsAndBytesConfig.from_dict(quantization_config, return_unused_kwargs=False)
@@ -2401,7 +2427,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         low_cpu_mem_usage = True
 
         elif (
-            not is_8bit_serializable and not load_in_8bit and quantization_method == QuantizationMethod.BITS_AND_BYTES
+            not is_8bit_serializable
+            and not load_in_8bit
+            and quantization_method_from_config == QuantizationMethod.BITS_AND_BYTES
         ):
             logger.warning(
                 "Detected the presence of a `quantization_config` attribute in the model's configuration but you don't have the correct"
@@ -2787,7 +2815,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "All non-linear modules will be loaded in full precision."
                 " If you want to load the other modules in other precision, please specify a `torch_dtype` attribute."
             )
-        if quantization_method == QuantizationMethod.GPTQ:
+        if quantization_method_from_config == QuantizationMethod.GPTQ:
             model = quantizer.convert_model(model)
 
         if isinstance(device_map, str):
@@ -2983,6 +3011,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if "skip_keys" in inspect.signature(dispatch_model).parameters:
                 kwargs["skip_keys"] = model._skip_keys_device_placement
             dispatch_model(model, **kwargs)
+
+        if quantization_method_from_args == QuantizationMethod.GPTQ:
+            tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, use_fast=True)
+            quantizer.quantize_model(model, tokenizer)
+            model.config.quantization_config = AutoGPTQConfig.from_dict(quantizer.to_dict())
 
         if output_loading_info:
             if loading_info is None:
