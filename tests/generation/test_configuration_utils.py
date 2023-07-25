@@ -144,7 +144,7 @@ class ConfigPushToHubTester(unittest.TestCase):
             temperature=0.7,
             length_penalty=1.0,
         )
-        config.push_to_hub("test-generation-config", use_auth_token=self._token)
+        config.push_to_hub("test-generation-config", token=self._token)
 
         new_config = GenerationConfig.from_pretrained(f"{USER}/test-generation-config")
         for k, v in config.to_dict().items():
@@ -157,7 +157,7 @@ class ConfigPushToHubTester(unittest.TestCase):
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
             config.save_pretrained(
-                tmp_dir, repo_id="test-generation-config", push_to_hub=True, use_auth_token=self._token
+                tmp_dir, repo_id="test-generation-config", push_to_hub=True, token=self._token
             )
 
         new_config = GenerationConfig.from_pretrained(f"{USER}/test-generation-config")
