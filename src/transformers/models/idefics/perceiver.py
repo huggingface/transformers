@@ -23,6 +23,7 @@ class PerceiverResampler(nn.Module):
         to the Perceiver Resampler (also dimensionality of
                           latent embeddings *returned* by the Perceiver Resampler. Could be e.g., VIT embed_dim, ResNet
                           pool dim, and so on.
+
         Args:
             depth: Depth of the Perceiver Resampler (Transformer w/ cross attention). Should be shallow (< 3).
             n_heads: Number of heads in each Transformer block (for multi-headed self-attention).
