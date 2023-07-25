@@ -5219,6 +5219,13 @@ class MT5ForQuestionAnswering(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MT5ForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class MT5Model(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7070,6 +7077,13 @@ class T5ForQuestionAnswering(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class T5ForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class T5Model(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7314,6 +7328,13 @@ class UMT5ForConditionalGeneration(metaclass=DummyObject):
 
 
 class UMT5ForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class UMT5ForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
