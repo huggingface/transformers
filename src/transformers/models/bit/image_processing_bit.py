@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for BiT."""
 
-from typing import Dict, Iterable, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 

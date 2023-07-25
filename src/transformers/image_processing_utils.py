@@ -520,28 +520,6 @@ class BaseImageProcessor(ImageProcessingMixin):
     def preprocess(self, images, **kwargs) -> BatchFeature:
         raise NotImplementedError("Each image processor must implement its own preprocess method")
 
-    def rescale(
-        self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
-    ) -> np.ndarray:
-        """
-        Rescale an image by a scale factor. image = image * scale.
-
-        Args:
-            image (`np.ndarray`):
-                Image to rescale.
-            scale (`float`):
-                The scaling factor to rescale pixel values by.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-
-        Returns:
-            `np.ndarray`: The rescaled image.
-        """
-        return rescale(image, scale=scale, data_format=data_format, **kwargs)
-
     def normalize(
         self,
         image: np.ndarray,
@@ -594,6 +572,27 @@ class BaseImageProcessor(ImageProcessingMixin):
         if "height" not in size or "width" not in size:
             raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
         return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
+    def rescale(
+        self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
+    ) -> np.ndarray:
+        """
+        Rescale an image by a scale factor. image = image * scale.
+
+        Args:
+            image (`np.ndarray`):
+                Image to rescale.
+            scale (`float`):
+                The scaling factor to rescale pixel values by.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The rescaled image.
+        """
+        return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
 
 VALID_SIZE_DICT_KEYS = ({"height", "width"}, {"shortest_edge"}, {"shortest_edge", "longest_edge"}, {"longest_edge"})
