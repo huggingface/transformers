@@ -172,7 +172,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
 
 class TemperatureLogitsWarper(LogitsWarper):
     r"""
-    [`LogitsWarper`] for temperature (exponential scaling output probability distribution) which effectively means that
+    [`LogitsWarper`] for temperature (exponential scaling output probability distribution), which effectively means that
     it can control the randomness of the predicted tokens.
 
     <Tip>
