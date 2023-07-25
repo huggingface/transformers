@@ -145,6 +145,7 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
             " instructions."
         )
         raise
+
     is_bfloat_16 = all(v.dtype == torch.bfloat16 for v in pt_state_dict.values())  # noqa: F821
     pt_state_dict = {k: v.numpy() if not is_bfloat_16 else v.float().numpy() for k, v in pt_state_dict.items()}
 
@@ -208,11 +209,15 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
                 continue
 
             # also add unexpected weight so that warning is thrown
-            flax_state_dict[("params",) + flax_key] = jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
+            flax_state_dict[("params",) + flax_key] = (
+                jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
+            )
 
         else:
             # also add unexpected weight so that warning is thrown
-            flax_state_dict[flax_key] = jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
+            flax_state_dict[flax_key] = (
+                jnp.asarray(flax_tensor) if not is_bfloat_16 else jnp.asarray(flax_tensor, dtype=jnp.bfloat16)
+            )
 
     return unflatten_dict(flax_state_dict)
 
@@ -350,10 +355,10 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
     pt_model_dict = pt_model.state_dict()
 
     load_model_with_head_into_base_model = (pt_model.base_model_prefix in flax_state) and (
-        pt_model.base_model_prefix not in set([k.split(".")[0] for k in pt_model_dict.keys()])
+        pt_model.base_model_prefix not in {k.split(".")[0] for k in pt_model_dict.keys()}
     )
     load_base_model_into_model_with_head = (pt_model.base_model_prefix not in flax_state) and (
-        pt_model.base_model_prefix in set([k.split(".")[0] for k in pt_model_dict.keys()])
+        pt_model.base_model_prefix in {k.split(".")[0] for k in pt_model_dict.keys()}
     )
 
     # keep track of unexpected & missing keys
