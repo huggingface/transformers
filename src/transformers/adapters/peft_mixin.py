@@ -14,10 +14,10 @@
 import os
 from typing import Optional
 
-from ..utils import requires_backends, is_peft_available, ADAPTER_CONFIG_NAME, cached_file
+from ..utils import ADAPTER_CONFIG_NAME, cached_file, logging, requires_backends
 
-if is_peft_available():
-    from peft import PeftModel
+
+logger = logging.get_logger(__name__)
 
 
 class PeftAdapterMixin:
@@ -25,9 +25,10 @@ class PeftAdapterMixin:
     A class containing all functions for loading and using adapters weights that are supported in PEFT library.
     Currently supported PEFT methods are all non-prefix tuning methods
     """
+
     def load_adapter(
-        self, 
-        peft_model_id: str, 
+        self,
+        peft_model_id: str,
         adapter_name: Optional[str] = "default",
         revision: Optional[str] = None,
         use_auth_token: Optional[str] = None,
@@ -37,6 +38,13 @@ class PeftAdapterMixin:
         Load adapter weights from file. Requires peft as a backend to load the adapter weights
         """
         requires_backends(self.load_adapter, "peft")
+
+        from peft import LoraConfig, PeftModel, create_and_replace
+        from peft.utils import set_peft_model_state_dict
+        from peft.utils.other import TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING
+
+        self.peft_config = {}
+        self.modules_to_save = None
 
         adapter_config_file = self._find_adapter_config_file(
             peft_model_id,
@@ -50,7 +58,54 @@ class PeftAdapterMixin:
                 f"adapter model file not found in {peft_model_id}. Make sure you are passing the correct path to the "
                 "adapter model."
             )
-        
+
+        # TODO: automatically infer the correct config class
+        loaded_peft_config = LoraConfig.from_pretrained(
+            peft_model_id,
+            revision=revision,
+            use_auth_token=use_auth_token,
+            commit_hash=commit_hash,
+        )
+
+        if not hasattr(loaded_peft_config, "target_modules"):
+            target_modules = TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING[self.config.model_type]
+            loaded_peft_config.target_modules = target_modules
+
+        # TODO: constraint this to single adapter
+        if adapter_name not in self.peft_config:
+            self.peft_config[adapter_name] = loaded_peft_config
+        else:
+            raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
+
+        # Replace the adapter with the loaded adapter
+        create_and_replace(loaded_peft_config.peft_type, loaded_peft_config, self, adapter_name)
+
+        # TODO: move that to peft.utils
+        adapter_state_dict = PeftModel._get_peft_state_dict(
+            peft_model_id,
+            revision=revision,
+            use_auth_token=use_auth_token,
+        )
+
+        # We need to pre-process the state dict to remove unneeded prefixes - for backward compatibility
+        processed_adapter_state_dict = {}
+        for key, value in adapter_state_dict.items():
+            if "base_model.model" in key:
+                new_key = key.replace("base_model.model.", "")
+            else:
+                new_key = key
+            processed_adapter_state_dict[new_key] = value
+
+        # Load state dict
+        incompatible_keys = set_peft_model_state_dict(self, processed_adapter_state_dict, adapter_name)
+
+        if incompatible_keys is not None:
+            # check only for unexpected keys
+            if hasattr(incompatible_keys, "unexpected_keys") and len(incompatible_keys.unexpected_keys) > 0:
+                logger.warning(
+                    f"Loading adapter weights from {peft_model_id} led to unexpected keys not found in the model: "
+                    f" {incompatible_keys.unexpected_keys}. "
+                )
 
     def _find_adapter_config_file(
         self,
