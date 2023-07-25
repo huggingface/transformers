@@ -241,6 +241,23 @@ class FlaxBloomGenerationTest(unittest.TestCase):
 
         self.assertEqual(sequences_fx_batch[1][6:].tolist(), sequences_fx_simple[0][:-6].tolist())
 
+    def test_batch_generated_text(self):
+        input_sentences = [
+            "Hello what is",
+            "Running a quick test with the",
+        ]
+        inputs = self.tokenizer(input_sentences, return_tensors="np", padding=True, truncation=True)
+        generated_ids = self.model.generate(**inputs, max_length=20).sequences
+        generated_text = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+
+        # these generations match those of the PyTorch model, ensuring correctness
+        EXPECTED_GENERATIONS = [
+            "Hello what is the best way to get the data from the server? I have tried",
+            "Running a quick test with the following command:\nsudo apt-get install python3\nsudo apt-get install python2",
+        ]
+
+        self.assertListEqual(generated_text, EXPECTED_GENERATIONS)
+
 
 @require_torch
 @is_pt_flax_cross_test
