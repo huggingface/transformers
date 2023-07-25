@@ -1027,7 +1027,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         # complain that it's not used
         self.image_size = config.vision_image_size
 
-        # TODO: use nested config
+        # TODO: remove the dependency on `vision_model_name`
         self.vision_config = config.vision_config
         other_config_kwargs = {"id2label": {}, "label2id": {}}
         clip_vision_config = CLIPVisionConfig(**self.vision_config)

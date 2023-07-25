@@ -118,6 +118,7 @@ SPECIAL_CASES_TO_ALLOW.update(
         "JukeboxPriorConfig": True,
         # TODO: @Younes (for `is_decoder`)
         "Pix2StructTextConfig": True,
+        "IdeficsConfig": True,
     }
 )
 
