@@ -19,7 +19,7 @@
 # limitations under the License.
 """ Idefics model configuration"""
 import os
-from typing import Tuple, Union
+from typing import Union
 
 from transformers import AutoConfig
 from transformers.configuration_utils import PretrainedConfig
@@ -119,6 +119,8 @@ class IdeficsConfig(PretrainedConfig):
         vision_model_name="google/vit-base-patch16-224",
         vision_embed_dim=768,
         vision_image_size=224,
+        vision_intermediate_size=37,
+        vision_patch_size=2,
         use_resampler=False,
         resampler_n_latents=64,
         resampler_depth=6,
@@ -161,6 +163,8 @@ class IdeficsConfig(PretrainedConfig):
 
         self.vision_embed_dim = vision_embed_dim
         self.vision_image_size = vision_image_size
+        self.vision_intermediate_size = vision_intermediate_size
+        self.vision_patch_size = vision_patch_size
 
         if vision_config is None:
             self.vision_config = {}
@@ -168,8 +172,12 @@ class IdeficsConfig(PretrainedConfig):
             self.vision_config["image_size"] = vision_image_size
             self.vision_config["num_attention_heads"] = num_attention_heads
             self.vision_config["num_hidden_layers"] = num_hidden_layers
+            self.vision_config["intermediate_size"] = vision_intermediate_size
+            self.vision_config["patch_size"] = vision_patch_size
         elif not isinstance(vision_config, dict):
             raise ValueError("vision_config must be a dict")
+        else:
+            self.vision_config = vision_config
 
         # Resampler params
         self.use_resampler = use_resampler
@@ -207,9 +215,9 @@ class IdeficsConfig(PretrainedConfig):
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
         outputs = super(IdeficsConfig, cls).from_pretrained(pretrained_model_name_or_path, **kwargs)
-        if isinstance(outputs, Tuple):
-            # When called with return_unused_kwargs=True, the first item will be the config
-            outputs[0].check_compatibilities()
-        else:
-            outputs.check_compatibilities()
+        # if isinstance(outputs, Tuple):
+        #     # When called with return_unused_kwargs=True, the first item will be the config
+        #     outputs[0].check_compatibilities()
+        # else:
+        #     outputs.check_compatibilities()
         return outputs
