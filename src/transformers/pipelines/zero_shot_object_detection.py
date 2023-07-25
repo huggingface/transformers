@@ -14,7 +14,7 @@ if is_torch_available():
 
     from transformers.modeling_outputs import BaseModelOutput
 
-    from ..models.auto.modeling_auto import MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -60,7 +60,7 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
         requires_backends(self, "vision")
-        self.check_model_type(MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING)
+        self.check_model_type(MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES)
 
     def __call__(
         self,

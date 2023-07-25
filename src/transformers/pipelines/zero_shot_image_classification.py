@@ -18,10 +18,10 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES
 
 if is_tf_available():
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES
     from ..tf_utils import stable_softmax
 
 logger = logging.get_logger(__name__)
@@ -66,9 +66,9 @@ class ZeroShotImageClassificationPipeline(Pipeline):
 
         requires_backends(self, "vision")
         self.check_model_type(
-            TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING
+            TF_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES
             if self.framework == "tf"
-            else MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING
+            else MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES
         )
 
     def __call__(self, images: Union[str, List[str], "Image", List["Image"]], **kwargs):

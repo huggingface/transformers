@@ -118,6 +118,10 @@ class ViTMAEModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             mask_ratio=self.mask_ratio,
+            decoder_hidden_size=self.hidden_size,
+            decoder_intermediate_size=self.intermediate_size,
+            decoder_num_attention_heads=self.num_attention_heads,
+            decoder_num_hidden_layers=self.num_hidden_layers,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):

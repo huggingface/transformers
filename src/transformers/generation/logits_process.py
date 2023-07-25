@@ -193,12 +193,38 @@ class TemperatureLogitsWarper(LogitsWarper):
 
 class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     r"""
-    [`LogitsProcessor`] enforcing an exponential penalty on repeated sequences.
+    [`LogitsProcessor`] that prevents the repetition of previous tokens through an exponential penalty. This technique
+    shares some similarities with coverage mechanisms and other aimed at reducing repetition. During the text
+    generation process, the probability distribution for the next token is determined using a formula that incorporates
+    token scores based on their occurrence in the generated sequence. Tokens with higher scores are less likely to be
+    selected. The formula can be seen in the original [paper](https://arxiv.org/pdf/1909.05858.pdf). According to the
+    paper a penalty of around 1.2 yields a good balance between truthful generation and lack of repetition.
 
     Args:
         repetition_penalty (`float`):
             The parameter for repetition penalty. 1.0 means no penalty. See [this
             paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
+
+    Examples:
+
+    ```py
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> # Initializing the model and tokenizer for it
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> inputs = tokenizer(["I'm not going to"], return_tensors="pt")
+
+    >>> # This shows a normal generate without any specific parameters
+    >>> summary_ids = model.generate(inputs["input_ids"], max_length=20)
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True)[0])
+    I'm not going to lie, I'm not going to lie. I'm not going to lie
+
+    >>> # This generates a penalty for repeated tokens
+    >>> penalized_ids = model.generate(inputs["input_ids"], max_length=20, repetition_penalty=1.2)
+    >>> print(tokenizer.batch_decode(biased_ids, skip_special_tokens=True)[0])
+    I'm not going to lie, I was really excited about this. It's a great game
+    ```
     """
 
     def __init__(self, penalty: float):
@@ -624,9 +650,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
 
         # Bias variables that will be populated on the first call (for retrocompatibility purposes, the vocabulary size
         # is infered in the first usage, which inhibits initializing here)
-        self.sequences_length_greater_than_1 = []
         self.length_1_bias = None
-        self.length_greather_than_1_bias = None
         self.prepared_bias_variables = False
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -642,11 +666,9 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         bias += self.length_1_bias
 
         # 4 - include the bias from length > 1, after determining which biased sequences may be completed.
-        # `matching_mask` is a (batch_size, vocab_size) boolean mask that is True for all tokens whose corresponding
-        # bias should be applied. The bias is applied on the last token of the sequence, if (and only if) the sequence
-        # may become complete this iteration.
-        matching_mask = torch.zeros_like(scores, dtype=torch.bool)
-        for sequence_ids in self.sequences_length_greater_than_1:
+        for sequence_ids, sequence_bias in self.sequence_bias.items():
+            if len(sequence_ids) == 1:  # the sequence is of length 1, already applied
+                continue
             if len(sequence_ids) > input_ids.shape[1]:  # the sequence is longer than the context, ignore
                 continue
             prefix_length = len(sequence_ids) - 1
@@ -655,12 +677,9 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
                 input_ids[:, -prefix_length:],
                 torch.tensor(sequence_ids[:-1], dtype=input_ids.dtype, device=input_ids.device),
             ).prod(dim=1)
-            matching_mask[:, last_token] |= matching_rows.bool()
-        bias += torch.where(
-            matching_mask,
-            self.length_greather_than_1_bias,
-            torch.tensor(0.0, device=self.length_greather_than_1_bias.device),
-        )
+            bias[:, last_token] += torch.where(
+                matching_rows.bool(), sequence_bias, torch.tensor(0.0, device=input_ids.device)
+            )
 
         # 5 - apply the bias to the scores
         scores = scores + bias
@@ -668,12 +687,10 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
 
     def _prepare_bias_variables(self, scores: torch.FloatTensor):
         vocabulary_size = scores.shape[-1]
-        sequence_bias = self.sequence_bias
-        tokens_with_bias = []
 
         # Check biased tokens out of bounds
         invalid_biases = []
-        for sequence_ids in sequence_bias:
+        for sequence_ids in self.sequence_bias:
             for token_id in sequence_ids:
                 if token_id >= vocabulary_size:
                     invalid_biases.append(token_id)
@@ -686,20 +703,9 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         # Precompute the bias tensors to be applied. Sequences of length 1 are kept separately, as they can be applied
         # with simpler logic.
         self.length_1_bias = torch.zeros((vocabulary_size,), dtype=torch.float).to(scores.device)
-        self.length_greather_than_1_bias = torch.zeros((vocabulary_size,), dtype=torch.float).to(scores.device)
-        for sequence_ids, bias in sequence_bias.items():
+        for sequence_ids, bias in self.sequence_bias.items():
             if len(sequence_ids) == 1:
                 self.length_1_bias[sequence_ids[-1]] = bias
-            else:
-                self.sequences_length_greater_than_1.append(sequence_ids)
-                if self.length_greather_than_1_bias[sequence_ids[-1]] != 0.0:
-                    raise ValueError(
-                        "Setting a bias on sequences that share a common token termination is not yet supported. "
-                        "Please open an issue if you see this error message (after checking that it doesn't already "
-                        "exist)."
-                    )
-                self.length_greather_than_1_bias[sequence_ids[-1]] = bias
-            tokens_with_bias.append(sequence_ids[-1])
 
         self.prepared_bias_variables = True
 
@@ -741,6 +747,50 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
             List of list of token ids that are not allowed to be generated.
         eos_token_id (`Union[int, List[int]]`):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> inputs = tokenizer(["In a word, the cake is a"], return_tensors="pt")
+
+    >>> summary_ids = model.generate(inputs["input_ids"], max_new_tokens=5, pad_token_id=tokenizer.eos_token_id)
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True)[0])
+    In a word, the cake is a bit of a mess.
+
+    >>> # Now let's control generation taking the bad words out. Please note that the tokenizer is initialized differently
+
+    >>> tokenizer_with_prefix_space = AutoTokenizer.from_pretrained("gpt2", add_prefix_space=True)
+
+
+    >>> def get_tokens_as_list(word_list):
+    ...     "Converts a sequence of words into a list of tokens"
+    ...     tokens_list = []
+    ...     for word in word_list.split(" "):
+    ...         tokenized_word = tokenizer_with_prefix_space([word], add_special_tokens=False).input_ids[0]
+    ...         tokens_list.append(tokenized_word)
+    ...     return tokens_list
+
+
+    >>> word_list = "mess"
+    >>> bad_words_ids = get_tokens_as_list(word_list=word_list)
+
+    >>> badwords_ids = model.generate(
+    ...     inputs["input_ids"],
+    ...     max_new_tokens=5,
+    ...     bad_words_ids=bad_words_ids,
+    ...     eos_token_id=tokenizer_with_prefix_space.eos_token_id,
+    ... )
+    >>> print(tokenizer.batch_decode(badwords_ids, skip_special_tokens=True)[0])
+    In a word, the cake is a bit of a surprise.
+
+    >>> badwords_ids = model.generate(inputs["input_ids"], max_new_tokens=4, num_beams=5, bad_words_ids=bad_words_ids)
+    >>> print(tokenizer.batch_decode(biased_ids, skip_special_tokens=True)[0])
+    In a word, the cake is a great way to start
+    ```
     """
 
     def __init__(self, bad_words_ids: List[List[int]], eos_token_id: Union[int, List[int]]):
@@ -1147,4 +1197,40 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         unguided_bsz = scores.shape[0] // 2
         cond_logits, uncond_logits = scores.split(unguided_bsz, dim=0)
         scores = uncond_logits + (cond_logits - uncond_logits) * self.guidance_scale
+        return scores
+
+
+class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] enforcing alternated generation between the two codebooks of [`Bark`]'s fine submodel.
+
+    Args:
+        input_start_len (`int`):
+            The length of the initial input sequence.
+        semantic_vocab_size (`int`):
+            Vocabulary size of the semantic part, i.e number of tokens associated to the semantic vocabulary.
+        codebook_size (`int`):
+            Number of tokens associated to the codebook.
+    """
+
+    def __init__(self, input_start_len: int, semantic_vocab_size: int, codebook_size: int):
+        if not isinstance(input_start_len, int) or input_start_len < 0:
+            raise ValueError(f"`input_starting_length` has to be a non-negative integer, but is {input_start_len}")
+
+        self.input_start_len = input_start_len
+        self.semantic_vocab_size = semantic_vocab_size
+        self.codebook_size = codebook_size
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        curr_len = input_ids.shape[-1]
+
+        # even -> first codebook, odd -> second codebook
+        is_first_codebook = ((curr_len - self.input_start_len) % 2) == 0
+
+        if is_first_codebook:
+            scores[:, : self.semantic_vocab_size] = -float("inf")
+            scores[:, self.semantic_vocab_size + self.codebook_size :] = -float("inf")
+        else:
+            scores[:, : self.semantic_vocab_size + self.codebook_size] = -float("inf")
+
         return scores

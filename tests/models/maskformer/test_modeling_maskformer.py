@@ -85,9 +85,15 @@ class MaskFormerModelTester:
         return MaskFormerConfig.from_backbone_and_decoder_configs(
             backbone_config=SwinConfig(
                 depths=[1, 1, 1, 1],
+                embed_dim=16,
+                hidden_size=32,
+                num_heads=[1, 1, 2, 2],
             ),
             decoder_config=DetrConfig(
-                decoder_ffn_dim=128,
+                decoder_ffn_dim=64,
+                decoder_layers=2,
+                encoder_ffn_dim=64,
+                encoder_layers=2,
                 num_queries=self.num_queries,
                 decoder_attention_heads=2,
                 d_model=self.mask_feature_size,

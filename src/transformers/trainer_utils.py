@@ -36,6 +36,7 @@ from .utils import (
     is_torch_available,
     is_torch_cuda_available,
     is_torch_mps_available,
+    is_torch_npu_available,
     is_torch_tpu_available,
     requires_backends,
 )
@@ -94,6 +95,8 @@ def set_seed(seed: int):
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
         # ^^ safe to call this function even if cuda is not available
+    if is_torch_npu_available():
+        torch.npu.manual_seed_all(seed)
     if is_tf_available():
         tf.random.set_seed(seed)
 

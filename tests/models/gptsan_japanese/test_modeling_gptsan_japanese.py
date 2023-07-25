@@ -38,7 +38,7 @@ class GPTSanJapaneseTester:
     def __init__(
         self,
         parent,
-        vocab_size=36000,
+        vocab_size=99,
         batch_size=13,
         num_contexts=7,
         # For common tests
