@@ -1723,6 +1723,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             token = use_auth_token
 
+        if token is not None:
+            kwargs["token"] = token
+
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "is_loaded_in_8bit", False) and getattr(self, "is_8bit_serializable", False):
             warnings.warn(

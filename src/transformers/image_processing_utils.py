@@ -223,6 +223,9 @@ class ImageProcessingMixin(PushToHubMixin):
                 )
             token = use_auth_token
 
+        if token is not None:
+            kwargs["token"] = token
+
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
