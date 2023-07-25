@@ -360,7 +360,7 @@ class FeatureExtractionMixin(PushToHubMixin):
             token = use_auth_token
 
         if token is not None:
-            kwargs["use_auth_token"] = token
+            kwargs["token"] = token
 
         feature_extractor_dict, kwargs = cls.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
 
