@@ -70,7 +70,7 @@ from .table_question_answering import TableQuestionAnsweringArgumentHandler, Tab
 from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
 from .text_classification import TextClassificationPipeline
 from .text_generation import TextGenerationPipeline
-from .text_to_speech import TextToAudioPipeline
+from .text_to_audio import TextToAudioPipeline
 from .token_classification import (
     AggregationStrategy,
     NerPipeline,
@@ -134,7 +134,8 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         AutoModelForSpeechSeq2Seq,
         AutoModelForTableQuestionAnswering,
-        AutoModelForTextToAudio,
+        AutoModelForTextToSpectrogram,
+        AutoModelForTextToWaveform,
         AutoModelForTokenClassification,
         AutoModelForVideoClassification,
         AutoModelForVision2Seq,
@@ -178,7 +179,7 @@ SUPPORTED_TASKS = {
     "text-to-audio": {
         "impl": TextToAudioPipeline,
         "tf": (),
-        "pt": (AutoModelForTextToAudio,) if is_torch_available() else (),
+        "pt": (AutoModelForTextToWaveform, AutoModelForTextToSpectrogram) if is_torch_available() else (),
         "default": {"model": {"pt": ("suno/bark-small", "645cfba")}},
         "type": "text",
     },
@@ -972,7 +973,6 @@ def pipeline(
 
                     if not is_pyctcdecode_available():
                         logger.warning("Try to install `pyctcdecode`: `pip install pyctcdecode")
-
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:

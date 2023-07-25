@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import (
-    MODEL_FOR_TEXT_TO_AUDIO_MAPPING,
+    MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING,
     TextToAudioPipeline,
     pipeline,
 )
@@ -37,7 +37,7 @@ if is_torch_available():
 @is_pipeline_test
 @require_torch_or_tf
 class TextToAudioPipelineTests(unittest.TestCase):
-    model_mapping = MODEL_FOR_TEXT_TO_AUDIO_MAPPING
+    model_mapping = MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING
 
     @require_torch
     def test_small_model_pt(self):

@@ -18,8 +18,8 @@ SPEAKER_EMBEDDINGS_KEY_MAPPING = {"bark": "history_prompt"}
 
 class TextToAudioPipeline(Pipeline):
     """
-    Text-to-audio generation pipeline using any `AutoModelForTextToAudio`. This pipeline generates an audio file from
-    an input text and optional other conditional inputs.
+    Text-to-audio generation pipeline using any `AutoModelForTextToWaveform` or `AutoModelForTextToSpectrogram`. This
+    pipeline generates an audio file from an input text and optional other conditional inputs.
 
     Example:
 

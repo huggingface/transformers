@@ -49,7 +49,7 @@ from .pipelines.test_pipelines_table_question_answering import TQAPipelineTests
 from .pipelines.test_pipelines_text2text_generation import Text2TextGenerationPipelineTests
 from .pipelines.test_pipelines_text_classification import TextClassificationPipelineTests
 from .pipelines.test_pipelines_text_generation import TextGenerationPipelineTests
-from .pipelines.test_pipelines_text_to_speech import TextToAudioPipelineTests
+from .pipelines.test_pipelines_text_to_audio import TextToAudioPipelineTests
 from .pipelines.test_pipelines_token_classification import TokenClassificationPipelineTests
 from .pipelines.test_pipelines_translation import TranslationPipelineTests
 from .pipelines.test_pipelines_video_classification import VideoClassificationPipelineTests
@@ -409,8 +409,8 @@ class PipelineTesterMixin:
 
     @is_pipeline_test
     @require_torch
-    def test_pipeline_text_to_speech(self):
-        self.run_task_tests(task="text-to-speech")
+    def test_pipeline_text_to_audio(self):
+        self.run_task_tests(task="text-to-audio")
 
     @is_pipeline_test
     def test_pipeline_token_classification(self):
