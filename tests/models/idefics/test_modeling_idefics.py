@@ -76,14 +76,6 @@ class IdeficsModelTester:
         vision_num_attention_heads=4,
         vision_num_hidden_layers=5,
         vision_intermediate_size=37,
-        # vision_config={
-        #     "patch_size": 2,
-        #     "hidden_size": 32,
-        #     "image_size": 30,
-        #     "num_attention_heads": 4,
-        #     "num_hidden_layers": 5,
-        #     "intermediate_size": 37,
-        # },
     ):
         self.parent = parent
         self.batch_size = batch_size
