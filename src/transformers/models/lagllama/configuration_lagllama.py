@@ -31,8 +31,8 @@ LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 class LagLlamaConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LagLlamaModel`]. It is used to instantiate an LagLLaMA
-    model according to the specified arguments, defining the model architecture.
+    This is the configuration class to store the configuration of a [`LagLlamaModel`]. It is used to instantiate an
+    LagLLaMA model according to the specified arguments, defining the model architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

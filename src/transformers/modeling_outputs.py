@@ -1470,7 +1470,8 @@ class Seq2SeqSpectrogramOutput(ModelOutput):
 @dataclass
 class BaseTSModelOutputWithPast(ModelOutput):
     """
-    Base class for time series model's outputs that may also contain a past key/values (to speed up sequential decoding).
+    Base class for time series model's outputs that may also contain a past key/values (to speed up sequential
+    decoding).
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
