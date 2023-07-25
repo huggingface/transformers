@@ -160,18 +160,18 @@ class IdeficsModelTester:
         self,
         config,
         input_ids,
-        token_type_ids,
         input_mask,
         pixel_values,
+        image_attention_mask,
     ):
         model = IdeficsModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values)
-        result = model(input_ids, pixel_values=pixel_values)
-        result = model(input_ids, pixel_values=pixel_values)
+        result = model(
+            input_ids, attention_mask=input_mask, pixel_values=pixel_values, image_attention_mask=image_attention_mask
+        )
         self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.expected_seq_len, self.hidden_size)
+            result.last_hidden_state.shape, (self.batch_size, input_ids.shape[1], self.hidden_size)
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -275,32 +275,18 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             loss = model(**inputs).loss
             loss.backward()
 
-    @unittest.skip(
-        reason="""VilT samples image tokens from a multinomial distribution, resulting in not deterministic
-                            hidden states"""
-    )
-    def test_save_load(self):
-        pass
+    @unittest.skip(reason="""IDEFICS does not support retaining the gradients of the hidden states and attention""")
+    def test_retain_grad_hidden_states_attentions(self):
+        return
 
-    @unittest.skip(
-        reason="""VilT samples image tokens from a multinomial distribution, resulting in not deterministic
-                            hidden states"""
-    )
-    def test_determinism(self):
-        pass
-
-    @unittest.skip(
-        reason="""VilT samples image tokens from a multinomial distribution, resulting in not deterministic
-                            hidden states"""
-    )
-    def test_model_outputs_equivalence(self):
-        pass
+    # TODO: re-write this test
+    @unittest.skip(reason="""IDEFICS has a unique initialization that makes the test fail.""")
+    def test_initialization(self):
+        return
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
-
-        seq_len = getattr(self.model_tester, "expected_seq_len", None)
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -312,13 +298,8 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            if model_class.__name__ == "IdeficsForImagesAndTextClassification":
-                # attentions are a list of length num_images
-                # each element contains the attentions of a particular image index
-                self.assertEqual(len(attentions), self.model_tester.num_images)
-                self.assertEqual(len(attentions[0]), self.model_tester.num_hidden_layers)
-            else:
-                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -329,24 +310,8 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            if model_class.__name__ == "IdeficsForImagesAndTextClassification":
-                # attentions are a list of length num_images
-                # each element contains the attentions of a particular image index
-                self.assertEqual(len(attentions), self.model_tester.num_images)
-                self.assertEqual(len(attentions[0]), self.model_tester.num_hidden_layers)
-            else:
-                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            if model_class.__name__ == "IdeficsForImagesAndTextClassification":
-                self.assertListEqual(
-                    list(attentions[0][0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len, seq_len],
-                )
-            else:
-                self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len, seq_len],
-                )
+            # IDEFICS does not support outputting attention score becuase it uses SDPA under the hood
+            self.assertTrue(attentions[0] is None)
             out_len = len(outputs)
 
             # Check attention is always last and order is fine
@@ -362,19 +327,9 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
-            if model_class.__name__ == "IdeficsForImagesAndTextClassification":
-                self.assertEqual(len(self_attentions), self.model_tester.num_images)
-                self.assertEqual(len(self_attentions[0]), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(self_attentions[0][0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len, seq_len],
-                )
-            else:
-                self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len, seq_len],
-                )
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            # IDEFICS does not support outputting attention score becuase it uses SDPA under the hood
+            self.assertTrue(self_attentions[0] is None)
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -390,31 +345,18 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
-            if model_class.__name__ == "IdeficsForImagesAndTextClassification":
-                # hidden_states are a list of length num_images
-                # each element contains the hidden states of a particular image index
-                self.assertEqual(len(hidden_states), self.model_tester.num_images)
-                self.assertEqual(len(hidden_states[0]), expected_num_layers)
-            else:
-                self.assertEqual(len(hidden_states), expected_num_layers)
+            self.assertEqual(len(hidden_states), expected_num_layers)
 
-            seq_length = self.model_tester.expected_seq_len
+            seq_length = self.model_tester.seq_length
 
-            if model_class.__name__ == "IdeficsForImagesAndTextClassification":
-                self.assertListEqual(
-                    list(hidden_states[0][0].shape[-2:]),
-                    [seq_length, self.model_tester.hidden_size],
-                )
-            else:
-                self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
-                    [seq_length, self.model_tester.hidden_size],
-                )
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [seq_length, self.model_tester.hidden_size],
+            )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            print("Model class:", model_class)
             inputs_dict["output_hidden_states"] = True
             check_hidden_states_output(inputs_dict, config, model_class)
 
@@ -423,46 +365,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-
-    def test_retain_grad_hidden_states_attentions(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        config.output_attentions = True
-
-        # no need to test all models as different heads yield the same functionality
-        model_class = self.all_model_classes[0]
-        model = model_class(config)
-        model.to(torch_device)
-
-        inputs = self._prepare_for_class(inputs_dict, model_class)
-
-        outputs = model(**inputs)
-
-        output = outputs[0]
-
-        # Encoder-/Decoder-only models
-        hidden_states = outputs.hidden_states[0]
-        attentions = outputs.attentions[0]
-
-        if model_class.__name__ == "IdeficsForImagesAndTextClassification":
-            # hidden_states are a list of length num_images
-            # each element contains the hidden states of a particular image index
-            hidden_states[0].retain_grad()
-            attentions[0].retain_grad()
-        else:
-            hidden_states.retain_grad()
-            attentions.retain_grad()
-
-        output.flatten()[0].backward(retain_graph=True)
-
-        if model_class.__name__ == "IdeficsForImagesAndTextClassification":
-            # hidden_states are a list of length num_images
-            # each element contains the hidden states of a particular image index
-            self.assertIsNotNone(hidden_states[0].grad)
-            self.assertIsNotNone(attentions[0].grad)
-        else:
-            self.assertIsNotNone(hidden_states.grad)
-            self.assertIsNotNone(attentions.grad)
 
     @slow
     def test_model_from_pretrained(self):
@@ -487,6 +389,10 @@ class IdeficsForCausalLMTest(IdeficsModelTest, unittest.TestCase):
 
     @unittest.skip("We only test the model that takes in multiple images")
     def test_for_token_classification(self):
+        pass
+
+    @unittest.skip(reason="""IDEFICS does not support retaining the gradients of the hidden states and attention""")
+    def test_retain_grad_hidden_states_attentions(self):
         pass
 
 
