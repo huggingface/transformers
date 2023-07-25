@@ -29,7 +29,6 @@ GEOLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class GeoLMConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`GeoLMModel`] or a [`TFGeoLMModel`]. It is used to
@@ -81,7 +80,8 @@ class GeoLMConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
         use_spatial_distance_embedding (`bool`, *optional*, defaults to `True`):
-            Whether or not add spatial_distance_embedding module to the other embeddings to calculate the final input embeddings. 
+            Whether or not add spatial_distance_embedding module to the other embeddings to calculate the final input
+            embeddings.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
 
@@ -118,7 +118,7 @@ class GeoLMConfig(PretrainedConfig):
         pad_token_id=0,
         position_embedding_type="absolute",
         use_cache=True,
-        use_spatial_distance_embedding = True,
+        use_spatial_distance_embedding=True,
         classifier_dropout=None,
         **kwargs,
     ):

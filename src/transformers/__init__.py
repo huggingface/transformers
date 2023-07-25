@@ -178,13 +178,6 @@ _import_structure = {
         "BertTokenizer",
         "WordpieceTokenizer",
     ],
-    "models.geolm": [
-        "GEOLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BasicTokenizer",
-        "GeoLMConfig",
-       
-        "WordpieceTokenizer",
-    ],
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"],
     "models.bertweet": ["BertweetTokenizer"],
@@ -343,6 +336,12 @@ _import_structure = {
     "models.focalnet": ["FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FocalNetConfig"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
+    "models.geolm": [
+        "GEOLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BasicTokenizer",
+        "GeoLMConfig",
+        "WordpieceTokenizer",
+    ],
     "models.git": ["GIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "GitConfig", "GitProcessor", "GitVisionConfig"],
     "models.glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
@@ -1202,23 +1201,6 @@ else:
             "load_tf_weights_in_bert",
         ]
     )
-    _import_structure["models.geolm"].extend(
-        [
-            "GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "GeoLMForMaskedLM",
-            "GeoLMForMultipleChoice",
-            "GeoLMForNextSentencePrediction",
-            "GeoLMForPreTraining",
-            "GeoLMForQuestionAnswering",
-            "GeoLMForSequenceClassification",
-            "GeoLMForTokenClassification",
-            "GeoLMLayer",
-            "GeoLMLMHeadModel",
-            "GeoLMModel",
-            "GeoLMPreTrainedModel",
-            "load_tf_weights_in_geolm",
-        ]
-    )
     _import_structure["models.bert_generation"].extend(
         [
             "BertGenerationDecoder",
@@ -1811,6 +1793,23 @@ else:
             "FunnelModel",
             "FunnelPreTrainedModel",
             "load_tf_weights_in_funnel",
+        ]
+    )
+    _import_structure["models.geolm"].extend(
+        [
+            "GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GeoLMForMaskedLM",
+            "GeoLMForMultipleChoice",
+            "GeoLMForNextSentencePrediction",
+            "GeoLMForPreTraining",
+            "GeoLMForQuestionAnswering",
+            "GeoLMForSequenceClassification",
+            "GeoLMForTokenClassification",
+            "GeoLMLayer",
+            "GeoLMLMHeadModel",
+            "GeoLMModel",
+            "GeoLMPreTrainedModel",
+            "load_tf_weights_in_geolm",
         ]
     )
     _import_structure["models.git"].extend(
@@ -3177,23 +3176,6 @@ else:
             "TFBertPreTrainedModel",
         ]
     )
-    _import_structure["models.geolm"].extend(
-        [
-            "TF_GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFGeoLMEmbeddings",
-            "TFGeoLMForMaskedLM",
-            "TFGeoLMForMultipleChoice",
-            "TFGeoLMForNextSentencePrediction",
-            "TFGeoLMForPreTraining",
-            "TFGeoLMForQuestionAnswering",
-            "TFGeoLMForSequenceClassification",
-            "TFGeoLMForTokenClassification",
-            "TFGeoLMLMHeadModel",
-            "TFGeoLMMainLayer",
-            "TFGeoLMModel",
-            "TFGeoLMPreTrainedModel",
-        ]
-    )
     _import_structure["models.blenderbot"].extend(
         ["TFBlenderbotForConditionalGeneration", "TFBlenderbotModel", "TFBlenderbotPreTrainedModel"]
     )
@@ -3394,6 +3376,23 @@ else:
             "TFFunnelForTokenClassification",
             "TFFunnelModel",
             "TFFunnelPreTrainedModel",
+        ]
+    )
+    _import_structure["models.geolm"].extend(
+        [
+            "TF_GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFGeoLMEmbeddings",
+            "TFGeoLMForMaskedLM",
+            "TFGeoLMForMultipleChoice",
+            "TFGeoLMForNextSentencePrediction",
+            "TFGeoLMForPreTraining",
+            "TFGeoLMForQuestionAnswering",
+            "TFGeoLMForSequenceClassification",
+            "TFGeoLMForTokenClassification",
+            "TFGeoLMLMHeadModel",
+            "TFGeoLMMainLayer",
+            "TFGeoLMModel",
+            "TFGeoLMPreTrainedModel",
         ]
     )
     _import_structure["models.gpt2"].extend(
@@ -4197,13 +4196,6 @@ if TYPE_CHECKING:
         BertTokenizer,
         WordpieceTokenizer,
     )
-    from .models.geolm import (
-        GEOLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        BasicTokenizer,
-        GeoLMConfig,
-       
-        WordpieceTokenizer,
-    )
     from .models.bert_generation import BertGenerationConfig
     from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
     from .models.bertweet import BertweetTokenizer
@@ -4354,6 +4346,12 @@ if TYPE_CHECKING:
     from .models.focalnet import FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FocalNetConfig
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
+    from .models.geolm import (
+        GEOLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BasicTokenizer,
+        GeoLMConfig,
+        WordpieceTokenizer,
+    )
     from .models.git import GIT_PRETRAINED_CONFIG_ARCHIVE_MAP, GitConfig, GitProcessor, GitVisionConfig
     from .models.glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
@@ -5119,21 +5117,6 @@ if TYPE_CHECKING:
             BertPreTrainedModel,
             load_tf_weights_in_bert,
         )
-        from .models.geolm import (
-            GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GeoLMForMaskedLM,
-            GeoLMForMultipleChoice,
-            GeoLMForNextSentencePrediction,
-            GeoLMForPreTraining,
-            GeoLMForQuestionAnswering,
-            GeoLMForSequenceClassification,
-            GeoLMForTokenClassification,
-            GeoLMLayer,
-            GeoLMLMHeadModel,
-            GeoLMModel,
-            GeoLMPreTrainedModel,
-            load_tf_weights_in_geolm,
-        )
         from .models.bert_generation import (
             BertGenerationDecoder,
             BertGenerationEncoder,
@@ -5618,6 +5601,21 @@ if TYPE_CHECKING:
             FunnelModel,
             FunnelPreTrainedModel,
             load_tf_weights_in_funnel,
+        )
+        from .models.geolm import (
+            GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GeoLMForMaskedLM,
+            GeoLMForMultipleChoice,
+            GeoLMForNextSentencePrediction,
+            GeoLMForPreTraining,
+            GeoLMForQuestionAnswering,
+            GeoLMForSequenceClassification,
+            GeoLMForTokenClassification,
+            GeoLMLayer,
+            GeoLMLMHeadModel,
+            GeoLMModel,
+            GeoLMPreTrainedModel,
+            load_tf_weights_in_geolm,
         )
         from .models.git import (
             GIT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6738,21 +6736,6 @@ if TYPE_CHECKING:
             TFBertModel,
             TFBertPreTrainedModel,
         )
-        from .models.geolm import (
-            TF_GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFGeoLMEmbeddings,
-            TFGeoLMForMaskedLM,
-            TFGeoLMForMultipleChoice,
-            TFGeoLMForNextSentencePrediction,
-            TFGeoLMForPreTraining,
-            TFGeoLMForQuestionAnswering,
-            TFGeoLMForSequenceClassification,
-            TFGeoLMForTokenClassification,
-            TFGeoLMLMHeadModel,
-            TFGeoLMMainLayer,
-            TFGeoLMModel,
-            TFGeoLMPreTrainedModel,
-        )
         from .models.blenderbot import (
             TFBlenderbotForConditionalGeneration,
             TFBlenderbotModel,
@@ -6918,6 +6901,21 @@ if TYPE_CHECKING:
             TFFunnelForTokenClassification,
             TFFunnelModel,
             TFFunnelPreTrainedModel,
+        )
+        from .models.geolm import (
+            TF_GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFGeoLMEmbeddings,
+            TFGeoLMForMaskedLM,
+            TFGeoLMForMultipleChoice,
+            TFGeoLMForNextSentencePrediction,
+            TFGeoLMForPreTraining,
+            TFGeoLMForQuestionAnswering,
+            TFGeoLMForSequenceClassification,
+            TFGeoLMForTokenClassification,
+            TFGeoLMLMHeadModel,
+            TFGeoLMMainLayer,
+            TFGeoLMModel,
+            TFGeoLMPreTrainedModel,
         )
         from .models.gpt2 import (
             TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7294,18 +7292,6 @@ if TYPE_CHECKING:
             FlaxBertModel,
             FlaxBertPreTrainedModel,
         )
-        from .models.geolm import (
-            FlaxGeoLMForCausalLM,
-            FlaxGeoLMForMaskedLM,
-            FlaxGeoLMForMultipleChoice,
-            FlaxGeoLMForNextSentencePrediction,
-            FlaxGeoLMForPreTraining,
-            FlaxGeoLMForQuestionAnswering,
-            FlaxGeoLMForSequenceClassification,
-            FlaxGeoLMForTokenClassification,
-            FlaxGeoLMModel,
-            FlaxGeoLMPreTrainedModel,
-        )
         from .models.big_bird import (
             FlaxBigBirdForCausalLM,
             FlaxBigBirdForMaskedLM,
@@ -7356,6 +7342,18 @@ if TYPE_CHECKING:
             FlaxElectraPreTrainedModel,
         )
         from .models.encoder_decoder import FlaxEncoderDecoderModel
+        from .models.geolm import (
+            FlaxGeoLMForCausalLM,
+            FlaxGeoLMForMaskedLM,
+            FlaxGeoLMForMultipleChoice,
+            FlaxGeoLMForNextSentencePrediction,
+            FlaxGeoLMForPreTraining,
+            FlaxGeoLMForQuestionAnswering,
+            FlaxGeoLMForSequenceClassification,
+            FlaxGeoLMForTokenClassification,
+            FlaxGeoLMModel,
+            FlaxGeoLMPreTrainedModel,
+        )
         from .models.gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model, FlaxGPT2PreTrainedModel
         from .models.gpt_neo import FlaxGPTNeoForCausalLM, FlaxGPTNeoModel, FlaxGPTNeoPreTrainedModel
         from .models.gptj import FlaxGPTJForCausalLM, FlaxGPTJModel, FlaxGPTJPreTrainedModel
