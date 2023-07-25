@@ -775,6 +775,50 @@ class NllbConverter(SpmConverter):
         )
 
 
+class Kosmos2Converter(SpmConverter):
+    def vocab(self, proto):
+        vocab = [
+            ("<s>", 0.0),
+            ("<pad>", 0.0),
+            ("</s>", 0.0),
+            ("<unk>", 0.0),
+        ]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+        vocab += [("<mask>", 0.0)]
+        # fmt: off
+        vocab += [
+            ("</doc>", 0.0),
+            ("<image>", 0.0),
+            ("</image>", 0.0),
+            ("</chunk>", 0.0),
+            ("</line>", 0.0),
+            ("<phrase>", 0.0),
+            ("</phrase>", 0.0),
+            ("<object>", 0.0),
+            ("</object>", 0.0),
+            ("</delimiter_of_multi_objects>", 0.0),
+            ("<grounding>", 0.0),
+        ]
+        # fmt: on
+        vocab += [(f"<patch_index_{str(i).zfill(4)}>", 0.0) for i in range(self.original_tokenizer.num_patch_index_tokens)]
+
+        return vocab
+
+    def unk_id(self, proto):
+        unk_id = 3
+        return unk_id
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single="<s> $A </s>",
+            pair="<s> $A </s> </s> $B </s>",
+            special_tokens=[
+                ("<s>", self.original_tokenizer.convert_tokens_to_ids("<s>")),
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
+            ],
+        )
+
+
 class XLMRobertaConverter(SpmConverter):
     def vocab(self, proto):
         vocab = [
@@ -1274,6 +1318,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "FunnelTokenizer": FunnelConverter,
     "GPT2Tokenizer": GPT2Converter,
     "HerbertTokenizer": HerbertConverter,
+    "Kosmos2Tokenizer": Kosmos2Converter,
     "LayoutLMTokenizer": BertConverter,
     "LayoutLMv2Tokenizer": BertConverter,
     "LayoutLMv3Tokenizer": RobertaConverter,
