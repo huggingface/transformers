@@ -27,6 +27,7 @@ GPU 설정에 대한 실용적인 조언을 살펴보겠습니다.
 
 ## GPU [[gpu]]
 더 큰 모델을 훈련시킬 때는 기본적으로 세 가지 옵션이 있습니다:
+
 - 더 큰 GPU
 - 더 많은 GPU
 - 더 많은 CPU 및 NVMe ([DeepSpeed-Infinity](../en/main_classes/deepspeed#nvme-support)를 통한 오프로드(offload))
