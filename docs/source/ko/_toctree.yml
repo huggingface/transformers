@@ -128,7 +128,7 @@
     - local: in_translation
       title: (번역중) Inference on Specialized Hardware
     - local: perf_hardware
-      title: 훈련용 사용자 정의 하드웨어
+      title: 훈련용 사용자 맞춤형 하드웨어
     - local: in_translation
       title: (번역중) Instantiating a big model
     - local: in_translation
