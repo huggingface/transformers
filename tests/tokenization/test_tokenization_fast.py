@@ -118,8 +118,8 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(
             tokenizer.padding,
             {
-                "length": None,
-                "pad_to_multiple_of": None,
+                "length": 512,
+                "pad_to_multiple_of": 64,
                 "pad_id": 0,
                 "pad_token": "<pad>",
                 "pad_type_id": 0,
