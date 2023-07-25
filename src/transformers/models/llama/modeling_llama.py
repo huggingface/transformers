@@ -512,6 +512,10 @@ class LlamaModel(LlamaPreTrainedModel):
             batch_size, seq_length, _ = inputs_embeds.shape
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+        
+        # NOTE: Shape を合わせるために追加する
+        if last_hidden_state is not None:
+            seq_length += last_hidden_state.shape[1]
 
         seq_length_with_past = seq_length
         past_key_values_length = 0
