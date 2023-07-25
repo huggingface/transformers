@@ -31,7 +31,7 @@ from transformers.activations import ACT2FN
 from transformers.deepspeed import is_deepspeed_zero3_enabled
 from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from transformers.modeling_utils import PretrainedConfig
-from transformers.models.clip.configuration_clip import CLIPConfig, CLIPVisionConfig
+from transformers.models.clip.configuration_clip import CLIPVisionConfig
 from transformers.models.clip.modeling_clip import CLIPVisionTransformer
 from transformers.utils import (
     ContextManagers,
@@ -1023,20 +1023,12 @@ class IdeficsModel(IdeficsPreTrainedModel):
             padding_idx=self.padding_idx,
         )
 
-        # workaround for including `vision_image_size` config and not have transformers checks
         # complain that it's not used
         self.image_size = config.vision_image_size
 
-        # TODO: remove the dependency on `vision_model_name`
-        self.vision_config = config.vision_config
-        other_config_kwargs = {"id2label": {}, "label2id": {}}
-        clip_vision_config = CLIPVisionConfig(**self.vision_config)
-
-        clip_config = CLIPConfig.from_pretrained(
-            config.vision_model_name, vision_config=clip_vision_config, **other_config_kwargs
-        )
-        # print(clip_config.vision_config)
-        self.vision_model = CLIPVisionTransformer(clip_config.vision_config)
+        self.vision_config_dict = config.vision_config_dict
+        clip_vision_config = CLIPVisionConfig(**self.vision_config_dict)
+        self.vision_model = CLIPVisionTransformer(clip_vision_config)
 
         # Perceiver Resampler
         if config.use_resampler:
