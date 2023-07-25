@@ -165,6 +165,31 @@ def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.
     return -input.log_prob(target)
 
 
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.weighted_average
+def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
+    """
+    Computes the weighted average of a given tensor across a given `dim`, masking values associated with weight zero,
+    meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
+
+    Args:
+        input_tensor (`torch.FloatTensor`):
+            Input tensor, of which the average must be computed.
+        weights (`torch.FloatTensor`, *optional*):
+            Weights tensor, of the same shape as `input_tensor`.
+        dim (`int`, *optional*):
+            The dim along which to average `input_tensor`.
+
+    Returns:
+        `torch.FloatTensor`: The tensor with values averaged along the specified `dim`.
+    """
+    if weights is not None:
+        weighted_tensor = torch.where(weights != 0, input_tensor * weights, torch.zeros_like(input_tensor))
+        sum_weights = torch.clamp(weights.sum(dim=dim) if dim else weights.sum(), min=1.0)
+        return (weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()) / sum_weights
+    else:
+        return input_tensor.mean(dim=dim)
+
+
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(
     input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
@@ -1040,6 +1065,7 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
         loc: Optional[torch.FloatTensor] = None,
         scale: Optional[torch.FloatTensor] = None,
         future_values: Optional[torch.Tensor] = None,
+        future_observed_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1098,21 +1124,33 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
         # params of the chosen distribution
         params = self.parameter_projection(hidden_states)
 
-        loss = None
+        prediction_loss = None
         if future_values is not None:
             # Shift so that tokens < n predict n
             shift_params = [p[..., :-1].contiguous() for p in params]
             distribution = self.output_distribution(shift_params, loc, scale)
 
-            shift_future_values = future_values[..., max(self.config.lags_sequence)+1:].contiguous()
+            shift_future_values = future_values[:, max(self.config.lags_sequence) + 1 :].contiguous()
             loss = self.loss(distribution, shift_future_values)
+
+            if future_observed_mask is None:
+                future_observed_mask = torch.ones_like(shift_future_values)
+            else:
+                future_observed_mask = future_observed_mask[:, max(self.config.lags_sequence) + 1 :].contiguous()
+
+            if len(self.target_shape) == 0:
+                loss_weights = future_observed_mask
+            else:
+                loss_weights, _ = future_observed_mask.min(dim=-1, keepdim=False)
+
+            prediction_loss = weighted_average(loss, weights=loss_weights)
 
         if not return_dict:
             output = (params,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
+            return (prediction_loss,) + output if prediction_loss is not None else output
 
         return CausalTSOutputWithPast(
-            loss=loss,
+            loss=prediction_loss,
             params=params,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
