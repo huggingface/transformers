@@ -121,8 +121,8 @@
       title: (번역중) Training on TPU with TensorFlow
     - local: in_translation
       title: (번역중) Training on Specialized Hardware
-    - local: in_translation
-      title: (번역중) Inference on CPU
+    - local: perf_infer_cpu
+      title: CPU로 추론하기
     - local: in_translation
       title: (번역중) Inference on one GPU
     - local: in_translation
