@@ -783,6 +783,7 @@ class DetrDecoderLayer(nn.Module):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
+        **kwargs,
     ):
         """
         Args:
@@ -805,6 +806,22 @@ class DetrDecoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
+        position_embeddings = kwargs.pop("position_embeddings", None)
+
+        if kwargs:
+            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
+
+        if position_embeddings is not None and object_queries is not None:
+            raise ValueError(
+                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
+            )
+
+        if position_embeddings is not None:
+            logger.warning_once(
+                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
+            )
+            object_queries = position_embeddings
+
         residual = hidden_states
 
         # Self Attention
