@@ -2706,7 +2706,7 @@ class ModelTesterMixin:
                         new_model_without_prefix(input_ids)
 
     def test_model_is_small(self):
-        # Just a consistency check to make sure we are not running tests on 80M parameter models.
+        # Just a consistency check to make sure we are not running tests on 1M parameter models.
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -2714,7 +2714,7 @@ class ModelTesterMixin:
             num_params = model.num_parameters()
             assert (
                 num_params < 1000000
-            ), f"{model_class} is too big for the common tests ({num_params})! It should have 200k max."
+            ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
 
 
 global_rng = random.Random()
