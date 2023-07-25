@@ -760,7 +760,7 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
     >>> summary_ids = model.generate(inputs["input_ids"], max_new_tokens=5, pad_token_id=tokenizer.eos_token_id)
     >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True)[0])
     In a word, the cake is a bit of a mess.
-    
+
     >>> # Now let's control generation taking the bad words out. Please note that the tokenizer is initialized differently
 
     >>> tokenizer_with_prefix_space = AutoTokenizer.from_pretrained("gpt2", add_prefix_space=True)
@@ -773,6 +773,7 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
     ...         tokenized_word = tokenizer_with_prefix_space([word], add_special_tokens=False).input_ids[0]
     ...         tokens_list.append(tokenized_word)
     ...     return tokens_list
+
 
     >>> word_list = "mess"
     >>> bad_words_ids = get_tokens_as_list(word_list=word_list)
