@@ -185,39 +185,3 @@ class IdeficsConfig(PretrainedConfig):
         self.resampler_depth = resampler_depth
         self.resampler_n_heads = resampler_n_heads
         self.resampler_head_dim = resampler_head_dim
-
-        # IMPORTANT: Do not do any __init__ args-based checks in the constructor, since
-        # PretrainedConfig.from_dict first instantiates the class with the config dict and only then
-        # updates the config object with `kwargs` from from_pretrained, so during the instantiation
-        # of this object many attributes have default values and haven't yet been overridden.
-        # Do any required checks inside `from_pretrained` once the superclass' `from_pretrained` was run.
-
-    def check_compatibilities(self):
-        vision_model_params = eval(self.vision_model_params)
-        config = AutoConfig.from_pretrained(self.vision_model_name, **vision_model_params)
-        if hasattr(config, "vision_config"):
-            vision_config = config.vision_config
-        else:
-            vision_config = config
-        vision_embed_dim = vision_config.hidden_size
-        if self.vision_embed_dim != vision_embed_dim:
-            raise ValueError(
-                f"vision_embed_dim ({self.vision_embed_dim}) must match the hidden size of the vision model"
-                f" ({vision_embed_dim})"
-            )
-        vision_image_size = vision_config.image_size
-        if self.vision_image_size != vision_image_size:
-            raise ValueError(
-                f"vision_image_size ({self.vision_image_size}) must match the hidden size of the vision model"
-                f" ({vision_image_size})"
-            )
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        outputs = super(IdeficsConfig, cls).from_pretrained(pretrained_model_name_or_path, **kwargs)
-        # if isinstance(outputs, Tuple):
-        #     # When called with return_unused_kwargs=True, the first item will be the config
-        #     outputs[0].check_compatibilities()
-        # else:
-        #     outputs.check_compatibilities()
-        return outputs
