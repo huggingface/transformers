@@ -392,6 +392,7 @@ Flax), PyTorch, and/or TensorFlow.
 |           MobileViT           |       ✅        |         ✅         |      ❌      |
 |          MobileViTV2          |       ✅        |         ❌         |      ❌      |
 |             MPNet             |       ✅        |         ✅         |      ❌      |
+|              MPT              |       ✅        |         ❌         |      ❌      |
 |              MRA              |       ✅        |         ❌         |      ❌      |
 |              MT5              |       ✅        |         ✅         |      ✅      |
 |           MusicGen            |       ✅        |         ❌         |      ❌      |
