@@ -1,17 +1,54 @@
 import torch
-from typing import Optional, Union, List, Set, Tuple
 import torch.nn as nn
+from typing import List, Optional, Set, Tuple, Union
 
-config = {
-    "hidden_size":1,
-    "num_attention_heads":1,
-    "embedding_size":1,
-  }
+class ViTPosePatchEmbed(nn.Module):
+    """
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
+    """
 
-
-class ViTSelfAttention(nn.Module):
-    def __init__(self, config: config) -> None:
+    ## change variable names from config, looks good othervise
+    def __init__(self, config):
         super().__init__()
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.num_patches = num_patches
+
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size, padding = some_size)
+
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
+        batch_size, num_channels, height, width = pixel_values.shape
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+                f" Expected {self.num_channels} but got {num_channels}."
+            )
+        if not interpolate_pos_encoding:
+            if height != self.image_size[0] or width != self.image_size[1]:
+                raise ValueError(
+                    f"Input image size ({height}*{width}) doesn't match model"
+                    f" ({self.image_size[0]}*{self.image_size[1]})."
+                )
+        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        return embeddings
+
+class Attention(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"heads {config.num_attention_heads}."
+            )
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
@@ -55,7 +92,51 @@ class ViTSelfAttention(nn.Module):
 
         context_layer = torch.matmul(attention_probs, value_layer)
 
-print(config.hidden_size)
-a = ViTSelfAttention(config)
+        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
 
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        return outputs
+
+class mlp(nn.Module):
+    def __init__(self, in_features, hidden_features=None, out_features=None, dropout=.0):
+        super().__init__()
+        if hidden_features is None:
+          hidden_features = in_features
+        if out_features is None:
+          out_features = in_features
+
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.act = nn.GELU()
+        self.fc2 = nn.Linear(hidden_features, out_features)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self,x):
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+        return x
+
+    pass
+
+class ViTPoseBlock(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.norm1 = nn.LayerNorm(1)
+        #self.attn = Attention(dim=1, num_heads=1, qkv_bias=True, qk_scale=1, attn_drop=1, proj_drop=1)
+        self.drop_path = nn.Identity()
+        self.norm2 = nn.LayerNorm(1)
+        self.mlp = mlp(in_features=1, hidden_features=int(1*12))
+
+    def forward(self, x):
+        #x = x + self.drop_path(self.attn(self.norm1(x)))
+        x = x + self.drop_path(self.mlp(self.norm2(x)))
+        return x
+    pass
+
+
+a = ViTPoseBlock()
 print(a)
