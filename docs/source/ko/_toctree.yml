@@ -129,8 +129,8 @@
       title: (번역중) Inference on many GPUs
     - local: in_translation
       title: (번역중) Inference on Specialized Hardware
-    - local: in_translation
-      title: (번역중) Custom hardware for training
+    - local: perf_hardware
+      title: 훈련용 사용자 맞춤형 하드웨어
     - local: in_translation
       title: (번역중) Instantiating a big model
     - local: in_translation
