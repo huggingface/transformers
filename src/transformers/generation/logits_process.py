@@ -184,7 +184,7 @@ class TemperatureLogitsWarper(LogitsWarper):
 
     Args:
         temperature (`float`):
-            The value used to module the logits distribution. A value smaller than `1` decreases randomness (and vice
+            Strictly positive float value used to modulate the logits distribution. A value smaller than `1` decreases randomness (and vice
             versa), with `0` being equivalent to shifting all probability mass to the most likely token. However, bear
             in mind that a positive float should be given, therefore, `float(0)` is not allowed.
 
