@@ -111,7 +111,7 @@ class DebertaV2Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=128100,
+        vocab_size=128001,
         hidden_size=1536,
         num_hidden_layers=24,
         num_attention_heads=24,
