@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for MobileNetV2."""
 
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
