@@ -279,7 +279,6 @@ tokenizer (called "slow"). A "fast" tokenizer backed by the 🤗 Tokenizers libr
 Flax), PyTorch, and/or TensorFlow.
 
 <!--This table is updated automatically from the auto modules with _make fix-copies_. Do not update manually!-->
-
 |             Model             | PyTorch support | TensorFlow support | Flax Support  |
 |:-----------------------------:|:---------------:|:------------------:|:-------------:|
 |            ALBERT             |        ✅        |         ✅          |       ✅       |
