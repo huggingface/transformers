@@ -108,7 +108,7 @@ BLOOM_INPUTS_DOCSTRING = r"""
 """
 
 
-def build_alibi_tensor(attention_mask: jax.Array, num_heads: int, dtype: Optional[jnp.dtype] = jnp.float32):
+def build_alibi_tensor(attention_mask: jnp.ndarray, num_heads: int, dtype: Optional[jnp.dtype] = jnp.float32):
     """
     Flax implementation of the BLOOM Alibi tensor. BLOOM Alibi tensor is not causal as the original paper mentions, it
     relies on a translation invariance of softmax for quick implementation: with l being a tensor, and a fixed value
