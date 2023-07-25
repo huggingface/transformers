@@ -267,8 +267,8 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             model = model_class(config).to(torch_device).eval()
             output_greedy, output_generate = self._greedy_generate(
                 model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
+                input_ids=input_ids.to(torch_device),
+                attention_mask=attention_mask.to(torch_device),
                 max_length=max_length,
                 output_scores=True,
                 output_hidden_states=True,
@@ -293,8 +293,8 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             model = model_class(config).to(torch_device).eval()
             output_greedy, output_generate = self._greedy_generate(
                 model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
+                input_ids=input_ids.to(torch_device),
+                attention_mask=attention_mask.to(torch_device),
                 max_length=max_length,
                 output_scores=True,
                 output_hidden_states=True,
@@ -324,8 +324,8 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             # check `generate()` and `sample()` are equal
             output_sample, output_generate = self._sample_generate(
                 model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
+                input_ids=input_ids.to(torch_device),
+                attention_mask=attention_mask.to(torch_device),
                 max_length=max_length,
                 num_return_sequences=3,
                 logits_processor=logits_processor,
@@ -356,8 +356,8 @@ class MusicgenDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
             output_sample, output_generate = self._sample_generate(
                 model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
+                input_ids=input_ids.to(torch_device),
+                attention_mask=attention_mask.to(torch_device),
                 max_length=max_length,
                 num_return_sequences=1,
                 logits_processor=logits_processor,
@@ -964,8 +964,8 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             model = model_class(config).to(torch_device).eval()
             output_greedy, output_generate = self._greedy_generate(
                 model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
+                input_ids=input_ids.to(torch_device),
+                attention_mask=attention_mask.to(torch_device),
                 decoder_input_ids=decoder_input_ids,
                 max_length=max_length,
                 output_scores=True,
@@ -989,8 +989,8 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             model = model_class(config).to(torch_device).eval()
             output_greedy, output_generate = self._greedy_generate(
                 model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
+                input_ids=input_ids.to(torch_device),
+                attention_mask=attention_mask.to(torch_device),
                 decoder_input_ids=decoder_input_ids,
                 max_length=max_length,
                 output_scores=True,
@@ -1019,8 +1019,8 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             # check `generate()` and `sample()` are equal
             output_sample, output_generate = self._sample_generate(
                 model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
+                input_ids=input_ids.to(torch_device),
+                attention_mask=attention_mask.to(torch_device),
                 decoder_input_ids=decoder_input_ids,
                 max_length=max_length,
                 num_return_sequences=1,
@@ -1050,8 +1050,8 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
             output_sample, output_generate = self._sample_generate(
                 model=model,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
+                input_ids=input_ids.to(torch_device),
+                attention_mask=attention_mask.to(torch_device),
                 decoder_input_ids=decoder_input_ids,
                 max_length=max_length,
                 num_return_sequences=3,
