@@ -36,11 +36,19 @@ class FastSpeech2ConformerModelTester:
         self,
         parent,
         batch_size=13,
-        num_hidden_layers=2,
+        num_hidden_layers=1,
         num_attention_heads=2,
         hidden_size=24,
         seq_length=7,
+        encoder_linear_units=384,
+        decoder_linear_units=384,
         is_training=False,
+        speech_decoder_postnet_units=128,
+        speech_decoder_postnet_layers=2,
+        pitch_predictor_layers=1,
+        energy_predictor_layers=1,
+        duration_predictor_layers=1,
+        num_mel_bins=8,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -50,6 +58,14 @@ class FastSpeech2ConformerModelTester:
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.encoder_linear_units = encoder_linear_units
+        self.decoder_linear_units = decoder_linear_units
+        self.speech_decoder_postnet_units = speech_decoder_postnet_units
+        self.speech_decoder_postnet_layers = speech_decoder_postnet_layers
+        self.pitch_predictor_layers = pitch_predictor_layers
+        self.energy_predictor_layers = energy_predictor_layers
+        self.duration_predictor_layers = duration_predictor_layers
+        self.num_mel_bins = num_mel_bins
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
@@ -58,7 +74,18 @@ class FastSpeech2ConformerModelTester:
 
     def get_config(self):
         return FastSpeech2ConformerConfig(
-            hidden_size=self.hidden_size, encoder_layers=self.num_hidden_layers, decoder_layers=self.num_hidden_layers
+            hidden_size=self.hidden_size, 
+            encoder_layers=self.num_hidden_layers, 
+            decoder_layers=self.num_hidden_layers, 
+            encoder_linear_units=self.encoder_linear_units, 
+            decoder_linear_units=self.decoder_linear_units,  
+            speech_decoder_postnet_units=self.speech_decoder_postnet_units, 
+            speech_decoder_postnet_layers=self.speech_decoder_postnet_layers, 
+            num_mel_bins=self.num_mel_bins,
+            pitch_predictor_layers=self.pitch_predictor_layers,
+            energy_predictor_layers=self.energy_predictor_layers,
+            duration_predictor_layers=self.duration_predictor_layers,
+            
         )
 
     def create_and_check_model(self, config, input_ids, *args):
