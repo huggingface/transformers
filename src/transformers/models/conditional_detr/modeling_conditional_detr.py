@@ -555,7 +555,7 @@ class DetrAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
         return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Optional[torch.Tensor], **kwargs):
+    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Optional[Tensor], **kwargs):
         position_embeddings = kwargs.pop("position_embeddings", None)
 
         if kwargs:
@@ -585,6 +585,7 @@ class DetrAttention(nn.Module):
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
+
         position_embeddings = kwargs.pop("position_ebmeddings", None)
         key_value_position_embeddings = kwargs.pop("key_value_position_embeddings", None)
 
