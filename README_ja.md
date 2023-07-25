@@ -114,26 +114,26 @@ user: ユーザ
 以下はその一例です:
 
  自然言語処理にて:
-- [BERTによるマスクドワード補完](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
-- [Electraによる名前実体認識](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
-- [GPT-2によるテキスト生成](https://huggingface.co/gpt2?text=A+long+time+ago%2C+)
-- [RoBERTaによる自然言語推論](https://huggingface.co/roberta-large-mnli?text=The+dog+was+lost.+Nobody+lost+any+animal)
-- [BARTによる要約](https://huggingface.co/facebook/bart-large-cnn?text=The+tower+is+324+metres+%281%2C063+ft%29+tall%2C+about+the+same+height+as+an+81-storey+building%2C+and+the+tallest+structure+in+Paris.+Its+base+is+square%2C+measuring+125+metres+%28410+ft%29+on+each+side.+During+its+construction%2C+the+Eiffel+Tower+surpassed+the+Washington+Monument+to+become+the+tallest+man-made+structure+in+the+world%2C+a+title+it+held+for+41+years+until+the+Chrysler+Building+in+New+York+City+was+finished+in+1930.+It+was+the+first+structure+to+reach+a+height+of+300+metres.+Due+to+the+addition+of+a+broadcasting+aerial+at+the+top+of+the+tower+in+1957%2C+it+is+now+taller+than+the+Chrysler+Building+by+5.2+metres+%2817+ft%29.+Excluding+transmitters%2C+the+Eiffel+Tower+is+the+second+tallest+free-standing+structure+in+France+after+the+Millau+Viaduct)
-- [DistilBERTによる質問応答](https://huggingface.co/distilbert-base-uncased-distilled-squad?text=Which+name+is+also+used+to+describe+the+Amazon+rainforest+in+English%3F&context=The+Amazon+rainforest+%28Portuguese%3A+Floresta+Amaz%C3%B4nica+or+Amaz%C3%B4nia%3B+Spanish%3A+Selva+Amaz%C3%B3nica%2C+Amazon%C3%ADa+or+usually+Amazonia%3B+French%3A+For%C3%AAt+amazonienne%3B+Dutch%3A+Amazoneregenwoud%29%2C+also+known+in+English+as+Amazonia+or+the+Amazon+Jungle%2C+is+a+moist+broadleaf+forest+that+covers+most+of+the+Amazon+basin+of+South+America.+This+basin+encompasses+7%2C000%2C000+square+kilometres+%282%2C700%2C000+sq+mi%29%2C+of+which+5%2C500%2C000+square+kilometres+%282%2C100%2C000+sq+mi%29+are+covered+by+the+rainforest.+This+region+includes+territory+belonging+to+nine+nations.+The+majority+of+the+forest+is+contained+within+Brazil%2C+with+60%25+of+the+rainforest%2C+followed+by+Peru+with+13%25%2C+Colombia+with+10%25%2C+and+with+minor+amounts+in+Venezuela%2C+Ecuador%2C+Bolivia%2C+Guyana%2C+Suriname+and+French+Guiana.+States+or+departments+in+four+nations+contain+%22Amazonas%22+in+their+names.+The+Amazon+represents+over+half+of+the+planet%27s+remaining+rainforests%2C+and+comprises+the+largest+and+most+biodiverse+tract+of+tropical+rainforest+in+the+world%2C+with+an+estimated+390+billion+individual+trees+divided+into+16%2C000+species)
-- [T5による翻訳](https://huggingface.co/t5-base?text=My+name+is+Wolfgang+and+I+live+in+Berlin)
+* [BERTによるマスクドワード補完](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
+* [Electraによる名前実体認識](https://huggingface.co/dbmdz/electra-large-discriminator-finetuned-conll03-english?text=My+name+is+Sarah+and+I+live+in+London+city)
+* [GPT-2によるテキスト生成](https://huggingface.co/gpt2?text=A+long+time+ago%2C+)
+* [RoBERTaによる自然言語推論](https://huggingface.co/roberta-large-mnli?text=The+dog+was+lost.+Nobody+lost+any+animal)
+* [BARTによる要約](https://huggingface.co/facebook/bart-large-cnn?text=The+tower+is+324+metres+%281%2C063+ft%29+tall%2C+about+the+same+height+as+an+81-storey+building%2C+and+the+tallest+structure+in+Paris.+Its+base+is+square%2C+measuring+125+metres+%28410+ft%29+on+each+side.+During+its+construction%2C+the+Eiffel+Tower+surpassed+the+Washington+Monument+to+become+the+tallest+man-made+structure+in+the+world%2C+a+title+it+held+for+41+years+until+the+Chrysler+Building+in+New+York+City+was+finished+in+1930.+It+was+the+first+structure+to+reach+a+height+of+300+metres.+Due+to+the+addition+of+a+broadcasting+aerial+at+the+top+of+the+tower+in+1957%2C+it+is+now+taller+than+the+Chrysler+Building+by+5.2+metres+%2817+ft%29.+Excluding+transmitters%2C+the+Eiffel+Tower+is+the+second+tallest+free-standing+structure+in+France+after+the+Millau+Viaduct)
+* [DistilBERTによる質問応答](https://huggingface.co/distilbert-base-uncased-distilled-squad?text=Which+name+is+also+used+to+describe+the+Amazon+rainforest+in+English%3F&context=The+Amazon+rainforest+%28Portuguese%3A+Floresta+Amaz%C3%B4nica+or+Amaz%C3%B4nia%3B+Spanish%3A+Selva+Amaz%C3%B3nica%2C+Amazon%C3%ADa+or+usually+Amazonia%3B+French%3A+For%C3%AAt+amazonienne%3B+Dutch%3A+Amazoneregenwoud%29%2C+also+known+in+English+as+Amazonia+or+the+Amazon+Jungle%2C+is+a+moist+broadleaf+forest+that+covers+most+of+the+Amazon+basin+of+South+America.+This+basin+encompasses+7%2C000%2C000+square+kilometres+%282%2C700%2C000+sq+mi%29%2C+of+which+5%2C500%2C000+square+kilometres+%282%2C100%2C000+sq+mi%29+are+covered+by+the+rainforest.+This+region+includes+territory+belonging+to+nine+nations.+The+majority+of+the+forest+is+contained+within+Brazil%2C+with+60%25+of+the+rainforest%2C+followed+by+Peru+with+13%25%2C+Colombia+with+10%25%2C+and+with+minor+amounts+in+Venezuela%2C+Ecuador%2C+Bolivia%2C+Guyana%2C+Suriname+and+French+Guiana.+States+or+departments+in+four+nations+contain+%22Amazonas%22+in+their+names.+The+Amazon+represents+over+half+of+the+planet%27s+remaining+rainforests%2C+and+comprises+the+largest+and+most+biodiverse+tract+of+tropical+rainforest+in+the+world%2C+with+an+estimated+390+billion+individual+trees+divided+into+16%2C000+species)
+* [T5による翻訳](https://huggingface.co/t5-base?text=My+name+is+Wolfgang+and+I+live+in+Berlin)
 
 コンピュータビジョンにて:
-- [ViTによる画像分類](https://huggingface.co/google/vit-base-patch16-224)
-- [DETRによる物体検出](https://huggingface.co/facebook/detr-resnet-50)
-- [SegFormerによるセマンティックセグメンテーション](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
-- [DETRによるパノプティックセグメンテーション](https://huggingface.co/facebook/detr-resnet-50-panoptic)
+* [ViTによる画像分類](https://huggingface.co/google/vit-base-patch16-224)
+* [DETRによる物体検出](https://huggingface.co/facebook/detr-resnet-50)
+* [SegFormerによるセマンティックセグメンテーション](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
+* [DETRによるパノプティックセグメンテーション](https://huggingface.co/facebook/detr-resnet-50-panoptic)
 
 オーディオにて:
-- [Wav2Vec2による自動音声認識](https://huggingface.co/facebook/wav2vec2-base-960h)
-- [Wav2Vec2によるキーワード検索](https://huggingface.co/superb/wav2vec2-base-superb-ks)
+* [Wav2Vec2による自動音声認識](https://huggingface.co/facebook/wav2vec2-base-960h)
+* [Wav2Vec2によるキーワード検索](https://huggingface.co/superb/wav2vec2-base-superb-ks)
 
 マルチモーダルなタスクにて:
-- [ViLTによる視覚的質問応答](https://huggingface.co/dandelin/vilt-b32-finetuned-vqa)
+* [ViLTによる視覚的質問応答](https://huggingface.co/dandelin/vilt-b32-finetuned-vqa)
 
 Hugging Faceチームによって作られた **[トランスフォーマーを使った書き込み](https://transformer.huggingface.co)** は、このリポジトリのテキスト生成機能の公式デモである。
 
@@ -200,6 +200,7 @@ Hugging Faceチームによって作られた **[トランスフォーマーを�
 [このチュートリアル](https://huggingface.co/docs/transformers/task_summary)では、`pipeline`APIでサポートされているタスクについて詳しく説明しています。
 
 `pipeline`に加えて、与えられたタスクに学習済みのモデルをダウンロードして使用するために必要なのは、3行のコードだけです。以下はPyTorchのバージョンです:
+
 ```python
 >>> from transformers import AutoTokenizer, AutoModel
 
@@ -211,6 +212,7 @@ Hugging Faceチームによって作られた **[トランスフォーマーを�
 ```
 
 And here is the equivalent code for TensorFlow:
+
 ```python
 >>> from transformers import AutoTokenizer, TFAutoModel
 
@@ -228,31 +230,31 @@ And here is the equivalent code for TensorFlow:
 ## なぜtransformersを使う必要があるのでしょうか？
 
 1. 使いやすい最新モデル:
-    - 自然言語理解・生成、コンピュータビジョン、オーディオの各タスクで高いパフォーマンスを発揮します。
-    - 教育者、実務者にとっての低い参入障壁。
-    - 学習するクラスは3つだけで、ユーザが直面する抽象化はほとんどありません。
-    - 学習済みモデルを利用するための統一されたAPI。
+    * 自然言語理解・生成、コンピュータビジョン、オーディオの各タスクで高いパフォーマンスを発揮します。
+    * 教育者、実務者にとっての低い参入障壁。
+    * 学習するクラスは3つだけで、ユーザが直面する抽象化はほとんどありません。
+    * 学習済みモデルを利用するための統一されたAPI。
 
 1. 低い計算コスト、少ないカーボンフットプリント:
-    - 研究者は、常に再トレーニングを行うのではなく、トレーニングされたモデルを共有することができます。
-    - 実務家は、計算時間や生産コストを削減することができます。
-    - すべてのモダリティにおいて、60,000以上の事前学習済みモデルを持つ数多くのアーキテクチャを提供します。
+    * 研究者は、常に再トレーニングを行うのではなく、トレーニングされたモデルを共有することができます。
+    * 実務家は、計算時間や生産コストを削減することができます。
+    * すべてのモダリティにおいて、60,000以上の事前学習済みモデルを持つ数多くのアーキテクチャを提供します。
 
 1. モデルのライフタイムのあらゆる部分で適切なフレームワークを選択可能:
-    - 3行のコードで最先端のモデルをトレーニング。
-    - TF2.0/PyTorch/JAXフレームワーク間で1つのモデルを自在に移動させる。
-    - 学習、評価、生産に適したフレームワークをシームレスに選択できます。
+    * 3行のコードで最先端のモデルをトレーニング。
+    * TF2.0/PyTorch/JAXフレームワーク間で1つのモデルを自在に移動させる。
+    * 学習、評価、生産に適したフレームワークをシームレスに選択できます。
 
 1. モデルやサンプルをニーズに合わせて簡単にカスタマイズ可能:
-    - 原著者が発表した結果を再現するために、各アーキテクチャの例を提供しています。
-    - モデル内部は可能な限り一貫して公開されています。
-    - モデルファイルはライブラリとは独立して利用することができ、迅速な実験が可能です。
+    * 原著者が発表した結果を再現するために、各アーキテクチャの例を提供しています。
+    * モデル内部は可能な限り一貫して公開されています。
+    * モデルファイルはライブラリとは独立して利用することができ、迅速な実験が可能です。
 
 ## なぜtransformersを使ってはいけないのでしょうか？
 
-- このライブラリは、ニューラルネットのためのビルディングブロックのモジュール式ツールボックスではありません。モデルファイルのコードは、研究者が追加の抽象化/ファイルに飛び込むことなく、各モデルを素早く反復できるように、意図的に追加の抽象化でリファクタリングされていません。
-- 学習APIはどのようなモデルでも動作するわけではなく、ライブラリが提供するモデルで動作するように最適化されています。一般的な機械学習のループには、別のライブラリ(おそらく[Accelerate](https://huggingface.co/docs/accelerate))を使用する必要があります。
-- 私たちはできるだけ多くの使用例を紹介するよう努力していますが、[examples フォルダ](https://github.com/huggingface/transformers/tree/main/examples) にあるスクリプトはあくまで例です。あなたの特定の問題に対してすぐに動作するわけではなく、あなたのニーズに合わせるために数行のコードを変更する必要があることが予想されます。
+* このライブラリは、ニューラルネットのためのビルディングブロックのモジュール式ツールボックスではありません。モデルファイルのコードは、研究者が追加の抽象化/ファイルに飛び込むことなく、各モデルを素早く反復できるように、意図的に追加の抽象化でリファクタリングされていません。
+* 学習APIはどのようなモデルでも動作するわけではなく、ライブラリが提供するモデルで動作するように最適化されています。一般的な機械学習のループには、別のライブラリ(おそらく[Accelerate](https://huggingface.co/docs/accelerate))を使用する必要があります。
+* 私たちはできるだけ多くの使用例を紹介するよう努力していますが、[examples フォルダ](https://github.com/huggingface/transformers/tree/main/examples) にあるスクリプトはあくまで例です。あなたの特定の問題に対してすぐに動作するわけではなく、あなたのニーズに合わせるために数行のコードを変更する必要があることが予想されます。
 
 ## インストール
 
@@ -376,7 +378,7 @@ Flax、PyTorch、TensorFlowをcondaでインストールする方法は、それ
 1. **[GPT Neo](https://huggingface.co/docs/transformers/model_doc/gpt_neo)** (EleutherAI から) Sid Black, Stella Biderman, Leo Gao, Phil Wang and Connor Leahy から公開されたレポジトリー : [EleutherAI/gpt-neo](https://github.com/EleutherAI/gpt-neo)
 1. **[GPT NeoX](https://huggingface.co/docs/transformers/model_doc/gpt_neox)** (EleutherAI から) Sid Black, Stella Biderman, Eric Hallahan, Quentin Anthony, Leo Gao, Laurence Golding, Horace He, Connor Leahy, Kyle McDonell, Jason Phang, Michael Pieler, USVSN Sai Prashanth, Shivanshu Purohit, Laria Reynolds, Jonathan Tow, Ben Wang, Samuel Weinbach から公開された研究論文: [GPT-NeoX-20B: An Open-Source Autoregressive Language Model](https://arxiv.org/abs/2204.06745)
 1. **[GPT NeoX Japanese](https://huggingface.co/docs/transformers/model_doc/gpt_neox_japanese)** (ABEJA から) Shinya Otani, Takayoshi Makabe, Anuj Arora, and Kyo Hattori からリリース.
-1. **[GPT-2](https://huggingface.co/docs/transformers/model_doc/gpt2)** (OpenAI から) Alec Radford*, Jeffrey Wu*, Rewon Child, David Luan, Dario Amodei** and Ilya Sutskever** から公開された研究論文: [Language Models are Unsupervised Multitask Learners](https://blog.openai.com/better-language-models/)
+1. **[GPT-2](https://huggingface.co/docs/transformers/model_doc/gpt2)** (OpenAI から) Alec Radford*, Jeffrey Wu*, Rewon Child, David Luan, Dario Amodei**and Ilya Sutskever** から公開された研究論文: [Language Models are Unsupervised Multitask Learners](https://blog.openai.com/better-language-models/)
 1. **[GPT-J](https://huggingface.co/docs/transformers/model_doc/gptj)** (EleutherAI から) Ben Wang and Aran Komatsuzaki から公開されたレポジトリー [kingoflolz/mesh-transformer-jax](https://github.com/kingoflolz/mesh-transformer-jax/)
 1. **[GPT-Sw3](https://huggingface.co/docs/transformers/model_doc/gpt-sw3)** (AI-Sweden から) Ariel Ekgren, Amaru Cuba Gyllensten, Evangelia Gogoulou, Alice Heiman, Severine Verlinden, Joey Öhman, Fredrik Carlsson, Magnus Sahlgren から公開された研究論文: [Lessons Learned from GPT-SW3: Building the First Large-Scale Generative Language Model for Swedish](http://www.lrec-conf.org/proceedings/lrec2022/pdf/2022.lrec-1.376.pdf)
 1. **[GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode)** (BigCode から) Loubna Ben Allal, Raymond Li, Denis Kocetkov, Chenghao Mou, Christopher Akiki, Carlos Munoz Ferrandis, Niklas Muennighoff, Mayank Mishra, Alex Gu, Manan Dey, Logesh Kumar Umapathi, Carolyn Jane Anderson, Yangtian Zi, Joel Lamy Poirier, Hailey Schoelkopf, Sergey Troshin, Dmitry Abulkhanov, Manuel Romero, Michael Lappert, Francesco De Toni, Bernardo García del Río, Qian Liu, Shamik Bose, Urvashi Bhattacharyya, Terry Yue Zhuo, Ian Yu, Paulo Villegas, Marco Zocca, Sourab Mangrulkar, David Lansky, Huu Nguyen, Danish Contractor, Luis Villa, Jia Li, Dzmitry Bahdanau, Yacine Jernite, Sean Hughes, Daniel Fried, Arjun Guha, Harm de Vries, Leandro von Werra. から公開された研究論文 [SantaCoder: don't reach for the stars!](https://arxiv.org/abs/2301.03988)
@@ -389,7 +391,7 @@ Flax、PyTorch、TensorFlowをcondaでインストールする方法は、それ
 1. **[Informer](https://huggingface.co/docs/transformers/model_doc/informer)** (from Beihang University, UC Berkeley, Rutgers University, SEDD Company) released with the paper [Informer: Beyond Efficient Transformer for Long Sequence Time-Series Forecasting](https://arxiv.org/abs/2012.07436) by Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, and Wancai Zhang.
 1. **[InstructBLIP](https://huggingface.co/docs/transformers/model_doc/instructblip)** (Salesforce から) Wenliang Dai, Junnan Li, Dongxu Li, Anthony Meng Huat Tiong, Junqi Zhao, Weisheng Wang, Boyang Li, Pascale Fung, Steven Hoi. から公開された研究論文 [InstructBLIP: Towards General-purpose Vision-Language Models with Instruction Tuning](https://arxiv.org/abs/2305.06500)
 1. **[Jukebox](https://huggingface.co/docs/transformers/model_doc/jukebox)** (OpenAI から) Prafulla Dhariwal, Heewoo Jun, Christine Payne, Jong Wook Kim, Alec Radford, Ilya Sutskever から公開された研究論文: [Jukebox: A Generative Model for Music](https://arxiv.org/pdf/2005.00341.pdf)
-1. **[LagLagLlama](https://huggingface.co/docs/transformers/main/model_doc/lagllama)** (from <FILL INSTITUTION>) released with the paper [<FILL PAPER TITLE>](<FILL ARKIV LINK>) by <FILL AUTHORS>. 
+1. **[LagLlama](https://huggingface.co/docs/transformers/main/model_doc/lagllama)** (from <FILL INSTITUTION>) released with the paper [<FILL PAPER TITLE>](<FILL ARKIV LINK>) by <FILL AUTHORS>. 
 1. **[LayoutLM](https://huggingface.co/docs/transformers/model_doc/layoutlm)** (Microsoft Research Asia から) Yiheng Xu, Minghao Li, Lei Cui, Shaohan Huang, Furu Wei, Ming Zhou から公開された研究論文: [LayoutLM: Pre-training of Text and Layout for Document Image Understanding](https://arxiv.org/abs/1912.13318)
 1. **[LayoutLMv2](https://huggingface.co/docs/transformers/model_doc/layoutlmv2)** (Microsoft Research Asia から) Yang Xu, Yiheng Xu, Tengchao Lv, Lei Cui, Furu Wei, Guoxin Wang, Yijuan Lu, Dinei Florencio, Cha Zhang, Wanxiang Che, Min Zhang, Lidong Zhou から公開された研究論文: [LayoutLMv2: Multi-modal Pre-training for Visually-Rich Document Understanding](https://arxiv.org/abs/2012.14740)
 1. **[LayoutLMv3](https://huggingface.co/docs/transformers/model_doc/layoutlmv3)** (Microsoft Research Asia から) Yupan Huang, Tengchao Lv, Lei Cui, Yutong Lu, Furu Wei から公開された研究論文: [LayoutLMv3: Pre-training for Document AI with Unified Text and Image Masking](https://arxiv.org/abs/2204.08387)
@@ -521,7 +523,6 @@ Flax、PyTorch、TensorFlowをcondaでインストールする方法は、それ
 
 これらの実装はいくつかのデータセットでテストされており(サンプルスクリプトを参照)、オリジナルの実装の性能と一致するはずである。性能の詳細は[documentation](https://github.com/huggingface/transformers/tree/main/examples)のExamplesセクションで見ることができます。
 
-
 ## さらに詳しく
 
 | セクション | 概要 |
@@ -537,6 +538,7 @@ Flax、PyTorch、TensorFlowをcondaでインストールする方法は、それ
 ## 引用
 
 🤗 トランスフォーマーライブラリに引用できる[論文](https://www.aclweb.org/anthology/2020.emnlp-demos.6/)が出来ました:
+
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
