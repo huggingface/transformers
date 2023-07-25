@@ -2354,7 +2354,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 quantization_method = config.quantization_config.get("quant_method", None)
 
         quantizer = None
-        if quantization_method ==  QuantizationMethod.GPTQ:
+        if quantization_method == QuantizationMethod.GPTQ:
             if not (is_optimum_available() and is_auto_gptq_available()):
                 raise ImportError(
                     "Loading GTPQ quantized model requires optimum library : `pip install optimum` and auto-gptq library 'pip install auto-gptq'"
@@ -2364,16 +2364,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 from optimum.gptq import GPTQQuantizer
             quantizer = GPTQQuantizer.from_dict(config.quantization_config)
             torch_dtype = config.torch_dtype
-        
+
         if is_8bit_serializable and quantization_config is not None and load_in_8bit:
-            if quantization_method==QuantizationMethod.BITS_AND_BYTES:
+            if quantization_method == QuantizationMethod.BITS_AND_BYTES:
                 logger.warning(
                     "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a"
                     " `quantization_config` attribute. The `quantization_config` attribute will be overwritten with the"
                     " one you passed to `from_pretrained`."
                 )
             config.quantization_config = quantization_config
-        elif is_8bit_serializable and not load_in_8bit and quantization_method==QuantizationMethod.BITS_AND_BYTES:
+        elif is_8bit_serializable and not load_in_8bit and quantization_method == QuantizationMethod.BITS_AND_BYTES:
             quantization_config = config.quantization_config
             if isinstance(quantization_config, dict):
                 quantization_config = BitsAndBytesConfig.from_dict(quantization_config, return_unused_kwargs=False)
@@ -2403,7 +2403,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     if low_cpu_mem_usage is None:
                         low_cpu_mem_usage = True
 
-        elif not is_8bit_serializable and not load_in_8bit and quantization_method==QuantizationMethod.BITS_AND_BYTES:
+        elif (
+            not is_8bit_serializable and not load_in_8bit and quantization_method == QuantizationMethod.BITS_AND_BYTES
+        ):
             logger.warning(
                 "Detected the presence of a `quantization_config` attribute in the model's configuration but you don't have the correct"
                 " `bitsandbytes` version to support int8 serialization. Please install the latest version of `bitsandbytes` with "
@@ -2788,7 +2790,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "All non-linear modules will be loaded in full precision."
                 " If you want to load the other modules in other precision, please specify a `torch_dtype` attribute."
             )
-        if quantization_method ==  QuantizationMethod.GPTQ:
+        if quantization_method == QuantizationMethod.GPTQ:
             model = quantizer.convert_model(model)
 
         if isinstance(device_map, str):

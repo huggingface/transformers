@@ -19,12 +19,12 @@ import importlib.metadata
 import json
 import os
 from dataclasses import dataclass
+from enum import Enum
 from typing import Any, Dict, Union
 
 from packaging import version
 
 from ..utils import is_torch_available, logging
-from enum import Enum
 
 
 if is_torch_available():
@@ -33,9 +33,11 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
+
 class QuantizationMethod(Enum):
     BITS_AND_BYTES = "bitsandbytes"
     GPTQ = "gtpq"
+
 
 @dataclass
 class BitsAndBytesConfig:
