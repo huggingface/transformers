@@ -19,11 +19,11 @@ if is_vision_available():
 if is_tf_available():
     import tensorflow as tf
 
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
     from ..tf_utils import stable_softmax
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -57,9 +57,9 @@ class ImageClassificationPipeline(Pipeline):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
         self.check_model_type(
-            TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+            TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
             if self.framework == "tf"
-            else MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING
+            else MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES
         )
 
     def _sanitize_parameters(self, top_k=None):

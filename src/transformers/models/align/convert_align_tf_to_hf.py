@@ -346,8 +346,10 @@ def convert_align_checkpoint(checkpoint_path, pytorch_dump_folder_path, save_mod
     text_features = tf.nn.l2_normalize(text_features, axis=-1)
 
     # Check whether original and HF model outputs match  -> np.allclose
-    assert np.allclose(image_features, hf_image_features, atol=1e-3), "The predicted image features are not the same."
-    assert np.allclose(text_features, hf_text_features, atol=1e-3), "The predicted text features are not the same."
+    if not np.allclose(image_features, hf_image_features, atol=1e-3):
+        raise ValueError("The predicted image features are not the same.")
+    if not np.allclose(text_features, hf_text_features, atol=1e-3):
+        raise ValueError("The predicted text features are not the same.")
     print("Model outputs match!")
 
     if save_model:
