@@ -1021,6 +1021,13 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
     def get_decoder(self):
         return self.model
 
+    @torch.jit.ignore
+    def output_distribution(self, params, loc=None, scale=None, trailing_n=None) -> torch.distributions.Distribution:
+        sliced_params = params
+        if trailing_n is not None:
+            sliced_params = [p[:, -trailing_n:] for p in params]
+        return self.distribution_output.distribution(sliced_params, loc=loc, scale=scale)
+
     @add_start_docstrings_to_model_forward(LAGLLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalTSOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1097,7 +1104,7 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
             shift_params = [p[..., :-1].contiguous() for p in params]
             distribution = self.output_distribution(shift_params, loc, scale)
 
-            shift_future_values = future_values[..., 1:].contiguous()
+            shift_future_values = future_values[..., max(self.config.lags_sequence)+1:].contiguous()
             loss = self.loss(distribution, shift_future_values)
 
         if not return_dict:
