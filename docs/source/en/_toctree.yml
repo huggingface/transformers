@@ -369,6 +369,8 @@
         title: MobileBERT
       - local: model_doc/mpnet
         title: MPNet
+      - local: model_doc/mpt
+        title: MPT
       - local: model_doc/mra
         title: MRA
       - local: model_doc/mt5

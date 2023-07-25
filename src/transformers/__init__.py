@@ -429,6 +429,7 @@ _import_structure = {
     "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mobilevitv2": ["MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTV2Config"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
+    "models.mpt": ["MPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MptConfig"],
     "models.mra": ["MRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MraConfig"],
     "models.mt5": ["MT5Config"],
     "models.musicgen": [
@@ -2213,6 +2214,17 @@ else:
             "MPNetLayer",
             "MPNetModel",
             "MPNetPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mpt"].extend(
+        [
+            "MPT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MptForCausalLM",
+            "MptForQuestionAnswering",
+            "MptForSequenceClassification",
+            "MptForTokenClassification",
+            "MptModel",
+            "MptPreTrainedModel",
         ]
     )
     _import_structure["models.mra"].extend(
@@ -4388,6 +4400,7 @@ if TYPE_CHECKING:
     from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
     from .models.mobilevitv2 import MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTV2Config
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
+    from .models.mpt import MPT_PRETRAINED_CONFIG_ARCHIVE_MAP, MptConfig
     from .models.mra import MRA_PRETRAINED_CONFIG_ARCHIVE_MAP, MraConfig
     from .models.mt5 import MT5Config
     from .models.musicgen import (
@@ -5893,6 +5906,15 @@ if TYPE_CHECKING:
             MPNetLayer,
             MPNetModel,
             MPNetPreTrainedModel,
+        )
+        from .models.mpt import (
+            MPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MptForCausalLM,
+            MptForQuestionAnswering,
+            MptForSequenceClassification,
+            MptForTokenClassification,
+            MptModel,
+            MptPreTrainedModel,
         )
         from .models.mra import (
             MRA_PRETRAINED_MODEL_ARCHIVE_LIST,
