@@ -111,6 +111,7 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_init_from_tokenizers_model(self):
         from tokenizers import Tokenizer
+        sentences = ["Hello, y'all!", "How are you 😁 ?"]
 
         tokenizer = Tokenizer.from_pretrained("t5-base")
         # Enable padding
@@ -127,26 +128,30 @@ class PreTrainedTokenizationFastTest(TokenizerTesterMixin, unittest.TestCase):
             },
         )
         fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+        tmpdirname = tempfile.mkdtemp()
+        fast_tokenizer.save_pretrained(tmpdirname)
+        fast_from_saved = PreTrainedTokenizerFast.from_pretrained(tmpdirname)
+        for tok in [fast_tokenizer, fast_from_saved]:
+            self.assertEqual(tok.pad_token_id, 0)
+            self.assertEqual(tok.padding_side, "right")
+            self.assertEqual(tok.pad_token, "<pad>")
+            self.assertEqual(tok.init_kwargs["max_length"], 512)
+            self.assertEqual(tok.init_kwargs["pad_to_multiple_of"], 64)
+            assert fast_tokenizer(sentences, padding=True)
 
-        self.assertEqual(fast_tokenizer.pad_token_id, 0)
-        self.assertEqual(fast_tokenizer.padding_side, "right")
-        self.assertEqual(fast_tokenizer.pad_token, "<pad>")
-        self.assertEqual(fast_tokenizer.pad_token, "<pad>")
-        self.assertEqual(fast_tokenizer.init_kwargs["max_length"], 512)
-        self.assertEqual(fast_tokenizer.init_kwargs["pad_to_multiple_of"], 64)
-        sentences = ["Hello, y'all!", "How are you 😁 ?"]
-        assert fast_tokenizer(sentences, padding=True)
-
-        # make sure padding and truncation is preserved across
         tokenizer.enable_truncation(64, stride=3, strategy="only_second", direction="left")
         self.assertEqual(
             tokenizer.truncation, {"max_length": 64, "stride": 3, "strategy": "only_second", "direction": "left"}
         )
-        self.assertEqual(fast_tokenizer.truncation_side, "left")
-        self.assertEqual(fast_tokenizer.init_kwargs["truncation_strategy"], "only_second")
-        self.assertEqual(fast_tokenizer.init_kwargs["max_length"], 64)
-        self.assertEqual(fast_tokenizer.init_kwargs["stride"], 3)
-        # make sure saving and loading also works
+        fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+        tmpdirname = tempfile.mkdtemp()
+        fast_tokenizer.save_pretrained(tmpdirname)
+        fast_from_saved = PreTrainedTokenizerFast.from_pretrained(tmpdirname)
+        for tok in [fast_tokenizer, fast_from_saved]:
+            self.assertEqual(tok.truncation_side, "left")
+            self.assertEqual(tok.init_kwargs["truncation_strategy"], "only_second")
+            self.assertEqual(tok.init_kwargs["max_length"], 64)
+            self.assertEqual(tok.init_kwargs["stride"], 3)
 
 
 @require_tokenizers
