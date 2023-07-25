@@ -105,14 +105,14 @@
       title: 문제 해결
   title: (번역중) 개발자 가이드
 - sections:
-    - local: in_translation
-      title: (번역중) Overview
+    - local: performance
+      title: 성능 및 확장성
     - local: in_translation
       title: (번역중) Training on one GPU
     - local: in_translation
       title: (번역중) Training on many GPUs
-    - local: in_translation
-      title: (번역중) Training on CPU
+    - local: perf_train_cpu
+      title: CPU에서 훈련
     - local: in_translation
       title: (번역중) Training on many CPUs
     - local: in_translation
@@ -149,8 +149,8 @@
       title: (번역중) How to convert a 🤗 Transformers model to TensorFlow?
     - local: in_translation
       title: (번역중) How to add a pipeline to 🤗 Transformers?
-    - local: in_translation
-      title: (번역중) Testing
+    - local: testing
+      title: 테스트
     - local: in_translation
       title: (번역중) Checks on a Pull Request
   title: (번역중) 기여하기

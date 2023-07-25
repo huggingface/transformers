@@ -41,6 +41,7 @@ from huggingface_hub import (
 from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
 from huggingface_hub.utils import (
     EntryNotFoundError,
+    GatedRepoError,
     LocalEntryNotFoundError,
     RepositoryNotFoundError,
     RevisionNotFoundError,
@@ -428,21 +429,26 @@ def cached_file(
             use_auth_token=use_auth_token,
             local_files_only=local_files_only,
         )
-
-    except RepositoryNotFoundError:
+    except GatedRepoError as e:
+        raise EnvironmentError(
+            "You are trying to access a gated repo.\nMake sure to request access at "
+            f"https://huggingface.co/{path_or_repo_id} and pass a token having permission to this repo either "
+            "by logging in with `huggingface-cli login` or by passing `token=<your_token>`."
+        ) from e
+    except RepositoryNotFoundError as e:
         raise EnvironmentError(
             f"{path_or_repo_id} is not a local folder and is not a valid model identifier "
-            "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
-            "pass a token having permission to this repo with `use_auth_token` or log in with "
-            "`huggingface-cli login` and pass `use_auth_token=True`."
-        )
-    except RevisionNotFoundError:
+            "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token "
+            "having permission to this repo either by logging in with `huggingface-cli login` or by passing "
+            "`token=<your_token>`"
+        ) from e
+    except RevisionNotFoundError as e:
         raise EnvironmentError(
             f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
             "for this model name. Check the model page at "
             f"'https://huggingface.co/{path_or_repo_id}' for available revisions."
-        )
-    except LocalEntryNotFoundError:
+        ) from e
+    except LocalEntryNotFoundError as e:
         # We try to see if we have a cached version (not up to date):
         resolved_file = try_to_load_from_cache(path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision)
         if resolved_file is not None and resolved_file != _CACHED_NO_EXIST:
@@ -454,8 +460,8 @@ def cached_file(
             f" cached files and it looks like {path_or_repo_id} is not the path to a directory containing a file named"
             f" {full_filename}.\nCheckout your internet connection or see how to run the library in offline mode at"
             " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
-        )
-    except EntryNotFoundError:
+        ) from e
+    except EntryNotFoundError as e:
         if not _raise_exceptions_for_missing_entries:
             return None
         if revision is None:
@@ -463,7 +469,7 @@ def cached_file(
         raise EnvironmentError(
             f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
             f"'https://huggingface.co/{path_or_repo_id}/{revision}' for available files."
-        )
+        ) from e
     except HTTPError as err:
         # First we try to see if we have a cached version (not up to date):
         resolved_file = try_to_load_from_cache(path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision)
@@ -611,6 +617,13 @@ def has_file(
     try:
         hf_raise_for_status(r)
         return True
+    except GatedRepoError as e:
+        logger.error(e)
+        raise EnvironmentError(
+            f"{path_or_repo} is a gated repository. Make sure to request access at "
+            f"https://huggingface.co/{path_or_repo} and pass a token having permission to this repo either by "
+            "logging in with `huggingface-cli login` or by passing `token=<your_token>`."
+        ) from e
     except RepositoryNotFoundError as e:
         logger.error(e)
         raise EnvironmentError(f"{path_or_repo} is not a local folder or a valid repository name on 'https://hf.co'.")
