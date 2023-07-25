@@ -20,7 +20,6 @@
 """ Idefics model configuration"""
 import copy
 
-from transformers import AutoConfig
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
 
@@ -171,7 +170,6 @@ class IdeficsConfig(PretrainedConfig):
         self.resampler_depth = resampler_depth
         self.resampler_n_heads = resampler_n_heads
         self.resampler_head_dim = resampler_head_dim
-
         # IMPORTANT: Do not do any __init__ args-based checks in the constructor, since
         # PretrainedConfig.from_dict first instantiates the class with the config dict and only then
         # updates the config object with `kwargs` from from_pretrained, so during the instantiation
