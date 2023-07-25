@@ -29,6 +29,14 @@ Large multimodal models trained on natural documents, which interleave images an
 This model was contributed by [HuggingFaceM4](https://huggingface.co/HuggingFaceM4). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>). (TODO: don't have a public link yet).
 
 
+<Tip warning={true}>
+
+Idefics modeling code in Transformers is for finetuning and inferencing the pre-trained Idefics models.
+
+To train a new Idefics model from scratch use the m4 codebase (a link will be provided once it's made public)
+
+</Tip>
+
 
 ## IdeficsConfig
 
