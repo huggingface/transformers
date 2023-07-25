@@ -1019,7 +1019,13 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             return model, unflatten_dict(state)
 
     def save_pretrained(
-        self, save_directory: Union[str, os.PathLike], params=None, push_to_hub=False, max_shard_size="10GB", token: Optional[Union[str, bool]] = None, **kwargs
+        self,
+        save_directory: Union[str, os.PathLike],
+        params=None,
+        push_to_hub=False,
+        max_shard_size="10GB",
+        token: Optional[Union[str, bool]] = None,
+        **kwargs,
     ):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the

@@ -213,9 +213,7 @@ def get_image_processor_config(
             "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
         )
         if token is not None:
-            raise ValueError(
-                "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-            )
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         token = use_auth_token
 
     resolved_config_file = get_file_from_repo(
