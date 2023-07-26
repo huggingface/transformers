@@ -521,10 +521,16 @@ class ImageProcessingMixin(PushToHubMixin):
         If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
         returned.
         """
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0"
+                " Safari/537.36"
+            )
+        }
         if isinstance(image_url_or_urls, list):
             return [self.fetch_images(x) for x in image_url_or_urls]
         elif isinstance(image_url_or_urls, str):
-            return Image.open(BytesIO(requests.get(image_url_or_urls, stream=True).content))
+            return Image.open(BytesIO(requests.get(image_url_or_urls, stream=True, headers=headers).content))
         else:
             raise ValueError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
 
