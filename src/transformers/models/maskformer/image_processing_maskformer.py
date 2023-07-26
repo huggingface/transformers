@@ -25,6 +25,7 @@ from ...image_transforms import (
     PaddingMode,
     get_resize_output_image_size,
     pad,
+    rescale,
     resize,
     to_channel_dimension_format,
 )
@@ -492,6 +493,15 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         )
         image = resize(image, size=size, resample=resample, data_format=data_format)
         return image
+
+    # Copied from transformers.models.detr.image_processing_detr.rescale
+    def rescale(
+        self, image: np.ndarray, rescale_factor: float, data_format: Optional[ChannelDimension] = None
+    ) -> np.ndarray:
+        """
+        Rescale the image by the given factor.
+        """
+        return rescale(image, rescale_factor, data_format=data_format)
 
     def convert_segmentation_map_to_binary_masks(
         self,
