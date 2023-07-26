@@ -388,7 +388,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
         it with indices starting from length of the current vocabulary. Special tokens are sometimes already in the vocab
-        which is why they have to be handled specifically. If the unknown token
+        which is why they have to be handled specifically. If the unknown token.
+        
+        This is the only exposed way to modify `self.added_tokens_encoder` and `self.added_tokens_decoder`.
 
         Args:
             new_tokens (`List[str]`or `List[tokenizers.AddedToken]`):

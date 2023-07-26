@@ -926,9 +926,11 @@ class SpecialTokensMixin:
                 if replace_additional_special_tokens:
                     setattr(self, key, value)
                     added_tokens.extend(self._additional_special_tokens)
-                    
-                    # this does not work. The Trie is not updated and thus tokens that were previously here will no longer be there.
-                    # Kept for backward compatibility, should be removed
+                    logger.warning(
+                        "You are using `replace_additional_special_tokens`, which does not work. The Trie is not updated, so the tokens will be split"
+                        "Kept for backward compatibility, will be removed in transformersv5"
+                    )
+
                 else:
                     to_add = []
                     for token in value:
@@ -937,9 +939,8 @@ class SpecialTokensMixin:
                     added_tokens.extend(to_add)
 
             else:
-                assert isinstance(
-                    value, (str, AddedToken)
-                ), f"Token {value} for key {key} should be a str or an AddedToken instance"
+                if not isinstance( value, (str, AddedToken)):
+                    raise ValueError(f"Token {value} for key {key} should be a str or an AddedToken instance")
                 if isinstance(value, (str)):
                     value = AddedToken(value)
                 if isinstance(value, AddedToken):
@@ -1761,7 +1762,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
             }
             vocab_files = {**cls.vocab_files_names, **additional_files_names}
-
+            # TODO process legacy files in priority! 
             if "tokenizer_file" in vocab_files:
                 # Try to get the tokenizer config to see if there are versioned tokenizer files.
                 fast_tokenizer_file = FULL_TOKENIZER_FILE
@@ -1963,6 +1964,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         init_kwargs.update(kwargs)
 
         # Convert AddedTokens serialized as dict to class instances
+        # TODO Bring this back for legacy behaviour
         # HACK AddedTokens are all added tokens, no need for type
 
         # def convert_added_tokens(obj: Union[AddedToken, Any]):
@@ -2169,6 +2171,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             repo_id = self._create_repo(repo_id, **kwargs)
             files_timestamps = self._get_files_timestamps(save_directory)
 
+        special_tokens_map_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + SPECIAL_TOKENS_MAP_FILE
+        )
         tokenizer_config_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_CONFIG_FILE
         )
@@ -2221,6 +2226,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         logger.info(f"tokenizer config file saved in {tokenizer_config_file}")
 
         # Sanitize AddedTokens in special_tokens_map
+        # TODO don't erase legacy behaviour
         write_dict = self.convert_added_tokens(self.special_tokens_map_extended, add_type_field=False)
 
         file_names = (tokenizer_config_file,)
@@ -2260,6 +2266,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             raise ValueError(
                 "Only fast tokenizers (instances of PreTrainedTokenizerFast) can be saved in non legacy format."
             )
+        # TODO bring legacy behaviour back when pushing to hub for people who use old versions! 
         save_directory = str(save_directory)
         vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
         return file_names + vocab_files
