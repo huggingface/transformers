@@ -1129,7 +1129,7 @@ class PushInProgress:
     Internal class to keep track of a push in progress (which might contain multiple `Future` jobs).
     """
 
-    def __init__(self, jobs=None):
+    def __init__(self, jobs: Optional[Future] = None) -> None:
         self.jobs = [] if jobs is None else jobs
 
     def is_done(self):
