@@ -946,33 +946,6 @@ class TokenizerTesterMixin:
                 decoded = tokenizer.decode(encoded, skip_special_tokens=True)
                 self.assertTrue(special_token not in decoded)
 
-    def test_split_special_tokens(self):
-        tokenizers = self.get_tokenizers(do_lower_case=False)
-        for tokenizer in tokenizers:
-            with self.subTest(f"{tokenizer.__class__.__name__}"):
-                input_text, ids = self.get_clean_sequence(tokenizer)
-
-                special_token = "[SPECIAL_TOKEN]"
-
-                tokenizer.add_special_tokens({"eos_token": special_token})
-                encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False)
-                self.assertEqual(len(encoded_special_token), 1)
-
-                encoded_special_token = tokenizer.encode(
-                    special_token, add_special_tokens=False, split_special_tokens=True
-                )
-                self.assertTrue(len(encoded_special_token) > 1)
-
-                text = tokenizer.decode(ids + encoded_special_token, clean_up_tokenization_spaces=False)
-                encoded = tokenizer.encode(text, add_special_tokens=False)
-
-                input_encoded = tokenizer.encode(input_text, add_special_tokens=False)
-                special_token_id = tokenizer.encode(special_token, add_special_tokens=False)
-                self.assertEqual(encoded, input_encoded + special_token_id)
-
-                tokenizer.split_special_tokens = True
-                self.assertEqual(tokenizer.encode(special_token, add_special_tokens=False), encoded_special_token)
-
     def test_internal_consistency(self):
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
@@ -3980,3 +3953,28 @@ class TokenizerTesterMixin:
         tokenizer.clean_up_tokenization_spaces = True
         decoded = tokenizer.decode(tokens)
         assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
+
+    def test_split_special_tokens(self):
+        tokenizer = PreTrainedTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+        input_text = "This is <s> and thst"
+        ids = tokenizer.encode(ids)
+        special_token = "[SPECIAL_TOKEN]"
+
+        tokenizer.add_special_tokens({"eos_token": special_token})
+        encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False)
+        self.assertEqual(len(encoded_special_token), 1)
+
+        encoded_special_token = tokenizer.encode(
+            special_token, add_special_tokens=False, split_special_tokens=True
+        )
+        self.assertTrue(len(encoded_special_token) > 1)
+
+        text = tokenizer.decode(ids + encoded_special_token, clean_up_tokenization_spaces=False)
+        encoded = tokenizer.encode(text, add_special_tokens=False)
+
+        input_encoded = tokenizer.encode(input_text, add_special_tokens=False)
+        special_token_id = tokenizer.encode(special_token, add_special_tokens=False)
+        self.assertEqual(encoded, input_encoded + special_token_id)
+
+        tokenizer.split_special_tokens = True
+        self.assertEqual(tokenizer.encode(special_token, add_special_tokens=False), encoded_special_token)
