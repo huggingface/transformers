@@ -73,7 +73,7 @@ with torch.no_grad():
 outputs.audio.shape
 ```
 
-You can check whether you require the `uroman` tokenizer for your language by inspecting the `is_uroman` attribute of 
+You can check whether you require the `uroman` package for your language by inspecting the `is_uroman` attribute of 
 the pre-trained `tokenizer`:
 
 ```python
