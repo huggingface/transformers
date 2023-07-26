@@ -3060,7 +3060,7 @@ else:
     _import_structure["time_series_utils"] = []
     _import_structure["trainer"] = ["Trainer"]
     _import_structure["trainer_pt_utils"] = [
-        "load_model_from_pretrained_only_on_rank0",
+        "load_pretrained_model_only_on_rank0",
         "torch_distributed_zero_first",
     ]
     _import_structure["trainer_seq2seq"] = ["Seq2SeqTrainer"]
@@ -6601,7 +6601,7 @@ if TYPE_CHECKING:
 
         # Trainer
         from .trainer import Trainer
-        from .trainer_pt_utils import load_model_from_pretrained_only_on_rank0, torch_distributed_zero_first
+        from .trainer_pt_utils import load_pretrained_model_only_on_rank0, torch_distributed_zero_first
         from .trainer_seq2seq import Seq2SeqTrainer
 
     # TensorFlow

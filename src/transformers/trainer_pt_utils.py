@@ -1127,7 +1127,7 @@ if is_sagemaker_mp_enabled():
         return tensor.concat().detach().cpu()
 
 
-def load_model_from_pretrained_only_on_rank0(model_cls, config_cls, model_name_or_path):
+def load_pretrained_model_only_on_rank0(model_cls, config_cls, model_name_or_path):
     from accelerate.state import PartialState
 
     state = PartialState()
