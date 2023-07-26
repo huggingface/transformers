@@ -12,13 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch FastSpeech2Conformer model. """
+""" Testing suite for the PyTorch FastSpeech2Conformer model."""
 
 import inspect
 import tempfile
 import unittest
 
-from transformers import FastSpeech2ConformerConfig, FastSpeech2ConformerTokenizer, is_torch_available, is_datasets_available
+from transformers import (
+    FastSpeech2ConformerConfig,
+    FastSpeech2ConformerTokenizer,
+    is_torch_available,
+)
 from transformers.testing_utils import require_g2p_en, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -74,18 +78,17 @@ class FastSpeech2ConformerModelTester:
 
     def get_config(self):
         return FastSpeech2ConformerConfig(
-            hidden_size=self.hidden_size, 
-            encoder_layers=self.num_hidden_layers, 
-            decoder_layers=self.num_hidden_layers, 
-            encoder_linear_units=self.encoder_linear_units, 
-            decoder_linear_units=self.decoder_linear_units,  
-            speech_decoder_postnet_units=self.speech_decoder_postnet_units, 
-            speech_decoder_postnet_layers=self.speech_decoder_postnet_layers, 
+            hidden_size=self.hidden_size,
+            encoder_layers=self.num_hidden_layers,
+            decoder_layers=self.num_hidden_layers,
+            encoder_linear_units=self.encoder_linear_units,
+            decoder_linear_units=self.decoder_linear_units,
+            speech_decoder_postnet_units=self.speech_decoder_postnet_units,
+            speech_decoder_postnet_layers=self.speech_decoder_postnet_layers,
             num_mel_bins=self.num_mel_bins,
             pitch_predictor_layers=self.pitch_predictor_layers,
             energy_predictor_layers=self.energy_predictor_layers,
             duration_predictor_layers=self.duration_predictor_layers,
-            
         )
 
     def create_and_check_model(self, config, input_ids, *args):
@@ -269,8 +272,8 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_attention_outputs(self):
         """
-        Custom `test_attention_outputs` since FastSpeech2Conformer does not output cross attentions,
-        has variable decoder attention shape, and uniquely outputs energy, pitch, and durations.
+        Custom `test_attention_outputs` since FastSpeech2Conformer does not output cross attentions, has variable
+        decoder attention shape, and uniquely outputs energy, pitch, and durations.
         """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -358,6 +361,7 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
         spectrogram = outputs_dict["spectrogram"]
 
         # mel-spectrogram is too large (1, 205, 80), so only check top-left 100 elements
+        # fmt: off
         expected_mel_spectrogram = torch.tensor(
             [
                 [-1.2426, -1.7286, -1.6754, -1.7451, -1.6402, -1.5219, -1.4480, -1.3345, -1.4031, -1.4497],
@@ -373,10 +377,11 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
             ],
             device=torch_device,
         )
+        # fmt: on
 
         self.assertTrue(torch.allclose(spectrogram[0, :10, :10], expected_mel_spectrogram, atol=1e-4))
         self.assertEqual(spectrogram.shape, (1, 205, model.config.num_mel_bins))
-    
+
     def test_training_integration(self):
         model = FastSpeech2ConformerModel.from_pretrained("connor-henderson/fastspeech2_conformer")
         model.to(torch_device)
@@ -386,7 +391,7 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
         tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("connor-henderson/fastspeech2_conformer")
         text = "Test that this generates speech"
         input_ids = tokenizer(text, return_tensors="pt").to(torch_device)["input_ids"]
-        
+
         # NOTE: Dummy numbers since FastSpeech2Conformer does not have a feature extractor due to the package deps required (librosa, MFA)
         batch_size, max_text_len = input_ids.shape
         pitch_labels = torch.rand((batch_size, max_text_len, 1), dtype=torch.float, device=torch_device)
@@ -394,19 +399,23 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
         duration_labels = torch.normal(10, 2, size=(batch_size, max_text_len)).clamp(1, 20).int()
         max_target_len, _ = duration_labels.sum(dim=1).max(dim=0)
         max_target_len = max_target_len.item()
-        spectrogram_labels = torch.rand((batch_size, max_target_len, model.num_mel_bins), dtype=torch.float, device=torch_device)
+        spectrogram_labels = torch.rand(
+            (batch_size, max_target_len, model.num_mel_bins), dtype=torch.float, device=torch_device
+        )
 
-        outputs_dict = model(input_ids,
-                             spectrogram_labels=spectrogram_labels,
-                             duration_labels=duration_labels,
-                             pitch_labels=pitch_labels,
-                             energy_labels=energy_labels,
-                             return_dict=True
-                             )
+        outputs_dict = model(
+            input_ids,
+            spectrogram_labels=spectrogram_labels,
+            duration_labels=duration_labels,
+            pitch_labels=pitch_labels,
+            energy_labels=energy_labels,
+            return_dict=True,
+        )
         spectrogram = outputs_dict["spectrogram"]
         loss = outputs_dict["loss"]
 
         # # mel-spectrogram is too large (1, 224, 80), so only check top-left 100 elements
+        # fmt: off
         expected_mel_spectrogram = torch.tensor(
             [
                 [-1.0643e+00, -6.8058e-01, -1.0901e+00, -8.2724e-01, -7.7241e-01, -1.1905e+00, -8.5725e-01, -8.2930e-01, -1.1313e+00, -1.2449e+00],
@@ -422,6 +431,7 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
             ],
             device=torch_device,
         )
+        # fmt: on
         expected_loss = torch.tensor(3.1221, device=torch_device)
 
         self.assertTrue(torch.allclose(spectrogram[0, :10, :10], expected_mel_spectrogram, atol=1e-3))
@@ -445,31 +455,14 @@ class FastSpeech2ConformerWithHifiGanIntegrationTest(unittest.TestCase):
         waveform = model.generate_speech(input_ids)
 
         # waveform is too large (1, 52480), so only check first 100 elements
+        # fmt: off
         expected_waveform = torch.tensor(
             [
-                [-9.6345e-04,  1.3557e-03,  5.7559e-04,  2.4706e-04,  2.2675e-04,
-                1.2258e-04,  4.7784e-04,  1.0109e-03, -1.9718e-04,  6.3495e-04,
-                3.2106e-04,  6.3620e-05,  9.1713e-04, -2.5664e-05,  1.9596e-04,
-                6.0418e-04,  8.1112e-04,  3.6342e-04, -6.3396e-04, -2.0146e-04,
-                -1.1768e-04,  4.3155e-04,  7.5599e-04, -2.2972e-04, -9.5665e-05,
-                3.3078e-04,  1.3793e-04, -1.4932e-04, -3.9645e-04,  3.6473e-05,
-                -1.7224e-04, -4.5370e-05, -4.8950e-04, -4.3059e-04,  1.0451e-04,
-                -1.0485e-03, -6.0410e-04,  1.6990e-04, -2.1997e-04, -3.8769e-04,
-                -7.6898e-04, -3.2372e-04, -1.9783e-04,  5.2896e-05, -1.0586e-03,
-                -7.8516e-04,  7.6867e-04, -8.5331e-05, -4.8158e-04, -4.5362e-05,
-                -1.0770e-04,  6.6823e-04,  3.0765e-04,  3.3669e-04,  9.5677e-04,
-                1.0458e-03,  5.8129e-04,  3.3737e-04,  1.0816e-03,  7.0346e-04,
-                4.2378e-04,  4.3131e-04,  2.8095e-04,  1.2201e-03,  5.6121e-04,
-                -1.1086e-04,  4.9908e-04,  1.5586e-04,  4.2046e-04, -2.8088e-04,
-                -2.2462e-04, -1.5539e-04, -7.0126e-04, -2.8577e-04, -3.3693e-04,
-                -1.2471e-04, -6.9104e-04, -1.2867e-03, -6.2651e-04, -2.5586e-04,
-                -1.3201e-04, -9.4537e-04, -4.8438e-04,  4.1458e-04,  6.4109e-04,
-                1.0891e-04, -6.3764e-04,  4.5573e-04,  8.2974e-04,  3.2973e-06,
-                -3.8274e-04, -2.0400e-04,  4.9922e-04,  2.1508e-04, -1.1009e-04,
-                -3.9763e-05,  3.0576e-04,  3.1485e-05, -2.7574e-05,  3.3856e-04],
+                [-9.6345e-04,  1.3557e-03,  5.7559e-04,  2.4706e-04,  2.2675e-04, 1.2258e-04,  4.7784e-04,  1.0109e-03, -1.9718e-04,  6.3495e-04, 3.2106e-04,  6.3620e-05,  9.1713e-04, -2.5664e-05,  1.9596e-04, 6.0418e-04,  8.1112e-04,  3.6342e-04, -6.3396e-04, -2.0146e-04, -1.1768e-04,  4.3155e-04,  7.5599e-04, -2.2972e-04, -9.5665e-05, 3.3078e-04,  1.3793e-04, -1.4932e-04, -3.9645e-04,  3.6473e-05, -1.7224e-04, -4.5370e-05, -4.8950e-04, -4.3059e-04,  1.0451e-04, -1.0485e-03, -6.0410e-04,  1.6990e-04, -2.1997e-04, -3.8769e-04, -7.6898e-04, -3.2372e-04, -1.9783e-04,  5.2896e-05, -1.0586e-03, -7.8516e-04,  7.6867e-04, -8.5331e-05, -4.8158e-04, -4.5362e-05, -1.0770e-04,  6.6823e-04,  3.0765e-04,  3.3669e-04,  9.5677e-04, 1.0458e-03,  5.8129e-04,  3.3737e-04,  1.0816e-03,  7.0346e-04, 4.2378e-04,  4.3131e-04,  2.8095e-04,  1.2201e-03,  5.6121e-04, -1.1086e-04,  4.9908e-04,  1.5586e-04,  4.2046e-04, -2.8088e-04, -2.2462e-04, -1.5539e-04, -7.0126e-04, -2.8577e-04, -3.3693e-04, -1.2471e-04, -6.9104e-04, -1.2867e-03, -6.2651e-04, -2.5586e-04, -1.3201e-04, -9.4537e-04, -4.8438e-04,  4.1458e-04,  6.4109e-04, 1.0891e-04, -6.3764e-04,  4.5573e-04,  8.2974e-04,  3.2973e-06, -3.8274e-04, -2.0400e-04,  4.9922e-04,  2.1508e-04, -1.1009e-04, -3.9763e-05,  3.0576e-04,  3.1485e-05, -2.7574e-05,  3.3856e-04],
             ],
             device=torch_device,
         )
+        # fmt: on
 
         self.assertTrue(torch.allclose(waveform[0, :100], expected_waveform, atol=1e-4))
         self.assertEqual(waveform.shape, (1, 52480))
