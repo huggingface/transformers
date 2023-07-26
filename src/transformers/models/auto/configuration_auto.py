@@ -210,6 +210,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("vision-text-dual-encoder", "VisionTextDualEncoderConfig"),
         ("visual_bert", "VisualBertConfig"),
         ("vit", "ViTConfig"),
+        ("vitpose", "ViTPoseConfig"),
         ("vit_hybrid", "ViTHybridConfig"),
         ("vit_mae", "ViTMAEConfig"),
         ("vit_msn", "ViTMSNConfig"),

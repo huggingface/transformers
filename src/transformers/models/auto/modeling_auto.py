@@ -197,6 +197,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vision-text-dual-encoder", "VisionTextDualEncoderModel"),
         ("visual_bert", "VisualBertModel"),
         ("vit", "ViTModel"),
+        ("vitPose", "ViTPoseModel"),
         ("vit_hybrid", "ViTHybridModel"),
         ("vit_mae", "ViTMAEModel"),
         ("vit_msn", "ViTMSNModel"),
