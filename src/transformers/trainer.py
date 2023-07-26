@@ -3429,7 +3429,7 @@ class Trainer:
                 out.
         """
         warnings.warn(
-            "`Trainer.init_git_repo` is deprecated and will be removed in v5 of Transformers. Use "
+            "`Trainer.init_git_repo` is deprecated and will be removed in v4.34.0 of Transformers. Use "
             "`Trainer.init_hf_repo` instead."
         )
         if not self.is_world_process_zero():
