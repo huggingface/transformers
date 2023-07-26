@@ -118,7 +118,7 @@ class MptAttentionConfig(PretrainedConfig):
             )
 
         return cls.from_dict(config_dict, **kwargs)
-    
+
 
 class MptConfig(PretrainedConfig):
     """
@@ -247,7 +247,6 @@ class MptConfig(PretrainedConfig):
     @property
     def attn_config(self):
         return self._attn_config
-
 
     @attn_config.setter
     def attn_config(self, attn_config):

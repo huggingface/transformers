@@ -326,6 +326,17 @@ class MptModelTester:
 
         return config, inputs_dict
 
+class MptConfigTester(ConfigTester):
+    
+    def __init__(self, parent, config_class=None, has_text_modality=True, common_properties=None, **kwargs):
+        super().__init__(parent, config_class, has_text_modality, common_properties, **kwargs)
+        
+    def test_attn_config_as_dict(self):
+        pass
+    
+    def run_common_tests(self):
+        self.test_attn_config_as_dict()
+        return super().run_common_tests()
 
 @require_torch
 class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -353,7 +364,7 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     def setUp(self):
         self.model_tester = MptModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MptConfig, n_embd=37)
+        self.config_tester = MptConfigTester(self, config_class=MptConfig, n_embd=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
