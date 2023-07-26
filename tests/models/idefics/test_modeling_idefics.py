@@ -29,10 +29,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        IdeficsForVisionText2Text,
-        IdeficsModel,
-    )
+    from transformers import IdeficsForVisionText2Text, IdeficsModel
     from transformers.models.idefics.modeling_idefics import IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST
 
 try:
@@ -214,14 +211,7 @@ class IdeficsModelTester:
 @unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
 class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            IdeficsModel,
-            IdeficsForVisionText2Text,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (IdeficsModel, IdeficsForVisionText2Text) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "visual-question-answering": IdeficsForVisionText2Text,
