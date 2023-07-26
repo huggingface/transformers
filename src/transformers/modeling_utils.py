@@ -105,6 +105,14 @@ logger = logging.get_logger(__name__)
 _init_weights = True
 
 
+def is_fsdp_enabled():
+    return os.environ["ACCELERATE_USE_FSDP"]
+
+
+def is_fsdp_enabled_and_dist_rank_0():
+    return is_fsdp_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() == 0
+
+
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
     from smdistributed.modelparallel import __version__ as SMP_VERSION
@@ -457,7 +465,11 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             )
         return safe_load_file(checkpoint_file)
     try:
-        if is_deepspeed_zero3_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0:
+        if (
+            (is_deepspeed_zero3_enabled() or is_fsdp_enabled())
+            and torch.distributed.is_initialized()
+            and torch.distributed.get_rank() > 0
+        ):
             map_location = "meta"
         else:
             map_location = "cpu"
@@ -541,7 +553,7 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
                     with deepspeed.zero.GatheredParameters(params_to_gather, modifier_rank=0):
                         if torch.distributed.get_rank() == 0:
                             module._load_from_state_dict(*args)
-            else:
+            elif not is_fsdp_enabled() or is_fsdp_enabled_and_dist_rank_0():
                 module._load_from_state_dict(*args)
 
         for name, child in module._modules.items():
@@ -1481,7 +1493,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=0):
                 if torch.distributed.get_rank() == 0:
                     new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
-        else:
+        elif not is_fsdp_enabled() or is_fsdp_enabled_and_dist_rank_0():
             new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
 
         return new_embeddings
@@ -1565,7 +1577,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     # Copy bias weights to new lm head
                     if has_new_lm_head_bias:
                         new_lm_head.bias.data[:num_tokens_to_copy] = old_lm_head.bias.data[:num_tokens_to_copy]
-        else:
+        elif not is_fsdp_enabled() or is_fsdp_enabled_and_dist_rank_0():
             # Copy old lm head weights to new lm head
             if not transposed:
                 new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[:num_tokens_to_copy, :]
@@ -2192,6 +2204,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
+
+        if is_fsdp_enabled():
+            low_cpu_mem_usage = True
 
         if use_auth_token is not None:
             warnings.warn(
@@ -3265,23 +3280,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
                 if low_cpu_mem_usage:
-                    new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
-                        model_to_load,
-                        state_dict,
-                        loaded_keys,
-                        start_prefix,
-                        expected_keys,
-                        device_map=device_map,
-                        offload_folder=offload_folder,
-                        offload_index=offload_index,
-                        state_dict_folder=state_dict_folder,
-                        state_dict_index=state_dict_index,
-                        dtype=dtype,
-                        is_quantized=is_quantized,
-                        is_safetensors=is_safetensors,
-                        keep_in_fp32_modules=keep_in_fp32_modules,
-                    )
-                    error_msgs += new_error_msgs
+                    if not is_fsdp_enabled() or is_fsdp_enabled_and_dist_rank_0():
+                        new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
+                            model_to_load,
+                            state_dict,
+                            loaded_keys,
+                            start_prefix,
+                            expected_keys,
+                            device_map=device_map,
+                            offload_folder=offload_folder,
+                            offload_index=offload_index,
+                            state_dict_folder=state_dict_folder,
+                            state_dict_index=state_dict_index,
+                            dtype=dtype,
+                            is_quantized=is_quantized,
+                            is_safetensors=is_safetensors,
+                            keep_in_fp32_modules=keep_in_fp32_modules,
+                        )
+                        error_msgs += new_error_msgs
                 else:
                     error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
 
