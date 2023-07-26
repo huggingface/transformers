@@ -10,7 +10,7 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    from ..models.auto.modeling_auto import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -53,7 +53,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.check_model_type(MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING)
+        self.check_model_type(MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES)
 
     def _sanitize_parameters(self, top_k=None, padding=None, truncation=None, **kwargs):
         preprocess_params, postprocess_params = {}, {}

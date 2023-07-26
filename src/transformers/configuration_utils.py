@@ -435,6 +435,8 @@ class PretrainedConfig(PushToHubMixin):
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        self._set_token_in_kwargs(kwargs)
+
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
@@ -463,11 +465,11 @@ class PretrainedConfig(PushToHubMixin):
                 repo_id,
                 files_timestamps,
                 commit_message=commit_message,
-                token=kwargs.get("use_auth_token"),
+                token=kwargs.get("token"),
             )
 
-    @classmethod
-    def _set_token_in_kwargs(self, kwargs, token=None):
+    @staticmethod
+    def _set_token_in_kwargs(kwargs, token=None):
         """Temporary method to deal with `token` and `use_auth_token`.
 
         This method is to avoid apply the same changes in all model config classes that overwrite `from_pretrained`.
@@ -490,8 +492,7 @@ class PretrainedConfig(PushToHubMixin):
             token = use_auth_token
 
         if token is not None:
-            # change to `token` in a follow-up PR
-            kwargs["use_auth_token"] = token
+            kwargs["token"] = token
 
     @classmethod
     def from_pretrained(
@@ -612,6 +613,8 @@ class PretrainedConfig(PushToHubMixin):
             `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the configuration object.
 
         """
+        cls._set_token_in_kwargs(kwargs)
+
         original_kwargs = copy.deepcopy(kwargs)
         # Get config dict associated with the base config file
         config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
@@ -635,7 +638,7 @@ class PretrainedConfig(PushToHubMixin):
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
+        token = kwargs.pop("token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
@@ -677,7 +680,7 @@ class PretrainedConfig(PushToHubMixin):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
-                    use_auth_token=use_auth_token,
+                    token=token,
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,

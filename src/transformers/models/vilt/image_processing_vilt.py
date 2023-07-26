@@ -307,7 +307,7 @@ class ViltImageProcessor(BaseImageProcessor):
         Args:
             images (`List[np.ndarray]`):
                 Batch of images to pad.
-            return_pixel_mask (`bool`, *optional*, defaults to `False`):
+            return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return the pixel mask.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
