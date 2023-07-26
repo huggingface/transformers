@@ -416,11 +416,11 @@ class CLIPConfig(PretrainedConfig):
 
 class IdeficsConfig(PretrainedConfig):
     r"""
-    e.g. [HuggingFaceM4/idefics-80b](https://huggingface.co/HuggingFaceM4/idefics-80b)
-
     This is the configuration class to store the configuration of a [`~IdeficsModel`]. It is used to instantiate an
     Idefics model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Idefics-9B.
+
+    e.g. [HuggingFaceM4/idefics-9b](https://huggingface.co/HuggingFaceM4/idefics-9b)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
