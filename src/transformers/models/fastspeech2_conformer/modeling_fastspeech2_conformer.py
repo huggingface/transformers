@@ -637,57 +637,54 @@ class FastSpeech2ConformerConvolutionModule(nn.Module):
 class FastSpeech2ConformerEncoderLayer(nn.Module):
     def __init__(
         self,
-        attention_dim=256,
+        config: FastSpeech2ConformerConfig,
         attention_heads=4,
         linear_units=2048,
         dropout_rate=0.1,
         attention_dropout_rate=0.0,
         normalize_before=True,
         concat_after=False,
-        positionwise_conv_kernel_size=1,
-        macaron_style=False,
-        use_cnn_module=False,
         cnn_module_kernel=31,
     ):
         super().__init__()
 
         # self-attention module definition
-        self.self_attn = FastSpeech2ConformerAttention(attention_heads, attention_dim, attention_dropout_rate)
+        self.self_attn = FastSpeech2ConformerAttention(attention_heads, config.hidden_size, attention_dropout_rate)
 
         # feed-forward module definition
         self.feed_forward = FastSpeech2ConformerMultiLayeredConv1d(
-            attention_dim, linear_units, positionwise_conv_kernel_size, dropout_rate
+            config.hidden_size, linear_units, config.positionwise_conv_kernel_size, dropout_rate
         )
 
-        self.macaron_style = macaron_style
+        self.macaron_style = config.use_macaron_style_in_conformer
         if self.macaron_style:
             self.feed_forward_macaron = FastSpeech2ConformerMultiLayeredConv1d(
-                attention_dim, linear_units, positionwise_conv_kernel_size, dropout_rate
+                config.hidden_size, linear_units, config.positionwise_conv_kernel_size, dropout_rate
             )
-            self.ff_macaron_layer_norm = nn.LayerNorm(attention_dim)
+            self.ff_macaron_layer_norm = nn.LayerNorm(config.hidden_size)
             self.ff_scale = 0.5
         else:
             self.ff_scale = 1.0
 
         # convolution module definition
-        self.use_cnn_module = use_cnn_module
-        if use_cnn_module:
-            self.conv_module = FastSpeech2ConformerConvolutionModule(attention_dim, cnn_module_kernel)
-            self.conv_layer_norm = nn.LayerNorm(attention_dim)
-            self.final_layer_norm = nn.LayerNorm(attention_dim)
+        self.use_cnn_module = config.use_cnn_in_conformer
+        if self.use_cnn_module:
+            self.conv_module = FastSpeech2ConformerConvolutionModule(config.hidden_size, cnn_module_kernel)
+            self.conv_layer_norm = nn.LayerNorm(config.hidden_size)
+            self.final_layer_norm = nn.LayerNorm(config.hidden_size)
 
         # for the FNN module
-        self.ff_layer_norm = nn.LayerNorm(attention_dim)
+        self.ff_layer_norm = nn.LayerNorm(config.hidden_size)
 
         # for the MHA module
-        self.self_attn_layer_norm = nn.LayerNorm(attention_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(config.hidden_size)
 
         self.dropout = nn.Dropout(dropout_rate)
-        self.size = attention_dim
+        self.size = config.hidden_size
         self.normalize_before = normalize_before
         self.concat_after = concat_after
         if self.concat_after:
-            self.concat_linear = nn.Linear(attention_dim + attention_dim, attention_dim)
+            self.concat_linear = nn.Linear(config.hidden_size + config.hidden_size, config.hidden_size)
 
     def forward(
         self,
@@ -891,8 +888,7 @@ class FastSpeech2ConformerEncoder(nn.Module):
     FastSpeech2ConformerEncoder encoder module.
 
     Args:
-        attention_dim (`int`, *optional*, defaults to 256): Dimension of attention.
-        attention_heads (`int`, *optional*, defaults to 4): The number of heads of multi head attention.
+        config (`FastSpeech2ConformerConfig`): FastSpeech2ConformerConfig instance.
         linear_units (`int`, *optional*, defaults to 2048): The number of units of position-wise feed forward.
         num_blocks (`int`, *optional*, defaults to 6): The number of decoder blocks.
         dropout_rate (`float`, *optional*, defaults to 0.1): Dropout rate.
@@ -903,17 +899,13 @@ class FastSpeech2ConformerEncoder(nn.Module):
         concat_after (`bool`, *optional*, defaults to `False`): Whether to concat attention layer's input and output.
             if True, additional linear will be applied. i.e. x -> x + linear(concat(x, att(x))) if False, no additional
             linear will be applied. i.e. x -> x + att(x)
-        positionwise_conv_kernel_size (`int`, *optional*, defaults to 1): Kernel size of positionwise conv1d layer.
-        macaron_style (`bool`, *optional*, defaults to `False`): Whether to use macaron style for positionwise layer.
-        use_cnn_module (`bool`, *optional*, defaults to `False`): Whether to use convolution module.
         cnn_module_kernel (int, *optional*, defaults to 31): Kernel size of convolution module.
 
     """
 
     def __init__(
         self,
-        vocab_size,
-        attention_dim=256,
+        config: FastSpeech2ConformerConfig,
         attention_heads=4,
         linear_units=2048,
         num_blocks=6,
@@ -923,30 +915,26 @@ class FastSpeech2ConformerEncoder(nn.Module):
         use_encoder_input_layer=False,
         normalize_before=True,
         concat_after=False,
-        positionwise_conv_kernel_size=1,
-        macaron_style=False,
-        use_cnn_module=False,
         cnn_module_kernel=31,
     ):
         super().__init__()
 
         self.embed = None
         if use_encoder_input_layer:
-            self.embed = nn.Embedding(num_embeddings=vocab_size, embedding_dim=attention_dim, padding_idx=0)
-        self.pos_enc = FastSpeech2ConformerRelPositionalEncoding(attention_dim, positional_dropout_rate)
+            self.embed = nn.Embedding(
+                num_embeddings=config.vocab_size, embedding_dim=config.hidden_size, padding_idx=0
+            )
+        self.pos_enc = FastSpeech2ConformerRelPositionalEncoding(config.hidden_size, positional_dropout_rate)
 
         self.conformer_layers = nn.ModuleList(
             [
                 FastSpeech2ConformerEncoderLayer(
-                    attention_dim=attention_dim,
+                    config,
                     attention_heads=attention_heads,
                     attention_dropout_rate=attention_dropout_rate,
                     linear_units=linear_units,
-                    positionwise_conv_kernel_size=positionwise_conv_kernel_size,
                     dropout_rate=dropout_rate,
                     cnn_module_kernel=cnn_module_kernel,
-                    macaron_style=macaron_style,
-                    use_cnn_module=use_cnn_module,
                     normalize_before=normalize_before,
                     concat_after=concat_after,
                 )
@@ -1205,8 +1193,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             self.projection = nn.Linear(config.hidden_size + self.speaker_embed_dim, config.hidden_size)
 
         self.encoder = FastSpeech2ConformerEncoder(
-            vocab_size=config.vocab_size,
-            attention_dim=self.hidden_size,
+            config,
             attention_heads=config.encoder_num_attention_heads,
             linear_units=config.encoder_linear_units,
             num_blocks=config.encoder_layers,
@@ -1216,9 +1203,6 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             attention_dropout_rate=config.encoder_attention_dropout_rate,
             normalize_before=config.encoder_normalize_before,
             concat_after=config.encoder_concat_after,
-            positionwise_conv_kernel_size=config.positionwise_conv_kernel_size,
-            macaron_style=config.use_macaron_style_in_conformer,
-            use_cnn_module=config.use_cnn_in_conformer,
             cnn_module_kernel=config.encoder_kernel_size,
         )
 
@@ -1258,8 +1242,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
 
         # The decoder is an encoder
         self.decoder = FastSpeech2ConformerEncoder(
-            vocab_size=config.vocab_size,
-            attention_dim=self.hidden_size,
+            config,
             attention_heads=config.decoder_num_attention_heads,
             linear_units=config.decoder_linear_units,
             num_blocks=config.decoder_layers,
@@ -1269,9 +1252,6 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             attention_dropout_rate=config.decoder_attention_dropout_rate,
             normalize_before=config.decoder_normalize_before,
             concat_after=config.decoder_concat_after,
-            positionwise_conv_kernel_size=config.positionwise_conv_kernel_size,
-            macaron_style=config.use_macaron_style_in_conformer,
-            use_cnn_module=config.use_cnn_in_conformer,
             cnn_module_kernel=config.decoder_kernel_size,
         )
 
