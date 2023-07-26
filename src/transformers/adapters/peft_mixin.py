@@ -39,7 +39,7 @@ class PeftAdapterMixin:
         """
         requires_backends(self.load_adapter, "peft")
 
-        from peft import LoraConfig, PeftModel, create_and_replace
+        from peft import PeftConfig, PeftModel, create_and_replace
         from peft.utils import set_peft_model_state_dict
         from peft.utils.other import TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING
 
@@ -58,8 +58,7 @@ class PeftAdapterMixin:
                 "adapter model."
             )
 
-        # TODO: automatically infer the correct config class
-        loaded_peft_config = LoraConfig.from_pretrained(
+        loaded_peft_config = PeftConfig.from_pretrained(
             peft_model_id,
             revision=revision,
             use_auth_token=use_auth_token,
