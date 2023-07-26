@@ -1129,7 +1129,7 @@ class PushInProgress:
     Internal class to keep track of a push in progress (which might contain multiple `Future` jobs).
     """
 
-    def __init__(self, jobs: Optional[Future] = None) -> None:
+    def __init__(self, jobs: Optional[futures.Future] = None) -> None:
         self.jobs = [] if jobs is None else jobs
 
     def is_done(self):
@@ -1138,15 +1138,13 @@ class PushInProgress:
     def wait_until_done(self):
         futures.wait(self.jobs)
 
-    def cancel(self):
-        new_jobs = []
-        for job in self.jobs:
-            if job.running():
-                new_jobs.append(job)
-            elif not job.done():
-                job.cancel()
-
-        self.jobs = new_jobs
+    def cancel(self) -> None:
+        self.jobs = [
+            job
+            for job in self.jobs
+            # Cancel the job if it wasn't started yet and remove cancelled/done jobs from the list
+            if not (job.cancel() or job.done())
+        ]
 
 
 cache_version_file = os.path.join(TRANSFORMERS_CACHE, "version.txt")

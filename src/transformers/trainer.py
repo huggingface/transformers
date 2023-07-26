@@ -3561,6 +3561,7 @@ class Trainer:
             ignore_patterns=["_*", ".*"],
             allow_patterns=["*.*"],
         )
+        print(commit_message)
         push_jobs = [model_push_job]
 
         if self.args.hub_strategy in [HubStrategy.CHECKPOINT, HubStrategy.ALL_CHECKPOINTS]:
