@@ -282,6 +282,7 @@ def main():
     parser.add_argument(
         "--model_size",
         choices=["7B", "7Bf", "13B", "13Bf", "30B", "65B", "70B", "70Bf", "tokenizer_only"],
+        help="'f' models are specific to the LLAMA2 official release.",
     )
     parser.add_argument(
         "--output_dir",
