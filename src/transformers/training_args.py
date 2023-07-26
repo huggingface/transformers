@@ -436,13 +436,13 @@ class TrainingArguments:
             deepspeed json config file (e.g., `ds_config.json`) or an already loaded json file as `dict`.
 
             A List of config and its options:
-                - fsdp_min_num_params (`int`, *optional*, defaults to `0`):
+                - min_num_params (`int`, *optional*, defaults to `0`):
                     FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is
                     passed).
-                - fsdp_transformer_layer_cls_to_wrap (`List[str]`, *optional*):
+                - transformer_layer_cls_to_wrap (`List[str]`, *optional*):
                     List of transformer layer class names (case-sensitive) to wrap, e.g, `BertLayer`, `GPTJBlock`,
                     `T5Block` .... (useful only when `fsdp` flag is passed).
-                - fsdp_backward_prefetch (`str`, *optional*)
+                - backward_prefetch (`str`, *optional*)
                     FSDP's backward prefetch mode. Controls when to prefetch next set of parameters (useful only when
                     `fsdp` field is passed).
 
@@ -454,21 +454,22 @@ class TrainingArguments:
                     - `"backward_post"` : This prefetches the next set of parameters after the current set of
                       parameter’s
                         gradient computation.
-                - fsdp_forward_prefetch (`bool`, *optional*, defaults to `False`)
+                - forward_prefetch (`bool`, *optional*, defaults to `False`)
                     FSDP's forward prefetch mode (useful only when `fsdp` field is passed).
                      If `"True"`, then FSDP explicitly prefetches the next upcoming all-gather while executing in the
                      forward pass.
-                - fsdp_limit_all_gathers (`bool`, *optional*, defaults to `False`)
+                - limit_all_gathers (`bool`, *optional*, defaults to `False`)
                     FSDP's limit_all_gathers (useful only when `fsdp` field is passed).
                      If `"True"`, FSDP explicitly synchronizes the CPU thread to prevent too many in-flight
                      all-gathers.
-                - fsdp_use_orig_params (`bool`, *optional*, defaults to `False`)
-                    If `"True"`, allows non-uniform `requires_grad` during init, which means support for interspersed frozen and trainable paramteres.
-                    Useful in cases such as parameter-efficient fine-tuning.
-                    Please refer this [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019
-                - fsdp_sync_module_states (`bool`, *optional*, defaults to `False`)
-                    If `"True"`, each individually wrapped FSDP unit will broadcast module parameters from rank 0
-                    to ensure they are the same across all ranks after initialization
+                - use_orig_params (`bool`, *optional*, defaults to `False`)
+                    If `"True"`, allows non-uniform `requires_grad` during init, which means support for interspersed
+                    frozen and trainable paramteres. Useful in cases such as parameter-efficient fine-tuning. Please
+                    refer this
+                    [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019
+                - sync_module_states (`bool`, *optional*, defaults to `False`)
+                    If `"True"`, each individually wrapped FSDP unit will broadcast module parameters from rank 0 to
+                    ensure they are the same across all ranks after initialization
                 - xla (`bool`, *optional*, defaults to `False`):
                     Whether to use PyTorch/XLA Fully Sharded Data Parallel Training. This is an experimental feature
                     and its API may evolve in the future.
@@ -1524,15 +1525,13 @@ class TrainingArguments:
                 self.fsdp_config = json.load(f)
                 for k, v in self.fsdp_config.items():
                     if k.startswith("fsdp_"):
-                        self.fsdp_config[k.replace("fsdp", "")] = v
+                        self.fsdp_config[k.replace("fsdp_", "")] = v
                         del self.fsdp_config[k]
 
         if self.fsdp_min_num_params > 0:
             warnings.warn("using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ", FutureWarning)
 
-        self.fsdp_config["fsdp_min_num_params"] = max(
-            self.fsdp_config.get("min_num_params", 0), self.fsdp_min_num_params
-        )
+        self.fsdp_config["min_num_params"] = max(self.fsdp_config.get("min_num_params", 0), self.fsdp_min_num_params)
 
         # if fsdp_config["transformer_layer_cls_to_wrap"] is specified as a string, convert it to a list with a single object
         if isinstance(self.fsdp_config.get("transformer_layer_cls_to_wrap", None), str):
@@ -1547,19 +1546,17 @@ class TrainingArguments:
             ) + [self.fsdp_transformer_layer_cls_to_wrap]
 
         if len(self.fsdp) == 0 and self.fsdp_config["min_num_params"] > 0:
-            warnings.warn("`--fsdp_min_num_params` is useful only when `--fsdp` is specified.")
+            warnings.warn("`min_num_params` is useful only when `--fsdp` is specified.")
 
         if len(self.fsdp) == 0 and self.fsdp_config.get("transformer_layer_cls_to_wrap", None) is not None:
-            warnings.warn("`--fsdp_transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
+            warnings.warn("`transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
 
         if (
             len(self.fsdp) > 0
             and self.fsdp_config["min_num_params"] > 0
             and self.fsdp_config.get("transformer_layer_cls_to_wrap", None) is not None
         ):
-            raise ValueError(
-                "`--fsdp_min_num_params` and `--fsdp_transformer_layer_cls_to_wrap` are mutually exclusive."
-            )
+            raise ValueError("`min_num_params` and `transformer_layer_cls_to_wrap` are mutually exclusive.")
         self.fsdp_config["xla"] = self.fsdp_config.get("xla", False)
         self.fsdp_config["xla_fsdp_grad_ckpt"] = self.fsdp_config.get("xla_fsdp_grad_ckpt", False)
         if self.fsdp_config["xla"]:
