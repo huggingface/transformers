@@ -3918,7 +3918,7 @@ class IBertPreTrainedModel(metaclass=DummyObject):
 IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class IdeficsForCausalLM(metaclass=DummyObject):
+class IdeficsForVisionText2Text(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

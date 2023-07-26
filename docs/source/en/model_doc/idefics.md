@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Idefics model was proposed in [OBELISC: An Open Web-Scale Filtered Dataset of Interleaved Image-Text Documents
+The IDEFICS model was proposed in [OBELISC: An Open Web-Scale Filtered Dataset of Interleaved Image-Text Documents
 ](https://huggingface.co/papers/2306.16527
 ) by Hugo Laurençon, Lucile Saulnier, Léo Tronchon, Stas Bekman, Amanpreet Singh, Anton Lozhkov, Thomas Wang, Siddharth Karamcheti, Alexander M. Rush, Douwe Kiela, Matthieu Cord, Victor Sanh
 
@@ -47,9 +47,9 @@ To train a new Idefics model from scratch use the m4 codebase (a link will be pr
 [[autodoc]] IdeficsModel
     - forward
 
-## IdeficsForCausalLM
+## IdeficsForVisionText2Text
 
-[[autodoc]] IdeficsForCausalLM
+[[autodoc]] IdeficsForVisionText2Text
     - forward
 
 ## IdeficsImageProcessor

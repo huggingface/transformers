@@ -30,7 +30,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        IdeficsForCausalLM,
+        IdeficsForVisionText2Text,
         IdeficsModel,
     )
     from transformers.models.idefics.modeling_idefics import IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST
@@ -217,14 +217,14 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_model_classes = (
         (
             IdeficsModel,
-            IdeficsForCausalLM,
+            IdeficsForVisionText2Text,
         )
         if is_torch_available()
         else ()
     )
     pipeline_model_mapping = (
         {
-            "visual-question-answering": IdeficsForCausalLM,
+            "visual-question-answering": IdeficsForVisionText2Text,
         }
         if is_torch_available()
         else {}
@@ -254,7 +254,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
         for model_class in self.all_model_classes:
             # IdeficsModel does not support training, users should use
-            # IdeficsForCausalLM for this purpose
+            # IdeficsForVisionText2Text for this purpose
             if model_class == IdeficsModel:
                 return
 
@@ -276,7 +276,7 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
         for model_class in self.all_model_classes:
             # IdeficsModel does not support training, users should use
-            # IdeficsForCausalLM for this purpose
+            # IdeficsForVisionText2Text for this purpose
             if model_class == IdeficsModel:
                 return
 
@@ -392,8 +392,8 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
 @unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
-class IdeficsForCausalLMTest(IdeficsModelTest, unittest.TestCase):
-    all_model_classes = (IdeficsForCausalLM,) if is_torch_available() else ()
+class IdeficsForVisionText2TextTest(IdeficsModelTest, unittest.TestCase):
+    all_model_classes = (IdeficsForVisionText2Text,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = IdeficsModelTester(
@@ -447,7 +447,7 @@ class IdeficsModelIntegrationTest(TestCasePlus):
             ],
         ]
 
-        model = IdeficsForCausalLM.from_pretrained("HuggingFaceM4/idefics-9b").to(torch_device)
+        model = IdeficsForVisionText2Text.from_pretrained("HuggingFaceM4/idefics-9b").to(torch_device)
         processor = self.default_processor
         inputs = processor(prompts, eval_mode=True, device=torch_device, return_tensors="pt")
         generated_ids = model.generate(**inputs, max_length=100)

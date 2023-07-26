@@ -1930,7 +1930,7 @@ else:
     _import_structure["models.idefics"].extend(
         [
             "IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "IdeficsForCausalLM",
+            "IdeficsForVisionText2Text",
             "IdeficsModel",
             "IdeficsPreTrainedModel",
         ]
@@ -5701,7 +5701,7 @@ if TYPE_CHECKING:
         )
         from .models.idefics import (
             IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST,
-            IdeficsForCausalLM,
+            IdeficsForVisionText2Text,
             IdeficsGatedCrossAttentionLayer,
             IdeficsModel,
             IdeficsPreTrainedModel,

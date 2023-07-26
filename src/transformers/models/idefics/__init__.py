@@ -35,7 +35,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_idefics"] = [
         "IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "IdeficsForCausalLM",
+        "IdeficsForVisionText2Text",
         "IdeficsModel",
         "IdeficsPreTrainedModel",
         "IdeficsGatedCrossAttentionLayer",
@@ -62,7 +62,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_idefics import (
             IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST,
-            IdeficsForCausalLM,
+            IdeficsForVisionText2Text,
             IdeficsGatedCrossAttentionLayer,
             IdeficsModel,
             IdeficsPreTrainedModel,

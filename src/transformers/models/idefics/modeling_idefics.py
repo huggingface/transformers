@@ -1345,7 +1345,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         )
 
 
-class IdeficsForCausalLM(IdeficsPreTrainedModel):
+class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
     _tied_weights_keys = ["model.embed_tokens.weight", "lm_head.weight"]
 
