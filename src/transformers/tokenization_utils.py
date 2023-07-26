@@ -498,7 +498,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         all_special_tokens_extended = {
             str(t): t for t in self.all_special_tokens_extended if isinstance(t, AddedToken)
         }
-
+        
+        split_special_tokens = kwargs.pop('split_special_tokens', self.split_special_tokens)
+        
         text, kwargs = self.prepare_for_tokenization(text, **kwargs)
 
         if kwargs:
@@ -513,13 +515,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
             text = re.sub(pattern, lambda m: m.groups()[0] or m.groups()[1].lower(), text)
 
-        split_special_tokens = kwargs.get("split_special_tokens", False)
-        if not split_special_tokens :
+        # split_special_tokens: empty `no_split_token`
+        if split_special_tokens :
+            no_split_token = []
+            tokens = [text]
+        else:
             no_split_token = set(self.unique_no_split_tokens)
             tokens = self.tokens_trie.split(text)
-        else:
-            no_split_token = []
-            tokens = text
             
         # ["This is something", "<special_token_1>", "  else"]
         for i, token in enumerate(tokens):
