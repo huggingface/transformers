@@ -136,6 +136,11 @@ def convert_espnet_state_dict_to_hf(state_dict):
                 new_key = new_key.replace("0", "conv")
             if "encoders" in key:
                 new_key = new_key.replace("encoders", "conformer_layers")
+                new_key = new_key.replace("norm_final", "final_layer_norm")
+                new_key = new_key.replace("norm_mha", "self_attn_layer_norm")
+                new_key = new_key.replace("norm_ff_macaron", "ff_macaron_layer_norm")
+                new_key = new_key.replace("norm_ff", "ff_layer_norm")
+                new_key = new_key.replace("norm_conv", "conv_layer_norm")
             if "lid_emb" in key:
                 new_key = new_key.replace("lid_emb", "language_id_embedding")
             if "sid_emb" in key:
@@ -161,6 +166,7 @@ def convert_FastSpeech2ConformerModel_checkpoint(
 
     espnet_checkpoint = torch.load(checkpoint_path)
     hf_compatible_state_dict = convert_espnet_state_dict_to_hf(espnet_checkpoint)
+
     model.load_state_dict(hf_compatible_state_dict)
 
     model.save_pretrained(pytorch_dump_folder_path)

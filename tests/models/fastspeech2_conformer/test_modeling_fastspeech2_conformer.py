@@ -18,7 +18,7 @@ import inspect
 import tempfile
 import unittest
 
-from transformers import FastSpeech2ConformerConfig, FastSpeech2ConformerTokenizer, is_torch_available
+from transformers import FastSpeech2ConformerConfig, FastSpeech2ConformerTokenizer, is_torch_available, is_datasets_available
 from transformers.testing_utils import require_g2p_en, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -28,7 +28,7 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_ten
 if is_torch_available():
     import torch
 
-    from transformers import FastSpeech2ConformerModel, FastSpeech2ConformerWithHifiGan
+    from transformers import FastSpeech2ConformerModel, FastSpeech2ConformerWithHifiGan, set_seed
 
 
 class FastSpeech2ConformerModelTester:
@@ -286,7 +286,6 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
             self.assertEqual(len(outputs.encoder_attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -341,10 +340,6 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    # training is not supported yet
-    def test_training(self):
-        pass
-
 
 @require_torch
 @require_g2p_en
@@ -357,9 +352,9 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
 
         tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("connor-henderson/fastspeech2_conformer")
         text = "Test that this generates speech"
-        inputs = tokenizer(text, return_tensors="pt").to(torch_device)
+        input_ids = tokenizer(text, return_tensors="pt").to(torch_device)["input_ids"]
 
-        outputs_dict = model(**inputs, return_dict=True)
+        outputs_dict = model(input_ids)
         spectrogram = outputs_dict["spectrogram"]
 
         # mel-spectrogram is too large (1, 205, 80), so only check top-left 100 elements
@@ -381,6 +376,58 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(spectrogram[0, :10, :10], expected_mel_spectrogram, atol=1e-4))
         self.assertEqual(spectrogram.shape, (1, 205, model.config.num_mel_bins))
+    
+    def test_training_integration(self):
+        model = FastSpeech2ConformerModel.from_pretrained("connor-henderson/fastspeech2_conformer")
+        model.to(torch_device)
+        model.eval()
+        set_seed(0)
+
+        tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("connor-henderson/fastspeech2_conformer")
+        text = "Test that this generates speech"
+        input_ids = tokenizer(text, return_tensors="pt").to(torch_device)["input_ids"]
+        
+        # NOTE: Dummy numbers since FastSpeech2Conformer does not have a feature extractor due to the package deps required (librosa, MFA)
+        batch_size, max_text_len = input_ids.shape
+        pitch_labels = torch.rand((batch_size, max_text_len, 1), dtype=torch.float, device=torch_device)
+        energy_labels = torch.rand((batch_size, max_text_len, 1), dtype=torch.float, device=torch_device)
+        duration_labels = torch.normal(10, 2, size=(batch_size, max_text_len)).clamp(1, 20).int()
+        max_target_len, _ = duration_labels.sum(dim=1).max(dim=0)
+        max_target_len = max_target_len.item()
+        spectrogram_labels = torch.rand((batch_size, max_target_len, model.num_mel_bins), dtype=torch.float, device=torch_device)
+
+        outputs_dict = model(input_ids,
+                             spectrogram_labels=spectrogram_labels,
+                             duration_labels=duration_labels,
+                             pitch_labels=pitch_labels,
+                             energy_labels=energy_labels,
+                             return_dict=True
+                             )
+        spectrogram = outputs_dict["spectrogram"]
+        loss = outputs_dict["loss"]
+
+        # # mel-spectrogram is too large (1, 224, 80), so only check top-left 100 elements
+        expected_mel_spectrogram = torch.tensor(
+            [
+                [-1.0643e+00, -6.8058e-01, -1.0901e+00, -8.2724e-01, -7.7241e-01, -1.1905e+00, -8.5725e-01, -8.2930e-01, -1.1313e+00, -1.2449e+00],
+                [-5.5067e-01, -2.7045e-01, -6.3483e-01, -1.9320e-01,  1.0234e-01, -3.3253e-01, -2.4423e-01, -3.5045e-01, -5.2070e-01, -4.3710e-01],
+                [ 2.2181e-01,  3.1433e-01, -1.2849e-01,  6.0253e-01,  1.0033e+00, 1.3952e-01,  1.2851e-01, -2.3063e-02, -1.5092e-01,  2.4903e-01],
+                [ 4.6343e-01,  4.1820e-01,  1.6468e-01,  1.1297e+00,  1.4588e+00, 1.3737e-01,  6.6355e-02, -6.0973e-02, -5.4225e-02,  5.9208e-01],
+                [ 5.2762e-01,  4.8725e-01,  4.2735e-01,  1.4392e+00,  1.7398e+00, 2.4891e-01, -8.4531e-03, -8.1282e-02,  1.2857e-01,  8.7559e-01],
+                [ 5.2548e-01,  5.1653e-01,  5.2034e-01,  1.3782e+00,  1.5972e+00, 1.6380e-01, -5.1807e-02,  1.5474e-03,  2.2824e-01,  8.5288e-01],
+                [ 3.6356e-01,  4.4109e-01,  4.4257e-01,  9.4273e-01,  1.1201e+00, -9.0551e-03, -1.1627e-01, -2.0821e-02,  1.0793e-01,  5.0336e-01],
+                [ 3.6598e-01,  3.2708e-01,  1.3297e-01,  4.5162e-01,  6.4168e-01, -2.6923e-01, -2.3101e-01, -1.4943e-01, -1.4732e-01,  7.3057e-02],
+                [ 2.7639e-01,  2.2588e-01, -1.5310e-01,  1.0957e-01,  3.3048e-01, -5.3431e-01, -3.3822e-01, -2.8007e-01, -3.3823e-01, -1.5775e-01],
+                [ 2.9323e-01,  1.6723e-01, -3.4153e-01, -1.1209e-01,  1.7355e-01, -6.1724e-01, -5.4201e-01, -4.9944e-01, -5.2212e-01, -2.7596e-01]
+            ],
+            device=torch_device,
+        )
+        expected_loss = torch.tensor(3.1221, device=torch_device)
+
+        self.assertTrue(torch.allclose(spectrogram[0, :10, :10], expected_mel_spectrogram, atol=1e-3))
+        self.assertTrue(torch.allclose(loss, expected_loss, atol=1e-4))
+        self.assertEqual(spectrogram.shape, (1, 224, model.config.num_mel_bins))
+
 
 @require_torch
 @require_g2p_en

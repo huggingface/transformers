@@ -481,41 +481,6 @@ class FastSpeech2ConformerAttention(nn.Module):
         self.pos_bias_u = nn.Parameter(torch.Tensor(self.num_attention_heads, self.dim_key))
         self.pos_bias_v = nn.Parameter(torch.Tensor(self.num_attention_heads, self.dim_key))
 
-    def forward_attention(self, value, scores, attention_mask):
-        """
-        Compute attention context vector.
-
-        Args:
-            value (`torch.Tensor` of shape `(batch, num_head, time2, dim_key)`): Transformed value.
-            scores (`torch.Tensor` of shape `(batch, num_head, time1, time2)`): Attention score.
-            attention_mask (`torch.Tensor` of shape `(batch, time1, time2)`): Mask to apply.
-
-        Returns:
-            `torch.Tensor`: Transformed value of shape `(batch, time1, d_model)`
-                weighted by the attention score `(batch, time1, time2)`.
-        """
-        batch_size, _, time1, _ = scores.size()
-
-        if attention_mask is not None:
-            # if attention_mask.size() != (batch_size, 1, time1):
-            #     raise ValueError(
-            #         f"Attention mask should be of size {(batch_size, 1, time1)}, but is {attention_mask.size()}"
-            #     )
-            attention_mask = attention_mask.unsqueeze(1).eq(0)
-            min_value = float(torch.finfo(scores.dtype).min)
-            scores = scores.masked_fill(attention_mask, min_value)
-            attn_probs = torch.softmax(scores, dim=-1).masked_fill(attention_mask, 0.0)
-        else:
-            attn_probs = torch.softmax(scores, dim=-1)
-
-        attn_probs = self.dropout(attn_probs)
-        context = torch.matmul(attn_probs, value)
-        context = context.transpose(1, 2).contiguous().view(batch_size, time1, -1)
-
-        attention_output = self.linear_out(context)
-
-        return attention_output, attn_probs
-
     def rel_shift(self, pos_tensor):
         """
         Args:
@@ -530,7 +495,13 @@ class FastSpeech2ConformerAttention(nn.Module):
 
         return pos_tensor
 
-    def forward(self, hidden_states, attention_mask=None, pos_emb=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        pos_emb: Optional[torch.Tensor] = None,
+        output_attentions: Optional[torch.Tensor] = False,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Compute 'Scaled Dot Product Attention' with rel. positional encoding.
 
@@ -576,7 +547,24 @@ class FastSpeech2ConformerAttention(nn.Module):
         # (batch_size, head, time1, time2)
         scores = (matrix_ac + matrix_bd) / math.sqrt(self.dim_key)
 
-        attention_output, attention_scores = self.forward_attention(value, scores, attention_mask)
+        # Forward attention
+        batch_size, target_len, _ = hidden_states.size()
+        if attention_mask is not None:
+            expected_size = (batch_size, 1, target_len)
+            if attention_mask.size() != expected_size:
+                raise ValueError(f"Attention mask should be of size {expected_size}, but is {attention_mask.size()}")
+            attention_mask = attention_mask.unsqueeze(1).eq(0)
+            min_value = float(torch.finfo(scores.dtype).min)
+            scores = scores.masked_fill(attention_mask, min_value)
+            attention_scores = torch.softmax(scores, dim=-1).masked_fill(attention_mask, 0.0)
+        else:
+            attention_scores = torch.softmax(scores, dim=-1)
+
+        attention_scores = self.dropout(attention_scores)
+        context = torch.matmul(attention_scores, value)
+        context = context.transpose(1, 2).contiguous().view(batch_size, target_len, -1)
+
+        attention_output = self.linear_out(context)
 
         if not output_attentions:
             attention_scores = None
@@ -676,7 +664,7 @@ class FastSpeech2ConformerEncoderLayer(nn.Module):
             self.feed_forward_macaron = FastSpeech2ConformerMultiLayeredConv1d(
                 attention_dim, linear_units, positionwise_conv_kernel_size, dropout_rate
             )
-            self.norm_ff_macaron = nn.LayerNorm(attention_dim)
+            self.ff_macaron_layer_norm = nn.LayerNorm(attention_dim)
             self.ff_scale = 0.5
         else:
             self.ff_scale = 1.0
@@ -685,31 +673,36 @@ class FastSpeech2ConformerEncoderLayer(nn.Module):
         self.use_cnn_module = use_cnn_module
         if use_cnn_module:
             self.conv_module = FastSpeech2ConformerConvolutionModule(attention_dim, cnn_module_kernel)
-            self.norm_conv = nn.LayerNorm(attention_dim)
-            self.norm_final = nn.LayerNorm(attention_dim)
+            self.conv_layer_norm = nn.LayerNorm(attention_dim)
+            self.final_layer_norm = nn.LayerNorm(attention_dim)
 
         # for the FNN module
-        self.norm_ff = nn.LayerNorm(attention_dim)
+        self.ff_layer_norm = nn.LayerNorm(attention_dim)
 
         # for the MHA module
-        self.norm_mha = nn.LayerNorm(attention_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(attention_dim)
 
         self.dropout = nn.Dropout(dropout_rate)
         self.size = attention_dim
-        self.dropout_rate = dropout_rate
         self.normalize_before = normalize_before
         self.concat_after = concat_after
         if self.concat_after:
             self.concat_linear = nn.Linear(attention_dim + attention_dim, attention_dim)
 
-    def forward(self, hidden_states, pos_emb, mask, output_attentions):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        pos_emb: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[torch.Tensor] = False,
+    ):
         """
         Compute encoded features.
 
         Args:
             hidden_states (`torch.Tensor` of shape `(batch, time, size)`): Input tensor.
             pos_emb (`torch.Tensor` of shape `(1, time, size)`): Positional embeddings tensor.
-            mask (`torch.Tensor` of shape `(batch, time)`): Mask tensor for the input.
+            attention_mask (`torch.Tensor` of shape `(batch, time)`): Attention mask tensor for the input.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -721,49 +714,60 @@ class FastSpeech2ConformerEncoderLayer(nn.Module):
         if self.macaron_style:
             residual = hidden_states
             if self.normalize_before:
-                hidden_states = self.norm_ff_macaron(hidden_states)
+                hidden_states = self.ff_macaron_layer_norm(hidden_states)
             hidden_states = residual + self.ff_scale * self.dropout(self.feed_forward_macaron(hidden_states))
             if not self.normalize_before:
-                hidden_states = self.norm_ff_macaron(hidden_states)
+                hidden_states = self.ff_macaron_layer_norm(hidden_states)
 
         # multi-headed self-attention module
         residual = hidden_states
         if self.normalize_before:
-            hidden_states = self.norm_mha(hidden_states)
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         attention_output, attention_scores = self.self_attn(
-            hidden_states, attention_mask=mask, pos_emb=pos_emb, output_attentions=output_attentions
+            hidden_states, attention_mask=attention_mask, pos_emb=pos_emb, output_attentions=output_attentions
         )
 
         if self.concat_after:
             x_concat = torch.cat((hidden_states, attention_output), dim=-1)
-            hidden_states = residual + self.concat_linear(x_concat)
+            hidden_states = self.concat_linear(x_concat)
+            hidden_states = residual + hidden_states
         else:
-            hidden_states = residual + self.dropout(attention_output)
+            hidden_states = self.dropout(attention_output)
+            hidden_states = residual + hidden_states
         if not self.normalize_before:
-            hidden_states = self.norm_mha(hidden_states)
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # convolution module
         if self.use_cnn_module:
             residual = hidden_states
             if self.normalize_before:
-                hidden_states = self.norm_conv(hidden_states)
-            hidden_states = residual + self.dropout(self.conv_module(hidden_states))
+                hidden_states = self.conv_layer_norm(hidden_states)
+            hidden_states = self.conv_module(hidden_states)
+            hidden_states = self.dropout(hidden_states)
+            hidden_states = residual + hidden_states
             if not self.normalize_before:
-                hidden_states = self.norm_conv(hidden_states)
+                hidden_states = self.conv_layer_norm(hidden_states)
 
         # feed forward module
         residual = hidden_states
         if self.normalize_before:
-            hidden_states = self.norm_ff(hidden_states)
-        hidden_states = residual + self.ff_scale * self.dropout(self.feed_forward(hidden_states))
+            hidden_states = self.ff_layer_norm(hidden_states)
+        hidden_states = self.feed_forward(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = residual + self.ff_scale * hidden_states
         if not self.normalize_before:
-            hidden_states = self.norm_ff(hidden_states)
+            hidden_states = self.ff_layer_norm(hidden_states)
 
         if self.conv_module is not None:
-            hidden_states = self.norm_final(hidden_states)
+            hidden_states = self.final_layer_norm(hidden_states)
 
-        return hidden_states, attention_scores, pos_emb, mask
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attention_scores,)
+
+        return outputs
 
 
 class FastSpeech2ConformerMultiLayeredConv1d(nn.Module):
@@ -955,7 +959,7 @@ class FastSpeech2ConformerEncoder(nn.Module):
         input_tensor: torch.LongTensor,
         attention_mask: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
+        output_attentions: Optional[bool] = False,
         return_dict: Optional[bool] = None,
     ):
         """
@@ -1000,12 +1004,11 @@ class FastSpeech2ConformerEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            hidden_states, attention_output, pos_emb, attention_mask = conformer_layer(
-                hidden_states, pos_emb, attention_mask, output_attentions
-            )
+            layer_outputs = conformer_layer(hidden_states, pos_emb, attention_mask, output_attentions)
+            hidden_states = layer_outputs[0]
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (attention_output,)
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
         # Add last layer
         if output_hidden_states:
@@ -1049,8 +1052,8 @@ class FastSpeech2ConformerLoss(nn.Module):
         duration_labels,
         pitch_labels,
         energy_labels,
-        attention_mask,
-        out_mask,
+        duration_mask,
+        spectrogram_mask,
     ):
         """
         Args:
@@ -1071,30 +1074,30 @@ class FastSpeech2ConformerLoss(nn.Module):
                 Batch of target token-averaged pitch.
             energy_labels (`torch.Tensor` of shape `(batch_size, max_text_length, 1)`):
                 Batch of target token-averaged energy.
-            attention_mask (`torch.LongTensor`):
-                Attention mask used to discern which values loss should be calculated for.
-            out_mask (`torch.LongTensor`): Output mask used to discern which values loss should be calculated for.
+            duration_mask (`torch.LongTensor`):
+                Mask used to discern which values the duration loss should be calculated for.
+            spectrogram_mask (`torch.LongTensor`):
+                Mask used to discern which values the spectrogam loss should be calculated for.
 
         Returns:
             `tuple(torch.FloatTensor)`: Tuple of tensors containing, in order, the L1 loss value, duration predictor
             loss value, pitch predictor loss value, and energy predictor loss value.
 
         """
-        out_mask.unsqueeze(-1)
+        pitch_and_energy_masks = duration_mask.unsqueeze(-1)
 
         # apply mask to remove padded part
         if self.use_masking:
-            outputs_before_postnet = outputs_before_postnet.masked_select(out_mask)
+            outputs_before_postnet = outputs_before_postnet.masked_select(spectrogram_mask)
             if outputs_after_postnet is not None:
-                outputs_after_postnet = outputs_after_postnet.masked_select(out_mask)
-            spectrogram_labels = spectrogram_labels.masked_select(out_mask)
-            duration_outputs = duration_outputs.masked_select(attention_mask)
-            duration_labels = duration_labels.masked_select(attention_mask)
-            pitch_masks = attention_mask.unsqueeze(-1)
-            pitch_outputs = pitch_outputs.masked_select(pitch_masks)
-            energy_outputs = energy_outputs.masked_select(pitch_masks)
-            pitch_labels = pitch_labels.masked_select(pitch_masks)
-            energy_labels = energy_labels.masked_select(pitch_masks)
+                outputs_after_postnet = outputs_after_postnet.masked_select(spectrogram_mask)
+            spectrogram_labels = spectrogram_labels.masked_select(spectrogram_mask)
+            duration_outputs = duration_outputs.masked_select(duration_mask)
+            duration_labels = duration_labels.masked_select(duration_mask)
+            pitch_outputs = pitch_outputs.masked_select(pitch_and_energy_masks)
+            energy_outputs = energy_outputs.masked_select(pitch_and_energy_masks)
+            pitch_labels = pitch_labels.masked_select(pitch_and_energy_masks)
+            energy_labels = energy_labels.masked_select(pitch_and_energy_masks)
 
         # calculate loss
         l1_loss = self.l1_criterion(outputs_before_postnet, spectrogram_labels)
@@ -1107,25 +1110,23 @@ class FastSpeech2ConformerLoss(nn.Module):
 
         # make weighted mask and apply it
         if self.use_weighted_masking:
-            out_mask = nn.functional.pad(
-                out_mask.transpose(1, 2),
-                [0, spectrogram_labels.size(1) - out_mask.size(1), 0, 0, 0, 0],
+            spectrogram_mask = nn.functional.pad(
+                spectrogram_mask.transpose(1, 2),
+                [0, spectrogram_labels.size(1) - spectrogram_mask.size(1), 0, 0, 0, 0],
                 value=False,
             ).transpose(1, 2)
 
-            out_weights = out_mask.float() / out_mask.sum(dim=1, keepdim=True).float()
+            out_weights = spectrogram_mask.float() / spectrogram_mask.sum(dim=1, keepdim=True).float()
             out_weights /= spectrogram_labels.size(0) * spectrogram_labels.size(2)
-            duration_masks = attention_mask
-            duration_weights = duration_masks.float() / duration_masks.sum(dim=1, keepdim=True).float()
+            duration_weights = duration_mask.float() / duration_mask.sum(dim=1, keepdim=True).float()
             duration_weights /= duration_labels.size(0)
 
             # apply weight
-            l1_loss = l1_loss.mul(out_weights).masked_select(out_mask).sum()
-            duration_loss = duration_loss.mul(duration_weights).masked_select(duration_masks).sum()
-            pitch_masks = duration_masks.unsqueeze(-1)
+            l1_loss = l1_loss.mul(out_weights).masked_select(spectrogram_mask).sum()
+            duration_loss = duration_loss.mul(duration_weights).masked_select(duration_mask).sum()
             pitch_weights = duration_weights.unsqueeze(-1)
-            pitch_loss = pitch_loss.mul(pitch_weights).masked_select(pitch_masks).sum()
-            energy_loss = energy_loss.mul(pitch_weights).masked_select(pitch_masks).sum()
+            pitch_loss = pitch_loss.mul(pitch_weights).masked_select(pitch_and_energy_masks).sum()
+            energy_loss = energy_loss.mul(pitch_weights).masked_select(pitch_and_energy_masks).sum()
 
         return l1_loss + duration_loss + pitch_loss + energy_loss
 
@@ -1360,12 +1361,9 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(input_ids.shape)
 
-        is_inference = spectrogram_labels is None
-
-        spectrogram_mask = spectrogram_labels != -100
-        if self.reduction_factor > 1:
-            length_dim = spectrogram_mask.shape[1] - spectrogram_mask.shape[1] % self.reduction_factor
-            spectrogram_mask = spectrogram_mask[:, :length_dim]
+        is_inference = (
+            spectrogram_labels is None or duration_labels is None or pitch_labels is None or energy_labels is None
+        )
 
         # forward encoder
         text_masks = attention_mask.unsqueeze(-2)
@@ -1395,19 +1393,19 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             hidden_states = self.projection(torch.cat([hidden_states, embeddings_expanded], dim=-1))
 
         # forward duration predictor and variance predictors
-        duration_masks = ~attention_mask.bool()
+        duration_mask = ~attention_mask.bool()
 
         if self.stop_gradient_from_pitch_predictor:
-            pitch_predictions = self.pitch_predictor(hidden_states.detach(), duration_masks.unsqueeze(-1))
+            pitch_predictions = self.pitch_predictor(hidden_states.detach(), duration_mask.unsqueeze(-1))
         else:
-            pitch_predictions = self.pitch_predictor(hidden_states, duration_masks.unsqueeze(-1))
+            pitch_predictions = self.pitch_predictor(hidden_states, duration_mask.unsqueeze(-1))
 
         if self.stop_gradient_from_energy_predictor:
-            energy_predictions = self.energy_predictor(hidden_states.detach(), duration_masks.unsqueeze(-1))
+            energy_predictions = self.energy_predictor(hidden_states.detach(), duration_mask.unsqueeze(-1))
         else:
-            energy_predictions = self.energy_predictor(hidden_states, duration_masks.unsqueeze(-1))
+            energy_predictions = self.energy_predictor(hidden_states, duration_mask.unsqueeze(-1))
 
-        duration_predictions = self.duration_predictor(hidden_states, duration_masks, is_inference=is_inference)
+        duration_predictions = self.duration_predictor(hidden_states, duration_mask, is_inference=is_inference)
 
         if is_inference:
             # use prediction in inference
@@ -1423,14 +1421,19 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             hidden_states = self.length_regulator(hidden_states, duration_labels)
 
         # forward decoder
-        if spectrogram_mask is not None and not is_inference:
-            hidden_masks = spectrogram_mask.unsqueeze(-2)
+        if is_inference:
+            hidden_mask = None
         else:
-            hidden_masks = None
+            spectrogram_mask = (spectrogram_labels != -100).any(dim=-1)
+            spectrogram_mask = spectrogram_mask.int()
+            if self.reduction_factor > 1:
+                length_dim = spectrogram_mask.shape[1] - spectrogram_mask.shape[1] % self.reduction_factor
+                spectrogram_mask = spectrogram_mask[:, :, :length_dim]
+            hidden_mask = spectrogram_mask.unsqueeze(-2)
 
         decoder_outputs = self.decoder(
             hidden_states,
-            hidden_masks,
+            hidden_mask,
             output_hidden_states=output_hidden_states,
             output_attentions=output_attentions,
             return_dict=return_dict,
@@ -1441,6 +1444,8 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         loss = None
         if not is_inference:
             # calculate loss
+            loss_duration_mask = ~duration_mask
+            loss_spectrogram_mask = spectrogram_mask.unsqueeze(-1).bool()
             loss = self.criterion(
                 outputs_after_postnet=outputs_after_postnet,
                 outputs_before_postnet=outputs_before_postnet,
@@ -1451,8 +1456,8 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
                 duration_labels=duration_labels,
                 pitch_labels=pitch_labels,
                 energy_labels=energy_labels,
-                attention_mask=attention_mask,
-                out_mask=spectrogram_mask,
+                duration_mask=loss_duration_mask,
+                spectrogram_mask=loss_spectrogram_mask,
             )
 
         if not return_dict:
