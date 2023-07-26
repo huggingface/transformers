@@ -114,21 +114,17 @@ class ProcessorMixin(PushToHubMixin):
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
-        token = kwargs.pop("token", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
 
         if use_auth_token is not None:
             warnings.warn(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
             )
-            if token is not None:
+            if kwargs.get("token", None) is not None:
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
-            token = use_auth_token
-
-        if token is not None:
-            kwargs["token"] = token
+            kwargs["token"] = use_auth_token
 
         os.makedirs(save_directory, exist_ok=True)
 
