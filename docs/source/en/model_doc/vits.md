@@ -35,8 +35,8 @@ runs a forward pass using the MMS-TTS English checkpoint:
 import torch
 from transformers import VitsTokenizer, VitsModel, set_seed
 
-tokenizer = VitsTokenizer.from_pretrained("Matthijs/mms-tts-eng")
-model = VitsModel.from_pretrained("Matthijs/mms-tts-eng")
+tokenizer = VitsTokenizer.from_pretrained("sanchit-gandhi/mms-tts-eng")
+model = VitsModel.from_pretrained("sanchit-gandhi/mms-tts-eng")
 
 inputs = tokenizer(text="Hello, my dog is cute", return_tensors="pt")
 
@@ -61,8 +61,8 @@ speech using the MMS-TTS Korean checkpoint and the `uroman` package:
 import torch
 from transformers import VitsTokenizer, VitsModel, set_seed
 
-tokenizer = VitsTokenizer.from_pretrained("Matthijs/mms-tts-kor")
-model = VitsModel.from_pretrained("Matthijs/mms-tts-kor")
+tokenizer = VitsTokenizer.from_pretrained("sanchit-gandhi/mms-tts-kor")
+model = VitsModel.from_pretrained("sanchit-gandhi/mms-tts-kor")
 
 inputs = tokenizer(text="이봐 무슨 일이야", uroman_path="./uroman", return_tensors="pt")
 

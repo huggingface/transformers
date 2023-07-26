@@ -22,7 +22,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VITS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Matthijs/mms-tts-eng": "https://huggingface.co/Matthijs/mms-tts-eng/resolve/main/config.json",
+    "sanchit-gandhi/mms-tts-eng": "https://huggingface.co/sanchit-gandhi/mms-tts-eng/resolve/main/config.json",
 }
 
 
@@ -31,7 +31,7 @@ class VitsConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`VitsModel`]. It is used to instantiate a VITS
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the VITS
-    [Matthijs/mms-tts-eng](https://huggingface.co/Matthijs/mms-tts-eng) architecture.
+    [sanchit-gandhi/mms-tts-eng](https://huggingface.co/sanchit-gandhi/mms-tts-eng) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -139,10 +139,10 @@ class VitsConfig(PretrainedConfig):
     ```python
     >>> from transformers import VitsModel, VitsConfig
 
-    >>> # Initializing a "Matthijs/mms-tts-eng" style configuration
+    >>> # Initializing a "sanchit-gandhi/mms-tts-eng" style configuration
     >>> configuration = VitsConfig()
 
-    >>> # Initializing a model (with random weights) from the "Matthijs/mms-tts-eng" style configuration
+    >>> # Initializing a model (with random weights) from the "sanchit-gandhi/mms-tts-eng" style configuration
     >>> model = VitsModel(configuration)
 
     >>> # Accessing the model configuration
