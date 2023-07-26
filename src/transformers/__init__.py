@@ -3059,7 +3059,10 @@ else:
     _import_structure["sagemaker"] = []
     _import_structure["time_series_utils"] = []
     _import_structure["trainer"] = ["Trainer"]
-    _import_structure["trainer_pt_utils"] = ["torch_distributed_zero_first"]
+    _import_structure["trainer_pt_utils"] = [
+        "load_model_from_pretrained_only_on_rank0",
+        "torch_distributed_zero_first",
+    ]
     _import_structure["trainer_seq2seq"] = ["Seq2SeqTrainer"]
 
 # TensorFlow-backed objects
