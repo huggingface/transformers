@@ -2259,7 +2259,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         quantization_method_from_args = None
         if quantization_config is not None:
-            quantization_method_from_args = quantization_config.get("quant_method", QuantizationMethod.BITS_AND_BYTES)
+            quantization_method_from_args = getattr(
+                quantization_config, "quant_method", QuantizationMethod.BITS_AND_BYTES
+            )
 
         if quantization_config is None and (load_in_8bit or load_in_4bit):
             quantization_config, kwargs = BitsAndBytesConfig.from_dict(

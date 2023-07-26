@@ -16,7 +16,7 @@
 import tempfile
 import unittest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, GPTQConfig
 from transformers.testing_utils import (
     is_torch_available,
     require_accelerate,
@@ -58,8 +58,6 @@ class GPTQTest(unittest.TestCase):
     # called only once for all test in this class
     @classmethod
     def setUpClass(cls):
-        from optimum.gptq import GPTQQuantizer
-
         """
         Setup quantized model
         """
@@ -69,9 +67,17 @@ class GPTQTest(unittest.TestCase):
         cls.mem_fp16 = cls.model_fp16.get_memory_footprint()
 
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name, use_fast=True)
-        cls.quantizer = GPTQQuantizer(bits=cls.bits, group_size=cls.group_size, desc_act=cls.desc_act)
 
-        cls.quantized_model = cls.quantizer.quantize_model(cls.model_fp16, cls.tokenizer, cls.dataset)
+        quantization_config = GPTQConfig(
+            bits=cls.bits, dataset=cls.dataset, group_size=cls.group_size, desc_act=cls.desc_act
+        )
+
+        cls.quantized_model = AutoModelForCausalLM.from_pretrained(
+            cls.model_name,
+            torch_dtype=torch.float16,
+            device_map=cls.device_map,
+            quantization_config=quantization_config,
+        )
 
     def test_memory_footprint(self):
         r"""

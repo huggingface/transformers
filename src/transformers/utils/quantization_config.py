@@ -41,17 +41,21 @@ class QuantizationMethod(str, Enum):
 
 @dataclass
 class QuantizationConfigMixin:
+    """
+    Mixin class for quantization config
+    """
+
     quant_method: QuantizationMethod
 
     @classmethod
-    def from_dict(cls, config_dict, return_unused_kwargs, **kwargs):
+    def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
         """
         Instantiates a [`QuantizationConfig`] from a Python dictionary of parameters.
 
         Args:
             config_dict (`Dict[str, Any]`):
                 Dictionary that will be used to instantiate the configuration object.
-            return_unused_kwargs (`bool`):
+            return_unused_kwargs (`bool`,*optional*, defaults to `False`):
                 Whether or not to return a list of unused keyword arguments. Used for `from_pretrained` method in
                 `PreTrainedModel`.
             kwargs (`Dict[str, Any]`):
@@ -351,7 +355,7 @@ class GPTQConfig(QuantizationConfigMixin):
         pad_token_id: Optional[int] = None,
         **kwargs,
     ):
-        self.quant_method: QuantizationMethod.GPTQ
+        self.quant_method = QuantizationMethod.GPTQ
         self.bits = bits
         self.dataset = dataset
         self.group_size = group_size
