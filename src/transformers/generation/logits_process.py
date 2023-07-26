@@ -392,16 +392,48 @@ class TopKLogitsWarper(LogitsWarper):
 
 class TypicalLogitsWarper(LogitsWarper):
     r"""
-    [`LogitsWarper`] that performs typical decoding. See [Typical Decoding for Natural Language
-    Generation](https://arxiv.org/abs/2202.00666) for more information.
+    [`LogitsProcessor`] that applies typical warping techniques to the logits during text generation. It can be used to
+    control the randomness and diversity of generated text.
 
     Args:
-        mass (`float`):
-            Value of typical_p between 0 and 1 inclusive, defaults to 0.9.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
-            All filtered values will be set to this float value.
-        min_tokens_to_keep (`int`, *optional*, defaults to 1):
-            Minimum number of tokens that cannot be filtered.
+        temperature (:obj:`float`, optional, defaults to 1.0):
+            The temperature value controls the randomness of the generated text. Higher values (e.g., 1.5) make the
+            generated text more diverse, while lower values (e.g., 0.8) make it more focused and deterministic.
+
+        top_k (:obj:`int`, optional, defaults to 50):
+            The `top_k` parameter controls the number of most likely tokens to consider during sampling. It restricts
+            the sampling pool to the top `k` tokens with the highest probabilities at each step. Setting `top_k` to a
+            lower value (e.g., 20) will make the text generation more conservative.
+
+        top_p (:obj:`float`, optional, defaults to 1.0):
+            The `top_p` parameter, also known as nucleus sampling or probabilistic sampling, controls the cumulative
+            probability of the top tokens to consider during sampling. It defines the smallest set of tokens whose
+            cumulative probability exceeds `top_p`. Setting a lower `top_p` value (e.g., 0.9) will make the generation
+            more focused, as it includes only a narrower range of likely tokens.
+
+    Example:
+       
+    ```python
+    >>> from transformers import GPT2Tokenizer, GPT2LMHeadModel, TypicalLogitsWarper
+
+    >>> # Load pre-trained model and tokenizer
+    >>> model_name = "gpt2"
+    >>> tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+    >>> model = GPT2LMHeadModel.from_pretrained(model_name)
+
+    >>> # Create the warper with desired parameters
+    >>> warper = TypicalLogitsWarper(temperature=0.7, top_k=30, top_p=0.9)
+
+    >>> # Generate text using the model and warper
+    >>> input_text = "Once upon a time"
+    >>> input_ids = tokenizer.encode(input_text, return_tensors="pt")
+    >>> output = model.generate(input_ids, do_sample=True, max_length=50, warper=warper)
+
+    >>> # Decode and print the generated text
+    >>> generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
+    >>> print("Generated Text: ", generated_text)
+    Once upon a time, there was a beautiful princess who lived in a magical kingdom. She had a loyal and loving family, and they all lived happily ever after.
+    ```
     """
 
     def __init__(self, mass: float = 0.9, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
