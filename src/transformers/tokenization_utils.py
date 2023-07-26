@@ -424,7 +424,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 token.content != self.unk_token
                 and self.convert_tokens_to_ids(token.content) == self.convert_tokens_to_ids(self.unk_token)
             ):
-                new_idx = len(self.get_vocab()) + 1
+                new_idx = len(self.get_vocab()) + added_tokens
                 if not special_tokens and not token.special and hasattr(self, "do_lower_case") and self.do_lower_case:
                         token.content = token.content.lower()
                 self._added_tokens_encoder[token.content] =  new_idx
@@ -438,7 +438,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     self._added_tokens_encoder[token.content] = self._convert_token_to_id(token.content)
                     self._added_tokens_decoder.update({self._convert_token_to_id(token.content):token})
             else:
-                new_idx = len(self.get_vocab()) + 1
+                # TODO get vocab might not be the best way to get the current length with the added tokens
+                new_idx = len(self.get_vocab()) + added_tokens
                 self._added_tokens_encoder[token.content] =  new_idx
                 self._added_tokens_decoder[new_idx] = token
             added_tokens += 1

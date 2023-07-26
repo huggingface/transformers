@@ -2017,14 +2017,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         # Ids are provided. Should we still need to check?????
-        if "added_tokens" in init_kwargs:
-            print("The `tokenizer_config` will be used to initialise the added_tokens")
-            for token in init_kwargs.pop("added_tokens"):
-                id = token.pop("id")
+        if "added_tokens_decoder" in init_kwargs:
+            print(" `added_tokens_decoder` were saved in the `tokenizer_config.json` and will be used to initialise the added_tokens")
+            added_tokens_decoder = init_kwargs.pop("added_tokens_decoder")
+            for idx, token in added_tokens_decoder.items():
+                # TODO check that can be converted to int, and might be able to check idx on the fly! 
+                id = int(idx)
                 token = AddedToken(**token)
                 tokenizer._added_tokens_encoder[token.content] = id
                 tokenizer._added_tokens_decoder[id] = token
-
+                # TODO trie is not created. ADD safeguards to prevent people from modifying these attribute whithout adding a token! this way you force trie update. 
+                # OR allow modifications, but harder to maintain! 
+            tokenizer.create_trie()
         tokens_to_add = []
         # If there is a complementary special token map, load it
         special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
@@ -2048,9 +2052,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     setattr(tokenizer, key, final_value)
 
         if added_tokens_file is not None:
-            # for backward compatibility, two cases have to be treated:
-            # 1. the format is str:idx (legacy)
-            # 2. the format is idx: serialized(AddedToken)
+            # kept for backward comp. Make sure this updates the encoder and decoder added vocab
 
             with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                 added_tok_encoder = json.load(added_tokens_handle)
@@ -2080,6 +2082,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             f"Non-consecutive added token '{token}' found. "
                             f"Should have index {current_index} but has index {index} in saved vocabulary."
                         )
+            tokenizer.add_tokens([tok[0] for tok in tokens_to_add])
 
 
         tokenizer.add_tokens(tokens_to_add)
@@ -2182,7 +2185,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # TODO: Ensure the modified attributes (those are also in the __init__ kwargs) will give identical tokenizers
         # target_keys = self.init_kwargs.keys()
-        target_keys = ["model_max_length", "clean_up_tokenization_spaces"]
+        target_keys = ["model_max_length", "clean_up_tokenization_spaces"] # either add it here and keep convert added
         for k in target_keys:
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)
@@ -2193,11 +2196,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config.pop(file_id, None)
 
         # add_type_field=True to allow dicts in the kwargs / differentiate from AddedToken serialization
+        # TODO KEPT FOR LEGACY
         tokenizer_config = self.convert_added_tokens(tokenizer_config, add_type_field=True)
-        added_tokens = []
+
+        added_tokens = {}
         for key,value in self.added_tokens_decoder.items():
-            added_tokens.append({"id":key, **value.__getstate__()})
-        tokenizer_config["added_tokens"] = added_tokens
+            added_tokens[key] = value.__getstate__()
+        tokenizer_config["added_tokens_decoder"] = added_tokens
 
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
         tokenizer_class = self.__class__.__name__
