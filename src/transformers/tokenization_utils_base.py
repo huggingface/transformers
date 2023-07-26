@@ -1967,17 +1967,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # TODO Bring this back for legacy behaviour
         # HACK AddedTokens are all added tokens, no need for type
 
-        # def convert_added_tokens(obj: Union[AddedToken, Any]):
-        #     if isinstance(obj, dict) and "__type" in obj and obj["__type"] == "AddedToken":
-        #         obj.pop("__type")
-        #         return AddedToken(**obj)
-        #     elif isinstance(obj, (list, tuple)):
-        #         return [convert_added_tokens(o) for o in obj]
-        #     elif isinstance(obj, dict):
-        #         return {k: convert_added_tokens(v) for k, v in obj.items()}
-        #     return obj
-
-        # init_kwargs = convert_added_tokens(init_kwargs)
 
         # Set max length if needed
         if pretrained_model_name_or_path in cls.max_model_input_sizes:
@@ -2015,6 +2004,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Unable to load vocabulary from file. "
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
+        cls.legacy_save = True
 
         # Ids are provided. Should we still need to check?????
         if "added_tokens_decoder" in init_kwargs:
@@ -2029,63 +2019,68 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 # TODO trie is not created. ADD safeguards to prevent people from modifying these attribute whithout adding a token! this way you force trie update. 
                 # OR allow modifications, but harder to maintain! 
             tokenizer.create_trie()
-        tokens_to_add = []
-        # If there is a complementary special token map, load it
-        special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
-        if special_tokens_map_file is not None:
-            with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
-                special_tokens_map = json.load(special_tokens_map_handle)
-            for key, value in special_tokens_map.items():
-                if key in kwargs and kwargs[key]:
-                    # This value has already been redefined by the kwargs
-                    # We keep this new value and ignore the one stored in the special_tokens_map_file
-                    continue
-                if isinstance(value, dict):
-                    value = AddedToken(**value)
-                    tokens_to_add.append(value)
-                elif isinstance(value, list):
-                    final_value = []
-                    for token in value:
-                        added_token = AddedToken(**token) if isinstance(token, dict) else AddedToken(token)
-                        tokens_to_add.append(added_token)
-                        final_value.append(token)
-                    setattr(tokenizer, key, final_value)
 
-        if added_tokens_file is not None:
-            # kept for backward comp. Make sure this updates the encoder and decoder added vocab
+        elif cls.legacy_save:
+            init_kwargs = cls.convert_added_tokens(init_kwargs)
+            
+            # TODO make sure previous code works, but is also fixed. Meaning this correctly adds the tokens, sets eos and bos etc
+            tokens_to_add = []
+            # If there is a complementary special token map, load it
+            special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
+            if special_tokens_map_file is not None:
+                with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
+                    special_tokens_map = json.load(special_tokens_map_handle)
+                for key, value in special_tokens_map.items():
+                    if key in kwargs and kwargs[key]:
+                        # This value has already been redefined by the kwargs
+                        # We keep this new value and ignore the one stored in the special_tokens_map_file
+                        continue
+                    if isinstance(value, dict):
+                        value = AddedToken(**value)
+                        tokens_to_add.append(value)
+                    elif isinstance(value, list):
+                        final_value = []
+                        for token in value:
+                            added_token = AddedToken(**token) if isinstance(token, dict) else AddedToken(token)
+                            tokens_to_add.append(added_token)
+                            final_value.append(token)
+                            setattr(tokenizer, key, final_value)
 
-            with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
-                added_tok_encoder = json.load(added_tokens_handle)
-            for key, value in added_tok_encoder.items():
-                if isinstance(value, dict):
-                    token = AddedToken(**value)
-                    tokens_to_add.append(token)
-            # Sort added tokens by index
+            if added_tokens_file is not None:
+                # kept for backward comp. Make sure this updates the encoder and decoder added vocab
 
-            added_tok_encoder_sorted = sorted(tokens_to_add, key=lambda x: x[1])
-            current_index = tokenizer.vocab_size
-            for token, index in added_tok_encoder_sorted:
-                if index >= tokenizer.vocab_size:
-                    current_index+=1
+                with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
+                    added_tok_encoder = json.load(added_tokens_handle)
+                for key, value in added_tok_encoder.items():
+                    if isinstance(value, dict):
+                        token = AddedToken(**value)
+                        tokens_to_add.append(token)
+                # Sort added tokens by index
 
-                    if has_tokenizer_file and index != current_index and tokenizer.convert_tokens_to_ids(token) != index:
-                        # Tokenizer fast: added token needs to either be in the vocabulary with the proper index or the
-                        # index is the current length of the tokenizer (not in vocabulary)
-                        raise ValueError(
-                            f"Wrong index found for {token}: should be {tokenizer.convert_tokens_to_ids(token)} but found "
-                            f"{index}."
-                        )
-                    elif not has_tokenizer_file and index != current_index:
-                        # Tokenizer slow: added token cannot already be in the vocabulary so its index needs to be the
-                        # current length of the tokenizer.
-                        raise ValueError(
-                            f"Non-consecutive added token '{token}' found. "
-                            f"Should have index {current_index} but has index {index} in saved vocabulary."
-                        )
-            tokenizer.add_tokens([tok[0] for tok in tokens_to_add])
+                added_tok_encoder_sorted = sorted(tokens_to_add, key=lambda x: x[1])
+                current_index = tokenizer.vocab_size
+                for token, index in added_tok_encoder_sorted:
+                    if index >= tokenizer.vocab_size:
+                        current_index+=1
+
+                        if has_tokenizer_file and index != current_index and tokenizer.convert_tokens_to_ids(token) != index:
+                            # Tokenizer fast: added token needs to either be in the vocabulary with the proper index or the
+                            # index is the current length of the tokenizer (not in vocabulary)
+                            raise ValueError(
+                                f"Wrong index found for {token}: should be {tokenizer.convert_tokens_to_ids(token)} but found "
+                                f"{index}."
+                            )
+                        elif not has_tokenizer_file and index != current_index:
+                            # Tokenizer slow: added token cannot already be in the vocabulary so its index needs to be the
+                            # current length of the tokenizer.
+                            raise ValueError(
+                                f"Non-consecutive added token '{token}' found. "
+                                f"Should have index {current_index} but has index {index} in saved vocabulary."
+                            )
+                tokenizer.add_tokens([tok[0] for tok in tokens_to_add])
 
 
-        tokenizer.add_tokens(tokens_to_add)
+            tokenizer.add_tokens(tokens_to_add)
         return tokenizer
 
     @staticmethod
@@ -2185,7 +2180,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # TODO: Ensure the modified attributes (those are also in the __init__ kwargs) will give identical tokenizers
         # target_keys = self.init_kwargs.keys()
-        target_keys = ["model_max_length", "clean_up_tokenization_spaces"] # either add it here and keep convert added
+        target_keys = ["model_max_length", "clean_up_tokenization_spaces"]
         for k in target_keys:
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)
@@ -2196,14 +2191,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config.pop(file_id, None)
 
         # add_type_field=True to allow dicts in the kwargs / differentiate from AddedToken serialization
-        # TODO KEPT FOR LEGACY
         tokenizer_config = self.convert_added_tokens(tokenizer_config, add_type_field=True)
 
         added_tokens = {}
         for key,value in self.added_tokens_decoder.items():
             added_tokens[key] = value.__getstate__()
         tokenizer_config["added_tokens_decoder"] = added_tokens
-
+        self.legacy_save = False # FOR TESTING PURPOSES
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
         tokenizer_class = self.__class__.__name__
         # Remove the Fast at the end unless we have a special `PreTrainedTokenizerFast`
@@ -2229,12 +2223,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             out_str = json.dumps(tokenizer_config, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
             f.write(out_str)
         logger.info(f"tokenizer config file saved in {tokenizer_config_file}")
-
+        file_names = (tokenizer_config_file, )
         # Sanitize AddedTokens in special_tokens_map
-        # TODO don't erase legacy behaviour
-        write_dict = self.convert_added_tokens(self.special_tokens_map_extended, add_type_field=False)
+        if self.legacy_save:
+            write_dict = self.convert_added_tokens(self.special_tokens_map_extended, add_type_field=False)
+            with open(special_tokens_map_file, "w", encoding="utf-8") as f:
+                out_str = json.dumps(write_dict, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+                f.write(out_str)
+            logger.info(f"Special tokens file saved in {special_tokens_map_file}")
 
-        file_names = (tokenizer_config_file,)
+            file_names += (special_tokens_map_file,)
 
         save_files = self._save_pretrained(
             save_directory=save_directory,
@@ -2271,10 +2269,25 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             raise ValueError(
                 "Only fast tokenizers (instances of PreTrainedTokenizerFast) can be saved in non legacy format."
             )
-        # TODO bring legacy behaviour back when pushing to hub for people who use old versions! 
+
         save_directory = str(save_directory)
         vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
-        return file_names + vocab_files
+        
+        file_names += vocab_files
+        
+        if self.legacy_save:
+            added_tokens_file = os.path.join(
+                save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
+            )
+            added_vocab = self.get_added_vocab()
+            if added_vocab:
+                with open(added_tokens_file, "w", encoding="utf-8") as f:
+                    out_str = json.dumps(added_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+                    f.write(out_str)
+                    logger.info(f"added tokens file saved in {added_tokens_file}")
+            file_names += + (added_tokens_file,)
+
+        return file_names
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
