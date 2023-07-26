@@ -156,3 +156,38 @@ class GPTQTest(unittest.TestCase):
 @require_torch_multi_gpu
 class GPTQTestDeviceMap(GPTQTest):
     device_map = "auto"
+
+
+@require_accelerate
+@require_torch_multi_gpu
+class GPTQTestDeviceMapCPUOffload(GPTQTest):
+    device_map = {
+        "transformer.word_embeddings": 0,
+        "transformer.word_embeddings_layernorm": 0,
+        "lm_head": 0,
+        "transformer.h.0": 0,
+        "transformer.h.1": 0,
+        "transformer.h.2": 0,
+        "transformer.h.3": 0,
+        "transformer.h.4": 0,
+        "transformer.h.5": 0,
+        "transformer.h.6": 0,
+        "transformer.h.7": 0,
+        "transformer.h.8": 0,
+        "transformer.h.9": 0,
+        "transformer.h.10": 1,
+        "transformer.h.11": 1,
+        "transformer.h.12": 1,
+        "transformer.h.13": 1,
+        "transformer.h.14": 1,
+        "transformer.h.15": 1,
+        "transformer.h.16": 1,
+        "transformer.h.17": 0,
+        "transformer.h.18": "cpu",
+        "transformer.h.19": "cpu",
+        "transformer.h.20": "cpu",
+        "transformer.h.21": "cpu",
+        "transformer.h.22": "cpu",
+        "transformer.h.23": 1,
+        "transformer.ln_f": 0,
+    }
