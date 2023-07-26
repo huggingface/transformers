@@ -18,9 +18,9 @@ import copy
 import importlib.metadata
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 from packaging import version
 
@@ -296,69 +296,79 @@ class GPTQConfig(QuantizationConfigMixin):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
     loaded using `optimum` api for gptq quantization relying on auto_gptq backend.
-    """
 
-    quant_method: QuantizationMethod = QuantizationMethod.GPTQ
-    bits: int = field(
-        default=None, metadata={"help": "The number of bits to quantize to, supported numbers are (2, 3, 4, 8)."}
-    )
-    dataset: Union[List[str], str] = field(
-        default=None,
-        metadata={
-            "help": "The dataset used for quantization. You can provide your own dataset in a list of string"
-            "or just use the original datasets used in GPTQ paper ['wikitext2','c4','c4-new','ptb','ptb-new']"
-        },
-    )
-    group_size: int = field(
-        default=128,
-        metadata={
-            "help": "The group size to use for quantization. Recommended value is 128 and -1 uses per-column quantization."
-        },
-    )
-    damp_percent: float = field(
-        default=0.01,
-        metadata={
-            "help": "The percent of the average Hessian diagonal to use for dampening. Recommended value is 0.01."
-        },
-    )
-    desc_act: bool = field(
-        default=True,
-        metadata={
-            "help": "Whether to quantize columns in order of decreasing activation size."
+    Args:
+        bits (`int`):
+            The number of bits to quantize to, supported numbers are (2, 3, 4, 8).
+        dataset (`Union[List[str], str]`):
+            "The dataset used for quantization. You can provide your own dataset in a list of string" "or just use the
+            original datasets used in GPTQ paper ['wikitext2','c4','c4-new','ptb','ptb-new']"
+        group_size (`int`, *optional*, defaults to `128`):
+            "The group size to use for quantization. Recommended value is 128 and -1 uses per-column quantization.
+        damp_percent (`float`, *optional*, defaults to `0.01`):
+            The percent of the average Hessian diagonal to use for dampening. Recommended value is 0.01.
+        desc_act (`bool`, *optional*, defaults to `True`):
+             "Whether to quantize columns in order of decreasing activation size."
             "Setting it to False can significantly speed up inference but the perplexity may become slightly worse."
             "Also known as act-order."
-        },
-    )
-    sym: bool = field(default=True, metadata={"help": " Whether to use symetric quantization."})
-    true_sequential: bool = field(
-        default=True,
-        metadata={
-            "help": "Whether to perform sequential quantization even within a single Transformer block."
-            "Instead of quantizing the entire block at once, we perform layer-wise quantization."
-            "As a result, each layer undergoes quantization using inputs that have passed through the previously quantized layers."
-        },
-    )
-    pack_sequentially: bool = field(
-        default=False,
-        metadata={
-            "help": "Whether to pack the layer just after it is quantized. If False, we will pack the model at the end."
-        },
-    )
-    use_cuda_fp16: bool = field(
-        default=False,
-        metadata={"help": "Whether or not to use optimized cuda kernel for fp16 model. Need to have model in fp16."},
-    )
-    model_seqlen: int = field(default=None, metadata={"help": "The maximum sequence length that the model can take."})
-    block_name_to_quantize: str = field(default=None, metadata={"help": "The transformers block name to quantize."})
-    module_name_preceding_first_block: List[str] = field(
-        default=None, metadata={"help": "The layers that are preceding the first Transformer block."}
-    )
-    batch_size: int = field(default=1, metadata={"help": "The batch size used when processing the dataset"})
-    pad_token_id: int = field(
-        default=None, metadata={"help": "The pad token id. Needed to prepare the dataset when `batch_size` > 1."}
-    )
+        sym (`bool`, *optional*, defaults to `True`):
+            Whether to use symetric quantization.
+        true_sequential (`bool`, *optional*, defaults to `True`):
+            "Whether to perform sequential quantization even within a single Transformer block." "Instead of quantizing
+            the entire block at once, we perform layer-wise quantization." "As a result, each layer undergoes
+            quantization using inputs that have passed through the previously quantized layers."
+        pack_sequentially (`bool`, *optional*, defaults to `False`):
+            Whether to pack the layer just after it is quantized. If False, we will pack the model at the end.
+        use_cuda_fp16 (`bool`, *optional*, defaults to `False`):
+            "Whether or not to use optimized cuda kernel for fp16 model. Need to have model in fp16.
+        model_seqlen (`Optional[int]`, *optional*, defaults to `None`):
+            The maximum sequence length that the model can take.
+        block_name_to_quantize (`Optional[str]`, *optional*, defaults to `None`):
+            The transformers block name to quantize.
+        module_name_preceding_first_block (`Optional[List[str]]`, *optional*, defaults to `None`):
+            The layers that are preceding the first Transformer block.
+        batch_size (`int`, *optional*, defaults to `1`):
+            The batch size used when processing the dataset
+        pad_token_id (`Optional[int]`, *optional*, defaults to `None`):
+            The pad token id. Needed to prepare the dataset when `batch_size` > 1.
+    """
 
-    def __post_init__(self):
+    def __init__(
+        self,
+        bits: int,
+        dataset: Union[List[str], str],
+        group_size: int = 128,
+        damp_percent: float = 0.01,
+        desc_act: bool = True,
+        sym: bool = True,
+        true_sequential: bool = True,
+        pack_sequentially: bool = False,
+        use_cuda_fp16: bool = False,
+        model_seqlen: Optional[int] = None,
+        block_name_to_quantize: Optional[str] = None,
+        module_name_preceding_first_block: Optional[List[str]] = None,
+        batch_size: int = 1,
+        pad_token_id: Optional[int] = None,
+        **kwargs,
+    ):
+        self.quant_method: QuantizationMethod.GPTQ
+        self.bits = bits
+        self.dataset = dataset
+        self.group_size = group_size
+        self.damp_percent = damp_percent
+        self.desc_act = desc_act
+        self.sym = sym
+        self.true_sequential = true_sequential
+        self.pack_sequentially = pack_sequentially
+        self.use_cuda_fp16 = use_cuda_fp16
+        self.model_seqlen = model_seqlen
+        self.block_name_to_quantize = block_name_to_quantize
+        self.module_name_preceding_first_block = module_name_preceding_first_block
+        self.batch_size = batch_size
+        self.pad_token_id = pad_token_id
+        self.post_init()
+
+    def post_init(self):
         r"""
         Safety checker that arguments are correct
         """
