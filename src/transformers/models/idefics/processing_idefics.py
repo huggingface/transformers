@@ -105,7 +105,7 @@ class IdeficsProcessor(ProcessorMixin):
         image_processor (`IdeficsImageProcessor`):
             An instance of [`IdeficsImageProcessor`]. The image processor is a required input.
         tokenizer (`LlamaTokenizerFast`):
-            An instance of ['LlamaTokenizerFast`]. The tokenizer is a required input.
+            An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "IdeficsImageProcessor"

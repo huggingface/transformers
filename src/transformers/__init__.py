@@ -1931,7 +1931,6 @@ else:
         [
             "IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST",
             "IdeficsForCausalLM",
-            "IdeficsGatedCrossAttentionLayer",
             "IdeficsModel",
             "IdeficsPreTrainedModel",
         ]

@@ -1006,7 +1006,7 @@ LLAMA_INPUTS_DOCSTRING = r"""
 )
 class IdeficsModel(IdeficsPreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`IdeficsDecoderLayer`]
+    Transformer decoder consisting of `config.num_hidden_layers` layers. Each layer is a [`IdeficsDecoderLayer`]
 
     Args:
         config: IdeficsConfig
