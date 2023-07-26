@@ -700,8 +700,13 @@ class BatchEncoding(UserDict):
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             import torch
 
-            as_tensor = torch.tensor
             is_tensor = torch.is_tensor
+
+            def as_tensor(value, dtype=None):
+                if isinstance(value, list) and isinstance(value[0], np.ndarray):
+                    return torch.tensor(np.array(value))
+                return torch.tensor(value)
+
         elif tensor_type == TensorType.JAX:
             if not is_flax_available():
                 raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
