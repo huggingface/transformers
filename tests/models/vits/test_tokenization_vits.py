@@ -173,7 +173,7 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer_class in tokenizer_classes:
             tokenizer = tokenizer_class.from_pretrained(
                 "sanchit-gandhi/mms-tts-eng",
-                revision="55f109774a823f29e38e9d9fa555c1e914323c17",  # to pin the tokenizer version
+                revision="d188a254c84ae6cfd24deb7a8f5c0c1d349d7d9f",  # to pin the tokenizer version
             )
 
             encoding = tokenizer(sequences, padding=True, normalize=True)

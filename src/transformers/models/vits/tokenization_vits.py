@@ -145,6 +145,27 @@ class VitsTokenizer(PreTrainedTokenizer):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         return vocab
 
+    def normalize_text(self, input_string):
+        """Lowercase the input string, respecting any special token ids that may be part or entirely upper-cased."""
+        all_vocabulary = (self.encoder | self.added_tokens_encoder).keys()
+        filtered_text = ""
+
+        i = 0
+        while i < len(input_string):
+            found_match = False
+            for word in all_vocabulary:
+                if input_string[i : i + len(word)] == word:
+                    filtered_text += word
+                    i += len(word)
+                    found_match = True
+                    break
+
+            if not found_match:
+                filtered_text += input_string[i].lower()
+                i += 1
+
+        return filtered_text
+
     def _preprocess_char(self, text):
         """Special treatment of characters in certain languages"""
         if self.language == "ron":
@@ -152,9 +173,13 @@ class VitsTokenizer(PreTrainedTokenizer):
         return text
 
     def prepare_for_tokenization(
-        self, text: str, is_split_into_words: bool = False, normalize: bool = True, uroman_path: str = None, **kwargs
+        self, text: str, is_split_into_words: bool = False, normalize: bool = False, uroman_path: str = None, **kwargs
     ) -> Tuple[str, Dict[str, Any]]:
-        filtered_text = self._preprocess_char(text.lower() if normalize else text)
+        if normalize:
+            # normalise for casing
+            text = self.normalize_text(text)
+
+        filtered_text = self._preprocess_char(text)
 
         if self.is_uroman and uroman_path is not None:
             filtered_text = uromanize(filtered_text, uroman_path)
@@ -181,6 +206,7 @@ class VitsTokenizer(PreTrainedTokenizer):
             )
             filtered_text = re.sub(r"\s+", " ", filtered_text)
         elif normalize:
+            # strip any chars outside of the vocab (punctuation)
             filtered_text = "".join(list(filter(lambda char: char in self.encoder, filtered_text))).strip()
 
         return filtered_text, kwargs
