@@ -467,7 +467,7 @@ class TrainingArguments:
                     frozen and trainable paramteres. Useful in cases such as parameter-efficient fine-tuning. Please
                     refer this
                     [blog](https://dev-discuss.pytorch.org/t/rethinking-pytorch-fully-sharded-data-parallel-fsdp-from-first-principles/1019
-                - sync_module_states (`bool`, *optional*, defaults to `False`)
+                - sync_module_states (`bool`, *optional*, defaults to `True`)
                     If `"True"`, each individually wrapped FSDP unit will broadcast module parameters from rank 0 to
                     ensure they are the same across all ranks after initialization
                 - xla (`bool`, *optional*, defaults to `False`):
@@ -1603,7 +1603,7 @@ class TrainingArguments:
             prefetch_policy = self.fsdp_config.get("fsdp_backward_prefetch", "NO_PREFETCH")
             os.environ[f"{prefix}BACKWARD_PREFETCH"] = prefetch_policy.upper()
             os.environ[f"{prefix}FORWARD_PREFETCH"] = self.fsdp_config.get("forward_prefect", "false")
-            os.environ[f"{prefix}SYNC_MODULE_STATES"] = self.fsdp_config.get("sync_module_states", "false")
+            os.environ[f"{prefix}SYNC_MODULE_STATES"] = self.fsdp_config.get("sync_module_states", "true")
             os.environ[f"{prefix}USE_ORIG_PARAMS"] = self.fsdp_config.get("use_orig_params", "false")
 
         if self.tpu_metrics_debug:
