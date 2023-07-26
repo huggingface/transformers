@@ -174,10 +174,10 @@
     title: 패딩과 잘라내기
   - local: bertology
     title: BERTology
-  - local: in_translation
-    title: (번역중) Perplexity of fixed-length models
   - local: perplexity
     title: 고정 길이 모델의 펄플렉서티(Perplexity)
+  - local: pipeline_webserver
+    title: 추론 웹 서버를 위한 파이프라인
   title: (번역중) 개념 가이드
 - sections:
   - sections:

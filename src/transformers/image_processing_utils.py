@@ -25,6 +25,8 @@ import requests
 
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature as BaseBatchFeature
+from .image_transforms import normalize, rescale
+from .image_utils import ChannelDimension
 from .utils import (
     IMAGE_PROCESSOR_NAME,
     PushToHubMixin,
@@ -195,8 +197,7 @@ class ImageProcessingMixin(PushToHubMixin):
             token = use_auth_token
 
         if token is not None:
-            # change to `token` in a follow-up PR
-            kwargs["use_auth_token"] = token
+            kwargs["token"] = token
 
         image_processor_dict, kwargs = cls.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
 
@@ -217,6 +218,18 @@ class ImageProcessingMixin(PushToHubMixin):
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        use_auth_token = kwargs.pop("use_auth_token", None)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if kwargs.get("token", None) is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            kwargs["token"] = use_auth_token
+
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
@@ -245,7 +258,7 @@ class ImageProcessingMixin(PushToHubMixin):
                 repo_id,
                 files_timestamps,
                 commit_message=commit_message,
-                token=kwargs.get("use_auth_token"),
+                token=kwargs.get("token"),
             )
 
         return [output_image_processor_file]
@@ -272,6 +285,7 @@ class ImageProcessingMixin(PushToHubMixin):
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
+        token = kwargs.pop("token", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
@@ -279,6 +293,16 @@ class ImageProcessingMixin(PushToHubMixin):
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
 
         user_agent = {"file_type": "image processor", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -310,7 +334,7 @@ class ImageProcessingMixin(PushToHubMixin):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
-                    use_auth_token=use_auth_token,
+                    token=token,
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
@@ -515,6 +539,57 @@ class BaseImageProcessor(ImageProcessingMixin):
 
     def preprocess(self, images, **kwargs) -> BatchFeature:
         raise NotImplementedError("Each image processor must implement its own preprocess method")
+
+    def rescale(
+        self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
+    ) -> np.ndarray:
+        """
+        Rescale an image by a scale factor. image = image * scale.
+
+        Args:
+            image (`np.ndarray`):
+                Image to rescale.
+            scale (`float`):
+                The scaling factor to rescale pixel values by.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The rescaled image.
+        """
+        return rescale(image, scale=scale, data_format=data_format, **kwargs)
+
+    def normalize(
+        self,
+        image: np.ndarray,
+        mean: Union[float, Iterable[float]],
+        std: Union[float, Iterable[float]],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Normalize an image. image = (image - image_mean) / image_std.
+
+        Args:
+            image (`np.ndarray`):
+                Image to normalize.
+            mean (`float` or `Iterable[float]`):
+                Image mean to use for normalization.
+            std (`float` or `Iterable[float]`):
+                Image standard deviation to use for normalization.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The normalized image.
+        """
+        return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
 
 VALID_SIZE_DICT_KEYS = ({"height", "width"}, {"shortest_edge"}, {"shortest_edge", "longest_edge"}, {"longest_edge"})
