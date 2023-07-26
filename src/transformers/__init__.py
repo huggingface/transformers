@@ -2925,10 +2925,12 @@ else:
         ]
     )
     _import_structure["models.vivit"].extend(
-        "VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "VivitForVideoClassification",
-        "VivitModel",
-        "VivitPreTrainedModel",
+        [
+            "VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VivitForVideoClassification",
+            "VivitModel",
+            "VivitPreTrainedModel",
+        ]
     )
     _import_structure["models.wav2vec2"].extend(
         [
@@ -6562,10 +6564,10 @@ if TYPE_CHECKING:
             VitsPreTrainedModel,
         )
         from .models.vivit import (
-             VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-             VivitForVideoClassification,
-             VivitModel,
-             VivitPreTrainedModel,
+            VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VivitForVideoClassification,
+            VivitModel,
+            VivitPreTrainedModel,
         )
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,

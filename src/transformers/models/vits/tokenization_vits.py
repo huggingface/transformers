@@ -57,7 +57,7 @@ def has_non_roman_characters(input_string):
 
 def uromanize(input_string, uroman_path, language=None, chart=False):
     """Convert non-Roman strings to Roman using the `uroman` perl package."""
-    script_path = os.path.join(uroman_path, "/bin/uroman.pl")
+    script_path = os.path.join(uroman_path, "bin/uroman.pl")
 
     command = ["perl", script_path]
 
@@ -123,6 +123,7 @@ class VitsTokenizer(PreTrainedTokenizer):
             language=language,
             add_blank=add_blank,
             phonemize=phonemize,
+            is_uroman=is_uroman,
             **kwargs,
         )
 
