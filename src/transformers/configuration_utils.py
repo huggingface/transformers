@@ -478,7 +478,7 @@ class PretrainedConfig(PushToHubMixin):
         """
         # Some model config classes like CLIP define their own `from_pretrained` without the new argument `token` yet.
         if token is None:
-            token = kwargs.get("token", None)
+            token = kwargs.pop("token", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
 
         if use_auth_token is not None:
@@ -489,7 +489,10 @@ class PretrainedConfig(PushToHubMixin):
                 raise ValueError(
                     "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
                 )
-            kwargs["token"] = use_auth_token
+            token = use_auth_token
+
+        if token is not None:
+            kwargs["token"] = token
 
     @classmethod
     def from_pretrained(
