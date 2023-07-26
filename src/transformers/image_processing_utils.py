@@ -250,7 +250,7 @@ class ImageProcessingMixin(PushToHubMixin):
                 repo_id,
                 files_timestamps,
                 commit_message=commit_message,
-                token=token,
+                token=kwargs.get("token"),
             )
 
         return [output_image_processor_file]
