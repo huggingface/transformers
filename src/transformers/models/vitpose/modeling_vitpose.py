@@ -101,6 +101,7 @@ class ViTPosePatchEmbed(nn.Module):
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return embeddings
 
+## to be changed
 class ViTPoseAttention(nn.Module):
     def __init__(self, config: ViTConfig) -> None:
         super().__init__()
@@ -312,15 +313,16 @@ class ViTPoseTopDownHeatMap(nn.Module):
     ## deconv layers and all the other remaining things with the final layer
     def __init__(self, embed_dim=hidden_dim, num_keypoints=17):
         super().__init__()
-        self.deconv_layers = nn.Sequential(
-            nn.ConvTranspose2d(embed_dim, 256, kernel_size, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-            nn.ConvTranspose2d(256, 256, kernel_size=4, stride=2, padding=1, bias=False),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-        )
-        self.final_layer = nn.Conv2d(256, num_keypoints, kernel_siz=1, stride=1)
+        self.deconv_layers = []
+        for i in range(config.num_deconv_layer):
+            in_channels = config.embed_dim if i == 0 else config.num_deconv_filters[i - 1]
+            out_channels = config.num_deconv_filters[i]
+            kernel_size = num_deconv_kernels[i]
+            self.deconv_layer.append(nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride=2, padding=1, bias=False))
+            self.deconv_layer.append(nn.BatchNorm2d(out_channels))
+            self.deconv_layer.append(nn.ReLU(inplace=True))
+        self.deconv_layers = nn.Sequential(*deconv_layers)
+        self.final_layer = nn.Conv2d(config.num_deconv_filters[-1], config.num_output_channels, kernel_siz=1, stride=1)
 
     def forward(self, x):
         x = self.deconv_layers(x)
@@ -328,10 +330,10 @@ class ViTPoseTopDownHeatMap(nn.Module):
         return keypoints
 
 class TopDown(nn.Module):
-    def __init__(self, in_channels=3, img_size=224, patch_size=1, ):
+    def __init__(self, config: ViTConfig):
         super().__init__()
-        self.backbone = ViTBackbone(in_channels)
-        self.keypoint_head = ViTPoseTopDownHeatMap(embed_dim, num_keypoints)
+        self.backbone = ViTBackbone(config)
+        self.keypoint_head = ViTPoseTopDownHeatMap(config)
 
     def forward(self, x):
         x = self.backbone(x)

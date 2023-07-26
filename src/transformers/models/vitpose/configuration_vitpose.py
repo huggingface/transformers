@@ -107,6 +107,7 @@ class ViTConfig(PretrainedConfig):
         keypoint_num_deconv_filters = (256, 256),
         keypoint_num_deconv_kernels= (4,4),
         dropout_p = 0.0,
+        num_output_channels = 17,
 
 
         hidden_size=768,
