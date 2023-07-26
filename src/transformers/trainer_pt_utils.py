@@ -1133,14 +1133,8 @@ def load_model_from_pretrained_only_on_rank0(model_cls, config_cls, model_name_o
     state = PartialState()
     if state.is_main_process:
         model = model_cls.from_pretrained(model_name_or_path, return_dict=True)
-        param_init_fn = None
     else:
         with torch.device("meta"):
             config = config_cls.from_pretrained(model_name_or_path)
             model = model_cls.from_config(config)
-
-        def param_init_fn(x):
-            return x.to_empty(device=state.device, recurse=False)
-
-    model.train()
-    return model, param_init_fn
+    return model
