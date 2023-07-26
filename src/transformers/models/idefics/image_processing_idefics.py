@@ -16,6 +16,9 @@
 
 from typing import Dict, List, Optional, Union
 
+import PIL
+from PIL import Image
+
 from ...image_processing_utils import BaseImageProcessor
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -25,15 +28,12 @@ from ...image_utils import (
     make_list_of_images,
     valid_images,
 )
-from ...utils import TensorType, is_torchvision_available, is_vision_available, logging
+from ...utils import TensorType, is_torchvision_available, logging
 
 
 if is_torchvision_available():
     import torchvision.transforms as transforms
 
-if is_vision_available():
-    import PIL
-    from PIL import Image
 
 logger = logging.get_logger(__name__)
 
