@@ -1015,8 +1015,9 @@ class Pipeline(_ScikitCompat):
         raise NotImplementedError("postprocess not implemented")
 
     def get_inference_context(self):
-        inference_mode_supported = version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.9.0")
-        model_was_not_compiled = version.parse(version.parse(torch.__version__).base_version) >= version.parse("2.0.0") \
+        torch_version = version.parse(torch.__version__).base_version
+        inference_mode_supported = version.parse(torch_version) >= version.parse("1.9.0")
+        model_was_not_compiled = version.parse(torch_version) >= version.parse("2.0.0") \
                                     and not isinstance(self.model, torch._dynamo.eval_frame.OptimizedModule) 
         inference_context = (
             torch.inference_mode
