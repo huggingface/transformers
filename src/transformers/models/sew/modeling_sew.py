@@ -723,7 +723,6 @@ class SEWPreTrainedModel(PreTrainedModel):
     base_model_prefix = "sew"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""

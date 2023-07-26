@@ -19,7 +19,7 @@ import tempfile
 import unittest
 
 from transformers import SPIECE_UNDERLINE, AddedToken, BatchEncoding, T5Tokenizer, T5TokenizerFast
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_seqio, require_tokenizers, slow
 from transformers.utils import cached_property, is_tf_available, is_torch_available
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -381,7 +381,7 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_get_sentinel_tokens(self):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=10)
         sentinel_tokens = tokenizer.get_sentinel_tokens()
-        self.assertEquals(len(sentinel_tokens), 10)
+        self.assertEqual(len(sentinel_tokens), 10)
         self.assertListEqual(sorted(sentinel_tokens), sorted([f"<extra_id_{str(i)}>" for i in range(0, 10)]))
         self.assertTrue([re.search(r"<extra_id_\d+>", token) is not None for token in sentinel_tokens])
 
@@ -392,10 +392,159 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_get_sentinel_tokens_for_fasttokenizer(self):
         tokenizer = T5TokenizerFast(SAMPLE_VOCAB, extra_ids=10)
         sentinel_tokens = tokenizer.get_sentinel_tokens()
-        self.assertEquals(len(sentinel_tokens), 10)
+        self.assertEqual(len(sentinel_tokens), 10)
         self.assertListEqual(sorted(sentinel_tokens), sorted([f"<extra_id_{str(i)}>" for i in range(0, 10)]))
         self.assertTrue([re.search(r"<extra_id_\d+>", token) is not None for token in sentinel_tokens])
 
     def test_get_sentinel_token_ids_for_fasttokenizer(self):
         tokenizer = T5TokenizerFast(SAMPLE_VOCAB, extra_ids=10)
         self.assertListEqual(sorted(tokenizer.get_sentinel_token_ids()), sorted(range(1000, 1010)))
+
+
+@require_sentencepiece
+@require_tokenizers
+class CommonSpmIntegrationTests(unittest.TestCase):
+    """
+    A class that regroups important test to make sure that we properly handle the special tokens.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=0, legacy=False)
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<extra_id_0>"]})
+        tokenizer._create_trie(tokenizer.all_special_tokens)
+        # TODO ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
+        # So the extra ids are split....
+        cls.tokenizer = tokenizer
+
+    def test_add_dummy_prefix(self):
+        # make sure `'▁'` is prepended, and outputs match sp_model's
+        # `sentencepiece.NormalizerSpec.add_dummy_prefix` attribute
+        input_ids = self.tokenizer.encode(". Hello", add_special_tokens=False)
+        self.assertEqual(input_ids, [7, 4, 156, 86, 20])
+        sp_encode = self.tokenizer.sp_model.encode(". Hello")
+        self.assertEqual(input_ids, sp_encode)
+        tokens = self.tokenizer.tokenize(". Hello")
+        self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
+
+    def test_remove_extra_whitespaces(self):
+        # make sure the extra spaces are eaten
+        # sentencepiece.NormalizerSpec.remove_extra_whitespaces attribute
+        input_ids = self.tokenizer.encode("       . Hello", add_special_tokens=False)
+        self.assertEqual(input_ids, [7, 4, 156, 86, 20])
+        sp_encode = self.tokenizer.sp_model.encode("       . Hello")
+        self.assertEqual(input_ids, sp_encode)
+        tokens = self.tokenizer.tokenize(" . Hello")
+        self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
+
+        # `'▁'` is also a whitespace
+        input_ids = self.tokenizer.encode("▁He is not")
+        self.assertEqual(input_ids, [156, 46, 44, 2])
+        tokens = self.tokenizer.tokenize("▁He is not")
+        self.assertEqual(tokens, ["▁He", "▁is", "▁not"])  # no extra space added
+
+        input_ids = self.tokenizer.encode("▁He is not<extra_id_0>             ▁He")
+        # here t5x does not eat with lstrip, so there is and extra ▁He in the original one
+        # TODO @arthurzucker we should probably not srip right since it is done by default
+        # for certain models...
+        self.assertEqual(input_ids, [156, 46, 44, 999, 0, 2])
+        tokens = self.tokenizer.tokenize("▁He is not<extra_id_0>              ▁He")
+        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<extra_id_0>", "He"])  # spaces are eaten by spm + our strip
+        # make sure that the output after the extra id is the same as if
+        # extra_id was not there
+        input_ids = self.tokenizer.encode("▁He is not             ▁He")
+        self.assertEqual(input_ids, [156, 46, 44, 156, 2])
+        tokens = self.tokenizer.tokenize("▁He is not              ▁He")
+        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "▁He"])  # spaces are eaten by spm even if not start
+
+    def test_character_after_special_token(self):
+        # Make sure that `tokenizer.tokenize` is similar to
+        # adding the equivalent special token to the vocab
+        input_ids = self.tokenizer.encode("Hey <extra_id_0>I")
+        self.assertEqual(input_ids, [156, 30, 999, 100, 2])
+        tokens = self.tokenizer.tokenize("Hey <extra_id_0>I")
+        self.assertEqual(tokens, ["▁He", "y", "<extra_id_0>", "I"])
+
+        input_ids = self.tokenizer.encode("Hello, <extra_id_0>,")
+        self.assertEqual(input_ids, [156, 86, 20, 3, 999, 3, 2])
+        tokens = self.tokenizer.tokenize("Hello, <extra_id_0>,")
+        self.assertEqual(tokens, ["▁He", "ll", "o", ",", "<extra_id_0>", ","])
+
+    def test_special_tokens_strip(self):
+        input_ids = self.tokenizer.encode(" <extra_id_0> ,")
+        self.assertEqual(input_ids, [999, 3, 2])
+        tokens = self.tokenizer.tokenize(" <extra_id_0> ,")
+        # spaces are eaten by rstrip / lstrip
+        self.assertEqual(tokens, ["<extra_id_0>", ","])
+
+        # test with a begin of word like `▁He`
+        input_ids = self.tokenizer.encode("No <extra_id_0> He")
+        self.assertEqual(input_ids, [284, 999, 0, 2])
+        # spaces are eaten by rstrip / lstrip, so this is expected. Don't strip otherwise you break
+        tokens = self.tokenizer.tokenize("No <extra_id_0> He")
+        self.assertEqual(tokens, ["▁No", "<extra_id_0>", "He"])
+
+        # Make sure this does not happen if we don't strip
+        tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=0)
+        tokenizer.add_special_tokens({"bos_token": AddedToken("<bos>")})
+        input_ids = tokenizer.encode("No <bos> He")
+        self.assertEqual(input_ids, [284, 1000, 156, 2])
+        tokens = tokenizer.tokenize("No <bos> He")
+        # the first `' '` after `'No'` is eaten by spm:
+        self.assertEqual(tokenizer.sp_model.encode("No         ", out_type=str), ["▁No"])
+        self.assertEqual(tokens, ["▁No", "<bos>", "▁He"])
+
+    @require_seqio
+    @unittest.skipIf(
+        os.getenv("RUN_TOKENIZER_INTEGRATION", "0") == "0",
+        "RUN_TOKENIZER_INTEGRATION=1 to run tokenizer integration tests",
+    )
+    def test_integration_seqio(self):
+        from datasets import load_dataset
+        from seqio import SentencePieceVocabulary
+
+        ds = load_dataset("xnli", "all_languages", split="train+test+validation")
+
+        # TODO ArthurZucker fix the 3 commented tests with #23909
+        input_texts = [
+            "Bonjour <extra_id_0>.",
+            # "Bonjour<extra_id_0>.",  # this will fail. In T5 the special token has to be at the end.
+            # because in T5 they add `_<extra_id_0>` to the vocab, not `<extra_id_0>`.
+            "                   Hey <extra_id_0>I love you",
+            # "Hey <extra_id_0> I love you", # this will fail, we strip left, to _I vs I
+            # "Hey <extra_id_0>▁He", # this will fail for the same reason, we replace `_` then strip
+        ]
+
+        import tqdm
+
+        # Test with umt5
+        vocab_path = "gs://t5-data/vocabs/umt5.256000/sentencepiece.model"
+        t5x_tokenizer = SentencePieceVocabulary(vocab_path, extra_ids=300)
+        hf_tokenizer = T5Tokenizer.from_pretrained("google/umt5-small", legacy=False)
+        for text in input_texts:
+            self.assertEqual(
+                hf_tokenizer.encode(text, add_special_tokens=False), t5x_tokenizer.tokenizer.tokenize(text), f"{text}"
+            )
+        for texts in tqdm.tqdm(ds["premise"]):
+            for text in texts:
+                self.assertEqual(
+                    hf_tokenizer.encode(text, add_special_tokens=False),
+                    t5x_tokenizer.tokenizer.tokenize(text),
+                    f"{text}",
+                )
+
+        # Test with T5
+        hf_tokenizer = T5Tokenizer.from_pretrained("t5-small")
+        vocab_path = "gs://t5-data/vocabs/cc_all.32000/sentencepiece.model"
+        t5x_tokenizer = SentencePieceVocabulary(vocab_path, extra_ids=300)
+        for text in input_texts:
+            self.assertEqual(
+                hf_tokenizer.encode(text, add_special_tokens=False), t5x_tokenizer.tokenizer.tokenize(text), f"{text}"
+            )
+        for texts in tqdm.tqdm(ds["premise"]):
+            for text in texts:
+                self.assertEqual(
+                    hf_tokenizer.encode(text, add_special_tokens=False),
+                    t5x_tokenizer.tokenizer.tokenize(text),
+                    f"{text}",
+                )

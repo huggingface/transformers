@@ -46,7 +46,7 @@ if is_tf_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import ViTImageProcessor
 
 
 class TFViTMAEModelTester:
@@ -60,7 +60,7 @@ class TFViTMAEModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -424,8 +424,8 @@ def prepare_img():
 @require_vision
 class TFViTMAEModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("facebook/vit-mae-base") if is_vision_available() else None
+    def default_image_processor(self):
+        return ViTImageProcessor.from_pretrained("facebook/vit-mae-base") if is_vision_available() else None
 
     @slow
     def test_inference_for_pretraining(self):
@@ -434,9 +434,9 @@ class TFViTMAEModelIntegrationTest(unittest.TestCase):
 
         model = TFViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base")
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="tf")
+        inputs = image_processor(images=image, return_tensors="tf")
 
         # prepare a noise vector that will be also used for testing the TF model
         # (this way we can ensure that the PT and TF models operate on the same inputs)

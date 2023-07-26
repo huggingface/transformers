@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Testing suite for the PyTorch MaskFormer model. """
 
+import copy
 import inspect
 import unittest
 
@@ -35,7 +36,7 @@ if is_torch_available():
     from transformers import MaskFormerForInstanceSegmentation, MaskFormerModel
 
     if is_vision_available():
-        from transformers import MaskFormerFeatureExtractor
+        from transformers import MaskFormerImageProcessor
 
 if is_vision_available():
     from PIL import Image
@@ -54,6 +55,8 @@ class MaskFormerModelTester:
         max_size=32 * 6,
         num_labels=4,
         mask_feature_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -65,6 +68,9 @@ class MaskFormerModelTester:
         self.max_size = max_size
         self.num_labels = num_labels
         self.mask_feature_size = mask_feature_size
+        # This is passed to the decoder config. We add it to the model tester here for testing
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size]).to(
@@ -85,11 +91,18 @@ class MaskFormerModelTester:
         return MaskFormerConfig.from_backbone_and_decoder_configs(
             backbone_config=SwinConfig(
                 depths=[1, 1, 1, 1],
+                embed_dim=16,
+                hidden_size=32,
+                num_heads=[1, 1, 2, 2],
             ),
             decoder_config=DetrConfig(
-                decoder_ffn_dim=128,
+                decoder_ffn_dim=64,
+                decoder_layers=self.num_hidden_layers,
+                decoder_attention_heads=self.num_attention_heads,
+                encoder_ffn_dim=64,
+                encoder_layers=self.num_hidden_layers,
+                encoder_attention_heads=self.num_attention_heads,
                 num_queries=self.num_queries,
-                decoder_attention_heads=2,
                 d_model=self.mask_feature_size,
             ),
             mask_feature_size=self.mask_feature_size,
@@ -190,6 +203,27 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.model_tester = MaskFormerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MaskFormerConfig, has_text_modality=False)
 
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = copy.deepcopy(inputs_dict)
+
+        if return_labels:
+            if model_class in [MaskFormerForInstanceSegmentation]:
+                inputs_dict["mask_labels"] = torch.zeros(
+                    (
+                        self.model_tester.batch_size,
+                        self.model_tester.num_labels,
+                        self.model_tester.min_size,
+                        self.model_tester.max_size,
+                    ),
+                    dtype=torch.float32,
+                    device=torch_device,
+                )
+                inputs_dict["class_labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.num_labels), dtype=torch.long, device=torch_device
+                )
+
+        return inputs_dict
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -259,26 +293,47 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.model_tester.create_and_check_maskformer_model(config, **inputs, output_hidden_states=True)
 
     def test_attention_outputs(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
 
         for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            outputs = model(**inputs, output_attentions=True)
-            self.assertTrue(outputs.attentions is not None)
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
-    def test_training(self):
-        if not self.model_tester.is_training:
-            return
-        # only MaskFormerForInstanceSegmentation has the loss
-        model_class = self.all_model_classes[1]
-        config, pixel_values, pixel_mask, mask_labels, class_labels = self.model_tester.prepare_config_and_inputs()
+            # Check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            out_len = len(outputs)
 
-        model = model_class(config)
-        model.to(torch_device)
-        model.train()
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            # encoder_hidden_states, pixel_decoder_hidden_states, transformer_decoder_hidden_states, hidden_states
+            added_hidden_states = 4
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-        loss = model(pixel_values, mask_labels=mask_labels, class_labels=class_labels).loss
-        loss.backward()
+            self_attentions = outputs.attentions
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
 
     def test_retain_grad_hidden_states_attentions(self):
         # only MaskFormerForInstanceSegmentation has the loss
@@ -326,18 +381,18 @@ def prepare_img():
 @slow
 class MaskFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
-            MaskFormerFeatureExtractor.from_pretrained("facebook/maskformer-swin-small-coco")
+            MaskFormerImageProcessor.from_pretrained("facebook/maskformer-swin-small-coco")
             if is_vision_available()
             else None
         )
 
     def test_inference_no_head(self):
         model = MaskFormerModel.from_pretrained("facebook/maskformer-swin-small-coco").to(torch_device)
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
         inputs_shape = inputs["pixel_values"].shape
         # check size is divisible by 32
         self.assertTrue((inputs_shape[-1] % 32) == 0 and (inputs_shape[-2] % 32) == 0)
@@ -380,9 +435,9 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
             .to(torch_device)
             .eval()
         )
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
         inputs_shape = inputs["pixel_values"].shape
         # check size is divisible by 32
         self.assertTrue((inputs_shape[-1] % 32) == 0 and (inputs_shape[-2] % 32) == 0)
@@ -424,9 +479,9 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
             .to(torch_device)
             .eval()
         )
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
         inputs_shape = inputs["pixel_values"].shape
         # check size is divisible by 32
         self.assertTrue((inputs_shape[-1] % 32) == 0 and (inputs_shape[-2] % 32) == 0)
@@ -460,9 +515,9 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
             .to(torch_device)
             .eval()
         )
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
 
-        inputs = feature_extractor(
+        inputs = image_processor(
             [np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333))],
             segmentation_maps=[np.zeros((384, 384)).astype(np.float32), np.zeros((384, 384)).astype(np.float32)],
             return_tensors="pt",

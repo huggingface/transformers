@@ -56,8 +56,8 @@ class Seq2seqTrainerTester(TestCasePlus):
             ]
             batch["decoder_attention_mask"] = outputs.attention_mask
 
-            assert all([len(x) == 512 for x in inputs.input_ids])
-            assert all([len(x) == 128 for x in outputs.input_ids])
+            assert all(len(x) == 512 for x in inputs.input_ids)
+            assert all(len(x) == 128 for x in outputs.input_ids)
 
             return batch
 

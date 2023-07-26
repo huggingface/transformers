@@ -48,6 +48,7 @@ _tools_are_initialized = False
 
 BASE_PYTHON_TOOLS = {
     "print": print,
+    "range": range,
     "float": float,
     "int": int,
     "bool": bool,
@@ -703,7 +704,7 @@ class LocalAgent(Agent):
         Args:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
                 The name of a repo on the Hub or a local path to a folder containing both model and tokenizer.
-            kwargs:
+            kwargs (`Dict[str, Any]`, *optional*):
                 Keyword arguments passed along to [`~PreTrainedModel.from_pretrained`].
 
         Example:
@@ -724,7 +725,7 @@ class LocalAgent(Agent):
     def _model_device(self):
         if hasattr(self.model, "hf_device_map"):
             return list(self.model.hf_device_map.values())[0]
-        for param in self.mode.parameters():
+        for param in self.model.parameters():
             return param.device
 
     def generate_one(self, prompt, stop):

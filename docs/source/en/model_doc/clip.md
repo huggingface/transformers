@@ -50,10 +50,10 @@ product between the projected image and text features is then used as a similar 
 To feed images to the Transformer encoder, each image is split into a sequence of fixed-size non-overlapping patches,
 which are then linearly embedded. A [CLS] token is added to serve as representation of an entire image. The authors
 also add absolute position embeddings, and feed the resulting sequence of vectors to a standard Transformer encoder.
-The [`CLIPFeatureExtractor`] can be used to resize (or rescale) and normalize images for the model.
+The [`CLIPImageProcessor`] can be used to resize (or rescale) and normalize images for the model.
 
 The [`CLIPTokenizer`] is used to encode the text. The [`CLIPProcessor`] wraps
-[`CLIPFeatureExtractor`] and [`CLIPTokenizer`] into a single instance to both
+[`CLIPImageProcessor`] and [`CLIPTokenizer`] into a single instance to both
 encode the text and prepare the images. The following example shows how to get the image-text similarity scores using
 [`CLIPProcessor`] and [`CLIPModel`].
 

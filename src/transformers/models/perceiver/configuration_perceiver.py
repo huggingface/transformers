@@ -97,6 +97,8 @@ class PerceiverConfig(PretrainedConfig):
             Number of audio samples per frame for the multimodal autoencoding model.
         samples_per_patch (`int`, *optional*, defaults to 16):
             Number of audio samples per patch when preprocessing the audio for the multimodal autoencoding model.
+        output_num_channels (`int`, *optional*, defaults to 512):
+            Number of output channels for each modalitiy decoder.
         output_shape (`List[int]`, *optional*, defaults to `[1, 16, 224, 224]`):
             Shape of the output (batch_size, num_frames, height, width) for the video decoder queries of the multimodal
             autoencoding model. This excludes the channel dimension.
@@ -144,6 +146,8 @@ class PerceiverConfig(PretrainedConfig):
         audio_samples_per_frame=1920,
         samples_per_patch=16,
         output_shape=[1, 16, 224, 224],
+        output_num_channels=512,
+        _label_trainable_num_channels=1024,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -177,6 +181,8 @@ class PerceiverConfig(PretrainedConfig):
         self.audio_samples_per_frame = audio_samples_per_frame
         self.samples_per_patch = samples_per_patch
         self.output_shape = output_shape
+        self.output_num_channels = output_num_channels
+        self._label_trainable_num_channels = _label_trainable_num_channels
 
 
 class PerceiverOnnxConfig(OnnxConfig):

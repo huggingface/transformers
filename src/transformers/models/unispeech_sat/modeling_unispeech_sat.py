@@ -988,7 +988,6 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
     config_class = UniSpeechSatConfig
     base_model_prefix = "unispeech_sat"
     main_input_name = "input_values"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):

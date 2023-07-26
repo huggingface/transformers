@@ -903,9 +903,10 @@ class Pipeline(_ScikitCompat):
                 yield
         else:
             if self.device.type == "cuda":
-                torch.cuda.set_device(self.device)
-
-            yield
+                with torch.cuda.device(self.device):
+                    yield
+            else:
+                yield
 
     def ensure_tensor_on_device(self, **inputs):
         """
@@ -951,12 +952,18 @@ class Pipeline(_ScikitCompat):
         """
         if not isinstance(supported_models, list):  # Create from a model mapping
             supported_models_names = []
-            for config, model in supported_models.items():
+            for _, model_name in supported_models.items():
                 # Mapping can now contain tuples of models for the same configuration.
-                if isinstance(model, tuple):
-                    supported_models_names.extend([_model.__name__ for _model in model])
+                if isinstance(model_name, tuple):
+                    supported_models_names.extend(list(model_name))
                 else:
-                    supported_models_names.append(model.__name__)
+                    supported_models_names.append(model_name)
+            if hasattr(supported_models, "_model_mapping"):
+                for _, model in supported_models._model_mapping._extra_content.items():
+                    if isinstance(model_name, tuple):
+                        supported_models_names.extend([m.__name__ for m in model])
+                    else:
+                        supported_models_names.append(model.__name__)
             supported_models = supported_models_names
         if self.model.__class__.__name__ not in supported_models:
             logger.error(

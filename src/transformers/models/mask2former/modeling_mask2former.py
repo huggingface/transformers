@@ -23,7 +23,7 @@ import numpy as np
 import torch
 from torch import Tensor, nn
 
-from ... import AutoBackbone, SwinConfig
+from ... import AutoBackbone
 from ...activations import ACT2FN
 from ...file_utils import (
     ModelOutput,
@@ -1388,10 +1388,7 @@ class Mask2FormerPixelLevelModule(nn.Module):
         """
         super().__init__()
 
-        backbone_config_dict = config.backbone_config.to_dict()
-        backbone_config = SwinConfig.from_dict(backbone_config_dict)
-
-        self.encoder = AutoBackbone.from_config(backbone_config)
+        self.encoder = AutoBackbone.from_config(config.backbone_config)
         self.decoder = Mask2FormerPixelDecoder(config, feature_channels=self.encoder.channels)
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> Mask2FormerPixelLevelModuleOutput:
@@ -2109,8 +2106,8 @@ MASK2FORMER_START_DOCSTRING = r"""
 MASK2FORMER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`AutoImageProcessor.preprocess`] for details.
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
 

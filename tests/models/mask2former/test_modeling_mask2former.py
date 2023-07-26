@@ -54,6 +54,8 @@ class Mask2FormerModelTester:
         max_size=32 * 8,
         num_labels=4,
         hidden_dim=64,
+        num_attention_heads=4,
+        num_hidden_layers=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -66,6 +68,8 @@ class Mask2FormerModelTester:
         self.num_labels = num_labels
         self.hidden_dim = hidden_dim
         self.mask_feature_size = hidden_dim
+        self.num_attention_heads = num_attention_heads
+        self.num_hidden_layers = num_hidden_layers
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.min_size, self.max_size]).to(
@@ -85,15 +89,25 @@ class Mask2FormerModelTester:
     def get_config(self):
         config = Mask2FormerConfig(
             hidden_size=self.hidden_dim,
+            num_attention_heads=self.num_attention_heads,
+            num_hidden_layers=self.num_hidden_layers,
+            encoder_feedforward_dim=16,
+            dim_feedforward=32,
+            num_queries=self.num_queries,
+            num_labels=self.num_labels,
+            decoder_layers=2,
+            encoder_layers=2,
+            feature_size=16,
         )
         config.num_queries = self.num_queries
         config.num_labels = self.num_labels
 
+        config.backbone_config.embed_dim = 16
         config.backbone_config.depths = [1, 1, 1, 1]
+        config.backbone_config.hidden_size = 16
         config.backbone_config.num_channels = self.num_channels
+        config.backbone_config.num_heads = [1, 1, 2, 2]
 
-        config.encoder_feedforward_dim = 64
-        config.dim_feedforward = 128
         config.hidden_dim = self.hidden_dim
         config.mask_feature_size = self.hidden_dim
         config.feature_size = self.hidden_dim
@@ -325,14 +339,14 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         return "facebook/mask2former-swin-small-coco-instance"
 
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return Mask2FormerImageProcessor.from_pretrained(self.model_checkpoints) if is_vision_available() else None
 
     def test_inference_no_head(self):
         model = Mask2FormerModel.from_pretrained(self.model_checkpoints).to(torch_device)
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
         inputs_shape = inputs["pixel_values"].shape
         # check size is divisible by 32
         self.assertTrue((inputs_shape[-1] % 32) == 0 and (inputs_shape[-2] % 32) == 0)
@@ -371,9 +385,9 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
     def test_inference_universal_segmentation_head(self):
         model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
         inputs_shape = inputs["pixel_values"].shape
         # check size is divisible by 32
         self.assertTrue((inputs_shape[-1] % 32) == 0 and (inputs_shape[-2] % 32) == 0)
@@ -408,9 +422,9 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
     def test_with_segmentation_maps_and_loss(self):
         model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
 
-        inputs = feature_extractor(
+        inputs = image_processor(
             [np.zeros((3, 800, 1333)), np.zeros((3, 800, 1333))],
             segmentation_maps=[np.zeros((384, 384)).astype(np.float32), np.zeros((384, 384)).astype(np.float32)],
             return_tensors="pt",

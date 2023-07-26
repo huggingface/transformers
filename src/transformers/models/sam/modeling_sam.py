@@ -507,8 +507,8 @@ class SamMaskDecoder(nn.Module):
 
         # Expand per-image data in batch direction to be per-point
         image_embeddings = image_embeddings + dense_prompt_embeddings
-        image_embeddings = image_embeddings.repeat(point_batch_size, 1, 1, 1)
-        image_positional_embeddings = image_positional_embeddings.repeat(point_batch_size, 1, 1, 1)
+        image_embeddings = image_embeddings.repeat_interleave(point_batch_size, 0)
+        image_positional_embeddings = image_positional_embeddings.repeat_interleave(point_batch_size, 0)
 
         # Run the transformer, image_positional_embedding are consumed
         point_embedding, image_embeddings, attentions = self.transformer(
@@ -1190,7 +1190,6 @@ SAM_INPUTS_DOCSTRING = r"""
     SAM_START_DOCSTRING,
 )
 class SamModel(SamPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"prompt_encoder.shared_embedding.positional_embedding"]
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
 
     def __init__(self, config):

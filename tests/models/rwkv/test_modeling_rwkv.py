@@ -334,7 +334,7 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                     if param.requires_grad:
                         # check if it's a ones like
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
-                elif any([x in name for x in ["time_mix_key", "time_mix_receptance"]]):
+                elif any(x in name for x in ["time_mix_key", "time_mix_receptance"]):
                     if param.requires_grad:
                         self.assertInterval(
                             param.data,

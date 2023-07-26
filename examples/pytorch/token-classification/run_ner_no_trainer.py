@@ -28,6 +28,7 @@ from pathlib import Path
 
 import datasets
 import evaluate
+import numpy as np
 import torch
 from accelerate import Accelerator
 from accelerate.logging import get_logger
@@ -55,7 +56,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.31.0.dev0")
+check_min_version("4.32.0.dev0")
 
 logger = get_logger(__name__)
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
@@ -777,6 +778,12 @@ def main():
             if args.with_tracking:
                 all_results.update({"train_loss": total_loss.item() / len(train_dataloader)})
             with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
+                # Convert all float64 & int64 type numbers to float & int for json serialization
+                for key, value in all_results.items():
+                    if isinstance(value, np.float64):
+                        all_results[key] = float(value)
+                    elif isinstance(value, np.int64):
+                        all_results[key] = int(value)
                 json.dump(all_results, f)
 
 
