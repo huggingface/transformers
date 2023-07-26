@@ -33,7 +33,6 @@ from packaging import version
 from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
-from . import AutoTokenizer
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
@@ -77,7 +76,7 @@ from .utils import (
 )
 from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 from .utils.import_utils import ENV_VARS_TRUE_VALUES, is_sagemaker_mp_enabled
-from .utils.quantization_config import AutoGPTQConfig, BitsAndBytesConfig, QuantizationMethod
+from .utils.quantization_config import BitsAndBytesConfig, GPTQConfig, QuantizationMethod
 from .utils.versions import require_version_core
 
 
@@ -2376,7 +2375,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # Need to protect the import
                 from optimum.gptq import GPTQQuantizer
             if quantization_method_from_config == QuantizationMethod.GPTQ:
-                quantization_config = AutoGPTQConfig.from_dict(config.quantization_config)
+                quantization_config = GPTQConfig.from_dict(config.quantization_config)
                 torch_dtype = config.torch_dtype
             quantizer = GPTQQuantizer.from_dict(quantization_config.to_dict())
 
@@ -3013,9 +3012,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             dispatch_model(model, **kwargs)
 
         if quantization_method_from_args == QuantizationMethod.GPTQ:
+            from . import AutoTokenizer
+
             tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, use_fast=True)
             quantizer.quantize_model(model, tokenizer)
-            model.config.quantization_config = AutoGPTQConfig.from_dict(quantizer.to_dict())
+            model.config.quantization_config = GPTQConfig.from_dict(quantizer.to_dict())
 
         if output_loading_info:
             if loading_info is None:

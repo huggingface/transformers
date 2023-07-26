@@ -40,7 +40,7 @@ class QuantizationMethod(str, Enum):
 
 
 @dataclass
-class QuantizationConfig:
+class QuantizationConfigMixin:
     quant_method: QuantizationMethod
 
     @classmethod
@@ -123,7 +123,7 @@ class QuantizationConfig:
 
 
 @dataclass
-class BitsAndBytesConfig(QuantizationConfig):
+class BitsAndBytesConfig(QuantizationConfigMixin):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
     loaded using `bitsandbytes`.
@@ -292,7 +292,7 @@ class BitsAndBytesConfig(QuantizationConfig):
 
 
 @dataclass
-class AutoGPTQConfig(QuantizationConfig):
+class GPTQConfig(QuantizationConfigMixin):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
     loaded using `optimum` api for gptq quantization relying on auto_gptq backend.
@@ -317,12 +317,6 @@ class AutoGPTQConfig(QuantizationConfig):
     )
     damp_percent: float = field(
         default=0.01,
-        metadata={
-            "help": "The percent of the average Hessian diagonal to use for dampening. Recommended value is 0.01."
-        },
-    )
-    dataset: Union[str, List[str]] = field(
-        default=None,
         metadata={
             "help": "The percent of the average Hessian diagonal to use for dampening. Recommended value is 0.01."
         },
@@ -359,11 +353,9 @@ class AutoGPTQConfig(QuantizationConfig):
     module_name_preceding_first_block: List[str] = field(
         default=None, metadata={"help": "The layers that are preceding the first Transformer block."}
     )
-
-    batch_size: int = field(default=1, metadata={"help": " The batch size of the dataset"})
-
+    batch_size: int = field(default=1, metadata={"help": "The batch size used when processing the dataset"})
     pad_token_id: int = field(
-        default=None, metadata={"help": "  The pad token id. Needed to prepare the dataset when `batch_size` > 1."}
+        default=None, metadata={"help": "The pad token id. Needed to prepare the dataset when `batch_size` > 1."}
     )
 
     def __post_init__(self):
@@ -376,3 +368,13 @@ class AutoGPTQConfig(QuantizationConfig):
             raise ValueError("group_size must be greater than 0 or equal to -1")
         if not (0 < self.damp_percent < 1):
             raise ValueError("damp_percent must between 0 and 1.")
+        if isinstance(self.dataset, str) and self.dataset not in ["wikitext2", "c4", "c4-new", "ptb", "ptb-new"]:
+            raise ValueError(
+                f"""You have entered a string value for dataset. You can only choose between
+                ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
+            )
+        elif not isinstance(self.dataset, list):
+            raise ValueError(
+                f"""dataset needs to be either a list of string or a value in
+                ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
+            )
