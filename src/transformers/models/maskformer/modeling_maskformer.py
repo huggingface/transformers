@@ -1628,9 +1628,9 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         hidden_states = None
 
         if output_hidden_states:
-            encoder_hidden_states = pixel_level_module_output.encoder_hidden_states
-            pixel_decoder_hidden_states = pixel_level_module_output.decoder_hidden_states
-            transformer_decoder_hidden_states = transformer_module_output.hidden_states
+            encoder_hidden_states = pixel_level_module_output[2]
+            pixel_decoder_hidden_states = pixel_level_module_output[3]
+            transformer_decoder_hidden_states = transformer_module_output[1]
             hidden_states = encoder_hidden_states + pixel_decoder_hidden_states + transformer_decoder_hidden_states
 
         output = MaskFormerModelOutput(
@@ -1864,7 +1864,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         if not return_dict:
             output = tuple(
                 v
-                for v in (loss, *outputs.values(), class_queries_logits, masks_queries_logits, auxiliary_logits)
+                for v in (loss, class_queries_logits, masks_queries_logits, auxiliary_logits, *outputs.values())
                 if v is not None
             )
             return output
