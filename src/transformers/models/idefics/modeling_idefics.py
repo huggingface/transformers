@@ -801,6 +801,7 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        no_images: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
@@ -814,6 +815,7 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+            no_images (`bool`, *optional*, defaults to `False`): If `True` the vision part is ignored
         """
         if image_hidden_states is None:
             raise ValueError(
@@ -836,7 +838,9 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
             output_attentions=output_attentions,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.config, training=self.training)
-        hidden_states = residual + self.act_cross_attn(self.alpha_cross_attn) * hidden_states
+        # when there are no images the model is used in pure language mode
+        gate = 0 if no_images else 1
+        hidden_states = residual + gate * self.act_cross_attn(self.alpha_cross_attn) * hidden_states
 
         # Fully Connected
         residual = hidden_states
@@ -1161,24 +1165,21 @@ class IdeficsModel(IdeficsPreTrainedModel):
         else:
             position_ids = position_ids.view(-1, seq_length).long()
 
-        # if pixel_values is None and image_embeddings is None:
-        #     # Hack to use the model in full language modeling mode. The value 224 is hard-coded.
-        #     pixel_values = torch.ones(batch_size, 1, 3, 224, 224)
-        if pixel_values is not None and image_embeddings is not None:
-            raise ValueError("You cannot specify both pixel_values and image_embeddings at the same time")
-        elif pixel_values is not None:
-            pixel_values = pixel_values.to(dtype=self.dtype, device=device)  # fp16 compatibility
-            batch_size, num_images = pixel_values.size(0), pixel_values.size(1)
-            pixel_values = pixel_values.contiguous().view(batch_size * num_images, *pixel_values.shape[2:])
+        no_images = False
+        if pixel_values is None and image_embeddings is None:
+            raise ValueError("Either pixel_values and image_embeddings have to be not-None.")
 
-            # print(pixel_values.shape)
-            # print(pixel_values)
+        elif pixel_values is not None and image_embeddings is not None:
+            raise ValueError("You cannot specify both pixel_values and image_embeddings at the same time")
+
+        elif pixel_values is not None:
+            no_images = len(torch.nonzero(pixel_values)) == 0
+            pixel_values = pixel_values.to(dtype=self.dtype, device=device)  # fp16 compatibility
+            batch_size, num_images = pixel_values.shape[:2]
+            pixel_values = pixel_values.contiguous().view(batch_size * num_images, *pixel_values.shape[2:])
 
             # Get sequence from the vision encoder
             image_hidden_states = self.vision_model(pixel_values=pixel_values).last_hidden_state
-
-            # print(image_hidden_states)
-            # print(image_hidden_states.shape)
 
         elif image_embeddings is not None:
             batch_size, num_images, image_seq_len, image_hidden_size = image_embeddings.size()
@@ -1247,6 +1248,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
                 image_attention_mask,
                 output_attentions,
                 use_cache,
+                no_images,
                 layer_idx,
                 cross_layer_interval,
                 gated_cross_attn_layers,
@@ -1262,6 +1264,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
                         output_attentions=output_attentions,
                         use_cache=use_cache,
                         past_key_value=None,  # not implemented
+                        no_images=no_images,
                     )
                     hidden_states = outputs[0]
 
@@ -1295,6 +1298,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
                     image_attention_mask,
                     output_attentions,
                     use_cache,
+                    no_images,
                     idx,
                     self.cross_layer_interval,
                     self.gated_cross_attn_layers,
@@ -1310,6 +1314,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
                     image_attention_mask=image_attention_mask,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
+                    no_images=no_images,
                     layer_idx=idx,
                     cross_layer_interval=self.cross_layer_interval,
                     gated_cross_attn_layers=self.gated_cross_attn_layers,

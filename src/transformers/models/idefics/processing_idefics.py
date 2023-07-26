@@ -256,6 +256,7 @@ class IdeficsProcessor(ProcessorMixin):
         max_num_images = max(len(x) for x in all_images)
         max_seq_len = max(len(x) for x in all_texts)
 
+        at_least_one_image = sum(len(x) for x in all_images) > 0
         output_input_ids = []
         output_images = []
         output_attention_masks = []
@@ -277,12 +278,13 @@ class IdeficsProcessor(ProcessorMixin):
                 padded_image_tensor = torch.zeros(max_num_images, *current_images.size()[1:])
                 padded_image_tensor[: current_images.size(0)] = current_images
             else:
+                # XXX: deal with the hardcoded num_channels -> preprocessing config
                 default_image_size = (
                     3,
                     self.image_processor.image_size,
                     self.image_processor.image_size,
                 )
-                padded_image_tensor = torch.zeros(max_num_images, *default_image_size)
+                padded_image_tensor = torch.zeros(1, *default_image_size)
 
             output_images.append(padded_image_tensor)
             output_input_ids.append(torch.tensor(padded_input_ids))
@@ -293,8 +295,16 @@ class IdeficsProcessor(ProcessorMixin):
         output_images = torch.stack(output_images)
         output_attention_masks = torch.stack(output_attention_masks)
 
-        image_attention_mask, _ = image_attention_mask_for_packed_input_ids(output_input_ids, self.tokenizer)
-        image_attention_mask = incremental_to_binary_attention_mask(image_attention_mask, num_classes=max_num_images)
+        if at_least_one_image:
+            image_attention_mask, _ = image_attention_mask_for_packed_input_ids(output_input_ids, self.tokenizer)
+            image_attention_mask = incremental_to_binary_attention_mask(
+                image_attention_mask, num_classes=max_num_images
+            )
+        else:
+            # in full language mode we set the image mask to all-0s
+            image_attention_mask = torch.zeros(
+                output_input_ids.shape[0], output_input_ids.shape[1], 1, dtype=torch.bool
+            )
 
         inputs = {
             "input_ids": output_input_ids,
