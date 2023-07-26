@@ -3014,10 +3014,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             dispatch_model(model, **kwargs)
 
         if quantization_method_from_args == QuantizationMethod.GPTQ:
-            from . import AutoTokenizer
-
-            tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, use_fast=True)
-            quantizer.quantize_model(model, tokenizer)
+            if quantization_config.tokenizer is None:
+                quantization_config.tokenizer = pretrained_model_name_or_path
+            quantizer.quantize_model(model, quantization_config.tokenizer)
             model.config.quantization_config = GPTQConfig.from_dict(quantizer.to_dict())
 
         if output_loading_info:

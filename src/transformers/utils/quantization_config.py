@@ -304,6 +304,14 @@ class GPTQConfig(QuantizationConfigMixin):
     Args:
         bits (`int`):
             The number of bits to quantize to, supported numbers are (2, 3, 4, 8).
+        tokenizer(`Any`):
+            The tokenizer used to process the dataset. You can pass either:
+                - A custom tokenizer object.
+                - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
+                    Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
+                    user or organization name, like `dbmdz/bert-base-german-cased`.
+                - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
+                    using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
         dataset (`Union[List[str]]`, *optional*, defaults to `None`):
             "The dataset used for quantization. You can provide your own dataset in a list of string" "or just use the
             original datasets used in GPTQ paper ['wikitext2','c4','c4-new','ptb','ptb-new']"
@@ -340,6 +348,7 @@ class GPTQConfig(QuantizationConfigMixin):
     def __init__(
         self,
         bits: int,
+        tokenizer: Any = None,
         dataset: Optional[Union[List[str], str]] = None,
         group_size: int = 128,
         damp_percent: float = 0.01,
@@ -357,6 +366,7 @@ class GPTQConfig(QuantizationConfigMixin):
     ):
         self.quant_method = QuantizationMethod.GPTQ
         self.bits = bits
+        self.tokenizer = tokenizer
         self.dataset = dataset
         self.group_size = group_size
         self.damp_percent = damp_percent
@@ -382,13 +392,14 @@ class GPTQConfig(QuantizationConfigMixin):
             raise ValueError("group_size must be greater than 0 or equal to -1")
         if not (0 < self.damp_percent < 1):
             raise ValueError("damp_percent must between 0 and 1.")
-        if isinstance(self.dataset, str) and self.dataset not in ["wikitext2", "c4", "c4-new", "ptb", "ptb-new"]:
-            raise ValueError(
-                f"""You have entered a string value for dataset. You can only choose between
-                ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
-            )
-        elif not isinstance(self.dataset, list):
-            raise ValueError(
-                f"""dataset needs to be either a list of string or a value in
-                ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
-            )
+        if self.dataset is not None:
+            if isinstance(self.dataset, str) and self.dataset not in ["wikitext2", "c4", "c4-new", "ptb", "ptb-new"]:
+                raise ValueError(
+                    f"""You have entered a string value for dataset. You can only choose between
+                    ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
+                )
+            elif not isinstance(self.dataset, list):
+                raise ValueError(
+                    f"""dataset needs to be either a list of string or a value in
+                    ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
+                )
