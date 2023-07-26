@@ -20,7 +20,6 @@ import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
-    center_crop,
     get_resize_output_image_size,
     resize,
     to_channel_dimension_format,
@@ -148,30 +147,6 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         else:
             raise ValueError(f"Size must contain 'height' and 'width' keys or 'shortest_edge' key. Got {size.keys()}")
         return resize(image, size=size, resample=resample, data_format=data_format, **kwargs)
-
-    def center_crop(
-        self,
-        image: np.ndarray,
-        size: Dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Center crop an image. If the image is too small to be cropped to the size given, it will be padded (so the
-        returned result will always be of size `size`).
-
-        Args:
-            image (`np.ndarray`):
-                Image to center crop.
-            size (`Dict[str, int]`):
-                Size of the output image in the form of a dictionary with keys `height` and `width`.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` parameter must contain the keys (height, width). Got {size.keys()}")
-        return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
 
     def preprocess(
         self,
