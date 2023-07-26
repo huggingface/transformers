@@ -731,6 +731,7 @@ _import_structure = {
     ],
     "utils.bitsandbytes": [],
     "utils.quantization_config": ["BitsAndBytesConfig"],
+    "uils.quantization_config": ["GPTQConfig"]
 }
 
 # sentencepiece-backed objects
@@ -4674,6 +4675,7 @@ if TYPE_CHECKING:
 
     # bitsandbytes config
     from .utils.quantization_config import BitsAndBytesConfig
+    from .utils.quantization_config import GPTQConfig
 
     try:
         if not is_sentencepiece_available():
