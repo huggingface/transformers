@@ -402,6 +402,10 @@ class Trainer:
                     "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit"
                     " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
                 )
+        if getattr(model, "_is_gptq_quantized", False):
+            raise ValueError(
+                    "Training GTPQ quantized model is not possible yet."
+                )
 
         # Setup Sharded DDP training
         self.sharded_ddp = None

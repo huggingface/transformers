@@ -3017,6 +3017,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if quantization_config.tokenizer is None:
                 quantization_config.tokenizer = pretrained_model_name_or_path
             quantizer.quantize_model(model, quantization_config.tokenizer)
+            model._is_gptq_quantized = True
             model.config.quantization_config = GPTQConfig.from_dict(quantizer.to_dict())
 
         if output_loading_info:
