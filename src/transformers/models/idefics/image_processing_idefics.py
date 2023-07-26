@@ -58,6 +58,8 @@ class IdeficsImageProcessor(BaseImageProcessor):
     Args:
         image_size (`int` *optional*, defaults to `224`):
             Resize to image size
+        image_num_channels (`int`, *optional*, defaults to `3`):
+            Defines the number of image channels
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
             Mean to use if normalizing the image. This is a float or list of floats the length of the number of
             channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
@@ -78,6 +80,7 @@ class IdeficsImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         image_size: int = 224,
+        image_num_channels: int = 3,
         image_mean: Optional[Union[float, List[float]]] = IMAGENET_STANDARD_MEAN,
         image_std: Optional[Union[float, List[float]]] = IMAGENET_STANDARD_STD,
         eval_mode: bool = True,
@@ -86,6 +89,7 @@ class IdeficsImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
 
         self.image_size = image_size
+        self.image_num_channels = image_num_channels
         self.image_mean = image_mean
         self.image_std = image_std
 
@@ -108,6 +112,8 @@ class IdeficsImageProcessor(BaseImageProcessor):
                 Image to preprocess.
             image_size (`int`, *optional*, defaults to `self.image_size`):
                 Controls the size of the image after `resize`.
+            image_num_channels (`int`, *optional*, defaults to `self.image_size`):
+                Defines the number of image channels
             image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
                 Image mean to normalize the image by if `do_normalize` is set to `True`.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):

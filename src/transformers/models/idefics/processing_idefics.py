@@ -118,6 +118,12 @@ class IdeficsProcessor(ProcessorMixin):
         self.current_processor = self.image_processor
         self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
 
+        self.default_image_dims = (
+            self.image_processor.image_num_channels,
+            self.image_processor.image_size,
+            self.image_processor.image_size,
+        )
+
     def __call__(
         self,
         prompts: Union[List[TextInput], List[List[TextInput]]],
@@ -256,8 +262,11 @@ class IdeficsProcessor(ProcessorMixin):
             all_texts.append(encoding["input_ids"])
             all_images.append(real_images)
 
-        max_num_images = max(len(x) for x in all_images)
         max_seq_len = max(len(x) for x in all_texts)
+
+        # max_num_images has to be at least 1 even when there are no images
+        max_num_images = max(len(x) for x in all_images)
+        max_num_images = max(1, max_num_images)
 
         at_least_one_image = sum(len(x) for x in all_images) > 0
         output_input_ids = []
@@ -281,13 +290,7 @@ class IdeficsProcessor(ProcessorMixin):
                 padded_image_tensor = torch.zeros(max_num_images, *current_images.size()[1:])
                 padded_image_tensor[: current_images.size(0)] = current_images
             else:
-                # XXX: deal with the hardcoded num_channels -> preprocessing config
-                default_image_size = (
-                    3,
-                    self.image_processor.image_size,
-                    self.image_processor.image_size,
-                )
-                padded_image_tensor = torch.zeros(1, *default_image_size)
+                padded_image_tensor = torch.zeros(max_num_images, *self.default_image_dims)
 
             output_images.append(padded_image_tensor)
             output_input_ids.append(torch.tensor(padded_input_ids))
