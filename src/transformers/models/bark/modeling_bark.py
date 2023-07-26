@@ -23,8 +23,13 @@ from torch.nn import functional as F
 
 from ...generation.logits_process import AlternatingCodebooksLogitsProcessor, SuppressTokensLogitsProcessor
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
-from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, is_torch_cuda_available, logging
+from ...modeling_utils import PreTrainedModel, get_parameter_device
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_accelerate_available,
+    logging,
+)
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
@@ -287,6 +292,26 @@ class BarkPreTrainedModel(PreTrainedModel):
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
+
+    @property
+    def device(self) -> torch.device:
+        """
+        `torch.device`: The device on which the module is (assuming that all the module parameters are on the same
+        device).
+        """
+
+        # if has _hf_hook, has been offloaded so the device has to be found in the hook
+        if not hasattr(self, "_hf_hook"):
+            return get_parameter_device(self)
+        for module in self.modules():
+            if (
+                hasattr(module, "_hf_hook")
+                and hasattr(module._hf_hook, "execution_device")
+                and module._hf_hook.execution_device is not None
+            ):
+                return torch.device(module._hf_hook.execution_device)
+
+        return get_parameter_device(self)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, BarkCausalModel) or isinstance(module, BarkFineModel) or isinstance(module, BarkModel):
@@ -1376,6 +1401,63 @@ class BarkModel(BarkPreTrainedModel):
 
         self.config = config
 
+    @property
+    def device(self) -> torch.device:
+        """
+        `torch.device`: The device on which the module is (assuming that all the module parameters are on the same
+        device).
+        """
+        # for bark_model, device must be verified on its sub-models
+        # if has _hf_hook, has been offloaded so the device has to be found in the hook
+        if not hasattr(self.semantic, "_hf_hook"):
+            return get_parameter_device(self)
+        for module in self.semantic.modules():
+            if (
+                hasattr(module, "_hf_hook")
+                and hasattr(module._hf_hook, "execution_device")
+                and module._hf_hook.execution_device is not None
+            ):
+                return torch.device(module._hf_hook.execution_device)
+
+    def enable_cpu_offload(self, gpu_id: Optional[int] = 0):
+        r"""
+        Offloads all sub-models to CPU using accelerate, reducing memory usage with a low impact on performance. This
+        method moves one whole sub-model at a time to the GPU when it is used, and the sub-model remains in GPU until
+        the next sub-model runs.
+
+        Args:
+            gpu_id (`Optional[int]`, *optional*, defaults to 0):
+                GPU id on which the sub-models will be loaded and offloaded.
+        """
+        if is_accelerate_available():
+            from accelerate import cpu_offload_with_hook
+        else:
+            raise ImportError("`enable_model_cpu_offload` requires `accelerate`.")
+
+        device = torch.device(f"cuda:{gpu_id}")
+
+        if self.device.type != "cpu":
+            self.to("cpu")
+            torch.cuda.empty_cache()  # otherwise we don't see the memory savings (but they probably exist)
+
+        # this layer is used outside the first foward pass of semantic so need to be loaded before semantic
+        self.semantic.input_embeds_layer, _ = cpu_offload_with_hook(self.semantic.input_embeds_layer, device)
+
+        hook = None
+        for cpu_offloaded_model in [
+            self.semantic,
+            self.coarse_acoustics,
+            self.fine_acoustics,
+        ]:
+            _, hook = cpu_offload_with_hook(cpu_offloaded_model, device, prev_module_hook=hook)
+
+        self.fine_acoustics_hook = hook
+
+        _, hook = cpu_offload_with_hook(self.codec_model, device, prev_module_hook=hook)
+
+        # We'll offload the last model manually.
+        self.codec_model_hook = hook
+
     def codec_decode(self, fine_output):
         """Turn quantized audio codes into audio array using encodec."""
 
@@ -1391,7 +1473,6 @@ class BarkModel(BarkPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         history_prompt: Optional[Dict[str, torch.Tensor]] = None,
-        offload_to_cpu: Optional[bool] = False,
         **kwargs,
     ) -> torch.LongTensor:
         """
@@ -1403,9 +1484,6 @@ class BarkModel(BarkPreTrainedModel):
                 longest generation among the batch.
             history_prompt (`Optional[Dict[str,torch.Tensor]]`, *optional*):
                 Optional `Bark` speaker prompt. Note that for now, this model takes only one speaker prompt per batch.
-            offload_to_cpu (`Optional[bool]`, *optional*, defaults to `False`):
-                If `True` and when used with a GPU device, each sub-model will be loaded onto the GPU before use and
-                unloaded after use. Efficiency is even greater when the model is initially loaded onto the CPU.
             kwargs (*optional*): Remaining dictionary of keyword arguments. Keyword arguments are of two types:
 
                 - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model.
@@ -1465,17 +1543,6 @@ class BarkModel(BarkPreTrainedModel):
                 if key not in kwargs_fine:
                     kwargs_fine[key] = value
 
-        if offload_to_cpu and not is_torch_cuda_available():
-            logger.warning_once(
-                """`offload_to_cpu=True` but no Cuda device was found.
-                    Offload_to_cpu will be set to False and won't be used. Make sure to use a GPU."""
-            )
-
-        offload_to_cpu = offload_to_cpu and is_torch_cuda_available()
-
-        if offload_to_cpu:
-            self.semantic = self.semantic.to("cuda")
-
         # 1. Generate from the semantic model
         semantic_output = self.semantic.generate(
             input_ids,
@@ -1483,10 +1550,6 @@ class BarkModel(BarkPreTrainedModel):
             semantic_generation_config=semantic_generation_config,
             **kwargs_semantic,
         )
-
-        if offload_to_cpu:
-            self.semantic = self.semantic.to("cpu")
-            self.coarse_acoustics = self.coarse_acoustics.to("cuda")
 
         # 2. Generate from the coarse model
         coarse_output = self.coarse_acoustics.generate(
@@ -1497,10 +1560,6 @@ class BarkModel(BarkPreTrainedModel):
             codebook_size=self.generation_config.codebook_size,
             **kwargs_coarse,
         )
-
-        if offload_to_cpu:
-            self.coarse_output = self.coarse_acoustics.to("cpu")
-            self.fine_acoustics = self.fine_acoustics.to("cuda")
 
         # 3. "generate" from the fine model
         output = self.fine_acoustics.generate(
@@ -1513,15 +1572,19 @@ class BarkModel(BarkPreTrainedModel):
             **kwargs_fine,
         )
 
-        if offload_to_cpu:
-            self.fine_acoustics = self.fine_acoustics.to("cpu")
-            self.codec_model = self.codec_model.to("cuda")
+        if hasattr(self, "fine_acoustics_hook") and self.fine_acoustics_hook is not None:
+            # Manually offload fine_acoustics to CPU
+            # and load codec_model to GPU
+            # since bark doesn't use codec_model forward pass
+            self.fine_acoustics_hook.offload()
+            self.codec_model = self.codec_model.to(self.device)
 
         # 4. Decode the output and generate audio array
         audio = self.codec_decode(output)
 
-        if offload_to_cpu:
-            self.codec_model = self.codec_model.to("cpu")
+        if hasattr(self, "codec_model_hook") and self.codec_model_hook is not None:
+            # Offload codec_model to CPU
+            self.codec_model_hook.offload()
 
         return audio
 
