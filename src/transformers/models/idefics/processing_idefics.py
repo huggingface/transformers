@@ -5,10 +5,9 @@ Processor class for IDEFICS.
 from typing import List, Optional, Union
 from urllib.parse import urlparse
 
-from transformers import is_torch_available
-from transformers.processing_utils import ProcessorMixin
-from transformers.tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
-from transformers.utils import TensorType
+from ...processing_utils import ProcessorMixin
+from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
+from ...utils import TensorType, is_torch_available
 
 
 if is_torch_available():

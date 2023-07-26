@@ -19,7 +19,6 @@ import unittest
 from transformers import IdeficsConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import TestCasePlus, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
-from transformers.utils.versions import require_version
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -31,13 +30,7 @@ if is_torch_available():
 
     from transformers import IdeficsForVisionText2Text, IdeficsModel
     from transformers.models.idefics.modeling_idefics import IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST
-
-try:
-    # F.scaled_dot_product_attention require pt>=2.0
-    require_version("torch>=2.0")
-    is_torch_greater_or_equal_than_2_0 = True
-except Exception:
-    is_torch_greater_or_equal_than_2_0 = False
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
 
 
 if is_vision_available():

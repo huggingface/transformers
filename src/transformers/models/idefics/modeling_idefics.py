@@ -26,21 +26,20 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from transformers import PreTrainedModel
-from transformers.activations import ACT2FN
-from transformers.deepspeed import is_deepspeed_zero3_enabled
-from transformers.modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from transformers.modeling_utils import PretrainedConfig
-from transformers.models.clip.configuration_clip import CLIPVisionConfig
-from transformers.models.clip.modeling_clip import CLIPVisionTransformer
-from transformers.utils import (
+from ... import PreTrainedModel
+from ...activations import ACT2FN
+from ...deepspeed import is_deepspeed_zero3_enabled
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_utils import PretrainedConfig
+from ...models.clip.configuration_clip import CLIPVisionConfig
+from ...models.clip.modeling_clip import CLIPVisionTransformer
+from ...utils import (
     ContextManagers,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
 )
-
 from .configuration_idefics import IdeficsConfig
 from .perceiver import PerceiverResampler
 
