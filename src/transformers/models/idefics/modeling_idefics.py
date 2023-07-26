@@ -202,7 +202,7 @@ def freeze_model(model, module_exceptions=[]):
     return model
 
 
-class DecoupledEmbedding(nn.Embedding):
+class IdeficsDecoupledEmbedding(nn.Embedding):
     # Derived from https://pytorch.org/docs/stable/_modules/torch/nn/modules/sparse.html#Embedding
     """
     Implements a decoupling of parameters to allow freezing (or not) a subset of the embeddings. In practise, the
@@ -307,7 +307,7 @@ class DecoupledEmbedding(nn.Embedding):
         raise NotImplementedError
 
 
-class DecoupledLinear(nn.Linear):
+class IdeficsDecoupledLinear(nn.Linear):
     # Derived from https://pytorch.org/docs/stable/_modules/torch/nn/modules/linear.html#Linear
     """
     Implements a decoupling of parameters to allow freezing (or not) a subset of the parameters. In practise, the
@@ -923,7 +923,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
                     module.weight.data[module.padding_idx].zero_()
                 module._is_hf_initialized = True
 
-        elif isinstance(module, DecoupledLinear):
+        elif isinstance(module, IdeficsDecoupledLinear):
             if hasattr(module, "additional_fc"):
                 init_a_linear(module.additional_fc, std=(1.0 / (module.additional_fc.in_features)) ** 0.5)
                 module._is_hf_initialized = True
@@ -1020,7 +1020,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
-        self.embed_tokens = DecoupledEmbedding(
+        self.embed_tokens = IdeficsDecoupledEmbedding(
             num_embeddings=config.vocab_size,
             num_additional_embeddings=config.additional_vocab_size,
             embedding_dim=config.hidden_size,
@@ -1351,7 +1351,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         super().__init__(config)
         self.model = IdeficsModel(config)
 
-        self.lm_head = DecoupledLinear(
+        self.lm_head = IdeficsDecoupledLinear(
             in_features=config.hidden_size,
             out_features=config.vocab_size,
             out_additional_features=config.additional_vocab_size,
@@ -1382,8 +1382,8 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
 
     def tie_weights(self):
         """
-        Overwrite `transformers.modeling_utils.PreTrainedModel.tie_weights` to handle the case of DecoupledLinear and
-        DecoupledEmbedding.
+        Overwrite `transformers.modeling_utils.PreTrainedModel.tie_weights` to handle the case of
+        IdeficsDecoupledLinear and IdeficsDecoupledEmbedding.
         """
         output_embeddings = self.get_output_embeddings()
         input_embeddings = self.get_input_embeddings()
