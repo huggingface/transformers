@@ -1017,8 +1017,12 @@ class Pipeline(_ScikitCompat):
     def get_inference_context(self):
         torch_version = version.parse(torch.__version__).base_version
         inference_mode_supported = version.parse(torch_version) >= version.parse("1.9.0")
-        model_was_not_compiled = version.parse(torch_version) >= version.parse("2.0.0") \
-                                    and not isinstance(self.model, torch._dynamo.eval_frame.OptimizedModule) 
+        try:
+            from torch._dynamo.eval_frame import OptimizedModule
+        except ImportError:
+            model_was_not_compiled = True
+        else:
+            model_was_not_compiled = not isinstance(self.model, OptimizedModule)
         inference_context = (
             torch.inference_mode
             if inference_mode_supported and model_was_not_compiled
