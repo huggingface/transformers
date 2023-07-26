@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 
 
-class PerceiverResampler(nn.Module):
+class IdeficsPerceiverResampler(nn.Module):
     def __init__(self, config, embed_dim: int, depth: int, n_heads: int, head_dim: int, n_latents: int) -> None:
         """
         Instantiates a Perceiver Resampler that operates over a sequence of embeddings (say from a ResNet or ViT or
@@ -45,8 +45,8 @@ class PerceiverResampler(nn.Module):
             [
                 nn.ModuleList(
                     [
-                        PerceiverAttention(self.embed_dim, self.n_heads, self.head_dim, self.qk_layer_norms),
-                        MLP(self.intermediate_dim, config),
+                        IdeficsPerceiverAttention(self.embed_dim, self.n_heads, self.head_dim, self.qk_layer_norms),
+                        IdeficsMLP(self.intermediate_dim, config),
                     ]
                 )
                 for _ in range(depth)
@@ -67,7 +67,7 @@ class PerceiverResampler(nn.Module):
         return self.layer_norm(latents)
 
 
-class PerceiverAttention(nn.Module):
+class IdeficsPerceiverAttention(nn.Module):
     def __init__(self, embed_dim: int, n_heads: int, head_dim: int, qk_layer_norms: bool) -> None:
         """Perceiver Cross-Attention Module --> let long-form inputs be `context`, resampled embeddings be `latents`"""
         super().__init__()
@@ -128,7 +128,7 @@ class PerceiverAttention(nn.Module):
         return self.output_proj(resampled.transpose(1, 2).flatten(-2))
 
 
-class MLP(nn.Module):
+class IdeficsMLP(nn.Module):
     def __init__(self, intermediate_size, config):
         """Simple MLP block with intermediate_size and embedding size"""
         super().__init__()

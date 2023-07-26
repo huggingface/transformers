@@ -40,7 +40,7 @@ from ...utils import (
 )
 from .clip import CLIPVisionTransformer
 from .configuration_idefics import CLIPVisionConfig, IdeficsConfig
-from .perceiver import PerceiverResampler
+from .perceiver import IdeficsPerceiverResampler
 
 
 logger = logging.get_logger(__name__)
@@ -904,7 +904,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
                         factor = 1.0
                     init_a_linear(sub_module, std=(0.4 / (sub_module.in_features * factor)) ** 0.5)
                     sub_module._is_hf_initialized = True
-        elif isinstance(module, PerceiverResampler):
+        elif isinstance(module, IdeficsPerceiverResampler):
             with ContextManagers(deepspeed_gathered_parameters_context_manager(module.latents, modify=True)):
                 module.latents.data.normal_(mean=0.0, std=(1.0 / self.config.vision_embed_dim) ** 0.5)
                 module._is_hf_initialized = True
@@ -1037,7 +1037,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
         # Perceiver Resampler
         if config.use_resampler:
-            self.perceiver_resampler = PerceiverResampler(
+            self.perceiver_resampler = IdeficsPerceiverResampler(
                 self.config,
                 self.config.vision_embed_dim,
                 config.resampler_depth,
