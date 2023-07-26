@@ -32,6 +32,47 @@ if is_torch_available():
     import torch
 
 
+class GPTQConfigTest(unittest.TestCase):
+    def test_bits(self):
+        with self.assertRaises(ValueError):
+            GPTQConfig(bits="")
+            GPTQConfig(bits=1)
+        GPTQConfig(bits=2)
+        GPTQConfig(bits=4)
+
+    def test_dataset(self):
+        with self.assertRaises(ValueError):
+            GPTQConfig(bits=2, dataset="auto_gpt")
+        GPTQConfig(bits=2, dataset="c4")
+        GPTQConfig(bits=2, dataset="ptb-new")
+
+    def test_damp_percent(self):
+        with self.assertRaises(ValueError):
+            GPTQConfig(bits=2, damp_percent=10)
+            GPTQConfig(bits=2, damp_percent=-1)
+            GPTQConfig(bits=2, damp_percent="0")
+        GPTQConfig(bits=2, damp_percent=0.01)
+
+    def test_to_dict(self):
+        quantization_config = GPTQConfig(bits=2)
+        quantization_config.to_dict()
+
+    def test_from_dict(self):
+        dict = {"bits": 2}
+        quantization_config = GPTQConfig.from_dict(dict)
+        self.assertEqual(dict["bits"], quantization_config.bits)
+
+    @require_optimum
+    def test_optimum_config(self):
+        from optimum.gptq import GPTQQuantizer
+
+        config = GPTQConfig(bits=2)
+        optimum_config = GPTQQuantizer.from_dict(config.to_dict())
+        self.assertEqual(optimum_config.bits, config.bits)
+        new_config = GPTQConfig.from_dict(optimum_config.to_dict())
+        self.assertEqual(optimum_config.bits, new_config.bits)
+
+
 @slow
 @require_optimum
 @require_auto_gptq
