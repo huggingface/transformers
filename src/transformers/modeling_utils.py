@@ -1665,6 +1665,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         max_shard_size: Union[int, str] = "10GB",
         safe_serialization: bool = False,
         variant: Optional[str] = None,
+        token: Optional[Union[str, bool]] = None,
         **kwargs,
     ):
         """
@@ -1704,9 +1705,27 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
             variant (`str`, *optional*):
                 If specified, weights are saved in the format pytorch_model.<variant>.bin.
+            token (`str` or `bool`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        use_auth_token = kwargs.pop("use_auth_token", None)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
+
+        if token is not None:
+            kwargs["token"] = token
+
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "is_loaded_in_8bit", False) and getattr(self, "is_8bit_serializable", False):
             warnings.warn(
@@ -1872,7 +1891,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 repo_id,
                 files_timestamps,
                 commit_message=commit_message,
-                token=kwargs.get("use_auth_token"),
+                token=token,
             )
 
     def get_memory_footprint(self, return_buffers=True):
@@ -2513,7 +2532,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         "proxies": proxies,
                         "resume_download": resume_download,
                         "local_files_only": local_files_only,
-                        "use_auth_token": token,
+                        "token": token,
                         "user_agent": user_agent,
                         "revision": revision,
                         "subfolder": subfolder,
@@ -2558,7 +2577,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         has_file_kwargs = {
                             "revision": revision,
                             "proxies": proxies,
-                            "use_auth_token": token,
+                            "token": token,
                         }
                         if has_file(pretrained_model_name_or_path, TF2_WEIGHTS_NAME, **has_file_kwargs):
                             raise EnvironmentError(
@@ -2619,7 +2638,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 proxies=proxies,
                 resume_download=resume_download,
                 local_files_only=local_files_only,
-                use_auth_token=token,
+                token=token,
                 user_agent=user_agent,
                 revision=revision,
                 subfolder=subfolder,
