@@ -7,10 +7,7 @@ from urllib.parse import urlparse
 
 from transformers import is_torch_available
 from transformers.processing_utils import ProcessorMixin
-from transformers.tokenization_utils_base import (
-    BatchEncoding,
-    TextInput,
-)
+from transformers.tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
 from transformers.utils import TensorType
 
 
@@ -124,6 +121,9 @@ class IdeficsProcessor(ProcessorMixin):
     def __call__(
         self,
         prompts: Union[List[TextInput], List[List[TextInput]]],
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
+        max_length: Optional[int] = None,
         eval_mode: bool = False,
         device: str = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -248,6 +248,9 @@ class IdeficsProcessor(ProcessorMixin):
             encoding = self.tokenizer(
                 text=full_text,
                 add_special_tokens=False,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
             )
 
             all_texts.append(encoding["input_ids"])
