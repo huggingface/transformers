@@ -141,5 +141,5 @@ class GTPQTest(unittest.TestCase):
 
 @require_accelerate
 @require_torch_multi_gpu
-class GTPQTestDeviceMap(GTPQTest):
+class GPTQTestDeviceMap(GPTQTest):
     device_map = "auto"
