@@ -34,8 +34,6 @@ IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class IdeficsConfig(PretrainedConfig):
     r"""
-    TODO: update docstring with respect to new arguments
-
     e.g. [HuggingFaceM4/idefics-80b](https://huggingface.co/HuggingFaceM4/idefics-80b)
 
     This is the configuration class to store the configuration of a [`~IdeficsModel`]. It is used to instantiate an
