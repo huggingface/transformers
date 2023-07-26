@@ -23,7 +23,6 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size
 from ...image_transforms import (
     center_crop,
     center_to_corners_format,
-    normalize,
     rescale,
     resize,
     to_channel_dimension_format,
@@ -209,19 +208,6 @@ class OwlViTImageProcessor(BaseImageProcessor):
         Rescale an image by a certain factor.
         """
         return rescale(image, rescale_factor, data_format=data_format, **kwargs)
-
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: List[float],
-        std: List[float],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Normalize an image with a certain mean and standard deviation.
-        """
-        return normalize(image, mean, std, data_format=data_format, **kwargs)
 
     def preprocess(
         self,
