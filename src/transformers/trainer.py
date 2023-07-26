@@ -403,9 +403,7 @@ class Trainer:
                     " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
                 )
         if getattr(model, "_is_gptq_quantized", False):
-            raise ValueError(
-                    "Training GTPQ quantized model is not possible yet."
-                )
+            raise ValueError("Training GTPQ quantized model is not possible yet.")
 
         # Setup Sharded DDP training
         self.sharded_ddp = None
