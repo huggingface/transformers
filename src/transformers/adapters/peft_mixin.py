@@ -14,7 +14,7 @@
 import os
 from typing import Optional
 
-from ..utils import ADAPTER_CONFIG_NAME, cached_file, logging, requires_backends
+from ..utils import ADAPTER_CONFIG_NAME, cached_file, is_peft_available, logging, requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -25,6 +25,8 @@ class PeftAdapterMixin:
     A class containing all functions for loading and using adapters weights that are supported in PEFT library.
     Currently supported PEFT methods are all non-prefix tuning methods
     """
+
+    _hf_peft_config_loaded = False
 
     def load_adapter(
         self,
@@ -43,7 +45,9 @@ class PeftAdapterMixin:
         from peft.utils import set_peft_model_state_dict
         from peft.utils.other import TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING
 
-        self.peft_config = {}
+        if not self._hf_peft_config_loaded:
+            self.peft_config = {}
+            self._hf_peft_config_loaded = True
 
         adapter_config_file = self._find_adapter_config_file(
             peft_model_id,
@@ -69,7 +73,6 @@ class PeftAdapterMixin:
             target_modules = TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING[self.config.model_type]
             loaded_peft_config.target_modules = target_modules
 
-        # TODO: constraint this to single adapter
         if adapter_name not in self.peft_config:
             self.peft_config[adapter_name] = loaded_peft_config
         else:
@@ -104,6 +107,49 @@ class PeftAdapterMixin:
                     f"Loading adapter weights from {peft_model_id} led to unexpected keys not found in the model: "
                     f" {incompatible_keys.unexpected_keys}. "
                 )
+
+    def set_adapter(self, adapter_name: str):
+        r"""
+        Sets an adapter to switch easily between multiple adapters.
+        """
+        requires_backends(self.set_adapter, "peft")
+        if not self._hf_peft_config_loaded:
+            raise ValueError("No adapter loaded. Please load an adapter first.")
+        elif adapter_name not in self.peft_config:
+            raise ValueError(
+                f"Adapter with name {adapter_name} not found. Please pass the correct adapter name among {list(self.peft_config.keys())}"
+            )
+
+        from peft.tuners.tuners_utils import BaseTunerLayerMixin
+
+        _adapters_has_been_set = False
+
+        for _, module in self.named_modules():
+            if isinstance(module, BaseTunerLayerMixin) and module.peft_is_plugable:
+                module.active_adapter = adapter_name
+                _adapters_has_been_set = True
+
+        if not _adapters_has_been_set:
+            raise ValueError(
+                "Did not succeeded in setting the adapter. Please make sure you are using a model that supports adapters."
+            )
+
+    @property
+    def current_active_adapter(self):
+        r"""
+        Gets the current active adapter of the model
+        """
+        if not is_peft_available():
+            raise ImportError("PEFT is not available. Please install PEFT to use this function: `pip install peft`.")
+
+        if not self._hf_peft_config_loaded:
+            raise ValueError("No adapter loaded. Please load an adapter first.")
+
+        from peft.tuners.tuners_utils import BaseTunerLayerMixin
+
+        for _, module in self.named_modules():
+            if isinstance(module, BaseTunerLayerMixin) and module.peft_is_plugable:
+                return module.active_adapter
 
     def _find_adapter_config_file(
         self,
