@@ -18,7 +18,7 @@ import copy
 import os
 import tempfile
 import unittest
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
 
 import numpy as np
 
@@ -48,6 +48,7 @@ if is_torch_available():
 
 CONFIG_NAME = "config.json"
 GENERATION_CONFIG_NAME = "generation_config.json"
+
 
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
@@ -333,10 +334,10 @@ class VitsModelIntegrationTests(unittest.TestCase):
         # GPU gives different results than CPU
         torch_device = "cpu"
 
-        model = VitsModel.from_pretrained("Matthijs/mms-tts-eng")
+        model = VitsModel.from_pretrained("sanchit-gandhi/mms-tts-eng")
         model.to(torch_device)
 
-        tokenizer = VitsTokenizer.from_pretrained("Matthijs/mms-tts-eng")
+        tokenizer = VitsTokenizer.from_pretrained("sanchit-gandhi/mms-tts-eng")
 
         set_seed(555)  # make deterministic
 

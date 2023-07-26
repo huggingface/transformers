@@ -24,6 +24,55 @@ This model can also be used with MMS-TTS checkpoints as those use the same archi
 
 This model was contributed by [Matthijs](https://huggingface.co/Matthijs). The original code can be found [here](https://github.com/jaywalnut310/vits).
 
+## Model Usage
+
+Both the VITS and MMS-TTS checkpoints can be used with the same API. Since the flow-based model is non-deterministic, it 
+is good practice to set a seed to ensure reproducibility of the outputs. For languages with a Roman alphabet, 
+such as English or French, the tokenizer can be used directly to pre-process the text inputs. The following code example 
+runs a forward pass using the MMS-TTS English checkpoint:
+
+```python
+import torch
+from transformers import VitsTokenizer, VitsModel, set_seed
+
+tokenizer = VitsTokenizer.from_pretrained("Matthijs/mms-tts-eng")
+model = VitsModel.from_pretrained("Matthijs/mms-tts-eng")
+
+inputs = tokenizer(text="Hello, my dog is cute", return_tensors="pt")
+
+set_seed(555)  # make deterministic
+with torch.no_grad():
+   outputs = model(inputs["input_ids"])
+
+outputs.audio.shape
+```
+
+For languages with a non-Roman alphabet, such as Arabic, Mandarin or Hindi, the [`uroman`](https://github.com/isi-nlp/uroman) 
+perl package is required to pre-process the text inputs to the Roman alphabet. First, clone the `uroman` package:
+
+```bash
+git clone https://github.com/isi-nlp/uroman.git
+```
+
+Then specify the path to the `uroman` package when you call the `tokenizer`. The following example generates 
+speech using the MMS-TTS Greek checkpoint and the `uroman` package:
+
+```python
+import torch
+from transformers import VitsTokenizer, VitsModel, set_seed
+
+tokenizer = VitsTokenizer.from_pretrained("Matthijs/mms-tts-ell")
+model = VitsModel.from_pretrained("Matthijs/mms-tts-ell")
+
+inputs = tokenizer(text="Πώς είσαι", uroman_path="./uroman", return_tensors="pt")
+
+set_seed(555)  # make deterministic
+with torch.no_grad():
+   outputs = model(inputs["input_ids"])
+
+outputs.audio.shape
+```
+
 ## VitsConfig
 
 [[autodoc]] VitsConfig

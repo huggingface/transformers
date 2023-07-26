@@ -18,6 +18,7 @@
 import json
 import os
 import re
+import subprocess
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ...tokenization_utils import PreTrainedTokenizer
@@ -44,6 +45,42 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
+def has_non_roman_characters(input_string):
+    # Find any character outside the ASCII range
+    non_roman_pattern = re.compile(r"[^\x00-\x7F]")
+
+    # Search the input string for non-Roman characters
+    match = non_roman_pattern.search(input_string)
+    has_non_roman = match is not None
+    return has_non_roman
+
+
+def uromanize(input_string, uroman_path, language=None, chart=False):
+    """Convert non-Roman strings to Roman using the `uroman` perl package."""
+    script_path = os.path.join(uroman_path, "/bin/uroman.pl")
+
+    command = ["perl", script_path]
+
+    # Add language flag if specified
+    if language:
+        command.extend(["-l", language])
+
+    # Add chart flag if specified
+    if chart:
+        command.append("--chart")
+
+    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    # Execute the perl command
+    stdout, stderr = process.communicate(input=input_string.encode())
+
+    if process.returncode != 0:
+        raise ValueError(f"Error {process.returncode}: {stderr.decode()}")
+
+    # Return the output as a string and skip the new-line character at the end
+    return stdout.decode()[:-1]
+
+
 class VitsTokenizer(PreTrainedTokenizer):
     """
     Construct a VITS tokenizer. Also supports MMS-TTS.
@@ -60,6 +97,8 @@ class VitsTokenizer(PreTrainedTokenizer):
             Whether to insert token id 0 in between the other tokens.
         phonemize (`bool`, *optional*, defaults to `True`):
             Whether to convert the input text into phonemes.
+        is_uroman (`bool`, *optional*, defaults to `False`):
+            Whether the `uroman` Romanizer needs to be applied to the input text prior to tokenizing.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -75,6 +114,7 @@ class VitsTokenizer(PreTrainedTokenizer):
         language=None,
         add_blank=True,
         phonemize=True,
+        is_uroman=False,
         **kwargs,
     ) -> None:
         super().__init__(
@@ -94,6 +134,8 @@ class VitsTokenizer(PreTrainedTokenizer):
         self.add_blank = add_blank
         self.phonemize = phonemize
 
+        self.is_uroman = is_uroman
+
     @property
     def vocab_size(self):
         return len(self.encoder)
@@ -109,9 +151,20 @@ class VitsTokenizer(PreTrainedTokenizer):
         return text
 
     def prepare_for_tokenization(
-        self, text: str, is_split_into_words: bool = False, normalize: bool = True, **kwargs
+        self, text: str, is_split_into_words: bool = False, normalize: bool = True, uroman_path: str = None, **kwargs
     ) -> Tuple[str, Dict[str, Any]]:
         filtered_text = self._preprocess_char(text.lower() if normalize else text)
+
+        if self.is_uroman and uroman_path is not None:
+            filtered_text = uromanize(filtered_text, uroman_path)
+
+        if has_non_roman_characters(filtered_text) and self.is_uroman:
+            logger.warning(
+                "Text to the tokenizer contains non-Roman characters. Ensure the `uroman` Romanizer is "
+                "applied to the text prior to passing it to the tokenizer. First clone the uroman package by running: "
+                "`git clone https://github.com/isi-nlp/uroman.git`, then pass the argument `uroman_path` to the tokenizer "
+                "and specify the path where the `uroman` package is located."
+            )
 
         if self.phonemize:
             if not is_phonemizer_available():

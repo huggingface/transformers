@@ -317,8 +317,9 @@ def convert_checkpoint(
             logger.warning("For this checkpoint, you should use `uroman` to convert input text before tokenizing it!")
     else:
         logger.info(f"***Converting model: {checkpoint_path}***")
+        is_uroman = False
 
-    # original VITS checkpoint?
+    # original VITS checkpoint
     if vocab_path is None:
         _pad = "_"
         _punctuation = ';:,.!?¡¿—…"«»“” '
@@ -337,7 +338,7 @@ def convert_checkpoint(
         with open(tf.name, "w", encoding="utf-8") as f:
             f.write(json.dumps(symbol_to_id, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
-        tokenizer = VitsTokenizer(tf.name, language=language, phonemize=phonemize)
+        tokenizer = VitsTokenizer(tf.name, language=language, phonemize=phonemize, is_uroman=is_uroman)
 
     config.vocab_size = len(symbols)
     model = VitsModel(config)

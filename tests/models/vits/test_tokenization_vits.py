@@ -33,8 +33,10 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        vocab = "k ' z y u d h e s w – 3 c p - 1 j m i X f l o 0 b r a 4 2 n _ x v t q 5 6 g ț ţ < > | <pad> <unk>".split(
-            " "
+        vocab = (
+            "k ' z y u d h e s w – 3 c p - 1 j m i X f l o 0 b r a 4 2 n _ x v t q 5 6 g ț ţ < > | <pad> <unk>".split(
+                " "
+            )
         )
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         vocab_tokens[" "] = vocab_tokens["X"]
@@ -139,7 +141,7 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             "BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly "
             "conditioning on both left and right context in all layers.",
             "The quick brown fox! Jumps over the lazy dog...",
-            "We use k as our padding token"
+            "We use k as our padding token",
         ]
 
         normalized_sequences = [

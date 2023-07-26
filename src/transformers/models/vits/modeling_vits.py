@@ -1348,7 +1348,8 @@ class VitsModel(VitsPreTrainedModel):
 
         >>> set_seed(555)  # make deterministic
 
-        >>> outputs = model(inputs["input_ids"])
+        >>> with torch.no_grad():
+        >>>    outputs = model(inputs["input_ids"])
         >>> outputs.audio.shape
         torch.Size([1, 33280])
         ```
