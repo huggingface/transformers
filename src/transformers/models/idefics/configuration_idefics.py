@@ -170,11 +170,7 @@ class IdeficsConfig(PretrainedConfig):
         self.resampler_depth = resampler_depth
         self.resampler_n_heads = resampler_n_heads
         self.resampler_head_dim = resampler_head_dim
-        # IMPORTANT: Do not do any __init__ args-based checks in the constructor, since
-        # PretrainedConfig.from_dict first instantiates the class with the config dict and only then
-        # updates the config object with `kwargs` from from_pretrained, so during the instantiation
-        # of this object many attributes have default values and haven't yet been overridden.
-        # Do any required checks inside `from_pretrained` once the superclass' `from_pretrained` was run.
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -183,6 +179,11 @@ class IdeficsConfig(PretrainedConfig):
             **kwargs,
         )
 
+        # IMPORTANT: Do not do any __init__ args-based checks in the constructor, since
+        # PretrainedConfig.from_dict first instantiates the class with the config dict and only then
+        # updates the config object with `kwargs` from from_pretrained, so during the instantiation
+        # of this object many attributes have default values and haven't yet been overridden.
+        # Do any required checks inside `from_pretrained` once the superclass' `from_pretrained` was run.
     def to_dict(self):
         """
         Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
