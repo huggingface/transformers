@@ -332,8 +332,10 @@ class MptConfigTester(ConfigTester):
         super().__init__(parent, config_class, has_text_modality, common_properties, **kwargs)
         
     def test_attn_config_as_dict(self):
-        pass
-    
+        config = self.config_class(**self.inputs_dict, attn_config = dict(attn_impl="flash", softmax_scale=None))
+        assert config.attn_config.attn_impl == "flash"
+        assert config.attn_config.softmax_scale is None
+
     def run_common_tests(self):
         self.test_attn_config_as_dict()
         return super().run_common_tests()
