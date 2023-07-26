@@ -32,6 +32,8 @@ Most of those are only useful if you are studying the code of the Trainer in the
 
 [[autodoc]] torch_distributed_zero_first
 
+[[autodoc]] load_model_from_pretrained_only_on_rank0
+
 ## Callbacks internals
 
 [[autodoc]] trainer_callback.CallbackHandler
