@@ -457,7 +457,11 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             )
         return safe_load_file(checkpoint_file)
     try:
-        return torch.load(checkpoint_file, map_location="cpu")
+        if is_deepspeed_zero3_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0:
+            map_location = "meta"
+        else:
+            map_location = "cpu"
+        return torch.load(checkpoint_file, map_location=map_location)
     except Exception as e:
         try:
             with open(checkpoint_file) as f:
@@ -1700,8 +1704,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
             variant (`str`, *optional*):
                 If specified, weights are saved in the format pytorch_model.<variant>.bin.
-
-            kwargs:
+            kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
         # Checks if the model has been loaded in 8-bit
@@ -3057,13 +3060,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         unexpected_keys = list(unexpected_keys - model_buffers)
 
         model.tie_weights()
-        ptrs = collections.defaultdict(list)
-        for name, tensor in model.state_dict().items():
-            id_tensor = id_tensor_storage(tensor) if tensor.device != torch.device("meta") else id(tensor)
-            ptrs[id_tensor].append(name)
+        if device_map is None:
+            ptrs = collections.defaultdict(list)
+            for name, tensor in model.state_dict().items():
+                id_tensor = id_tensor_storage(tensor)
+                ptrs[id_tensor].append(name)
 
-        # These are all the pointers of shared tensors.
-        tied_params = [names for _, names in ptrs.items() if len(names) > 1]
+            # These are all the pointers of shared tensors.
+            tied_params = [names for _, names in ptrs.items() if len(names) > 1]
+        else:
+            # id function doesn't work for meta tensor so we need this function
+            tied_params = find_tied_parameters(model)
 
         for group in tied_params:
             if remove_prefix_from_model:
@@ -3158,6 +3165,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             mismatched_keys = []
             if ignore_mismatched_sizes:
                 for checkpoint_key in loaded_keys:
+                    # If the checkpoint is sharded, we may not have the key here.
+                    if checkpoint_key not in state_dict:
+                        continue
                     model_key = checkpoint_key
                     if remove_prefix_from_model:
                         # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.

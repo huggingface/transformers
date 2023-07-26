@@ -110,10 +110,9 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
                 num = int(scope_names[1])
                 pointer = pointer[num]
         try:
-            assert (
-                pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-        except AssertionError as e:
+            if pointer.shape != array.shape:
+                raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched")
+        except ValueError as e:
             e.args += (pointer.shape, array.shape)
             raise
         logger.info(f"Initialize PyTorch weight {name}")
@@ -1444,7 +1443,9 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1).to(logits.device)
+                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).long().argmax(-1) - 1).to(
+                    logits.device
+                )
             else:
                 sequence_lengths = -1
                 logger.warning(

@@ -86,7 +86,7 @@ def _make_causal_mask(
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min, device=device), device=device)
+    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
     mask_cond = torch.arange(mask.size(-1), device=device)
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
@@ -1228,7 +1228,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 generation config an error is thrown. This feature is intended for advanced users.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
-            kwargs:
+            kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
@@ -1303,11 +1303,10 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         # 5. Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        if has_default_max_length and generation_config.max_new_tokens is None:
+        if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length != 20:
             logger.warning(
-                f"Using `max_length`'s default ({generation_config.max_length}) to control the generation length. "
-                "This behaviour is deprecated and will be removed from the config in v5 of Transformers -- we"
-                " recommend using `max_new_tokens` to control the maximum length of the generation.",
+                f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
+                "to control the generation length.  recommend setting `max_new_tokens` to control the maximum length of the generation.",
                 UserWarning,
             )
         elif generation_config.max_new_tokens is not None:
@@ -2225,7 +2224,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 generation config an error is thrown. This feature is intended for advanced users.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
-            kwargs:
+            kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
@@ -2332,9 +2331,8 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
         if has_default_max_length and generation_config.max_new_tokens is None:
             logger.warning(
-                f"Using `max_length`'s default ({generation_config.max_length}) to control the generation length. "
-                "This behaviour is deprecated and will be removed from the config in v5 of Transformers -- we"
-                " recommend using `max_new_tokens` to control the maximum length of the generation.",
+                f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
+                "to control the generation length.  recommend setting `max_new_tokens` to control the maximum length of the generation.",
                 UserWarning,
             )
         elif generation_config.max_new_tokens is not None:

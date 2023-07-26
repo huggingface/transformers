@@ -142,6 +142,7 @@ from .import_utils import (
     is_sagemaker_mp_enabled,
     is_scipy_available,
     is_sentencepiece_available,
+    is_seqio_available,
     is_sklearn_available,
     is_soundfile_availble,
     is_spacy_available,
@@ -163,6 +164,7 @@ from .import_utils import (
     is_torch_fx_proxy,
     is_torch_mps_available,
     is_torch_neuroncore_available,
+    is_torch_npu_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
@@ -175,15 +177,6 @@ from .import_utils import (
     requires_backends,
     torch_only_method,
 )
-
-
-if is_protobuf_available():
-    import google.protobuf
-
-    if version.parse(google.protobuf.__version__) < version.parse("4.0.0"):
-        from . import sentencepiece_model_pb2
-    else:
-        from . import sentencepiece_model_pb2_new as sentencepiece_model_pb2
 
 
 WEIGHTS_NAME = "pytorch_model.bin"

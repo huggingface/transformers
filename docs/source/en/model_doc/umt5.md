@@ -92,6 +92,11 @@ The conversion script is also different because the model was saved in t5x's lat
 [[autodoc]] UMT5EncoderModel
     - forward
 
+## UMT5ForSequenceClassification
+
+[[autodoc]] UMT5ForSequenceClassification
+    - forward
+
 ## UMT5ForQuestionAnswering
 
 [[autodoc]] UMT5ForQuestionAnswering
