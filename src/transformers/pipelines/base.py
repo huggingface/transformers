@@ -1024,9 +1024,7 @@ class Pipeline(_ScikitCompat):
         else:
             model_was_not_compiled = not isinstance(self.model, OptimizedModule)
         inference_context = (
-            torch.inference_mode
-            if inference_mode_supported and model_was_not_compiled
-            else torch.no_grad
+            torch.inference_mode if inference_mode_supported and model_was_not_compiled else torch.no_grad
         )
         return inference_context
 
