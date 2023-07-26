@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Idefics model configuration"""
+import copy
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
@@ -111,13 +112,13 @@ class IdeficsConfig(PretrainedConfig):
         freeze_lm_head=False,
         freeze_vision_layers=True,
         freeze_vision_module_exceptions=[],
-        vision_model_params="{}",
-        vision_config=None,
         vision_model_name="google/vit-base-patch16-224",
         vision_embed_dim=768,
         vision_image_size=224,
         vision_intermediate_size=5120,
         vision_patch_size=14,
+        vision_num_hidden_layers=32,
+        vision_num_attention_heads=16,
         use_resampler=False,
         resampler_n_latents=64,
         resampler_depth=6,
@@ -139,14 +140,6 @@ class IdeficsConfig(PretrainedConfig):
         self.alpha_type = alpha_type
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.vision_model_params = vision_model_params
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
 
         self.cross_layer_interval = cross_layer_interval
         self.qk_layer_norms = qk_layer_norms
@@ -163,18 +156,13 @@ class IdeficsConfig(PretrainedConfig):
         self.vision_intermediate_size = vision_intermediate_size
         self.vision_patch_size = vision_patch_size
 
-        if vision_config is None:
-            self.vision_config = {}
-            self.vision_config["hidden_size"] = vision_embed_dim
-            self.vision_config["image_size"] = vision_image_size
-            self.vision_config["num_attention_heads"] = num_attention_heads
-            self.vision_config["num_hidden_layers"] = num_hidden_layers
-            self.vision_config["intermediate_size"] = vision_intermediate_size
-            self.vision_config["patch_size"] = vision_patch_size
-        elif not isinstance(vision_config, dict):
-            raise ValueError("vision_config must be a dict")
-        else:
-            self.vision_config = vision_config
+        self.vision_config_dict = {}
+        self.vision_config_dict["hidden_size"] = vision_embed_dim
+        self.vision_config_dict["image_size"] = vision_image_size
+        self.vision_config_dict["num_attention_heads"] = vision_num_attention_heads
+        self.vision_config_dict["num_hidden_layers"] = vision_num_hidden_layers
+        self.vision_config_dict["intermediate_size"] = vision_intermediate_size
+        self.vision_config_dict["patch_size"] = vision_patch_size
 
         # Resampler params
         self.use_resampler = use_resampler
@@ -182,3 +170,27 @@ class IdeficsConfig(PretrainedConfig):
         self.resampler_depth = resampler_depth
         self.resampler_n_heads = resampler_n_heads
         self.resampler_head_dim = resampler_head_dim
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs,
+        )
+
+        # IMPORTANT: Do not do any __init__ args-based checks in the constructor, since
+        # PretrainedConfig.from_dict first instantiates the class with the config dict and only then
+        # updates the config object with `kwargs` from from_pretrained, so during the instantiation
+        # of this object many attributes have default values and haven't yet been overridden.
+        # Do any required checks inside `from_pretrained` once the superclass' `from_pretrained` was run.
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+
+        Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["vision_config_dict"] = self.vision_config_dict
+        return output

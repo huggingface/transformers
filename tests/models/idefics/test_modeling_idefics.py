@@ -80,14 +80,11 @@ class IdeficsModelTester:
         add_multiple_images=False,
         num_images=-1,
         vision_embed_dim=32,
-        vision_config={
-            "patch_size": 2,
-            "hidden_size": 32,
-            "image_size": 30,
-            "num_attention_heads": 4,
-            "num_hidden_layers": 5,
-            "intermediate_size": 37,
-        },
+        vision_patch_size=2,
+        vision_image_size=30,
+        vision_num_attention_heads=4,
+        vision_num_hidden_layers=5,
+        vision_intermediate_size=37,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -116,8 +113,14 @@ class IdeficsModelTester:
         self.modality_type_vocab_size = modality_type_vocab_size
         self.add_multiple_images = add_multiple_images
         self.num_images = num_images
+
         self.vision_embed_dim = vision_embed_dim
-        self.vision_config = vision_config
+        self.vision_patch_size = vision_patch_size
+        self.vision_image_size = vision_image_size
+        self.vision_num_attention_heads = vision_num_attention_heads
+        self.vision_num_hidden_layers = vision_num_hidden_layers
+        self.vision_intermediate_size = vision_intermediate_size
+
         # we set the expected sequence length (which is used in several tests)
         # this is equal to the seq length of the text tokens + number of image patches + 1 for the CLS token
         self.expected_seq_len = self.seq_length + (self.image_size // self.patch_size) ** 2 + 1
@@ -162,7 +165,11 @@ class IdeficsModelTester:
             modality_type_vocab_size=self.modality_type_vocab_size,
             num_images=self.num_images,
             vision_embed_dim=self.vision_embed_dim,
-            vision_config=self.vision_config,
+            vision_intermediate_size=self.vision_intermediate_size,
+            vision_num_attention_heads=self.vision_num_attention_heads,
+            vision_image_size=self.vision_image_size,
+            vision_patch_size=self.vision_patch_size,
+            vision_num_hidden_layers=self.vision_num_hidden_layers,
         )
 
     def create_and_check_model(
