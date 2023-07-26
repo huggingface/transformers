@@ -731,7 +731,7 @@ _import_structure = {
     ],
     "utils.bitsandbytes": [],
     "utils.quantization_config": ["BitsAndBytesConfig"],
-    "uils.quantization_config": ["GPTQConfig"]
+    "utils.quantization_config": ["GPTQConfig"]
 }
 
 # sentencepiece-backed objects
