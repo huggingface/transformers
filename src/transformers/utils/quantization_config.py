@@ -304,7 +304,7 @@ class GPTQConfig(QuantizationConfigMixin):
     Args:
         bits (`int`):
             The number of bits to quantize to, supported numbers are (2, 3, 4, 8).
-        dataset (`Union[List[str], str]`):
+        dataset (`Union[List[str]]`, *optional*, defaults to `None`):
             "The dataset used for quantization. You can provide your own dataset in a list of string" "or just use the
             original datasets used in GPTQ paper ['wikitext2','c4','c4-new','ptb','ptb-new']"
         group_size (`int`, *optional*, defaults to `128`):
@@ -325,22 +325,22 @@ class GPTQConfig(QuantizationConfigMixin):
             Whether to pack the layer just after it is quantized. If False, we will pack the model at the end.
         use_cuda_fp16 (`bool`, *optional*, defaults to `False`):
             "Whether or not to use optimized cuda kernel for fp16 model. Need to have model in fp16.
-        model_seqlen (`Optional[int]`, *optional*, defaults to `None`):
+        model_seqlen (`int`, *optional*, defaults to `None`):
             The maximum sequence length that the model can take.
         block_name_to_quantize (`Optional[str]`, *optional*, defaults to `None`):
             The transformers block name to quantize.
-        module_name_preceding_first_block (`Optional[List[str]]`, *optional*, defaults to `None`):
+        module_name_preceding_first_block (`List[str]`, *optional*, defaults to `None`):
             The layers that are preceding the first Transformer block.
         batch_size (`int`, *optional*, defaults to `1`):
             The batch size used when processing the dataset
-        pad_token_id (`Optional[int]`, *optional*, defaults to `None`):
+        pad_token_id (`int`, *optional*, defaults to `None`):
             The pad token id. Needed to prepare the dataset when `batch_size` > 1.
     """
 
     def __init__(
         self,
         bits: int,
-        dataset: Union[List[str], str],
+        dataset: Optional[Union[List[str], str]] = None,
         group_size: int = 128,
         damp_percent: float = 0.01,
         desc_act: bool = True,
