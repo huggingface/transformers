@@ -8493,6 +8493,10 @@ class Trainer(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+def load_model_from_pretrained_only_on_rank0(*args, **kwargs):
+    requires_backends(load_model_from_pretrained_only_on_rank0, ["torch"])
+
+
 def torch_distributed_zero_first(*args, **kwargs):
     requires_backends(torch_distributed_zero_first, ["torch"])
 
