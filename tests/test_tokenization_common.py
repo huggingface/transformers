@@ -3955,7 +3955,7 @@ class TokenizerTesterMixin:
         assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
 
     def test_split_special_tokens(self):
-        tokenizer = PreTrainedTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+        tokenizer = PreTrainedTokenizer.from_pretrained("huggyllama/llama-7b")
         input_text = "This is <s> and thst"
         ids = tokenizer.encode(ids)
         special_token = "[SPECIAL_TOKEN]"
