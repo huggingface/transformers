@@ -1572,7 +1572,7 @@ class BarkModel(BarkPreTrainedModel):
             **kwargs_fine,
         )
 
-        if hasattr(self, "fine_acoustics_hook") and self.fine_acoustics_hook is not None:
+        if getattr(self, "fine_acoustics_hook", None) is not None:
             # Manually offload fine_acoustics to CPU
             # and load codec_model to GPU
             # since bark doesn't use codec_model forward pass
@@ -1582,7 +1582,7 @@ class BarkModel(BarkPreTrainedModel):
         # 4. Decode the output and generate audio array
         audio = self.codec_decode(output)
 
-        if hasattr(self, "codec_model_hook") and self.codec_model_hook is not None:
+        if getattr(self, "codec_model_hook", None) is not None:
             # Offload codec_model to CPU
             self.codec_model_hook.offload()
 
