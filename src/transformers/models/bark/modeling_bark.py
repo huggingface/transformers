@@ -1426,7 +1426,7 @@ class BarkModel(BarkPreTrainedModel):
         the next sub-model runs.
 
         Args:
-            gpu_id (`Optional[int]`, *optional*, defaults to 0):
+            gpu_id (`int`, *optional*, defaults to 0):
                 GPU id on which the sub-models will be loaded and offloaded.
         """
         if is_accelerate_available():
