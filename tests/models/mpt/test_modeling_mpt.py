@@ -326,19 +326,20 @@ class MptModelTester:
 
         return config, inputs_dict
 
+
 class MptConfigTester(ConfigTester):
-    
     def __init__(self, parent, config_class=None, has_text_modality=True, common_properties=None, **kwargs):
         super().__init__(parent, config_class, has_text_modality, common_properties, **kwargs)
-        
+
     def test_attn_config_as_dict(self):
-        config = self.config_class(**self.inputs_dict, attn_config = dict(attn_impl="flash", softmax_scale=None))
-        assert config.attn_config.attn_impl == "flash"
-        assert config.attn_config.softmax_scale is None
+        config = self.config_class(**self.inputs_dict, attn_config={"attn_impl": "flash", "softmax_scale": None})
+        self.parent.assertTrue(config.attn_config.attn_impl == "flash")
+        self.parent.assertTrue(config.attn_config.softmax_scale is None)
 
     def run_common_tests(self):
         self.test_attn_config_as_dict()
         return super().run_common_tests()
+
 
 @require_torch
 class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
