@@ -36,7 +36,7 @@ logger = logging.get_logger(__name__)
 
 class QuantizationMethod(str, Enum):
     BITS_AND_BYTES = "bitsandbytes"
-    GPTQ = "gtpq"
+    GPTQ = "gptq"
 
 
 @dataclass

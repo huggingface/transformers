@@ -36,7 +36,7 @@ if is_torch_available():
 @require_optimum
 @require_auto_gptq
 @require_torch_gpu
-class GTPQTest(unittest.TestCase):
+class GPTQTest(unittest.TestCase):
     model_name = "bigscience/bloom-560m"
 
     input_text = "Hello my name is"

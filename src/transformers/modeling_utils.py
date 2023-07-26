@@ -2369,7 +2369,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         ):
             if not (is_optimum_available() and is_auto_gptq_available()):
                 raise ImportError(
-                    "Loading GTPQ quantized model requires optimum library : `pip install optimum` and auto-gptq library 'pip install auto-gptq'"
+                    "Loading GPTQ quantized model requires optimum library : `pip install optimum` and auto-gptq library 'pip install auto-gptq'"
                 )
             else:
                 # Need to protect the import
