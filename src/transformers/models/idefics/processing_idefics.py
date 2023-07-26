@@ -242,7 +242,8 @@ class IdeficsProcessor(ProcessorMixin):
                 print(f"{full_text=}")
 
             real_images = self.image_processor(real_images, eval_mode=eval_mode, return_tensors=return_tensors)
-            real_images = torch.stack(real_images)
+            if len(real_images) > 0:
+                real_images = torch.stack(real_images)
 
             encoding = self.tokenizer(
                 text=full_text,
@@ -272,8 +273,16 @@ class IdeficsProcessor(ProcessorMixin):
 
             current_images = images[:local_max_num_images]
 
-            padded_image_tensor = torch.zeros(max_num_images, *current_images.size()[1:])
-            padded_image_tensor[: current_images.size(0)] = current_images
+            if len(current_images) > 0:
+                padded_image_tensor = torch.zeros(max_num_images, *current_images.size()[1:])
+                padded_image_tensor[: current_images.size(0)] = current_images
+            else:
+                default_image_size = (
+                    3,
+                    self.image_processor.image_size,
+                    self.image_processor.image_size,
+                )
+                padded_image_tensor = torch.zeros(max_num_images, *default_image_size)
 
             output_images.append(padded_image_tensor)
             output_input_ids.append(torch.tensor(padded_input_ids))
