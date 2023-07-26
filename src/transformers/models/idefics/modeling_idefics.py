@@ -31,8 +31,6 @@ from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PretrainedConfig
-from ...models.clip.configuration_clip import CLIPVisionConfig
-from ...models.clip.modeling_clip import CLIPVisionTransformer
 from ...utils import (
     ContextManagers,
     add_start_docstrings,
@@ -40,7 +38,8 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_idefics import IdeficsConfig
+from .clip import CLIPVisionTransformer
+from .configuration_idefics import CLIPVisionConfig, IdeficsConfig
 from .perceiver import PerceiverResampler
 
 
