@@ -393,11 +393,12 @@ class GPTQConfig(QuantizationConfigMixin):
         if not (0 < self.damp_percent < 1):
             raise ValueError("damp_percent must between 0 and 1.")
         if self.dataset is not None:
-            if isinstance(self.dataset, str) and self.dataset not in ["wikitext2", "c4", "c4-new", "ptb", "ptb-new"]:
-                raise ValueError(
-                    f"""You have entered a string value for dataset. You can only choose between
-                    ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
-                )
+            if isinstance(self.dataset, str):
+                if self.dataset not in ["wikitext2", "c4", "c4-new", "ptb", "ptb-new"]:
+                    raise ValueError(
+                        f"""You have entered a string value for dataset. You can only choose between
+                        ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
+                    )
             elif not isinstance(self.dataset, list):
                 raise ValueError(
                     f"""dataset needs to be either a list of string or a value in
