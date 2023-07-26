@@ -6598,7 +6598,7 @@ if TYPE_CHECKING:
 
         # Trainer
         from .trainer import Trainer
-        from .trainer_pt_utils import torch_distributed_zero_first
+        from .trainer_pt_utils import load_model_from_pretrained_only_on_rank0, torch_distributed_zero_first
         from .trainer_seq2seq import Seq2SeqTrainer
 
     # TensorFlow
