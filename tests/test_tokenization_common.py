@@ -957,8 +957,10 @@ class TokenizerTesterMixin:
                 tokenizer.add_special_tokens({"eos_token": special_token})
                 encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False)
                 self.assertEqual(len(encoded_special_token), 1)
-                
-                encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False, split_special_tokens = True)
+
+                encoded_special_token = tokenizer.encode(
+                    special_token, add_special_tokens=False, split_special_tokens=True
+                )
                 self.assertTrue(len(encoded_special_token) > 1)
 
                 text = tokenizer.decode(ids + encoded_special_token, clean_up_tokenization_spaces=False)
@@ -967,12 +969,10 @@ class TokenizerTesterMixin:
                 input_encoded = tokenizer.encode(input_text, add_special_tokens=False)
                 special_token_id = tokenizer.encode(special_token, add_special_tokens=False)
                 self.assertEqual(encoded, input_encoded + special_token_id)
-                
+
                 tokenizer.split_special_tokens = True
-                self.assertEqual(encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False), encoded_special_token)
+                self.assertEqual(tokenizer.encode(special_token, add_special_tokens=False), encoded_special_token)
 
-
-                
     def test_internal_consistency(self):
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:

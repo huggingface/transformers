@@ -1488,9 +1488,10 @@ INIT_TOKENIZER_DOCSTRING = r"""
             Whether or not the model should cleanup the spaces that were added when splitting the input text during the
             tokenization process.
         split_special_tokens (`bool`, *optional*, defaults to `False`):
-            Whether or not the special tokens should be split during the tokenization process. The default behaviour is to
-            not split special tokens. This means that if `<s>` is the `bos_token`, then `tokenizer.tokenize("<s>") = ['<s>`].
-            Otherwise, if `split_special_tokens=True`, then `tokenizer.tokenize("<s>")` will be give `['<', 's', '>']`.
+            Whether or not the special tokens should be split during the tokenization process. The default behaviour is
+            to not split special tokens. This means that if `<s>` is the `bos_token`, then `tokenizer.tokenize("<s>") =
+            ['<s>`]. Otherwise, if `split_special_tokens=True`, then `tokenizer.tokenize("<s>")` will be give `['<',
+            's', '>']`.
 """
 
 
