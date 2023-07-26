@@ -72,6 +72,7 @@ from .utils import (
     is_torch_tpu_available,
     logging,
     replace_return_docstrings,
+    strtobool,
 )
 from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 from .utils.import_utils import ENV_VARS_TRUE_VALUES, is_sagemaker_mp_enabled
@@ -106,7 +107,7 @@ _init_weights = True
 
 
 def is_fsdp_enabled():
-    return os.environ["ACCELERATE_USE_FSDP"]
+    return strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
 
 
 def is_fsdp_enabled_and_dist_rank_0():
@@ -1154,6 +1155,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # and memory copying it on CPU or each GPU first
             with deepspeed.zero.Init(config_dict_or_path=deepspeed_config()):
                 model = cls(config, **kwargs)
+        elif is_fsdp_enabled():
+            if is_fsdp_enabled_and_dist_rank_0():
+                model = cls(config, **kwargs)
+            else:
+                with torch.device("meta"):
+                    model = cls(config, **kwargs)
         else:
             model = cls(config, **kwargs)
 
@@ -2205,9 +2212,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
 
-        if is_fsdp_enabled():
-            low_cpu_mem_usage = True
-
         if use_auth_token is not None:
             warnings.warn(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
@@ -2262,7 +2266,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 # The max memory utils require PyTorch >= 1.10 to have torch.cuda.mem_get_info.
                 require_version_core("torch>=1.10")
 
-            if is_deepspeed_zero3_enabled():
+            if is_deepspeed_zero3_enabled() or is_fsdp_enabled():
                 raise ValueError(
                     "DeepSpeed Zero-3 is not compatible with `low_cpu_mem_usage=True` or with passing a `device_map`."
                 )
@@ -2714,6 +2718,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
         elif load_in_8bit or load_in_4bit or low_cpu_mem_usage:
             init_contexts.append(init_empty_weights())
+        elif is_fsdp_enabled():
+            if not is_fsdp_enabled_and_dist_rank_0():
+                init_contexts.append(torch.device("meta"))
 
         with ContextManagers(init_contexts):
             model = cls(config, *model_args, **model_kwargs)
