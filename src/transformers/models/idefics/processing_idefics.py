@@ -203,7 +203,14 @@ class IdeficsProcessor(ProcessorMixin):
         if not any(isinstance(i, list) for i in prompts):
             prompts = [prompts]
 
-        img_tokens = "<fake_token_around_image><image><fake_token_around_image>"
+        fake_token = "<fake_token_around_image>"
+        image_token = "<image>"
+
+        def image_tokens(last_was_image):
+            if last_was_image:
+                return image_token + fake_token
+            else:
+                return fake_token + image_token + fake_token
 
         all_texts = []
         all_images = []
@@ -213,19 +220,23 @@ class IdeficsProcessor(ProcessorMixin):
 
             # an image can either be an image object in the item or the url, everything else is a verbatim prompt text
             real_images = []
+            last_was_image = False
             for item in sample:
                 if isinstance(item, str):
                     item = item.strip(" ")
                     if is_url(item):
                         image = self.image_processor.fetch_images(item)
-                        full_text += img_tokens
+                        full_text += image_tokens(last_was_image)
                         real_images.append(image)
+                        last_was_image = True
                     else:
                         full_text += item
+                        last_was_image = False
                 else:
                     # must be an image obj
-                    full_text += img_tokens
+                    full_text += image_tokens(last_was_image)
                     real_images.append(item)
+                    last_was_image = True
 
             if debug is True:
                 print(f"{full_text=}")
