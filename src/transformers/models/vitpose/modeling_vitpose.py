@@ -83,7 +83,7 @@ class ViTPosePatchEmbed(nn.Module):
         self.num_channels = num_channels
         self.num_patches = num_patches
 
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size, padding = some_size)
+        self.projection = nn.Conv2d(self.num_channels, config.embed_dim, kernel_size=config.patch_size, stride=config.patch_size, padding = (2,2))
 
     def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
@@ -168,10 +168,10 @@ class mlp(nn.Module):
         if out_features is None:
           out_features = in_features
 
-        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.fc1 = nn.Linear(in_features=config.embed_dim, out_features=config.embed_dim*config.mlp_ratio,bias=True)
         self.act = nn.GELU()
-        self.fc2 = nn.Linar(hidden_features, out_features)
-        self.dropout = nn.Dropout(dropout)
+        self.fc2 = nn.Linar(inf_features=config.embed_dim*config.mlp_ratio, out_features=config.embed_dim)
+        self.dropout = nn.Dropout(config.dropout_p, inplace=True)
 
     def forward(self,x):
         x = self.fc1(x)
@@ -185,11 +185,11 @@ class mlp(nn.Module):
 class ViTPoseBlock(nn.Module):
     def __init__(self, config: ViTPoseConfig):
         super().__init__()
-        self.norm1 = nn.LayerNorm()
+        self.norm1 = nn.LayerNorm(config.embed_dim, eps=1e-06, elementwise_affine=True)
         self.attn = Attention(dim, num_heads, qkv_bias=True, qk_scale=qk_value, attn_drop=attn_drop, proj_drop=drop)
         self.drop_path = Identity()
-        self.norm2 = nn.LayerNorm(dim)
-        self.mlp = mlp(in_feature=dim, hidden_features=int(dim*mlp_ratio), act_layer=nn.GELU, drop=drop)
+        self.norm2 = nn.LayerNorm(config.embed_dim, eps=1e-06, elementwise_affine=True)
+        self.mlp = mlp(config)
 
     def forward(self, x):
         x = x + self.drop_path(self.attn(self.norm1(x)))
@@ -198,6 +198,8 @@ class ViTPoseBlock(nn.Module):
     pass
 
 
+
+## to be changed
 class ViTBackbone(nn.Module):
     """
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
@@ -211,7 +213,7 @@ class ViTBackbone(nn.Module):
         self.patch_embeddings = ViTPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(config.dropout_p)
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
