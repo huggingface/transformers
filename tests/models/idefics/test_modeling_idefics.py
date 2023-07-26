@@ -219,6 +219,14 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        # XXX: IdeficsForVisionText2TextTest has no MODEL_FOR group yet, but it should be the same
+        # as MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, so for now manually changing to do the right thing
+        # as super won't do it
+        if return_labels:
+            inputs_dict["labels"] = torch.zeros(
+                (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+            )
+
         return inputs_dict
 
     def setUp(self):
