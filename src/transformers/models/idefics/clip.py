@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch IdeficsVision model - copy of CLIPVisionModel"""
+""" PyTorch IdeficsVision model - a copy of CLIPVisionModel using a new config object """
 
 
 from dataclasses import dataclass
