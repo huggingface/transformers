@@ -1084,7 +1084,7 @@ class GeoLMModel(GeoLMPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        sequence_output = encoder_outputs[0]    
+        sequence_output = encoder_outputs[0]
         # pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
         if pivot_token_idx_list is not None:
             pooled_output = self.pivot_pooler(sequence_output, pivot_token_idx_list)

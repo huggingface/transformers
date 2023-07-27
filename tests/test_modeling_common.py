@@ -1732,8 +1732,8 @@ class ModelTesterMixin:
                     elif tuple_object is None:
                         return
                     else:
-                        print('tuple',len(tuple_object))
-                        print('dict',len(dict_object))
+                        print("tuple", len(tuple_object))
+                        print("dict", len(dict_object))
                         self.assertTrue(
                             torch.allclose(
                                 set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
