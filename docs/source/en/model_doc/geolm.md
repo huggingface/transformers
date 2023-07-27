@@ -17,20 +17,16 @@ rendered properly in your Markdown viewer.
 # GeoLM
 
 ## Overview
-
+<!-- 
+TODO: 
 The GeoLM model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+<INSERT SHORT SUMMARY HERE> -->
 
-The abstract from the paper is the following:
+GeoLM is a language model built upon BERT to enhance geospatial understanding for natural language corpus. It is pretrained on world-wide OpenStreetMap (OSM), WikiData and Wikipedia data using masked language modeling (MLM) and contrastive learning. GeoLM can be adapted to various downstream tasks, such as [toponym recognition](https://huggingface.co/zekun-li/geolm-base-toponym-recognition) and toponym linking. 
 
-*<INSERT PAPER ABSTRACT HERE>*
 
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+<!-- This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
+The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>). -->
 
 
 ## GeoLMConfig
@@ -42,18 +38,10 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] models.geolm.modeling_geolm.GeoLMForPreTrainingOutput
 
-[[autodoc]] models.geolm.modeling_tf_geolm.TFGeoLMForPreTrainingOutput
-
-[[autodoc]] models.geolm.modeling_flax_geolm.FlaxGeoLMForPreTrainingOutput
 
 ## GeoLMModel
 
 [[autodoc]] GeoLMModel
-    - forward
-
-## GeoLMForPreTraining
-
-[[autodoc]] GeoLMForPreTraining
     - forward
 
 ## GeoLMLMHeadModel
@@ -66,117 +54,7 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 [[autodoc]] GeoLMForMaskedLM
     - forward
 
-## GeoLMForNextSentencePrediction
-
-[[autodoc]] GeoLMForNextSentencePrediction
-    - forward
-
-## GeoLMForSequenceClassification
-
-[[autodoc]] GeoLMForSequenceClassification
-    - forward
-
-## GeoLMForMultipleChoice
-
-[[autodoc]] GeoLMForMultipleChoice
-    - forward
-
 ## GeoLMForTokenClassification
 
 [[autodoc]] GeoLMForTokenClassification
     - forward
-
-## GeoLMForQuestionAnswering
-
-[[autodoc]] GeoLMForQuestionAnswering
-    - forward
-
-## TFGeoLMModel
-
-[[autodoc]] TFGeoLMModel
-    - call
-
-## TFGeoLMForPreTraining
-
-[[autodoc]] TFGeoLMForPreTraining
-    - call
-
-## TFGeoLMModelLMHeadModel
-
-[[autodoc]] TFGeoLMLMHeadModel
-    - call
-
-## TFGeoLMForMaskedLM
-
-[[autodoc]] TFGeoLMForMaskedLM
-    - call
-
-## TFGeoLMForNextSentencePrediction
-
-[[autodoc]] TFGeoLMForNextSentencePrediction
-    - call
-
-## TFGeoLMForSequenceClassification
-
-[[autodoc]] TFGeoLMForSequenceClassification
-    - call
-
-## TFGeoLMForMultipleChoice
-
-[[autodoc]] TFGeoLMForMultipleChoice
-    - call
-
-## TFGeoLMForTokenClassification
-
-[[autodoc]] TFGeoLMForTokenClassification
-    - call
-
-## TFGeoLMForQuestionAnswering
-
-[[autodoc]] TFGeoLMForQuestionAnswering
-    - call
-
-## FlaxGeoLMModel
-
-[[autodoc]] FlaxGeoLMModel
-    - __call__
-
-## FlaxGeoLMForPreTraining
-
-[[autodoc]] FlaxGeoLMForPreTraining
-    - __call__
-
-## FlaxGeoLMForCausalLM
-
-[[autodoc]] FlaxGeoLMForCausalLM
-    - __call__
-
-## FlaxGeoLMForMaskedLM
-
-[[autodoc]] FlaxGeoLMForMaskedLM
-    - __call__
-
-## FlaxGeoLMForNextSentencePrediction
-
-[[autodoc]] FlaxGeoLMForNextSentencePrediction
-    - __call__
-
-## FlaxGeoLMForSequenceClassification
-
-[[autodoc]] FlaxGeoLMForSequenceClassification
-    - __call__
-
-## FlaxGeoLMForMultipleChoice
-
-[[autodoc]] FlaxGeoLMForMultipleChoice
-    - __call__
-
-## FlaxGeoLMForTokenClassification
-
-[[autodoc]] FlaxGeoLMForTokenClassification
-    - __call__
-
-## FlaxGeoLMForQuestionAnswering
-
-[[autodoc]] FlaxGeoLMForQuestionAnswering
-    - __call__
