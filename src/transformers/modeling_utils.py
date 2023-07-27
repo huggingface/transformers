@@ -2734,8 +2734,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             llm_int8_skip_modules = quantization_config.llm_int8_skip_modules
             load_in_8bit_fp32_cpu_offload = quantization_config.llm_int8_enable_fp32_cpu_offload
-
-            logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
+            if load_in_8bit:
+                logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
+            else:
+                logger.info("Detected 4-bit loading: activating 4-bit loading for this model")
 
             # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
             if llm_int8_skip_modules is None:
