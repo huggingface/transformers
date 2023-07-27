@@ -52,7 +52,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_idefics import IdeficsImageProcessor
-        from .processing_idefics import IdeficsProcessor
 
     try:
         if not is_torch_available():
@@ -60,6 +59,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
+        from .processing_idefics import IdeficsProcessor
         from .modeling_idefics import (
             IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST,
             IdeficsForVisionText2Text,
