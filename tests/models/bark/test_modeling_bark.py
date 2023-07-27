@@ -32,7 +32,6 @@ from transformers.models.bark.generation_configuration_bark import (
     BarkSemanticGenerationConfig,
 )
 from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
-from transformers.trainer_utils import set_seed
 from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -51,8 +50,6 @@ if is_torch_available():
         BarkProcessor,
         BarkSemanticModel,
     )
-
-set_seed(42)
 
 
 class BarkSemanticModelTester:
