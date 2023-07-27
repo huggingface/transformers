@@ -1802,17 +1802,11 @@ else:
         [
             "GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GeoLMForMaskedLM",
-            "GeoLMForMultipleChoice",
-            "GeoLMForNextSentencePrediction",
-            "GeoLMForPreTraining",
-            "GeoLMForQuestionAnswering",
-            "GeoLMForSequenceClassification",
             "GeoLMForTokenClassification",
             "GeoLMLayer",
             "GeoLMLMHeadModel",
             "GeoLMModel",
             "GeoLMPreTrainedModel",
-            "load_tf_weights_in_geolm",
         ]
     )
     _import_structure["models.git"].extend(
@@ -3409,23 +3403,6 @@ else:
             "TFFunnelPreTrainedModel",
         ]
     )
-    _import_structure["models.geolm"].extend(
-        [
-            "TF_GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFGeoLMEmbeddings",
-            "TFGeoLMForMaskedLM",
-            "TFGeoLMForMultipleChoice",
-            "TFGeoLMForNextSentencePrediction",
-            "TFGeoLMForPreTraining",
-            "TFGeoLMForQuestionAnswering",
-            "TFGeoLMForSequenceClassification",
-            "TFGeoLMForTokenClassification",
-            "TFGeoLMLMHeadModel",
-            "TFGeoLMMainLayer",
-            "TFGeoLMModel",
-            "TFGeoLMPreTrainedModel",
-        ]
-    )
     _import_structure["models.gpt2"].extend(
         [
             "TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3907,20 +3884,6 @@ else:
             "FlaxBertForTokenClassification",
             "FlaxBertModel",
             "FlaxBertPreTrainedModel",
-        ]
-    )
-    _import_structure["models.geolm"].extend(
-        [
-            "FlaxGeoLMForCausalLM",
-            "FlaxGeoLMForMaskedLM",
-            "FlaxGeoLMForMultipleChoice",
-            "FlaxGeoLMForNextSentencePrediction",
-            "FlaxGeoLMForPreTraining",
-            "FlaxGeoLMForQuestionAnswering",
-            "FlaxGeoLMForSequenceClassification",
-            "FlaxGeoLMForTokenClassification",
-            "FlaxGeoLMModel",
-            "FlaxGeoLMPreTrainedModel",
         ]
     )
     _import_structure["models.big_bird"].extend(
@@ -5646,17 +5609,12 @@ if TYPE_CHECKING:
         from .models.geolm import (
             GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             GeoLMForMaskedLM,
-            GeoLMForMultipleChoice,
-            GeoLMForNextSentencePrediction,
             GeoLMForPreTraining,
-            GeoLMForQuestionAnswering,
-            GeoLMForSequenceClassification,
             GeoLMForTokenClassification,
             GeoLMLayer,
             GeoLMLMHeadModel,
             GeoLMModel,
             GeoLMPreTrainedModel,
-            load_tf_weights_in_geolm,
         )
         from .models.git import (
             GIT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6961,21 +6919,6 @@ if TYPE_CHECKING:
             TFFunnelModel,
             TFFunnelPreTrainedModel,
         )
-        from .models.geolm import (
-            TF_GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFGeoLMEmbeddings,
-            TFGeoLMForMaskedLM,
-            TFGeoLMForMultipleChoice,
-            TFGeoLMForNextSentencePrediction,
-            TFGeoLMForPreTraining,
-            TFGeoLMForQuestionAnswering,
-            TFGeoLMForSequenceClassification,
-            TFGeoLMForTokenClassification,
-            TFGeoLMLMHeadModel,
-            TFGeoLMMainLayer,
-            TFGeoLMModel,
-            TFGeoLMPreTrainedModel,
-        )
         from .models.gpt2 import (
             TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFGPT2DoubleHeadsModel,
@@ -7402,18 +7345,6 @@ if TYPE_CHECKING:
             FlaxElectraPreTrainedModel,
         )
         from .models.encoder_decoder import FlaxEncoderDecoderModel
-        from .models.geolm import (
-            FlaxGeoLMForCausalLM,
-            FlaxGeoLMForMaskedLM,
-            FlaxGeoLMForMultipleChoice,
-            FlaxGeoLMForNextSentencePrediction,
-            FlaxGeoLMForPreTraining,
-            FlaxGeoLMForQuestionAnswering,
-            FlaxGeoLMForSequenceClassification,
-            FlaxGeoLMForTokenClassification,
-            FlaxGeoLMModel,
-            FlaxGeoLMPreTrainedModel,
-        )
         from .models.gpt2 import FlaxGPT2LMHeadModel, FlaxGPT2Model, FlaxGPT2PreTrainedModel
         from .models.gpt_neo import FlaxGPTNeoForCausalLM, FlaxGPTNeoModel, FlaxGPTNeoPreTrainedModel
         from .models.gptj import FlaxGPTJForCausalLM, FlaxGPTJModel, FlaxGPTJPreTrainedModel
