@@ -173,10 +173,10 @@ class VitsConfig(PretrainedConfig):
         num_speakers=1,
         speaker_embedding_size=0,
         upsample_initial_channel=512,
-        upsample_rates=(8, 8, 2, 2),
-        upsample_kernel_sizes=(16, 16, 4, 4),
-        resblock_kernel_sizes=(3, 7, 11),
-        resblock_dilation_sizes=((1, 3, 5), (1, 3, 5), (1, 3, 5)),
+        upsample_rates=[8, 8, 2, 2],
+        upsample_kernel_sizes=[16, 16, 4, 4],
+        resblock_kernel_sizes=[3, 7, 11],
+        resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
         leaky_relu_slope=0.1,
         depth_separable_channels=2,
         depth_separable_num_layers=3,
@@ -245,12 +245,6 @@ class VitsConfig(PretrainedConfig):
             raise ValueError(
                 f"The length of `upsample_kernel_sizes` ({len(upsample_kernel_sizes)}) must match the length of "
                 f"`upsample_rates` ({len(upsample_rates)})"
-            )
-
-        if (hidden_size // num_attention_heads * num_attention_heads) != hidden_size:
-            raise ValueError(
-                f"hidden_size must be divisible by num_attention_heads (got `hidden_size`: {hidden_size}"
-                f" and `num_attention_heads`: {num_attention_heads})."
             )
 
         super().__init__(**kwargs)

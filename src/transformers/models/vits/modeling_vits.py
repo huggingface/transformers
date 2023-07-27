@@ -823,6 +823,12 @@ class VitsAttention(nn.Module):
         self.head_dim = self.embed_dim // self.num_heads
         self.scaling = self.head_dim**-0.5
 
+        if (self.head_dim * self.num_heads) != self.embed_dim:
+            raise ValueError(
+                f"hidden_size must be divisible by num_attention_heads (got `hidden_size`: {self.embed_dim}"
+                f" and `num_attention_heads`: {self.num_heads})."
+            )
+
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_bias)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_bias)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_bias)
