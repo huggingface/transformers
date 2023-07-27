@@ -59,7 +59,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .processing_idefics import IdeficsProcessor
         from .modeling_idefics import (
             IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST,
             IdeficsForVisionText2Text,
@@ -67,6 +66,7 @@ if TYPE_CHECKING:
             IdeficsModel,
             IdeficsPreTrainedModel,
         )
+        from .processing_idefics import IdeficsProcessor
 
 
 else:
