@@ -123,7 +123,7 @@ _deps = [
     "huggingface-hub>=0.14.1,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
-    "isort>=5.5.4",
+    "isort>=5.12",
     "jax>=0.2.8,!=0.3.2,<=0.4.13",
     "jaxlib>=0.1.65,<=0.4.13",
     "jieba",
