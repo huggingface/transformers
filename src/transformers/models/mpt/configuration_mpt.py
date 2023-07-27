@@ -107,7 +107,6 @@ class MptAttentionConfig(PretrainedConfig):
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the text config dict if we are loading from CLIPConfig
         if config_dict.get("model_type") == "mpt":
             config_dict = config_dict["attn_config"]
 
