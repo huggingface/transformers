@@ -21,63 +21,8 @@ dog_sample_file = "sample.bin"
 # ==============================================================================================================
 # Config class
 
+from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig
 
-class Kosmos2TextConfig(PretrainedConfig):
-
-    model_type = "kosmos_2_text_model"
-
-    def __init__(
-        self,
-        vocab_size=65037,
-        hidden_size=2048,
-        pad_token_id=1,  # ?
-        max_position_embeddings=2048,
-        **kwargs,
-    ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
-
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.max_position_embeddings = max_position_embeddings
-
-
-class Kosmos2Config(PretrainedConfig):
-
-    model_type = "kosmos-2"
-
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        if text_config is None:
-            text_config = {}
-            # logger.info("`text_config` is `None`. Initializing the `BlipTextConfig` with default values.")
-
-        if vision_config is None:
-            vision_config = {}
-            # logger.info("`text_config` is `None`. Initializing the `BlipTextConfig` with default values.")
-
-        self.text_config = Kosmos2TextConfig(**text_config)
-
-        vision_model_type = vision_config["model_type"] if "model_type" in vision_config else "clip"
-        self.vision_config = CONFIG_MAPPING[vision_model_type](**vision_config)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["text_config"] = self.text_config.to_dict()
-        output["vision_config"] = self.vision_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
 
 # ==============================================================================================================
 # Model class
@@ -402,7 +347,7 @@ class Kosmos2TextFFN(nn.Module):
 class Kosmos2TextBlock(nn.Module):
     def __init__(self, config: Kosmos2TextConfig):
         super().__init__()
-        self.embed_dim = config.hidden_size
+        self.embed_dim = config.embed_dim
 
         self.self_attn = KosmosTextAttention(
             config,
@@ -530,19 +475,19 @@ class Kosmos2TextTransformer(nn.Module):
 
         self.dropout = config.dropout
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.embed_dim, padding_idx=config.pad_token_id)
 
         self.embed_positions = Kosmos2TextSinusoidalPositionalEmbedding(
             num_positions=config.max_position_embeddings,
-            embedding_dim=config.hidden_size,
+            embedding_dim=config.embed_dim,
             padding_idx=config.pad_token_id
         )
 
-        self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
+        self.embed_scale = math.sqrt(config.embed_dim) if config.scale_embedding else 1.0
 
         self.layers = nn.ModuleList([Kosmos2TextBlock(config) for _ in range(config.layers)])
 
-        self.layer_norm = nn.LayerNorm(config.hidden_size, config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.embed_dim, config.layer_norm_eps)
 
         self.gradient_checkpointing = False
 
@@ -809,7 +754,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
         super().__init__(config)
 
         self.model = Kosmos2TextTransformer(config)
-        self.lm_head = nn.Linear(in_features=config.hidden_size, out_features=config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(in_features=config.embed_dim, out_features=config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -929,7 +874,7 @@ class KosmosConnector(nn.Module):
 
     def __init__(self, config: Kosmos2Config):
         super().__init__()
-        self.dense = nn.Linear(config.vision_config.vision_config.hidden_size, config.text_config.embed_dim)
+        self.dense = nn.Linear(config.vision_config.hidden_size, config.text_config.embed_dim)
         self.latent_query = nn.Parameter(torch.randn(config.latent_query_num, config.text_config.embed_dim))
 
         self.x_attn = KosmosTextAttention(
@@ -1000,13 +945,9 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         super().__init__(config)
 
         self.text_model = Kosmos2TextModel(config.text_config)
-        vision_model = AutoModel.from_config(config.vision_config)
-
-        # Need to be more thorough
-        if vision_model.__class__.__name__ == "CLIPModel":
-            self.vision_model = vision_model.vision_model
-        else:
-            self.vision_model = vision_model
+        from transformers import CLIPVisionModel
+        vision_model = CLIPVisionModel(config.vision_config)
+        self.vision_model = vision_model.vision_model
 
         self.img_connector = KosmosConnector(config)
 
@@ -1095,13 +1036,9 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         super().__init__(config)
 
         self.text_model = Kosmos2TextForCausalLM(config.text_config)
-        vision_model = AutoModel.from_config(config.vision_config)
-
-        # Need to be more thorough
-        if vision_model.__class__.__name__ == "CLIPModel":
-            self.vision_model = vision_model.vision_model
-        else:
-            self.vision_model = vision_model
+        from transformers import CLIPVisionModel
+        vision_model = CLIPVisionModel(config.vision_config)
+        self.vision_model = vision_model.vision_model
 
         self.img_connector = KosmosConnector(config)
 
@@ -1570,8 +1507,8 @@ def check_model_with_dummy_inputs(model):
     # --------------------------------------------------------------------
     # Ours
 
-    img_size = model.config.vision_config.vision_config.image_size  # 224
-    num_channels = model.config.vision_config.vision_config.num_channels  # 3
+    img_size = model.config.vision_config.image_size  # 224
+    num_channels = model.config.vision_config.num_channels  # 3
 
     batch_size = 1
 
@@ -2473,11 +2410,11 @@ def create_model(num_layers=2):
     clip_config.vision_config.intermediate_size = 4096
     clip_config.vision_config.num_attention_heads = 16
     clip_config.vision_config.patch_size = 14
-    clip_config = clip_config.to_dict()
+    clip_vision_config = clip_config.vision_config.to_dict()
 
     latent_query_num = 64
 
-    config = Kosmos2Config(text_config=text_config, vision_config=clip_config, latent_query_num=latent_query_num)
+    config = Kosmos2Config(text_config=text_config, vision_config=clip_vision_config, latent_query_num=latent_query_num)
     model = Kosmos2ForConditionalGeneration(config=config)
     model.eval()
 
