@@ -26,7 +26,12 @@ import logging
 import numpy as np
 import torch
 
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    is_torch_mps_available,
+    is_torch_npu_available,
+)
 
 
 logging.basicConfig(
@@ -41,7 +46,12 @@ def set_seed(args):
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     if args.n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
+        if is_torch_mps_available():
+            torch.mps.manual_seed(args.seed)
+        elif is_torch_npu_available():
+            torch.npu.manual_seed_all(args.seed)
+        else:
+            torch.cuda.manual_seed_all(args.seed)
 
 
 def main():
@@ -73,7 +83,11 @@ def main():
     parser.add_argument("--xlm_language", type=str, default="", help="Optional language when used with the XLM model.")
 
     parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")
-    parser.add_argument("--no_cuda", action="store_true", help="Avoid using CUDA when available")
+    parser.add_argument(
+        "--use_cpu",
+        action="store_true",
+        help="Whether or not to use cpu. If set to False, " "we will use gpu/npu or mps device if available",
+    )
     parser.add_argument(
         "--fp16",
         action="store_true",
@@ -81,8 +95,19 @@ def main():
     )
     args = parser.parse_args()
 
-    args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
-    args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
+    if not args.use_cpu:
+        if torch.cuda.is_available():
+            args.device = torch.device("cuda")
+            args.n_gpu = torch.cuda.device_count()
+        elif is_torch_mps_available():
+            args.device = torch.device("mps")
+            args.n_gpu = 1
+        elif is_torch_npu_available():
+            args.device = torch.device("npu")
+            args.n_gpu = torch.npu.device_count()
+    else:
+        args.device = torch.device("cpu")
+        args.n_gpu = 0
 
     logger.warning(f"device: {args.device}, n_gpu: {args.n_gpu}, 16-bits training: {args.fp16}")
 
