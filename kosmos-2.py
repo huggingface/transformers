@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import copy
 import math
 import re
 import torch
@@ -15,7 +16,7 @@ from transformers.utils.generic import ModelOutput
 
 # Get this from the original kosmos-2 demo
 original_kosmos2_checkpoint_only_2_layers = "kosmos-2-state-dict-num-layers-2.bin"
-dog_sample_file = "sample"
+dog_sample_file = "sample.bin"
 
 # ==============================================================================================================
 # Config class
@@ -65,6 +66,18 @@ class Kosmos2Config(PretrainedConfig):
         vision_model_type = vision_config["model_type"] if "model_type" in vision_config else "clip"
         self.vision_config = CONFIG_MAPPING[vision_model_type](**vision_config)
 
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
+
+        Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["text_config"] = self.text_config.to_dict()
+        output["vision_config"] = self.vision_config.to_dict()
+        output["model_type"] = self.__class__.model_type
+        return output
 
 # ==============================================================================================================
 # Model class
@@ -209,7 +222,7 @@ class KosmosTextAttention(nn.Module):
         num_heads: int,
         dropout: float = 0.0,
         is_decoder: bool = False,
-        is_encoder_attn=False,
+        add_inner_attn_layernorm=False,
         bias: bool = True,
     ):
         super().__init__()
@@ -232,7 +245,7 @@ class KosmosTextAttention(nn.Module):
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
         self.inner_attn_ln = None
-        if config.subln and not is_encoder_attn:
+        if add_inner_attn_layernorm:
             self.inner_attn_ln = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
@@ -371,16 +384,15 @@ class Kosmos2TextFFN(nn.Module):
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.fc1 = nn.Linear(config.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.embed_dim)
+        self.fc1 = nn.Linear(config.embed_dim, config.ffn_dim)
+        self.fc2 = nn.Linear(config.ffn_dim, config.embed_dim)
 
-        self.ffn_layernorm = nn.LayerNorm(config.decoder_ffn_dim, eps=config.layer_norm_eps) if config.subln else None
+        self.ffn_layernorm = nn.LayerNorm(config.ffn_dim, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states):
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        if self.ffn_layernorm is not None:
-            hidden_states = self.ffn_layernorm(hidden_states)
+        hidden_states = self.ffn_layernorm(hidden_states)
         hidden_states = self.fc2(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -395,28 +407,24 @@ class Kosmos2TextBlock(nn.Module):
         self.self_attn = KosmosTextAttention(
             config,
             embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
+            num_heads=config.attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
-            is_encoder_attn=False,
+            add_inner_attn_layernorm=True,
         )
-
-        self.normalize_before = config.decoder_normalize_before
 
         self.dropout = config.dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
-        if not config.add_cross_attention:
-            self.encoder_attn = None
-            self.encoder_attn_layer_norm = None
-        else:
+        if config.add_cross_attention:
             self.encoder_attn = KosmosTextAttention(
+                config,
                 self.embed_dim,
-                config.decoder_attention_heads,
+                config.attention_heads,
                 dropout=config.attention_dropout,
                 is_decoder=True,
-                is_encoder_attn=True,
+                add_inner_attn_layernorm=False,
             )
             self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
@@ -442,8 +450,7 @@ class Kosmos2TextBlock(nn.Module):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
 
-        if self.normalize_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # add present self-attn cache to positions 1,2 of present_key_value tuple
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
@@ -455,17 +462,20 @@ class Kosmos2TextBlock(nn.Module):
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        if not self.normalize_before:
-           hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_present_key_value = None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
+            if not hasattr(self, "encoder_attn"):
+                raise ValueError(
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers"
+                    " by setting `config.add_cross_attention=True`"
+                )
+
             residual = hidden_states
 
-            if self.normalize_before:
-                hidden_states = self.encoder_attn_layer_norm(hidden_states)
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -479,8 +489,6 @@ class Kosmos2TextBlock(nn.Module):
             )
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
-            if not self.normalize_before:
-                hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # add cross-attn to positions 3,4 of present_key_value tuple
             present_key_value = present_key_value + cross_attn_present_key_value
@@ -488,15 +496,11 @@ class Kosmos2TextBlock(nn.Module):
         # Fully Connected
         residual = hidden_states
 
-        if self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.final_layer_norm(hidden_states)
 
         # FFN
         hidden_states = self.ffn(hidden_states)
         hidden_states = residual + hidden_states
-
-        if not self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 
@@ -515,14 +519,15 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
     models.
     """
     config_class = Kosmos2Config
-    base_model_prefix = "kosmos_2_text"
+    # base_model_prefix = "kosmos_2_text"
 
 
-class Kosmos2TextModel(Kosmos2PreTrainedModel):
-    config_class = Kosmos2TextConfig
+class Kosmos2TextTransformer(nn.Module):
 
     def __init__(self, config: Kosmos2TextConfig):
-        super().__init__(config)
+        super().__init__()
+        self.config = config
+
         self.dropout = config.dropout
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
@@ -535,20 +540,11 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
 
         self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 
-        if config.layernorm_embedding:
-            self.layernorm_embedding = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        else:
-            self.layernorm_embedding = None
+        self.layers = nn.ModuleList([Kosmos2TextBlock(config) for _ in range(config.layers)])
 
-        self.layers = nn.ModuleList([Kosmos2TextBlock(config) for _ in range(config.decoder_layers)])
-
-        if config.decoder_normalize_before:
-            self.layer_norm = nn.LayerNorm(config.hidden_size, config.layer_norm_eps)
-        else:
-            self.layer_norm = None
+        self.layer_norm = nn.LayerNorm(config.hidden_size, config.layer_norm_eps)
 
         self.gradient_checkpointing = False
-        self.post_init()
 
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
@@ -575,17 +571,13 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
 
     def forward_embedding(self, input_ids, inputs_embeds=None, img_features=None, img_input_mask=None, past_key_values_length: int = 0):
 
-        # TODO: different from original code
-        # `Bart` asssumes the passed argument `inputs_embeds` has already been multiplied by `self.embed_scale`
-        # But `Kosmos-2` required the original `token_embedding` being passed.
-        # In both cases, they are only involved with the tokens and not other features
+        # The argument `inputs_embeds` should be the one without being multiplied by `self.embed_scale`
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) #  * self.embed_scale
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if img_features is not None:
             inputs_embeds[img_input_mask] = img_features
 
-        # TODO: decide where to do scaling
         inputs_embeds = inputs_embeds * self.embed_scale
 
         # We need to use inputs ids! otherwise we don't know where is the padding!
@@ -594,8 +586,6 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         positions = positions.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + positions
-        if self.layernorm_embedding is not None:
-            hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -627,17 +617,14 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
 
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input = input_ids
-            input_shape = input.shape
+            input_shape = input_ids.shape
             input_ids = input_ids.view(-1, input_shape[-1])
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
-            # TODO: doesn't make any sense
-            # input = inputs_embeds[:, :, -1]
         else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
@@ -651,7 +638,6 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
             input_ids=input_ids, inputs_embeds=inputs_embeds, img_features=img_features, img_input_mask=img_attn_mask, past_key_values_length=past_key_values_length,
         )
 
-        # TODO: not good parameter/argument name
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, hidden_states, past_key_values_length
         )
@@ -740,9 +726,8 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
 
-        # TODO: should we include this one or the one without layernorm in `all_hidden_states`?
-        if self.layer_norm is not None:
-            hidden_states = self.layer_norm(hidden_states)
+        # add final layer norm
+        hidden_states = self.layer_norm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -764,17 +749,20 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         )
 
 
-class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
+class Kosmos2TextModel(Kosmos2PreTrainedModel):
     config_class = Kosmos2TextConfig
 
     def __init__(self, config: Kosmos2TextConfig):
         super().__init__(config)
-
-        self.kosmos_2_text = Kosmos2TextModel(config)
-        self.lm_head = nn.Linear(in_features=config.hidden_size, out_features=config.vocab_size, bias=False)
-
+        self.model = Kosmos2TextTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
 
     def forward(
         self,
@@ -793,7 +781,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
-        outputs = self.kosmos_2_text(
+        outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             img_features=img_features,
@@ -809,11 +797,98 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        lm_logits = self.lm_head(outputs[0])
+
+        return outputs
+
+
+class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
+    config_class = Kosmos2TextConfig
+    _tied_weights_keys = ["lm_head.weight"]
+
+    def __init__(self, config: Kosmos2TextConfig):
+        super().__init__(config)
+
+        self.model = Kosmos2TextTransformer(config)
+        self.lm_head = nn.Linear(in_features=config.hidden_size, out_features=config.vocab_size, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        img_features = None,
+        img_attn_mask = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if labels is not None:
+            if use_cache:
+                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+            use_cache = False
+
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            img_features=img_features,
+            img_attn_mask=img_attn_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            head_mask=head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        logits = self.lm_head(outputs[0])
+
+        loss = None
+        if labels is not None:
+            # Shift so that tokens < n predict n
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            # Flatten the tokens
+            loss_fct = CrossEntropyLoss()
+            shift_logits = shift_logits.view(-1, self.config.vocab_size)
+            shift_labels = shift_labels.view(-1)
+            # Enable model parallelism
+            shift_labels = shift_labels.to(shift_logits.device)
+            loss = loss_fct(shift_logits, shift_labels)
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
-            loss=None,
-            logits=lm_logits,
+            loss=loss,
+            logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
@@ -821,31 +896,32 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, img_features, img_attn_mask, past_key_values=None, attention_mask=None, **model_kwargs
+        self, input_ids, img_features, img_attn_mask, past_key_values=None, attention_mask=None, use_cache=None, **model_kwargs
     ):
-        # TODO: Is this necessary
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
 
-        # cut decoder_input_ids if past_key_values is used
+        # cut input_ids if past_key_values is used
         if past_key_values is not None:
+            input_ids = input_ids[:, -1:]
+            # the image info. is already encoded into the past keys/values
             img_features = None,
             img_attn_mask = None,
-
-            input_ids = input_ids[:, -1:]
+        elif img_attn_mask is not None:
+            # appending `False` to `img_attn_mask` (because `input_ids` grows during generation)
+            batch_size, seq_len = input_ids.size()
+            mask_len = img_attn_mask.size()[-1]
+            img_attn_mask = torch.cat((img_attn_mask, torch.zeros(size=(batch_size, seq_len - mask_len), dtype=torch.bool)), dim=1)
 
         return {
+            "input_ids": input_ids,
             "img_features": img_features,
             "img_attn_mask": img_attn_mask,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
             "past_key_values": past_key_values,
-            "use_cache": True,
-            # "encoder_hidden_states": model_kwargs.get("encoder_hidden_states", None),
-            # "encoder_attention_mask": model_kwargs.get("encoder_attention_mask", None),
-            #"is_decoder": True,
+            "attention_mask": attention_mask,
+            "use_cache": use_cache,
         }
 
 
@@ -859,12 +935,11 @@ class KosmosConnector(nn.Module):
         self.x_attn = KosmosTextAttention(
             config.text_config,
             config.text_config.embed_dim,
-            config.text_config.decoder_attention_heads,
+            config.text_config.attention_heads,
             # shared with text,
             dropout=config.text_config.attention_dropout,
-            # TODO: check - this is strange ?
             is_decoder=False,
-            is_encoder_attn=True,
+            add_inner_attn_layernorm=False,
         )
 
     def forward(self, features):
@@ -887,6 +962,20 @@ class KosmosConnector(nn.Module):
 
 
 @dataclass
+class Kosmos2ModelOutput(ModelOutput):
+    """
+    """
+
+    last_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    image_features: Optional[torch.FloatTensor] = None
+    image_connector_attention: Optional[torch.FloatTensor] = None
+    vision_model_output: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
 class Kosmos2ForConditionalGenerationModelOutput(ModelOutput):
     """
     """
@@ -894,19 +983,110 @@ class Kosmos2ForConditionalGenerationModelOutput(ModelOutput):
     loss: Optional[Tuple[torch.FloatTensor]] = None
     logits: Optional[Tuple[torch.FloatTensor]] = None
     past_key_values: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_features: Optional[torch.FloatTensor] = None
     image_connector_attention: Optional[torch.FloatTensor] = None
-    encoder_last_hidden_state: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     vision_model_output: Optional[Tuple[torch.FloatTensor]] = None
+
+
+class Kosmos2Model(Kosmos2PreTrainedModel):
+    config_class = Kosmos2Config
+
+    def __init__(
+        self,
+        config: Kosmos2Config,
+    ):
+        super().__init__(config)
+
+        self.text_model = Kosmos2TextModel(config.text_config)
+        vision_model = AutoModel.from_config(config.vision_config)
+
+        # Need to be more thorough
+        if vision_model.__class__.__name__ == "CLIPModel":
+            self.vision_model = vision_model.vision_model
+        else:
+            self.vision_model = vision_model
+
+        self.img_connector = KosmosConnector(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.text_model.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.text_model.model.embed_tokens = value
+
+    def forward(
+        self,
+        pixel_values: Optional[torch.Tensor] = None,
+        img_attn_mask = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask = None,
+        head_mask: Optional[torch.Tensor] = None,
+        img_features: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        vision_model_output = None
+        image_connector_attention = None
+        if img_features is None:
+
+            if pixel_values is None:
+                raise ValueError("You have to specify pixel_values")
+
+            vision_model_output = self.vision_model(pixel_values)
+            # HF CLIP has `last_hidden_state` without through `post_layernorm`
+            # Here we want to pass the whole `last_hidden_state` instead of `pooled_output` from clip model
+            img_features = self.vision_model.post_layernorm(vision_model_output.last_hidden_state)
+            # normalized
+            img_features = nn.functional.normalize(img_features, dim=-1)
+            img_features, image_connector_attention = self.img_connector(img_features)
+
+        outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            img_features=img_features,
+            img_attn_mask=img_attn_mask,
+            head_mask=head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if not return_dict:
+            outputs = outputs + (img_features, image_connector_attention, vision_model_output)
+            return tuple(output for output in outputs if output is not None)
+
+        return Kosmos2ModelOutput(
+            last_hidden_states=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_features=img_features,
+            image_connector_attention=image_connector_attention,
+            vision_model_output=vision_model_output,
+        )
 
 
 class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
     config_class = Kosmos2Config
+    _tied_weights_keys = ["text_model.lm_head.weight"]
 
     def __init__(
         self,
@@ -928,24 +1108,48 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.text_model.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.text_model.model.embed_tokens = value
+
+    # We can't have this (with `config.tie_word_embeddings=True`) if we don't implement `get_input_embeddings` above
+    def get_output_embeddings(self):
+        return self.text_model.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.text_model.set_output_embeddings(new_embeddings)
+
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
         img_attn_mask = None,
-        decoder_input_ids: Optional[torch.Tensor] = None,
-        decoder_attention_mask = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask = None,
+        head_mask: Optional[torch.Tensor] = None,
+        img_features: Optional[List[torch.FloatTensor]] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
-        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
-        decoder_inputs_embeds: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         vision_model_output = None
-        img_features = None
         image_connector_attention = None
-        if pixel_values is not None:
+        if img_features is None:
+
+            if pixel_values is None:
+                raise ValueError("You have to specify pixel_values")
+
             vision_model_output = self.vision_model(pixel_values)
             # HF CLIP has `last_hidden_state` without through `post_layernorm`
             # Here we want to pass the whole `last_hidden_state` instead of `pooled_output` from clip model
@@ -954,36 +1158,75 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
             img_features = nn.functional.normalize(img_features, dim=-1)
             img_features, image_connector_attention = self.img_connector(img_features)
 
-        # so far not used
-        encoder_outputs = None
-
         lm_outputs = self.text_model(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
             img_features=img_features,
             img_attn_mask=img_attn_mask,
+            head_mask=head_mask,
             past_key_values=past_key_values,
-            inputs_embeds=decoder_inputs_embeds,
+            inputs_embeds=inputs_embeds,
+            labels=labels,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
+        if not return_dict:
+            outputs = lm_outputs + (img_features, image_connector_attention, vision_model_output)
+            return tuple(output for output in outputs if output is not None)
+
         return Kosmos2ForConditionalGenerationModelOutput(
-            loss=None,
+            loss=lm_outputs.loss,
             logits=lm_outputs.logits,
             past_key_values=lm_outputs.past_key_values,
-            decoder_hidden_states=lm_outputs.hidden_states,
-            decoder_attentions=lm_outputs.attentions,
-            cross_attentions=lm_outputs.cross_attentions,
+            hidden_states=lm_outputs.hidden_states,
+            attentions=lm_outputs.attentions,
             image_features=img_features,
-            encoder_last_hidden_state=None,
-            encoder_hidden_states=None,
-            encoder_attentions=None,
+            image_connector_attention=image_connector_attention,
             vision_model_output=vision_model_output,
         )
 
+    def generate(
+        self,
+        pixel_values=None,
+        input_ids=None,
+        attention_mask=None,
+        img_features=None,
+        inputs_embeds=None,
+        **kwargs,
+    ):
+        # to allow `inputs` argument
+        inputs = kwargs.pop("inputs", None)
+        if pixel_values is not None and inputs is not None:
+            raise ValueError(
+                f"`inputs`: {inputs} were passed alongside `pixel_values` which is not allowed."
+                f"Make sure to either pass `inputs` or pixel_values=..."
+            )
+        if pixel_values is None:
+            if inputs is not None:
+                pixel_values = inputs
+
+        if img_features is None:
+
+            vision_model_output = self.vision_model(pixel_values)
+            # HF CLIP has `last_hidden_state` without through `post_layernorm`
+            # Here we want to pass the whole `last_hidden_state` instead of `pooled_output` from clip model
+            img_features = self.vision_model.post_layernorm(vision_model_output.last_hidden_state)
+            # normalized
+            img_features = nn.functional.normalize(img_features, dim=-1)
+            img_features, image_connector_attention = self.img_connector(img_features)
+
+        output = self.text_model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            img_features=img_features,
+            input_embeds=inputs_embeds,
+            **kwargs,
+        )
+
+        return output
 
 # ==============================================================================================================
 # conversion
@@ -1020,15 +1263,15 @@ def rename_key(key):
     # text decoder
     key = re.sub(r"gpt_model.decoder\.", "text_model.", key)
     # text decode: `embed_tokens`
-    key = re.sub(r"\.embed_tokens\.", ".kosmos_2_text.embed_tokens.", key)
+    key = re.sub(r"\.embed_tokens\.", ".model.embed_tokens.", key)
 
     # text decode: `embed_positions` (no weight)
     # key: gpt_model.decoder.embed_positions._float_tensor
     # renamed_key: text_model.embed_positions._float_tensor
 
-    key = re.sub(r"\.layers\.", ".kosmos_2_text.layers.", key)
+    key = re.sub(r"\.layers\.", ".model.layers.", key)
 
-    key = re.sub(r"^text_model.layer_norm\.", "text_model.kosmos_2_text.layer_norm.", key)
+    key = re.sub(r"^text_model.layer_norm\.", "text_model.model.layer_norm.", key)
 
     key = re.sub(r"^text_model.output_projection\.", "text_model.lm_head.", key)
 
@@ -1151,11 +1394,11 @@ def load_and_check_vision_model():
     assert(set(hf_clip_vision_keys).issubset(renamed_keys))
 
 
-def load_and_check_model(model):
+def load_and_check_model(model, ckpt_path):
 
     # ================================================================================
     # load (small) state dict
-    state_dict = torch.load(original_kosmos2_checkpoint_only_2_layers)
+    state_dict = torch.load(ckpt_path)
     state_dict_keys = list(state_dict.keys())
 
     # ================================================================================
@@ -1441,9 +1684,9 @@ def check_model_with_dummy_inputs(model):
     dummy_img_attn_mask = torch.cat((torch.ones(size=(1, 64)), torch.zeros(size=(1, 7))), dim=-1).to("cpu").bool()
 
     # pass only text
-    model_output_only_text = model(
-        pixel_values=None,
-        decoder_input_ids=dummy_input_ids,
+    model_output_only_text = model.text_model(
+        # pixel_values=None,
+        input_ids=dummy_input_ids,
         img_attn_mask=None,
     )
     logits_only_text = model_output_only_text.logits
@@ -1453,7 +1696,7 @@ def check_model_with_dummy_inputs(model):
     # pass text and vision
     model_output = model(
         pixel_values=dummy_pixel_values,
-        decoder_input_ids=dummy_input_ids,
+        input_ids=dummy_input_ids,
         img_attn_mask=dummy_img_attn_mask
     )
     logits = model_output.logits
@@ -1565,7 +1808,7 @@ def check_model_with_dog_sample(model):
     # It's of shape [1, 1, 3, 224, 224]. Change it to `[1, 3, 224, 224]`
     pixel_values = pixel_values[0]
 
-    decoder_input_ids = sample["net_input"]["src_tokens"]
+    input_ids = sample["net_input"]["src_tokens"]
     img_attn_mask = sample["net_input"]["img_gpt_input_mask"]
     # We need a `bool` value
     img_attn_mask = img_attn_mask.bool()
@@ -1573,7 +1816,7 @@ def check_model_with_dog_sample(model):
     # --------------------------------------------------------------------
     # `use_cache=False`
 
-    model_output_no_cache = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids, img_attn_mask=img_attn_mask, use_cache=False)
+    model_output_no_cache = model(pixel_values=pixel_values, input_ids=input_ids, img_attn_mask=img_attn_mask, use_cache=False)
 
     logits_no_cache = model_output_no_cache.logits
     past_key_values_no_cache = model_output_no_cache.past_key_values
@@ -1582,7 +1825,7 @@ def check_model_with_dog_sample(model):
     # --------------------------------------------------------------------
     # `use_cache=True` to get the initial `past_key_values`
 
-    model_output = model(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids, img_attn_mask=img_attn_mask, use_cache=True)
+    model_output = model(pixel_values=pixel_values, input_ids=input_ids, img_attn_mask=img_attn_mask, use_cache=True)
 
     logits = model_output.logits
     past_key_values = model_output.past_key_values
@@ -1642,9 +1885,9 @@ def check_model_with_dog_sample(model):
     # --------------------------------------------------------------------
     # next step: without `past_key_values`
 
-    new_decoder_input_ids = torch.cat((decoder_input_ids, torch.tensor([[9]], dtype=torch.long, device="cpu")), dim=1)
+    new_input_ids = torch.cat((input_ids, torch.tensor([[9]], dtype=torch.long, device="cpu")), dim=1)
     new_img_attn_mask = torch.cat((img_attn_mask, torch.tensor([[False]], dtype=torch.bool, device="cpu")), dim=1)
-    new_model_output = model(pixel_values=pixel_values, decoder_input_ids=new_decoder_input_ids, img_attn_mask=new_img_attn_mask)
+    new_model_output = model(pixel_values=pixel_values, input_ids=new_input_ids, img_attn_mask=new_img_attn_mask)
 
     new_logits = new_model_output.logits
     new_past_key_values = new_model_output.past_key_values
@@ -1656,11 +1899,12 @@ def check_model_with_dog_sample(model):
     # --------------------------------------------------------------------
     # next step: with `past_key_values`
 
-    next_decoder_input_ids = torch.tensor([[9]], dtype=torch.long, device="cpu")
-    # no need to pass `pixel_values`
+    next_input_ids = torch.tensor([[9]], dtype=torch.long, device="cpu")
+    # (no need to pass `pixel_values`) -> need to specify it or `image_features`
     next_pixel_values = None
+    next_image_features = image_features
     next_img_attn_mask = None
-    next_model_output = model(pixel_values=next_pixel_values, decoder_input_ids=next_decoder_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=past_key_values, use_cache=True)
+    next_model_output = model(pixel_values=next_pixel_values, img_features=next_image_features, input_ids=next_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=past_key_values, use_cache=True)
 
     next_logits = next_model_output.logits
     next_past_key_values = next_model_output.past_key_values
@@ -1708,12 +1952,12 @@ def check_model_with_dog_sample(model):
     # no need to pass `img_features` (`pixel_values`) and `img_attn_mask`
     generated_output = model.text_model.generate(
         # we need to provide the full `input_ids` not just the trailing one!
-        input_ids=new_decoder_input_ids,
+        input_ids=new_input_ids,
         use_cache=True,
         past_key_values=past_key_values,
         img_features=None,
         img_attn_mask=None,
-        # not sure why we get one more token being generated
+        # we already generated the first token (step 71 -> 72)
         max_new_tokens=len(expected_generation) - 1,
     )
 
@@ -1723,26 +1967,498 @@ def check_model_with_dog_sample(model):
     assert generated_output[0, 71:].tolist() == expected_generation
 
 
-if __name__ == "__main__":
+def check_real_model_with_dog_sample(model):
 
-    # ================================================================================
-    # config & model creation
+    # --------------------------------------------------------------------
+    # real input: (dog)
+
+    sample = torch.load(dog_sample_file, map_location=torch.device('cpu'))
+
+    pixel_values = sample["net_input"]["img_src_tokens"]
+    # It's of shape [1, 1, 3, 224, 224]. Change it to `[1, 3, 224, 224]`
+    pixel_values = pixel_values[0]
+
+    input_ids = sample["net_input"]["src_tokens"]
+    img_attn_mask = sample["net_input"]["img_gpt_input_mask"]
+    # We need a `bool` value
+    img_attn_mask = img_attn_mask.bool()
+
+    # --------------------------------------------------------------------
+    # `use_cache=False`
+
+    model_output_no_cache = model(pixel_values=pixel_values, input_ids=input_ids, img_attn_mask=img_attn_mask, use_cache=False)
+
+    logits_no_cache = model_output_no_cache.logits
+    past_key_values_no_cache = model_output_no_cache.past_key_values
+    image_features_no_cache = model_output_no_cache.image_features
+
+    # --------------------------------------------------------------------
+    # `use_cache=True` to get the initial `past_key_values`
+
+    model_output = model(pixel_values=pixel_values, input_ids=input_ids, img_attn_mask=img_attn_mask, use_cache=True)
+
+    logits = model_output.logits
+    past_key_values = model_output.past_key_values
+    image_features = model_output.image_features
+
+    # --------------------------------------------------------------------
+    # verify the results between with/without using `cache`
+
+    assert past_key_values_no_cache is None
+    assert past_key_values is not None
+
+    assert torch.max(torch.abs(image_features - image_features_no_cache)) < 1e-12
+    assert torch.max(torch.abs(logits - logits_no_cache)) < 1e-12
+
+    # --------------------------------------------------------------------
+    # check with the original kosmos-2 output: initial step (step 71 -> step 72)
+
+    assert list(logits.shape) == [1, 71, 65037]
+
+    expected_block_1 = torch.tensor(
+        [
+            [2.920926332473755, -5.4380574226379395, 2.8645224571228027],
+            [0.004667307715862989, -5.0997819900512695, 4.338554382324219],
+            [-0.5761765837669373, -4.547626972198486, 3.8142454624176025],
+        ],
+    )
+    expected_block_2 = torch.tensor(
+        [
+            [-2.61974835395813, -2.6742029190063477, -1.6856958866119385],
+            [-2.251966714859009, -2.242988348007202, -1.5341331958770752],
+            [-2.3858885765075684, -1.5038200616836548, -1.013083577156067],
+        ],
+    )
+    expected_block_3 = torch.tensor(
+        [
+            [-1.3929418325424194, -4.623406410217285, 3.7545101642608643],
+            [0.522249698638916, -4.5460662841796875, 7.236062526702881],
+            [-1.7789695262908936, -5.221266746520996, 3.770735740661621],
+        ],
+    )
+    expected_block_4 = torch.tensor(
+        [
+            [-2.3952505588531494, -2.878037452697754, -1.3662471771240234],
+            [-3.3000922203063965, -3.0199999809265137, -0.24584506452083588],
+            [-2.8502795696258545, -3.096112012863159, -0.771698534488678],
+        ],
+    )
+
+    diff_1 = torch.max(torch.abs(logits[0, :+3, :+3] - expected_block_1))
+    diff_2 = torch.max(torch.abs(logits[0, :+3, -3:] - expected_block_2))
+    diff_3 = torch.max(torch.abs(logits[0, -3:, :+3] - expected_block_3))
+    diff_4 = torch.max(torch.abs(logits[0, -3:, -3:] - expected_block_4))
+
+    max_diff = torch.max(torch.tensor([diff_1, diff_2, diff_3, diff_4]))
+    assert max_diff < 3e-5
+
+    expected_next_token = 64007
+    predicted_next_token = torch.argmax(logits[0, -1, :]).detach().to("cpu").numpy().tolist()
+
+    assert predicted_next_token == expected_next_token
+
+    # --------------------------------------------------------------------
+    # next step: without `past_key_values`
+
+    next_token = expected_next_token
+
+    new_input_ids = torch.cat((input_ids, torch.tensor([[next_token]], dtype=torch.long, device="cpu")), dim=1)
+    new_img_attn_mask = torch.cat((img_attn_mask, torch.tensor([[False]], dtype=torch.bool, device="cpu")), dim=1)
+    new_model_output = model(pixel_values=pixel_values, input_ids=new_input_ids, img_attn_mask=new_img_attn_mask)
+
+    new_logits = new_model_output.logits
+    new_past_key_values = new_model_output.past_key_values
+
+    assert new_past_key_values is None
+
+    print(new_logits[:, -1, :])
+
+    # --------------------------------------------------------------------
+    # next step: with `past_key_values`
+
+    next_input_ids = torch.tensor([[next_token]], dtype=torch.long, device="cpu")
+    # (no need to pass `pixel_values`) -> need to specify it or `image_features`
+    next_pixel_values = None
+    next_image_features = image_features
+    next_img_attn_mask = None
+    next_model_output = model(pixel_values=next_pixel_values, img_features=next_image_features, input_ids=next_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=past_key_values, use_cache=True)
+
+    next_logits = next_model_output.logits
+    next_past_key_values = next_model_output.past_key_values
+
+    assert next_past_key_values is not None
+
+    print(next_logits[:, -1, :])
+
+    # --------------------------------------------------------------------
+    # verify the results between with/without using `past_key_values`
+
+    max_diff = torch.max(torch.abs(new_logits[:, -1, :] - next_logits[:, -1, :]))
+    print(max_diff)
+    assert max_diff < torch.tensor(3e-5)
+
+    # --------------------------------------------------------------------
+    # check with the original kosmos-2 output: next step (step 72 -> step 73)
+
+    assert list(next_logits.shape) == [1, 1, 65037]
+
+    expected_block_1 = torch.tensor([[[-1.3323104, -5.1079516,  5.359114 ]]])
+    expected_block_2 = torch.tensor([[[-2.8319776, -3.5213413, -1.8274367]]])
+
+    diff_1 = torch.max(torch.abs(next_logits[0, 0, :+3] - expected_block_1))
+    diff_2 = torch.max(torch.abs(next_logits[0, 0, -3:] - expected_block_2))
+
+    max_diff = torch.max(torch.tensor([diff_1, diff_2]))
+    assert max_diff < 3e-5
+
+    expected_next_token = 94
+    predicted_next_token = torch.argmax(next_logits[0, -1, :]).detach().to("cpu").numpy().tolist()
+
+    assert predicted_next_token == expected_next_token
+
+    # --------------------------------------------------------------------
+    # repeat the above check with more extra steps (step 73 -> step 74)
+    # check with the original kosmos-2 output: next step
+
+    # steps: 73 -> 74 -> .. -> 83 (-> 84)
+    steps = list(range(73, 83 + 1))
+
+    next_tokens = [94, 17772, 64008, 64009, 64092, 65029, 64011, 64148, 65021, 64010, 1280, 12]
+
+    expected_blocks = [
+        ([-1.5333264, -5.0365257,  5.595204 ], [-2.1252668, -2.9195867, -1.3610152]),
+        ([-1.14558  , -4.6416078,  8.611397 ], [-1.9524179, -2.3943331, -1.2364707]),
+        ([ 2.1540604, -2.713409 ,  1.8866036], [ 1.631276 ,  0.8916559, -0.4697148]),
+        ([-1.1833401, -3.1272492, -1.4443989], [2.75421  , 2.1421206, 1.2756062]),
+        ([-1.429662 , -4.2857313,  1.123333 ], [13.215454, 13.476381, 14.000856]),
+        ([-0.10423064, -4.0805306 ,  7.669438  ], [1.3264995 , 0.37444258, 2.872366  ]),
+        ([-1.9969933, -4.391607 , -3.4535604], [ 0.15055317,  0.05899912, -0.0650674 ]),
+        ([-2.1537013, -4.2108035,  2.163306 ], [8.790059, 8.622845, 9.70795 ]),
+        ([-0.10536906, -2.7584782 ,  5.857536  ], [4.7097054, 3.5752287, 6.4874005]),
+        ([-0.40761316, -4.65115   , 16.127958  ], [-3.0172224, -3.2040298, -2.283117 ]),
+        ([ 0.4004581, -4.4891667, 14.7836075], [-0.9358875, -1.006671 , -0.1364981]),
+    ]
+
+    for (step, next_token, expected_next_token, (expected_block_1, expected_block_2)) in zip(steps, next_tokens[:-1], next_tokens[1:], expected_blocks):
+
+        print(f"step: {step}")
+
+        new_input_ids = torch.cat((new_input_ids, torch.tensor([[next_token]], dtype=torch.long, device="cpu")), dim=1)
+        new_img_attn_mask = torch.cat((new_img_attn_mask, torch.tensor([[False]], dtype=torch.bool, device="cpu")), dim=1)
+        new_model_output = model(pixel_values=pixel_values, input_ids=new_input_ids, img_attn_mask=new_img_attn_mask)
+
+        new_logits = new_model_output.logits
+        new_past_key_values = new_model_output.past_key_values
+
+        assert new_past_key_values is None
+
+        print(new_logits[:, -1, :])
+
+        # --------------------------------------------------------------------
+        # next step: with `past_key_values`
+
+        next_input_ids = torch.tensor([[next_token]], dtype=torch.long, device="cpu")
+        # (no need to pass `pixel_values`) -> need to specify it or `image_features`
+        next_pixel_values = None
+        next_image_features = image_features
+        next_img_attn_mask = None
+        next_model_output = model(pixel_values=next_pixel_values, img_features=next_image_features, input_ids=next_input_ids, img_attn_mask=next_img_attn_mask, past_key_values=next_past_key_values, use_cache=True)
+
+        next_logits = next_model_output.logits
+        next_past_key_values = next_model_output.past_key_values
+
+        assert next_past_key_values is not None
+
+        print(next_logits[:, -1, :])
+
+        # --------------------------------------------------------------------
+        # verify the results between with/without using `past_key_values`
+
+        max_diff = torch.max(torch.abs(new_logits[:, -1, :] - next_logits[:, -1, :]))
+        # step 75 has a slightly bigger diff
+        allowed_max_diff = 3e-5 if step != 75 else 5e-5
+
+        assert max_diff < torch.tensor(allowed_max_diff)
+
+        # --------------------------------------------------------------------
+        # check with the original kosmos-2 output: next step
+
+        assert list(next_logits.shape) == [1, 1, 65037]
+
+        expected_block_1 = torch.tensor([[expected_block_1]])
+        expected_block_2 = torch.tensor([[expected_block_2]])
+
+        diff_1 = torch.max(torch.abs(next_logits[0, 0, :+3] - expected_block_1))
+        diff_2 = torch.max(torch.abs(next_logits[0, 0, -3:] - expected_block_2))
+
+        max_diff = torch.max(torch.tensor([diff_1, diff_2]))
+        allowed_max_diff = 3e-5
+
+        assert max_diff < allowed_max_diff
+
+        predicted_next_token = torch.argmax(next_logits[0, -1, :]).detach().to("cpu").numpy().tolist()
+
+        assert predicted_next_token == expected_next_token
+
+    # --------------------------------------------------------------------
+    # generation
+
+    new_input_ids = torch.cat((new_input_ids, torch.tensor([[predicted_next_token]], dtype=torch.long, device="cpu")), dim=1)
+    new_img_attn_mask = torch.cat((new_img_attn_mask, torch.tensor([[False]], dtype=torch.bool, device="cpu")), dim=1)
+
+    expected_generation = [
+         64007,    94, 17772, 64008, 64009, 64092, 65029, 64011, 64148,
+         65021, 64010,  1280,    12, 64007,     5,  4464, 64008, 64009, 64013,
+         65036, 64010, 2
+    ]
+
+    # use `text_model` directly
+    # with `past_key_values` being passed as the initialized
+    # no need to pass `img_features` (`pixel_values`) and `img_attn_mask`
+    generated_output = model.text_model.generate(
+        input_ids=new_input_ids,
+        use_cache=True,
+        past_key_values=next_past_key_values,
+        img_features=None,
+        img_attn_mask=None,
+        # we already generated 13 tokens: from `64007` (step 71 -> 72) to `12` (step 83 -> 84)
+        max_new_tokens=len(expected_generation) - 13,
+    )
+
+    # --------------------------------------------------------------------
+    # check with the original kosmos-2 output generation output: (step 84 -> step X)
+
+    assert generated_output[0, 71:].tolist() == expected_generation
+
+    # --------------------------------------------------------------------
+    # Use `eos_token_id`
+
+    # or we can specify `eos_token_id` to stop earlier.
+    generated_output = model.text_model.generate(
+        input_ids=new_input_ids,
+        use_cache=True,
+        past_key_values=next_past_key_values,
+        img_features=None,
+        img_attn_mask=None,
+        # we already generated 13 tokens: from `64007` (step 71 -> 72) to `12` (step 83 -> 84)
+        # use `eos_token_id=2` to stop earlier
+        # TODO: specify this in the config file
+        # we still need to specify this: so we get long enough generations
+        max_new_tokens=len(expected_generation),
+        eos_token_id=2,
+    )
+    assert generated_output[0, 71:].tolist() == expected_generation
+
+    # --------------------------------------------------------------------
+    # generation without `use_cache` (from step 84)
+
+    # use `text_model` directly
+    # with `use_cache=False` and `past_key_values=None`
+    # need to pass `img_features` and `img_attn_mask` (for the `correctness`)
+    generated_output = model.text_model.generate(
+        input_ids=new_input_ids,
+        use_cache=False,
+        past_key_values=None,
+        img_features=image_features,
+        img_attn_mask=new_img_attn_mask,
+        # we already generated 13 tokens: from `64007` (step 71 -> 72) to `12` (step 83 -> 84)
+        max_new_tokens=len(expected_generation) - 13,
+    )
+    assert generated_output[0, 71:].tolist() == expected_generation
+
+    # --------------------------------------------------------------------
+    # generation without `use_cache` (from the start)
+
+    # use `text_model` directly
+    # with`use_cache=False` (from the start --> `past_key_values=None`)
+    # need to pass `img_features` and `img_attn_mask` (for the `correctness`)
+    generated_output = model.text_model.generate(
+        input_ids=input_ids,
+        use_cache=False,
+        past_key_values=None,
+        img_features=image_features,
+        img_attn_mask=img_attn_mask,
+        max_new_tokens=len(expected_generation),
+        output_scores=True,
+        return_dict_in_generate=True,
+    )
+
+    assert generated_output.sequences[0, 71:].tolist() == expected_generation
+
+    for score, expected_block in zip(generated_output.scores[2:12], expected_blocks):
+        assert torch.max(torch.abs(score[0, :+3] - torch.tensor(expected_block[0]))) < 5e-5
+        assert torch.max(torch.abs(score[0, -3:] - torch.tensor(expected_block[1]))) < 5e-5
+
+    # --------------------------------------------------------------------
+    # generation with `use_cache` (from the start)
+
+    # use `text_model` directly
+    # with `use_cache=True` (from the start --> `past_key_values=None`)
+    # need to pass `img_features` and `img_attn_mask` (for the `correctness`)
+    generated_output = model.text_model.generate(
+        input_ids=input_ids,
+        use_cache=True,
+        past_key_values=None,
+        img_features=image_features,
+        img_attn_mask=img_attn_mask,
+        max_new_tokens=len(expected_generation),
+        output_scores=True,
+        return_dict_in_generate=True,
+    )
+
+    assert generated_output.sequences[0, 71:].tolist() == expected_generation
+
+    for score, expected_block in zip(generated_output.scores[2:12], expected_blocks):
+        assert torch.max(torch.abs(score[0, :+3] - torch.tensor(expected_block[0]))) < 3e-5
+        assert torch.max(torch.abs(score[0, -3:] - torch.tensor(expected_block[1]))) < 3e-5
+
+    # --------------------------------------------------------------------
+    # generation without `use_cache` (from the start)
+
+    # use `model`
+    # with`use_cache=False` (from the start --> `past_key_values=None`)
+    generated_output = model.generate(
+        pixel_values=pixel_values,
+        input_ids=input_ids,
+        use_cache=False,
+        past_key_values=None,
+        # we can specify `None` here.
+        img_features=image_features,
+        img_attn_mask=img_attn_mask,
+        max_new_tokens=len(expected_generation),
+        output_scores=True,
+        return_dict_in_generate=True,
+    )
+
+    assert generated_output.sequences[0, 71:].tolist() == expected_generation
+
+    for score, expected_block in zip(generated_output.scores[2:12], expected_blocks):
+        assert torch.max(torch.abs(score[0, :+3] - torch.tensor(expected_block[0]))) < 5e-5
+        assert torch.max(torch.abs(score[0, -3:] - torch.tensor(expected_block[1]))) < 5e-5
+
+    # --------------------------------------------------------------------
+    # generation with `use_cache` (from the start)
+
+    # use `model`
+    # with `use_cache=True` (from the start --> `past_key_values=None`)
+    generated_output = model.generate(
+        pixel_values=pixel_values,
+        input_ids=input_ids,
+        use_cache=True,
+        past_key_values=None,
+        img_features=None,
+        img_attn_mask=img_attn_mask,
+        max_new_tokens=len(expected_generation),
+        output_scores=True,
+        return_dict_in_generate=True,
+    )
+
+    assert generated_output.sequences[0, 71:].tolist() == expected_generation
+
+    for score, expected_block in zip(generated_output.scores[2:12], expected_blocks):
+        assert torch.max(torch.abs(score[0, :+3] - torch.tensor(expected_block[0]))) < 3e-5
+        assert torch.max(torch.abs(score[0, -3:] - torch.tensor(expected_block[1]))) < 3e-5
+
+    # --------------------------------------------------------------------
+    # generation with `use_cache` (from the start)
+
+    # use `model`
+    # with `use_cache=True` (from the start --> `past_key_values=None`)
+    generated_output = model.generate(
+        pixel_values=pixel_values,
+        input_ids=input_ids,
+        use_cache=True,
+        past_key_values=None,
+        img_features=image_features,
+        img_attn_mask=img_attn_mask,
+        max_new_tokens=len(expected_generation),
+        output_scores=True,
+        return_dict_in_generate=True,
+    )
+
+    assert generated_output.sequences[0, 71:].tolist() == expected_generation
+
+    for score, expected_block in zip(generated_output.scores[2:12], expected_blocks):
+        assert torch.max(torch.abs(score[0, :+3] - torch.tensor(expected_block[0]))) < 3e-5
+        assert torch.max(torch.abs(score[0, -3:] - torch.tensor(expected_block[1]))) < 3e-5
+
+    # --------------------------------------------------------------------
+    # generation with `use_cache` (from step 84)
+
+    # use `model`
+    # with `use_cache=True`
+    generated_output = model.generate(
+        pixel_values=pixel_values,
+        input_ids=new_input_ids,
+        use_cache=True,
+        past_key_values=next_past_key_values,
+        img_features=None,
+        img_attn_mask=new_img_attn_mask,
+        # we already generated 13 tokens: from `64007` (step 71 -> 72) to `12` (step 83 -> 84)
+        max_new_tokens=len(expected_generation) - 13,
+    )
+    assert generated_output[0, 71:].tolist() == expected_generation
+
+    # --------------------------------------------------------------------
+    # generation with `use_cache` (from step 84)
+
+    # use `model`
+    # with `use_cache=True`
+    generated_output = model.generate(
+        pixel_values=pixel_values,
+        input_ids=new_input_ids,
+        use_cache=True,
+        past_key_values=next_past_key_values,
+        img_features=image_features,
+        img_attn_mask=new_img_attn_mask,
+        # we already generated 13 tokens: from `64007` (step 71 -> 72) to `12` (step 83 -> 84)
+        max_new_tokens=len(expected_generation) - 13,
+    )
+    assert generated_output[0, 71:].tolist() == expected_generation
+
+
+def check_head_base_model_loading(config):
+
+    model = Kosmos2ForConditionalGeneration(config=config)
+    ckpt = "Kosmos2ForConditionalGeneration"
+    model.save_pretrained(ckpt)
+
+    loaded_config = Kosmos2Config.from_pretrained(ckpt)
+    loaded_config.architectures = ["Kosmos2Model"]
+    loaded_config.save_pretrained(ckpt)
+    loaded_config = Kosmos2Config.from_pretrained(ckpt)
+    print(loaded_config.architectures)
+
+    _ = Kosmos2Model.from_pretrained(ckpt)
+
+
+    base_model = Kosmos2Model(config=config)
+    ckpt = "Kosmos2Model"
+    base_model.save_pretrained(ckpt)
+
+    loaded_config = Kosmos2Config.from_pretrained(ckpt)
+    loaded_config.architectures = ["Kosmos2ForConditionalGeneration"]
+    loaded_config.save_pretrained(ckpt)
+    loaded_config = Kosmos2Config.from_pretrained(ckpt)
+    print(loaded_config.architectures)
+
+    _ = Kosmos2ForConditionalGeneration.from_pretrained(ckpt)
+
+
+def create_model(num_layers=2):
 
     text_config = {
         "use_cache": False,
         "scale_embedding": True,
-        "layernorm_embedding": False,
         "dropout": 0.1,
-        "subln": True,
         "attention_dropout": 0.1,
-        "decoder_normalize_before": True,
         "activation_function": "gelu",
         "activation_dropout": 0.0,
         "add_cross_attention": False,
-        "decoder_attention_heads": 32,
-        "decoder_ffn_dim": 8192,
+        "attention_heads": 32,
+        "ffn_dim": 8192,
         "embed_dim": 2048,
-        "decoder_layers": 2,
+        "layers": num_layers,
         "layer_norm_eps": 1e-5,
         "gradient_checkpointing": False,
         # to match the demo
@@ -1752,7 +2468,7 @@ if __name__ == "__main__":
     }
     clip_config = CLIPConfig()
     #  2 layers
-    clip_config.vision_config.num_hidden_layers = 2
+    clip_config.vision_config.num_hidden_layers = num_layers
     clip_config.vision_config.hidden_size = 1024
     clip_config.vision_config.intermediate_size = 4096
     clip_config.vision_config.num_attention_heads = 16
@@ -1767,11 +2483,26 @@ if __name__ == "__main__":
 
     print(model)
 
+    return model
+
+
+if __name__ == "__main__":
+
+    # ================================================================================
+    # config & model creation
+
+    dummy_model = create_model(num_layers=2)
+
+    # ================================================================================
+    # check the head model's checkpoint could be loaded into the base model and vice-versa
+
+    check_head_base_model_loading(dummy_model.config)
+
     # ================================================================================
     # check model keys and loading
 
     load_and_check_vision_model()
-    load_and_check_model(model)
+    load_and_check_model(dummy_model, ckpt_path=original_kosmos2_checkpoint_only_2_layers)
 
     # ================================================================================
     # check loaded text model outputs
@@ -1784,5 +2515,35 @@ if __name__ == "__main__":
     # Including the padding token id `1`  in `input_ids` to make sure everything work
     # (especially the positional embedding)
 
-    check_model_with_dummy_inputs(model)
-    check_model_with_dog_sample(model)
+    check_model_with_dummy_inputs(dummy_model)
+    check_model_with_dog_sample(dummy_model)
+
+    # ================================================================================
+    # real config & model creation
+
+    real_model = create_model(num_layers=24)
+
+    # need to create this checkpoint
+    load_and_check_model(real_model, ckpt_path="kosmos2_state_dict.bin")
+    real_model.save_pretrained("HF_Kosmos2")
+
+    # check we can load
+    real_model = Kosmos2ForConditionalGeneration.from_pretrained("HF_Kosmos2")
+
+    # # If we want to push to the Hub
+    # # repo_id = "ydshieh/kosmos-2"
+    # # real_model.save_pretrained("HF_Kosmos2", push_to_hub=True, repo_id=repo_id, use_auth_token="XXX")
+    #
+    # # check we can load from the Hub
+    # # real_model = Kosmos2ForConditionalGeneration.from_pretrained(repo_id)
+
+    # repo_id = "ydshieh/kosmos-2"
+    #
+    # # check we can load from the Hub
+    # real_model = Kosmos2ForConditionalGeneration.from_pretrained(repo_id)
+
+    # ================================================================================
+
+    check_real_model_with_dog_sample(real_model)
+
+    # ================================================================================
