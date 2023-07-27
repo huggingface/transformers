@@ -5702,7 +5702,6 @@ if TYPE_CHECKING:
         from .models.idefics import (
             IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST,
             IdeficsForVisionText2Text,
-            IdeficsGatedCrossAttentionLayer,
             IdeficsModel,
             IdeficsPreTrainedModel,
         )
