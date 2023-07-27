@@ -24,11 +24,8 @@ from ...feature_extraction_utils import BatchFeature
 from ...tokenization_utils import AddedToken, BatchEncoding, PaddingStrategy, PreTrainedTokenizer, TruncationStrategy
 from ...utils import TensorType, is_pretty_midi_available, logging, requires_backends, to_numpy
 
-
 if is_pretty_midi_available():
     import pretty_midi
-else:
-    raise ModuleNotFoundError("pretty_midi was not found in your environment! Please use `pip install pretty_midi`")
 
 
 logger = logging.get_logger(__name__)
