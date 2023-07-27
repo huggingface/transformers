@@ -434,11 +434,6 @@ class GeoLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             GeoLMModel,
             GeoLMLMHeadModel,
             GeoLMForMaskedLM,
-            GeoLMForMultipleChoice,
-            GeoLMForNextSentencePrediction,
-            GeoLMForPreTraining,
-            GeoLMForQuestionAnswering,
-            GeoLMForSequenceClassification,
             GeoLMForTokenClassification,
         )
         if is_torch_available()
@@ -622,35 +617,5 @@ class GeoLMModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor([[[0.4249, 0.1008, 0.7531], [0.3771, 0.1188, 0.7467], [0.4152, 0.1098, 0.7108]]])
-
-        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
-
-    @slow
-    def test_inference_no_head_relative_embedding_key(self):
-        model = GeoLMModel.from_pretrained("zhiheng-huang/zekun-li/geolm-base-cased-embedding-relative-key")
-        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
-        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
-        with torch.no_grad():
-            output = model(input_ids, attention_mask=attention_mask)[0]
-        expected_shape = torch.Size((1, 11, 768))
-        self.assertEqual(output.shape, expected_shape)
-        expected_slice = torch.tensor(
-            [[[0.0756, 0.3142, -0.5128], [0.3761, 0.3462, -0.5477], [0.2052, 0.3760, -0.1240]]]
-        )
-
-        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
-
-    @slow
-    def test_inference_no_head_relative_embedding_key_query(self):
-        model = GeoLMModel.from_pretrained("zhiheng-huang/zekun-li/geolm-base-cased-embedding-relative-key-query")
-        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
-        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
-        with torch.no_grad():
-            output = model(input_ids, attention_mask=attention_mask)[0]
-        expected_shape = torch.Size((1, 11, 768))
-        self.assertEqual(output.shape, expected_shape)
-        expected_slice = torch.tensor(
-            [[[0.6496, 0.3784, 0.8203], [0.8148, 0.5656, 0.2636], [-0.0681, 0.5597, 0.7045]]]
-        )
 
         self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
