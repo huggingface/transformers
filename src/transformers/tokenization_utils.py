@@ -345,22 +345,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._added_tokens_encoder = {}
-        self._added_tokens_decoder = {}
+        self.tokens_trie = Trie()
+        self._added_tokens_decoder: Dict[int, AddedToken] = {}
         self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
         self._decode_use_source_tokenizer = False
 
     @property
     def is_fast(self) -> bool:
         return False
-
-    @property
-    def added_tokens_encoder(self):
-        return self._added_tokens_encoder
-
-    @property
-    def added_tokens_decoder(self):
-        return self._added_tokens_decoder
 
     @property
     def vocab_size(self) -> int:
@@ -426,26 +418,19 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 new_idx = len(self.get_vocab()) + added_tokens
                 if not special_tokens and not token.special and hasattr(self, "do_lower_case") and self.do_lower_case:
                     token.content = token.content.lower()
-                self._added_tokens_encoder[token.content] = new_idx
                 self._added_tokens_decoder[new_idx] = token
-            # elif special_tokens or token.special and token.content not in self.additional_special_tokens:
-            #     # token has to be special now
-            #     token.special = True
-            #     self._added_tokens_decoder.update({self._convert_token_to_id(token.content):token})
-            #     self._added_tokens_encoder[token.content] = self._convert_token_to_id(token.content)
             elif self._convert_token_to_id(token.content) is not None:
-                self._added_tokens_encoder[token.content] = self._convert_token_to_id(token.content)
                 self._added_tokens_decoder.update({self._convert_token_to_id(token.content): token})
             else:
                 # TODO get vocab might not be the best way to get the current length with the added tokens
                 new_idx = len(self.get_vocab()) + added_tokens
-                self._added_tokens_encoder[token.content] = new_idx
                 self._added_tokens_decoder[new_idx] = token
             added_tokens += 1
+            self.tokens_trie.add(token.content)
             if self.verbose:
                 logger.info(f"Adding {token} to the vocabulary")
 
-        self._create_trie()
+        # self._create_trie() #TODO we should only have to update the trie. If we add tokens after, why re-create it?
         return added_tokens
 
     def _create_trie(self):
@@ -518,7 +503,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 tok_extended = self.added_tokens_decoder.get(self.added_tokens_encoder[token], None)
                 left = tokens[i - 1] if i > 0 else None
                 right = tokens[i + 1] if i < len(tokens) - 1 else None
-
                 if isinstance(tok_extended, AddedToken):
                     if tok_extended.single_word:
                         if right and not right[0] == " " and right not in self.all_special_tokens:
