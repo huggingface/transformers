@@ -3927,20 +3927,6 @@ else:
             "FlaxBertPreTrainedModel",
         ]
     )
-    _import_structure["models.geolm"].extend(
-        [
-            "FlaxGeoLMForCausalLM",
-            "FlaxGeoLMForMaskedLM",
-            "FlaxGeoLMForMultipleChoice",
-            "FlaxGeoLMForNextSentencePrediction",
-            "FlaxGeoLMForPreTraining",
-            "FlaxGeoLMForQuestionAnswering",
-            "FlaxGeoLMForSequenceClassification",
-            "FlaxGeoLMForTokenClassification",
-            "FlaxGeoLMModel",
-            "FlaxGeoLMPreTrainedModel",
-        ]
-    )
     _import_structure["models.big_bird"].extend(
         [
             "FlaxBigBirdForCausalLM",
