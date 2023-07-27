@@ -111,6 +111,13 @@ class HtdemucsConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.num_stems = num_stems
 
+        head_dim = self.hidden_size // self.num_attention_heads
+        if (head_dim * self.num_heads) != self.embed_dim:
+            raise ValueError(
+                f"`hidden_size` must be divisible by `num_attention_heads`. Got `hidden_size`: {self.hidden_size}"
+                f" and `num_attention_heads`: {self.num_attention_heads}."
+            )
+
         super().__init__(
             **kwargs,
         )

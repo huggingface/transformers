@@ -72,30 +72,19 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 class HtdemucsAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        bias: bool = True,
-    ):
+    def __init__(self, config: HtdemucsConfig,):
         super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.dropout = config.dropout
+        self.head_dim = config.hidden_size // config.num_attention_heads
 
-        if (self.head_dim * num_heads) != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
-                f" and `num_heads`: {num_heads})."
-            )
         self.scaling = self.head_dim**-0.5
 
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, )
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, )
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, )
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -183,17 +172,13 @@ class HtdemucsAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-class HtdemucsEncoderBlock(nn.Module):
+class HtdemucsTransformerBlock(nn.Module):
     def __init__(self, config: HtdemucsConfig, is_cross_attn=False):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.is_cross_attn = is_cross_attn
 
-        self.attn = HtdemucsAttention(
-            self.embed_dim,
-            config.num_attention_heads,
-            dropout=config.attention_dropout,
-        )
+        self.attn = HtdemucsAttention(config)
 
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -271,15 +256,15 @@ class HtdemucsEncoderBlock(nn.Module):
         return outputs
 
 
-class HtdemucsEncoderLayer(nn.Module):
+class HtdemucsTransformerLayer(nn.Module):
     def __init__(self, config: HtdemucsConfig):
         super().__init__()
 
-        self.freq_self_attn = HtdemucsEncoderBlock(config)
-        self.temp_self_attn = HtdemucsEncoderBlock(config)
+        self.freq_self_attn = HtdemucsTransformerBlock(config)
+        self.temp_self_attn = HtdemucsTransformerBlock(config)
 
-        self.freq_cross_attn = HtdemucsEncoderBlock(config, is_cross_attn=True)
-        self.temp_self_attn = HtdemucsEncoderBlock(config, is_cross_attn=True)
+        self.freq_cross_attn = HtdemucsTransformerBlock(config, is_cross_attn=True)
+        self.temp_self_attn = HtdemucsTransformerBlock(config, is_cross_attn=True)
 
     def forward(
         self,
@@ -340,6 +325,198 @@ class HtdemucsEncoderLayer(nn.Module):
             all_hidden_states
         )
 
+class HtdemucsScaledFrequencyEmbedding(nn.Module):
+    """
+    Boost the learning rate for frequency embeddings by a factor `scale`, and optionally smooth by the
+    distribution's standard deviation.
+    """
+    def __init__(self, config: HtdemucsConfig):
+        super().__init__()
+        num_embeddings = config.num_mel_bins // (2 * config.stride)
+        embedding_dim = config.hidden_channels
+
+        self.embedding = nn.Embedding(num_embeddings, embedding_dim)
+
+        if config.smooth_freq_embedding_weights:
+            weight = torch.cumsum(self.embedding.weight.data, dim=0)
+            # when summing gaussian, scale raises as sqrt(n), so we normalize by that
+            smoothing_factor = torch.arange(1, num_embeddings + 1)
+            smoothing_factor = smoothing_factor[:, None].to(weight)
+            self.embedding.weight.data[:] = weight / smoothing_factor.sqrt()
+
+        self.embedding.weight.data /= config.freq_embedding_lr_scale
+        self.scale = config.freq_embedding_lr_scale
+
+    @property
+    def weight(self):
+        return self.embedding.weight * self.scale
+
+    def forward(self, x):
+        out = self.embedding(x) * self.scale
+        return out
+
+class HtdemucsTempEncoderLayer(nn.Module):
+    def __init__(self, config: HtdemucsConfig, in_channels, out_channels):
+        super().__init__()
+        self.conv_in = nn.Conv1d(in_channels, out_channels, kernel_size=8, stride=4, padding=2)
+
+        residual_hidden_size = int(out_channels / 2)
+        self.stride = config.residual_stride
+
+        self.residual_layers = nn.ModuleList([])
+        self.layer_scales = nn.ParameterList([])
+
+        for layer_idx in range(self.depth):
+            dilation = 2 ** layer_idx
+            layer = [
+                nn.Conv1d(out_channels, residual_hidden_size, kernel_size=3, dilation=dilation, padding=dilation),
+                nn.GELU(),
+                nn.Conv1d(residual_hidden_size, 2 * residual_hidden_size, kernel_size=1),
+                nn.GLU(dim=1),
+            ]
+            layer = nn.Sequential(*layer)  # TODO(SG): remove sequential
+            self.residual_layers.append(layer)
+            self.layer_scales.append(nn.Parameter(torch.ones(self.embed_dim) * config.layer_scale_init_value))
+
+        self.conv_out = nn.Conv1d(out_channels, s2 * out_channels, kernel_size=1)
+
+    def forward(self, temp_hidden_states):
+        seq_len = temp_hidden_states.shape[-1]
+        if seq_len % self.stride != 0:
+            temp_hidden_states = nn.functional.pad(temp_hidden_states, (0, self.stride - (seq_len % self.stride)))
+
+        temp_hidden_states = self.conv_in(temp_hidden_states)
+        temp_hidden_states = nn.functional.gelu(temp_hidden_states)
+
+        for idx, layer in enumerate(self.residual_layers):
+            residual = temp_hidden_states
+            temp_hidden_states = self.layer_scales[idx] * layer(temp_hidden_states)
+            temp_hidden_states = residual + temp_hidden_states
+
+        temp_hidden_states = self.conv_out(temp_hidden_states)
+        temp_hidden_states = nn.functional.glu(temp_hidden_states, dim=1)
+        return temp_hidden_states
+
+class HtdemucsFreqEncoderLayer(nn.Module):
+    def __init__(self, config: HtdemucsConfig, in_channels, out_channels):
+        super().__init__()
+        self.conv_in = nn.Conv2d(in_channels, out_channels, kernel_size=(8, 1), stride=(4, 1), padding=(2, 0))
+
+        residual_hidden_size = int(out_channels / 2)
+        self.stride = config.residual_stride
+
+        self.residual_layers = nn.ModuleList([])
+        self.layer_scales = nn.ParameterList([])
+
+        for layer_idx in range(self.depth):
+            dilation = 2 ** layer_idx
+            layer = [
+                nn.Conv1d(out_channels, residual_hidden_size, kernel_size=3, dilation=dilation, padding=dilation),
+                nn.GELU(),
+                nn.Conv1d(residual_hidden_size, 2 * residual_hidden_size, kernel_size=1),
+                nn.GLU(dim=1),
+            ]
+            layer = nn.Sequential(*layer)  # TODO(SG): remove sequential
+            self.residual_layers.append(layer)
+            self.layer_scales.append(nn.Parameter(torch.ones(self.embed_dim) * config.layer_scale_init_value))
+
+        self.conv_out = nn.Conv2d(out_channels, 2 * out_channels, kernel_size=1)
+
+    def forward(self, temp_hidden_states):
+        temp_hidden_states = self.conv_in(temp_hidden_states)
+        temp_hidden_states = nn.functional.gelu(temp_hidden_states)
+
+        for layer, layer_scale in zip(self.residual_layers, self.layer_scales):
+            temp_hidden_states = temp_hidden_states + layer_scale * layer(temp_hidden_states)
+
+        temp_hidden_states = self.conv_out(temp_hidden_states)
+        temp_hidden_states = nn.functional.glu(temp_hidden_states, dim=1)
+        return temp_hidden_states
+
+
+class HDecLayer(nn.Module):
+    def __init__(self, chin, chout, last=False, kernel_size=8, stride=4, norm_groups=1, empty=False,
+                 freq=True, dconv=True, norm=True, context=1, dconv_kw={}, pad=True,
+                 context_freq=True, rewrite=True):
+        """
+        Same as HEncLayer but for decoder. See `HEncLayer` for documentation.
+        """
+        super().__init__()
+        pad = kernel_size // 4
+        self.pad = pad
+        self.last = last
+        self.freq = freq
+        self.chin = chin
+        self.empty = empty
+        self.stride = stride
+        self.kernel_size = kernel_size
+        self.norm = norm
+        self.context_freq = context_freq
+
+        self.conv_tr = nn.ConvTranspose1d(chin, chout, kernel_size, stride)
+        self.rewrite = nn.Conv1d(chin, 2 * chin, 1 + 2 * context, 1, context)
+
+        self.dconv = None
+        if dconv:
+            self.dconv = DConv(chin, **dconv_kw)
+
+    def forward(self, x, skip, length):
+        if self.freq and x.dim() == 3:
+            B, C, T = x.shape
+            x = x.view(B, self.chin, -1, T)
+
+        x = x + skip
+
+        if self.rewrite:
+            y = F.glu(self.norm1(self.rewrite(x)), dim=1)
+        else:
+            y = x
+        if self.dconv:
+            if self.freq:
+                B, C, Fr, T = y.shape
+                y = y.permute(0, 2, 1, 3).reshape(-1, C, T)
+            y = self.dconv(y)
+            if self.freq:
+                y = y.view(B, Fr, C, T).permute(0, 2, 1, 3)
+
+        z = self.norm2(self.conv_tr(y))
+        z = z[..., self.pad:self.pad + length]
+        if not self.last:
+            z = F.gelu(z)
+        return z, y
+
+
+class HtdemucsEncoder(nn.Module):
+    def __init__(self, config: HtdemucsConfig):
+        super().__init__()
+
+        in_channels = config.in_channels
+        out_channels = config.hidden_channels
+
+        num_layers = config.num_conv_layers
+        frequency = config.num_mel_bins // 2
+
+        self.freq_embedding = HtdemucsScaledFrequencyEmbedding(config)
+        self.freq_embedding_scale = config.freq_embedding_scale
+
+        self.temp_encoder = nn.ModuleList()
+        self.freq_encoder = nn.ModuleList()
+
+        self.temp_decoder = nn.ModuleList()
+        self.freq_decoder = nn.ModuleList()
+
+        for layer in range(num_layers):
+
+            if layer == 0:
+                in_channels = config.num_stems * in_channels
+
+            in_channels = out_channels
+            out_channels = config.growth * out_channels
+
+            frequency = frequency // config.stride
+
+
+
 
 class HtdemucsPreTrainedModel(PreTrainedModel):
     config_class = HtdemucsConfig
@@ -358,7 +535,7 @@ class HtdemucsPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, HtdemucsEncoder):
+        if isinstance(module, HtdemucsTransformer):
             module.gradient_checkpointing = value
 
 
@@ -448,7 +625,7 @@ class Htdemucs2dSinusoidalPositionalEmbedding(nn.Module):
         return relative_position_embeddings
 
 
-class HtdemucsEncoder(HtdemucsPreTrainedModel):
+class HtdemucsTransformer(HtdemucsPreTrainedModel):
     def __init__(self, config: HtdemucsConfig):
         super().__init__(config)
 
@@ -457,7 +634,7 @@ class HtdemucsEncoder(HtdemucsPreTrainedModel):
 
         embed_dim = config.hidden_size
 
-        self.layers = nn.ModuleList([HtdemucsEncoderLayer(config) for _ in range(config.num_hidden_layers // 2)])
+        self.layers = nn.ModuleList([HtdemucsTransformerLayer(config) for _ in range(config.num_hidden_layers // 2)])
 
         self.freq_pos_embedding = Htdemucs2dSinusoidalPositionalEmbedding(config)
         self.temp_pos_embedding = HtdemucsSinusoidalPositionalEmbedding(config.max_position_embeddings, embedding_dim=embed_dim)
