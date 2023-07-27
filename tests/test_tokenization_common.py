@@ -966,17 +966,17 @@ class TokenizerTesterMixin:
 
     @require_tokenizers
     def test_encode_decode_with_spaces(self):
-        tokenizers = self.get_tokenizers(do_lower_case=False, fast = False)
+        tokenizers = self.get_tokenizers(do_lower_case=False, fast=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 new_toks = [
-                    AddedToken("[ABC]", normalized=False), # these are added tokens, they will be normalized....
+                    AddedToken("[ABC]", normalized=False),  # these are added tokens, they will be normalized....
                     AddedToken("[DEF]", normalized=False),
                     AddedToken("GHI IHG", normalized=False),
                 ]
                 tokenizer.add_tokens(new_toks)
-                # special tokens should not be normalized... 
-                tokenizer.add_tokens([AddedToken("[SAMPLE]", normalized=True)], special_tokens = True)
+                # special tokens should not be normalized...
+                tokenizer.add_tokens([AddedToken("[SAMPLE]", normalized=True)], special_tokens=True)
                 print(tokenizer.added_tokens_encoder)
                 input = "[ABC][DEF][ABC]GHI IHG[DEF]"
                 if self.space_between_special_tokens:
@@ -987,10 +987,10 @@ class TokenizerTesterMixin:
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=self.space_between_special_tokens)
                 breakpoint()
                 self.assertIn(decoded, [output, output.lower()])
-                
+
                 encoded = tokenizer.encode("[ABC] [DEF][SAMPLE]", add_special_tokens=False)
-                print( tokenizer.all_special_ids)
-                print( tokenizer.additional_special_tokens)
+                print(tokenizer.all_special_ids)
+                print(tokenizer.additional_special_tokens)
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=True, skip_special_tokens=False)
                 print(decoded)
                 self.assertIn(decoded, ["[ABC] [DEF] [SAMPLE]", "[ABC] [DEF] [SAMPLE]".lower()])
@@ -998,15 +998,13 @@ class TokenizerTesterMixin:
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=True, skip_special_tokens=True)
                 self.assertIn(decoded, ["[ABC] [DEF]", "[ABC] [DEF]".lower()])
 
-                
                 encoded = tokenizer.encode("[ABC][SAMPLE][DEF]", add_special_tokens=False)
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=True)
                 self.assertIn(decoded, ["[ABC] [SAMPLE] [DEF]", "[ABC][SAMPLE][DEF]".lower()])
 
-                
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=False)
                 self.assertIn(decoded, ["[ABC][SAMPLE][DEF] ", "[ABC][SAMPLE][DEF]".lower()])
-                
+
     def test_pretrained_model_lists(self):
         # We should have at least one default checkpoint for each tokenizer
         # We should specify the max input length as well (used in some part to list the pretrained checkpoints)

@@ -347,7 +347,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         super().__init__(**kwargs)
         self._added_tokens_encoder = {}
         self._added_tokens_decoder = {}
-        self._add_tokens(self.all_special_tokens_extended, special_tokens = True)
+        self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
         self._decode_use_source_tokenizer = False
 
     @property
@@ -387,9 +387,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
-        it with indices starting from length of the current vocabulary. Special tokens are sometimes already in the vocab
-        which is why they have to be handled specifically. If the unknown token.
-        
+        it with indices starting from length of the current vocabulary. Special tokens are sometimes already in the
+        vocab which is why they have to be handled specifically. If the unknown token.
+
         This is the only exposed way to modify `self.added_tokens_encoder` and `self.added_tokens_decoder`.
 
         Args:
@@ -420,14 +420,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
             if isinstance(token, str):
                 token = AddedToken(token)
-            if (
-                token.content != self.unk_token
-                and self.convert_tokens_to_ids(token.content) == self.convert_tokens_to_ids(self.unk_token)
-            ):
+            if token.content != self.unk_token and self.convert_tokens_to_ids(
+                token.content
+            ) == self.convert_tokens_to_ids(self.unk_token):
                 new_idx = len(self.get_vocab()) + added_tokens
                 if not special_tokens and not token.special and hasattr(self, "do_lower_case") and self.do_lower_case:
-                        token.content = token.content.lower()
-                self._added_tokens_encoder[token.content] =  new_idx
+                    token.content = token.content.lower()
+                self._added_tokens_encoder[token.content] = new_idx
                 self._added_tokens_decoder[new_idx] = token
             # elif special_tokens or token.special and token.content not in self.additional_special_tokens:
             #     # token has to be special now
@@ -435,12 +434,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             #     self._added_tokens_decoder.update({self._convert_token_to_id(token.content):token})
             #     self._added_tokens_encoder[token.content] = self._convert_token_to_id(token.content)
             elif self._convert_token_to_id(token.content) is not None:
-                    self._added_tokens_encoder[token.content] = self._convert_token_to_id(token.content)
-                    self._added_tokens_decoder.update({self._convert_token_to_id(token.content):token})
+                self._added_tokens_encoder[token.content] = self._convert_token_to_id(token.content)
+                self._added_tokens_decoder.update({self._convert_token_to_id(token.content): token})
             else:
                 # TODO get vocab might not be the best way to get the current length with the added tokens
                 new_idx = len(self.get_vocab()) + added_tokens
-                self._added_tokens_encoder[token.content] =  new_idx
+                self._added_tokens_encoder[token.content] = new_idx
                 self._added_tokens_decoder[new_idx] = token
             added_tokens += 1
             if self.verbose:
@@ -510,7 +509,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
             text = re.sub(pattern, lambda m: m.groups()[0] or m.groups()[1].lower(), text)
 
-        no_split_token = set(self.added_tokens_encoder.keys()) # don't s plit on added tokens
+        no_split_token = set(self.added_tokens_encoder.keys())  # don't s plit on added tokens
         tokens = self.tokens_trie.split(text)
         # ["This is something", "<special_token_1>", "  else"]
         for i, token in enumerate(tokens):

@@ -88,7 +88,7 @@ else:
         lstrip: bool = False
         rstrip: bool = False
         normalized: bool = True
-        special:bool = False
+        special: bool = False
 
         def __getstate__(self):
             return self.__dict__
@@ -860,8 +860,8 @@ class SpecialTokensMixin:
         special tokens are NOT in the vocabulary, they are added to it (indexed starting from the last index of the
         current vocabulary).
 
-        When adding new tokens to the vocabulary, you should make sure to also resize the token embedding
-        matrix of the model so that its embedding matrix matches the tokenizer.
+        When adding new tokens to the vocabulary, you should make sure to also resize the token embedding matrix of the
+        model so that its embedding matrix matches the tokenizer.
 
         In order to do that, please use the [`~PreTrainedModel.resize_token_embeddings`] method.
 
@@ -939,14 +939,14 @@ class SpecialTokensMixin:
                     added_tokens.extend(to_add)
 
             else:
-                if not isinstance( value, (str, AddedToken)):
+                if not isinstance(value, (str, AddedToken)):
                     raise ValueError(f"Token {value} for key {key} should be a str or an AddedToken instance")
                 if isinstance(value, (str)):
                     value = AddedToken(value)
                 if isinstance(value, AddedToken):
                     setattr(self, key, value)
                 added_tokens.append(value)
-        added_tokens = self.add_tokens(added_tokens, special_tokens = True)
+        added_tokens = self.add_tokens(added_tokens, special_tokens=True)
         return added_tokens
 
     def add_tokens(
@@ -1123,7 +1123,7 @@ class SpecialTokensMixin:
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
-        self._additional_special_tokens = [AddedToken(token) if isinstance(token,str) else token for token in value]
+        self._additional_special_tokens = [AddedToken(token) if isinstance(token, str) else token for token in value]
 
     @property
     def bos_token_id(self) -> Optional[int]:
@@ -1282,7 +1282,8 @@ class SpecialTokensMixin:
     @property
     def all_special_tokens(self) -> List[str]:
         """
-        `List[str]`: All the special tokens (`'<unk>'`, `'<cls>'`, ..., `_additional_special_tokens`.) mapped to class attributes.
+        `List[str]`: All the special tokens (`'<unk>'`, `'<cls>'`, ..., `_additional_special_tokens`.) mapped to class
+        attributes.
 
         Convert tokens of `tokenizers.AddedToken` type to string.
         """
@@ -1757,12 +1758,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         else:
             # At this point pretrained_model_name_or_path is either a directory or a model identifier name
             additional_files_names = {
-                "added_tokens_file": ADDED_TOKENS_FILE, # TODO kept only for legacy
-                "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE, # kept only for legacy
+                "added_tokens_file": ADDED_TOKENS_FILE,  # TODO kept only for legacy
+                "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,  # kept only for legacy
                 "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
             }
             vocab_files = {**cls.vocab_files_names, **additional_files_names}
-            # TODO process legacy files in priority! 
+            # TODO process legacy files in priority!
             if "tokenizer_file" in vocab_files:
                 # Try to get the tokenizer config to see if there are versioned tokenizer files.
                 fast_tokenizer_file = FULL_TOKENIZER_FILE
@@ -1967,7 +1968,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # TODO Bring this back for legacy behaviour
         # HACK AddedTokens are all added tokens, no need for type
 
-
         # Set max length if needed
         if pretrained_model_name_or_path in cls.max_model_input_sizes:
             # if we're using a pretrained model, ensure the tokenizer
@@ -2008,21 +2008,23 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Ids are provided. Should we still need to check?????
         if "added_tokens_decoder" in init_kwargs:
-            print(" `added_tokens_decoder` were saved in the `tokenizer_config.json` and will be used to initialise the added_tokens")
+            print(
+                " `added_tokens_decoder` were saved in the `tokenizer_config.json` and will be used to initialise the added_tokens"
+            )
             added_tokens_decoder = init_kwargs.pop("added_tokens_decoder")
             for idx, token in added_tokens_decoder.items():
-                # TODO check that can be converted to int, and might be able to check idx on the fly! 
+                # TODO check that can be converted to int, and might be able to check idx on the fly!
                 id = int(idx)
                 token = AddedToken(**token)
                 tokenizer._added_tokens_encoder[token.content] = id
                 tokenizer._added_tokens_decoder[id] = token
-                # TODO trie is not created. ADD safeguards to prevent people from modifying these attribute whithout adding a token! this way you force trie update. 
-                # OR allow modifications, but harder to maintain! 
+                # TODO trie is not created. ADD safeguards to prevent people from modifying these attribute whithout adding a token! this way you force trie update.
+                # OR allow modifications, but harder to maintain!
             tokenizer.create_trie()
 
         elif cls.legacy_save:
             init_kwargs = cls.convert_added_tokens(init_kwargs)
-            
+
             # TODO make sure previous code works, but is also fixed. Meaning this correctly adds the tokens, sets eos and bos etc
             tokens_to_add = []
             # If there is a complementary special token map, load it
@@ -2061,9 +2063,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 current_index = tokenizer.vocab_size
                 for token, index in added_tok_encoder_sorted:
                     if index >= tokenizer.vocab_size:
-                        current_index+=1
+                        current_index += 1
 
-                        if has_tokenizer_file and index != current_index and tokenizer.convert_tokens_to_ids(token) != index:
+                        if (
+                            has_tokenizer_file
+                            and index != current_index
+                            and tokenizer.convert_tokens_to_ids(token) != index
+                        ):
                             # Tokenizer fast: added token needs to either be in the vocabulary with the proper index or the
                             # index is the current length of the tokenizer (not in vocabulary)
                             raise ValueError(
@@ -2078,7 +2084,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                                 f"Should have index {current_index} but has index {index} in saved vocabulary."
                             )
                 tokenizer.add_tokens([tok[0] for tok in tokens_to_add])
-
 
             tokenizer.add_tokens(tokens_to_add)
         return tokenizer
@@ -2194,10 +2199,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         tokenizer_config = self.convert_added_tokens(tokenizer_config, add_type_field=True)
 
         added_tokens = {}
-        for key,value in self.added_tokens_decoder.items():
+        for key, value in self.added_tokens_decoder.items():
             added_tokens[key] = value.__getstate__()
         tokenizer_config["added_tokens_decoder"] = added_tokens
-        self.legacy_save = False # FOR TESTING PURPOSES
+        self.legacy_save = False  # FOR TESTING PURPOSES
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
         tokenizer_class = self.__class__.__name__
         # Remove the Fast at the end unless we have a special `PreTrainedTokenizerFast`
@@ -2223,7 +2228,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             out_str = json.dumps(tokenizer_config, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
             f.write(out_str)
         logger.info(f"tokenizer config file saved in {tokenizer_config_file}")
-        file_names = (tokenizer_config_file, )
+        file_names = (tokenizer_config_file,)
         # Sanitize AddedTokens in special_tokens_map
         if self.legacy_save:
             write_dict = self.convert_added_tokens(self.special_tokens_map_extended, add_type_field=False)
@@ -2272,9 +2277,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         save_directory = str(save_directory)
         vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
-        
+
         file_names += vocab_files
-        
+
         if self.legacy_save:
             added_tokens_file = os.path.join(
                 save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
@@ -2285,7 +2290,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     out_str = json.dumps(added_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
                     f.write(out_str)
                     logger.info(f"added tokens file saved in {added_tokens_file}")
-            file_names += + (added_tokens_file,)
+            file_names += +(added_tokens_file,)
 
         return file_names
 
