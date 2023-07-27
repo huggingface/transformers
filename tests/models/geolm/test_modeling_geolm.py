@@ -141,7 +141,6 @@ class GeoLMModelTester:
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        
 
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -200,8 +199,6 @@ class GeoLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else {}
     )
-
-
 
     fx_compatible = False
 
@@ -306,6 +303,8 @@ class GeoLMModelIntegrationTest(unittest.TestCase):
             output = model(input_ids, attention_mask=attention_mask)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = torch.tensor([[[ 0.0157, -0.0219,  0.3148], [-0.0314,  0.0465,  0.2926], [-0.0556, -0.0484,  0.3685]]])
+        expected_slice = torch.tensor(
+            [[[0.0157, -0.0219, 0.3148], [-0.0314, 0.0465, 0.2926], [-0.0556, -0.0484, 0.3685]]]
+        )
 
         self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
