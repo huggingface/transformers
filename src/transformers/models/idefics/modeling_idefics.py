@@ -301,10 +301,6 @@ class IdeficsDecoupledEmbedding(nn.Embedding):
             self.partially_freeze,
         )
 
-    @classmethod
-    def from_pretrained(cls, embeddings, freeze=True, **kwargs):
-        raise NotImplementedError
-
 
 class IdeficsDecoupledLinear(nn.Linear):
     # Derived from https://pytorch.org/docs/stable/_modules/torch/nn/modules/linear.html#Linear
@@ -883,7 +879,6 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
-    _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
 
     def _init_weights(self, module):
         # important: this ported version of Idefics isn't meant for training from scratch - only
