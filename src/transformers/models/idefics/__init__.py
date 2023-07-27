@@ -25,7 +25,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["image_processing_idefics"] = ["IdeficsImageProcessor"]
-    _import_structure["processing_idefics"] = ["IdeficsProcessor"]
 
 try:
     if not is_torch_available():
@@ -36,10 +35,11 @@ else:
     _import_structure["modeling_idefics"] = [
         "IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST",
         "IdeficsForVisionText2Text",
+        "IdeficsGatedCrossAttentionLayer",
         "IdeficsModel",
         "IdeficsPreTrainedModel",
-        "IdeficsGatedCrossAttentionLayer",
     ]
+    _import_structure["processing_idefics"] = ["IdeficsProcessor"]
 
 
 if TYPE_CHECKING:
