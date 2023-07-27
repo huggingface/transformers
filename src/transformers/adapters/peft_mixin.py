@@ -81,7 +81,6 @@ class PeftAdapterMixin:
         # Replace the adapter with the loaded adapter
         create_and_replace(loaded_peft_config.peft_type, loaded_peft_config, self, adapter_name)
 
-        # TODO: move that to peft.utils
         adapter_state_dict = load_peft_weights(
             peft_model_id,
             revision=revision,
