@@ -27,17 +27,16 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/vit-base-patch16-224": "https://huggingface.co/vit-base-patch16-224/resolve/main/config.json",
-    # See all ViT models at https://huggingface.co/models?filter=vit
+    "shauray/ViTPose": "https://huggingface.co/shauray/ViTPose/blob/main/config.json",
 }
 
 
 class ViTPoseConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ViTModel`]. It is used to instantiate an ViT
+    This is the configuration class to store the configuration of a [`ViTPoseModel`]. It is used to instantiate an ViTPose
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the ViT
-    [google/vit-base-patch16-224](https://huggingface.co/google/vit-base-patch16-224) architecture.
+    defaults will yield a similar configuration to that of the ViTPose
+    [shauray/ViTPose](https://huggingface.co/shauray/ViTPose) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -77,18 +76,18 @@ class ViTPoseConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ViTConfig, ViTModel
+    >>> from transformers import ViTPoseConfig, ViTPoseModel
 
-    >>> # Initializing a ViT vit-base-patch16-224 style configuration
-    >>> configuration = ViTConfig()
+    >>> # Initializing a ViTPose style configuration
+    >>> configuration = ViTPoseConfig()
 
-    >>> # Initializing a model (with random weights) from the vit-base-patch16-224 style configuration
-    >>> model = ViTModel(configuration)
+    >>> # Initializing a model (with random weights) from the vitpose style configuration
+    >>> model = ViTPoseModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "vit"
+    model_type = "vitpose"
 
     def __init__(
         self,
@@ -140,6 +139,8 @@ class ViTPoseConfig(PretrainedConfig):
         self.keypoint_num_deconv_layers = keypoint_num_deconv_layers,
         self.keypoint_num_deconv_filters = keypoint_num_deconv_filters,
         self.keypoint_num_deconv_kernels = keypoint_num_deconv_kernels,
+        self.dropout_p = droput_p,
+        self.num_output_channels = num_output_channels,
 
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -155,20 +156,4 @@ class ViTPoseConfig(PretrainedConfig):
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
         self.encoder_stride = encoder_stride
-
-
-class ViTOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
 
