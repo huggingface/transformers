@@ -294,7 +294,9 @@ def main():
     # Handle the repository creation
     if training_args.push_to_hub:
         # Retrieve of infer repo_name
-        repo_name = training_args.hub_model_id or Path(training_args.output_dir).absolute().name
+        repo_name = training_args.hub_model_id
+        if repo_name is None:
+            repo_name = Path(training_args.output_dir).absolute().name
         # Create repo and retrieve repo_id
         repo_id = create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
         # Clone repo locally

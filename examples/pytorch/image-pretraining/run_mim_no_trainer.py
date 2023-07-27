@@ -407,7 +407,9 @@ def main():
     if accelerator.is_main_process:
         if args.push_to_hub:
             # Retrieve of infer repo_name
-            repo_name = args.hub_model_id or Path(args.output_dir).absolute().name
+            repo_name = args.hub_model_id
+            if repo_name is None:
+                repo_name = Path(args.output_dir).absolute().name
             # Create repo and retrieve repo_id
             repo_id = create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
             # Clone repo locally

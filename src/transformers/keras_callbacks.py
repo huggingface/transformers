@@ -335,10 +335,9 @@ class PushToHubCallback(Callback):
         output_dir = Path(output_dir)
 
         # Create repo and retrieve repo_id
-        self.hub_model_id = create_repo(
-            repo_id=hub_model_id or output_dir.absolute().name,
-            exist_ok=True,
-        ).repo_id
+        if hub_model_id is None:
+            hub_model_id = output_dir.absolute().name
+        self.hub_model_id = create_repo(repo_id=hub_model_id, exist_ok=True).repo_id
 
         self.output_dir = output_dir
         self.repo = Repository(str(self.output_dir), clone_from=self.hub_model_id, token=hub_token)

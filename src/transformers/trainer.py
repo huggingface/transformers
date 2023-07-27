@@ -3398,11 +3398,11 @@ class Trainer:
             return
 
         # Make sure the repo exists + retrieve "real" repo_id
+        repo_name = self.args.hub_model_id
+        if repo_name is None:
+            repo_name = Path(self.args.output_dir).absolute().name
         repo_id = create_repo(
-            repo_id=self.args.hub_model_id or Path(self.args.output_dir).absolute().name,
-            token=self.args.hub_token,
-            private=self.args.hub_private_repo,
-            exist_ok=True,
+            repo_id=repo_name, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True
         ).repo_id
 
         try:
