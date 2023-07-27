@@ -215,7 +215,7 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return self.sp_model.get_piece_size() + self._extra_ids
+        return self.sp_model.get_piece_size() # + self._extra_ids legacy? 
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
@@ -362,18 +362,11 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        # if token.startswith("<extra_id_"):
-        #     match = re.match(r"<extra_id_(\d+)>", token)
-        #     num = int(match.group(1))
-        #     return self.vocab_size - num - 1
         return self.sp_model.piece_to_id(token)
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        # if index < self.sp_model.get_piece_size():
         token = self.sp_model.IdToPiece(index)
-        # else:
-        #     token = f"<extra_id_{self.vocab_size - 1 - index}>"
         return token
 
     def convert_tokens_to_string(self, tokens):
