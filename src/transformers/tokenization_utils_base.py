@@ -2072,7 +2072,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
                 for token, index in added_tok_encoder_sorted:
                     current_index = len(tokenizer) + len(tokens)
-                    if has_tokenizer_file and index != current_index and tokenizer.convert_tokens_to_ids(token) != index:
+                    if (
+                        has_tokenizer_file
+                        and index != current_index
+                        and tokenizer.convert_tokens_to_ids(token) != index
+                    ):
                         # Tokenizer fast: added token needs to either be in the vocabulary with the proper index or the
                         # index is the current length of the tokenizer (not in vocabulary)
                         raise ValueError(
@@ -2091,7 +2095,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     if is_last_special is None or is_last_special == is_special:
                         tokens.append(token)
                     else:
-                        added_tokens += tokenizer.add_tokens(tokens, special_tokens=is_last_special)
+                        tokenizer.add_tokens(tokens, special_tokens=is_last_special)
                         tokens = [token]
                     is_last_special = is_special
 
