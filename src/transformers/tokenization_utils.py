@@ -421,8 +421,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 if not special_tokens and not token.special and hasattr(self, "do_lower_case") and self.do_lower_case:
                     token.content = token.content.lower()
                 self._added_tokens_decoder[new_idx] = token
-            elif self._convert_token_to_id(token.content) is not None:
-                self._added_tokens_decoder.update({self._convert_token_to_id(token.content): token})
+            elif self.convert_tokens_to_ids(token.content) is not None:
+                # token cotent exists, let's update the lstrip etc
+                self._added_tokens_decoder[self.convert_tokens_to_ids(token.content)] = token
             else:
                 # TODO get vocab might not be the best way to get the current length with the added tokens
                 new_idx = len(self.get_vocab()) + added_tokens
