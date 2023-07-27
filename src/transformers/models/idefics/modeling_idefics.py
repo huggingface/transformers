@@ -37,9 +37,9 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .clip import IdeficsVisionTransformer
 from .configuration_idefics import IdeficsConfig
 from .perceiver import IdeficsPerceiverResampler
+from .vision import IdeficsVisionTransformer
 
 
 logger = logging.get_logger(__name__)
