@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Kosmos-2 model configuration"""
+
+import copy
 from collections import OrderedDict
 from typing import Mapping
 
@@ -179,31 +181,28 @@ class Kosmos2Config(PretrainedConfig):
 
         if text_config is None:
             text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `BlipTextConfig` with default values.")
+            logger.info("`text_config` is `None`. Initializing the `Kosmos2TextConfig` with default values.")
 
         if vision_config is None:
             vision_config = {}
-            logger.info("`vision_config` is `None`. Initializing the `BlipVisionConfig` with default values.")
+            logger.info("`vision_config` is `None`. Initializing the `Kosmos2VisionConfig` with default values.")
 
         self.text_config = Kosmos2TextConfig(**text_config)
-        # TODO: Change this
-        self.vision_config = CLIPVisionConfig(**vision_config)
+        # TODO: Remove this by adding Kosmos2VisionConfig
+        from transformers import CLIPVisionConfig as Kosmos2VisionConfig
+        self.vision_config = Kosmos2VisionConfig(**vision_config)
 
         self.latent_query_num = latent_query_num
 
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
 
-# Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
-class Kosmos2OnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
+        Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+        output["text_config"] = self.text_config.to_dict()
+        output["vision_config"] = self.vision_config.to_dict()
+        output["model_type"] = self.__class__.model_type
+        return output
