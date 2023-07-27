@@ -122,10 +122,9 @@ def remove_classification_head_(state_dict):
 
 
 ## change it to a simple for loop 
-def rename_key(dct, old, new):
-    print(dct.keys())
-    val = dct.pop(old)
-    dct[new] = val
+def rename_key(state_dict, old, new):
+    val = state_dict.pop(old)
+    state_dict[new] = val
 
 
 # We will verify our results on an image of cute cats
@@ -147,7 +146,7 @@ def convert_vitpose_checkpoint(pytorch_dump_folder_path):
     base_model = False
     # dataset (ImageNet-21k only or also fine-tuned on ImageNet 2012), patch_size and image_size
     ## change or remove 
-    vitpose_name = hf_hub_download(repo_id="shauray/VitPose", filename="vitpose_small.pth")
+    vitpose_name = hf_hub_download(repo_id="shauray/VitPose", filename="vitpose_small.pth", repo_type="model")
 
 #    if vitpose_name[-5:] == "in21k":
 #        base_model = True
@@ -198,8 +197,6 @@ def convert_vitpose_checkpoint(pytorch_dump_folder_path):
 
     # load original model from timm
     state_dict = torch.load(vitpose_name, map_location="cpu")
-    for key in state_dict.copy().keys():
-        print(key)
 
     # load state_dict of original model, remove and rename some keys
     rename_keys = create_rename_keys(config, base_model)

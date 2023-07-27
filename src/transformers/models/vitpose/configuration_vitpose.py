@@ -139,7 +139,7 @@ class ViTPoseConfig(PretrainedConfig):
         self.keypoint_num_deconv_layers = keypoint_num_deconv_layers,
         self.keypoint_num_deconv_filters = keypoint_num_deconv_filters,
         self.keypoint_num_deconv_kernels = keypoint_num_deconv_kernels,
-        self.dropout_p = droput_p,
+        self.dropout_p = dropout_p,
         self.num_output_channels = num_output_channels,
 
         self.hidden_size = hidden_size
