@@ -23,11 +23,9 @@ python run_generation_contrastive_search.py --model_name_or_path=gpt2-large --pe
 import argparse
 import logging
 
-import numpy as np
-import torch
-
 from accelerate import Accelerator
 from accelerate.utils import set_seed
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 

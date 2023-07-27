@@ -23,11 +23,10 @@ import inspect
 import logging
 from typing import Tuple
 
-import numpy as np
 import torch
-
 from accelerate import Accelerator
 from accelerate.utils import set_seed
+
 from transformers import (
     AutoTokenizer,
     BloomForCausalLM,
