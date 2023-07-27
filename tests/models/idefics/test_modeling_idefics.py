@@ -29,6 +29,7 @@ if is_torch_available():
     import torch
 
     from transformers import IdeficsForVisionText2Text, IdeficsModel
+    from transformers.models.idefics.configuration_idefics import IdeficsVisionConfig
     from transformers.models.idefics.modeling_idefics import IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
 else:
@@ -112,6 +113,15 @@ class IdeficsModelTester:
         self.vision_num_hidden_layers = vision_num_hidden_layers
         self.vision_intermediate_size = vision_intermediate_size
 
+        self.vision_config = IdeficsVisionConfig(
+            embed_dim=self.vision_embed_dim,
+            patch_size=self.vision_patch_size,
+            image_size=self.vision_image_size,
+            num_attention_heads=self.vision_num_attention_heads,
+            num_hidden_layers=self.vision_num_hidden_layers,
+            intermediate_size=self.vision_intermediate_size,
+        )
+
         # we set the expected sequence length (which is used in several tests)
         # this is equal to the seq length of the text tokens + number of image patches + 1 for the CLS token
         self.expected_seq_len = self.seq_length + (self.image_size // self.patch_size) ** 2 + 1
@@ -155,12 +165,7 @@ class IdeficsModelTester:
             num_labels=self.num_labels,
             modality_type_vocab_size=self.modality_type_vocab_size,
             num_images=self.num_images,
-            vision_embed_dim=self.vision_embed_dim,
-            vision_intermediate_size=self.vision_intermediate_size,
-            vision_num_attention_heads=self.vision_num_attention_heads,
-            vision_image_size=self.vision_image_size,
-            vision_patch_size=self.vision_patch_size,
-            vision_num_hidden_layers=self.vision_num_hidden_layers,
+            vision_config=self.vision_config,
         )
 
     def create_and_check_model(

@@ -32,7 +32,7 @@ class IdeficsPerceiverResampler(nn.Module):
         """
         super().__init__()
         self.embed_dim, self.n_heads, self.head_dim, self.n_latents = embed_dim, n_heads, head_dim, n_latents
-        self.qk_layer_norms = config.qk_layer_norms_perceiver
+        self.qk_layer_norms = config.perceiver_config.qk_layer_norms_perceiver
 
         # Create Latents for Perceiver
         self.latents = nn.Parameter(torch.randn(self.n_latents, self.embed_dim), requires_grad=True)

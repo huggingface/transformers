@@ -30,7 +30,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_idefics import CLIPConfig, CLIPVisionConfig
+from .configuration_idefics import CLIPVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -318,9 +318,8 @@ class CLIPMLP(nn.Module):
         return hidden_states
 
 
-# copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer
 class CLIPEncoderLayer(nn.Module):
-    def __init__(self, config: CLIPConfig):
+    def __init__(self, config: CLIPVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = CLIPAttention(config)
@@ -328,6 +327,7 @@ class CLIPEncoderLayer(nn.Module):
         self.mlp = CLIPMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
+    # copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -369,22 +369,22 @@ class CLIPEncoderLayer(nn.Module):
         return outputs
 
 
-# copied from transformers.models.clip.modeling_clip.CLIPEncoder
 class CLIPEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`CLIPEncoderLayer`].
 
     Args:
-        config: CLIPConfig
+        config: CLIPVisionConfig
     """
 
-    def __init__(self, config: CLIPConfig):
+    def __init__(self, config: CLIPVisionConfig):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([CLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
+    # copied from transformers.models.clip.modeling_clip.CLIPEncoder.forward
     def forward(
         self,
         inputs_embeds,

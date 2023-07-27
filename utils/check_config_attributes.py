@@ -122,6 +122,9 @@ SPECIAL_CASES_TO_ALLOW.update(
         # TODO: @Younes (for `is_decoder`)
         "Pix2StructTextConfig": True,
         "IdeficsConfig": True,
+        "IdeficsVisionConfig": True,
+        "IdeficsPerceiverConfig": True,
+        "CLIPVisionConfig": True,
     }
 )
 

@@ -39,7 +39,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .clip import CLIPVisionTransformer
-from .configuration_idefics import CLIPVisionConfig, IdeficsConfig
+from .configuration_idefics import IdeficsConfig
 from .perceiver import IdeficsPerceiverResampler
 
 
@@ -1029,21 +1029,20 @@ class IdeficsModel(IdeficsPreTrainedModel):
         )
 
         # complain that it's not used
-        self.image_size = config.vision_image_size
-
-        self.vision_config_dict = config.vision_config_dict
-        clip_vision_config = CLIPVisionConfig(**self.vision_config_dict)
-        self.vision_model = CLIPVisionTransformer(clip_vision_config)
+        self.image_size = config.vision_config.image_size
+        self.vision_config = config.vision_config
+        # clip_vision_config = CLIPVisionConfig(**self.vision_config_dict)
+        self.vision_model = CLIPVisionTransformer(config.vision_config)
 
         # Perceiver Resampler
         if config.use_resampler:
             self.perceiver_resampler = IdeficsPerceiverResampler(
                 self.config,
                 self.config.vision_embed_dim,
-                config.resampler_depth,
-                config.resampler_n_heads,
-                config.resampler_head_dim,
-                config.resampler_n_latents,
+                config.perceiver_config.resampler_depth,
+                config.perceiver_config.resampler_n_heads,
+                config.perceiver_config.resampler_head_dim,
+                config.perceiver_config.resampler_n_latents,
             )
 
         self.layers = nn.ModuleList([IdeficsDecoderLayer(config) for _ in range(config.num_hidden_layers)])
