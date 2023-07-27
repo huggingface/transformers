@@ -123,9 +123,8 @@ class ViTImageProcessor(BaseImageProcessor):
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
             raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        return resize(
-            image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
-        )
+        output_size = (size["height"], size["width"])
+        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
     def preprocess(
         self,
