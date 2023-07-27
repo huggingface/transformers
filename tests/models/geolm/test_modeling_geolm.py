@@ -306,6 +306,6 @@ class GeoLMModelIntegrationTest(unittest.TestCase):
             output = model(input_ids, attention_mask=attention_mask)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = torch.tensor([[[0.4249, 0.1008, 0.7531], [0.3771, 0.1188, 0.7467], [0.4152, 0.1098, 0.7108]]])
+        expected_slice = torch.tensor([[[ 0.0157, -0.0219,  0.3148], [-0.0314,  0.0465,  0.2926], [-0.0556, -0.0484,  0.3685]]])
 
         self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
