@@ -497,6 +497,43 @@ class GenerationMixin:
             "A model class needs to define a `prepare_inputs_for_generation` method in order to use `.generate()`."
         )
 
+    def prepare_inputs_for_assisted_generation(self, *args, cache_size=None, **kwargs):
+        """
+        This method prepares inputs to be passed into the model's `forward` method during assisted generation.
+
+        Must allow multiple new `input_ids`/`decoder_input_ids` alongside `past_key_values`. This differs from
+        `prepare_inputs_for_generation` which assumes only the final ID is needed when `past_key_values` is present.
+
+        This method can be overridden by a model to implement custom logic.
+        """
+        if "past_key_values" in kwargs:
+            past_key_values = kwargs["past_key_values"]
+        else:
+            return self.prepare_inputs_for_generation(*args, **kwargs)
+
+        kwargs_no_past = {**kwargs}
+        del kwargs_no_past["past_key_values"]
+
+        inputs = self.prepare_inputs_for_generation(*args, **kwargs_no_past)
+
+        if self.config.is_encoder_decoder:
+            keys_to_trim = [
+                "decoder_input_ids",
+            ]
+        else:
+            keys_to_trim = [
+                "input_ids",
+                "position_ids",
+                "token_type_ids",
+            ]
+
+        for key in keys_to_trim:
+            if key in inputs and inputs[key] is not None:
+                inputs[key] = inputs[key][:, cache_size:]
+
+        inputs["past_key_values"] = past_key_values
+        return inputs
+
     def _prepare_model_inputs(
         self,
         inputs: Optional[torch.Tensor] = None,
@@ -1182,6 +1219,28 @@ class GenerationMixin:
                 f"The following `model_kwargs` are not used by the model: {unused_model_args} (note: typos in the"
                 " generate arguments will also show up in this list)"
             )
+
+    def _extend_attention_mask(self, model_kwargs: Dict[str, Any], to: int) -> Dict[str, Any]:
+        if self.config.is_encoder_decoder:
+            key = "decoder_attention_mask"
+        else:
+            key = "attention_mask"
+
+        if key not in model_kwargs:
+            return model_kwargs
+
+        mask = model_kwargs[key]
+        amount = to - mask.shape[1]
+
+        if amount < 0:
+            raise ValueError("Cannot extend attention mask to a length less than it already is")
+
+        model_kwargs[key] = torch.cat(
+            [mask, mask.new_ones((mask.shape[0], amount))],
+            dim=-1,
+        )
+
+        return model_kwargs
 
     @torch.no_grad()
     def generate(
@@ -4372,6 +4431,7 @@ class GenerationMixin:
         )
 
         this_peer_finished = False  # used by synced_gpus only
+        new_cache_size = None
         while True:
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
@@ -4447,47 +4507,31 @@ class GenerationMixin:
             # `candidate_length + 1` relevant logits from this process: in the event that all candidates are correct,
             # we use this forward pass to also pick the subsequent logits in the original model.
 
-            # 2.1. Run a forward pass on the candidate sequence
-            if "past_key_values" in model_kwargs:
-                model_attn = torch.ones_like(candidate_input_ids)
-                model_input_ids = candidate_input_ids[:, -candidate_length - 1 :]
-                if self.config.is_encoder_decoder:
-                    outputs = self(
-                        decoder_input_ids=model_input_ids,
-                        decoder_attention_mask=model_attn,
-                        past_key_values=model_kwargs["past_key_values"],
-                        encoder_outputs=model_kwargs["encoder_outputs"],
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                        use_cache=True,
-                    )
-                else:
-                    outputs = self(
-                        model_input_ids,
-                        attention_mask=model_attn,
-                        past_key_values=model_kwargs["past_key_values"],
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                        use_cache=True,
-                    )
-            else:
-                if self.config.is_encoder_decoder:
-                    outputs = self(
-                        decoder_input_ids=candidate_input_ids,
-                        encoder_outputs=model_kwargs["encoder_outputs"],
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                        use_cache=True,
-                    )
-                else:
-                    outputs = self(
-                        candidate_input_ids,
-                        output_attentions=output_attentions,
-                        output_hidden_states=output_hidden_states,
-                        use_cache=True,
-                    )
+            # 2.1. Prepare the model inputs
+            candidate_kwargs = copy.deepcopy(model_kwargs)
+            candidate_kwargs = self._extend_attention_mask(candidate_kwargs, candidate_input_ids.shape[1])
+            if "token_type_ids" in candidate_kwargs and candidate_kwargs["token_type_ids"] is not None:
+                final_token_type = candidate_kwargs["token_type_ids"][:, -1].unsqueeze(-1)
+                n_copies = candidate_input_ids.shape[1] - candidate_kwargs["token_type_ids"].shape[1]
+                token_type_copies = final_token_type.repeat(1, n_copies)
+                candidate_kwargs["token_type_ids"] = torch.cat(
+                    [candidate_kwargs["token_type_ids"], token_type_copies],
+                    dim=-1,
+                )
 
-            # 2.2. Process the new logits
+            if "past_key_values" in candidate_kwargs and candidate_kwargs["past_key_values"] is not None:
+                candidate_kwargs["cache_size"] = new_cache_size
+
+            model_inputs = self.prepare_inputs_for_assisted_generation(candidate_input_ids, **candidate_kwargs)
+
+            # 2.2. Run a forward pass on the candidate sequence
+            outputs = self(
+                **model_inputs,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+
+            # 2.3. Process the new logits
             new_logits = outputs.logits[:, -candidate_length - 1 :]  # excludes the input prompt if present
             if len(logits_processor) > 0:
                 for i in range(candidate_length):
