@@ -30,7 +30,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
    # _import_structure["feature_extraction_vit"] = ["ViTFeatureExtractor"]
-    _import_structure["image_processing_vit"] = ["ViTImageProcessor"]
+    _import_structure["image_processing_vitpose"] = ["ViTPoseImageProcessor"]
 
 try:
     if not is_torch_available():
