@@ -69,9 +69,9 @@
   - sections:
       - local: tasks/image_captioning
         title: 이미지 캡셔닝
-      - local: in_translation
-        title: (번역중) Document Question Answering
-    title: (번역중) 멀티모달
+      - local: tasks/document_question_answering
+        title: 문서 질의 응답(Document Question Answering)
+    title: 멀티모달
     isExpanded: false
   title: 태스크 가이드
 - sections:
@@ -99,18 +99,20 @@
       title: (번역중) Notebooks with examples
     - local: in_translation
       title: (번역중) Community resources
+    - local: custom_tools
+      title: 사용자 정의 도구와 프롬프트
     - local: troubleshooting
       title: 문제 해결
   title: (번역중) 개발자 가이드
 - sections:
-    - local: in_translation
-      title: (번역중) Overview
+    - local: performance
+      title: 성능 및 확장성
     - local: in_translation
       title: (번역중) Training on one GPU
     - local: in_translation
       title: (번역중) Training on many GPUs
-    - local: in_translation
-      title: (번역중) Training on CPU
+    - local: perf_train_cpu
+      title: CPU에서 훈련
     - local: in_translation
       title: (번역중) Training on many CPUs
     - local: in_translation
@@ -119,24 +121,24 @@
       title: (번역중) Training on TPU with TensorFlow
     - local: in_translation
       title: (번역중) Training on Specialized Hardware
-    - local: in_translation
-      title: (번역중) Inference on CPU
+    - local: perf_infer_cpu
+      title: CPU로 추론하기
     - local: in_translation
       title: (번역중) Inference on one GPU
     - local: in_translation
       title: (번역중) Inference on many GPUs
     - local: in_translation
       title: (번역중) Inference on Specialized Hardware
-    - local: in_translation
-      title: (번역중) Custom hardware for training
+    - local: perf_hardware
+      title: 훈련용 사용자 맞춤형 하드웨어
     - local: in_translation
       title: (번역중) Instantiating a big model
     - local: in_translation
       title: (번역중) Debugging
-    - local: in_translation
-      title: (번역중) Hyperparameter Search using Trainer API
-    - local: in_translation
-      title: (번역중) XLA Integration for TensorFlow Models
+    - local: hpo_train
+      title: Trainer API를 사용한 하이퍼파라미터 탐색
+    - local: tf_xla
+      title: TensorFlow 모델을 위한 XLA 통합
   title: (번역중) 성능 및 확장성
 - sections:
     - local: in_translation
@@ -147,8 +149,8 @@
       title: (번역중) How to convert a 🤗 Transformers model to TensorFlow?
     - local: in_translation
       title: (번역중) How to add a pipeline to 🤗 Transformers?
-    - local: in_translation
-      title: (번역중) Testing
+    - local: testing
+      title: 테스트
     - local: in_translation
       title: (번역중) Checks on a Pull Request
   title: (번역중) 기여하기
@@ -172,10 +174,10 @@
     title: 패딩과 잘라내기
   - local: bertology
     title: BERTology
-  - local: in_translation
-    title: (번역중) Perplexity of fixed-length models
   - local: perplexity
     title: 고정 길이 모델의 펄플렉서티(Perplexity)
+  - local: pipeline_webserver
+    title: 추론 웹 서버를 위한 파이프라인
   title: (번역중) 개념 가이드
 - sections:
   - sections:

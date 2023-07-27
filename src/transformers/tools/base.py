@@ -506,7 +506,7 @@ class PipelineTool(Tool):
         if device_map is not None:
             self.model_kwargs["device_map"] = device_map
         self.hub_kwargs = hub_kwargs
-        self.hub_kwargs["use_auth_token"] = token
+        self.hub_kwargs["token"] = token
 
         super().__init__()
 

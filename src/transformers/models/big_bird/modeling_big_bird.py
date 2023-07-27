@@ -227,7 +227,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
                 raise ValueError(
                     f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched of {txt_name}."
                 )
-        except AssertionError as e:
+        except ValueError as e:
             e.args += (pointer.shape, array.shape)
             raise
         pt_weight_name = ".".join(pt_name)

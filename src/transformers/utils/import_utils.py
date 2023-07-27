@@ -112,6 +112,7 @@ _sacremoses_available = _is_package_available("sacremoses")
 _safetensors_available = _is_package_available("safetensors")
 _scipy_available = _is_package_available("scipy")
 _sentencepiece_available = _is_package_available("sentencepiece")
+_is_seqio_available = _is_package_available("seqio")
 _sklearn_available = importlib.util.find_spec("sklearn") is not None
 if _sklearn_available:
     try:
@@ -396,6 +397,25 @@ def is_torch_neuroncore_available(check_device=True):
     return False
 
 
+@lru_cache()
+def is_torch_npu_available(check_device=False):
+    "Checks if `torch_npu` is installed and potentially if a NPU is in the environment"
+    if not _torch_available or importlib.util.find_spec("torch_npu") is None:
+        return False
+
+    import torch
+    import torch_npu  # noqa: F401
+
+    if check_device:
+        try:
+            # Will raise a RuntimeError if no NPU is found
+            _ = torch.npu.device_count()
+            return torch.npu.is_available()
+        except RuntimeError:
+            return False
+    return hasattr(torch, "npu") and torch.npu.is_available()
+
+
 def is_torchdynamo_available():
     if not is_torch_available():
         return False
@@ -484,7 +504,14 @@ def is_ipex_available():
 
 
 def is_bitsandbytes_available():
-    return _bitsandbytes_available
+    if not is_torch_available():
+        return False
+
+    # bitsandbytes throws an error if cuda is not available
+    # let's avoid that by adding a simple check
+    import torch
+
+    return _bitsandbytes_available and torch.cuda.is_available()
 
 
 def is_torchdistx_available():
@@ -505,6 +532,10 @@ def is_sklearn_available():
 
 def is_sentencepiece_available():
     return _sentencepiece_available
+
+
+def is_seqio_available():
+    return _is_seqio_available
 
 
 def is_protobuf_available():
@@ -541,7 +572,10 @@ def is_vision_available():
         try:
             package_version = importlib.metadata.version("Pillow")
         except importlib.metadata.PackageNotFoundError:
-            return False
+            try:
+                package_version = importlib.metadata.version("Pillow-SIMD")
+            except importlib.metadata.PackageNotFoundError:
+                return False
         logger.debug(f"Detected PIL version {package_version}")
     return _pil_available
 

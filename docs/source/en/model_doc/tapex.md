@@ -16,6 +16,15 @@ rendered properly in your Markdown viewer.
 
 # TAPEX
 
+<Tip warning={true}>
+
+This model is in maintenance mode only, so we won't accept any new PRs changing its code.
+
+If you run into any issues running this model, please reinstall the last version that supported this model: v4.30.0.
+You can do so by running the following command: `pip install -U transformers==4.30.0`.
+
+</Tip>
+
 ## Overview
 
 The TAPEX model was proposed in [TAPEX: Table Pre-training via Learning a Neural SQL Executor](https://arxiv.org/abs/2107.07653) by Qian Liu,

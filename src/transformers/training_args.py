@@ -47,11 +47,13 @@ from .utils import (
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
     is_torch_neuroncore_available,
+    is_torch_npu_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     logging,
     requires_backends,
 )
+from .utils.generic import strtobool
 from .utils.import_utils import is_optimum_neuron_available
 
 
@@ -283,7 +285,11 @@ class TrainingArguments:
             float in range `[0,1)`. If smaller than 1, will be interpreted as ratio of total training steps.
         save_total_limit (`int`, *optional*):
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
-            `output_dir`.
+            `output_dir`. When `load_best_model_at_end` is enabled, the "best" checkpoint according to
+            `metric_for_best_model` will always be retained in addition to the most recent ones. For example, for
+            `save_total_limit=5` and `load_best_model_at_end`, the four last checkpoints will always be retained
+            alongside the best model. When `save_total_limit=1` and `load_best_model_at_end`, it is possible that two
+            checkpoints are saved: the last one and the best one (if they are different).
         save_safetensors (`bool`, *optional*, defaults to `False`):
             Use [safetensors](https://huggingface.co/docs/safetensors) saving and loading for state dicts instead of
             default `torch.load` and `torch.save`.
@@ -293,8 +299,8 @@ class TrainingArguments:
 
             This should not be activated when the different nodes use the same storage as the files will be saved with
             the same names for each node.
-        no_cuda (`bool`, *optional*, defaults to `False`):
-            Whether to not use CUDA even when it is available or not.
+        use_cpu (`bool`, *optional*, defaults to `False`):
+            Whether or not to use cpu. If set to False, we will use cuda or mps device if available.
         seed (`int`, *optional*, defaults to 42):
             Random seed that will be set at the beginning of training. To ensure reproducibility across runs, use the
             [`~Trainer.model_init`] function to instantiate the model if it has some randomly initialized parameters.
@@ -309,7 +315,7 @@ class TrainingArguments:
             installation](https://github.com/intel/intel-extension-for-pytorch).
         bf16 (`bool`, *optional*, defaults to `False`):
             Whether to use bf16 16-bit (mixed) precision training instead of 32-bit training. Requires Ampere or higher
-            NVIDIA architecture or using CPU (no_cuda). This is an experimental API and it may change.
+            NVIDIA architecture or using CPU (use_cpu). This is an experimental API and it may change.
         fp16 (`bool`, *optional*, defaults to `False`):
             Whether to use fp16 16-bit (mixed) precision training instead of 32-bit training.
         fp16_opt_level (`str`, *optional*, defaults to 'O1'):
@@ -371,7 +377,10 @@ class TrainingArguments:
             except if the model used is one of the `XxxForQuestionAnswering` in which case it will also include the
             `["start_positions", "end_positions"]` keys.
         load_best_model_at_end (`bool`, *optional*, defaults to `False`):
-            Whether or not to load the best model found during training at the end of training.
+            Whether or not to load the best model found during training at the end of training. When this option is
+            enabled, the best checkpoint will always be saved. See
+            [`save_total_limit`](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.save_total_limit)
+            for more.
 
             <Tip>
 
@@ -397,7 +406,7 @@ class TrainingArguments:
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to `True`, the training will begin faster (as that skipping step
             can take a long time) but will not yield the same results as the interrupted training would have.
-        sharded_ddp (`bool`, `str` or list of [`~trainer_utils.ShardedDDPOption`], *optional*, defaults to `False`):
+        sharded_ddp (`bool`, `str` or list of [`~trainer_utils.ShardedDDPOption`], *optional*, defaults to `''`):
             Use Sharded DDP training from [FairScale](https://github.com/facebookresearch/fairscale) (in distributed
             training only). This is an experimental feature.
 
@@ -412,7 +421,7 @@ class TrainingArguments:
 
             If a string is passed, it will be split on space. If a bool is passed, it will be converted to an empty
             list for `False` and `["simple"]` for `True`.
-        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `False`):
+        fsdp (`bool`, `str` or list of [`~trainer_utils.FSDPOption`], *optional*, defaults to `''`):
             Use PyTorch Distributed Parallel Training (in distributed training only).
 
             A list of options along the following:
@@ -761,8 +770,13 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": (
-                "Limit the total amount of checkpoints. "
-                "Deletes the older checkpoints in the output_dir. Default is unlimited checkpoints"
+                "If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in"
+                " `output_dir`. When `load_best_model_at_end` is enabled, the 'best' checkpoint according to"
+                " `metric_for_best_model` will always be retained in addition to the most recent ones. For example,"
+                " for `save_total_limit=5` and `load_best_model_at_end=True`, the four last checkpoints will always be"
+                " retained alongside the best model. When `save_total_limit=1` and `load_best_model_at_end=True`,"
+                " it is possible that two checkpoints are saved: the last one and the best one (if they are different)."
+                " Default is unlimited checkpoints"
             )
         },
     )
@@ -781,7 +795,14 @@ class TrainingArguments:
             )
         },
     )
-    no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
+    no_cuda: bool = field(
+        default=False,
+        metadata={"help": "This argument is deprecated. It will be removed in version 5.0 of 🤗 Transformers."},
+    )
+    use_cpu: bool = field(
+        default=False,
+        metadata={"help": " Whether or not to use cpu. If set to False, we will use cuda or mps device if available."},
+    )
     use_mps_device: bool = field(
         default=False,
         metadata={
@@ -808,7 +829,7 @@ class TrainingArguments:
         metadata={
             "help": (
                 "Whether to use bf16 (mixed) precision instead of 32-bit. Requires Ampere or higher NVIDIA"
-                " architecture or using CPU (no_cuda). This is an experimental API and it may change."
+                " architecture or using CPU (use_cpu). This is an experimental API and it may change."
             )
         },
     )
@@ -924,10 +945,14 @@ class TrainingArguments:
     label_names: Optional[List[str]] = field(
         default=None, metadata={"help": "The list of keys in your dictionary of inputs that correspond to the labels."}
     )
-
     load_best_model_at_end: Optional[bool] = field(
         default=False,
-        metadata={"help": "Whether or not to load the best model found during training at the end of training."},
+        metadata={
+            "help": (
+                "Whether or not to load the best model found during training at the end of training. When this option"
+                " is enabled, the best checkpoint will always be saved. See `save_total_limit` for more."
+            )
+        },
     )
     metric_for_best_model: Optional[str] = field(
         default=None, metadata={"help": "The metric to use to compare two different models."}
@@ -944,7 +969,7 @@ class TrainingArguments:
             )
         },
     )
-    sharded_ddp: str = field(
+    sharded_ddp: Optional[Union[List[ShardedDDPOption], str]] = field(
         default="",
         metadata={
             "help": (
@@ -955,7 +980,7 @@ class TrainingArguments:
             ),
         },
     )
-    fsdp: str = field(
+    fsdp: Optional[Union[List[FSDPOption], str]] = field(
         default="",
         metadata={
             "help": (
@@ -976,12 +1001,13 @@ class TrainingArguments:
             )
         },
     )
+    # Do not touch this type annotation or it will stop working in CLI
     fsdp_config: Optional[str] = field(
         default=None,
         metadata={
             "help": (
-                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The  value is either a"
-                "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded  json file as `dict`."
+                "Config to be used with FSDP (Pytorch Fully Sharded  Data Parallel). The value is either a"
+                "fsdp json config file (e.g., `fsdp_config.json`) or an already loaded json file as `dict`."
             )
         },
     )
@@ -994,11 +1020,12 @@ class TrainingArguments:
             )
         },
     )
+    # Do not touch this type annotation or it will stop working in CLI
     deepspeed: Optional[str] = field(
         default=None,
         metadata={
             "help": (
-                "Enable deepspeed and pass the path to deepspeed json config file (e.g. ds_config.json) or an already"
+                "Enable deepspeed and pass the path to deepspeed json config file (e.g. `ds_config.json`) or an already"
                 " loaded json file as a dict"
             )
         },
@@ -1173,11 +1200,12 @@ class TrainingArguments:
         },
     )
 
-    xpu_backend: Optional[str] = field(
+    dispatch_batches: Optional[bool] = field(
         default=None,
         metadata={
-            "help": "The backend to be used for distributed training on Intel XPU.",
-            "choices": ["mpi", "ccl", "gloo"],
+            "help": "Whether to dispatch batches across devices in distributed training. If set to `True`, the dataloader prepared by the Accelerator is only iterated through on the main process"
+            "and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose"
+            "underlying dataset is an `IterableDataset`, `False` otherwise."
         },
     )
 
@@ -1203,14 +1231,13 @@ class TrainingArguments:
             )
             # Go back to the underlying string or we won't be able to instantiate `IntervalStrategy` on it.
             self.evaluation_strategy = self.evaluation_strategy.value
-
-        if self.xpu_backend is not None:
+        if self.no_cuda:
             warnings.warn(
-                "using `xpu_backend` is deprecated and will be removed in version 4.31"
-                " of 🤗 Transformers. Use `ddp_backend` instead",
+                "using `no_cuda` is deprecated and will be removed in version 5.0 of 🤗 Transformers. "
+                "Use `use_cpu` instead",
                 FutureWarning,
             )
-            self.ddp_backend = self.xpu_backend
+            self.use_cpu = self.no_cuda
 
         self.evaluation_strategy = IntervalStrategy(self.evaluation_strategy)
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
@@ -1305,10 +1332,10 @@ class TrainingArguments:
                 self.half_precision_backend = self.fp16_backend
 
             if self.bf16 or self.bf16_full_eval:
-                if self.no_cuda and not is_torch_bf16_cpu_available() and not is_torch_tpu_available():
+                if self.use_cpu and not is_torch_bf16_cpu_available() and not is_torch_tpu_available():
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
-                elif not self.no_cuda and torch.cuda.is_available() and not is_torch_bf16_gpu_available():
+                elif not self.use_cpu and torch.cuda.is_available() and not is_torch_bf16_gpu_available():
                     # gpu
                     raise ValueError(
                         "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
@@ -1354,12 +1381,13 @@ class TrainingArguments:
             self.framework == "pt"
             and is_torch_available()
             and (self.device.type != "cuda")
+            and (self.device.type != "npu")
             and (get_xla_device_type(self.device) != "GPU")
             and (self.fp16 or self.fp16_full_eval)
         ):
             raise ValueError(
                 "FP16 Mixed precision training with AMP or APEX (`--fp16`) and FP16 half precision evaluation"
-                " (`--fp16_full_eval`) can only be used on CUDA devices."
+                " (`--fp16_full_eval`) can only be used on CUDA or NPU devices."
             )
 
         if (
@@ -1404,6 +1432,7 @@ class TrainingArguments:
                         " otherwise."
                     )
                     torch.backends.cuda.matmul.allow_tf32 = True
+                    torch.backends.cudnn.allow_tf32 = True
             else:
                 logger.warning(
                     "The speedups for torchdynamo mostly come wih GPU Ampere or higher and which is not detected here."
@@ -1412,11 +1441,13 @@ class TrainingArguments:
             if self.tf32:
                 if is_torch_tf32_available():
                     torch.backends.cuda.matmul.allow_tf32 = True
+                    torch.backends.cudnn.allow_tf32 = True
                 else:
                     raise ValueError("--tf32 requires Ampere or a newer GPU arch, cuda>=11 and torch>=1.7")
             else:
                 if is_torch_tf32_available():
                     torch.backends.cuda.matmul.allow_tf32 = False
+                    torch.backends.cudnn.allow_tf32 = False
                 # no need to assert on else
 
         if self.report_to is None:
@@ -1444,6 +1475,12 @@ class TrainingArguments:
                 " during training"
             )
 
+        if not (self.sharded_ddp == "" or not self.sharded_ddp):
+            warnings.warn(
+                "using `sharded_ddp` is deprecated and will be removed in version 4.33"
+                " of 🤗 Transformers. Use `fsdp` instead",
+                FutureWarning,
+            )
         if isinstance(self.sharded_ddp, bool):
             self.sharded_ddp = "simple" if self.sharded_ddp else ""
         if isinstance(self.sharded_ddp, str):
@@ -1544,6 +1581,7 @@ class TrainingArguments:
                 elif fsdp_option == FSDPOption.OFFLOAD:
                     os.environ["FSDP_OFFLOAD_PARAMS"] = "true"
                 elif fsdp_option == FSDPOption.AUTO_WRAP:
+                    os.environ["FSDP_AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[0]
                     if self.fsdp_config["fsdp_min_num_params"] > 0:
                         os.environ["FSDP_MIN_NUM_PARAMS"] = str(self.fsdp_config["fsdp_min_num_params"])
                         os.environ["FSDP_AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[1]
@@ -1551,7 +1589,6 @@ class TrainingArguments:
                         os.environ["FSDP_TRANSFORMER_CLS_TO_WRAP"] = ",".join(
                             self.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]
                         )
-                        os.environ["FSDP_AUTO_WRAP_POLICY"] = FSDP_AUTO_WRAP_POLICY[0]
             prefetch_policy = self.fsdp_config.get("fsdp_backward_prefetch", "NO_PREFETCH")
             os.environ["FSDP_BACKWARD_PREFETCH"] = prefetch_policy.upper()
 
@@ -1696,7 +1733,9 @@ class TrainingArguments:
                 )
             AcceleratorState._reset_state(reset_partial_state=True)
         self.distributed_state = None
-        if self.no_cuda:
+        if not self.use_ipex and "ACCELERATE_USE_IPEX" not in os.environ:
+            os.environ["ACCELERATE_USE_IPEX"] = "false"
+        if self.use_cpu or strtobool(os.environ.get("ACCELERATE_USE_CPU", "False")):
             self.distributed_state = PartialState(cpu=True, backend=self.ddp_backend)
             self._n_gpu = 0
         elif is_sagemaker_mp_enabled():
@@ -1714,7 +1753,9 @@ class TrainingArguments:
             del os.environ["ACCELERATE_USE_DEEPSPEED"]
             self._n_gpu = 1
         else:
-            self.distributed_state = PartialState(backend=self.ddp_backend)
+            self.distributed_state = PartialState(
+                backend=self.ddp_backend, timeout=timedelta(seconds=self.ddp_timeout)
+            )
             self._n_gpu = 1
         if not is_sagemaker_mp_enabled():
             device = self.distributed_state.device
@@ -1744,9 +1785,13 @@ class TrainingArguments:
                     )
             if device.type == "mps":
                 self._n_gpu = 1
-            elif self.no_cuda:
+            elif self.use_cpu:
                 device = torch.device("cpu")
                 self._n_gpu = 0
+            elif is_torch_npu_available():
+                device = torch.device("npu:0")
+                torch.npu.set_device(device)
+                self._n_gpu = 1
             else:
                 # if n_gpu is > 1 we'll use nn.DataParallel.
                 # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
