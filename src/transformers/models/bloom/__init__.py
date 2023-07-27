@@ -24,11 +24,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_bloom": [
-        "BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BloomConfig",
-        "BloomOnnxConfig",
-    ],
+    "configuration_bloom": ["BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP", "BloomConfig", "BloomOnnxConfig"],
 }
 try:
     if not is_tokenizers_available():

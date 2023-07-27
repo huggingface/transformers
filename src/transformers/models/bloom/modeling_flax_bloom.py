@@ -207,7 +207,8 @@ class FlaxBloomAttention(nn.Module):
             cached_value.value = value
             num_updated_cache_vectors = query.shape[1]
             cache_index.value = cache_index.value + num_updated_cache_vectors
-            # causal mask for cached decoder self-attention: our single query position should only attend to those key positions that have already been generated and cached, not the remaining zero elements.
+            # causal mask for cached decoder self-attention: our single query position should only attend to those key
+            # positions that have already been generated and cached, not the remaining zero elements.
             pad_mask = jnp.broadcast_to(
                 jnp.arange(max_length) < cur_index + num_updated_cache_vectors,
                 tuple(batch_dims) + (1, num_updated_cache_vectors, max_length),
@@ -488,8 +489,9 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
 
         inputs = {"params": params or self.params}
 
-        # If past_key_values are passed then cache is already initialized a private flag init_cache has to be passed down to ensure cache is used.
-        # It has to be made sure that cache is marked as mutable so that it can be changed by FlaxBloomAttention module
+        # If past_key_values are passed then cache is already initialized a private flag init_cache has to be passed
+        # down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be
+        # changed by FlaxBloomAttention module
         if past_key_values:
             inputs["cache"] = past_key_values
             mutable = ["cache"]
@@ -711,9 +713,10 @@ class FlaxBloomForCausalLM(FlaxBloomPreTrainedModel):
         batch_size, seq_length = input_ids.shape
 
         past_key_values = self.init_cache(batch_size, max_length)
-        # Note that usually one would have to put 0's in the attention_mask for x > input_ids.shape[-1] and x < cache_length.
-        # But since Bloom uses a causal mask, those positions are masked anyway.
-        # Thus, we can create a single static attention_mask here, which is more efficient for compilation
+        # Note that usually one would have to put 0's in the attention_mask for
+        # x > input_ids.shape[-1] and x < cache_length. But since Bloom uses a causal mask,
+        # those positions are masked anyway. Thus, we can create a single static attention_mask here,
+        # which is more efficient for compilation
         extended_attention_mask = jnp.ones((batch_size, max_length), dtype="i4")
         if attention_mask is not None:
             extended_attention_mask = lax.dynamic_update_slice(extended_attention_mask, attention_mask, (0, 0))

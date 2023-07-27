@@ -38,10 +38,7 @@ if is_flax_available():
 def prepare_bloom_inputs_dict(config, input_ids, attention_mask=None):
     if attention_mask is None:
         attention_mask = np.where(input_ids != config.pad_token_id, 1, 0)
-    return {
-        "input_ids": input_ids,
-        "attention_mask": attention_mask,
-    }
+    return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
 @require_flax
