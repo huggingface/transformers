@@ -3056,7 +3056,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         private: Optional[bool] = None,
         max_shard_size: Optional[Union[int, str]] = "10GB",
         token: Optional[Union[bool, str]] = None,
-        # (`use_auth_token` is deprecated)
+        # (`use_auth_token` is deprecated: we have to keep it here as we don't have **kwargs)
         use_auth_token: Optional[Union[bool, str]] = None,
         create_pr: bool = False,
         **base_model_card_args,
