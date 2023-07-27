@@ -20,6 +20,7 @@ import re
 import shutil
 import signal
 import sys
+import warnings
 from pathlib import Path
 from typing import Dict, Optional, Union
 
@@ -233,9 +234,7 @@ def get_cached_module_file(
             "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
         )
         if token is not None:
-            raise ValueError(
-                "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-            )
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         token = use_auth_token
 
     if is_offline_mode() and not local_files_only:
@@ -436,9 +435,7 @@ def get_class_from_dynamic_module(
             "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
         )
         if token is not None:
-            raise ValueError(
-                "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-            )
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         token = use_auth_token
 
     # Catch the name of the repo if it's specified in `class_reference`
