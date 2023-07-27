@@ -23,17 +23,17 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "https://huggingface.co/zekun-li/geolm-base-cased": "https://huggingface.co/https://huggingface.co/zekun-li/geolm-base-cased/resolve/main/vocab.txt",
+        "zekun-li/geolm-base-cased": "https://huggingface.co/zekun-li/geolm-base-cased/resolve/main/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "https://huggingface.co/zekun-li/geolm-base-cased": 512,
+    "zekun-li/geolm-base-cased": 512,
 }
 
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "https://huggingface.co/zekun-li/geolm-base-cased": {"do_lower_case": False},
+    "zekun-li/geolm-base-cased": {"do_lower_case": False},
 }
 
 

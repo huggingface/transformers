@@ -1,5 +1,6 @@
 # coding=utf-8
-# Copyright 2022 Zekun Li and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The Google AI Language Team Authors and The HuggingFace Inc. team.
+# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,9 +13,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" GeoLM model configuration """
+""" GEOLM model configuration"""
+from collections import OrderedDict
+from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -22,76 +26,84 @@ logger = logging.get_logger(__name__)
 
 GEOLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "zekun-li/geolm-base-cased": "https://huggingface.co/zekun-li/geolm-base-cased/resolve/main/config.json",
-    # See all GeoLM models at https://huggingface.co/models?filter=geolm
 }
 
 
 class GeoLMConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~GeoLMModel`].
-    It is used to instantiate an GeoLM model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the GeoLM [zekun-li/geolm-base-cased](https://huggingface.co/zekun-li/geolm-base-cased) architecture.
+    This is the configuration class to store the configuration of a [`GeoLMModel`] or a [`TFGeoLMModel`]. It is used to
+    instantiate a GEOLM model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the GEOLM
+    [zekun-li/geolm-base-cased](https://huggingface.co/zekun-li/geolm-base-cased) architecture.
 
-    Configuration objects inherit from  [`PretrainedConfig`] and can be used
-    to control the model outputs. Read the documentation from  [`PretrainedConfig`]
-    for more information.
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the GeoLM model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`~GeoLMModel`] or
-            [`~TFGeoLMModel`].
+            Vocabulary size of the GEOLM model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`GeoLMModel`] or [`TFGeoLMModel`].
         hidden_size (`int`, *optional*, defaults to 768):
-            Dimension of the encoder layers and the pooler layer.
+            Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
+        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
         hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`~GeoLMModel`] or
-            [`~TFGeoLMModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`GeoLMModel`] or [`TFGeoLMModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
+            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
+            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
+            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        Example:
+        use_spatial_distance_embedding (`bool`, *optional*, defaults to `True`):
+            Whether or not add spatial_distance_embedding module to the other embeddings to calculate the final input
+            embeddings.
+        classifier_dropout (`float`, *optional*):
+            The dropout ratio for the classification head.
+
+    Examples:
 
     ```python
-    >>> from transformers import GeoLMModel, GeoLMConfig
+    >>> from transformers import GeoLMConfig, GeoLMModel
 
-    >>> # Initializing a GeoLM zekun-li/geolm-base-cased style configuration
+    >>> # Initializing a GEOLM geolm-base-cased style configuration
     >>> configuration = GeoLMConfig()
 
-    >>> # Initializing a model from the zekun-li/geolm-base-cased style configuration
+    >>> # Initializing a model (with random weights) from the geolm-base-cased style configuration
     >>> model = GeoLMModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "geolm"
-    
 
     def __init__(
         self,
-        vocab_size=30522,
+        vocab_size=28996,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -103,30 +115,28 @@ class GeoLMConfig(PretrainedConfig):
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
+        pad_token_id=0,
+        position_embedding_type="absolute",
         use_cache=True,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
-        **kwargs
+        use_spatial_distance_embedding=True,
+        classifier_dropout=None,
+        **kwargs,
     ):
+        super().__init__(pad_token_id=pad_token_id, **kwargs)
+
         self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
+        self.intermediate_size = intermediate_size
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
+        self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
+        self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs
-        )
-
-    
+        self.use_spatial_distance_embedding = use_spatial_distance_embedding
+        self.classifier_dropout = classifier_dropout
