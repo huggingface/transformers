@@ -1092,7 +1092,11 @@ class GeoLMModel(GeoLMPreTrainedModel):
             pooled_output = None
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            return tuple(
+                v
+                for v in [sequence_output, pooled_output, encoder_outputs.past_key_values, encoder_outputs.hidden_states, encoder_outputs.attentions, encoder_outputs.cross_attentions]
+                if v is not None
+            )
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
