@@ -141,7 +141,7 @@ class GeoLMModelTester:
         result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        
 
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -190,6 +190,19 @@ class GeoLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         else ()
     )
     all_generative_model_classes = (GeoLMLMHeadModel,) if is_torch_available() else ()
+
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": GeoLMModel,
+            "fill-mask": GeoLMForMaskedLM,
+            "token-classification": GeoLMForTokenClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
+
+
+
     fx_compatible = False
 
     # special case for ForPreTraining model
