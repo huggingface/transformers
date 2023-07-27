@@ -147,7 +147,7 @@ class VitsTokenizer(PreTrainedTokenizer):
 
     def normalize_text(self, input_string):
         """Lowercase the input string, respecting any special token ids that may be part or entirely upper-cased."""
-        all_vocabulary = (self.encoder | self.added_tokens_encoder).keys()
+        all_vocabulary = self.encoder.keys() + self.added_tokens_encoder.keys()
         filtered_text = ""
 
         i = 0
