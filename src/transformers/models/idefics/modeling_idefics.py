@@ -32,15 +32,14 @@ from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PretrainedConfig
 from ...utils import (
-    ContextManagers,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
 )
-from .clip import CLIPVisionTransformer
-from .configuration_idefics import CLIPVisionConfig, IdeficsConfig
+from .configuration_idefics import IdeficsConfig
 from .perceiver import IdeficsPerceiverResampler
+from .vision import IdeficsVisionTransformer
 
 
 logger = logging.get_logger(__name__)
@@ -887,46 +886,18 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
 
     def _init_weights(self, module):
-        def init_a_linear(module, mean=0.0, std=self.config.initializer_range):
-            with ContextManagers(deepspeed_gathered_parameters_context_manager(module.weight, modify=True)):
-                module.weight.data.normal_(mean=mean, std=std)
-                if module.bias is not None:
-                    with ContextManagers(deepspeed_gathered_parameters_context_manager(module.bias, modify=True)):
-                        module.bias.data.zero_()
-                module._is_hf_initialized = True
-
-        if isinstance(module, IdeficsGatedCrossAttentionLayer):
-            for sub_module_name, sub_module in module.named_modules():
-                if isinstance(sub_module, nn.Linear):
-                    if "down_proj" in sub_module_name:
-                        factor = 2 * self.config.num_hidden_layers
-                    else:
-                        factor = 1.0
-                    init_a_linear(sub_module, std=(0.4 / (sub_module.in_features * factor)) ** 0.5)
-                    sub_module._is_hf_initialized = True
-        elif isinstance(module, IdeficsPerceiverResampler):
-            with ContextManagers(deepspeed_gathered_parameters_context_manager(module.latents, modify=True)):
-                module.latents.data.normal_(mean=0.0, std=(1.0 / self.config.vision_embed_dim) ** 0.5)
-                module._is_hf_initialized = True
-            for sub_module_name, sub_module in module.named_modules():
-                if isinstance(sub_module, nn.Linear):
-                    if "c_proj" in sub_module_name:
-                        factor = 2 * self.config.num_hidden_layers
-                    else:
-                        factor = 1.0
-                    init_a_linear(sub_module, std=(0.4 / (self.config.vision_embed_dim * factor)) ** 0.5)
-                    sub_module._is_hf_initialized = True
+        # important: this ported version of Idefics isn't meant for training from scratch - only
+        # inference and fine-tuning - so the proper init weights code has been removed - the m4 code
+        # base should be used for training from scratch and it contains the correct code.
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            with ContextManagers(deepspeed_gathered_parameters_context_manager(module.weight, modify=True)):
-                module.weight.data.normal_(mean=0.0, std=(1.0 / self.config.hidden_size) ** 0.5)
-                if module.padding_idx is not None:
-                    module.weight.data[module.padding_idx].zero_()
-                module._is_hf_initialized = True
-
-        elif isinstance(module, IdeficsDecoupledLinear):
-            if hasattr(module, "additional_fc"):
-                init_a_linear(module.additional_fc, std=(1.0 / (module.additional_fc.in_features)) ** 0.5)
-                module._is_hf_initialized = True
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, IdeficsModel):
@@ -1022,21 +993,20 @@ class IdeficsModel(IdeficsPreTrainedModel):
         )
 
         # complain that it's not used
-        self.image_size = config.vision_image_size
-
-        self.vision_config_dict = config.vision_config_dict
-        clip_vision_config = CLIPVisionConfig(**self.vision_config_dict)
-        self.vision_model = CLIPVisionTransformer(clip_vision_config)
+        self.image_size = config.vision_config.image_size
+        self.vision_config = config.vision_config
+        self.vision_model = IdeficsVisionTransformer(config.vision_config)
 
         # Perceiver Resampler
         if config.use_resampler:
+            perceiver_config = config.perceiver_config
             self.perceiver_resampler = IdeficsPerceiverResampler(
-                self.config,
-                self.config.vision_embed_dim,
-                config.resampler_depth,
-                config.resampler_n_heads,
-                config.resampler_head_dim,
-                config.resampler_n_latents,
+                config,
+                config.vision_embed_dim,
+                perceiver_config.resampler_depth,
+                perceiver_config.resampler_n_heads,
+                perceiver_config.resampler_head_dim,
+                perceiver_config.resampler_n_latents,
             )
 
         self.layers = nn.ModuleList([IdeficsDecoderLayer(config) for _ in range(config.num_hidden_layers)])

@@ -12,11 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch CLIP model."""
+""" PyTorch IdeficsVision model: a copy of CLIPVisionModel using a simpler config object"""
 
 
 from dataclasses import dataclass
-from typing import Any, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -26,48 +26,16 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...utils import (
     ModelOutput,
-    add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
-from .configuration_idefics import CLIPConfig, CLIPVisionConfig
+from .configuration_idefics import IdeficsVisionConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-CLIP_VISION_INPUTS_DOCSTRING = ""
-
-
-# Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
-    """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
-    """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
-
-
-# contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/2021-03-07-clip.html
-def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
-    return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
-
-
-def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
-    caption_loss = contrastive_loss(similarity)
-    image_loss = contrastive_loss(similarity.t())
-    return (caption_loss + image_loss) / 2.0
-
-
 @dataclass
-class CLIPVisionModelOutput(ModelOutput):
+class IdeficsVisionModelOutput(ModelOutput):
     """
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
 
@@ -95,75 +63,9 @@ class CLIPVisionModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-@dataclass
-class CLIPTextModelOutput(ModelOutput):
-    """
-    Base class for text model's outputs that also contains a pooling of the last hidden states.
-
-    Args:
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The text embeddings obtained by applying the projection layer to the pooler_output.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    text_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-class CLIPOutput(ModelOutput):
-    """
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for image-text similarity.
-        logits_per_image:(`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
-            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
-            similarity scores.
-        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
-            similarity scores.
-        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`CLIPTextModel`].
-        image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of [`CLIPVisionModel`].
-        text_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`CLIPTextModel`].
-        vision_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`CLIPVisionModel`].
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits_per_image: torch.FloatTensor = None
-    logits_per_text: torch.FloatTensor = None
-    text_embeds: torch.FloatTensor = None
-    image_embeds: torch.FloatTensor = None
-    text_model_output: BaseModelOutputWithPooling = None
-    vision_model_output: BaseModelOutputWithPooling = None
-
-    def to_tuple(self) -> Tuple[Any]:
-        return tuple(
-            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
-
-
-# copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings
-class CLIPVisionEmbeddings(nn.Module):
-    def __init__(self, config: CLIPVisionConfig):
+# Adapted from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings
+class IdeficsVisionEmbeddings(nn.Module):
+    def __init__(self, config: IdeficsVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -197,8 +99,8 @@ class CLIPVisionEmbeddings(nn.Module):
         return embeddings
 
 
-# copied from transformers.models.clip.modeling_clip.CLIPAttention
-class CLIPAttention(nn.Module):
+# Adapted from transformers.models.clip.modeling_clip.CLIPAttention
+class IdeficsVisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
@@ -302,8 +204,8 @@ class CLIPAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# copied from transformers.models.clip.modeling_clip.CLIPMLP
-class CLIPMLP(nn.Module):
+# Adapted from transformers.models.clip.modeling_clip.CLIPMLP
+class IdeficsVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -318,14 +220,14 @@ class CLIPMLP(nn.Module):
         return hidden_states
 
 
-# copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer
-class CLIPEncoderLayer(nn.Module):
-    def __init__(self, config: CLIPConfig):
+# Adapted from transformers.models.clip.modeling_clip.CLIPEncoderLayer
+class IdeficsVisionEncoderLayer(nn.Module):
+    def __init__(self, config: IdeficsVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = CLIPAttention(config)
+        self.self_attn = IdeficsVisionAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = CLIPMLP(config)
+        self.mlp = IdeficsVisionMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
@@ -369,20 +271,20 @@ class CLIPEncoderLayer(nn.Module):
         return outputs
 
 
-# copied from transformers.models.clip.modeling_clip.CLIPEncoder
-class CLIPEncoder(nn.Module):
+# Adapted from transformers.models.clip.modeling_clip.CLIPEncoder
+class IdeficsVisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`CLIPEncoderLayer`].
+    [`IdeficsVisionEncoderLayer`].
 
     Args:
-        config: CLIPConfig
+        config: IdeficsVisionConfig
     """
 
-    def __init__(self, config: CLIPConfig):
+    def __init__(self, config: IdeficsVisionConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([CLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([IdeficsVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -473,20 +375,18 @@ class CLIPEncoder(nn.Module):
         )
 
 
-# copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer
-class CLIPVisionTransformer(nn.Module):
-    def __init__(self, config: CLIPVisionConfig):
+class IdeficsVisionTransformer(nn.Module):
+    def __init__(self, config: IdeficsVisionConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
 
-        self.embeddings = CLIPVisionEmbeddings(config)
+        self.embeddings = IdeficsVisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.encoder = CLIPEncoder(config)
+        self.encoder = IdeficsVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPVisionConfig)
+    # copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer.forward
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
