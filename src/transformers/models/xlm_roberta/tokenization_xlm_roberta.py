@@ -170,7 +170,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
 
         self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + self.fairseq_offset
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
-        
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,

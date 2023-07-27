@@ -149,8 +149,6 @@ class DistilBertTokenizer(PreTrainedTokenizer):
         strip_accents=None,
         **kwargs,
     ):
-
-
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
@@ -167,7 +165,7 @@ class DistilBertTokenizer(PreTrainedTokenizer):
                 strip_accents=strip_accents,
             )
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=unk_token)
-        
+
         super().__init__(
             do_lower_case=do_lower_case,
             do_basic_tokenize=do_basic_tokenize,

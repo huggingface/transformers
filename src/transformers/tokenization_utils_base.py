@@ -815,7 +815,7 @@ class SpecialTokensMixin:
         "pad_token",
         "cls_token",
         "mask_token",
-        "additional_special_tokens", # TODO let's remove it from here, only add it if legacy
+        "additional_special_tokens",  # TODO let's remove it from here, only add it if legacy
     ]
 
     def __init__(self, verbose=True, **kwargs):
@@ -921,7 +921,6 @@ class SpecialTokensMixin:
                 assert isinstance(value, (list, tuple)) and all(
                     isinstance(t, (str, AddedToken)) for t in value
                 ), f"Tokens {value} for key {key} should all be str or AddedToken instances"
-
 
                 to_add = []
                 for token in value:
@@ -1295,12 +1294,11 @@ class SpecialTokensMixin:
     @property
     def all_special_tokens(self) -> List[str]:
         """
-        `List[str]`: All the special tokens (`'<unk>'`, `'<cls>'`, ..., etc.) mapped to class
-        attributes.
+        `List[str]`: All the special tokens (`'<unk>'`, `'<cls>'`, ..., etc.) mapped to class attributes.
 
         Convert tokens of `tokenizers.AddedToken` type to string.
         """
-        # TODO deprecate this? 
+        # TODO deprecate this?
         all_toks = [str(s) for s in self.all_special_tokens_extended]
         return all_toks
 

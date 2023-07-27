@@ -16,7 +16,7 @@
 
 
 import warnings
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
@@ -85,13 +85,9 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        
+
         # unk token needs to be in the vocab with correct index
-        self._added_tokens_decoder = {
-            0: pad_token,
-            1: eos_token,
-            2: unk_token
-        }
+        self._added_tokens_decoder = {0: pad_token, 1: eos_token, 2: unk_token}
         self._utf_vocab_size = 2**8  # utf is 8 bits
         super().__init__(
             eos_token=eos_token,
@@ -205,8 +201,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
             token_id = self.unk_token_id
         else:
             token_id = ord(token) + len(self.added_tokens_decoder)
-                                        
-                                   
+
         return token_id
 
     def _convert_id_to_token(self, index):

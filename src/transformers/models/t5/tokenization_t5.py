@@ -172,14 +172,12 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.legacy = legacy
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
-
-
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
 
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
-        
+
         super().__init__(
             eos_token=eos_token,
             unk_token=unk_token,
@@ -215,7 +213,7 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return self.sp_model.get_piece_size() # + self._extra_ids legacy? 
+        return self.sp_model.get_piece_size()  # + self._extra_ids legacy?
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
