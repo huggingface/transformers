@@ -540,9 +540,8 @@ class EtaLogitsWarper(LogitsWarper):
     >>> outputs = model.generate(inputs["input_ids"], max_length=128)
     >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
     a quadcopter flight controller (RTFQ Flip MWC) that supports I2C sensors for adding thing like a barometer, magnetometer, and GPS system. The officially supported sensor block (BMP180, HMC5883L on one board) is discontinued, as far as I know, everyone involved lived to sing another day... disorder and an extreme state of dysmetabolism characterized by extensive erythema and a significant reduction in uncovered muscle mass. The patient was diagnosed with a severe erythema and a severe erythema of the right side of the body. The patient was
-    
-    # The result is much better and coherent when we use the `eta_cutoff` parameter
 
+    >>> # The result is much better and coherent when we use the `eta_cutoff` parameter
     >>> outputs = model.generate(
     ...     inputs["input_ids"], max_length=128, do_sample=True, eta_cutoff=2e-2
     ... )  # need to set do_sample=True for eta_cutoff to work
