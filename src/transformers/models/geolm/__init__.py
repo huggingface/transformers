@@ -37,11 +37,6 @@ else:
     _import_structure["modeling_geolm"] = [
         "GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "GeoLMForMaskedLM",
-        "GeoLMForMultipleChoice",
-        "GeoLMForNextSentencePrediction",
-        "GeoLMForPreTraining",
-        "GeoLMForQuestionAnswering",
-        "GeoLMForSequenceClassification",
         "GeoLMForTokenClassification",
         "GeoLMLayer",
         "GeoLMLMHeadModel",
@@ -110,11 +105,6 @@ if TYPE_CHECKING:
         from .modeling_geolm import (
             GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             GeoLMForMaskedLM,
-            GeoLMForMultipleChoice,
-            GeoLMForNextSentencePrediction,
-            GeoLMForPreTraining,
-            GeoLMForQuestionAnswering,
-            GeoLMForSequenceClassification,
             GeoLMForTokenClassification,
             GeoLMLayer,
             GeoLMLMHeadModel,
@@ -158,7 +148,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_flax_geolm import (
-            FlaxGeoLMForCausalLM,
             FlaxGeoLMForMaskedLM,
             FlaxGeoLMForMultipleChoice,
             FlaxGeoLMForNextSentencePrediction,

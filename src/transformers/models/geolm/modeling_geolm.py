@@ -173,32 +173,6 @@ class ContinuousSpatialPositionalEmbedding(nn.Module):
         return ret_pos_emb
 
 
-
-class ContinuousSpatialPositionalEmbedding(nn.Module):
-    def __init__(self, hidden_size):
-        super().__init__()
-
-        self.emb_dim = int(hidden_size / 2)  # dimension of the embedding
-
-        inv_freq = 1 / (10000 ** (torch.arange(0.0, self.emb_dim) / self.emb_dim))  # (emb_dim)
-
-        self.register_buffer("inv_freq", inv_freq)
-
-    def forward(self, x):
-        bsz, seq_len = x.shape[0], x.shape[1]  # get batch size
-        flat_x = torch.flatten(x)  # (bsize, seq_len) -> bsize * seq_len
-
-        flat_sinusoid_inp = torch.ger(flat_x, self.inv_freq)  # outer-product, out_shape: (bsize * seq_len, emb_dim)
-
-        sinusoid_inp = flat_sinusoid_inp.reshape(
-            bsz, seq_len, self.emb_dim
-        )  # (bsize * seq_len, emb_dim) -> (bsize, seq_len, emb_dim)
-
-        ret_pos_emb = torch.cat([sinusoid_inp.sin(), sinusoid_inp.cos()], dim=-1)  # (bsize, seq_len, 2*emb_dim)
-
-        return ret_pos_emb
-
-
 class GeoLMEmbeddings(nn.Module):
     """Construct the embeddings from word, position, geolocation and token_type embeddings."""
 

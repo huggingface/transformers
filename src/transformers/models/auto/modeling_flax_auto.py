@@ -38,7 +38,6 @@ FLAX_MODEL_MAPPING_NAMES = OrderedDict(
         ("clip", "FlaxCLIPModel"),
         ("distilbert", "FlaxDistilBertModel"),
         ("electra", "FlaxElectraModel"),
-        ("geolm", "FlaxGeoLMModel"),
         ("gpt-sw3", "FlaxGPT2Model"),
         ("gpt2", "FlaxGPT2Model"),
         ("gpt_neo", "FlaxGPTNeoModel"),
@@ -72,7 +71,6 @@ FLAX_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("bert", "FlaxBertForPreTraining"),
         ("big_bird", "FlaxBigBirdForPreTraining"),
         ("electra", "FlaxElectraForPreTraining"),
-        ("geolm", "FlaxGeoLMForPreTraining"),
         ("longt5", "FlaxLongT5ForConditionalGeneration"),
         ("mbart", "FlaxMBartForConditionalGeneration"),
         ("mt5", "FlaxMT5ForConditionalGeneration"),
@@ -95,7 +93,6 @@ FLAX_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("big_bird", "FlaxBigBirdForMaskedLM"),
         ("distilbert", "FlaxDistilBertForMaskedLM"),
         ("electra", "FlaxElectraForMaskedLM"),
-        ("geolm", "FlaxGeoLMForMaskedLM"),
         ("mbart", "FlaxMBartForConditionalGeneration"),
         ("roberta", "FlaxRobertaForMaskedLM"),
         ("roberta-prelayernorm", "FlaxRobertaPreLayerNormForMaskedLM"),
@@ -143,7 +140,6 @@ FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("bert", "FlaxBertForCausalLM"),
         ("big_bird", "FlaxBigBirdForCausalLM"),
         ("electra", "FlaxElectraForCausalLM"),
-        ("geolm", "FlaxGeoLMForCausalLM"),
         ("gpt-sw3", "FlaxGPT2LMHeadModel"),
         ("gpt2", "FlaxGPT2LMHeadModel"),
         ("gpt_neo", "FlaxGPTNeoForCausalLM"),
@@ -165,7 +161,6 @@ FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("big_bird", "FlaxBigBirdForSequenceClassification"),
         ("distilbert", "FlaxDistilBertForSequenceClassification"),
         ("electra", "FlaxElectraForSequenceClassification"),
-        ("geolm", "FlaxGeoLMForSequenceClassification"),
         ("mbart", "FlaxMBartForSequenceClassification"),
         ("roberta", "FlaxRobertaForSequenceClassification"),
         ("roberta-prelayernorm", "FlaxRobertaPreLayerNormForSequenceClassification"),
@@ -183,7 +178,6 @@ FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("big_bird", "FlaxBigBirdForQuestionAnswering"),
         ("distilbert", "FlaxDistilBertForQuestionAnswering"),
         ("electra", "FlaxElectraForQuestionAnswering"),
-        ("geolm", "FlaxGeoLMForQuestionAnswering"),
         ("mbart", "FlaxMBartForQuestionAnswering"),
         ("roberta", "FlaxRobertaForQuestionAnswering"),
         ("roberta-prelayernorm", "FlaxRobertaPreLayerNormForQuestionAnswering"),
@@ -200,7 +194,6 @@ FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("big_bird", "FlaxBigBirdForTokenClassification"),
         ("distilbert", "FlaxDistilBertForTokenClassification"),
         ("electra", "FlaxElectraForTokenClassification"),
-        ("geolm", "FlaxGeoLMForTokenClassification"),
         ("roberta", "FlaxRobertaForTokenClassification"),
         ("roberta-prelayernorm", "FlaxRobertaPreLayerNormForTokenClassification"),
         ("roformer", "FlaxRoFormerForTokenClassification"),
@@ -216,7 +209,6 @@ FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("big_bird", "FlaxBigBirdForMultipleChoice"),
         ("distilbert", "FlaxDistilBertForMultipleChoice"),
         ("electra", "FlaxElectraForMultipleChoice"),
-        ("geolm", "FlaxGeoLMForMultipleChoice"),
         ("roberta", "FlaxRobertaForMultipleChoice"),
         ("roberta-prelayernorm", "FlaxRobertaPreLayerNormForMultipleChoice"),
         ("roformer", "FlaxRoFormerForMultipleChoice"),
@@ -227,7 +219,6 @@ FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
 FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict(
     [
         ("bert", "FlaxBertForNextSentencePrediction"),
-        ("geolm", "FlaxGeoLMForNextSentencePrediction"),
     ]
 )
 
