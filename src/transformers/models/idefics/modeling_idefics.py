@@ -886,6 +886,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
 
     def _init_weights(self, module):
+        # important: this ported version of Idefics isn't meant for training from scratch - only inference and fine-tuning - so the proper init weights code has been removed - the m4 code base should be used for training from scratch and it contains the correct code.
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
