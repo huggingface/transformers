@@ -240,7 +240,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         super().test_model_outputs_equivalence()
         self.all_model_classes = orig
 
-
     def setUp(self):
         self.model_tester = IdeficsModelTester(self)
         self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
