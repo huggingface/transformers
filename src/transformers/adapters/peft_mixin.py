@@ -79,7 +79,7 @@ class PeftAdapterMixin:
             raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
 
         # Replace the adapter with the loaded adapter
-        create_and_replace(loaded_peft_config.peft_type, loaded_peft_config, self, adapter_name)
+        create_and_replace(loaded_peft_config, self, adapter_name)
 
         adapter_state_dict = load_peft_weights(
             peft_model_id,
