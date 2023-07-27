@@ -1254,10 +1254,15 @@ class MaskFormerPixelDecoder(nn.Module):
         self.fpn = MaskFormerFPNModel(*args, feature_size=feature_size, **kwargs)
         self.mask_projection = nn.Conv2d(feature_size, mask_feature_size, kernel_size=3, padding=1)
 
-    def forward(self, features: List[Tensor], output_hidden_states: bool = False) -> MaskFormerPixelDecoderOutput:
+    def forward(
+        self, features: List[Tensor], output_hidden_states: bool = False, return_dict: bool = True
+    ) -> MaskFormerPixelDecoderOutput:
         fpn_features = self.fpn(features)
         # we use the last feature map
         last_feature_projected = self.mask_projection(fpn_features[-1])
+
+        if not return_dict:
+            return (last_feature_projected, tuple(fpn_features)) if output_hidden_states else (last_feature_projected,)
 
         return MaskFormerPixelDecoderOutput(
             last_hidden_state=last_feature_projected, hidden_states=tuple(fpn_features) if output_hidden_states else ()
@@ -1387,9 +1392,20 @@ class MaskFormerPixelLevelModule(nn.Module):
             lateral_widths=feature_channels[:-1],
         )
 
-    def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> MaskFormerPixelLevelModuleOutput:
+    def forward(
+        self, pixel_values: Tensor, output_hidden_states: bool = False, return_dict: bool = True
+    ) -> MaskFormerPixelLevelModuleOutput:
         features = self.encoder(pixel_values).feature_maps
-        decoder_output = self.decoder(features, output_hidden_states)
+        decoder_output = self.decoder(features, output_hidden_states, return_dict=return_dict)
+
+        if not return_dict:
+            last_hidden_state = decoder_output[0]
+            outputs = (features[-1], last_hidden_state)
+            if output_hidden_states:
+                hidden_states = decoder_output[1]
+                outputs = outputs + (tuple(features),) + (hidden_states,)
+            return outputs
+
         return MaskFormerPixelLevelModuleOutput(
             # the last feature is actually the output from the last layer
             encoder_last_hidden_state=features[-1],
@@ -1414,7 +1430,11 @@ class MaskFormerTransformerModule(nn.Module):
         self.decoder = DetrDecoder(config=config.decoder_config)
 
     def forward(
-        self, image_features: Tensor, output_hidden_states: bool = False, output_attentions: bool = False
+        self,
+        image_features: Tensor,
+        output_hidden_states: bool = False,
+        output_attentions: bool = False,
+        return_dict: Optional[bool] = None,
     ) -> DetrDecoderOutput:
         if self.input_projection is not None:
             image_features = self.input_projection(image_features)
@@ -1438,7 +1458,7 @@ class MaskFormerTransformerModule(nn.Module):
             query_position_embeddings=queries_embeddings,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=None,
+            return_dict=return_dict,
         )
         return decoder_output
 
@@ -1593,9 +1613,11 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         if pixel_mask is None:
             pixel_mask = torch.ones((batch_size, height, width), device=pixel_values.device)
 
-        pixel_level_module_output = self.pixel_level_module(pixel_values, output_hidden_states)
-        image_features = pixel_level_module_output.encoder_last_hidden_state
-        pixel_embeddings = pixel_level_module_output.decoder_last_hidden_state
+        pixel_level_module_output = self.pixel_level_module(
+            pixel_values, output_hidden_states, return_dict=return_dict
+        )
+        image_features = pixel_level_module_output[0]
+        pixel_embeddings = pixel_level_module_output[1]
 
         transformer_module_output = self.transformer_module(image_features, output_hidden_states, output_attentions)
         queries = transformer_module_output.last_hidden_state
@@ -1606,9 +1628,9 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         hidden_states = None
 
         if output_hidden_states:
-            encoder_hidden_states = pixel_level_module_output.encoder_hidden_states
-            pixel_decoder_hidden_states = pixel_level_module_output.decoder_hidden_states
-            transformer_decoder_hidden_states = transformer_module_output.hidden_states
+            encoder_hidden_states = pixel_level_module_output[2]
+            pixel_decoder_hidden_states = pixel_level_module_output[3]
+            transformer_decoder_hidden_states = transformer_module_output[1]
             hidden_states = encoder_hidden_states + pixel_decoder_hidden_states + transformer_decoder_hidden_states
 
         output = MaskFormerModelOutput(
@@ -1803,12 +1825,24 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs: MaskFormerModelOutput = self.model(
+        raw_outputs = self.model(
             pixel_values,
             pixel_mask,
             output_hidden_states=output_hidden_states or self.config.use_auxiliary_loss,
-            return_dict=True,
+            return_dict=return_dict,
             output_attentions=output_attentions,
+        )
+        # We need to have raw_outputs optionally be returned as a dict to use torch.compile. For backwards
+        # compatibility we convert to a dataclass for the rest of the model logic
+        outputs = MaskFormerModelOutput(
+            encoder_last_hidden_state=raw_outputs[0],
+            pixel_decoder_last_hidden_state=raw_outputs[1],
+            transformer_decoder_last_hidden_state=raw_outputs[2],
+            encoder_hidden_states=raw_outputs[3] if output_hidden_states else None,
+            pixel_decoder_hidden_states=raw_outputs[4] if output_hidden_states else None,
+            transformer_decoder_hidden_states=raw_outputs[5] if output_hidden_states else None,
+            hidden_states=raw_outputs[6] if output_hidden_states else None,
+            attentions=raw_outputs[-1] if output_attentions else None,
         )
 
         loss, loss_dict, auxiliary_logits = None, None, None
@@ -1827,16 +1861,18 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         if not output_auxiliary_logits:
             auxiliary_logits = None
 
-        output = MaskFormerForInstanceSegmentationOutput(
+        if not return_dict:
+            output = tuple(
+                v
+                for v in (loss, class_queries_logits, masks_queries_logits, auxiliary_logits, *outputs.values())
+                if v is not None
+            )
+            return output
+
+        return MaskFormerForInstanceSegmentationOutput(
             loss=loss,
             **outputs,
             class_queries_logits=class_queries_logits,
             masks_queries_logits=masks_queries_logits,
             auxiliary_logits=auxiliary_logits,
         )
-
-        if not return_dict:
-            output = tuple(v for v in output.values())
-            if loss is not None:
-                output = ((loss)) + output
-        return output

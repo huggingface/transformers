@@ -517,8 +517,8 @@ class TFSamMaskDecoder(tf.keras.layers.Layer):
         point_embeddings = tf.cast(tokens, self.iou_token.dtype)
 
         image_embeddings = image_embeddings + dense_prompt_embeddings
-        image_embeddings = tf.tile(image_embeddings, [point_batch_size, 1, 1, 1])
-        image_positional_embeddings = tf.tile(image_positional_embeddings, [point_batch_size, 1, 1, 1])
+        image_embeddings = tf.repeat(image_embeddings, point_batch_size, axis=0)
+        image_positional_embeddings = tf.repeat(image_positional_embeddings, point_batch_size, axis=0)
 
         point_embedding, image_embeddings, attentions = self.transformer(
             point_embeddings=point_embeddings,
