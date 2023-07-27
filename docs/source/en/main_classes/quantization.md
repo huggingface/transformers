@@ -16,6 +16,112 @@ rendered properly in your Markdown viewer.
 
 # Quantize 🤗 Transformers models
 
+## `AutoGPTQ` Integration
+
+🤗 Transformers has integrated `optimum` API to perform GPTQ quantization on language models. You can load and quantize your model in 8,6,4 or even 2 bits without a big drop of performance and faster inference speed! This is supported by most GPU hardwares.
+
+To learn more about the the quantization model, check out: 
+- the [GPTQ](https://arxiv.org/pdf/2210.17323.pdf) paper
+<!-- - the `optimum` [guide]() on GPTQ quantization -->
+- the [`AutoGPTQ`](https://github.com/PanQiWei/AutoGPTQ) library used as the backend
+
+### Requirements
+
+You need to have the following requirements installed to run the code below: 
+
+- Install latest `AutoGPTQ` library
+`pip install auto-gptq`
+
+- Install latest `optimum` from source 
+`pip install --upgrade optimum`
+
+- Install latest `transformers` from source 
+`pip install --upgrade transformers`
+
+- Install latest `accelerate` from source 
+`pip install --upgrade accelerate`
+
+### Load and quantize a model
+
+#### GPTQ Configuration
+
+In order to load and quantize a model, you need to create a [`GPTQConfig`]. You need to pass the number of `bits`, a `dataset` in order to calibrate the quantization and the `tokenizer` of the model in order prepare the dataset.
+
+```python 
+model_id = "facebook/opt-125m"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+gptq_config = GPTQConfig(bits=4, dataset = "c4", tokenizer=tokenizer)
+```
+
+Note that you can pass your own dataset as a list of string. However, it is highly recommended to use the dataset from the GPTQ paper. 
+```python
+dataset = ["auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."]
+quantization = GPTQConfig(bits=4, dataset = dataset, tokenizer=tokenizer)
+```
+
+#### Quantization
+
+You can quantize a model by using `from_pretrained` and setting the `quantization_config`. 
+
+```python
+from transformers import AutoModelForCausalLM
+model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=gptq_config)
+```
+Note that you will need a GPU to quantize a model. We will put the model in the cpu and move the modules back and forth to the gpu in order to quantize them.
+
+If you want to maximize your gpus usage while using cpu offload, you can set `device_map = "auto"`.
+```python
+from transformers import AutoModelForCausalLM
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", quantization_config=gptq_config)
+```
+Note that disk offload is not supported. Furthermore, if you are out of memory because of the dataset, you may have to pass `max_memory` in `from_pretained`. Checkout this [guide](https://huggingface.co/docs/accelerate/usage_guides/big_modeling#designing-a-device-map) to learn more about `device_map` and `max_memory`.
+
+<Tip warning={true}>
+GPTQ quantization only works for text model for now. Futhermore, the quantization process can a lot of time depending on one's hardware (175B model = 4 gpu hours using NVIDIA A100). Please check on the hub if there is not a GPTQ quantized version of the model. If not, you can submit a demand on github. 
+</Tip>
+
+### Push quantized model to 🤗 Hub
+
+You can push the quantized model like any 🤗 model to Hub with `push_to_hub`:
+
+```python
+quantized_model.push_to_hub("opt-125m-gptq")
+tokenizer.push_to_hub("opt-125m-gptq")
+```
+
+If you want to save your quantized model on your local machine, you can also do it with `save_pretrained`: 
+```python
+quantized_model.save_pretrained("opt-125m-gptq")
+tokenizer.save_pretrained("opt-125m-gptq")
+```
+
+Note that if you have quantized your model with a `device_map`, make sure to move the entire model to one of your gpus or the `cpu` before saving it. 
+```python
+quantized_model.to("cpu")
+quantized_model.save_pretrained("opt-125m-gptq")
+```
+
+### Load a quantized model from the 🤗 Hub
+
+You can load a quantized model from the Hub by using `from_pretrained`.
+Make sure that the pushed weights are quantized, by checking that the attribute `quantization_config` is present in the model configuration object.
+
+```python
+from transformers import AutoModelForCausalLM
+model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq")
+```
+Note that in this case, you don't need to specify the `quantization_config`. It will look for the `quantization_config` and prepare the model 
+before loading the quantized weights. However, you need to make sure that `optimum` and `auto-gptq` are installed.
+
+If you want to load a model faster and without allocating more memory than needed, the `device_map` argument also works with quantized model. Make sure that you have `accelerate` library installed.
+```python
+from transformers import AutoModelForCausalLM
+model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto")
+```
+
+### GPTQConfig
+[[autodoc]] GPTQConfig
+
 ## `bitsandbytes` Integration
 
 🤗 Transformers is closely integrated with most used modules on `bitsandbytes`. You can load your model in 8-bit precision with few lines of code.
@@ -192,7 +298,7 @@ This section is intended to advanced users, that want to explore what it is poss
 
 One of the advanced usecase of this is being able to load a model and dispatch the weights between `CPU` and `GPU`. Note that the weights that will be dispatched on CPU **will not** be converted in 8-bit, thus kept in `float32`. This feature is intended for users that want to fit a very large model and dispatch the model between GPU and CPU.
 
-First, load a `BitsAndBytesConfig` from `transformers` and set the attribute `llm_int8_enable_fp32_cpu_offload` to `True`:
+First, load a [`BitsAndBytesConfig`] from `transformers` and set the attribute `llm_int8_enable_fp32_cpu_offload` to `True`:
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -274,10 +380,7 @@ This enables fine-tuning large models such as `flan-t5-large` or `facebook/opt-6
 Note that you don't need to pass `device_map` when loading the model for training. It will automatically load your model on your GPU. You can also set the device map to a specific device if needed (e.g. `cuda:0`, `0`, `torch.device('cuda:0')`). Please note that `device_map=auto` should be used for inference only. 
 
 ### BitsAndBytesConfig
-
 [[autodoc]] BitsAndBytesConfig
-
-
 ## Quantization with 🤗 `optimum` 
 
 Please have a look at [Optimum documentation](https://huggingface.co/docs/optimum/index) to learn more about quantization methods that are supported by `optimum` and see if these are applicable for your usecase.
