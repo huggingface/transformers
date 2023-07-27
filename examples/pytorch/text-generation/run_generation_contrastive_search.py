@@ -93,7 +93,7 @@ def main():
     # tokenizer = GPT2Tokenizer.from_pretrained(args.model_name_or_path)
     # model = OPTForCausalLM.from_pretrained(args.model_name_or_path)
     # Prepare model with `accelerator`.
-    accelerator.prepare_model(model)
+    model = accelerator.prepare_model(model, evaluation_mode=True)
 
     if args.fp16:
         model.half()

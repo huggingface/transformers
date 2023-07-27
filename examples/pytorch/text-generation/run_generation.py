@@ -356,7 +356,7 @@ def main():
     model = model_class.from_pretrained(args.model_name_or_path)
 
     # Prepare model with `accelerator`.
-    accelerator.prepare_model(model)
+    model = accelerator.prepare_model(model, evaluation_mode=True)
 
     if args.fp16:
         model.half()
