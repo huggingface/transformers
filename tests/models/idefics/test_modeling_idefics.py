@@ -32,13 +32,13 @@ if is_torch_available():
     from transformers.models.idefics.configuration_idefics import IdeficsVisionConfig
     from transformers.models.idefics.modeling_idefics import IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
+    from transformers import IdeficsProcessor
 else:
     is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import IdeficsProcessor
 
 
 class IdeficsModelTester:
