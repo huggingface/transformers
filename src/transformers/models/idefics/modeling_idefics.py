@@ -886,7 +886,9 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
 
     def _init_weights(self, module):
-        # important: this ported version of Idefics isn't meant for training from scratch - only inference and fine-tuning - so the proper init weights code has been removed - the m4 code base should be used for training from scratch and it contains the correct code.
+        # important: this ported version of Idefics isn't meant for training from scratch - only
+        # inference and fine-tuning - so the proper init weights code has been removed - the m4 code
+        # base should be used for training from scratch and it contains the correct code.
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -1004,13 +1006,14 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
         # Perceiver Resampler
         if config.use_resampler:
+            perceiver_config = config.perceiver_config
             self.perceiver_resampler = IdeficsPerceiverResampler(
-                self.config,
-                self.config.vision_embed_dim,
-                config.perceiver_config.resampler_depth,
-                config.perceiver_config.resampler_n_heads,
-                config.perceiver_config.resampler_head_dim,
-                config.perceiver_config.resampler_n_latents,
+                config,
+                config.vision_embed_dim,
+                perceiver_config.resampler_depth,
+                perceiver_config.resampler_n_heads,
+                perceiver_config.resampler_head_dim,
+                perceiver_config.resampler_n_latents,
             )
 
         self.layers = nn.ModuleList([IdeficsDecoderLayer(config) for _ in range(config.num_hidden_layers)])
