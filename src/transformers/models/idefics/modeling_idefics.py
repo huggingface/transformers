@@ -932,13 +932,6 @@ class IdeficsPreTrainedModel(PreTrainedModel):
         if isinstance(module, IdeficsModel):
             module.gradient_checkpointing = value
 
-    @classmethod
-    def override_vision_model_wrapper(cls, model, config, vision_model_name, vision_model_params, torch_dtype):
-        # this can be called via from_pretrained from a class w/ head or w/o head so we extract the beheaded model version
-        beheaded_model = model.model if hasattr(model, "model") else model
-        cls.override_vision_model(beheaded_model, vision_model_name, vision_model_params, torch_dtype)
-        beheaded_model.freeze_relevant_params(config)
-
 
 LLAMA_INPUTS_DOCSTRING = r"""
     Args:
