@@ -1125,16 +1125,3 @@ if is_sagemaker_mp_enabled():
         # It doesn't seem possible to check here if `tensor` is a StepOutput because StepOutput lives in `smp.step`
         # which is also the name of the decorator so Python is confused.
         return tensor.concat().detach().cpu()
-
-
-def load_pretrained_model_only_on_rank0(model_cls, config_cls, model_name_or_path):
-    from accelerate.state import PartialState
-
-    state = PartialState()
-    if state.is_main_process:
-        model = model_cls.from_pretrained(model_name_or_path, return_dict=True)
-    else:
-        with torch.device("meta"):
-            config = config_cls.from_pretrained(model_name_or_path)
-            model = model_cls.from_config(config)
-    return model
