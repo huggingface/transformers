@@ -32,7 +32,6 @@ from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PretrainedConfig
 from ...utils import (
-    ContextManagers,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -887,46 +886,15 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"decoder\.version"]
 
     def _init_weights(self, module):
-        def init_a_linear(module, mean=0.0, std=self.config.initializer_range):
-            with ContextManagers(deepspeed_gathered_parameters_context_manager(module.weight, modify=True)):
-                module.weight.data.normal_(mean=mean, std=std)
-                if module.bias is not None:
-                    with ContextManagers(deepspeed_gathered_parameters_context_manager(module.bias, modify=True)):
-                        module.bias.data.zero_()
-                module._is_hf_initialized = True
-
-        if isinstance(module, IdeficsGatedCrossAttentionLayer):
-            for sub_module_name, sub_module in module.named_modules():
-                if isinstance(sub_module, nn.Linear):
-                    if "down_proj" in sub_module_name:
-                        factor = 2 * self.config.num_hidden_layers
-                    else:
-                        factor = 1.0
-                    init_a_linear(sub_module, std=(0.4 / (sub_module.in_features * factor)) ** 0.5)
-                    sub_module._is_hf_initialized = True
-        elif isinstance(module, IdeficsPerceiverResampler):
-            with ContextManagers(deepspeed_gathered_parameters_context_manager(module.latents, modify=True)):
-                module.latents.data.normal_(mean=0.0, std=(1.0 / self.config.vision_embed_dim) ** 0.5)
-                module._is_hf_initialized = True
-            for sub_module_name, sub_module in module.named_modules():
-                if isinstance(sub_module, nn.Linear):
-                    if "c_proj" in sub_module_name:
-                        factor = 2 * self.config.num_hidden_layers
-                    else:
-                        factor = 1.0
-                    init_a_linear(sub_module, std=(0.4 / (self.config.vision_embed_dim * factor)) ** 0.5)
-                    sub_module._is_hf_initialized = True
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            with ContextManagers(deepspeed_gathered_parameters_context_manager(module.weight, modify=True)):
-                module.weight.data.normal_(mean=0.0, std=(1.0 / self.config.hidden_size) ** 0.5)
-                if module.padding_idx is not None:
-                    module.weight.data[module.padding_idx].zero_()
-                module._is_hf_initialized = True
-
-        elif isinstance(module, IdeficsDecoupledLinear):
-            if hasattr(module, "additional_fc"):
-                init_a_linear(module.additional_fc, std=(1.0 / (module.additional_fc.in_features)) ** 0.5)
-                module._is_hf_initialized = True
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, IdeficsModel):
