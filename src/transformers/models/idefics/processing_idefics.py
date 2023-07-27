@@ -131,8 +131,8 @@ class IdeficsProcessor(ProcessorMixin):
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
         transforms=None,
-        device: str = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        add_eos_token=False,
         debug=False,
     ) -> BatchEncoding:
         """This method takes batched or non-batched prompts made of text and images and converts them into prompts that
@@ -145,9 +145,8 @@ class IdeficsProcessor(ProcessorMixin):
             transforms (`?`, *optional*, defaults to `None`):
                 A custom `torchvision.Compose` set of image transforms can be passed for training. If `None` a preset
                 inference-specific set of transforms will be applied to the images
-            device (`str`, *optional*, defaults to `None`):
-                 if `device` is passed, the return dict values will be placed on that device
-
+            add_eos_token (`bool`, *optional*, defaults to `False`):
+                Adds `eos_token` at the end of the final prompt if True`
             debug (`bool`, *optional*, defaults to `False`):
                 `True` value will help debug prompt generation by dumping useful information
 
@@ -181,7 +180,7 @@ class IdeficsProcessor(ProcessorMixin):
             "Describe this image.\nAssistant:",
         ]
 
-        inputs = processor(prompts, eval_mode=True, device=device, return_tensors="pt")
+        inputs = processor(prompts, return_tensors="pt")
         generated_ids = model.generate(**inputs, max_length=100)
         generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         ```
@@ -213,7 +212,7 @@ class IdeficsProcessor(ProcessorMixin):
                 transforms.Normalize(mean=self.image_mean, std=self.image_std),
             ]
         )
-        inputs = processor(prompts, transforms=transforms, device=device, return_tensors="pt")
+        inputs = processor(prompts, transforms=transforms, return_tensors="pt")
         ```
 
         In order to help debug prompt generation enable `debug=True` which will show you what's happening.
@@ -258,6 +257,9 @@ class IdeficsProcessor(ProcessorMixin):
                     full_text += image_tokens(last_was_image)
                     image_objects.append(item)
                     last_was_image = True
+
+            if add_eos_token:
+                full_text += self.tokenizer.eos_token
 
             if debug is True:
                 print(f"{full_text=}")
