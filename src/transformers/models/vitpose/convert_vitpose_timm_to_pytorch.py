@@ -25,7 +25,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import DeiTImageProcessor, ViTPoseConfig, ViTForImageClassification, ViTImageProcessor, ViTModel
+from transformers import ViTPoseConfig, ViTPoseModel
 from transformers.utils import logging
 
 
