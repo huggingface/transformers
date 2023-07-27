@@ -5,6 +5,7 @@ Processor class for IDEFICS.
 from typing import List, Optional, Union
 from urllib.parse import urlparse
 
+from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
 from ...utils import TensorType, is_torch_available
@@ -324,18 +325,14 @@ class IdeficsProcessor(ProcessorMixin):
                 output_input_ids.shape[0], output_input_ids.shape[1], 1, dtype=torch.bool
             )
 
-        inputs = {
-            "input_ids": output_input_ids,
-            "attention_mask": output_attention_masks,
-            "pixel_values": output_images,
-            "image_attention_mask": image_attention_mask,
-        }
-
-        if device is not None:
-            for k in inputs.keys():
-                inputs[k] = inputs[k].to(device)
-
-        return inputs
+        return BatchFeature(
+            data={
+                "input_ids": output_input_ids,
+                "attention_mask": output_attention_masks,
+                "pixel_values": output_images,
+                "image_attention_mask": image_attention_mask,
+            }
+        )
 
     def batch_decode(self, *args, **kwargs):
         """

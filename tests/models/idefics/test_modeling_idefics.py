@@ -447,7 +447,7 @@ class IdeficsModelIntegrationTest(TestCasePlus):
 
         model = IdeficsForVisionText2Text.from_pretrained("HuggingFaceM4/idefics-9b").to(torch_device)
         processor = self.default_processor
-        inputs = processor(prompts, device=torch_device, return_tensors="pt")
+        inputs = processor(prompts, return_tensors="pt").to(torch_device)
         generated_ids = model.generate(**inputs, max_length=100)
         generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
