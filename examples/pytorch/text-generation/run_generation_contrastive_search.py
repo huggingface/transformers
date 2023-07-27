@@ -26,12 +26,9 @@ import logging
 import numpy as np
 import torch
 
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    is_torch_mps_available,
-    is_torch_npu_available,
-)
+from accelerate import Accelerator
+from accelerate.utils import set_seed
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 logging.basicConfig(
@@ -40,18 +37,6 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
-
-
-def set_seed(args):
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    if args.n_gpu > 0:
-        if is_torch_mps_available():
-            torch.mps.manual_seed(args.seed)
-        elif is_torch_npu_available():
-            torch.npu.manual_seed_all(args.seed)
-        else:
-            torch.cuda.manual_seed_all(args.seed)
 
 
 def main():
@@ -95,26 +80,13 @@ def main():
     )
     args = parser.parse_args()
 
-    if not args.use_cpu:
-        if torch.cuda.is_available():
-            args.device = torch.device("cuda")
-            args.n_gpu = torch.cuda.device_count()
-        elif is_torch_mps_available():
-            args.device = torch.device("mps")
-            args.n_gpu = 1
-        elif is_torch_npu_available():
-            args.device = torch.device("npu")
-            args.n_gpu = torch.npu.device_count()
-        else:
-            args.device = torch.device("cpu")
-            args.n_gpu = 0
-    else:
-        args.device = torch.device("cpu")
-        args.n_gpu = 0
+    # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
+    accelerator = Accelerator(cpu=args.use_cpu)
 
-    logger.warning(f"device: {args.device}, n_gpu: {args.n_gpu}, 16-bits training: {args.fp16}")
+    logger.warning(f"device: {accelerator.device}, 16-bits inference: {args.fp16}")
 
-    set_seed(args)
+    if args.seed is not None:
+        set_seed(args.seed)
 
     # Initialize the model and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
@@ -122,7 +94,8 @@ def main():
 
     # tokenizer = GPT2Tokenizer.from_pretrained(args.model_name_or_path)
     # model = OPTForCausalLM.from_pretrained(args.model_name_or_path)
-    model.to(args.device)
+    # Prepare model with `accelerator`.
+    accelerator.prepare_model(model)
 
     if args.fp16:
         model.half()
@@ -131,7 +104,7 @@ def main():
     prompt_text = args.prompt if args.prompt else input("Model prompt >>> ")
 
     inputs = tokenizer(prompt_text, return_tensors="pt", add_special_tokens=False)
-    inputs = {key: value.to(args.device) for key, value in inputs.items()}
+    inputs = {key: value.to(accelerator.device) for key, value in inputs.items()}
 
     output_sequences = model.generate(
         **inputs,
