@@ -88,7 +88,6 @@ else:
         lstrip: bool = False
         rstrip: bool = False
         normalized: bool = True
-        special: bool = False
 
         def __getstate__(self):
             return self.__dict__
@@ -923,23 +922,16 @@ class SpecialTokensMixin:
                     isinstance(t, (str, AddedToken)) for t in value
                 ), f"Tokens {value} for key {key} should all be str or AddedToken instances"
 
-                if replace_additional_special_tokens:
-                    if value not in self._additional_special_tokens:
-                        # make sure the trie will no longer split this token ? TODO is this something we want to allow?
-                        self._added_tokens_decoder.remove(self._added_tokens_encoder[value])
-                    setattr(self, key, value)
-                    added_tokens.extend(self._additional_special_tokens)
-                    logger.warning(
-                        "You are using `replace_additional_special_tokens`, which does not work. The Trie is not updated, so the tokens will be split"
-                        "Kept for backward compatibility, will be removed in transformersv5"
-                    )
 
-                else:
-                    to_add = []
-                    for token in value:
-                        if str(token) not in self._additional_special_tokens and str(token) not in to_add:
-                            to_add.append(token)
-                    added_tokens.extend(to_add)
+                to_add = []
+                for token in value:
+                    if str(token) in self.added_tokens_encoder and replace_additional_special_tokens:
+                        self._added_tokens_decoder.pop(self.added_tokens_encoder.get(token.content))
+                        to_add.append(token)
+
+                    if str(token) not in self._additional_special_tokens and str(token) not in to_add:
+                        to_add.append(token)
+                added_tokens.extend(to_add)
 
             else:
                 if not isinstance(value, (str, AddedToken)):

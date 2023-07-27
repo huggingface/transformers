@@ -345,9 +345,24 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.tokens_trie = Trie()
-        self._added_tokens_decoder : Dict[int, AddedToken] = {}
+        # 1. Initialize _added_tokens_decoder if it was not set
+        if not hasattr (self, "_added_tokens_decoder"):
+            self._added_tokens_decoder : Dict[int, AddedToken] = {} 
+        
+        if self.unk_token is not None and self.unk_token not in self._additional_special_tokens:
+            try:
+                self.convert_tokens_to_ids(self.unk_token)
+            except RecursionError as e:
+                logger.error(
+                    "An `unk_token` was set but it is neither part of the `additional_special_tokens` nor is it recognized by the tokenizer."
+                    "Make sure the token exists Whithout it, adding tokens to the model is not supported"
+                )
+            
+        # 2. Add the additional special tokens amd the special tokens if they are not already thre.
         self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
+        
+        # 3. Make sure the Trie has everything in it
+        self._create_trie()
         self._decode_use_source_tokenizer = False
 
     @property
@@ -415,10 +430,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 token = AddedToken(token)
             if token.content == self.unk_token:
                 self.unk_token = token
+                # if we are initializing token should still be added!
                 continue
-            if self.convert_tokens_to_ids(token.content) == self.unk_token:
-                new_idx = len(self.get_vocab()) + added_tokens
-                if not special_tokens and not token.special and hasattr(self, "do_lower_case") and self.do_lower_case:
+            # if unk_token is not part of the vocab, but we are adding tokens
+            if self.unk_token_id is not None and self.convert_tokens_to_ids(token.content) == self.unk_token_id:
+                new_idx = len(self) + added_tokens
+                if not special_tokens and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
                     token.content = token.content.lower()
                 self._added_tokens_decoder[new_idx] = token
             elif self.convert_tokens_to_ids(token.content) is not None:
@@ -428,12 +445,15 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 # TODO get vocab might not be the best way to get the current length with the added tokens
                 new_idx = len(self.get_vocab()) + added_tokens
                 self._added_tokens_decoder[new_idx] = token
-            added_tokens += 1
-            self.tokens_trie.add(token.content)
+            
+            if special_tokens and token not in self._additional_special_tokens:
+                self._additional_special_tokens.append(token)
+
+            added_tokens += 1 
             if self.verbose:
                 logger.info(f"Adding {token} to the vocabulary")
 
-        # self._create_trie() #TODO we should only have to update the trie. If we add tokens after, why re-create it? 
+        self._create_trie() #TODO we should only have to update the trie. If we add tokens after, why re-create it? 
         return added_tokens
 
     def _create_trie(self):
