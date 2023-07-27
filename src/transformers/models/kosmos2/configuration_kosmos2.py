@@ -165,73 +165,31 @@ class Kosmos2Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "beit"
+    model_type = "kosmos-2"
+    is_composition = True
 
     def __init__(
         self,
-        vocab_size=8192,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        image_size=224,
-        patch_size=16,
-        num_channels=3,
-        use_mask_token=False,
-        use_absolute_position_embeddings=False,
-        use_relative_position_bias=False,
-        use_shared_relative_position_bias=False,
-        layer_scale_init_value=0.1,
-        drop_path_rate=0.1,
-        use_mean_pooling=True,
-        out_indices=[3, 5, 7, 11],
-        pool_scales=[1, 2, 3, 6],
-        use_auxiliary_head=True,
-        auxiliary_loss_weight=0.4,
-        auxiliary_channels=256,
-        auxiliary_num_convs=1,
-        auxiliary_concat_input=False,
-        semantic_loss_ignore_index=255,
+        text_config=None,
+        vision_config=None,
+        latent_query_num=64,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
+        if text_config is None:
+            text_config = {}
+            logger.info("`text_config` is `None`. Initializing the `BlipTextConfig` with default values.")
 
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.use_mask_token = use_mask_token
-        self.use_absolute_position_embeddings = use_absolute_position_embeddings
-        self.use_relative_position_bias = use_relative_position_bias
-        self.use_shared_relative_position_bias = use_shared_relative_position_bias
-        self.layer_scale_init_value = layer_scale_init_value
-        self.drop_path_rate = drop_path_rate
-        self.use_mean_pooling = use_mean_pooling
-        # decode head attributes (semantic segmentation)
-        self.out_indices = out_indices
-        self.pool_scales = pool_scales
-        # auxiliary head attributes (semantic segmentation)
-        self.use_auxiliary_head = use_auxiliary_head
-        self.auxiliary_loss_weight = auxiliary_loss_weight
-        self.auxiliary_channels = auxiliary_channels
-        self.auxiliary_num_convs = auxiliary_num_convs
-        self.auxiliary_concat_input = auxiliary_concat_input
-        self.semantic_loss_ignore_index = semantic_loss_ignore_index
+        if vision_config is None:
+            vision_config = {}
+            logger.info("`vision_config` is `None`. Initializing the `BlipVisionConfig` with default values.")
+
+        self.text_config = Kosmos2TextConfig(**text_config)
+        # TODO: Change this
+        self.vision_config = CLIPVisionConfig(**vision_config)
+
+        self.latent_query_num = latent_query_num
 
 
 # Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
