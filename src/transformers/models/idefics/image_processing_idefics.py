@@ -14,31 +14,27 @@
 # limitations under the License.
 """Image processor class for Idefics."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, Optional
 
 import PIL
 from PIL import Image
 
-from ...image_processing_utils import BaseImageProcessor
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
+    PILImageResampling,
     make_list_of_images,
+    to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType, is_torchvision_available, logging
+from ...utils import TensorType
 
 
-if is_torchvision_available():
-    import torchvision.transforms as transforms
-
-
-logger = logging.get_logger(__name__)
-
-
-def convert_to_rgb_transform(image):
+def convert_to_rgb(image):
     # `image.convert("RGB")` would only work for .jpg images, as it creates a wrong background
     # for transparent images. The call to `alpha_composite` handles this case
     if image.mode == "RGB":
@@ -58,20 +54,6 @@ class IdeficsImageProcessor(BaseImageProcessor):
     Args:
         image_size (`int` *optional*, defaults to `224`):
             Resize to image size
-        image_num_channels (`int`, *optional*, defaults to `3`):
-            Defines the number of image channels
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
-            overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-            Can be overridden by the `image_std` parameter in the `preprocess` method.
-        eval_mode (`bool`, *optional*, defaults to `True`):
-            Whether to prepare the image for evaluation or training. If `eval_mode` is `True` resize will be performed,
-            otherwise a `RandomResizeCrop`
-
     """
 
     model_input_names = ["pixel_values"]
@@ -80,28 +62,17 @@ class IdeficsImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         image_size: int = 224,
-        image_num_channels: int = 3,
-        image_mean: Optional[Union[float, List[float]]] = IMAGENET_STANDARD_MEAN,
-        image_std: Optional[Union[float, List[float]]] = IMAGENET_STANDARD_STD,
-        eval_mode: bool = True,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
 
         self.image_size = image_size
-        self.image_num_channels = image_num_channels
-        self.image_mean = image_mean
-        self.image_std = image_std
 
     def preprocess(
         self,
         images: ImageInput,
         image_size: Optional[Dict[str, int]] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        eval_mode: Optional[bool] = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
+        transforms=None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -112,30 +83,12 @@ class IdeficsImageProcessor(BaseImageProcessor):
                 Image to preprocess.
             image_size (`int`, *optional*, defaults to `self.image_size`):
                 Controls the size of the image after `resize`.
-            image_num_channels (`int`, *optional*, defaults to `self.image_size`):
-                Defines the number of image channels
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to normalize the image by if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to normalize the image by if `do_normalize` is set to `True`.
-            eval_mode (`bool`, *optional*, defaults to `self.eval_mode`):
-                Whether to prepare the image for evaluation or training. If `eval_mode` is `True` resize will be
-                performed, otherwise a `RandomResizeCrop`
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                    - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            transforms (`?`, *optional*, defaults to `None`):
+                A custom `torchvision.Compose` set of image transforms can be passed for training. If `None` a preset
+                inference-specific set of transforms will be applied to the images
         """
         image_size = image_size if image_size is not None else self.image_size
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
+        size = (image_size, image_size)
 
         if len(images) == 0:
             return []
@@ -148,25 +101,25 @@ class IdeficsImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        # XXX: ideally the transformers set should be in __init__ but then `__repr__` can't handle Compose or Sequential
-        # TypeError: Object of type Sequential is not JSON serializable
-        # alternatively have to override `__repr__` here to do something about it
-        interpolation = transforms.InterpolationMode.BICUBIC
-        if eval_mode:
-            resize_transform = transforms.Resize((self.image_size, self.image_size), interpolation=interpolation)
-        else:
-            resize_transform = transforms.RandomResizedCrop(
-                (self.image_size, self.image_size), scale=(0.9, 1.0), interpolation=interpolation
-            )
-        image_transforms = transforms.Compose(
-            [
-                convert_to_rgb_transform,
-                resize_transform,
-                transforms.ToTensor(),
-                transforms.Normalize(mean=self.image_mean, std=self.image_std),
-            ]
-        )
+        # For training a user needs to pass their own set of transforms.
+        # For reference this is what was used in the original m4 training
+        # transforms = transforms.Compose([
+        #     convert_to_rgb,
+        #     transforms.RandomResizedCrop((size, size), scale=(0.9, 1.0), interpolation=transforms.InterpolationMode.BICUBIC)
+        #     transforms.ToTensor(),
+        #     transforms.Normalize(mean=image_mean, std=image_std),
+        # ])
 
-        images = [image_transforms(image) for image in images if image is not None]
+        if transforms is not None:
+            return [transforms(x) for x in images]
+
+        images = [convert_to_rgb(x) for x in images]
+        # further transforms expect numpy arrays
+        images = [to_numpy_array(x) for x in images]
+        images = [resize(x, size, resample=PILImageResampling.BICUBIC) for x in images]
+        images = [self.rescale(image=image, scale=1 / 255) for image in images]
+        images = [self.normalize(x, mean=IMAGENET_STANDARD_MEAN, std=IMAGENET_STANDARD_STD) for x in images]
+        images = [to_channel_dimension_format(x, ChannelDimension.FIRST) for x in images]
+        images = BatchFeature(data={"pixel_values": images}, tensor_type=TensorType.PYTORCH)["pixel_values"]
 
         return images

@@ -129,7 +129,7 @@ class IdeficsProcessor(ProcessorMixin):
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
-        eval_mode: bool = False,
+        transforms=None,
         device: str = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         debug=False,
@@ -141,9 +141,9 @@ class IdeficsProcessor(ProcessorMixin):
             prompts (`Union[List[TextInput], [List[List[TextInput]]]]`):
                 either a single prompt or a batched list of prompts - see the detailed description immediately after
                 the end of the arguments doc section.
-            eval_mode (`bool`, *optional*, defaults to `True`):
-                `True` should be used for inference, and `False` for training - this option impacts how cropping is
-                performed
+            transforms (`?`, *optional*, defaults to `None`):
+                A custom `torchvision.Compose` set of image transforms can be passed for training. If `None` a preset
+                inference-specific set of transforms will be applied to the images
             device (`str`, *optional*, defaults to `None`):
                  if `device` is passed, the return dict values will be placed on that device
 
@@ -200,6 +200,21 @@ class IdeficsProcessor(ProcessorMixin):
         This example also examplifies that images can be passed as objects or as text urls. It can be seen that the
         first image is passed as object and the second one as a url.
 
+        To do training do:
+
+        ```python
+        image_transforms = transforms.Compose(
+            [
+                transforms.RandomResizedCrop(
+                    (w, h), scale=(0.9, 1.0), interpolation=transforms.InterpolationMode.BICUBIC
+                ),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=self.image_mean, std=self.image_std),
+            ]
+        )
+        inputs = processor(prompts, transforms=transforms, device=device, return_tensors="pt")
+        ```
+
         In order to help debug prompt generation enable `debug=True` which will show you what's happening.
 
         """
@@ -224,7 +239,7 @@ class IdeficsProcessor(ProcessorMixin):
             full_text = f"{self.tokenizer.bos_token}"
 
             # an image can either be an image object in the item or the url, everything else is a verbatim prompt text
-            real_images = []
+            image_objects = []
             last_was_image = False
             for item in sample:
                 if isinstance(item, str):
@@ -232,7 +247,7 @@ class IdeficsProcessor(ProcessorMixin):
                     if is_url(item):
                         image = self.image_processor.fetch_images(item)
                         full_text += image_tokens(last_was_image)
-                        real_images.append(image)
+                        image_objects.append(image)
                         last_was_image = True
                     else:
                         full_text += item
@@ -240,17 +255,15 @@ class IdeficsProcessor(ProcessorMixin):
                 else:
                     # must be an image obj
                     full_text += image_tokens(last_was_image)
-                    real_images.append(item)
+                    image_objects.append(item)
                     last_was_image = True
 
             if debug is True:
                 print(f"{full_text=}")
 
-            real_images = self.image_processor(real_images, eval_mode=eval_mode, return_tensors=return_tensors)
-            if len(real_images) > 0:
-                real_images = torch.stack(real_images)
+            image_objects = self.image_processor(image_objects, transforms=transforms)
 
-            encoding = self.tokenizer(
+            text_encoding = self.tokenizer(
                 text=full_text,
                 add_special_tokens=False,
                 padding=padding,
@@ -258,8 +271,8 @@ class IdeficsProcessor(ProcessorMixin):
                 max_length=max_length,
             )
 
-            all_texts.append(encoding["input_ids"])
-            all_images.append(real_images)
+            all_texts.append(text_encoding["input_ids"])
+            all_images.append(image_objects)
 
         max_seq_len = max(len(x) for x in all_texts)
 
