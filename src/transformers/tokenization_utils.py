@@ -346,7 +346,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.tokens_trie = Trie()
-        self._added_tokens_decoder: Dict[int, AddedToken] = {}
+        self._added_tokens_decoder : Dict[int, AddedToken] = {}
         self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
         self._decode_use_source_tokenizer = False
 
@@ -369,7 +369,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             `Dict[str, int]`: The added tokens.
         """
         return self.added_tokens_encoder
-
+    
+    # TODO no tokenizer should overload this?
     def __len__(self):
         """
         Size of the full vocabulary with the added tokens.
@@ -412,9 +413,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
             if isinstance(token, str):
                 token = AddedToken(token)
-            if token.content != self.unk_token and self.convert_tokens_to_ids(
-                token.content
-            ) == self.convert_tokens_to_ids(self.unk_token):
+            if token.content == self.unk_token:
+                self.unk_token = token
+                continue
+            if self.convert_tokens_to_ids(token.content) == self.unk_token:
                 new_idx = len(self.get_vocab()) + added_tokens
                 if not special_tokens and not token.special and hasattr(self, "do_lower_case") and self.do_lower_case:
                     token.content = token.content.lower()
@@ -430,7 +432,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if self.verbose:
                 logger.info(f"Adding {token} to the vocabulary")
 
-        # self._create_trie() #TODO we should only have to update the trie. If we add tokens after, why re-create it?
+        # self._create_trie() #TODO we should only have to update the trie. If we add tokens after, why re-create it? 
         return added_tokens
 
     def _create_trie(self):
@@ -569,6 +571,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         if token in self.added_tokens_encoder:
             return self.added_tokens_encoder[token]
+
         return self._convert_token_to_id(token)
 
     def _convert_token_to_id(self, token):

@@ -816,7 +816,7 @@ class SpecialTokensMixin:
         "pad_token",
         "cls_token",
         "mask_token",
-        "additional_special_tokens",
+        "additional_special_tokens", # TODO let's remove it from here, only add it if legacy
     ]
 
     def __init__(self, verbose=True, **kwargs):
@@ -1090,6 +1090,7 @@ class SpecialTokensMixin:
         `List[str]`: All the additional special tokens you may want to use. Log an error if used while not having been
         set.
         """
+        logger.warn("DEPRECATED")
         if self._additional_special_tokens is None:
             if self.verbose:
                 logger.error("Using additional_special_tokens, but it is not set yet.")
@@ -1098,31 +1099,31 @@ class SpecialTokensMixin:
 
     @bos_token.setter
     def bos_token(self, value):
-        self._bos_token = value
+        self._bos_token = AddedToken(value) if isinstance(value, str) else value
 
     @eos_token.setter
     def eos_token(self, value):
-        self._eos_token = value
+        self._eos_token = AddedToken(value) if isinstance(value, str) else value
 
     @unk_token.setter
     def unk_token(self, value):
-        self._unk_token = value
+        self._unk_token = AddedToken(value) if isinstance(value, str) else value
 
     @sep_token.setter
     def sep_token(self, value):
-        self._sep_token = value
+        self._sep_token = AddedToken(value) if isinstance(value, str) else value
 
     @pad_token.setter
     def pad_token(self, value):
-        self._pad_token = value
+        self._pad_token = AddedToken(value) if isinstance(value, str) else value
 
     @cls_token.setter
     def cls_token(self, value):
-        self._cls_token = value
+        self._cls_token = AddedToken(value) if isinstance(value, str) else value
 
     @mask_token.setter
     def mask_token(self, value):
-        self._mask_token = value
+        self._mask_token = AddedToken(value) if isinstance(value, str) else value
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
@@ -1255,6 +1256,7 @@ class SpecialTokensMixin:
 
         Convert potential tokens of `tokenizers.AddedToken` type to string.
         """
+        # TODO let's not support additional special tokens anymore. It's dummy anyway
         set_attr = {}
         for attr in self.SPECIAL_TOKENS_ATTRIBUTES:
             attr_value = getattr(self, "_" + attr)
@@ -1301,11 +1303,12 @@ class SpecialTokensMixin:
     @property
     def all_special_tokens(self) -> List[str]:
         """
-        `List[str]`: All the special tokens (`'<unk>'`, `'<cls>'`, ..., `_additional_special_tokens`.) mapped to class
+        `List[str]`: All the special tokens (`'<unk>'`, `'<cls>'`, ..., etc.) mapped to class
         attributes.
 
         Convert tokens of `tokenizers.AddedToken` type to string.
         """
+        # TODO deprecate this? 
         all_toks = [str(s) for s in self.all_special_tokens_extended]
         return all_toks
 
@@ -1488,8 +1491,9 @@ INIT_TOKENIZER_DOCSTRING = r"""
             BERT). Will be associated to `self.mask_token` and `self.mask_token_id`.
         additional_special_tokens (tuple or list of `str` or `tokenizers.AddedToken`, *optional*):
             A tuple or a list of additional special tokens. Add them here to ensure they won't be split by the
-            tokenization process. Will be associated to `self.additional_special_tokens` and
-            `self.additional_special_tokens_ids`.
+            tokenization process. They will be added to the model using `tokenizer._add_tokens`and will be part of
+            `self.added_tokens_decoder` and `self.added_tokens_encoder`. If legacy, Will be associated to
+            `self.additional_special_tokens` and `self.additional_special_tokens_ids`.
         clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
             Whether or not the model should cleanup the spaces that were added when splitting the input text during the
             tokenization process.
@@ -2064,14 +2068,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                     added_tok_encoder = json.load(added_tokens_handle)
                 # Sort added tokens by index
-                added_tok_encoder_sorted = sorted(added_tok_encoder, key=lambda x: x[1])
+                added_tok_encoder_sorted = sorted(added_tok_encoder.items(), key=lambda x: x[1])
                 # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
                 # individual tokens would repeatedly rebuild a trie, which can be slow.
                 is_last_special = None
                 tokens = []
-
+                current_index = tokenizer.vocab_size
                 for token, index in added_tok_encoder_sorted:
-                    current_index = len(tokenizer) + len(tokens)
                     if (
                         has_tokenizer_file
                         and index != current_index
@@ -2098,12 +2101,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         tokenizer.add_tokens(tokens, special_tokens=is_last_special)
                         tokens = [token]
                     is_last_special = is_special
+                    if index >= tokenizer.vocab_size:
+                        current_index += 1
 
                 if tokens:
                     tokenizer.add_tokens(tokens, special_tokens=is_last_special)
 
                 # Check all our special tokens are registered as "no split" token (we don't cut them) and are in the vocab
-                added_tokens = tokenizer.sanitize_special_tokens()
+                added_tokens = tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
                 if added_tokens:
                     logger.warning_advice(
                         "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
