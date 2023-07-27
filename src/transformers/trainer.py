@@ -1513,7 +1513,12 @@ class Trainer:
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
-        if resume_from_checkpoint is not None and not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled:
+        if (
+            resume_from_checkpoint is not None
+            and not is_sagemaker_mp_enabled()
+            and not self.is_deepspeed_enabled
+            and not self.is_fsdp_enabled
+        ):
             self._load_from_checkpoint(resume_from_checkpoint)
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
@@ -1625,7 +1630,7 @@ class Trainer:
 
         model = self._wrap_model(self.model_wrapped)
 
-        if is_sagemaker_mp_enabled() and resume_from_checkpoint is not None:
+        if (is_sagemaker_mp_enabled() or self.is_fsdp_enabled) and resume_from_checkpoint is not None:
             self._load_from_checkpoint(resume_from_checkpoint, model)
 
         # as the model is wrapped, don't use `accelerator.prepare`
