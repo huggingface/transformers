@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     ImageClassifierOutput,
     MaskedImageModelingOutput,
 )
-from ...modeling_utils import PreTrainedModel
+#from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
@@ -40,7 +40,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_vit import ViTConfig
+from .configuration_vitpose import ViTPoseConfig
 
 
 logger = logging.get_logger(__name__)
@@ -103,7 +103,7 @@ class ViTPosePatchEmbed(nn.Module):
 
 ## to be changed
 class ViTPoseAttention(nn.Module):
-    def __init__(self, config: ViTConfig) -> None:
+    def __init__(self, config: ViTPoseConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -311,7 +311,7 @@ class ViTBackbone(nn.Module):
 class ViTPoseTopDownHeatMap(nn.Module):
     # keypoint head - mse loss]
     ## deconv layers and all the other remaining things with the final layer
-    def __init__(self, embed_dim=hidden_dim, num_keypoints=17):
+    def __init__(self):
         super().__init__()
         self.deconv_layers = []
         for i in range(config.num_deconv_layer):
@@ -329,8 +329,8 @@ class ViTPoseTopDownHeatMap(nn.Module):
         keypoints = self.final_layer(x)
         return keypoints
 
-class TopDown(nn.Module):
-    def __init__(self, config: ViTConfig):
+class ViTPoseModel(nn.Module):
+    def __init__(self, config: ViTPoseConfig):
         super().__init__()
         self.backbone = ViTBackbone(config)
         self.keypoint_head = ViTPoseTopDownHeatMap(config)
@@ -525,7 +525,7 @@ class TopDown(nn.Module):
 #    VIT_START_DOCSTRING,
 #)
 #class ViTModel(ViTPreTrainedModel):
-#    def __init__(self, config: ViTConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
+#    def __init__(self, config: ViTPoseConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
 #        super().__init__(config)
 #        self.config = config
 #

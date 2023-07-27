@@ -1,4 +1,4 @@
-# Copyright 2023 The HuggingFace Team. All rights reserved.
+# Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,5 +17,63 @@ from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_torch_available,
+    is_vision_available,
 )
 
+
+_import_structure = {"configuration_vitpose": ["VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTPoseConfig"]}
+
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+   # _import_structure["feature_extraction_vit"] = ["ViTFeatureExtractor"]
+    _import_structure["image_processing_vit"] = ["ViTImageProcessor"]
+
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_vitpose"] = [
+        "VITPSOE_PRETRAINED_MODEL_ARCHIVE_LIST",
+        #"ViTPoseForImageClassification",
+        #"ViTForMaskedImageModeling",
+        "ViTPoseModel",
+        #"ViTPosePreTrainedModel",
+    ]
+
+
+if TYPE_CHECKING:
+    from .configuration_vitpose import VITPOSE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTPoseConfig
+
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        #from .feature_extraction_vit import ViTFeatureExtractor
+        from .image_processing_vitpose import ViTPoseImageProcessor
+
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_vitpose import (
+            VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            #ViTForImageClassification,
+            #ViTForMaskedImageModeling,
+            ViTPoseModel,
+            #ViTPreTrainedModel,
+        )
+
+else:
+    import sys
+
+    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)

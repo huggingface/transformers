@@ -32,7 +32,7 @@ VIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class ViTConfig(PretrainedConfig):
+class ViTPoseConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ViTModel`]. It is used to instantiate an ViT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -131,7 +131,7 @@ class ViTConfig(PretrainedConfig):
         self.embed_dim = embed_dim,
         self.depth = depth,
         self.num_heads = num_heads,
-        self.ratio = ration,
+        self.ratio = ratio,
         self.use_checkpoint = use_checkpoint,
         self.mlp_ratio = mlp_ratio,
         self.qkv_bias = qkv_bias,
