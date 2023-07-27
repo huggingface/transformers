@@ -364,7 +364,6 @@ _import_structure = {
         "IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "IdeficsConfig",
         "IdeficsImageProcessor",
-        "IdeficsProcessor",
     ],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
     "models.informer": ["INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "InformerConfig"],
@@ -1933,6 +1932,7 @@ else:
             "IdeficsForVisionText2Text",
             "IdeficsModel",
             "IdeficsPreTrainedModel",
+            "IdeficsProcessor",
         ]
     )
     _import_structure["models.imagegpt"].extend(
@@ -4371,7 +4371,6 @@ if TYPE_CHECKING:
         IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         IdeficsConfig,
         IdeficsImageProcessor,
-        IdeficsProcessor,
     )
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
@@ -5711,6 +5710,7 @@ if TYPE_CHECKING:
             IdeficsForVisionText2Text,
             IdeficsModel,
             IdeficsPreTrainedModel,
+            IdeficsProcessor,
         )
         from .models.imagegpt import (
             IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
