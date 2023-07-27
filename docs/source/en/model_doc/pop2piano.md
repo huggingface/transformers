@@ -181,10 +181,8 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 
 [[autodoc]] Pop2PianoTokenizer
     - __call__
-    - batch_decode
 
 ## Pop2PianoProcessor
 
 [[autodoc]] Pop2PianoProcessor
     - __call__
-    - batch_decode

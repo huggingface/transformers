@@ -24,6 +24,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...tokenization_utils import AddedToken, BatchEncoding, PaddingStrategy, PreTrainedTokenizer, TruncationStrategy
 from ...utils import TensorType, is_pretty_midi_available, logging, requires_backends, to_numpy
 
+
 if is_pretty_midi_available():
     import pretty_midi
 
@@ -401,6 +402,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         Returns:
             `BatchEncoding` containing the tokens ids.
         """
+
         requires_backends(self, ["pretty_midi"])
 
         # check if notes is a pretty_midi object or not, if yes then extract the attributes and put them into a numpy
@@ -470,8 +472,6 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         Returns:
             `BatchEncoding` containing the tokens ids.
         """
-
-        requires_backends(self, ["pretty_midi"])
 
         encoded_batch_token_ids = []
         for i in range(len(notes)):
@@ -564,8 +564,6 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             `BatchEncoding` containing the token_ids.
         """
 
-        requires_backends(self, ["pretty_midi"])
-
         # check if it is batched or not
         # it is batched if its a list containing a list of `pretty_midi.Notes` where the outer list contains all the
         # batches and the inner list contains all Notes for a single batch. Otherwise if np.ndarray is passed it will be
@@ -638,8 +636,6 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             If `return_midi` is False:
                 - `BatchEncoding` containing `notes`.
         """
-
-        requires_backends(self, ["pretty_midi"])
 
         # check if they have attention_masks(attention_mask, attention_mask_beatsteps, attention_mask_extrapolated_beatstep) or not
         attention_masks_present = bool(
