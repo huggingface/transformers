@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch IdeficsVision model - a copy of CLIPVisionModel using a new config object """
+""" PyTorch IdeficsVision model: a copy of CLIPVisionModel using a simpler config object"""
 
 
 from dataclasses import dataclass
@@ -32,18 +32,6 @@ from .configuration_idefics import IdeficsVisionConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-# contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/2021-03-07-clip.html
-def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
-    return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
-
-
-def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
-    caption_loss = contrastive_loss(similarity)
-    image_loss = contrastive_loss(similarity.t())
-    return (caption_loss + image_loss) / 2.0
 
 
 @dataclass
@@ -75,7 +63,7 @@ class IdeficsVisionModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->Idefics
+# Adapted from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings
 class IdeficsVisionEmbeddings(nn.Module):
     def __init__(self, config: IdeficsVisionConfig):
         super().__init__()
@@ -111,7 +99,7 @@ class IdeficsVisionEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->IdeficsVision
+# Adapted from transformers.models.clip.modeling_clip.CLIPAttention
 class IdeficsVisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -216,7 +204,7 @@ class IdeficsVisionAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->IdeficsVision
+# Adapted from transformers.models.clip.modeling_clip.CLIPMLP
 class IdeficsVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -232,7 +220,7 @@ class IdeficsVisionMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->IdeficsVision
+# Adapted from transformers.models.clip.modeling_clip.CLIPEncoderLayer
 class IdeficsVisionEncoderLayer(nn.Module):
     def __init__(self, config: IdeficsVisionConfig):
         super().__init__()
@@ -283,7 +271,7 @@ class IdeficsVisionEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->IdeficsVision
+# Adapted from transformers.models.clip.modeling_clip.CLIPEncoder
 class IdeficsVisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
