@@ -75,6 +75,11 @@ class VitsModelTester:
         intermediate_size=64,
         flow_size=16,
         vocab_size=38,
+        spectrogram_bins=8,
+        duration_predictor_num_flows=2,
+        duration_predictor_filter_channels=16,
+        prior_encoder_num_flows=2,
+        upsample_initial_channel=16,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -86,6 +91,11 @@ class VitsModelTester:
         self.intermediate_size = intermediate_size
         self.flow_size = flow_size
         self.vocab_size = vocab_size
+        self.spectrogram_bins = spectrogram_bins
+        self.duration_predictor_num_flows = duration_predictor_num_flows
+        self.duration_predictor_filter_channels = duration_predictor_filter_channels
+        self.prior_encoder_num_flows = prior_encoder_num_flows
+        self.upsample_initial_channel = upsample_initial_channel
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(2)
@@ -105,11 +115,17 @@ class VitsModelTester:
     def get_config(self):
         return VitsConfig(
             hidden_size=self.hidden_size,
-            encoder_layers=self.num_hidden_layers,
-            encoder_attention_heads=self.num_attention_heads,
-            encoder_ffn_dim=self.intermediate_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            ffn_dim=self.intermediate_size,
             flow_size=self.flow_size,
             vocab_size=self.vocab_size,
+            spectrogram_bins=self.spectrogram_bins,
+            duration_predictor_num_flows=self.duration_predictor_num_flows,
+            prior_encoder_num_flows=self.prior_encoder_num_flows,
+            duration_predictor_filter_channels=self.duration_predictor_filter_channels,
+            posterior_encoder_num_wavenet_layers=self.num_hidden_layers,
+            upsample_initial_channel=self.upsample_initial_channel,
         )
 
     def create_and_check_model_forward(self, config, inputs_dict):
@@ -119,7 +135,7 @@ class VitsModelTester:
         attention_mask = inputs_dict["attention_mask"]
 
         result = model(input_ids, attention_mask=attention_mask)
-        self.parent.assertEqual(result.audio.shape, (self.batch_size, 13056))
+        self.parent.assertEqual(result.waveform.shape, (self.batch_size, 11008))
 
 
 @require_torch
