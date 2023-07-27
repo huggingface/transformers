@@ -235,10 +235,12 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     # IdeficsModel.forward doesn't have labels input arg - only IdeficsForVisionText2Text does
     # I hacked around it to remove IdeficsModel just for this test, but perhaps there is a better way
     def test_model_outputs_equivalence(self):
-        orig = self.all_model_classes
-        self.all_model_classes = (IdeficsForVisionText2Text,) if is_torch_available() else ()
-        super().test_model_outputs_equivalence()
-        self.all_model_classes = orig
+        try:
+            orig = self.all_model_classes
+            self.all_model_classes = (IdeficsForVisionText2Text,) if is_torch_available() else ()
+            super().test_model_outputs_equivalence()
+        finally:
+            self.all_model_classes = orig
 
     def setUp(self):
         self.model_tester = IdeficsModelTester(self)
