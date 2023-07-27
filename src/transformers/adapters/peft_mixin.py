@@ -41,7 +41,7 @@ class PeftAdapterMixin:
         """
         requires_backends(self.load_adapter, "peft")
 
-        from peft import PeftConfig, PeftModel, create_and_replace
+        from peft import PeftConfig, create_and_replace, load_peft_weights
         from peft.utils import set_peft_model_state_dict
         from peft.utils.other import TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING
 
@@ -82,7 +82,7 @@ class PeftAdapterMixin:
         create_and_replace(loaded_peft_config.peft_type, loaded_peft_config, self, adapter_name)
 
         # TODO: move that to peft.utils
-        adapter_state_dict = PeftModel._get_peft_state_dict(
+        adapter_state_dict = load_peft_weights(
             peft_model_id,
             revision=revision,
             use_auth_token=use_auth_token,
