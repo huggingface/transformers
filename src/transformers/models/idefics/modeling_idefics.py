@@ -37,7 +37,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .clip import CLIPVisionTransformer
+from .clip import IdeficsVisionTransformer
 from .configuration_idefics import IdeficsConfig
 from .perceiver import IdeficsPerceiverResampler
 
@@ -999,8 +999,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         # complain that it's not used
         self.image_size = config.vision_config.image_size
         self.vision_config = config.vision_config
-        # clip_vision_config = CLIPVisionConfig(**self.vision_config_dict)
-        self.vision_model = CLIPVisionTransformer(config.vision_config)
+        self.vision_model = IdeficsVisionTransformer(config.vision_config)
 
         # Perceiver Resampler
         if config.use_resampler:
