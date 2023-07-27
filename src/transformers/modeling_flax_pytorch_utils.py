@@ -146,8 +146,7 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
         )
         raise
 
-    is_bfloat_16 = all(v.dtype == torch.bfloat16 for v in pt_state_dict.values())  # noqa: F821
-    pt_state_dict = {k: v.numpy() if not is_bfloat_16 else v.float().numpy() for k, v in pt_state_dict.items()}
+    pt_state_dict = {k: v.numpy() if not v.dtype == torch.bfloat16 else v.float().numpy() for k, v in pt_state_dict.items()}
 
     model_prefix = flax_model.base_model_prefix
 
