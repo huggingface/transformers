@@ -1601,6 +1601,7 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer._tokenize
     def _tokenize(self, text: str) -> List[str]:
+        # TODO check if the t5/llama PR also applies here
         return self.sp_model.encode(text, out_type=str)
 
     # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer._convert_token_to_id

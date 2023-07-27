@@ -475,7 +475,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._convert_token_to_id with GPT2 -> Whisper
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        return self.encoder.get(token, self.encoder.get(self.unk_token))
+        return self.encoder.get(token, None)
 
     def _convert_id_to_token(self, index):
         """
