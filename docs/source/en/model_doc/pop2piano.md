@@ -23,7 +23,7 @@ from pop audio without melody and chord extraction modules.
 
 Pop2Piano is an encoder-decoder Transformer model based on [T5](https://arxiv.org/pdf/1910.10683.pdf). The input audio 
 is transformed to its waveform and passed to the encoder, which transforms it to a latent representation. The decoder 
-uses these latent representations to autoregressivley generate token ids. Each token id corresponds to one of four 
+uses these latent representations to generate token ids in an autoregressive way. Each token id corresponds to one of four 
 different token types: time, velocity, note and 'special'. The token ids are then decoded to their equivalent MIDI file.
 
 
@@ -70,12 +70,12 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 >>> processor = Pop2PianoProcessor.from_pretrained("sweetcocoa/pop2piano")
 >>> ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
 
->>> feature_extractor_output = processor.feature_extractor(
+>>> inputs = processor(
 ...     audio=ds["audio"][0]["array"], sampling_rate=ds["audio"][0]["sampling_rate"], return_tensors="pt"
 ... )
->>> model_output = model.generate(input_features=feature_extractor_output["input_features"], composer="composer1")
->>> tokenizer_output = processor.tokenizer(
-...     token_ids=model_output, feature_extractor_output=feature_extractor_output, return_midi=True
+>>> model_output = model.generate(input_features=inputs["input_features"], composer="composer1")
+>>> tokenizer_output = processor.batch_decode(
+...     token_ids=model_output, feature_extractor_output=inputs, return_midi=True
 ... )["pretty_midi_objects"][0]
 >>> tokenizer_output.write("./Outputs/midi_output.mid")
 ```
@@ -90,10 +90,10 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 >>> model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
 >>> processor = Pop2PianoProcessor.from_pretrained("sweetcocoa/pop2piano")
 
->>> feature_extractor_output = processor.feature_extractor(audio=audio, sampling_rate=sr, return_tensors="pt")
->>> model_output = model.generate(input_features=feature_extractor_output["input_features"], composer="composer1")
->>> tokenizer_output = processor.tokenizer(
-...     token_ids=model_output, feature_extractor_output=feature_extractor_output, return_midi=True
+>>> inputs = processor(audio=audio, sampling_rate=sr, return_tensors="pt")
+>>> model_output = model.generate(input_features=inputs["input_features"], composer="composer1")
+>>> tokenizer_output = processor.batch_decode(
+...     token_ids=model_output, feature_extractor_output=inputs, return_midi=True
 ... )["pretty_midi_objects"][0]
 >>> tokenizer_output.write("./Outputs/midi_output.mid")
 ```
@@ -110,15 +110,15 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 >>> model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
 >>> processor = Pop2PianoProcessor.from_pretrained("sweetcocoa/pop2piano")
 
->>> feature_extractor_output = processor.feature_extractor(audio=[audio1, audio2], sampling_rate=[sr1, sr2], return_tensors="pt")
+>>> inputs = processor(audio=[audio1, audio2], sampling_rate=[sr1, sr2], return_attention_mask=True, return_tensors="pt")
 >>> # Since we now generating in batch(2 audios) we must pass the attention_mask
 >>> model_output = model.generate(
-...     input_features=feature_extractor_output["input_features"],
-...     attention_mask=feature_extractor_output["attention_mask"],
+...     input_features=inputs["input_features"],
+...     attention_mask=inputs["attention_mask"],
 ...     composer="composer1",
 ... )
->>> tokenizer_output = processor.tokenizer(
-...     token_ids=model_output, feature_extractor_output=feature_extractor_output, return_midi=True
+>>> tokenizer_output = processor.batch_decode(
+...     token_ids=model_output, feature_extractor_output=inputs, return_midi=True
 ... )["pretty_midi_objects"]
 
 >>> # Since we now have 2 generated MIDI files
@@ -140,15 +140,20 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 >>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
 >>> tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
 
->>> feature_extractor_output = feature_extractor(audio=[audio1, audio2], sampling_rate=[sr1, sr2], return_tensors="pt")
+>>> inputs = feature_extractor(
+...     audio=[audio1, audio2], 
+...     sampling_rate=[sr1, sr2], 
+...     return_attention_mask=True, 
+...     return_tensors="pt",
+... )
 >>> # Since we now generating in batch(2 audios) we must pass the attention_mask
 >>> model_output = model.generate(
-...     input_features=feature_extractor_output["input_features"],
-...     attention_mask=feature_extractor_output["attention_mask"],
+...     input_features=inputs["input_features"],
+...     attention_mask=inputs["attention_mask"],
 ...     composer="composer1",
 ... )
->>> tokenizer_output = tokenizer(
-...     token_ids=model_output, feature_extractor_output=feature_extractor_output, return_midi=True
+>>> tokenizer_output = tokenizer.batch_decode(
+...     token_ids=model_output, feature_extractor_output=inputs, return_midi=True
 ... )["pretty_midi_objects"]
 
 >>> # Since we now have 2 generated MIDI files
@@ -176,8 +181,10 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 
 [[autodoc]] Pop2PianoTokenizer
     - __call__
+    - batch_decode
 
 ## Pop2PianoProcessor
 
 [[autodoc]] Pop2PianoProcessor
     - __call__
+    - batch_decode

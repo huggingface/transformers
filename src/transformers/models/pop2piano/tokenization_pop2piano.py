@@ -137,7 +137,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
                 This is a parameter which is used for TIME TOKEN when converting to Midi.
 
         Returns:
-            `List`: A list of token_type (`str`) and value (`int`).
+            `List`: A list consists of token_type (`str`) and value (`int`).
         """
 
         if token_id >= (self.vocab_size_special + self.vocab_size_note + self.vocab_size_velocity):
@@ -184,7 +184,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         else:
             return -1
 
-    def relative_batch_tokens_to_notes(
+    def relative_batch_tokens_ids_to_notes(
         self,
         tokens: np.ndarray,
         beat_offset_idx: int,
@@ -211,7 +211,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             _tokens = tokens[index]
             _start_idx = beat_offset_idx + index * bars_per_batch * 4
             _cutoff_time_idx = cutoff_time_idx + _start_idx
-            _notes = self.relative_tokens_to_notes(
+            _notes = self.relative_tokens_ids_to_notes(
                 _tokens,
                 start_idx=_start_idx,
                 cutoff_time_idx=_cutoff_time_idx,
@@ -228,7 +228,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             return []
         return notes
 
-    def relative_batch_tokens_to_midi(
+    def relative_batch_tokens_ids_to_midi(
         self,
         tokens: np.ndarray,
         beatstep: np.ndarray,
@@ -237,8 +237,8 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         cutoff_time_idx: int = 12,
     ):
         """
-        Converts tokens to Midi. This method calls `relative_batch_tokens_to_notes` method to convert batch tokens to
-        notes then uses `notes_to_midi` method to convert them to Midi.
+        Converts tokens to Midi. This method calls `relative_batch_tokens_ids_to_notes` method to convert batch tokens
+        to notes then uses `notes_to_midi` method to convert them to Midi.
 
         Args:
             tokens (`numpy.ndarray`):
@@ -253,7 +253,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
                 Denotes the cutoff time index for each note in generated Midi.
         """
         beat_offset_idx = 0 if beat_offset_idx is None else beat_offset_idx
-        notes = self.relative_batch_tokens_to_notes(
+        notes = self.relative_batch_tokens_ids_to_notes(
             tokens=tokens,
             beat_offset_idx=beat_offset_idx,
             bars_per_batch=bars_per_batch,
@@ -264,7 +264,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     # Taken from the original code
     # Please see https://github.com/sweetcocoa/pop2piano/blob/fac11e8dcfc73487513f4588e8d0c22a22f2fdc5/midi_tokenizer.py#L257
-    def relative_tokens_to_notes(self, tokens: np.ndarray, start_idx: float, cutoff_time_idx: float = None):
+    def relative_tokens_ids_to_notes(self, tokens: np.ndarray, start_idx: float, cutoff_time_idx: float = None):
         """
         Converts relative tokens to notes which will then be used to create Pretty Midi objects.
 
@@ -276,11 +276,6 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             cutoff_time_idx (`float`, *optional*):
                 A parameter used while converting tokens to notes.
         """
-        if tokens[0] >= (
-            self.vocab_size_special + self.vocab_size_note + self.vocab_size_velocity + self.vocab_size_time
-        ):
-            tokens = tokens[1:]
-
         words = [self._convert_id_to_token(token, time_idx_offset=0) for token in tokens]
 
         current_idx = start_idx
@@ -393,7 +388,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         r"""
         This is the `encode_plus` method for `Pop2PianoTokenizer`. It converts the midi notes to the transformer
         generated token ids. It only works on a single batch, to process multiple batches please use
-        `batch_encode_plus` method.
+        `batch_encode_plus` or `__call__` method.
 
         Args:
             notes (`numpy.ndarray` of shape `[sequence_length, 4]` or `list` of `pretty_midi.Note` objects):
@@ -462,7 +457,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
     ) -> BatchEncoding:
         r"""
         This is the `batch_encode_plus` method for `Pop2PianoTokenizer`. It converts the midi notes to the transformer
-        generated token ids. It only works on multiple batches by calling `encode_plus` multiple times in a loop.
+        generated token ids. It works on multiple batches by calling `encode_plus` multiple times in a loop.
 
         Args:
             notes (`numpy.ndarray` of shape `[batch_size, sequence_length, 4]` or `list` of `pretty_midi.Note` objects):
@@ -518,7 +513,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
                 If `notes` is a `numpy.ndarray`:
                     - Each sequence must have 4 values, they are `onset idx`, `offset idx`, `pitch` and `velocity`.
-                If `notes` is a `list` containing `list` of `pretty_midi.Note` objects:
+                If `notes` is a `list` containing `pretty_midi.Note` objects:
                     - Each sequence must have 4 attributes, they are `start`, `end`, `pitch` and `velocity`.
             padding (`bool`, `str` or [`~file_utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
@@ -716,7 +711,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             beatsteps = to_numpy(beatsteps)
             extrapolated_beatstep = to_numpy(extrapolated_beatstep)
 
-            pretty_midi_object = self.relative_batch_tokens_to_midi(
+            pretty_midi_object = self.relative_batch_tokens_ids_to_midi(
                 tokens=each_tokens_ids,
                 beatstep=extrapolated_beatstep,
                 bars_per_batch=self.num_bars,
