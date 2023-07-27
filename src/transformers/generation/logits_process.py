@@ -392,17 +392,57 @@ class TopKLogitsWarper(LogitsWarper):
 
 class TypicalLogitsWarper(LogitsWarper):
     r"""
-    [`LogitsWarper`] that performs typical decoding. See [Typical Decoding for Natural Language
-    Generation](https://arxiv.org/abs/2202.00666) for more information.
+    [`LogitsWarper`] that enforces the criterion of locally typical sampling when generating from probabilistic language models.
+     The abstraction of natural language generation as a discrete stochastic process, analyzed through information theory,
+    provides insights into the behavior of probabilistic language generators. This warping technique aims to produce more
+    coherent and fluent text by selecting words that have information content close to the expected information content,
+    i.e., the conditional entropy of the model. See [Typical Decoding for Natural Language Generation](https://arxiv.org/abs/2202.00666) for more information.
 
+    <Tip>
+
+     The `TypicalLogitsWarper` is a special case of a `LogitsWarper`, which is itself a subclass of `LogitsProcessor`.
+        It is designed to modify the logits during text generation with probabilistic language models when `do_sample=True`.
+        By using `TypicalLogitsWarper`, you can enforce locally typical sampling, resulting in more coherent and fluent text,
+        while reducing degenerate repetitions.
+
+    </Tip>
+    
     Args:
         mass (`float`):
-            Value of typical_p between 0 and 1 inclusive, defaults to 0.9.
+             The proportion of probability mass to retain while warping the logits. The value should be between 0 and 1.
+                Higher values (close to 1.0) retain more probability mass, leading to more typical sampling, whereas lower
+                values (close to 0.0) retain less probability mass, leading to more diverse sampling. The default is 0.9.
         filter_value (`float`, *optional*, defaults to `-float("Inf")`):
-            All filtered values will be set to this float value.
+            The value used to filter out logits that fall below this threshold. Any logits less than this value will be
+                set to -infinity before applying the softmax function. This helps in excluding unlikely tokens during sampling.
+                Default is -infinity.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
-            Minimum number of tokens that cannot be filtered.
-    """
+            The minimum number of tokens to always keep during sampling. This helps ensure a minimum level of coherence
+                in the generated text. Default is 1.
+    Example:
+        
+     ```python
+         from transformers import GPT2Tokenizer, GPT2LMHeadModel, TypicalLogitsWarper
+
+         # Load pre-trained model and tokenizer
+         model_name = "gpt2"
+         tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+         model = GPT2LMHeadModel.from_pretrained(model_name)
+
+         # Create the warper with desired parameters
+         warper = TypicalLogitsWarper(mass=0.9, filter_value=-5.0, min_tokens_to_keep=2)
+
+         # Generate text using the model and warper
+         input_text = "Once upon a time"
+         input_ids = tokenizer.encode(input_text, return_tensors="pt")
+         output = model.generate(input_ids, do_sample=True, max_length=50, warper=warper)
+
+        # Decode and print the generated text
+        generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
+        print("Generated Text: ", generated_text)
+     Once upon a time, there was a magical kingdom filled with mystical creatures and enchanted forests...
+     ```
+     """
 
     def __init__(self, mass: float = 0.9, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         mass = float(mass)
