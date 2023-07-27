@@ -72,7 +72,7 @@ class IdeficsImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         image_size: Optional[Dict[str, int]] = None,
-        transforms=None,
+        transform=None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -83,9 +83,10 @@ class IdeficsImageProcessor(BaseImageProcessor):
                 Image to preprocess.
             image_size (`int`, *optional*, defaults to `self.image_size`):
                 Controls the size of the image after `resize`.
-            transforms (`?`, *optional*, defaults to `None`):
-                A custom `torchvision.Compose` set of image transforms can be passed for training. If `None` a preset
-                inference-specific set of transforms will be applied to the images
+            transform (`?`, *optional*, defaults to `None`):
+                A custom transform function that accepts a single image can be passed for training. For example,
+                `torchvision.Compose` can be used to compose multiple functions. If `None` a preset inference-specific
+                set of transforms will be applied to the images
         """
         image_size = image_size if image_size is not None else self.image_size
         size = (image_size, image_size)
@@ -103,15 +104,18 @@ class IdeficsImageProcessor(BaseImageProcessor):
 
         # For training a user needs to pass their own set of transforms.
         # For reference this is what was used in the original m4 training
-        # transforms = transforms.Compose([
+        # transform = transforms.Compose([
         #     convert_to_rgb,
-        #     transforms.RandomResizedCrop((size, size), scale=(0.9, 1.0), interpolation=transforms.InterpolationMode.BICUBIC)
+        #     transforms.RandomResizedCrop((size, size), scale=(0.9, 1.0), interpolation=transforms.InterpolationMode.BICUBIC),
         #     transforms.ToTensor(),
         #     transforms.Normalize(mean=image_mean, std=image_std),
         # ])
 
-        if transforms is not None:
-            return [transforms(x) for x in images]
+        if transform is not None:
+            images = [transform(x) for x in images]
+            return images
+            # images = BatchFeature(data={"pixel_values": images}, tensor_type=TensorType.PYTORCH)["pixel_values"]
+            # return images
 
         images = [convert_to_rgb(x) for x in images]
         # further transforms expect numpy arrays

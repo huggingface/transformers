@@ -130,7 +130,7 @@ class IdeficsProcessor(ProcessorMixin):
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
-        transforms=None,
+        transform=None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         add_eos_token=False,
         debug=False,
@@ -142,9 +142,10 @@ class IdeficsProcessor(ProcessorMixin):
             prompts (`Union[List[TextInput], [List[List[TextInput]]]]`):
                 either a single prompt or a batched list of prompts - see the detailed description immediately after
                 the end of the arguments doc section.
-            transforms (`?`, *optional*, defaults to `None`):
-                A custom `torchvision.Compose` set of image transforms can be passed for training. If `None` a preset
-                inference-specific set of transforms will be applied to the images
+            transform (`?`, *optional*, defaults to `None`):
+                A custom transform function that accepts a single image can be passed for training. For example,
+                `torchvision.Compose` can be used to compose multiple functions. If `None` a preset inference-specific
+                set of transforms will be applied to the images
             add_eos_token (`bool`, *optional*, defaults to `False`):
                 Adds `eos_token` at the end of the final prompt if True`
             debug (`bool`, *optional*, defaults to `False`):
@@ -203,7 +204,7 @@ class IdeficsProcessor(ProcessorMixin):
         To do training do:
 
         ```python
-        image_transforms = transforms.Compose(
+        image_transform = transforms.Compose(
             [
                 transforms.RandomResizedCrop(
                     (w, h), scale=(0.9, 1.0), interpolation=transforms.InterpolationMode.BICUBIC
@@ -212,7 +213,7 @@ class IdeficsProcessor(ProcessorMixin):
                 transforms.Normalize(mean=self.image_mean, std=self.image_std),
             ]
         )
-        inputs = processor(prompts, transforms=transforms, return_tensors="pt")
+        inputs = processor(prompts, transform=image_transform, return_tensors="pt")
         ```
 
         In order to help debug prompt generation enable `debug=True` which will show you what's happening.
@@ -264,7 +265,7 @@ class IdeficsProcessor(ProcessorMixin):
             if debug is True:
                 print(f"{full_text=}")
 
-            image_objects = self.image_processor(image_objects, transforms=transforms)
+            image_objects = self.image_processor(image_objects, transform=transform)
 
             text_encoding = self.tokenizer(
                 text=full_text,
