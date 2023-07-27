@@ -16,21 +16,15 @@ specific language governing permissions and limitations under the License.
 
 The Pop2Piano model was proposed in [Pop2Piano : Pop Audio-based Piano Cover Generation](https://arxiv.org/abs/2211.00895) by Jongho Choi and Kyogu Lee.
 
-Piano covers of pop music are one of the widely enjoyed forms of music. But generating a Piano cover from a music is not 
-a trivial task, it requires great expertise with playing Piano as well as knowing different characteristics and melodies 
-of a song. For these reasons it is very difficult for anyone to create Piano covers for their favourite music.
+Piano covers of pop music are widely enjoyed, but generating them from music is not a trivial task. It requires great 
+expertise with playing piano as well as knowing different characteristics and melodies of a song. With Pop2Piano you 
+can directly generate a cover from a song's audio waveform. It is the first model to directly generate a piano cover 
+from pop audio without melody and chord extraction modules. 
 
-Don't worry, Pop2Piano got you covered! 
-
-Pop2Piano is an encoder-decoder Transformer model based on [T5](https://arxiv.org/pdf/1910.10683.pdf). It is the first model to 
-directly generate a piano cover from pop audio without melody and chord extraction modules. Pop2Piano has a
-Feature Extractor which converts the provided audio file to `log-mel-spectrogram` representation. The encoder 
-part of the Pop2Piano model takes those values and converts them to a latent representation and the decoder generates 
-the `token_ids` with the help of those latent representation. After that Pop2Piano Tokenizer converts those generated 
-`token_ids` to MIDI tokens and with the help of the `pretty_midi` library, we generate MIDI files(Piano covers). 
-For your reliance we have bundled the `Pop2PianoFeatureExtractor` and `Pop2PianoTokenizer` into a single class `Pop2PianoProcessor`. 
-
-Feel free to try it on your favourite music! We have included variety of examples down below.
+Pop2Piano is an encoder-decoder Transformer model based on [T5](https://arxiv.org/pdf/1910.10683.pdf). The input audio 
+is transformed to its waveform and passed to the encoder, which transforms it to a latent representation. The decoder 
+uses these latent representations to autoregressivley generate token ids. Each token id corresponds to one of four 
+different token types: time, velocity, note and 'special'. The token ids are then decoded to their equivalent MIDI file.
 
 
 The abstract from the paper is the following:

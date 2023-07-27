@@ -348,7 +348,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched and not return_attention_mask:
             processed_features_dict["input_features"] = processed_features_dict["input_features"][:-1, ...]
 
-        outputs = BatchFeature(processed_features_dict).convert_to_tensors(return_tensors)
+        outputs = BatchFeature(processed_features_dict, tensor_type=return_tensors)
 
         return outputs
 

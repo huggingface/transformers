@@ -21,6 +21,7 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
+from ...tokenization_utils import BatchEncoding, PaddingStrategy, TruncationStrategy
 from ...utils import TensorType
 
 
@@ -51,50 +52,73 @@ class Pop2PianoProcessor(ProcessorMixin):
         sampling_rate: Union[int, List[int]] = None,
         steps_per_beat: int = 2,
         do_infer_resample: Optional[bool] = True,
-        return_attention_mask: Optional[bool] = False,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        token_ids: Union[List, TensorType] = None,
-        feature_extractor_output: BatchFeature = None,
-        return_midi: bool = True,
+        notes: Union[List, TensorType] = None,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = None,
+        max_length: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
+        verbose: bool = True,
         **kwargs,
-    ) -> BatchFeature:
+    ) -> Union[BatchFeature, BatchEncoding]:
         """
         This method uses [`Pop2PianoFeatureExtractor.__call__`] method to prepare log-mel-spectrograms for the model,
-        and [`Pop2PianoTokenizer.__call__`] to prepare pretty_midi objects from the model outputs.
+        and [`Pop2PianoTokenizer.__call__`] to prepare token_ids from notes.
 
         Please refer to the docstring of the above two methods for more information.
         """
 
         # Since Feature Extractor needs both audio and sampling_rate and tokenizer needs both token_ids and
         # feature_extractor_output, we must check for both.
-        if (audio is None and sampling_rate is None) and (token_ids is None and feature_extractor_output is None):
+        if (audio is None and sampling_rate is None) and (notes is None):
             raise ValueError(
                 "You have to specify at least audios and sampling_rate in order to use feature extractor or "
-                "token_ids along with feature_extractor_output to use the tokenizer part."
+                "notes to use the tokenizer part."
             )
 
-        encoding = BatchFeature()
-
         if audio is not None and sampling_rate is not None:
-            extracted_features = self.feature_extractor(
+            inputs = self.feature_extractor(
                 audio=audio,
                 sampling_rate=sampling_rate,
                 steps_per_beat=steps_per_beat,
                 do_infer_resample=do_infer_resample,
-                return_attention_mask=return_attention_mask,
-                return_tensors=return_tensors,
+                **kwargs,
             )
-            encoding.update(extracted_features)
-
-        if token_ids is not None and feature_extractor_output is not None:
-            tokenizer_outputs = self.tokenizer(
-                token_ids=token_ids,
-                feature_extractor_output=feature_extractor_output,
-                return_midi=return_midi,
+        if notes is not None:
+            encoded_token_ids = self.tokenizer(
+                notes=notes,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                verbose=verbose,
+                **kwargs,
             )
-            encoding.update(tokenizer_outputs)
 
-        return encoding
+        if notes is None:
+            return inputs
+
+        elif audio is None or sampling_rate is None:
+            return encoded_token_ids
+
+        else:
+            inputs["token_ids"] = encoded_token_ids["token_ids"]
+            return inputs
+
+    def batch_decode(
+        self,
+        token_ids,
+        feature_extractor_output: BatchFeature,
+        return_midi: bool = True,
+    ) -> BatchEncoding:
+        """
+        This method uses [`Pop2PianoTokenizer.batch_decode`] method to convert model generated token_ids to midi_notes.
+
+        Please refer to the docstring of the above two methods for more information.
+        """
+
+        return self.tokenizer.batch_decode(
+            token_ids=token_ids, feature_extractor_output=feature_extractor_output, return_midi=return_midi
+        )
 
     @property
     def model_input_names(self):
