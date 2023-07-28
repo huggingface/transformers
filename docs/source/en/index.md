@@ -457,6 +457,7 @@ Flax), PyTorch, and/or TensorFlow.
 |             UMT5              |       ✅        |         ❌         |      ❌      |
 |           UniSpeech           |       ✅        |         ❌         |      ❌      |
 |         UniSpeechSat          |       ✅        |         ❌         |      ❌      |
+|            UnivNet            |       ❌        |         ❌         |      ❌      |
 |            UPerNet            |       ✅        |         ❌         |      ❌      |
 |              VAN              |       ✅        |         ❌         |      ❌      |
 |           VideoMAE            |       ✅        |         ❌         |      ❌      |
