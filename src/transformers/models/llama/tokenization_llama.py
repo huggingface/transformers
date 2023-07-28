@@ -111,7 +111,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
-        legacy=True,
+        legacy=None,
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -131,11 +131,13 @@ class LlamaTokenizer(PreTrainedTokenizer):
             legacy=legacy,
             **kwargs,
         )
-        if legacy:
+        if legacy is None:
             logger.warning_once(
-                f"You are using the legacy behaviour of the {self.__class__}. This means that tokens that come after special tokens will not be properly handled. We recommend you to"
-                " read the related pull request available at https://github.com/huggingface/transformers/pull/24565"
+                f"You are using the default legacy behaviour of the {self.__class__}. This means that tokens that come after special tokens will not be properly handled. We recommend you to"
+                " read the related pull request available at https://github.com/huggingface/transformers/pull/24565, and set the legacy attribute accordingly."
             )
+            legacy = True
+
         self.legacy = legacy
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
@@ -356,6 +358,17 @@ class LlamaTokenizer(PreTrainedTokenizer):
             `List[int]`:
                 Input ids for the conversation.
         """
+        if len(conversation.past_user_inputs) > 0:
+            if not conversation.past_user_inputs[0].startswith(B_SYS) or E_SYS not in conversation.past_user_inputs[0]:
+                conversation.past_user_inputs[0] = (
+                    B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
+                )
+        elif conversation.new_user_input:
+            if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
+                conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
+        else:
+            raise ValueError("Last message must be from user")
+
         dialogue = list(conversation.iter_texts())
         if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
             [not is_user for is_user, msg in dialogue[1::2]]
@@ -365,14 +378,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
             )
 
         dialog_tokens: List[int] = []
-        if len(conversation.past_user_inputs) > 0:
-            if not conversation.past_user_inputs[0].startswith(B_SYS) or E_SYS not in conversation.past_user_inputs[0]:
-                conversation.past_user_inputs[0] = (
-                    B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
-                )
-        elif not dialogue[0][1].startswith(B_SYS) or E_SYS not in dialogue[0][1]:
-            dialogue[0] = (dialogue[0][0], B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + dialogue[0][1])
-
         dialog_tokens += sum(
             [
                 [self.bos_token_id]
@@ -384,8 +389,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
             ],
             [],
         )
-        if not (dialogue[-1][0]):
-            raise ValueError(f"Last message must be from user, got {dialogue[-1]['role']}")
         dialog_tokens += [self.bos_token_id] + self.encode(
             f"{B_INST} {(dialogue[-1][1]).strip()} {E_INST}", add_special_tokens=False
         )

@@ -172,11 +172,58 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
 
 class TemperatureLogitsWarper(LogitsWarper):
     r"""
-    [`LogitsWarper`] for temperature (exponential scaling output probability distribution).
+    [`LogitsWarper`] for temperature (exponential scaling output probability distribution), which effectively means
+    that it can control the randomness of the predicted tokens.
+
+    <Tip>
+
+    Make sure that `do_sample=True` is included in the `generate` arguments otherwise the temperature value won't have
+    any effect.
+
+    </Tip>
 
     Args:
         temperature (`float`):
-            The value used to module the logits distribution.
+            Strictly positive float value used to modulate the logits distribution. A value smaller than `1` decreases
+            randomness (and vice versa), with `0` being equivalent to shifting all probability mass to the most likely
+            token.
+
+    Examples:
+
+    ```python
+    >>> import torch
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> model.config.pad_token_id = model.config.eos_token_id
+    >>> model.generation_config.pad_token_id = model.config.eos_token_id
+    >>> input_context = "Hugging Face Company is"
+    >>> input_ids = tokenizer.encode(input_context, return_tensors="pt")
+
+    >>> torch.manual_seed(0)
+
+    >>> # With temperature=1, the default, we consistently get random outputs due to random sampling.
+    >>> outputs = model.generate(input_ids=input_ids, max_new_tokens=10, temperature=1, do_sample=True)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is one of these companies that is going to take a
+
+    >>> outputs = model.generate(input_ids=input_ids, max_new_tokens=10, temperature=1, do_sample=True)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is one of these companies, you can make a very
+
+    >>> # However, with temperature close to 0 , the output remains invariant.
+    >>> outputs = model.generate(input_ids=input_ids, max_new_tokens=10, temperature=0.0001, do_sample=True)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is a company that has been around for over 20 years
+
+    >>> # even if we set a different seed.
+    >>> torch.manual_seed(42)
+    >>> outputs = model.generate(input_ids=input_ids, max_new_tokens=10, temperature=0.0001, do_sample=True)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is a company that has been around for over 20 years
+    ```
     """
 
     def __init__(self, temperature: float):
@@ -678,7 +725,9 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
                 torch.tensor(sequence_ids[:-1], dtype=input_ids.dtype, device=input_ids.device),
             ).prod(dim=1)
             bias[:, last_token] += torch.where(
-                matching_rows.bool(), sequence_bias, torch.tensor(0.0, device=input_ids.device)
+                matching_rows.bool(),
+                torch.tensor(sequence_bias, device=input_ids.device),
+                torch.tensor(0.0, device=input_ids.device),
             )
 
         # 5 - apply the bias to the scores
@@ -747,6 +796,50 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
             List of list of token ids that are not allowed to be generated.
         eos_token_id (`Union[int, List[int]]`):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> inputs = tokenizer(["In a word, the cake is a"], return_tensors="pt")
+
+    >>> summary_ids = model.generate(inputs["input_ids"], max_new_tokens=5, pad_token_id=tokenizer.eos_token_id)
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True)[0])
+    In a word, the cake is a bit of a mess.
+
+    >>> # Now let's control generation taking the bad words out. Please note that the tokenizer is initialized differently
+
+    >>> tokenizer_with_prefix_space = AutoTokenizer.from_pretrained("gpt2", add_prefix_space=True)
+
+
+    >>> def get_tokens_as_list(word_list):
+    ...     "Converts a sequence of words into a list of tokens"
+    ...     tokens_list = []
+    ...     for word in word_list.split(" "):
+    ...         tokenized_word = tokenizer_with_prefix_space([word], add_special_tokens=False).input_ids[0]
+    ...         tokens_list.append(tokenized_word)
+    ...     return tokens_list
+
+
+    >>> word_list = "mess"
+    >>> bad_words_ids = get_tokens_as_list(word_list=word_list)
+
+    >>> badwords_ids = model.generate(
+    ...     inputs["input_ids"],
+    ...     max_new_tokens=5,
+    ...     bad_words_ids=bad_words_ids,
+    ...     eos_token_id=tokenizer_with_prefix_space.eos_token_id,
+    ... )
+    >>> print(tokenizer.batch_decode(badwords_ids, skip_special_tokens=True)[0])
+    In a word, the cake is a bit of a surprise.
+
+    >>> badwords_ids = model.generate(inputs["input_ids"], max_new_tokens=4, num_beams=5, bad_words_ids=bad_words_ids)
+    >>> print(tokenizer.batch_decode(biased_ids, skip_special_tokens=True)[0])
+    In a word, the cake is a great way to start
+    ```
     """
 
     def __init__(self, bad_words_ids: List[List[int]], eos_token_id: Union[int, List[int]]):
