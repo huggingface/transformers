@@ -49,17 +49,17 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ViTPoseConfig"
 
 # Base docstring ## to be changed
-_CHECKPOINT_FOR_DOC = "google/vit-base-patch16-224-in21k"
+_CHECKPOINT_FOR_DOC = "shauray/ViTPose"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
 # Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "google/vit-base-patch16-224"
+_IMAGE_CLASS_CHECKPOINT = "shauray/vitpose"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
 VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/vit-base-patch16-224",
-    # See all ViT models at https://huggingface.co/models?filter=vit
+    "shauray/vitpose",
+    # See all ViTPose models at https://huggingface.co/models?filter=vitpose
 ]
 
 class ViTPosePatchEmbed(nn.Module):
@@ -76,8 +76,8 @@ class ViTPosePatchEmbed(nn.Module):
         self.embed_dim = config.embed_dim
         self.patch_size = config.patch_size
         self.image_size, patch_size = config.image_size
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        self.image_size = self.image_size if isinstance(self.image_size, collections.abc.Iterable) else (self.image_size, self.image_size)
+        self.patch_size = self.patch_size if isinstance(self.patch_size, collections.abc.Iterable) else (self.patch_size, self.patch_size)
 
         self.projection = nn.Conv2d(self.num_channels, self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size, padding = (2,2))
 
@@ -101,7 +101,7 @@ class ViTPosePatchEmbed(nn.Module):
 class ViTPoseAttention(nn.Module):
     def __init__(self, config: ViTPoseConfig) -> None:
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+        if config.embed_dim % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
