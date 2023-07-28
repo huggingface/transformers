@@ -91,7 +91,7 @@ class Kosmos2TextConfig(PretrainedConfig):
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the text config dict if we are loading from BlipConfig
+        # get the text config dict if we are loading from Kosmos2Config
         if config_dict.get("model_type") == "kosmos-2":
             config_dict = config_dict["text_config"]
 
