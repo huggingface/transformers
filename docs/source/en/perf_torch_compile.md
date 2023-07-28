@@ -293,7 +293,7 @@ Below you can find inference durations in milliseconds for each model with and w
 We also benchmarked on PyTorch nightly (2.1.0dev) and observed improvement in latency both for uncompiled and compiled models.
 
 ### A100
-| **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** | **torch 2.0 - <br>compile** |
+| **Task/Model** | **Batch Size** | **torch 2.0 - no compile** | **torch 2.0 -<br> compile** |
 |:---:|:---:|:---:|:---:|
 | Image Classification/BeiT | Unbatched | 12.462 | 6.954 | 
 | Image Classification/BeiT | 4 | 14.109 | 12.851 | 
@@ -303,7 +303,7 @@ We also benchmarked on PyTorch nightly (2.1.0dev) and observed improvement in la
 | Object Detection/DETR | 16 | 163.749 | 163.706  |
 
 ### T4
-| **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** | **torch 2.0 - <br>compile** |
+| **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** |
 |:---:|:---:|:---:|:---:|
 | Image Classification/BeiT | Unbatched | 14.408 | 14.052 | 
 | Image Classification/BeiT | 4 | 47.381 | 46.604 | 
@@ -313,7 +313,7 @@ We also benchmarked on PyTorch nightly (2.1.0dev) and observed improvement in la
 | Object Detection/DETR | 16 | OOM | OOM   |
 
 ### V100
-| **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** | **torch 2.0 - <br>compile** |
+| **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** |
 |:---:|:---:|:---:|:---:|
 | Image Classification/BeiT | Unbatched | 13.477 | 7.926 | 
 | Image Classification/BeiT | 4 | 15.103 | 14.378 | 
@@ -327,7 +327,7 @@ We also benchmarked on PyTorch nightly (2.1.0dev) and observed improvement in la
 We benchmarked `reduce-overhead` compilation mode for A100 and T4 in Nightly.
 
 ### A100
-| **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** | **torch 2.0 - <br>compile** |
+| **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** |
 |:---:|:---:|:---:|:---:|
 | Image Classification/ConvNeXT | Unbatched | 11.758 | 7.335 | 
 | Image Classification/ConvNeXT | 4 | 23.171 | 21.490 | 
@@ -340,7 +340,7 @@ We benchmarked `reduce-overhead` compilation mode for A100 and T4 in Nightly.
 
 
 ### T4
-| **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** | **torch 2.0 - <br>compile** |
+| **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** | 
 |:---:|:---:|:---:|:---:|
 | Image Classification/ConvNeXT | Unbatched | 32.137 | 31.84 | 
 | Image Classification/ConvNeXT | 4 | 120.944 | 110.209 | 
