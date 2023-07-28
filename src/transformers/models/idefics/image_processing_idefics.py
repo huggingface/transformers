@@ -21,8 +21,6 @@ from PIL import Image
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -31,6 +29,10 @@ from ...image_utils import (
     valid_images,
 )
 from ...utils import TensorType, is_torch_available
+
+
+IDEFICS_STANDARD_MEAN = (0.48145466, 0.4578275, 0.40821073)
+IDEFICS_STANDARD_STD = (0.26862954, 0.26130258, 0.27577711)
 
 
 def convert_to_rgb(image):
@@ -122,7 +124,7 @@ class IdeficsImageProcessor(BaseImageProcessor):
         images = [to_numpy_array(x) for x in images]
         images = [resize(x, size, resample=PILImageResampling.BICUBIC) for x in images]
         images = [self.rescale(image=image, scale=1 / 255) for image in images]
-        images = [self.normalize(x, mean=IMAGENET_STANDARD_MEAN, std=IMAGENET_STANDARD_STD) for x in images]
+        images = [self.normalize(x, mean=IDEFICS_STANDARD_MEAN, std=IDEFICS_STANDARD_STD) for x in images]
         images = [to_channel_dimension_format(x, ChannelDimension.FIRST) for x in images]
         # this converts to torch tensors - switch to convert_to_tensors once it becomes available
         images = BatchFeature(data={"pixel_values": images}, tensor_type=TensorType.PYTORCH)["pixel_values"]
