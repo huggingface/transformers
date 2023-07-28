@@ -22,9 +22,9 @@ import numpy as np
 from tests.test_modeling_common import floats_tensor
 from transformers import Mask2FormerConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
+    require_accelerate,
     require_torch,
     require_torch_gpu,
-    require_accelerate,
     require_torch_multi_gpu,
     require_vision,
     slow,
