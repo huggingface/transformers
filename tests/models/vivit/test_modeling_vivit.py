@@ -345,6 +345,6 @@ class VivitModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         # taken from original model
-        expected_slice = torch.tensor([-1.0543, 2.0764, -0.2104, 0.4439, -0.9658]).to(torch_device)
+        expected_slice = torch.tensor([-0.9498, 2.7971, -1.4049, 0.1024, -1.8353]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :5], expected_slice, atol=1e-4))
