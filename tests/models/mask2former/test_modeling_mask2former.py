@@ -22,7 +22,6 @@ import numpy as np
 from tests.test_modeling_common import floats_tensor
 from transformers import Mask2FormerConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
-    require_accelerate,
     require_torch,
     require_torch_gpu,
     require_torch_multi_gpu,
@@ -391,16 +390,11 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
             )
         )
 
-    def test_inference_universal_segmentation_head(self, torch_dtype=None):
-        torch_dtype = torch_dtype or torch.float32
-        model = (
-            Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints)
-            .to(torch_device, dtype=torch_dtype)
-            .eval()
-        )
+    def test_inference_universal_segmentation_head(self):
+        model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
         image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = image_processor(image, return_tensors="pt").to(torch_device, dtype=torch_dtype)
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
         inputs_shape = inputs["pixel_values"].shape
         # check size is divisible by 32
         self.assertTrue((inputs_shape[-1] % 32) == 0 and (inputs_shape[-2] % 32) == 0)
@@ -433,11 +427,19 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
 
-    @require_accelerate
-    @require_torch
     @require_torch_gpu
-    def test_inference_universal_segmentation_head_fp16(self):
-        self.test_inference_universal_segmentation_head(dtype=torch.float16)
+    def test_inference_fp16(self):
+        model = (
+            Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints)
+            .to(torch_device, dtype=torch.float16)
+            .eval()
+        )
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(image, return_tensors="pt").to(torch_device, dtype=torch.float16)
+
+        with torch.no_grad():
+            _ = model(**inputs)
 
     def test_with_segmentation_maps_and_loss(self):
         model = Mask2FormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
