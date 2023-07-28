@@ -1912,6 +1912,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             mem = mem + mem_bufs
         return mem
 
+    def cuda(self, *args, **kwargs):
+        # Checks if the model has been loaded in 8-bit
+        if getattr(self, "is_quantized", False):
+            raise ValueError(
+                "Calling `cuda()` is not supported for `4-bit` or `8-bit` quantized models. Please use the model as it is, since the"
+                " model has already been set to the correct devices and casted to the correct `dtype`."
+            )
+        else:
+            return super().cuda(*args, **kwargs)
+
     def to(self, *args, **kwargs):
         # Checks if the model has been loaded in 8-bit
         if getattr(self, "is_quantized", False):
