@@ -114,9 +114,11 @@ class IdeficsImageProcessor(BaseImageProcessor):
         #     transforms.Normalize(mean=image_mean, std=image_std),
         # ])
 
+        import torch
         if transform is not None:
             images = [transform(x) for x in images]
-            return images
+            return torch.stack(images)
+            #return images
             # images = BatchFeature(data={"pixel_values": images}, tensor_type=TensorType.PYTORCH)["pixel_values"]
             # return images
 
