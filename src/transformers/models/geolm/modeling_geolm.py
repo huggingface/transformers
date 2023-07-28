@@ -1026,6 +1026,7 @@ class GeoLMForMaskedLM(GeoLMPreTrainedModel):
     """GeoLM Model with a `language modeling` head on top for CLM fine-tuning. """, GEOLM_START_DOCSTRING
 )
 class GeoLMForCausalLM(GeoLMPreTrainedModel):
+    _tied_weights_keys =  ['geolm.embeddings.word_embeddings.weight', 'cls.predictions.decoder.weight','cls.predictions.bias', 'cls.predictions.decoder.bias']
 
     def __init__(self, config):
         super().__init__(config)
