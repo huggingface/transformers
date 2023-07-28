@@ -503,13 +503,13 @@ def main():
         config = AutoConfig.from_pretrained(
             model_args.config_name,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=True if model_args.use_auth_token else None,
         )
     elif model_args.model_name_or_path:
         config = AutoConfig.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=True if model_args.use_auth_token else None,
         )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
@@ -520,14 +520,14 @@ def main():
             model_args.tokenizer_name,
             cache_dir=model_args.cache_dir,
             use_fast=model_args.use_fast_tokenizer,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=True if model_args.use_auth_token else None,
         )
     elif model_args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=model_args.cache_dir,
             use_fast=model_args.use_fast_tokenizer,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=True if model_args.use_auth_token else None,
         )
     else:
         raise ValueError(
@@ -541,7 +541,7 @@ def main():
             config=config,
             seed=training_args.seed,
             dtype=getattr(jnp, model_args.dtype),
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=True if model_args.use_auth_token else None,
         )
     else:
         model = FlaxAutoModelForSeq2SeqLM.from_config(
