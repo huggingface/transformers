@@ -47,7 +47,7 @@ python run_flax_speech_recognition_seq2seq.py \
 	--per_device_train_batch_size="16" \
 	--per_device_eval_batch_size="16" \
 	--num_train_epochs="10" \
-	--learning_rate="1e-5" \
+	--learning_rate="1e-4" \
 	--warmup_steps="500" \
 	--logging_steps="25" \
 	--generation_max_length="225" \
