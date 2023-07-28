@@ -345,17 +345,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # 1. Initialize _added_tokens_decoder if it was not set
-        if not hasattr(self, "_added_tokens_decoder"):
-            self._added_tokens_decoder: Dict[int, AddedToken] = {}
 
-        if self.unk_token is not None and self.unk_token not in self._additional_special_tokens:
-            try:
-                self.convert_tokens_to_ids(self.unk_token)
-            except RecursionError:
-                logger.error(
+        if self.unk_token is not None and self.unk_token not in self._added_tokens_decoder:
+            if self.convert_tokens_to_ids(self.unk_token) is None:
+                raise ValueError(
                     "An `unk_token` was set but it is neither part of the `additional_special_tokens` nor is it recognized by the tokenizer."
-                    "Make sure the token exists Whithout it, adding tokens to the model is not supported"
+                    " Make sure the token exists, whithout it, adding tokens to the model is not possible. Thus the initialization fails."
                 )
 
         # 2. Add the additional special tokens amd the special tokens if they are not already thre.
@@ -388,9 +383,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     # TODO no tokenizer should overload this?
     def __len__(self):
         """
-        Size of the full vocabulary with the added tokens.
+        Size of the full vocabulary with the added tokens. This should be the maximum index ? Or the actual length?
+        Imagine if there is a hole in the vocab? What is computed in fast?
         """
-        return self.vocab_size + len(self.added_tokens_encoder)
+        return len(set(self.get_vocab().values()))
 
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
         """
@@ -434,22 +430,25 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 continue
             # if unk_token is not part of the vocab, but we are adding tokens
             if self.unk_token_id is not None and self.convert_tokens_to_ids(token.content) == self.unk_token_id:
-                new_idx = len(self) + added_tokens
+                # if some tokens were added at the beginning ignore them HACK
+                new_idx = len(self)
                 if not special_tokens and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
                     token.content = token.content.lower()
                 self._added_tokens_decoder[new_idx] = token
+                added_tokens += 1
             elif self.convert_tokens_to_ids(token.content) is not None:
                 # token cotent exists, let's update the lstrip etc
                 self._added_tokens_decoder[self.convert_tokens_to_ids(token.content)] = token
             else:
                 # TODO get vocab might not be the best way to get the current length with the added tokens
-                new_idx = len(self.get_vocab()) + added_tokens
+                new_idx = len(self)
                 self._added_tokens_decoder[new_idx] = token
+                added_tokens += 1
 
-            if special_tokens and token not in self._additional_special_tokens:
+            # if we are adding this as an additional special token
+            if special_tokens and token not in self.all_special_tokens_extended:
                 self._additional_special_tokens.append(token)
 
-            added_tokens += 1
             if self.verbose:
                 logger.info(f"Adding {token} to the vocabulary")
 

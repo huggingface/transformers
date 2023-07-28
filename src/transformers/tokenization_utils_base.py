@@ -804,7 +804,8 @@ class SpecialTokensMixin:
             A special token representing a masked token (used by masked-language modeling pretraining objectives, like
             BERT).
         additional_special_tokens (tuple or list of `str` or `tokenizers.AddedToken`, *optional*):
-            A tuple or a list of additional special tokens.
+            A tuple or a list of additional special tokens, which will also be skipped when decoding if
+            `skip_special_tokens` is set to `True`
     """
 
     SPECIAL_TOKENS_ATTRIBUTES = [
@@ -815,7 +816,7 @@ class SpecialTokensMixin:
         "pad_token",
         "cls_token",
         "mask_token",
-        "additional_special_tokens",  # TODO let's remove it from here, only add it if legacy
+        "additional_special_tokens",
     ]
 
     def __init__(self, verbose=True, **kwargs):
@@ -925,11 +926,13 @@ class SpecialTokensMixin:
                 to_add = []
                 for token in value:
                     if str(token) in self.added_tokens_encoder and replace_additional_special_tokens:
-                        self._added_tokens_decoder.pop(self.added_tokens_encoder.get(token.content))
+                        self._added_tokens_decoder.pop(self.added_tokens_encoder.get(str(token)))
                         to_add.append(token)
 
                     if str(token) not in self._additional_special_tokens and str(token) not in to_add:
                         to_add.append(token)
+                # additional special tokens don't need to be added tokens as they are only used for decoding
+                setattr(self, key, [str(i) for i in to_add])
                 added_tokens.extend(to_add)
 
             else:
@@ -1081,12 +1084,11 @@ class SpecialTokensMixin:
         `List[str]`: All the additional special tokens you may want to use. Log an error if used while not having been
         set.
         """
-        logger.warn("DEPRECATED")
         if self._additional_special_tokens is None:
             if self.verbose:
                 logger.error("Using additional_special_tokens, but it is not set yet.")
             return None
-        return [str(tok) for tok in self._additional_special_tokens if tok.special]
+        return [str(tok) for tok in self._additional_special_tokens]
 
     @bos_token.setter
     def bos_token(self, value):
@@ -1118,7 +1120,8 @@ class SpecialTokensMixin:
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
-        self._additional_special_tokens = [AddedToken(token) if isinstance(token, str) else token for token in value]
+        # should only store the str. As the actual token value should not be duplicated
+        self._additional_special_tokens = value
 
     @property
     def bos_token_id(self) -> Optional[int]:
@@ -1235,8 +1238,6 @@ class SpecialTokensMixin:
 
     @additional_special_tokens_ids.setter
     def additional_special_tokens_ids(self, values):
-        # TODO no, let's not keep this but rather output only the added tokens that are not normalized / have the special attribute
-        # as this is what defines them. This is otherwise untractable.....
         self._additional_special_tokens = [self.convert_ids_to_tokens(value) for value in values]
 
     @property
@@ -1247,7 +1248,6 @@ class SpecialTokensMixin:
 
         Convert potential tokens of `tokenizers.AddedToken` type to string.
         """
-        # TODO let's not support additional special tokens anymore. It's dummy anyway
         set_attr = {}
         for attr in self.SPECIAL_TOKENS_ATTRIBUTES:
             attr_value = getattr(self, "_" + attr)
@@ -1298,7 +1298,6 @@ class SpecialTokensMixin:
 
         Convert tokens of `tokenizers.AddedToken` type to string.
         """
-        # TODO deprecate this?
         all_toks = [str(s) for s in self.all_special_tokens_extended]
         return all_toks
 
@@ -1480,10 +1479,9 @@ INIT_TOKENIZER_DOCSTRING = r"""
             A special token representing a masked token (used by masked-language modeling pretraining objectives, like
             BERT). Will be associated to `self.mask_token` and `self.mask_token_id`.
         additional_special_tokens (tuple or list of `str` or `tokenizers.AddedToken`, *optional*):
-            A tuple or a list of additional special tokens. Add them here to ensure they won't be split by the
-            tokenization process. They will be added to the model using `tokenizer._add_tokens`and will be part of
-            `self.added_tokens_decoder` and `self.added_tokens_encoder`. If legacy, Will be associated to
-            `self.additional_special_tokens` and `self.additional_special_tokens_ids`.
+            A tuple or a list of additional special tokens. Add them here to ensure theyare skipped when decoding with
+            `skip_dspecial_tokens` is set to True. If they are not part of the vocabulkary, they will be added at the
+            end of the vocabulary.
         clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
             Whether or not the model should cleanup the spaces that were added when splitting the input text during the
             tokenization process.
@@ -1510,10 +1508,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     padding_side: str = "right"
     truncation_side: str = "right"
     slow_tokenizer_class = None
-    _added_tokens_decoder: Dict[int, AddedToken] = {}
-
-    # added_tokens_encoder: Dict[str, int] = {}
-    # added_tokens_decoder: Dict[int, AddedToken] = {}
 
     def __init__(self, **kwargs):
         # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
@@ -1521,6 +1515,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self.init_kwargs = copy.deepcopy(kwargs)
         self.name_or_path = kwargs.pop("name_or_path", "")
         self._processor_class = kwargs.pop("processor_class", None)
+
+        if not hasattr(self, "_added_tokens_decoder"):
+            self._added_tokens_decoder: Dict[int, AddedToken] = {}
 
         # For backward compatibility we fallback to set model_max_length from max_len if provided
         model_max_length = kwargs.pop("model_max_length", kwargs.pop("max_len", None))
@@ -1609,8 +1606,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length}, is_fast={self.is_fast},"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
-            f" special_tokens={self.special_tokens_map_extended}, clean_up_tokenization_spaces={self.clean_up_tokenization_spaces}), "
-            f" added_tokens_encoder={self.added_tokens_encoder}"
+            f" special_tokens={self.special_tokens_map}, clean_up_tokenization_spaces={self.clean_up_tokenization_spaces}), "
+            f" added_tokens_decoder={self.added_tokens_decoder}"
         )
 
     def __len__(self) -> int:
@@ -1626,7 +1623,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Returns:
             `Dict[str, int]`: The vocabulary.
         """
-        raise NotImplementedError()
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     @classmethod
     def from_pretrained(
@@ -2029,7 +2028,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
                 # TODO trie is not created. ADD safeguards to prevent people from modifying these attribute whithout adding a token! this way you force trie update.
                 # OR allow modifications, but harder to maintain!
-            tokenizer._create_trie()
+            if not tokenizer.is_fast:
+                tokenizer._create_trie()
 
         elif cls.legacy_save:
             #  Kept for bacward compatibilty, let's not fix the impossible to fix
@@ -2207,7 +2207,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # TODO: Ensure the modified attributes (those are also in the __init__ kwargs) will give identical tokenizers
         # target_keys = self.init_kwargs.keys()
-        target_keys = ["model_max_length", "clean_up_tokenization_spaces"]
+        target_keys = ["model_max_length", "clean_up_tokenization_spaces", "additional_special_tokens"]
         for k in target_keys:
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)

@@ -227,7 +227,10 @@ class TokenizerTesterMixin:
         return input_txt, input_txt
 
     def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5) -> Tuple[str, list]:
-        toks = [(i, tokenizer.decode([i], clean_up_tokenization_spaces=False)) for i in range(len(tokenizer))]
+        # the lenght of the tokenizer does not always reprensent the tokens that it can encode no? What if there are holes?
+        toks = [
+            (i, tokenizer.decode([i], clean_up_tokenization_spaces=False)) for i in set(tokenizer.get_vocab().values())
+        ]
         toks = list(filter(lambda t: re.match(r"^[ a-zA-Z]+$", t[1]), toks))
         toks = list(filter(lambda t: [t[0]] == tokenizer.encode(t[1], add_special_tokens=False), toks))
         if max_length is not None and len(toks) > max_length:
@@ -882,7 +885,7 @@ class TokenizerTesterMixin:
 
                 self.assertNotEqual(vocab_size, 0)
 
-                # We usually have added tokens from the start in tests because our vocab fixtures are
+                # We usually have added tokens from the start in tests (but also otherwise) because our vocab fixtures are
                 # smaller than the original vocabs - let's not assert this
                 # self.assertEqual(vocab_size, all_size)
 
@@ -913,7 +916,7 @@ class TokenizerTesterMixin:
                 self.assertEqual(all_size_3, all_size_2 + len(new_toks_2))
 
                 tokens = tokenizer.encode(
-                    ">>>>|||<||<<|<< aaaaabbbbbb low cccccccccdddddddd <<<<<|||>|>>>>|> l", add_special_tokens=False
+                    ">>>>|||<||<<|<< aaaaa bbbbbb low cccccccccdddddddd <<<<<|||>|>>>>|> l", add_special_tokens=False
                 )
 
                 self.assertGreaterEqual(len(tokens), 6)
@@ -930,9 +933,10 @@ class TokenizerTesterMixin:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 input_text, ids = self.get_clean_sequence(tokenizer)
 
-                special_token = "[SPECIAL_TOKEN]"
+                special_token = AddedToken("[SPECIAL_TOKEN]", lstrip=True, rstrip=True)
 
                 tokenizer.add_special_tokens({"cls_token": special_token})
+                special_token = str(special_token)
                 encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False)
                 self.assertEqual(len(encoded_special_token), 1)
 
@@ -970,9 +974,11 @@ class TokenizerTesterMixin:
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 new_toks = [
-                    AddedToken("[ABC]", normalized=False),  # these are added tokens, they will be normalized....
-                    AddedToken("[DEF]", normalized=False),
-                    AddedToken("GHI IHG", normalized=False),
+                    AddedToken(
+                        "[ABC]", normalized=False, lstrip=True, rstrip=True
+                    ),  # these are added tokens, they will be normalized....
+                    AddedToken("[DEF]", normalized=False, lstrip=True, rstrip=True),
+                    AddedToken("GHI IHG", normalized=False, lstrip=True, rstrip=True),
                 ]
                 tokenizer.add_tokens(new_toks)
                 # special tokens should not be normalized...
@@ -985,7 +991,7 @@ class TokenizerTesterMixin:
                     output = input
                 encoded = tokenizer.encode(input, add_special_tokens=False)
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=self.space_between_special_tokens)
-                breakpoint()
+
                 self.assertIn(decoded, [output, output.lower()])
 
                 encoded = tokenizer.encode("[ABC] [DEF][SAMPLE]", add_special_tokens=False)
@@ -1003,7 +1009,7 @@ class TokenizerTesterMixin:
                 self.assertIn(decoded, ["[ABC] [SAMPLE] [DEF]", "[ABC][SAMPLE][DEF]".lower()])
 
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=False)
-                self.assertIn(decoded, ["[ABC][SAMPLE][DEF] ", "[ABC][SAMPLE][DEF]".lower()])
+                self.assertIn(decoded, ["[ABC][SAMPLE][DEF]", "[ABC][SAMPLE][DEF]".lower()])
 
     def test_pretrained_model_lists(self):
         # We should have at least one default checkpoint for each tokenizer
@@ -3673,6 +3679,7 @@ class TokenizerTesterMixin:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
+                # DO I UNDERSTAND THAT FAST ALLOWS ADDING TOKENS THROUGH additional_special_tokens?
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(
                     pretrained_name, additional_special_tokens=added_tokens, **kwargs
                 )
@@ -3710,6 +3717,7 @@ class TokenizerTesterMixin:
         for tokenizer_class, tokenizer_utils in tokenizer_list:
             with tempfile.TemporaryDirectory() as tmp_dir:
                 tokenizer_utils.save_pretrained(tmp_dir)
+                # only legacy save will check this
 
                 with open(os.path.join(tmp_dir, "special_tokens_map.json"), encoding="utf-8") as json_file:
                     special_tokens_map = json.load(json_file)
