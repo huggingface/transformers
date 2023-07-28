@@ -21,7 +21,7 @@ dog_sample_file = "sample.bin"
 # ==============================================================================================================
 # Config class
 
-from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig
+from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig, Kosmos2VisionConfig
 
 
 # ==============================================================================================================
@@ -2403,18 +2403,14 @@ def create_model(num_layers=2):
         # "use_cache": True,
 
     }
-    clip_config = CLIPConfig()
+    vision_config = Kosmos2VisionConfig()
     #  2 layers
-    clip_config.vision_config.num_hidden_layers = num_layers
-    clip_config.vision_config.hidden_size = 1024
-    clip_config.vision_config.intermediate_size = 4096
-    clip_config.vision_config.num_attention_heads = 16
-    clip_config.vision_config.patch_size = 14
-    clip_vision_config = clip_config.vision_config.to_dict()
+    vision_config.num_hidden_layers = num_layers
+    vision_config = vision_config.to_dict()
 
     latent_query_num = 64
 
-    config = Kosmos2Config(text_config=text_config, vision_config=clip_vision_config, latent_query_num=latent_query_num)
+    config = Kosmos2Config(text_config=text_config, vision_config=vision_config, latent_query_num=latent_query_num)
     model = Kosmos2ForConditionalGeneration(config=config)
     model.eval()
 

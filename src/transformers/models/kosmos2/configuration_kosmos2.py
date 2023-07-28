@@ -15,8 +15,9 @@
 """ Kosmos-2 model configuration"""
 
 import copy
+import os
 from collections import OrderedDict
-from typing import Mapping
+from typing import Mapping, Union
 
 from packaging import version
 
