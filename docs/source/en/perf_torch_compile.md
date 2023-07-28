@@ -289,5 +289,66 @@ Below you can find inference durations in milliseconds for each model with and w
 | Object Detection/Resnet-101 |  1619.505 | 1262.758 | 
 | Object Detection/Conditional-DETR | 1137.513 | 897.390|
 
+## PyTorch Nightly
+We also benchmarked on PyTorch nightly (2.1.0dev) and observed improvement in latency both for uncompiled and compiled models.
+
+### A100
+| **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** | **torch 2.0 - <br>compile** |
+|:---:|:---:|:---:|:---:|
+| Image Classification/BeiT | Unbatched | 12.462 | 6.954 | 
+| Image Classification/BeiT | 4 | 14.109 | 12.851 | 
+| Image Classification/BeiT | 16 | 42.179 | 42.147 | 
+| Object Detection/DETR | Unbatched | 30.484 | 15.221 |
+| Object Detection/DETR | 4 | 46.816 | 30.942 |
+| Object Detection/DETR | 16 | 163.749 | 163.706  |
+
+### T4
+| **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** | **torch 2.0 - <br>compile** |
+|:---:|:---:|:---:|:---:|
+| Image Classification/BeiT | Unbatched | 14.408 | 14.052 | 
+| Image Classification/BeiT | 4 | 47.381 | 46.604 | 
+| Image Classification/BeiT | 16 | 42.179 | 42.147  | 
+| Object Detection/DETR | Unbatched | 68.382 | 53.481 |
+| Object Detection/DETR | 4 | 269.615 | 204.785 |
+| Object Detection/DETR | 16 | OOM | OOM   |
+
+### V100
+| **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** | **torch 2.0 - <br>compile** |
+|:---:|:---:|:---:|:---:|
+| Image Classification/BeiT | Unbatched | 13.477 | 7.926 | 
+| Image Classification/BeiT | 4 | 15.103 | 14.378 | 
+| Image Classification/BeiT | 16 | 52.517 | 51.691  | 
+| Object Detection/DETR | Unbatched | 28.706 | 19.077 |
+| Object Detection/DETR | 4 | 88.402 | 62.949|
+| Object Detection/DETR | 16 | OOM | OOM  |
+
+
+## Reduce Overhead
+We benchmarked `reduce-overhead` compilation mode for A100 and T4 in Nightly.
+
+### A100
+| **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** | **torch 2.0 - <br>compile** |
+|:---:|:---:|:---:|:---:|
+| Image Classification/ConvNeXT | Unbatched | 11.758 | 7.335 | 
+| Image Classification/ConvNeXT | 4 | 23.171 | 21.490 | 
+| Image Classification/ResNet | Unbatched | 7.435 | 3.801 | 
+| Image Classification/ResNet | 4 | 7.261 | 2.187 | 
+| Object Detection/Conditional-DETR | Unbatched | 32.823 | 11.627  | 
+| Object Detection/Conditional-DETR | 4 | 50.622 | 33.831  | 
+| Image Segmentation/MobileNet | Unbatched | 9.869 | 4.244 |
+| Image Segmentation/MobileNet | 4 | 14.385 | 7.946 |
+
+
+### T4
+| **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** | **torch 2.0 - <br>compile** |
+|:---:|:---:|:---:|:---:|
+| Image Classification/ConvNeXT | Unbatched | 32.137 | 31.84 | 
+| Image Classification/ConvNeXT | 4 | 120.944 | 110.209 | 
+| Image Classification/ResNet | Unbatched | 9.761 | 7.698 | 
+| Image Classification/ResNet | 4 | 15.215 | 13.871 | 
+| Object Detection/Conditional-DETR | Unbatched | 72.150 | 57.660  | 
+| Object Detection/Conditional-DETR | 4 | 301.494 | 247.543  | 
+| Image Segmentation/MobileNet | Unbatched | 22.266 | 19.339  |
+| Image Segmentation/MobileNet | 4 | 78.311 | 50.983 |
 
 
