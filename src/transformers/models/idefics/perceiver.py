@@ -1,16 +1,41 @@
+# This code was adapted from https://github.com/lucidrains/flamingo-pytorch licensed under the MIT License.
+#
+# MIT License
+#
+# Copyright (c) 2020  The Google AI Language Team Authors, The HuggingFace Inc. team and github/lonePatient
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+
 """
-This code was adapted from https://github.com/lucidrains/flamingo-pytorch
 
-Licensed under the MIT License.
+Generic interface to various configurations of the Perceiver Resampler, that simply takes in a
+series of (potentially time-indexed) contextual embeddings, and "resamples" (compresses) them down
+to a pre-specified number of latents! Note that the Perceiver in general resamples based solely off
+the *long-range* context; there's a nice opportunity here to prime the Perceiver Resampler with say
+a single layer's worth of language embeddings (the target domain), and use that to softly "retrieve
+& compress" what we need --> this would be a novel contribution we should explore.
 
-perceiver.py Generic interface to various configurations of the Perceiver Resampler, that simply takes in a series of
-(potentially time-indexed) contextual embeddings, and "resamples" (compresses) them down to a pre-specified number of
-latents! Note that the Perceiver in general resamples based solely off the *long-range* context; there's a nice
-opportunity here to prime the Perceiver Resampler with say a single layer's worth of language embeddings (the target
-domain), and use that to softly "retrieve & compress" what we need --> this would be a novel contribution we should
-explore. References:
+References:
     - DeepMind's Flamingo: https://www.deepmind.com/blog/tackling-multiple-tasks-with-a-single-visual-language-model
     - Code borrowed w/ love from: https://github.com/lucidrains/flamingo-pytorch
+
 """
 from typing import Optional, Tuple
 
