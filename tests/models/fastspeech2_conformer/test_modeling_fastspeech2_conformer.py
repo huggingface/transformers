@@ -21,8 +21,8 @@ import unittest
 from transformers import (
     FastSpeech2ConformerConfig,
     FastSpeech2ConformerHifiGanConfig,
-    FastSpeech2ConformerWithHifiGanConfig,
     FastSpeech2ConformerTokenizer,
+    FastSpeech2ConformerWithHifiGanConfig,
     is_torch_available,
 )
 from transformers.testing_utils import require_g2p_en, require_torch, slow, torch_device
@@ -498,7 +498,9 @@ class FastSpeech2ConformerWithHifiGanTester:
             energy_predictor_layers=self.energy_predictor_layers,
             duration_predictor_layers=self.duration_predictor_layers,
         )
-        self.vocoder_config = FastSpeech2ConformerHifiGanConfig(model_in_dim=self.num_mel_bins, upsample_initial_channel=self.upsample_initial_channel)
+        self.vocoder_config = FastSpeech2ConformerHifiGanConfig(
+            model_in_dim=self.num_mel_bins, upsample_initial_channel=self.upsample_initial_channel
+        )
         return FastSpeech2ConformerWithHifiGanConfig.from_sub_model_configs(
             model_config=self.model_config, vocoder_config=self.vocoder_config
         )
@@ -560,7 +562,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         return inputs_dict
-    
+
     def test_duration_energy_pitch_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.model_config.return_dict = True
@@ -752,6 +754,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="FastSpeech2Conformer has no input embeddings")
     def test_model_common_attributes(self):
         pass
+
 
 @require_torch
 @require_g2p_en
