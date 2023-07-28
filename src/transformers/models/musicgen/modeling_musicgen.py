@@ -773,7 +773,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
-            inputs_embeds = torch.zeros((bsz, seq_len, self.d_model), device=input_ids.device)
+            inputs_embeds = torch.zeros((bsz, seq_len, self.d_model), dtype=self.dtype, device=input_ids.device)
 
             for codebook in range(num_codebooks):
                 inputs_embeds += self.embed_tokens[codebook](input[:, codebook])

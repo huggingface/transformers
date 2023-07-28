@@ -1089,8 +1089,12 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             model = model_class(config).eval().to(torch_device)
             if torch_device == "cuda":
                 model.half()
-            model.generate(**input_dict, max_new_tokens=10)
-            model.generate(**input_dict, do_sample=True, max_new_tokens=10)
+            # greedy
+            model.generate(input_dict["input_ids"], attention_mask=input_dict["attention_mask"], max_new_tokens=10)
+            # sampling
+            model.generate(
+                input_dict["input_ids"], attention_mask=input_dict["attention_mask"], do_sample=True, max_new_tokens=10
+            )
 
 
 def get_bip_bip(bip_duration=0.125, duration=0.5, sample_rate=32000):
