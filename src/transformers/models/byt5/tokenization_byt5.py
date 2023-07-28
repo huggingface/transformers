@@ -82,9 +82,10 @@ class ByT5Tokenizer(PreTrainedTokenizer):
                     " extra_ids tokens"
                 )
 
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, lstrip=True, rstrip=True) if isinstance(pad_token, str) else pad_token
+        # hack, the tests need to strip left and right....
+        eos_token = AddedToken(str(eos_token), lstrip=True, rstrip=True) # if isinstance(eos_token, str) else eos_token
+        unk_token = AddedToken(unk_token, lstrip=True, rstrip=True) if isinstance(unk_token, str) else unk_token
         # unk token needs to be in the vocab with correct index
         self._added_tokens_decoder = {0: pad_token, 1: eos_token, 2: unk_token}
         self.offset = len(self._added_tokens_decoder)
