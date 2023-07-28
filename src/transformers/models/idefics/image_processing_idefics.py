@@ -57,12 +57,7 @@ class IdeficsImageProcessor(BaseImageProcessor):
 
     model_input_names = ["pixel_values"]
 
-    def __init__(
-        self,
-        do_resize: bool = True,
-        image_size: int = 224,
-        **kwargs,
-    ) -> None:
+    def __init__(self, do_resize: bool = True, image_size: int = 224, **kwargs) -> None:
         super().__init__(**kwargs)
 
         self.image_size = image_size
