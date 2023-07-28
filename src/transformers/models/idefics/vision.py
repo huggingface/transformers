@@ -374,6 +374,7 @@ class IdeficsVisionEncoder(nn.Module):
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
+
 # Adapted from transformers.models.clip.modeling_clip.CLIPVisionTransformer
 class IdeficsVisionTransformer(nn.Module):
     def __init__(self, config: IdeficsVisionConfig):
