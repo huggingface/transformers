@@ -545,7 +545,6 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
     @require_accelerate
     @require_torch
     @require_torch_gpu
-    @slow
     def test_inference_universal_segmentation_head_fp16(self):
         self.test_inference_universal_segmentation_head(torch_dtype=torch.float16)
 

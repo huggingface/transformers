@@ -433,10 +433,9 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
 
-    @slow
+    @require_accelerate
     @require_torch
     @require_torch_gpu
-    @require_accelerate
     def test_inference_universal_segmentation_head_fp16(self):
         self.test_inference_universal_segmentation_head(dtype=torch.float16)
 
