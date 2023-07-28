@@ -16,7 +16,6 @@
 
 from typing import Dict, Optional
 
-import PIL
 from PIL import Image
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
@@ -74,7 +73,7 @@ class IdeficsImageProcessor(BaseImageProcessor):
         image_size: Optional[Dict[str, int]] = None,
         transform=None,
         **kwargs,
-    ) -> PIL.Image.Image:
+    ) -> TensorType.PYTORCH:
         """
         Preprocess an image or batch of images.
 
@@ -87,6 +86,10 @@ class IdeficsImageProcessor(BaseImageProcessor):
                 A custom transform function that accepts a single image can be passed for training. For example,
                 `torchvision.Compose` can be used to compose multiple functions. If `None` a preset inference-specific
                 set of transforms will be applied to the images
+
+        Returns:
+            a PyTorch tensor of the processed images
+
         """
         image_size = image_size if image_size is not None else self.image_size
         size = (image_size, image_size)
