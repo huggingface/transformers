@@ -802,7 +802,11 @@ def main():
         eval_labels = []
 
         eval_loader = DataLoader(
-            vectorized_datasets["eval"], batch_size=eval_batch_size, drop_last=False, collate_fn=data_collator
+            vectorized_datasets["eval"],
+            batch_size=eval_batch_size,
+            drop_last=False,
+            collate_fn=data_collator,
+            num_workers=training_args.dataloader_num_workers,
         )
         for batch in tqdm(eval_loader, desc="Evaluating...", position=2, leave=False):
             # Model forward
