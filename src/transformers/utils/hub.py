@@ -838,6 +838,8 @@ class PushToHubMixin:
 
         repo_path_or_name = deprecated_kwargs.pop("repo_path_or_name", None)
         if repo_path_or_name is not None:
+            # Should use `repo_id` instead of `repo_path_or_name`. When using `repo_path_or_name`, we try to infer
+            # repo_id from the folder path, if it exists.
             warnings.warn(
                 "The `repo_path_or_name` argument is deprecated and will be removed in v5 of Transformers. Use "
                 "`repo_id` instead.",
@@ -856,6 +858,7 @@ class PushToHubMixin:
                 repo_id = repo_path_or_name
                 working_dir = repo_id.split("/")[-1]
         else:
+            # Repo_id is passed correctly: infer working_dir from it
             working_dir = repo_id.split("/")[-1]
 
         # Deprecation warning will be sent after for repo_url and organization
