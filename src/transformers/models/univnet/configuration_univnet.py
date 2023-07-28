@@ -29,10 +29,13 @@ class UnivNetGanConfig(PretrainedConfig):
             The number of hidden channels of each residual block in the UnivNet residual network.
         num_mel_channels ('int', *optional*, defaults to 100):
             The number of frequency bins in the conditioning log-mel spectrogram.
+        upsample_rates (`Tuple[int]` or `List[int]`, *optional*, defaults to `[1]`):
+            The UnivNet vocoder doesn't upsample the input spectrogram and this is set to a dummy value of `[1]` to be
+            compatible with vocoders which do upsample the input spectrogram (e.g. [`SpeechT5HifiGan`]).
         resblock_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 3, 3]`):
             A tuple of integers defining the kernel sizes of the 1D convolutional layers in the UnivNet residual
-            network. The length of `resblock_kernel_sizes` should match that of `resblock_stride_sizes` and
-            `resblock_dilation_sizes`.
+            network. The length of `resblock_kernel_sizes` defines the number of resnet blocks and should match that
+            of `resblock_stride_sizes` and `resblock_dilation_sizes`.
         resblock_stride_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[8, 8, 4]`):
             A tuple of integers defining the stride sizes of the 1D convolutional layers in the UnivNet residual
             network. The length of `resblock_stride_sizes` should match that of `resblock_kernel_sizes` and
@@ -40,7 +43,8 @@ class UnivNetGanConfig(PretrainedConfig):
         resblock_dilation_sizes (`Tuple[Tuple[int]]` or `List[List[int]]`, *optional*, defaults to `[[1, 3, 9, 27], [1, 3, 9, 27], [1, 3, 9, 27]]`):
             A nested tuple of integers defining the dilation rates of the dilated 1D convolutional layers in the
             UnivNet residual network. The length of `resblock_dilation_sizes` should match that of
-            `resblock_kernel_sizes` and `resblock_stride_sizes`.
+            `resblock_kernel_sizes` and `resblock_stride_sizes`. The length of each nested list in
+            `resblock_dilation_sizes` defines the number of convolutional layers per resnet block.
         kernel_predictor_num_blocks (`int`, *optional*, defaults to 3):
             The number of residual blocks in the kernel predictor network, which calculates the kernel and bias for
             each location variable convolution layer in the UnivNet residual network.
@@ -77,6 +81,7 @@ class UnivNetGanConfig(PretrainedConfig):
         model_in_channels=64,
         model_hidden_channels=32,
         num_mel_channels=100,
+        upsample_rates=[1],
         resblock_kernel_sizes=[3, 3, 3],
         resblock_stride_sizes=[8, 8, 4],
         resblock_dilation_sizes=[[1, 3, 9, 27], [1, 3, 9, 27], [1, 3, 9, 27]],
@@ -91,6 +96,7 @@ class UnivNetGanConfig(PretrainedConfig):
         self.model_in_channels = model_in_channels
         self.model_hidden_channels = model_hidden_channels
         self.num_mel_channels = num_mel_channels
+        self.upsample_rates = upsample_rates
         self.resblock_kernel_sizes = resblock_kernel_sizes
         self.resblock_stride_sizes = resblock_stride_sizes
         self.resblock_dilation_sizes = resblock_dilation_sizes
