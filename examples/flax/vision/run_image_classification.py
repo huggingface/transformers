@@ -338,7 +338,7 @@ def main():
             num_labels=len(train_dataset.classes),
             image_size=data_args.image_size,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=True if model_args.use_auth_token else None,
         )
     elif model_args.model_name_or_path:
         config = AutoConfig.from_pretrained(
@@ -346,7 +346,7 @@ def main():
             num_labels=len(train_dataset.classes),
             image_size=data_args.image_size,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=True if model_args.use_auth_token else None,
         )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
@@ -358,7 +358,7 @@ def main():
             config=config,
             seed=training_args.seed,
             dtype=getattr(jnp, model_args.dtype),
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=True if model_args.use_auth_token else None,
         )
     else:
         model = FlaxAutoModelForImageClassification.from_config(

@@ -411,17 +411,17 @@ def main():
         model_args.model_name_or_path,
         num_labels=num_labels,
         finetuning_task=data_args.task_name,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
         use_fast=not model_args.use_slow_tokenizer,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
     )
     model = FlaxAutoModelForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
         config=config,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
     )
 
     # Preprocessing the datasets

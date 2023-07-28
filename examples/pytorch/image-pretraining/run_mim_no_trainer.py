@@ -497,7 +497,7 @@ def main():
             config=config,
             cache_dir=args.cache_dir,
             revision=args.model_revision,
-            use_auth_token=True if args.use_auth_token else None,
+            token=True if args.use_auth_token else None,
         )
     else:
         logger.info("Training new model from scratch")
