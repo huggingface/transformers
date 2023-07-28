@@ -339,7 +339,7 @@ def prepare_img():
 
 
 @require_vision
-# @slow
+@slow
 class Mask2FormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def model_checkpoints(self):
