@@ -16,13 +16,9 @@
 
 import copy
 import os
-from collections import OrderedDict
 from typing import Mapping, Union
 
-from packaging import version
-
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -37,8 +33,69 @@ BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 
 class Kosmos2TextConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Kosmos2TextModel`]. It is used to instantiate a Kosmos2 text decoder
+    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the text decoder of the Kosmos2
+    [microsoft/kosmos-2-patch14-224](https://huggingface.co/microsoft/kosmos-2-patch14-224) architecture.
 
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 65037):
+            Vocabulary size of the Kosmos2 model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`Kosmos2Model`].
+        embed_dim (`int`, *optional*, defaults to 2048):
+            Dimensionality of the layers and the pooler layer.
+        layers (`int`, *optional*, defaults to 24):
+            Number of hidden layers in the Transformer encoder.
+        attention_heads (`int`, *optional*, defaults to 32):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        ffn_dim (`int`, *optional*, defaults to 8192):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
+        activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        dropout (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the attention probabilities.
+        activation_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for activations inside the fully connected layer.
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        layerdrop (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the layer normalization layers.
+        scale_embedding (`bool`, *optional*, defaults to `True`):
+            Scale embeddings by diving by sqrt(embed_dim).
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
+        forced_eos_token_id (`int`, *optional*, defaults to 2):
+            The id of the token to force as the last generated token when `max_length` is reached. Usually set to
+            `eos_token_id`.
+
+    Example:
+
+    ```python
+    >>> from transformers import Kosmos2TextConfig, Kosmos2TextModel
+
+    >>> # Initializing a Kosmos2TextConfig microsoft/kosmos-2-patch14-224 style configuration
+    >>> configuration = Kosmos2TextConfig()
+
+    >>> # Initializing a Kosmos2TextModel (with random weights) from the microsoft/kosmos-2-patch14-224 style configuration
+    >>> model = Kosmos2TextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     model_type = "kosmos_2_text_model"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"num_attention_heads": "attention_heads", "hidden_size": "embed_dim"}
 
     def __init__(
         self,
@@ -59,11 +116,18 @@ class Kosmos2TextConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        forced_eos_token_id=2,
         # TODO: should be in generation_config
         no_repeat_ngram_size=3,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            forced_eos_token_id=forced_eos_token_id,
+            **kwargs,
+        )
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -82,6 +146,7 @@ class Kosmos2TextConfig(PretrainedConfig):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.forced_eos_token_id = forced_eos_token_id
         # TODO: should be in generation_config
         self.no_repeat_ngram_size = no_repeat_ngram_size
 
