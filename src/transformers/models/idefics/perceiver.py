@@ -25,12 +25,11 @@
 
 """
 
-Generic interface to various configurations of the Perceiver Resampler, that simply takes in a
-series of (potentially time-indexed) contextual embeddings, and "resamples" (compresses) them down
-to a pre-specified number of latents! Note that the Perceiver in general resamples based solely off
-the *long-range* context; there's a nice opportunity here to prime the Perceiver Resampler with say
-a single layer's worth of language embeddings (the target domain), and use that to softly "retrieve
-& compress" what we need --> this would be a novel contribution we should explore.
+Generic interface to various configurations of the Perceiver Resampler, that simply takes in a series of (potentially
+time-indexed) contextual embeddings, and "resamples" (compresses) them down to a pre-specified number of latents! Note
+that the Perceiver in general resamples based solely off the *long-range* context; there's a nice opportunity here to
+prime the Perceiver Resampler with say a single layer's worth of language embeddings (the target domain), and use that
+to softly "retrieve & compress" what we need --> this would be a novel contribution we should explore.
 
 References:
     - DeepMind's Flamingo: https://www.deepmind.com/blog/tackling-multiple-tasks-with-a-single-visual-language-model
