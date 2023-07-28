@@ -19,7 +19,6 @@ Fine-tuning the Flax library models for sequence to sequence speech recognition.
 # You can also adapt this script on your own sequence to sequence task. Pointers for this are left as comments.
 
 import logging
-import math
 import os
 import sys
 import time
@@ -35,12 +34,13 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from datasets import Dataset, DatasetDict, load_dataset
+from datasets import DatasetDict, load_dataset
 from flax import jax_utils, traverse_util
 from flax.jax_utils import pad_shard_unpad, unreplicate
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard, shard_prng_key
 from huggingface_hub import Repository, create_repo
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 import transformers
@@ -59,10 +59,10 @@ from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
-# Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.27.0.dev0")
+# Will error if the minimal version of Transformers is not installed. Remove at your own risk.
+check_min_version("4.32.0.dev0")
 
-require_version("datasets>=1.18.0", "To fix: pip install -r examples/flax/speech-recogintion/requirements.txt")
+require_version("datasets>=2.14.0", "To fix: pip install -r examples/flax/speech-recogintion/requirements.txt")
 
 logger = logging.getLogger(__name__)
 
@@ -297,8 +297,10 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         model_input_name = self.processor.model_input_names[0]
-        input_features = {model_input_name: features[model_input_name]}
-        label_features = {"input_ids": features["labels"]}
+
+        # dataloader returns a list of features which we convert to a dict
+        input_features = {model_input_name: [feature[model_input_name] for feature in features]}
+        label_features = {"input_ids": [feature["labels"] for feature in features]}
 
         # reformat list to dict and set to pytorch format
         batch = self.processor.feature_extractor.pad(
@@ -334,30 +336,6 @@ class FlaxDataCollatorSpeechSeq2SeqWithPadding:
         batch["decoder_input_ids"] = decoder_input_ids
 
         return batch
-
-
-def data_loader(rng: jax.random.PRNGKey, dataset: Dataset, batch_size: int, shuffle: bool = False, drop_last=True):
-    """
-    Returns batches of size `batch_size` from `dataset`. If `drop_last` is set to `False`, the final batch may be incomplete,
-    and range in size from 1 to `batch_size`. Shuffle batches if `shuffle` is `True`.
-    """
-    if shuffle:
-        batch_idx = jax.random.permutation(rng, len(dataset))
-        batch_idx = np.asarray(batch_idx)
-    else:
-        batch_idx = np.arange(len(dataset))
-
-    if drop_last:
-        steps_per_epoch = len(dataset) // batch_size
-        batch_idx = batch_idx[: steps_per_epoch * batch_size]  # Skip incomplete batch.
-        batch_idx = batch_idx.reshape((steps_per_epoch, batch_size))
-    else:
-        steps_per_epoch = math.ceil(len(dataset) / batch_size)
-        batch_idx = np.array_split(batch_idx, steps_per_epoch)
-
-    for idx in batch_idx:
-        batch = dataset[idx]
-        yield batch
 
 
 class TrainState(train_state.TrainState):
@@ -792,16 +770,19 @@ def main():
         # ======================== Training ================================
         train_start = time.time()
 
-        # Create sampling rng
-        rng, input_rng = jax.random.split(rng)
         train_metrics = []
 
-        # Generate an epoch by shuffling sampling indices from the train dataset
-        train_loader = data_loader(input_rng, vectorized_datasets["train"], train_batch_size, shuffle=True)
+        # Generate an epoch by shuffling sampling indices from the train dataset and create a data loader
+        vectorized_datasets["train"] = vectorized_datasets["train"].shuffle(training_args.seed)
+        train_loader = DataLoader(
+            vectorized_datasets["train"],
+            batch_size=train_batch_size,
+            drop_last=True,
+            collate_fn=data_collator,
+            num_workers=training_args.dataloader_num_workers,
+        )
         # train
-        for _ in tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False):
-            samples = next(train_loader)
-            batch = data_collator(samples)
+        for batch in tqdm(train_loader, desc="Training...", position=1, leave=False):
             batch = shard(batch.data)
             state, train_metric = p_train_step(state, batch)
             train_metrics.append(train_metric)
@@ -820,12 +801,11 @@ def main():
         eval_preds = []
         eval_labels = []
 
-        eval_loader = data_loader(input_rng, vectorized_datasets["eval"], eval_batch_size, drop_last=False)
-        eval_steps = math.ceil(len(vectorized_datasets["eval"]) / eval_batch_size)
-        for _ in tqdm(range(eval_steps), desc="Evaluating...", position=2, leave=False):
+        eval_loader = DataLoader(
+            vectorized_datasets["eval"], batch_size=eval_batch_size, drop_last=False, collate_fn=data_collator
+        )
+        for batch in tqdm(eval_loader, desc="Evaluating...", position=2, leave=False):
             # Model forward
-            samples = next(eval_loader)
-            batch = data_collator(samples)
             labels = batch["labels"]
 
             metrics = pad_shard_unpad(p_eval_step, static_return=True)(

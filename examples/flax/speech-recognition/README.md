@@ -52,6 +52,7 @@ python run_flax_speech_recognition_seq2seq.py \
 	--logging_steps="25" \
 	--generation_max_length="225" \
 	--preprocessing_num_workers="16" \
+	--dataloader_num_workers="16" \
 	--max_duration_in_seconds="30" \
 	--text_column_name="sentence" \
 	--overwrite_output_dir \
