@@ -540,7 +540,6 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
             [[-3.5020, -12.3281, 8.4453], [-5.1406, -11.9609, 7.8711], [-4.0430, -13.4375, 9.1172]],
             device=torch_device,
         )
-        print(logits[0, :3, :3].float())
         self.assertTrue(torch.allclose(logits[0, :3, :3].float(), expected_slice, atol=1e-3))
 
         # verify generation
