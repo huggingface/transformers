@@ -29,13 +29,13 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import datasets
+import evaluate
 import flax
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 from datasets import Dataset, DatasetDict, load_dataset
-import evaluate
 from flax import jax_utils, traverse_util
 from flax.jax_utils import pad_shard_unpad, unreplicate
 from flax.training import train_state
@@ -673,14 +673,12 @@ def main():
         flat_params = traverse_util.flatten_dict(params)
         # find out all LayerNorm parameters
         layer_norm_candidates = ["layer_norm", "self_attn_layer_norm", "final_layer_norm", "encoder_attn_layer_norm"]
-        layer_norm_named_params = set(
-            [
-                layer[-2:]
+        layer_norm_named_params = {
+            layer[-2:]
                 for layer_norm_name in layer_norm_candidates
                 for layer in flat_params.keys()
                 if layer_norm_name in "".join(layer).lower()
-            ]
-        )
+        }
         flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}
         return traverse_util.unflatten_dict(flat_mask)
 
