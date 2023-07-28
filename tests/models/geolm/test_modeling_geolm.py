@@ -233,3 +233,43 @@ class GeoLMModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_geocoord_input(self):
+        model = GeoLMModel.from_pretrained("zekun-li/geolm-base-cased")
+
+        input_ids = torch.tensor([[101, 11338, 102, 2216, 1795, 102, 12786, 25937, 1324, 102]])
+        # ['[CLS]', 'Minneapolis','[SEP]','Saint','Paul','[SEP]','Du','##lut','##h','[SEP]']
+
+        spatial_position_list_x = torch.tensor(
+            [[0, -10390993.01, 0, -10362726.72, -10362726.72, 0, -10252579.09, -10252579.09, -10252579.09, 0]]
+        )
+        # longitudes in the [EPSG:4087](https://epsg.io/4087) coordinate. Converter tool: https://epsg.io/transform#s_srs=4326&t_srs=4087&x=-92.1004850&y=46.7866719
+
+        spatial_position_list_y = torch.tensor(
+            [[0, 5006125.30, 0, 5004223.32, 5004223.32, 0, 5208268.50, 5208268.50, 5208268.50, 0]]
+        )
+        # latitudes in the [EPSG:4087](https://epsg.io/4087) coordinate
+
+        with torch.no_grad():
+            output = model(
+                input_ids,
+                spatial_position_list_x=spatial_position_list_x,
+                spatial_position_list_y=spatial_position_list_y,
+            )[0]
+
+        expected_shape = torch.Size((1, 10, 768))
+        self.assertEqual(output.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [
+                [
+                    [-0.1946, 0.1248, 0.1287],
+                    [-0.4615, 0.3120, 0.2537],
+                    [-0.2704, 0.2729, -0.1430],
+                    [-0.3999, 0.3055, 0.1622],
+                ]
+            ]
+        )
+
+        self.assertTrue(torch.allclose(output[0, 1:5, 1:4], expected_slice, atol=1e-4))
