@@ -1288,7 +1288,8 @@ class SpecialTokensMixin:
         set_attr = self.special_tokens_map_extended
         for attr_value in set_attr.values():
             all_toks = all_toks + (list(attr_value) if isinstance(attr_value, (list, tuple)) else [attr_value])
-        all_toks = list(OrderedDict.fromkeys(all_toks))
+        # all_toks = list(OrderedDict.fromkeys(all_toks))
+        # order should be the one deciced by the use especially for additiona_special_tokens
         return all_toks
 
     @property
@@ -1555,7 +1556,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     @property
     def added_tokens_decoder(self) -> Dict[int, AddedToken]:
-        return self._added_tokens_decoder
+        return  self._added_tokens_decoder
 
     @property
     def max_len_single_sentence(self) -> int:

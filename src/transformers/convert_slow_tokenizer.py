@@ -1138,7 +1138,12 @@ class LlamaConverter(SpmConverter):
 
     def decoder(self, replacement, add_prefix_space):
         return decoders.Sequence(
-            [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse(), decoders.Strip(content=" ", left=1)]
+            [
+                decoders.Replace("▁", " "),
+                decoders.ByteFallback(),
+                decoders.Fuse(),
+                decoders.Strip(content=" ", left=1),
+            ]
         )
 
     def tokenizer(self, proto):
