@@ -1392,8 +1392,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         super().__init__(config)
 
         self.text_model = Kosmos2TextModel(config.text_config)
-        vision_model = Kosmos2VisionModel(config.vision_config)
-        self.vision_model = vision_model.vision_model
+        self.vision_model = Kosmos2VisionTransformer(config.vision_config)
 
         self.img_connector = KosmosConnector(config)
 
@@ -1482,8 +1481,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         super().__init__(config)
 
         self.text_model = Kosmos2TextForCausalLM(config.text_config)
-        vision_model = Kosmos2VisionModel(config.vision_config)
-        self.vision_model = vision_model.vision_model
+        self.vision_model = Kosmos2VisionTransformer(config.vision_config)
 
         self.img_connector = KosmosConnector(config)
 
