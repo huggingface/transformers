@@ -213,12 +213,8 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         """Converts a sequence of tokens (string) in a single string."""
         bstring = b""
         for token in tokens:
-            if token in self.special_tokens_decoder:
-                tok_string = self.special_tokens_decoder[token].encode("utf-8")
-            elif token in self.added_tokens_decoder:
-                tok_string = self.special_tokens_decoder[token].encode("utf-8")
-            elif token in self.special_tokens_encoder:
-                tok_string = token.encode("utf-8")
+            if token in self.added_tokens_decoder:
+                tok_string = self.added_tokens_decoder[token].encode("utf-8")
             elif token in self.added_tokens_encoder:
                 tok_string = token.encode("utf-8")
             else:
