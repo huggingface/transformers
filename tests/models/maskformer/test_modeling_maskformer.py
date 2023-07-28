@@ -21,7 +21,15 @@ import numpy as np
 
 from tests.test_modeling_common import floats_tensor
 from transformers import DetrConfig, MaskFormerConfig, SwinConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_accelerate,
+    require_torch,
+    require_torch_gpu,
+    require_torch_multi_gpu,
+    require_vision,
+    slow,
+    torch_device
+)
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -380,15 +388,16 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
             )
         )
 
-    def test_inference_instance_segmentation_head(self):
+    def test_inference_instance_segmentation_head(self, torch_dtype=None):
+        torch_dtype = torch_dtype or torch.float32
         model = (
             MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-small-coco")
-            .to(torch_device)
+            .to(torch_device, dtype=torch_dtype)
             .eval()
         )
         image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = image_processor(image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(image, return_tensors="pt").to(torch_device, dtype=torch_dtype)
         inputs_shape = inputs["pixel_values"].shape
         # check size is divisible by 32
         self.assertTrue((inputs_shape[-1] % 32) == 0 and (inputs_shape[-2] % 32) == 0)
@@ -423,6 +432,13 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
             ]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
+
+    @require_accelerate
+    @require_torch
+    @require_torch_gpu
+    @slow
+    def test_inference_instance_segmentation_head_fp16(self):
+        self.test_inference_instance_segmentation_head(torch_dtype=torch.float16)
 
     def test_inference_instance_segmentation_head_resnet_backbone(self):
         model = (
