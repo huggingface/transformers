@@ -9,7 +9,6 @@ from transformers import PretrainedConfig
 from transformers.activations import ACT2FN
 from typing import Optional, List, Tuple
 from transformers import CONFIG_MAPPING
-from transformers import CLIPConfig, AutoModel
 from transformers.modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from transformers.utils.generic import ModelOutput
 
@@ -34,11 +33,11 @@ from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2Config, Kos
 
 from typing import Union
 from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-CLIP_VISION_INPUTS_DOCSTRING = ""
-CLIP_START_DOCSTRING = ""
+KOSMOS2_VISION_INPUTS_DOCSTRING = ""
+KOSMOS2_START_DOCSTRING = ""
 from transformers import add_start_docstrings
 from transformers.utils import add_start_docstrings_to_model_forward, replace_return_docstrings
-from transformers import CLIPPreTrainedModel
+
 
 
 # -----------------------------------------------------------------------
@@ -360,7 +359,7 @@ class Kosmos2VisionTransformer(nn.Module):
         self.encoder = Kosmos2VisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
-    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(KOSMOS2_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Kosmos2VisionConfig)
     def forward(
         self,
@@ -404,64 +403,6 @@ class Kosmos2VisionTransformer(nn.Module):
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """The vision model from CLIP without any head or projection on top.""",
-    CLIP_START_DOCSTRING,
-)
-class Kosmos2VisionModel(CLIPPreTrainedModel):
-    config_class = Kosmos2VisionConfig
-    main_input_name = "pixel_values"
-
-    def __init__(self, config: Kosmos2VisionConfig):
-        super().__init__(config)
-        self.vision_model = Kosmos2VisionTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
-
-    @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Kosmos2VisionConfig)
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, Kosmos2VisionModel
-
-        >>> model = Kosmos2VisionModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled CLS states
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        return self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
 
@@ -1309,6 +1250,71 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
             "attention_mask": attention_mask,
             "use_cache": use_cache,
         }
+
+
+# ==============================================================================================================
+# Vision model class
+# (completely copied from CLIPVision)
+
+@add_start_docstrings(
+    """The vision model from KOSMOS2 without any head or projection on top.""",
+    KOSMOS2_START_DOCSTRING,
+)
+class Kosmos2VisionModel(Kosmos2PreTrainedModel):
+    config_class = Kosmos2VisionConfig
+    main_input_name = "pixel_values"
+
+    def __init__(self, config: Kosmos2VisionConfig):
+        super().__init__(config)
+        self.vision_model = Kosmos2VisionTransformer(config)
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.vision_model.embeddings.patch_embedding
+
+    @add_start_docstrings_to_model_forward(KOSMOS2_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Kosmos2VisionConfig)
+    def forward(
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, Kosmos2VisionModel
+
+        >>> model = Kosmos2VisionModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled CLS states
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        return self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+
+# ==============================================================================================================
 
 
 class KosmosConnector(nn.Module):
