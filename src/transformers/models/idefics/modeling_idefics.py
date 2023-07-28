@@ -1031,9 +1031,12 @@ class IdeficsModel(IdeficsPreTrainedModel):
         if config.freeze_vision_layers:
             freeze_model(self.vision_model, module_exceptions=config.freeze_vision_module_exceptions)
 
-    def freeze_text_layers(self, module_exceptions):
+    def freeze_text_layers(self, module_exceptions=[]):
         for module in [self.layers, self.norm]:
             freeze_model(module, module_exceptions=module_exceptions)
+
+    def freeze_vision_layers(self, module_exceptions=[]):
+        freeze_model(self.vision_model, module_exceptions=module_exceptions)
 
     def get_input_embeddings(self):
         return self.embed_tokens
