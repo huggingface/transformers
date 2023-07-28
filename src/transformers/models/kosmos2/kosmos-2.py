@@ -43,7 +43,7 @@ from transformers import CLIPPreTrainedModel
 
 # -----------------------------------------------------------------------
 
-class CLIPVisionEmbeddings(nn.Module):
+class Kosmos2VisionEmbeddings(nn.Module):
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
         self.config = config
@@ -77,7 +77,7 @@ class CLIPVisionEmbeddings(nn.Module):
         return embeddings
 
 
-class CLIPAttention(nn.Module):
+class Kosmos2VisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
@@ -181,7 +181,7 @@ class CLIPAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-class CLIPMLP(nn.Module):
+class Kosmos2VisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -196,13 +196,13 @@ class CLIPMLP(nn.Module):
         return hidden_states
 
 
-class CLIPEncoderLayer(nn.Module):
-    def __init__(self, config: CLIPConfig):
+class Kosmos2VisionEncoderLayer(nn.Module):
+    def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = CLIPAttention(config)
+        self.self_attn = Kosmos2VisionAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.mlp = CLIPMLP(config)
+        self.mlp = Kosmos2VisionMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
@@ -246,19 +246,19 @@ class CLIPEncoderLayer(nn.Module):
         return outputs
 
 
-class CLIPEncoder(nn.Module):
+class Kosmos2VisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`CLIPEncoderLayer`].
+    [`Kosmos2VisionEncoderLayer`].
 
     Args:
-        config: CLIPConfig
+        config: Kosmos2VisionConfig
     """
 
-    def __init__(self, config: CLIPConfig):
+    def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([CLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([Kosmos2VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -349,15 +349,15 @@ class CLIPEncoder(nn.Module):
         )
 
 
-class CLIPVisionTransformer(nn.Module):
+class Kosmos2VisionTransformer(nn.Module):
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
 
-        self.embeddings = CLIPVisionEmbeddings(config)
+        self.embeddings = Kosmos2VisionEmbeddings(config)
         self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.encoder = CLIPEncoder(config)
+        self.encoder = Kosmos2VisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
@@ -411,13 +411,13 @@ class CLIPVisionTransformer(nn.Module):
     """The vision model from CLIP without any head or projection on top.""",
     CLIP_START_DOCSTRING,
 )
-class CLIPVisionModel(CLIPPreTrainedModel):
+class Kosmos2VisionModel(CLIPPreTrainedModel):
     config_class = Kosmos2VisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__(config)
-        self.vision_model = CLIPVisionTransformer(config)
+        self.vision_model = Kosmos2VisionTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -441,9 +441,9 @@ class CLIPVisionModel(CLIPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, CLIPVisionModel
+        >>> from transformers import AutoProcessor, Kosmos2VisionModel
 
-        >>> model = CLIPVisionModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> model = Kosmos2VisionModel.from_pretrained("openai/clip-vit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1386,7 +1386,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         super().__init__(config)
 
         self.text_model = Kosmos2TextModel(config.text_config)
-        vision_model = CLIPVisionModel(config.vision_config)
+        vision_model = Kosmos2VisionModel(config.vision_config)
         self.vision_model = vision_model.vision_model
 
         self.img_connector = KosmosConnector(config)
@@ -1476,7 +1476,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         super().__init__(config)
 
         self.text_model = Kosmos2TextForCausalLM(config.text_config)
-        vision_model = CLIPVisionModel(config.vision_config)
+        vision_model = Kosmos2VisionModel(config.vision_config)
         self.vision_model = vision_model.vision_model
 
         self.img_connector = KosmosConnector(config)
