@@ -24,7 +24,7 @@ import logging
 from typing import Tuple
 
 import torch
-from accelerate import Accelerator
+from accelerate import PartialState
 from accelerate.utils import set_seed
 
 from transformers import (
@@ -335,10 +335,10 @@ def main():
     parser.add_argument("--jit", action="store_true", help="Whether or not to use jit trace to accelerate inference")
     args = parser.parse_args()
 
-    # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    accelerator = Accelerator(cpu=args.use_cpu)
+    # Initialize the distributed state.
+    distributed_state = PartialState(cpu=args.use_cpu)
 
-    logger.warning(f"device: {accelerator.device}, 16-bits inference: {args.fp16}")
+    logger.warning(f"device: {distributed_state.device}, 16-bits inference: {args.fp16}")
 
     if args.seed is not None:
         set_seed(args.seed)
@@ -355,8 +355,8 @@ def main():
         tokenizer.pad_token = tokenizer.eos_token
     model = model_class.from_pretrained(args.model_name_or_path)
 
-    # Prepare model with `accelerator`.
-    model = accelerator.prepare_model(model, evaluation_mode=True)
+    # Set the model to the right device
+    model.to(distributed_state.device)
 
     if args.fp16:
         model.half()
@@ -383,7 +383,7 @@ def main():
     else:
         prefix = args.prefix if args.prefix else args.padding_text
         encoded_prompt = tokenizer.encode(prefix + prompt_text, add_special_tokens=False, return_tensors="pt")
-    encoded_prompt = encoded_prompt.to(accelerator.device)
+    encoded_prompt = encoded_prompt.to(distributed_state.device)
 
     if encoded_prompt.size()[-1] == 0:
         input_ids = None

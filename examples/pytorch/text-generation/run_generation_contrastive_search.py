@@ -23,7 +23,7 @@ python run_generation_contrastive_search.py --model_name_or_path=gpt2-large --pe
 import argparse
 import logging
 
-from accelerate import Accelerator
+from accelerate import PartialState
 from accelerate.utils import set_seed
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -78,10 +78,10 @@ def main():
     )
     args = parser.parse_args()
 
-    # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    accelerator = Accelerator(cpu=args.use_cpu)
+    # Initialize the distributed state.
+    distributed_state = PartialState(cpu=args.use_cpu)
 
-    logger.warning(f"device: {accelerator.device}, 16-bits inference: {args.fp16}")
+    logger.warning(f"device: {distributed_state.device}, 16-bits inference: {args.fp16}")
 
     if args.seed is not None:
         set_seed(args.seed)
@@ -92,8 +92,8 @@ def main():
 
     # tokenizer = GPT2Tokenizer.from_pretrained(args.model_name_or_path)
     # model = OPTForCausalLM.from_pretrained(args.model_name_or_path)
-    # Prepare model with `accelerator`.
-    model = accelerator.prepare_model(model, evaluation_mode=True)
+    # Set the model to the right device
+    model.to(distributed_state.device)
 
     if args.fp16:
         model.half()
@@ -102,7 +102,7 @@ def main():
     prompt_text = args.prompt if args.prompt else input("Model prompt >>> ")
 
     inputs = tokenizer(prompt_text, return_tensors="pt", add_special_tokens=False)
-    inputs = {key: value.to(accelerator.device) for key, value in inputs.items()}
+    inputs = {key: value.to(distributed_state.device) for key, value in inputs.items()}
 
     output_sequences = model.generate(
         **inputs,
