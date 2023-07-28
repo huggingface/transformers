@@ -62,25 +62,8 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingfac
 [[autodoc]] GeoLMForMaskedLM
     - forward
 
-
-## GeoLMForSequenceClassification
-
-[[autodoc]] transformers.GeoLMForSequenceClassification
-    - forward
-
-## GeoLMForMultipleChoice
-
-[[autodoc]] transformers.GeoLMForMultipleChoice
-    - forward
-
-
 ## GeoLMForTokenClassification
 
 [[autodoc]] transformers.GeoLMForTokenClassification
     - forward
 
-
-## GeoLMForQuestionAnswering
-
-[[autodoc]] GeoLMForQuestionAnswering
-    - forward

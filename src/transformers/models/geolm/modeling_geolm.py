@@ -94,7 +94,6 @@ class GeoLMEmbeddings(nn.Module):
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
         self.spatial_position_embedding = ContinuousSpatialPositionalEmbedding(hidden_size=config.hidden_size)
-        self.spatial_position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
         self.use_spatial_distance_embedding = config.use_spatial_distance_embedding
 
@@ -158,17 +157,12 @@ class GeoLMEmbeddings(nn.Module):
             spatial_position_list_y = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
         if self.use_spatial_distance_embedding:
-            if self.spatial_position_embedding_type == "absolute":
-                pos_emb_x = self.spatial_position_embedding(spatial_position_list_x)
-                pos_emb_y = self.spatial_position_embedding(spatial_position_list_y)
+            pos_emb_x = self.spatial_position_embedding(spatial_position_list_x)
+            pos_emb_y = self.spatial_position_embedding(spatial_position_list_y)
 
-                embeddings += 0.01 * pos_emb_x
-                embeddings += 0.01 * pos_emb_y
-            else:
-                raise NotImplementedError("Invalid spatial position embedding type")
-
-        else:
-            pass
+            embeddings += 0.01 * pos_emb_x
+            embeddings += 0.01 * pos_emb_y
+            
 
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
@@ -651,7 +645,6 @@ class GeoLMPreTrainedModel(PreTrainedModel):
     config_class = GeoLMConfig
     base_model_prefix = "geolm"
     supports_gradient_checkpointing = True
-    # _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -911,13 +904,10 @@ class GeoLMModel(GeoLMPreTrainedModel):
             pooled_output = self.pivot_pooler(sequence_output, pivot_token_idx_list)
         else:
             pooled_output = None
-
+        
         if not return_dict:
-            return tuple(
-                v
-                for v in [sequence_output, pooled_output, encoder_outputs.past_key_values, encoder_outputs.hidden_states, encoder_outputs.attentions, encoder_outputs.cross_attentions]
-                if v is not None
-            )
+            return tuple(v  for v in [sequence_output, pooled_output]  if v is not None) + encoder_outputs[1:]
+
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
@@ -928,9 +918,11 @@ class GeoLMModel(GeoLMPreTrainedModel):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
-
 @add_start_docstrings("""GeoLM Model with a `language modeling` head on top. """, GEOLM_START_DOCSTRING)
 class GeoLMForMaskedLM(GeoLMPreTrainedModel):
+    _tied_weights_keys =  ['geolm.embeddings.word_embeddings.weight', 'cls.predictions.decoder.weight']
+    # 'geolm.embeddings.word_embeddings.weight', 
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1034,8 +1026,6 @@ class GeoLMForMaskedLM(GeoLMPreTrainedModel):
     """GeoLM Model with a `language modeling` head on top for CLM fine-tuning. """, GEOLM_START_DOCSTRING
 )
 class GeoLMForCausalLM(GeoLMPreTrainedModel):
-
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)

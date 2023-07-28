@@ -179,7 +179,6 @@ class GeoLMModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             GeoLMModel,
-            GeoLMForMaskedLM,
             GeoLMForCausalLM,
             GeoLMForTokenClassification,
         )
@@ -219,28 +218,6 @@ class GeoLMModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = GeoLMModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-
-# @require_torch
-# class GeoLMModelIntegrationTest(unittest.TestCase):
-#     @slow
-#     def test_inference_masked_lm(self):
-#         model = GeoLMForMaskedLM.from_pretrained("https://huggingface.co/zekun-li/geolm-base-cased")
-#         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-#         output = model(input_ids)[0]
-
-#         # TODO Replace vocab size
-#         vocab_size = 32000
-
-#         expected_shape = torch.Size((1, 6, vocab_size))
-#         self.assertEqual(output.shape, expected_shape)
-
-#         # TODO Replace values below with what was printed above.
-#         expected_slice = torch.tensor(
-#             [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
-#         )
-
-#         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
 
 @require_torch

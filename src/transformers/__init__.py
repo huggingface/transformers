@@ -1039,7 +1039,6 @@ else:
             "GeoLMLayer",
             "GeoLMModel",
             "GeoLMPreTrainedModel",
-            "load_tf_weights_in_geolm",
         ]
     )
     _import_structure["models.albert"].extend(
@@ -4973,7 +4972,6 @@ if TYPE_CHECKING:
             GeoLMLayer,
             GeoLMModel,
             GeoLMPreTrainedModel,
-            load_tf_weights_in_geolm,
         )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
