@@ -34,8 +34,8 @@ class UnivNetGanConfig(PretrainedConfig):
             compatible with vocoders which do upsample the input spectrogram (e.g. [`SpeechT5HifiGan`]).
         resblock_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 3, 3]`):
             A tuple of integers defining the kernel sizes of the 1D convolutional layers in the UnivNet residual
-            network. The length of `resblock_kernel_sizes` defines the number of resnet blocks and should match that
-            of `resblock_stride_sizes` and `resblock_dilation_sizes`.
+            network. The length of `resblock_kernel_sizes` defines the number of resnet blocks and should match that of
+            `resblock_stride_sizes` and `resblock_dilation_sizes`.
         resblock_stride_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[8, 8, 4]`):
             A tuple of integers defining the stride sizes of the 1D convolutional layers in the UnivNet residual
             network. The length of `resblock_stride_sizes` should match that of `resblock_kernel_sizes` and
