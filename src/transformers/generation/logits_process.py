@@ -507,15 +507,10 @@ class EtaLogitsWarper(LogitsWarper):
             For example, if `min_tokens_to_keep` is set to 1, at least one token will always be kept for generation,
             even if all tokens have probabilities below the cutoff `eta`.
 
-    Raises:
-            ValueError: If `epsilon` is not within the range (0, 1) or if `min_tokens_to_keep` is not a positive
-            integer.
-
     Examples:
     ```python
     >>> # Import required libraries
-    >>> from transformers import AutoModelForCausalLM, AutoTokenizer
-    >>> import torch
+    >>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
     >>> # Set the model name
     >>> model_name = "gpt2"
@@ -534,7 +529,7 @@ class EtaLogitsWarper(LogitsWarper):
     >>> # Tokenize the sequence
     >>> inputs = tokenizer(sequence, return_tensors="pt")
 
-    >>> torch.manual_seed(0)
+    >>> set_seed(0)
 
     >>> # We can see that the model is generating repeating text and also is not able to continue the sequence properly
     >>> outputs = model.generate(inputs["input_ids"], max_length=128)
