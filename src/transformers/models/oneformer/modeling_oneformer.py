@@ -1179,8 +1179,8 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         reference_points_list = []
         for lvl, (height, width) in enumerate(spatial_shapes):
             ref_y, ref_x = torch.meshgrid(
-                torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
-                torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
+                torch.linspace(0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device),
+                torch.linspace(0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device),
             )
             ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * height)
             ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * width)
@@ -1408,7 +1408,6 @@ class OneFormerPixelDecoder(nn.Module):
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
-        valid_ratios = valid_ratios.float()
 
         # Fourth, sent source_flatten + mask_flatten + lvl_pos_embed_flatten (backbone + proj layer output) through encoder
         # Also provide spatial_shapes, level_start_index and valid_ratios
@@ -1445,7 +1444,6 @@ class OneFormerPixelDecoder(nn.Module):
         # append `out` with extra FPN levels
         # Reverse feature maps into top-down order (from low to high resolution)
         for idx, feats in enumerate(features[: self.num_fpn_levels][::-1]):
-            feats = feats.float()
             lateral_conv = self.lateral_convs[idx]
             output_conv = self.output_convs[idx]
             cur_fpn = lateral_conv(feats)
@@ -2744,7 +2742,7 @@ class OneFormerTaskModel(nn.Module):
         )
 
     def forward(self, inputs: Tensor) -> Tensor:
-        task_tokens = self.task_mlp(inputs.float())
+        task_tokens = self.task_mlp(inputs)
         return task_tokens
 
 
@@ -2980,7 +2978,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         multi_scale_features = pixel_level_module_output.decoder_features
         mask_features = pixel_level_module_output.decoder_last_feature
 
-        task_token = self.task_encoder(task_inputs)
+        task_token = self.task_encoder(task_inputs.to(self.dtype))
 
         if self.is_training:
             text_queries = self.text_mapper(text_inputs)
