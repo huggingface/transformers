@@ -716,7 +716,7 @@ class WandbCallback(TrainerCallback):
             logger.info(
                 'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
             )
-            combined_dict = {**args.to_sanitized_dict()}
+            combined_dict = {**args.to_dict()}
 
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config.to_dict()

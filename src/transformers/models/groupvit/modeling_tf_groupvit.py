@@ -1002,6 +1002,9 @@ class TFGroupViTTextTransformer(tf.keras.layers.Layer):
             epsilon=config.layer_norm_eps, name="final_layer_norm"
         )
 
+        # For `pooled_output` computation
+        self.eos_token_id = config.eos_token_id
+
     def call(
         self,
         input_ids: TFModelInputType,
@@ -1038,14 +1041,30 @@ class TFGroupViTTextTransformer(tf.keras.layers.Layer):
         sequence_output = encoder_outputs[0]
         sequence_output = self.final_layer_norm(inputs=sequence_output)
 
-        # text_embeds.shape = [batch_size, n_ctx, transformer.width]
-        # take features from the eot embedding (eot_token is the highest number in each sequence)
-        pooled_output = tf.gather_nd(
-            params=sequence_output,
-            indices=tf.stack(
-                values=(tf.range(input_shape[0], dtype=tf.int64), tf.math.argmax(input_ids, axis=-1)), axis=1
-            ),
-        )
+        if self.eos_token_id == 2:
+            # The `eos_token_id` was incorrect before PR #24773: Let's keep what have been done here.
+            # A CLIP model with such `eos_token_id` in the config can't work correctly with extra new tokens added
+            # ------------------------------------------------------------
+            # text_embeds.shape = [batch_size, n_ctx, transformer.width]
+            # take features from the eot embedding (eot_token is the highest number in each sequence)
+            pooled_output = tf.gather_nd(
+                params=sequence_output,
+                indices=tf.stack(
+                    values=(tf.range(input_shape[0], dtype=tf.int64), tf.math.argmax(input_ids, axis=-1)), axis=1
+                ),
+            )
+        else:
+            # The config gets updated `eos_token_id` from PR #24773 (so the use of exta new tokens is possible)
+            pooled_output = tf.gather_nd(
+                params=sequence_output,
+                indices=tf.stack(
+                    values=(
+                        tf.range(input_shape[0], dtype=tf.int64),
+                        tf.math.argmax(tf.cast(input_ids == self.eos_token_id, dtype=tf.int8), axis=-1),
+                    ),
+                    axis=1,
+                ),
+            )
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]

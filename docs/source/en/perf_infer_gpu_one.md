@@ -48,7 +48,7 @@ Note that this feature can also be used in a multi GPU setup.
 
 </Tip>
 
-### Requirements
+### Requirements [[requirements-for-fp4-mixedprecision-inference]]
 
 - Latest `bitsandbytes` library
 `pip install bitsandbytes>=0.39.0`
@@ -114,7 +114,7 @@ For more details regarding the method, check out the [paper](https://arxiv.org/a
 Note, that you would require a GPU to run mixed-8bit models as the kernels have been compiled for GPUs only. Make sure that you have enough GPU memory to store the quarter (or half if your model weights are in half precision) of the model before using this feature.
 Below are some notes to help you use this module, or follow the demos on [Google colab](#colab-demos).
 
-### Requirements
+### Requirements [[requirements-for-int8-mixedprecision-matrix-decomposition]]
 
 - If you have `bitsandbytes<0.37.0`, make sure you run on NVIDIA GPUs that support 8-bit tensor cores (Turing, Ampere or newer architectures - e.g. T4, RTX20s RTX30s, A40-A100). For `bitsandbytes>=0.37.0`, all GPUs should be supported.
 - Install the correct version of `bitsandbytes` by running:

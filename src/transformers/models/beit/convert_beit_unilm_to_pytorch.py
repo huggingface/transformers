@@ -337,18 +337,19 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     else:
         raise ValueError("Can't verify logits as model is not supported")
 
-    assert logits.shape == expected_shape, "Shape of logits not as expected"
+    if logits.shape != expected_shape:
+        raise ValueError(f"Shape of logits not as expected. {logits.shape=}, {expected_shape=}")
     if not has_lm_head:
         if is_semantic:
-            assert torch.allclose(
-                logits[0, :3, :3, :3], expected_logits, atol=1e-3
-            ), "First elements of logits not as expected"
+            if not torch.allclose(logits[0, :3, :3, :3], expected_logits, atol=1e-3):
+                raise ValueError("First elements of logits not as expected")
         else:
             print("Predicted class idx:", logits.argmax(-1).item())
-            assert torch.allclose(
-                logits[0, :3], expected_logits, atol=1e-3
-            ), "First elements of logits not as expected"
-            assert logits.argmax(-1).item() == expected_class_idx, "Predicted class index not as expected"
+
+            if not torch.allclose(logits[0, :3], expected_logits, atol=1e-3):
+                raise ValueError("First elements of logits not as expected")
+            if logits.argmax(-1).item() != expected_class_idx:
+                raise ValueError("Predicted class index not as expected")
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")

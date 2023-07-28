@@ -221,6 +221,7 @@ class Seq2SeqTrainer(Trainer):
         inputs: Dict[str, Union[torch.Tensor, Any]],
         prediction_loss_only: bool,
         ignore_keys: Optional[List[str]] = None,
+        **gen_kwargs,
     ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Perform an evaluation step on `model` using `inputs`.
@@ -237,6 +238,8 @@ class Seq2SeqTrainer(Trainer):
                 argument `labels`. Check your model's documentation for all accepted arguments.
             prediction_loss_only (`bool`):
                 Whether or not to return the loss only.
+            gen_kwargs:
+                Additional `generate` specific kwargs.
 
         Return:
             Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]: A tuple with the loss, logits and
@@ -254,7 +257,10 @@ class Seq2SeqTrainer(Trainer):
         # XXX: adapt synced_gpus for fairscale as well
         # Priority (handled in generate):
         # gen_kwargs > model.generation_config > default GenerationConfig()
-        gen_kwargs = self._gen_kwargs.copy()
+
+        if len(gen_kwargs) == 0 and hasattr(self, "_gen_kwargs"):
+            gen_kwargs = self._gen_kwargs.copy()
+
         if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
             gen_kwargs["max_length"] = self.model.config.max_length
         gen_kwargs["num_beams"] = (

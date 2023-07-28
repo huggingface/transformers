@@ -14,7 +14,7 @@ from .base import PIPELINE_INIT_ARGS, ChunkPipeline
 if is_torch_available():
     import torch
 
-    from ..models.auto.modeling_auto import MODEL_FOR_MASK_GENERATION_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_MASK_GENERATION_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -96,7 +96,7 @@ class MaskGenerationPipeline(ChunkPipeline):
         if self.framework != "pt":
             raise ValueError(f"The {self.__class__} is only available in PyTorch.")
 
-        self.check_model_type(MODEL_FOR_MASK_GENERATION_MAPPING)
+        self.check_model_type(MODEL_FOR_MASK_GENERATION_MAPPING_NAMES)
 
     def _sanitize_parameters(self, **kwargs):
         preprocess_kwargs = {}
