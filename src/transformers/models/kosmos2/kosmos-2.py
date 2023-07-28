@@ -31,7 +31,7 @@ from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2Config, Kos
 # -----------------------------------------------------------------------
 # Fake values to make it work
 
-CLIPVisionConfig = Kosmos2VisionConfig
+
 from typing import Union
 from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 CLIP_VISION_INPUTS_DOCSTRING = ""
@@ -44,7 +44,7 @@ from transformers import CLIPPreTrainedModel
 # -----------------------------------------------------------------------
 
 class CLIPVisionEmbeddings(nn.Module):
-    def __init__(self, config: CLIPVisionConfig):
+    def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -350,7 +350,7 @@ class CLIPEncoder(nn.Module):
 
 
 class CLIPVisionTransformer(nn.Module):
-    def __init__(self, config: CLIPVisionConfig):
+    def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
@@ -361,7 +361,7 @@ class CLIPVisionTransformer(nn.Module):
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
     @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPVisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Kosmos2VisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -412,10 +412,10 @@ class CLIPVisionTransformer(nn.Module):
     CLIP_START_DOCSTRING,
 )
 class CLIPVisionModel(CLIPPreTrainedModel):
-    config_class = CLIPVisionConfig
+    config_class = Kosmos2VisionConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: CLIPVisionConfig):
+    def __init__(self, config: Kosmos2VisionConfig):
         super().__init__(config)
         self.vision_model = CLIPVisionTransformer(config)
         # Initialize weights and apply final processing
@@ -425,7 +425,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(CLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLIPVisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Kosmos2VisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1386,7 +1386,6 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         super().__init__(config)
 
         self.text_model = Kosmos2TextModel(config.text_config)
-        from transformers import CLIPVisionModel
         vision_model = CLIPVisionModel(config.vision_config)
         self.vision_model = vision_model.vision_model
 
@@ -1477,7 +1476,6 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         super().__init__(config)
 
         self.text_model = Kosmos2TextForCausalLM(config.text_config)
-        from transformers import CLIPVisionModel
         vision_model = CLIPVisionModel(config.vision_config)
         self.vision_model = vision_model.vision_model
 
