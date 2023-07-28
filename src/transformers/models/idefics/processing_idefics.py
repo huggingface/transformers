@@ -16,7 +16,7 @@
 Processor class for IDEFICS.
 """
 
-from typing import List, Optional, Union
+from typing import Callable, List, Optional, Union
 from urllib.parse import urlparse
 
 from ...feature_extraction_utils import BatchFeature
@@ -144,7 +144,7 @@ class IdeficsProcessor(ProcessorMixin):
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
         max_length: Optional[int] = None,
-        transform=None,
+        transform: Callable = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         add_eos_token=False,
         debug=False,
@@ -156,7 +156,7 @@ class IdeficsProcessor(ProcessorMixin):
             prompts (`Union[List[TextInput], [List[List[TextInput]]]]`):
                 either a single prompt or a batched list of prompts - see the detailed description immediately after
                 the end of the arguments doc section.
-            transform (`?`, *optional*, defaults to `None`):
+            transform (`Callable`, *optional*, defaults to `None`):
                 A custom transform function that accepts a single image can be passed for training. For example,
                 `torchvision.Compose` can be used to compose multiple functions. If `None` a preset inference-specific
                 set of transforms will be applied to the images

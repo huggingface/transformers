@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for Idefics."""
 
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 
 from PIL import Image
 
@@ -30,7 +30,7 @@ from ...image_utils import (
     to_numpy_array,
     valid_images,
 )
-from ...utils import TensorType
+from ...utils import TensorType, is_torch_available
 
 
 def convert_to_rgb(image):
@@ -51,7 +51,7 @@ class IdeficsImageProcessor(BaseImageProcessor):
     Constructs a Idefics image processor.
 
     Args:
-        image_size (`int` *optional*, defaults to `224`):
+        image_size (`int`, *optional*, defaults to `224`):
             Resize to image size
     """
 
@@ -66,21 +66,21 @@ class IdeficsImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         image_size: Optional[Dict[str, int]] = None,
-        transform=None,
+        transform: Callable = None,
         **kwargs,
     ) -> TensorType.PYTORCH:
         """
-        Preprocess an image or batch of images.
+        Preprocess a batch of images.
 
         Args:
             images (`ImageInput`):
-                Image to preprocess.
+                A list of images to preprocess.
             image_size (`int`, *optional*, defaults to `self.image_size`):
-                Controls the size of the image after `resize`.
-            transform (`?`, *optional*, defaults to `None`):
+                Controls the size of the image in `resize` transform in inference.
+            transform (`Callable`, *optional*, defaults to `None`):
                 A custom transform function that accepts a single image can be passed for training. For example,
-                `torchvision.Compose` can be used to compose multiple functions. If `None` a preset inference-specific
-                set of transforms will be applied to the images
+                `torchvision.Compose` can be used to compose multiple transforms. If `None` - an inference mode is
+                assumed - and then a preset of inference-specific transforms will be applied to the images
 
         Returns:
             a PyTorch tensor of the processed images
@@ -100,8 +100,8 @@ class IdeficsImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        # For training a user needs to pass their own set of transforms.
-        # For reference this is what was used in the original m4 training
+        # For training a user needs to pass their own set of transforms as a Callable
+        # For reference this is what was used in the original IDEFICS training
         # transform = transforms.Compose([
         #     convert_to_rgb,
         #     transforms.RandomResizedCrop((size, size), scale=(0.9, 1.0), interpolation=transforms.InterpolationMode.BICUBIC),
@@ -109,15 +109,13 @@ class IdeficsImageProcessor(BaseImageProcessor):
         #     transforms.Normalize(mean=image_mean, std=image_std),
         # ])
 
-        # XXX: fixme - can't import torch in this module
-        import torch
-
         if transform is not None:
+            if not is_torch_available():
+                raise ImportError("To pass in transforms torch must be installed")
+            import torch
+
             images = [transform(x) for x in images]
             return torch.stack(images)
-            # return images
-            # images = BatchFeature(data={"pixel_values": images}, tensor_type=TensorType.PYTORCH)["pixel_values"]
-            # return images
 
         images = [convert_to_rgb(x) for x in images]
         # further transforms expect numpy arrays
@@ -126,6 +124,7 @@ class IdeficsImageProcessor(BaseImageProcessor):
         images = [self.rescale(image=image, scale=1 / 255) for image in images]
         images = [self.normalize(x, mean=IMAGENET_STANDARD_MEAN, std=IMAGENET_STANDARD_STD) for x in images]
         images = [to_channel_dimension_format(x, ChannelDimension.FIRST) for x in images]
+        # this converts to torch tensors - switch to convert_to_tensors once it becomes available
         images = BatchFeature(data={"pixel_values": images}, tensor_type=TensorType.PYTORCH)["pixel_values"]
 
         return images
