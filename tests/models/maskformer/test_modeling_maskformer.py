@@ -336,7 +336,7 @@ def prepare_img():
 
 
 @require_vision
-@slow
+# @slow
 class MaskFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
