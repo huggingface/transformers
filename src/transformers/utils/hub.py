@@ -36,7 +36,6 @@ from huggingface_hub import (
     get_hf_file_metadata,
     hf_hub_download,
     hf_hub_url,
-    whoami,
 )
 from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
 from huggingface_hub.utils import (
@@ -690,6 +689,10 @@ class PushToHubMixin:
                 "The `repo_url` argument is deprecated and will be removed in v5 of Transformers. Use `repo_id` "
                 "instead."
             )
+            if repo_id is not None:
+                raise ValueError(
+                    "`repo_id` and `repo_url` are both specified. Please set only the argument `repo_id`."
+                )
             repo_id = repo_url.replace(f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/", "")
         if organization is not None:
             warnings.warn(
@@ -702,11 +705,7 @@ class PushToHubMixin:
                 repo_id = f"{organization}/{repo_id}"
 
         url = create_repo(repo_id=repo_id, token=token, private=private, exist_ok=True)
-
-        # If the namespace is not there, add it or `upload_file` will complain
-        if "/" not in repo_id and url != f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{repo_id}":
-            repo_id = get_full_repo_name(repo_id, token=token)
-        return repo_id
+        return url.repo_id
 
     def _get_files_timestamps(self, working_dir: Union[str, os.PathLike]):
         """
@@ -786,8 +785,7 @@ class PushToHubMixin:
         **deprecated_kwargs,
     ) -> str:
         """
-        Upload the {object_files} to the 🤗 Model Hub while synchronizing a local clone of the repo in
-        `repo_path_or_name`.
+        Upload the {object_files} to the 🤗 Model Hub.
 
         Parameters:
             repo_id (`str`):
@@ -838,21 +836,34 @@ class PushToHubMixin:
                 )
             token = use_auth_token
 
-        if "repo_path_or_name" in deprecated_kwargs:
+        repo_path_or_name = deprecated_kwargs.pop("repo_path_or_name", None)
+        if repo_path_or_name is not None:
+            # Should use `repo_id` instead of `repo_path_or_name`. When using `repo_path_or_name`, we try to infer
+            # repo_id from the folder path, if it exists.
             warnings.warn(
                 "The `repo_path_or_name` argument is deprecated and will be removed in v5 of Transformers. Use "
-                "`repo_id` instead."
+                "`repo_id` instead.",
+                FutureWarning,
             )
-            repo_id = deprecated_kwargs.pop("repo_path_or_name")
+            if repo_id is not None:
+                raise ValueError(
+                    "`repo_id` and `repo_path_or_name` are both specified. Please set only the argument `repo_id`."
+                )
+            if os.path.isdir(repo_path_or_name):
+                # repo_path: infer repo_id from the path
+                repo_id = repo_id.split(os.path.sep)[-1]
+                working_dir = repo_id
+            else:
+                # repo_name: use it as repo_id
+                repo_id = repo_path_or_name
+                working_dir = repo_id.split("/")[-1]
+        else:
+            # Repo_id is passed correctly: infer working_dir from it
+            working_dir = repo_id.split("/")[-1]
+
         # Deprecation warning will be sent after for repo_url and organization
         repo_url = deprecated_kwargs.pop("repo_url", None)
         organization = deprecated_kwargs.pop("organization", None)
-
-        if os.path.isdir(repo_id):
-            working_dir = repo_id
-            repo_id = repo_id.split(os.path.sep)[-1]
-        else:
-            working_dir = repo_id.split("/")[-1]
 
         repo_id = self._create_repo(
             repo_id, private=private, token=token, repo_url=repo_url, organization=organization
@@ -875,14 +886,6 @@ class PushToHubMixin:
                 token=token,
                 create_pr=create_pr,
             )
-
-
-def get_full_repo_name(model_id: str, organization: Optional[str] = None, token: Optional[str] = None):
-    if organization is None:
-        username = whoami(token)["name"]
-        return f"{username}/{model_id}"
-    else:
-        return f"{organization}/{model_id}"
 
 
 def send_example_telemetry(example_name, *example_args, framework="pytorch"):
