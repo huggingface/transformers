@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub import get_full_repo_name  # for backward compatibility
 from packaging import version
 
 from .. import __version__
@@ -79,7 +80,6 @@ from .hub import (
     extract_commit_hash,
     get_cached_models,
     get_file_from_repo,
-    get_full_repo_name,
     has_file,
     http_user_agent,
     is_offline_mode,
@@ -164,6 +164,7 @@ from .import_utils import (
     is_torch_fx_proxy,
     is_torch_mps_available,
     is_torch_neuroncore_available,
+    is_torch_npu_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,

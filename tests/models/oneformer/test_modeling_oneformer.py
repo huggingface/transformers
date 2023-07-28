@@ -112,16 +112,20 @@ class OneFormerModelTester:
         config = OneFormerConfig(
             text_encoder_vocab_size=self.vocab_size,
             hidden_size=self.hidden_dim,
+            num_queries=self.num_queries,
+            num_labels=self.num_labels,
+            encoder_feedforward_dim=32,
+            dim_feedforward=64,
+            encoder_layers=2,
+            decoder_layers=2,
         )
 
-        config.num_queries = self.num_queries
-        config.num_labels = self.num_labels
-
+        config.backbone_config.embed_dim = 16
         config.backbone_config.depths = [1, 1, 1, 1]
+        config.backbone_config.hidden_size = 16
         config.backbone_config.num_channels = self.num_channels
+        config.backbone_config.num_heads = [1, 1, 2, 2]
 
-        config.encoder_feedforward_dim = 64
-        config.dim_feedforward = 128
         config.hidden_dim = self.hidden_dim
         config.mask_dim = self.hidden_dim
         config.conv_dim = self.hidden_dim

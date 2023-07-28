@@ -92,7 +92,7 @@ class FlavaImageModelTester:
         num_channels=3,
         qkv_bias=True,
         mask_token=True,
-        vocab_size=8192,
+        vocab_size=99,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -337,7 +337,7 @@ class FlavaTextModelTester:
         is_training=True,
         use_input_mask=True,
         use_token_type_ids=True,
-        vocab_size=30522,
+        vocab_size=102,
         type_vocab_size=2,
         max_position_embeddings=512,
         position_embedding_type="absolute",
@@ -632,11 +632,23 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class FlavaImageCodebookTester:
-    def __init__(self, parent, batch_size=12, image_size=112, num_channels=3):
+    def __init__(
+        self,
+        parent,
+        batch_size=12,
+        image_size=112,
+        num_channels=3,
+        hidden_size=32,
+        num_groups=2,
+        vocab_size=99,
+    ):
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
+        self.hidden_size = hidden_size
+        self.num_groups = num_groups
+        self.vocab_size = vocab_size
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -645,7 +657,9 @@ class FlavaImageCodebookTester:
         return config, pixel_values
 
     def get_config(self):
-        return FlavaImageCodebookConfig()
+        return FlavaImageCodebookConfig(
+            hidden_size=self.hidden_size, num_groups=self.num_groups, vocab_size=self.vocab_size
+        )
 
     def create_and_check_model(self, config, pixel_values):
         model = FlavaImageCodebook(config=config)

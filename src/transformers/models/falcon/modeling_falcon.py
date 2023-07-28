@@ -255,7 +255,7 @@ class FalconAttention(nn.Module):
     # Copied from transformers.models.bloom.modeling_bloom.BloomAttention._merge_heads
     def _merge_heads(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Merge heads together over the last dimenstion
+        Merge heads together over the last dimension
 
         Args:
             x (`torch.tensor`, *required*): [batch_size * num_heads, seq_length, head_dim]
@@ -384,7 +384,7 @@ class FalconAttention(nn.Module):
             # matmul: [batch_size * num_heads, q_length, head_dim]
             context_layer = (attention_probs_reshaped @ value_layer_).flatten(0, 1)
 
-            # change view [batch_size, num_heads, q_length, head_dim]
+            # change view [batch_size, q_length, num_heads * head_dim]
             context_layer = self._merge_heads(context_layer)
 
             output_tensor = self.dense(context_layer)
@@ -1040,7 +1040,7 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = torch.ne(input_ids, self.config.pad_token_id).sum(dim=-1) - 1
+                sequence_lengths = (torch.ne(input_ids, self.config.pad_token_id).sum(dim=-1) - 1).to(logits.device)
             else:
                 sequence_lengths = -1
                 logger.warning(

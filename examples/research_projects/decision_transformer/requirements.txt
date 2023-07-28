@@ -1,5 +1,5 @@
 absl-py==1.0.0
-aiohttp==3.8.1
+aiohttp==3.8.5
 aiosignal==1.2.0
 alembic==1.7.7
 appdirs==1.4.4
@@ -20,7 +20,7 @@ boto3==1.16.34
 botocore==1.19.63
 Brotli==1.0.9
 cachetools==5.0.0
-certifi==2022.12.7
+certifi==2023.7.22
 cffi==1.15.0
 chardet==4.0.0
 charset-normalizer==2.0.12
@@ -34,7 +34,7 @@ cmd2==2.4.0
 codecarbon==1.2.0
 colorlog==6.6.0
 cookiecutter==2.1.1
-cryptography==41.0.0
+cryptography==41.0.2
 csvw==2.0.0
 cycler==0.11.0
 Cython==0.29.28
@@ -157,7 +157,7 @@ pycodestyle==2.8.0
 pycparser==2.21
 pyctcdecode==0.3.0
 pyflakes==2.4.0
-Pygments==2.11.2
+Pygments==2.15.0
 pygtrie==2.4.2
 pynvml==11.4.1
 pyOpenSSL==22.0.0

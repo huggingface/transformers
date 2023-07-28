@@ -506,6 +506,9 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     test_pruning = False  # training is not supported yet for MusicGen
     test_headmasking = False
     test_resize_embeddings = False
+    # not to test torchscript as the model tester doesn't prepare `input_values` and `padding_mask`
+    # (and `torchscript` hates `None` values).
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = MusicgenTester(self)

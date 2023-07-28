@@ -42,7 +42,7 @@ class TimmBackboneModelTester:
         out_indices=None,
         out_features=None,
         stage_names=None,
-        backbone="resnet50",
+        backbone="resnet18",
         batch_size=3,
         image_size=32,
         num_channels=3,
@@ -194,6 +194,10 @@ class TimmBackboneModelTest(ModelTesterMixin, BackboneTesterMixin, PipelineTeste
 
     @unittest.skip("Safetensors is not supported by timm.")
     def test_can_use_safetensors(self):
+        pass
+
+    @unittest.skip("Need to use a timm backbone and there is no tiny model available.")
+    def test_model_is_small(self):
         pass
 
     def test_forward_signature(self):

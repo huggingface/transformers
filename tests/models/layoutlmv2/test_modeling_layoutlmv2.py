@@ -415,6 +415,10 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @unittest.skip("We cannot configure detectron2 to output a smaller backbone")
+    def test_model_is_small(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:

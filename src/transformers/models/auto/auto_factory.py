@@ -15,6 +15,8 @@
 """Factory function to build auto-model classes."""
 import copy
 import importlib
+import os
+import warnings
 from collections import OrderedDict
 
 from ...configuration_utils import PretrainedConfig
@@ -418,7 +420,10 @@ class _BaseAutoModelClass:
             else:
                 repo_id = config.name_or_path
             model_class = get_class_from_dynamic_module(class_ref, repo_id, **kwargs)
-            cls._model_mapping.register(config.__class__, model_class, exist_ok=True)
+            if os.path.isdir(config._name_or_path):
+                model_class.register_for_auto_class(cls.__name__)
+            else:
+                cls.register(config.__class__, model_class, exist_ok=True)
             _ = kwargs.pop("code_revision", None)
             return model_class._from_config(config, **kwargs)
         elif type(config) in cls._model_mapping.keys():
@@ -445,8 +450,25 @@ class _BaseAutoModelClass:
             "revision",
             "subfolder",
             "use_auth_token",
+            "token",
         ]
         hub_kwargs = {name: kwargs.pop(name) for name in hub_kwargs_names if name in kwargs}
+
+        token = hub_kwargs.pop("token", None)
+        use_auth_token = hub_kwargs.pop("use_auth_token", None)
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
+
+        if token is not None:
+            hub_kwargs["token"] = token
+
         if not isinstance(config, PretrainedConfig):
             kwargs_orig = copy.deepcopy(kwargs)
             # ensure not to pollute the config object with torch_dtype="auto" - since it's
@@ -477,7 +499,10 @@ class _BaseAutoModelClass:
                 class_ref, pretrained_model_name_or_path, **hub_kwargs, **kwargs
             )
             _ = hub_kwargs.pop("code_revision", None)
-            cls._model_mapping.register(config.__class__, model_class, exist_ok=True)
+            if os.path.isdir(pretrained_model_name_or_path):
+                model_class.register_for_auto_class(cls.__name__)
+            else:
+                cls.register(config.__class__, model_class, exist_ok=True)
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
@@ -643,6 +668,7 @@ class _LazyAutoMapping(OrderedDict):
         self._config_mapping = config_mapping
         self._reverse_config_mapping = {v: k for k, v in config_mapping.items()}
         self._model_mapping = model_mapping
+        self._model_mapping._model_mapping = self
         self._extra_content = {}
         self._modules = {}
 
