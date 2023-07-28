@@ -29,7 +29,7 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     require_vision,
     slow,
-    torch_device
+    torch_device,
 )
 from transformers.utils import cached_property
 
@@ -511,7 +511,11 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
 
     def test_inference_universal_segmentation_head(self, torch_dtype=None):
         torch_dtype = torch_dtype or torch.float32
-        model = OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device, dtype=torch_dtype).eval()
+        model = (
+            OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints)
+            .to(torch_device, dtype=torch_dtype)
+            .eval()
+        )
         processor = self.default_processor
         image = prepare_img()
         inputs = processor(image, ["semantic"], return_tensors="pt").to(torch_device, dtype=torch_dtype)

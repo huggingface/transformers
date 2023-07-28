@@ -28,7 +28,7 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     require_vision,
     slow,
-    torch_device
+    torch_device,
 )
 from transformers.utils import cached_property
 
