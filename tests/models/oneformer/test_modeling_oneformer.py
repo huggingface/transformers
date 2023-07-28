@@ -22,7 +22,15 @@ import numpy as np
 
 from tests.test_modeling_common import floats_tensor
 from transformers import OneFormerConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_accelerate,
+    require_torch,
+    require_torch_gpu,
+    require_torch_multi_gpu,
+    require_vision,
+    slow,
+    torch_device
+)
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -501,11 +509,12 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
             )
         )
 
-    def test_inference_universal_segmentation_head(self):
-        model = OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device).eval()
+    def test_inference_universal_segmentation_head(self, torch_dtype=None):
+        torch_dtype = torch_dtype or torch.float32
+        model = OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints).to(torch_device, dtype=torch_dtype).eval()
         processor = self.default_processor
         image = prepare_img()
-        inputs = processor(image, ["semantic"], return_tensors="pt").to(torch_device)
+        inputs = processor(image, ["semantic"], return_tensors="pt").to(torch_device, dtype=torch_dtype)
         inputs_shape = inputs["pixel_values"].shape
         # check size
         self.assertEqual(inputs_shape, (1, 3, 512, 682))
@@ -532,6 +541,13 @@ class OneFormerModelIntegrationTest(unittest.TestCase):
             [[3.0668, -1.1833, -5.1103], [3.3440, -3.3620, -5.1101], [2.6017, -4.3613, -4.1444]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
+
+    @require_accelerate
+    @require_torch
+    @require_torch_gpu
+    @slow
+    def test_inference_universal_segmentation_head_fp16(self):
+        self.test_inference_universal_segmentation_head(torch_dtype=torch.float16)
 
     def test_with_segmentation_maps_and_loss(self):
         dummy_model = OneFormerForUniversalSegmentation.from_pretrained(self.model_checkpoints)
