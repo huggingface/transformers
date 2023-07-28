@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from . import (
-    geolm,
     albert,
     align,
     altclip,
@@ -87,6 +86,7 @@ from . import (
     focalnet,
     fsmt,
     funnel,
+    geolm,
     git,
     glpn,
     gpt2,

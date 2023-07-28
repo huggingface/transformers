@@ -30,7 +30,6 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
-        ("geolm", "GeoLMConfig"),
         ("albert", "AlbertConfig"),
         ("align", "AlignConfig"),
         ("altclip", "AltCLIPConfig"),
@@ -96,6 +95,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("focalnet", "FocalNetConfig"),
         ("fsmt", "FSMTConfig"),
         ("funnel", "FunnelConfig"),
+        ("geolm", "GeoLMConfig"),
         ("git", "GitConfig"),
         ("glpn", "GLPNConfig"),
         ("gpt-sw3", "GPT2Config"),
@@ -237,7 +237,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
-        ("geolm", "GEOLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("align", "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("altclip", "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -300,6 +299,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("focalnet", "FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("fsmt", "FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("funnel", "FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("geolm", "GEOLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("git", "GIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("glpn", "GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("gpt2", "GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -424,7 +424,6 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("geolm", "GeoLM"),
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),
@@ -502,6 +501,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("focalnet", "FocalNet"),
         ("fsmt", "FairSeq Machine-Translation"),
         ("funnel", "Funnel Transformer"),
+        ("geolm", "GeoLM"),
         ("git", "GIT"),
         ("glpn", "GLPN"),
         ("gpt-sw3", "GPT-Sw3"),

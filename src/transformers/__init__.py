@@ -123,7 +123,6 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.geolm": ["GEOLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "GeoLMConfig", "GeoLMTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -337,6 +336,7 @@ _import_structure = {
     "models.focalnet": ["FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "FocalNetConfig"],
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
+    "models.geolm": ["GEOLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "GeoLMConfig", "GeoLMTokenizer"],
     "models.git": ["GIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "GitConfig", "GitProcessor", "GitVisionConfig"],
     "models.glpn": ["GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP", "GLPNConfig"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
@@ -790,7 +790,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
-    _import_structure["models.geolm"].append("GeoLMTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -814,6 +813,7 @@ else:
     _import_structure["models.electra"].append("ElectraTokenizerFast")
     _import_structure["models.fnet"].append("FNetTokenizerFast")
     _import_structure["models.funnel"].append("FunnelTokenizerFast")
+    _import_structure["models.geolm"].append("GeoLMTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
@@ -1030,17 +1030,6 @@ else:
 
     # PyTorch models structure
 
-    _import_structure["models.geolm"].extend(
-        [
-            "GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "GeoLMForMaskedLM",
-            "GeoLMForCausalLM",
-            "GeoLMForTokenClassification",
-            "GeoLMLayer",
-            "GeoLMModel",
-            "GeoLMPreTrainedModel",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1804,6 +1793,17 @@ else:
             "FunnelModel",
             "FunnelPreTrainedModel",
             "load_tf_weights_in_funnel",
+        ]
+    )
+    _import_structure["models.geolm"].extend(
+        [
+            "GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GeoLMForCausalLM",
+            "GeoLMForMaskedLM",
+            "GeoLMForTokenClassification",
+            "GeoLMLayer",
+            "GeoLMModel",
+            "GeoLMPreTrainedModel",
         ]
     )
     _import_structure["models.git"].extend(
@@ -4142,7 +4142,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.geolm import GEOLM_PRETRAINED_CONFIG_ARCHIVE_MAP, GeoLMConfig, GeoLMTokenizer
     from .models.align import (
         ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AlignConfig,
@@ -4345,6 +4344,7 @@ if TYPE_CHECKING:
     from .models.focalnet import FOCALNET_PRETRAINED_CONFIG_ARCHIVE_MAP, FocalNetConfig
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
+    from .models.geolm import GEOLM_PRETRAINED_CONFIG_ARCHIVE_MAP, GeoLMConfig, GeoLMTokenizer
     from .models.git import GIT_PRETRAINED_CONFIG_ARCHIVE_MAP, GitConfig, GitProcessor, GitVisionConfig
     from .models.glpn import GLPN_PRETRAINED_CONFIG_ARCHIVE_MAP, GLPNConfig
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
@@ -4763,7 +4763,6 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
-        from .models.geolm import GeoLMTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -4785,6 +4784,7 @@ if TYPE_CHECKING:
         from .models.electra import ElectraTokenizerFast
         from .models.fnet import FNetTokenizerFast
         from .models.funnel import FunnelTokenizerFast
+        from .models.geolm import GeoLMTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
         from .models.gpt_neox import GPTNeoXTokenizerFast
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
@@ -4961,18 +4961,6 @@ if TYPE_CHECKING:
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
-
-        # PyTorch model imports
-
-        from .models.geolm import (
-            GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GeoLMForMaskedLM,
-            GeoLMForCausalLM,
-            GeoLMForTokenClassification,
-            GeoLMLayer,
-            GeoLMModel,
-            GeoLMPreTrainedModel,
-        )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -5608,6 +5596,17 @@ if TYPE_CHECKING:
             FunnelModel,
             FunnelPreTrainedModel,
             load_tf_weights_in_funnel,
+        )
+
+        # PyTorch model imports
+        from .models.geolm import (
+            GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GeoLMForCausalLM,
+            GeoLMForMaskedLM,
+            GeoLMForTokenClassification,
+            GeoLMLayer,
+            GeoLMModel,
+            GeoLMPreTrainedModel,
         )
         from .models.git import (
             GIT_PRETRAINED_MODEL_ARCHIVE_LIST,

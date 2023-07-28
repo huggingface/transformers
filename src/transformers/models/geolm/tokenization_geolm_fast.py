@@ -42,11 +42,10 @@ class GeoLMTokenizerFast(BertTokenizerFast):
     r"""
     Construct a "fast" GeoLM tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`~GeoLMTokenizerFast`] is identical to [`BertTokenizerFast`] and runs
-    end-to-end tokenization: punctuation splitting and wordpiece.
+    [`~GeoLMTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization: punctuation
+    splitting and wordpiece.
 
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

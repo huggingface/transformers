@@ -13,10 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import  _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
-from ...utils import is_torch_available
-
-
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -50,8 +47,6 @@ else:
     ]
 
 
-
-
 if TYPE_CHECKING:
     from .configuration_geolm import GEOLM_PRETRAINED_CONFIG_ARCHIVE_MAP, GeoLMConfig
     from .tokenization_geolm import GeoLMTokenizer
@@ -72,15 +67,14 @@ if TYPE_CHECKING:
     else:
         from .modeling_geolm import (
             GEOLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GeoLMForMaskedLM,
             GeoLMForCausalLM,
+            GeoLMForMaskedLM,
             GeoLMForTokenClassification,
             GeoLMLayer,
             GeoLMModel,
             GeoLMPreTrainedModel,
             load_tf_weights_in_geolm,
         )
-
 
 
 else:

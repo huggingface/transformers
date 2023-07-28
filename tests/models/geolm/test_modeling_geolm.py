@@ -17,11 +17,9 @@
 
 import unittest
 
-from ...test_modeling_common import floats_tensor
-from transformers import is_torch_available
+from transformers import GeoLMConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from transformers import GeoLMConfig
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
@@ -42,29 +40,29 @@ if is_torch_available():
 
 class GeoLMModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_token_type_ids=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            max_position_embeddings=512,
-            type_vocab_size=16,
-            type_sequence_label_size=2,
-            initializer_range=0.02,
-            num_labels=3,
-            num_choices=4,
-            scope=None,
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+        use_token_type_ids=True,
+        use_labels=True,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
+        type_vocab_size=16,
+        type_sequence_label_size=2,
+        initializer_range=0.02,
+        num_labels=3,
+        num_choices=4,
+        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -129,7 +127,7 @@ class GeoLMModelTester:
         )
 
     def create_and_check_model(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = GeoLMModel(config=config)
         model.to(torch_device)
@@ -140,7 +138,7 @@ class GeoLMModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_masked_lm(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = GeoLMForMaskedLM(config=config)
         model.to(torch_device)
@@ -149,7 +147,7 @@ class GeoLMModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_for_token_classification(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
         model = GeoLMForTokenClassification(config=config)
@@ -175,11 +173,11 @@ class GeoLMModelTester:
 
 @require_torch
 class GeoLMModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             GeoLMModel,
             GeoLMForCausalLM,
+            GeoLMForMaskedLM,
             GeoLMForTokenClassification,
         )
         if is_torch_available()
@@ -211,7 +209,6 @@ class GeoLMModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
-
 
     @slow
     def test_model_from_pretrained(self):

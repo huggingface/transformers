@@ -14,8 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ GEOLM model configuration"""
-from collections import OrderedDict
-from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -30,9 +28,9 @@ GEOLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class GeoLMConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GeoLMModel`]. It is used to
-    instantiate a GEOLM model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the GEOLM
+    This is the configuration class to store the configuration of a [`GeoLMModel`]. It is used to instantiate a GEOLM
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the GEOLM
     [zekun-li/geolm-base-cased](https://huggingface.co/zekun-li/geolm-base-cased) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the

@@ -28,7 +28,6 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
-        ("geolm", "GeoLMModel"),
         ("albert", "AlbertModel"),
         ("align", "AlignModel"),
         ("altclip", "AltCLIPModel"),
@@ -93,6 +92,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("focalnet", "FocalNetModel"),
         ("fsmt", "FSMTModel"),
         ("funnel", ("FunnelModel", "FunnelBaseModel")),
+        ("geolm", "GeoLMModel"),
         ("git", "GitModel"),
         ("glpn", "GLPNModel"),
         ("gpt-sw3", "GPT2Model"),
@@ -291,7 +291,6 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
-        ("geolm", "GeoLMForMaskedLM"),
         ("albert", "AlbertForMaskedLM"),
         ("bart", "BartForConditionalGeneration"),
         ("bert", "BertForMaskedLM"),
@@ -316,6 +315,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("fnet", "FNetForMaskedLM"),
         ("fsmt", "FSMTForConditionalGeneration"),
         ("funnel", "FunnelForMaskedLM"),
+        ("geolm", "GeoLMForMaskedLM"),
         ("git", "GitForCausalLM"),
         ("gpt-sw3", "GPT2LMHeadModel"),
         ("gpt2", "GPT2LMHeadModel"),
@@ -374,7 +374,6 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
-        ("geolm", "GeoLMForCausalLM"),
         ("bart", "BartForCausalLM"),
         ("bert", "BertLMHeadModel"),
         ("bert-generation", "BertGenerationDecoder"),
@@ -392,6 +391,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("electra", "ElectraForCausalLM"),
         ("ernie", "ErnieForCausalLM"),
         ("falcon", "FalconForCausalLM"),
+        ("geolm", "GeoLMForCausalLM"),
         ("git", "GitForCausalLM"),
         ("gpt-sw3", "GPT2LMHeadModel"),
         ("gpt2", "GPT2LMHeadModel"),
@@ -566,7 +566,6 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
-        ("geolm", "GeoLMForMaskedLM"),
         ("albert", "AlbertForMaskedLM"),
         ("bart", "BartForConditionalGeneration"),
         ("bert", "BertForMaskedLM"),
@@ -583,6 +582,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("flaubert", "FlaubertWithLMHeadModel"),
         ("fnet", "FNetForMaskedLM"),
         ("funnel", "FunnelForMaskedLM"),
+        ("geolm", "GeoLMForMaskedLM"),
         ("ibert", "IBertForMaskedLM"),
         ("layoutlm", "LayoutLMForMaskedLM"),
         ("longformer", "LongformerForMaskedLM"),
@@ -850,7 +850,6 @@ MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
-        ("geolm", "GeoLMForTokenClassification"),
         ("albert", "AlbertForTokenClassification"),
         ("bert", "BertForTokenClassification"),
         ("big_bird", "BigBirdForTokenClassification"),
@@ -871,6 +870,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("flaubert", "FlaubertForTokenClassification"),
         ("fnet", "FNetForTokenClassification"),
         ("funnel", "FunnelForTokenClassification"),
+        ("geolm", "GeoLMForTokenClassification"),
         ("gpt-sw3", "GPT2ForTokenClassification"),
         ("gpt2", "GPT2ForTokenClassification"),
         ("gpt_bigcode", "GPTBigCodeForTokenClassification"),

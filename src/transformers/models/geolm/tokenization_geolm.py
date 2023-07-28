@@ -41,11 +41,10 @@ class GeoLMTokenizer(BertTokenizer):
     r"""
     Construct a GeoLM tokenizer.
 
-    [`~GeoLMTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end
-    tokenization: punctuation splitting and wordpiece.
+    [`~GeoLMTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end tokenization: punctuation splitting and
+    wordpiece.
 
-    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning
-    parameters.
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
