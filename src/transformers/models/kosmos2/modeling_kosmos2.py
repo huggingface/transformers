@@ -1438,6 +1438,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Kosmos2ModelOutput]:
+        # TODO
         r"""
         Returns:
 
@@ -1548,6 +1549,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
+        # TODO
         r"""
         Returns:
 
