@@ -41,6 +41,7 @@ logger = logging.get_logger(__name__)
 KOSMOS2_VISION_INPUTS_DOCSTRING = r"""Kosmos-2"""
 
 
+# copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->Kosmos2
 class Kosmos2VisionEmbeddings(nn.Module):
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
@@ -75,6 +76,7 @@ class Kosmos2VisionEmbeddings(nn.Module):
         return embeddings
 
 
+# copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->Kosmos2Vision
 class Kosmos2VisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -179,6 +181,7 @@ class Kosmos2VisionAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
+# copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Kosmos2Vision
 class Kosmos2VisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -194,6 +197,7 @@ class Kosmos2VisionMLP(nn.Module):
         return hidden_states
 
 
+# copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->Kosmos2Vision
 class Kosmos2VisionEncoderLayer(nn.Module):
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
@@ -244,6 +248,7 @@ class Kosmos2VisionEncoderLayer(nn.Module):
         return outputs
 
 
+# copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->Kosmos2Vision
 class Kosmos2VisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -347,6 +352,7 @@ class Kosmos2VisionEncoder(nn.Module):
         )
 
 
+# copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer with CLIPVision->Kosmos2Vision,CLIP->Kosmos2Vision
 class Kosmos2VisionTransformer(nn.Module):
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
