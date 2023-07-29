@@ -409,7 +409,7 @@ class Kosmos2VisionEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer with CLIPVision->Kosmos2Vision,CLIP->Kosmos2Vision
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer with CLIPVision->Kosmos2Vision,CLIP_VISION->KOSMOS2_VISION,CLIP->Kosmos2Vision
 class Kosmos2VisionTransformer(nn.Module):
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
@@ -1084,7 +1084,6 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionModel with CLIP_VISION->KOSMOS2_VISION,CLIP->Kosmos2
 @add_start_docstrings(
     """The vision model from KOSMOS-2 without any head or projection on top.""",
     KOSMOS2_START_DOCSTRING,
@@ -1093,12 +1092,14 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
     config_class = Kosmos2VisionConfig
     main_input_name = "pixel_values"
 
+    # Copied from transformers.models.clip.modeling_clip.CLIPVisionModel.__init__ with CLIP_VISION->KOSMOS2_VISION,CLIP->Kosmos2
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__(config)
         self.vision_model = Kosmos2VisionTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.clip.modeling_clip.CLIPVisionModel.get_input_embeddings with CLIP_VISION->KOSMOS2_VISION,CLIP->Kosmos2
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
