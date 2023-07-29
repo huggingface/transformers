@@ -49,46 +49,11 @@ from transformers.models.kosmos2.modeling_kosmos2 import Kosmos2VisionTransforme
 # Model class
 
 
-from transformers.models.kosmos2.modeling_kosmos2 import Kosmos2TextSinusoidalPositionalEmbedding, KosmosTextAttention, Kosmos2TextFFN, Kosmos2TextBlock, Kosmos2TextTransformer, Kosmos2PreTrainedModel, Kosmos2TextModel, Kosmos2TextForCausalLM
+from transformers.models.kosmos2.modeling_kosmos2 import Kosmos2TextSinusoidalPositionalEmbedding, KosmosTextAttention, Kosmos2TextFFN, Kosmos2TextBlock, Kosmos2TextTransformer, Kosmos2PreTrainedModel, Kosmos2TextModel, Kosmos2TextForCausalLM, Kosmos2ImageToTextConnector
 
 
 # ==============================================================================================================
 
-
-class KosmosConnector(nn.Module):
-
-    def __init__(self, config: Kosmos2Config):
-        super().__init__()
-        self.dense = nn.Linear(config.vision_config.hidden_size, config.text_config.embed_dim)
-        self.latent_query = nn.Parameter(torch.randn(config.latent_query_num, config.text_config.embed_dim))
-
-        self.x_attn = KosmosTextAttention(
-            config.text_config,
-            config.text_config.embed_dim,
-            config.text_config.attention_heads,
-            # shared with text,
-            dropout=config.text_config.attention_dropout,
-            is_decoder=False,
-            add_inner_attn_layernorm=False,
-        )
-
-    def forward(self, features):
-
-        hidden_states = self.dense(features)
-
-        # [batch, latent_query_num, h_dim]
-        latent_query = self.latent_query.unsqueeze(0).expand(hidden_states.size(0), -1, -1)
-        key_value_states = torch.cat([hidden_states, latent_query], dim=1)
-
-        hidden_states, attn_weights, _ = self.x_attn(
-            hidden_states=latent_query,
-            key_value_states=key_value_states,
-            past_key_value=None,
-            attention_mask=None,
-            output_attentions=None,
-        )
-
-        return hidden_states, attn_weights
 
 
 @dataclass
@@ -132,7 +97,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         self.text_model = Kosmos2TextModel(config.text_config)
         self.vision_model = Kosmos2VisionTransformer(config.vision_config)
 
-        self.img_connector = KosmosConnector(config)
+        self.img_connector = Kosmos2ImageToTextConnector(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -221,7 +186,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         self.text_model = Kosmos2TextForCausalLM(config.text_config)
         self.vision_model = Kosmos2VisionTransformer(config.vision_config)
 
-        self.img_connector = KosmosConnector(config)
+        self.img_connector = Kosmos2ImageToTextConnector(config)
 
         # Initialize weights and apply final processing
         self.post_init()
