@@ -1132,13 +1132,13 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
     # Copied from transformers.models.clip.modeling_clip.CLIPVisionModel.__init__ with CLIP_VISION->KOSMOS2_VISION,CLIP->Kosmos2
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__(config)
-        self.vision_model = Kosmos2VisionTransformer(config)
+        self.model = Kosmos2VisionTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
     # Copied from transformers.models.clip.modeling_clip.CLIPVisionModel.get_input_embeddings with CLIP_VISION->KOSMOS2_VISION,CLIP->Kosmos2
     def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
+        return self.model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(KOSMOS2_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Kosmos2VisionConfig)
@@ -1153,7 +1153,7 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
         Returns:
 
         """
-        return self.vision_model(
+        return self.model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1409,7 +1409,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         super().__init__(config)
 
         self.text_model = Kosmos2TextModel(config.text_config)
-        self.vision_model = Kosmos2VisionTransformer(config.vision_config)
+        self.vision_model = Kosmos2VisionModel(config.vision_config)
         self.image_to_text_connector = Kosmos2ImageToTextConnector(config)
 
         # Initialize weights and apply final processing
@@ -1462,7 +1462,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
             vision_model_output = self.vision_model(pixel_values)
             # HF's CLIP has `last_hidden_state` without going through `post_layernorm`.
             # Here we need the whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
-            img_features = self.vision_model.post_layernorm(vision_model_output.last_hidden_state)
+            img_features = self.vision_model.model.post_layernorm(vision_model_output.last_hidden_state)
             # normalized features
             img_features = nn.functional.normalize(img_features, dim=-1)
             img_features, image_connector_attention = self.image_to_text_connector(img_features)
@@ -1511,7 +1511,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         super().__init__(config)
 
         self.text_model = Kosmos2TextForCausalLM(config.text_config)
-        self.vision_model = Kosmos2VisionTransformer(config.vision_config)
+        self.vision_model = Kosmos2VisionModel(config.vision_config)
 
         self.image_to_text_connector = Kosmos2ImageToTextConnector(config)
 
@@ -1572,7 +1572,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
             vision_model_output = self.vision_model(pixel_values)
             # HF's CLIP has `last_hidden_state` without going through `post_layernorm`.
             # Here we need the whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
-            img_features = self.vision_model.post_layernorm(vision_model_output.last_hidden_state)
+            img_features = self.vision_model.model.post_layernorm(vision_model_output.last_hidden_state)
             # normalized features
             img_features = nn.functional.normalize(img_features, dim=-1)
             img_features, image_connector_attention = self.image_to_text_connector(img_features)
@@ -1631,7 +1631,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
             vision_model_output = self.vision_model(pixel_values)
             # HF's CLIP has `last_hidden_state` without going through `post_layernorm`.
             # Here we need the whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
-            img_features = self.vision_model.post_layernorm(vision_model_output.last_hidden_state)
+            img_features = self.vision_model.model.post_layernorm(vision_model_output.last_hidden_state)
             # normalized features
             img_features = nn.functional.normalize(img_features, dim=-1)
             img_features, image_connector_attention = self.image_to_text_connector(img_features)
