@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
+# Copyright 2023 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,8 +11,8 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License
-""" Tokenization classes for Kosmos-2 model."""
+# limitations under the License.
+""" Tokenization classes for KOSMOS-2 model."""
 
 
 import os
@@ -36,18 +36,18 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": 
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "kosmos-2": "",
+        "microsoft/kosmos-2-patch14-224": "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/sentencepiece.bpe.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "kosmos-2": 512,
+    "microsoft/kosmos-2-patch14-224": 2048,
 }
 
 
 class Kosmos2TokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" Kosmos-2 tokenizer (backed by HuggingFace's *tokenizers* library). Adapted from
+    Construct a "fast" KOSMOS-2 tokenizer (backed by HuggingFace's *tokenizers* library). Adapted from
     [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
     [BPE](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models).
 
@@ -94,6 +94,9 @@ class Kosmos2TokenizerFast(PreTrainedTokenizerFast):
             modeling. This is the token which the model will try to predict.
         additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
+        num_patch_index_tokens (`int`, *optional*, defaults to `1024`):
+            The number of tokens used to specify the patch indices of bounding boxes in an image. These tokens have the
+            format `<patch_index_xxxx>` where `xxxx` is an integer.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -135,12 +138,25 @@ class Kosmos2TokenizerFast(PreTrainedTokenizerFast):
         self.vocab_file = vocab_file
         self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
-        self.num_patch_index_tokens = num_patch_index_tokens
+        self.eod_token = "</doc>"
 
-        self.tag_tokens = [
-            '</doc>', '<image>', '</image>', '</chunk>', '</line>', '<phrase>', '</phrase>',
-            '<object>', '</object>', '</delimiter_of_multi_objects/>', '<grounding>',
-        ]
+        self.boi_token = "<image>"
+        self.eoi_token = "</image>"
+
+        self.eoc_token = "</chunk>"
+        self.eol_token = "</line>"
+
+        self.bop_token = "<phrase>"
+        self.eop_token = "</phrase>"
+
+        self.boo_token = "<object>"
+        self.eoo_token = "</object>"
+
+        self.dom_token = "</delimiter_of_multi_objects/>"
+
+        self.grd_token = "<grounding>"
+
+        self.num_patch_index_tokens = num_patch_index_tokens
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
