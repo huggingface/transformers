@@ -99,6 +99,8 @@ def rename_key(key):
 
     key = re.sub(r"^text_model.output_projection\.", "text_model.lm_head.", key)
 
+    key = re.sub(r"^img_connector\.", "image_to_text_connector.", key)
+
     # not used in forward!
     # self.self_attn_sope
 

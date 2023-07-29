@@ -1410,7 +1410,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
 
         self.text_model = Kosmos2TextModel(config.text_config)
         self.vision_model = Kosmos2VisionTransformer(config.vision_config)
-        self.img_connector = Kosmos2ImageToTextConnector(config)
+        self.image_to_text_connector = Kosmos2ImageToTextConnector(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1465,7 +1465,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
             img_features = self.vision_model.post_layernorm(vision_model_output.last_hidden_state)
             # normalized features
             img_features = nn.functional.normalize(img_features, dim=-1)
-            img_features, image_connector_attention = self.img_connector(img_features)
+            img_features, image_connector_attention = self.image_to_text_connector(img_features)
 
         outputs = self.text_model(
             input_ids=input_ids,
@@ -1513,7 +1513,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         self.text_model = Kosmos2TextForCausalLM(config.text_config)
         self.vision_model = Kosmos2VisionTransformer(config.vision_config)
 
-        self.img_connector = Kosmos2ImageToTextConnector(config)
+        self.image_to_text_connector = Kosmos2ImageToTextConnector(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1575,7 +1575,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
             img_features = self.vision_model.post_layernorm(vision_model_output.last_hidden_state)
             # normalized features
             img_features = nn.functional.normalize(img_features, dim=-1)
-            img_features, image_connector_attention = self.img_connector(img_features)
+            img_features, image_connector_attention = self.image_to_text_connector(img_features)
 
         lm_outputs = self.text_model(
             input_ids=input_ids,
@@ -1634,7 +1634,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
             img_features = self.vision_model.post_layernorm(vision_model_output.last_hidden_state)
             # normalized features
             img_features = nn.functional.normalize(img_features, dim=-1)
-            img_features, image_connector_attention = self.img_connector(img_features)
+            img_features, image_connector_attention = self.image_to_text_connector(img_features)
 
         output = self.text_model.generate(
             input_ids=input_ids,
