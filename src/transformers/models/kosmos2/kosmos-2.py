@@ -59,7 +59,7 @@ from transformers.models.kosmos2.modeling_kosmos2 import Kosmos2Model, Kosmos2Fo
 def rename_vision_key(key):
 
     # text decoder
-    key = re.sub(r"img_model.visual\.", "vision_model.", key)
+    key = re.sub(r"img_model.visual\.", "vision_model.model.", key)
 
     key = re.sub(r"\.class_embedding$", ".embeddings.class_embedding", key)
     key = re.sub(r"\.positional_embedding$", ".embeddings.position_embedding.weight", key)
@@ -211,6 +211,10 @@ def load_and_check_vision_model():
     hf_clip_vision_keys = []
     for key in hf_clip_model.state_dict().keys():
         if key.startswith("vision_model") and not any(f".layers.{x}." in key for x in range(2, 25)):
+            # we need to change `vision_model` to `vision_model.model`, as HF CLIP's vision model
+            # starts with the key `vision_model`, but our model start with `vision_model.model`.
+            # Note this is necessary only for the CLIP vision model.
+            key = key.replace("vision_model", "vision_model.model")
             hf_clip_vision_keys.append(key)
 
     # ================================================================================
@@ -405,7 +409,7 @@ def check_model_with_dummy_inputs(model):
 
     hf_vision_output = model.vision_model(dummy_pixel_values)
     # HF CLIP has `last_hidden_state` without through `post_layernorm`
-    hf_vision_output = model.vision_model.post_layernorm(hf_vision_output.last_hidden_state)
+    hf_vision_output = model.vision_model.model.post_layernorm(hf_vision_output.last_hidden_state)
 
     print(hf_vision_output.shape)
     print(hf_vision_output[:, 0, :])
