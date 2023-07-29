@@ -120,6 +120,26 @@ class Kosmos2ModelOutput(ModelOutput):
     vision_model_output: Optional[Tuple[torch.FloatTensor]] = None
 
 
+# TODO: Add docstring
+@dataclass
+class Kosmos2ForConditionalGenerationModelOutput(ModelOutput):
+    """
+    Dummy
+
+    Args:
+        loss
+    """
+
+    loss: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    image_features: Optional[torch.FloatTensor] = None
+    image_connector_attention: Optional[torch.FloatTensor] = None
+    vision_model_output: Optional[Tuple[torch.FloatTensor]] = None
+
+
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->Kosmos2
 class Kosmos2VisionEmbeddings(nn.Module):
     def __init__(self, config: Kosmos2VisionConfig):
@@ -1474,3 +1494,154 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
             image_connector_attention=image_connector_attention,
             vision_model_output=vision_model_output,
         )
+
+
+@add_start_docstrings(
+    """
+    KOSMOS-2 Model for generating text and bounding boxes given an image. The model consists of a vision encoder (CLIP)
+    and a language model.
+    """,
+    KOSMOS2_START_DOCSTRING,
+)
+class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
+    config_class = Kosmos2Config
+    _tied_weights_keys = ["text_model.lm_head.weight"]
+
+    def __init__(self, config: Kosmos2Config):
+        super().__init__(config)
+
+        self.text_model = Kosmos2TextForCausalLM(config.text_config)
+        self.vision_model = Kosmos2VisionTransformer(config.vision_config)
+
+        self.img_connector = Kosmos2ImageToTextConnector(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.text_model.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.text_model.model.embed_tokens = value
+
+    def get_output_embeddings(self) -> nn.Module:
+        return self.text_model.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.text_model.set_output_embeddings(new_embeddings)
+
+    @add_start_docstrings_to_model_forward(KOSMOS2_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Kosmos2ForConditionalGenerationModelOutput, config_class=Kosmos2Config)
+    def forward(
+        self,
+        pixel_values: Optional[torch.Tensor] = None,
+        img_attn_mask = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask = None,
+        head_mask: Optional[torch.Tensor] = None,
+        img_features: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>>
+        ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        vision_model_output = None
+        image_connector_attention = None
+        if img_features is None:
+
+            if pixel_values is None:
+                raise ValueError("You have to specify either `pixel_values` or `img_features`.")
+
+            vision_model_output = self.vision_model(pixel_values)
+            # HF's CLIP has `last_hidden_state` without going through `post_layernorm`.
+            # Here we need the whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
+            img_features = self.vision_model.post_layernorm(vision_model_output.last_hidden_state)
+            # normalized features
+            img_features = nn.functional.normalize(img_features, dim=-1)
+            img_features, image_connector_attention = self.img_connector(img_features)
+
+        lm_outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            img_features=img_features,
+            img_attn_mask=img_attn_mask,
+            head_mask=head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            labels=labels,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if not return_dict:
+            outputs = lm_outputs + (img_features, image_connector_attention, vision_model_output)
+            return tuple(output for output in outputs if output is not None)
+
+        return Kosmos2ForConditionalGenerationModelOutput(
+            loss=lm_outputs.loss,
+            logits=lm_outputs.logits,
+            past_key_values=lm_outputs.past_key_values,
+            hidden_states=lm_outputs.hidden_states,
+            attentions=lm_outputs.attentions,
+            image_features=img_features,
+            image_connector_attention=image_connector_attention,
+            vision_model_output=vision_model_output,
+        )
+
+    def generate(
+        self,
+        pixel_values=None,
+        input_ids=None,
+        attention_mask=None,
+        img_features=None,
+        inputs_embeds=None,
+        **kwargs,
+    ):
+        # in order to allow `inputs` argument (as in `GenerationMixin`)
+        inputs = kwargs.pop("inputs", None)
+        if pixel_values is not None and inputs is not None:
+            raise ValueError(
+                f"`inputs`: {inputs} were passed alongside `pixel_values` which is not allowed."
+                f"Make sure to either pass `inputs` or pixel_values=..."
+            )
+        if pixel_values is None and inputs is not None:
+            pixel_values = inputs
+
+        if img_features is None:
+
+            vision_model_output = self.vision_model(pixel_values)
+            # HF's CLIP has `last_hidden_state` without going through `post_layernorm`.
+            # Here we need the whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
+            img_features = self.vision_model.post_layernorm(vision_model_output.last_hidden_state)
+            # normalized features
+            img_features = nn.functional.normalize(img_features, dim=-1)
+            img_features, image_connector_attention = self.img_connector(img_features)
+
+        output = self.text_model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            img_features=img_features,
+            input_embeds=inputs_embeds,
+            **kwargs,
+        )
+
+        return output
