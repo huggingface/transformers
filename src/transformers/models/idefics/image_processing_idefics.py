@@ -130,9 +130,6 @@ class IdeficsImageProcessor(BaseImageProcessor):
         if len(images) == 0:
             return []
 
-        print(f"{image_mean=}")
-        print(f"{image_std=}")
-
         images = make_list_of_images(images)
 
         if not valid_images(images):

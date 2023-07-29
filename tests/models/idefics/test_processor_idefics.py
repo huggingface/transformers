@@ -39,7 +39,7 @@ class IdeficsProcessorTest(TestCasePlus):
     def setUp(self):
         super().setUp()
 
-        self.checkpoint_path = self.get_auto_remove_tmp_dir("./xxx", after=False)
+        self.checkpoint_path = self.get_auto_remove_tmp_dir()
 
         image_processor = IdeficsImageProcessor()
         tokenizer = LlamaTokenizerFast.from_pretrained("HuggingFaceM4/tiny-random-idefics")
