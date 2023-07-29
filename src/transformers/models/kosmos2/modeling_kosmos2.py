@@ -1075,3 +1075,4 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
     models.
     """
     config_class = Kosmos2Config
+    supports_gradient_checkpointing = True
