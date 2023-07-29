@@ -98,7 +98,7 @@ KOSMOS2_VISION_INPUTS_DOCSTRING = r"""Kosmos-2"""
 KOSMOS2_TEXT_INPUTS_DOCSTRING = r"""Kosmos-2"""
 
 
-# copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->Kosmos2
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->Kosmos2
 class Kosmos2VisionEmbeddings(nn.Module):
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
@@ -133,7 +133,7 @@ class Kosmos2VisionEmbeddings(nn.Module):
         return embeddings
 
 
-# copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->Kosmos2Vision
+# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->Kosmos2Vision
 class Kosmos2VisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -238,7 +238,7 @@ class Kosmos2VisionAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Kosmos2Vision
+# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Kosmos2Vision
 class Kosmos2VisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -254,7 +254,7 @@ class Kosmos2VisionMLP(nn.Module):
         return hidden_states
 
 
-# copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->Kosmos2Vision
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->Kosmos2Vision
 class Kosmos2VisionEncoderLayer(nn.Module):
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
@@ -305,7 +305,7 @@ class Kosmos2VisionEncoderLayer(nn.Module):
         return outputs
 
 
-# copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->Kosmos2Vision
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->Kosmos2Vision
 class Kosmos2VisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -409,7 +409,7 @@ class Kosmos2VisionEncoder(nn.Module):
         )
 
 
-# copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer with CLIPVision->Kosmos2Vision,CLIP->Kosmos2Vision
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer with CLIPVision->Kosmos2Vision,CLIP->Kosmos2Vision
 class Kosmos2VisionTransformer(nn.Module):
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
@@ -1084,6 +1084,7 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
 
 
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionModel with CLIP_VISION->KOSMOS2_VISION,CLIP->Kosmos2
 @add_start_docstrings(
     """The vision model from KOSMOS-2 without any head or projection on top.""",
     KOSMOS2_START_DOCSTRING,
