@@ -197,6 +197,7 @@ def convert_vitpose_checkpoint(pytorch_dump_folder_path):
 
     # load original model from timm
     state_dict = torch.load(vitpose_name, map_location="cpu")
+    state_dict = state_dict["state_dict"]
 
     # load state_dict of original model, remove and rename some keys
     rename_keys = create_rename_keys(config, base_model)
