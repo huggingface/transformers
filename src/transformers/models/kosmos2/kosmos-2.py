@@ -1357,16 +1357,16 @@ if __name__ == "__main__":
     real_model = Kosmos2ForConditionalGeneration.from_pretrained("HF_Kosmos2")
 
     # # If we want to push to the Hub
-    # # repo_id = "ydshieh/kosmos-2"
-    # # real_model.save_pretrained("HF_Kosmos2", push_to_hub=True, repo_id=repo_id, use_auth_token="XXX")
-    #
-    # # check we can load from the Hub
-    # # real_model = Kosmos2ForConditionalGeneration.from_pretrained(repo_id)
-
-    # repo_id = "ydshieh/kosmos-2"
+    # repo_id = "ydshieh/kosmos-2-patch14-224"
+    # real_model.save_pretrained("HF_Kosmos2", push_to_hub=True, repo_id=repo_id, use_auth_token="XXX")
     #
     # # check we can load from the Hub
     # real_model = Kosmos2ForConditionalGeneration.from_pretrained(repo_id)
+
+    repo_id = "ydshieh/kosmos-2-patch14-224"
+
+    # check we can load from the Hub
+    real_model = Kosmos2ForConditionalGeneration.from_pretrained(repo_id)
 
     # ================================================================================
 
