@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import os
-from typing import TYPE_CHECKING, Dict, Iterable, List, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import requests
@@ -253,7 +253,7 @@ def valid_coco_panoptic_annotations(annotations: Iterable[Dict[str, Union[List, 
     return all(is_valid_annotation_coco_panoptic(ann) for ann in annotations)
 
 
-def load_image(image: Union[str, "PIL.Image.Image"]) -> "PIL.Image.Image":
+def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = None) -> "PIL.Image.Image":
     """
     Loads `image` to a PIL Image.
 
@@ -269,7 +269,7 @@ def load_image(image: Union[str, "PIL.Image.Image"]) -> "PIL.Image.Image":
         if image.startswith("http://") or image.startswith("https://"):
             # We need to actually check for a real protocol, otherwise it's impossible to use a local file
             # like http_huggingface_co.png
-            image = PIL.Image.open(requests.get(image, stream=True).raw)
+            image = PIL.Image.open(requests.get(image, stream=True, timeout=timeout).raw)
         elif os.path.isfile(image):
             image = PIL.Image.open(image)
         else:
