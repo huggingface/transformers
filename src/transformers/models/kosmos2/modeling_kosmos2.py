@@ -28,6 +28,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Bas
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -37,6 +38,9 @@ from .configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig, Kosmos2Visi
 
 
 logger = logging.get_logger(__name__)
+
+_CHECKPOINT_FOR_DOC = "microsoft/kosmos-2-patch14-224"
+_EXPECTED_OUTPUT_SHAPE = None
 
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
@@ -1102,7 +1106,12 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(KOSMOS2_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPastAndCrossAttentions, config_class=Kosmos2TextConfig)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=BaseModelOutputWithPastAndCrossAttentions,
+        config_class=Kosmos2TextConfig,
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1120,23 +1129,7 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-        r"""
-        Returns:
 
-        Examples:
-
-        ```python
-        >>> from transformers import AutoTokenizer, CLIPTextModel
-
-        >>> model = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
-
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
-        ```"""
         return self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
