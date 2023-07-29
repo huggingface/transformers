@@ -49,59 +49,7 @@ from transformers.models.kosmos2.modeling_kosmos2 import Kosmos2VisionTransforme
 # Model class
 
 
-from transformers.models.kosmos2.modeling_kosmos2 import Kosmos2TextSinusoidalPositionalEmbedding, KosmosTextAttention, Kosmos2TextFFN, Kosmos2TextBlock, Kosmos2TextTransformer, Kosmos2PreTrainedModel
-
-
-class Kosmos2TextModel(Kosmos2PreTrainedModel):
-    config_class = Kosmos2TextConfig
-
-    def __init__(self, config: Kosmos2TextConfig):
-        super().__init__(config)
-        self.model = Kosmos2TextTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        img_features = None,
-        img_attn_mask = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ):
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            img_features=img_features,
-            img_attn_mask=img_attn_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            head_mask=head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        return outputs
+from transformers.models.kosmos2.modeling_kosmos2 import Kosmos2TextSinusoidalPositionalEmbedding, KosmosTextAttention, Kosmos2TextFFN, Kosmos2TextBlock, Kosmos2TextTransformer, Kosmos2PreTrainedModel, Kosmos2TextModel
 
 
 class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
