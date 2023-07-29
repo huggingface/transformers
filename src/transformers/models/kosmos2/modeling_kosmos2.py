@@ -98,6 +98,20 @@ KOSMOS2_VISION_INPUTS_DOCSTRING = r"""Kosmos-2"""
 KOSMOS2_TEXT_INPUTS_DOCSTRING = r"""Kosmos-2"""
 
 
+@dataclass
+class Kosmos2ModelOutput(ModelOutput):
+    """
+    """
+
+    last_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    image_features: Optional[torch.FloatTensor] = None
+    image_connector_attention: Optional[torch.FloatTensor] = None
+    vision_model_output: Optional[Tuple[torch.FloatTensor]] = None
+
+
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->Kosmos2
 class Kosmos2VisionEmbeddings(nn.Module):
     def __init__(self, config: Kosmos2VisionConfig):
@@ -1363,3 +1377,87 @@ class Kosmos2ImageToTextConnector(nn.Module):
         )
 
         return hidden_states, attn_weights
+
+
+class Kosmos2Model(Kosmos2PreTrainedModel):
+    config_class = Kosmos2Config
+
+    def __init__(self, config: Kosmos2Config):
+        super().__init__(config)
+
+        self.text_model = Kosmos2TextModel(config.text_config)
+        self.vision_model = Kosmos2VisionTransformer(config.vision_config)
+        self.img_connector = Kosmos2ImageToTextConnector(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.text_model.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.text_model.model.embed_tokens = value
+
+    def forward(
+        self,
+        pixel_values: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        img_attn_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        img_features: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        vision_model_output = None
+        image_connector_attention = None
+        if img_features is None:
+
+            if pixel_values is None:
+                raise ValueError("You have to specify either `pixel_values` or `img_features`.")
+
+            vision_model_output = self.vision_model(pixel_values)
+            # HF's CLIP has `last_hidden_state` without going through `post_layernorm`.
+            # Here we need the whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.
+            img_features = self.vision_model.post_layernorm(vision_model_output.last_hidden_state)
+            # normalized features
+            img_features = nn.functional.normalize(img_features, dim=-1)
+            img_features, image_connector_attention = self.img_connector(img_features)
+
+        outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            img_features=img_features,
+            img_attn_mask=img_attn_mask,
+            head_mask=head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        if not return_dict:
+            outputs = outputs + (img_features, image_connector_attention, vision_model_output)
+            return tuple(output for output in outputs if output is not None)
+
+        return Kosmos2ModelOutput(
+            last_hidden_states=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            image_features=img_features,
+            image_connector_attention=image_connector_attention,
+            vision_model_output=vision_model_output,
+        )
