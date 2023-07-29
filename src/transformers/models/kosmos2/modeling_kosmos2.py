@@ -1067,3 +1067,11 @@ class Kosmos2TextTransformer(nn.Module):
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
         )
+
+
+class Kosmos2PreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+    config_class = Kosmos2Config
