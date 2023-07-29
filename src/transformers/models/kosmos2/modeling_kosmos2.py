@@ -541,6 +541,7 @@ class Kosmos2TextSinusoidalPositionalEmbedding(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape).contiguous() + past_key_values_length
 
 
+#  Similar to transformers.models.bart.modeling_bart.BartAttention with an additional `inner_attn_ln`.
 class KosmosTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -696,7 +697,6 @@ class KosmosTextAttention(nn.Module):
         # partitioned across GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
-        # new
         if self.inner_attn_ln is not None:
             attn_output = self.inner_attn_ln(attn_output)
 
