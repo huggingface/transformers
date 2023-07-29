@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Kosmos-2 model configuration"""
+""" KOSMOS-2 model configuration"""
 
 import copy
 import os
@@ -28,15 +28,15 @@ BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "microsoft/kosmos-2-patch14-224": (
         "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/config.json"
     ),
-    # See all Kosmos-2 models at https://huggingface.co/models?filter=kosmos-2
+    # See all KOSMOS-2 models at https://huggingface.co/models?filter=kosmos-2
 }
 
 
 class Kosmos2TextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Kosmos2TextModel`]. It is used to instantiate a Kosmos2 text decoder
+    This is the configuration class to store the configuration of a [`Kosmos2TextModel`]. It is used to instantiate a KOSMOS-2 text decoder
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the text decoder of the Kosmos2
+    defaults will yield a similar configuration to that of the text decoder of the KOSMOS-2
     [microsoft/kosmos-2-patch14-224](https://huggingface.co/microsoft/kosmos-2-patch14-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -163,8 +163,8 @@ class Kosmos2TextConfig(PretrainedConfig):
 class Kosmos2VisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Kosmos2VisionModel`]. It is used to instantiate a
-    Kosmos2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the vision encoder of the Kosmos2
+    KOSMOS-2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the vision encoder of the KOSMOS-2
     [microsoft/kosmos-2-patch14-224](https://huggingface.co/microsoft/kosmos-2-patch14-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -267,9 +267,9 @@ class Kosmos2VisionConfig(PretrainedConfig):
 
 class Kosmos2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Kosmos2Model`]. It is used to instantiate an Kosmos-2
+    This is the configuration class to store the configuration of a [`Kosmos2Model`]. It is used to instantiate a KOSMOS-2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Kosmos-2
+    defaults will yield a similar configuration to that of the KOSMOS-2
     [microsoft/kosmos-2-patch14-224](https://huggingface.co/microsoft/kosmos-2-patch14-224) architecture.
 
     Args:
