@@ -1118,6 +1118,7 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(KOSMOS2_VISION_INPUTS_DOCSTRING)
+    # TODO: do we need this?
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Kosmos2VisionConfig)
     def forward(
         self,
@@ -1126,28 +1127,6 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from PIL import Image
-        >>> import requests
-        >>> from transformers import AutoProcessor, Kosmos2VisionModel
-
-        >>> model = Kosmos2VisionModel.from_pretrained("microsoft/kosmos-2-patch14-224")
-        >>> processor = AutoProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled CLS states
-        ```"""
         return self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -1178,12 +1157,8 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(KOSMOS2_TEXT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
-        config_class=Kosmos2TextConfig,
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
+    # TODO: do we need this?
+    @replace_return_docstrings(output_type=BaseModelOutputWithPastAndCrossAttentions, config_class=Kosmos2TextConfig)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1220,6 +1195,13 @@ class Kosmos2TextModel(Kosmos2PreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """
+    The text model from KOSMOS-2 with a language modeling head on top (linear layer with weights tied to the input
+    embeddings).
+    """,
+    KOSMOS2_START_DOCSTRING,
+)
 class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
     config_class = Kosmos2TextConfig
     _tied_weights_keys = ["lm_head.weight"]
@@ -1245,6 +1227,9 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    @add_start_docstrings_to_model_forward(KOSMOS2_TEXT_INPUTS_DOCSTRING)
+    # TODO: do we need this?
+    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=Kosmos2TextConfig)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
