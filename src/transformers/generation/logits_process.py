@@ -502,14 +502,16 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     >>> inputs = tokenizer(["I enjoy watching football"], return_tensors="pt")
 
-    >>> beam_output = model.generate(**inputs, max_length=50, num_beams=5, early_stopping=True, output_scores = True)
+    >>> beam_output = model.generate(**inputs, max_length=50, num_beams=5, early_stopping=True, output_scores=True)
     >>> print(tokenizer.decode(beam_output[0], skip_special_tokens=True))
     I enjoy watching football, but I'm not a fan of it. I don't like it. I don't like it. I don't like it. I don't like it. I don't like it. I don't like it.
 
-    >>> #Now let's add ngram size using <no_repeat_ngram_size> in model.generate. This should stop the repetitions in the output.
-    >>> beam_output = model.generate(**inputs, max_length=50, num_beams=5, no_repeat_ngram_size=2, early_stopping=True, output_scores = True)
+    >>> # Now let's add ngram size using <no_repeat_ngram_size> in model.generate. This should stop the repetitions in the output.
+    >>> beam_output = model.generate(
+    ...     **inputs, max_length=50, num_beams=5, no_repeat_ngram_size=2, early_stopping=True, output_scores=True
+    ... )
     >>> print(tokenizer.decode(beam_output[0], skip_special_tokens=True))
-    I enjoy watching football, but I don't think I'm going to be able to do it in the NFL. "I'm not sure if I want to play football or not. I've been playing football for a long time and I 
+    I enjoy watching football, but I don't think I'm going to be able to do it in the NFL. "I'm not sure if I want to play football or not. I've been playing football for a long time and I
     ```
     """
 
