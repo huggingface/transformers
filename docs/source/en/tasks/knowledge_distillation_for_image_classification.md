@@ -1,0 +1,188 @@
+<!--Copyright 2023 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+# Knowledge Distillation for Computer Vision
+
+Knowledge distillation is a technique used to transfer knowledge from a larger, more complex model (teacher) to a smaller, simpler model (student). In the context of image classification, the goal is to train the student model to mimic the behavior of the teacher model. In this notebook, we will do task-specific knowledge distillation. We will use [beans](https://huggingface.co/datasets/beans) for this.
+
+This tutorial aims to demonstrate how to distil ResNet (teacher model)[https://huggingface.co/microsoft/resnet-50] to [MobileNet](https://huggingface.co/google/mobilenet_v2_1.4_224) (student model) using `Trainer` API of 🤗 Transformers.
+
+Let's install the libraries needed for distillation and evaluating the process. 
+
+```bash
+pip install transformers datasets accelerate tensorboard evaluate --upgrade
+```
+
+In this example, we are using `google/mobilenet_v2_1.4_224` and `microsoft/resnet-50`, both are trained with ImageNet-1k dataset on resolution of 224x224. You can see that feature extractor returns the same output below.
+
+```python
+from transformers import AutoFeatureExtractor
+from PIL import Image
+import requests
+import numpy as np
+
+teacher_extractor = AutoFeatureExtractor.from_pretrained("microsoft/resnet-50")
+student_extractor = AutoFeatureExtractor.from_pretrained("google/mobilenet_v2_1.4_224")
+
+url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+sample = Image.open(requests.get(url, stream=True).raw)
+
+np.array_equal(teacher_extractor(sample),student_extractor(sample))
+```
+
+We will now load and pre-process the dataset. 
+
+```python
+from datasets import load_dataset
+
+dataset = load_dataset("beans")
+```
+
+We can use either of the processors given they return the same output. We will use `map()` method of `dataset` to apply the preprocessing to every split of the dataset.
+
+```python
+def process(examples):
+    processed_inputs = teacher_extractor(examples["image"])
+    return processed_inputs
+
+processed_datasets = dataset.map(process, batched=True)
+```
+
+Essentially, we want the student to mimick the teacher so we will get the output from the teacher and the student, multiply it with a parameter called `temperature`, then calculate KL-divergence between them. We will then calculate loss based on KL-divergence and student output, and to provide a trade-off between them, we will use a parameter called `lambda`. In this tutorial, we are going to use `lambda` as 0.5 and temperature as 5.
+
+
+```python
+from transformers import TrainingArguments, Trainer
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class ImageDistilTrainer(Trainer):
+    def __init__(self, *args, teacher_model=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.teacher = teacher_model
+        self.student = student_model
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.teacher.to(device)
+        self.teacher.eval()
+
+    def compute_loss(self, student, inputs, return_outputs=False):
+        lambda_param = 0.5
+        temperature = 5
+        student_output = self.student(**inputs)
+
+        with torch.no_grad():
+          teacher_output = self.teacher(**inputs)
+
+        loss_function = nn.KLDivLoss(reduction="batchmean")
+        loss_logits = (loss_function(
+            F.log_softmax(student_output.logits / temperature, dim=-1),
+            F.softmax(teacher_output.logits / temperature, dim=-1)) * (temperature ** 2))
+
+        loss = lambda_param * student_output.loss + (1. - lambda_param) * loss_logits
+        return (loss, student_output) if return_outputs else loss
+```
+
+We will now login to Hugging Face Hub so we can push out model to Hugging Face Hub through `Trainer`. 
+
+```python
+from huggingface_hub import notebook_login
+
+notebook_login()
+```
+
+Let's initialize the data collator and `Trainer`. We will use `DefaultDataCollator` for this. 
+
+```python
+from transformers import AutoModelForImageClassification, DefaultDataCollator
+
+training_args = TrainingArguments(
+    output_dir="my-awesome-model",
+    num_train_epochs=5,
+    fp16=True,
+    logging_dir=f"{repo_name}/logs",
+    logging_strategy="epoch",
+    evaluation_strategy="epoch",
+    save_strategy="epoch",
+    load_best_model_at_end=True,
+    metric_for_best_model="accuracy",
+    report_to="tensorboard",
+    push_to_hub=True,
+    hub_strategy="every_save",
+    hub_model_id=repo_name,
+    )
+
+
+data_collator = DefaultDataCollator()
+
+num_labels = len(processed_datasets["train"].features["labels"].names)
+
+# initialize models
+teacher_model = AutoModelForImageClassification.from_pretrained(
+    "microsoft/resnet-50",
+    num_labels=num_labels,
+    ignore_mismatched_sizes=True
+)
+
+student_model = AutoModelForImageClassification.from_pretrained(
+    "google/mobilenet_v2_1.4_224",
+    num_labels=num_labels,
+    ignore_mismatched_sizes=True
+)
+```
+
+We can use `compute_metrics` function to evaluate our model on the test set. This function will be used during the training process to compute the `accuracy` & `f1` of our model.
+
+```python
+import evaluate
+import numpy as np
+
+accuracy = evaluate.load("accuracy")
+
+def compute_metrics(eval_pred):
+    predictions, labels = eval_pred
+    acc = accuracy.compute(references=labels, predictions=np.argmax(predictions, axis=1))
+    return {"accuracy": acc["accuracy"]}
+```
+
+Let's initialize the `Trainer` with the training arguments we defined. 
+
+```python
+trainer = ImageDistilTrainer(
+    student_model,
+    training_args,
+    teacher_model=teacher_model,
+    train_dataset=processed_datasets["train"],
+    eval_dataset=processed_datasets["validation"],
+    data_collator=data_collator,
+    tokenizer=teacher_extractor,
+    compute_metrics=compute_metrics,
+)
+```
+
+We can now train our model.
+
+```python
+trainer.train()
+```
+
+We can evaluate the model on the test set.
+
+```python
+trainer.evaluate(processed_datasets["test"])
+```
+
+On test set, our model reaches 88 percent evaluation accuracy. To have a sanity check over efficiency of distillation, we also trained MobileNet on beans dataset from scratch with same hyperparameters and observed 33 percent accuracy on test set.
