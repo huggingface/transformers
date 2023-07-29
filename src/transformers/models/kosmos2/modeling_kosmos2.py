@@ -1396,7 +1396,8 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         self.text_model.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(KOSMOS2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Kosmos2ModelOutput, config_class=Kosmos2Config)
+    # TODO: why we can't use the custom output data class `Kosmos2ModelOutput`?
+    # @replace_return_docstrings(output_type=Kosmos2ModelOutput, config_class=Kosmos2Config)
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
