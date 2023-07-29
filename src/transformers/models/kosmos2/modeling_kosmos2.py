@@ -89,7 +89,9 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     return incremental_indices.long() + padding_idx
 
 
+KOSMOS2_START_DOCSTRING = r"""Kosmos-2"""
 KOSMOS2_VISION_INPUTS_DOCSTRING = r"""Kosmos-2"""
+KOSMOS2_TEXT_INPUTS_DOCSTRING = r"""Kosmos-2"""
 
 
 # copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->Kosmos2
@@ -928,7 +930,7 @@ class Kosmos2TextTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1076,3 +1078,78 @@ class Kosmos2PreTrainedModel(PreTrainedModel):
     """
     config_class = Kosmos2Config
     supports_gradient_checkpointing = True
+
+
+@add_start_docstrings(
+    """The text model from KOSMOS-2 without any head or projection on top.""",
+    KOSMOS2_START_DOCSTRING,
+)
+class Kosmos2TextModel(Kosmos2PreTrainedModel):
+    config_class = Kosmos2TextConfig
+
+    _no_split_modules = ["Kosmos2TextBlock"]
+
+    def __init__(self, config: Kosmos2TextConfig):
+        super().__init__(config)
+        self.model = Kosmos2TextTransformer(config)
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    @add_start_docstrings_to_model_forward(KOSMOS2_TEXT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPastAndCrossAttentions, config_class=Kosmos2TextConfig)
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        img_features: Optional[torch.Tensor] = None,
+        img_attn_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoTokenizer, CLIPTextModel
+
+        >>> model = CLIPTextModel.from_pretrained("openai/clip-vit-base-patch32")
+        >>> tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
+        ```"""
+        return self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            img_features=img_features,
+            img_attn_mask=img_attn_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            head_mask=head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
