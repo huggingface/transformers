@@ -40,6 +40,7 @@ from .configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig, Kosmos2Visi
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/kosmos-2-patch14-224"
+_CONFIG_FOR_DOC = Kosmos2Config
 _EXPECTED_OUTPUT_SHAPE = None
 
 
@@ -96,6 +97,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
 KOSMOS2_START_DOCSTRING = r"""Kosmos-2"""
 KOSMOS2_VISION_INPUTS_DOCSTRING = r"""Kosmos-2"""
 KOSMOS2_TEXT_INPUTS_DOCSTRING = r"""Kosmos-2"""
+KOSMOS2_INPUTS_DOCSTRING= r"""Kosmos-2"""
 
 
 @dataclass
@@ -1246,7 +1248,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         Returns:
 
@@ -1367,6 +1369,13 @@ class Kosmos2ImageToTextConnector(nn.Module):
         return hidden_states, attn_weights
 
 
+@add_start_docstrings(
+    """
+    KOSMOS-2 Model for generating text and image features. The model consists of a vision encoder (CLIP) and a language
+    model.
+    """,
+    KOSMOS2_START_DOCSTRING,
+)
 class Kosmos2Model(Kosmos2PreTrainedModel):
     config_class = Kosmos2Config
 
@@ -1386,6 +1395,8 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.model.embed_tokens = value
 
+    @add_start_docstrings_to_model_forward(KOSMOS2_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Kosmos2ModelOutput, config_class=Kosmos2Config)
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -1400,7 +1411,15 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple, Kosmos2ModelOutput]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>>
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
