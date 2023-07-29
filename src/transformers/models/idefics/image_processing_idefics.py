@@ -31,8 +31,8 @@ from ...image_utils import (
 from ...utils import TensorType, is_torch_available
 
 
-IDEFICS_STANDARD_MEAN = (0.48145466, 0.4578275, 0.40821073)
-IDEFICS_STANDARD_STD = (0.26862954, 0.26130258, 0.27577711)
+IDEFICS_STANDARD_MEAN = [0.48145466, 0.4578275, 0.40821073]
+IDEFICS_STANDARD_STD = [0.26862954, 0.26130258, 0.27577711]
 
 
 def convert_to_rgb(image):
