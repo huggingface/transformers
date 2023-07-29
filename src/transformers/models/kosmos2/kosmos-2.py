@@ -1,56 +1,14 @@
-from dataclasses import dataclass
-import copy
-import math
 import re
 import torch
-from torch import nn
-from transformers import PreTrainedModel
-from transformers import PretrainedConfig
-from transformers.activations import ACT2FN
-from typing import Optional, List, Tuple
-from transformers import CONFIG_MAPPING
-from transformers.modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
-from transformers.utils.generic import ModelOutput
 
 
 # Get this from the original kosmos-2 demo
 original_kosmos2_checkpoint_only_2_layers = "kosmos-2-state-dict-num-layers-2.bin"
 dog_sample_file = "sample.bin"
 
-# ==============================================================================================================
-# Config class
 
-from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig, Kosmos2VisionConfig
-
-
-# ==============================================================================================================
-# Vision model class
-# (completely copied from CLIPVision)
-
-# -----------------------------------------------------------------------
-# Fake values to make it work
-
-
-from typing import Union
-from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-KOSMOS2_VISION_INPUTS_DOCSTRING = ""
-KOSMOS2_START_DOCSTRING = ""
-from transformers import add_start_docstrings
-from transformers.utils import add_start_docstrings_to_model_forward, replace_return_docstrings
-
-
-
-# -----------------------------------------------------------------------
-
-from transformers.models.kosmos2.modeling_kosmos2 import Kosmos2VisionTransformer
-
-
-# ==============================================================================================================
-# Model class
-
-
+from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2Config, Kosmos2VisionConfig
 from transformers.models.kosmos2.modeling_kosmos2 import Kosmos2Model, Kosmos2ForConditionalGeneration
-
 
 
 # conversion
