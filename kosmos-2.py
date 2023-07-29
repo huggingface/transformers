@@ -133,7 +133,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     return incremental_indices.long() + padding_idx
 
 
-# Copied from transformers.models.m2m_100.modeling_m2m_100.Kosmos2TextSinusoidalPositionalEmbedding
+
 class Kosmos2TextSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
