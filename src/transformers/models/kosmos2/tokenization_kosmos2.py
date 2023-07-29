@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
+# Copyright 2023 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,8 +11,8 @@
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
-# limitations under the License
-""" Tokenization classes for Kosmos-2 model."""
+# limitations under the License.
+""" Tokenization classes for KOSMOS-2 model."""
 
 
 import os
@@ -33,12 +33,12 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "kosmos-2": "",
+        "microsoft/kosmos-2-patch14-224": "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/sentencepiece.bpe.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "kosmos-2": 512,
+    "microsoft/kosmos-2-patch14-224": 2048,
 }
 
 
@@ -90,6 +90,9 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
             modeling. This is the token which the model will try to predict.
         additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
+        num_patch_index_tokens (`int`, *optional*, defaults to `1024`):
+            The number of tokens used to specify the patch indices of bounding boxes in an image. These tokens have the
+            format `<patch_index_xxxx>` where `xxxx` is an integer.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
@@ -133,6 +136,8 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -141,11 +146,9 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
-            sp_model_kwargs=sp_model_kwargs,
+            sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-
-        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(str(vocab_file))
@@ -166,23 +169,45 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
         self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + self.fairseq_offset
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
-        # =================================================================
-        # Original repo. also has `(` issue
+        self.eod_token = "</doc>"
+
+        self.boi_token = "<image>"
+        self.eoi_token = "</image>"
+
+        self.eoc_token = "</chunk>"
+        self.eol_token = "</line>"
+
+        self.bop_token = "<phrase>"
+        self.eop_token = "</phrase>"
+
+        self.boo_token = "<object>"
+        self.eoo_token = "</object>"
+
+        self.dom_token = "</delimiter_of_multi_objects/>"
+
+        self.grd_token = "<grounding>"
+
+        tag_tokens = [
+            self.eod_token,
+            self.boi_token,
+            self.eoi_token,
+            self.eoc_token,
+            self.eol_token,
+            self.bop_token,
+            self.eop_token,
+            self.boo_token,
+            self.eoo_token,
+            self.dom_token,
+            self.grd_token,
+        ]
 
         self.num_patch_index_tokens = num_patch_index_tokens
-
-        self.tag_tokens = [
-            '</doc>', '<image>', '</image>', '</chunk>', '</line>', '<phrase>', '</phrase>',
-            '<object>', '</object>', '</delimiter_of_multi_objects/>', '<grounding>',
-        ]
         patch_index_tokens = [f"<patch_index_{str(x).zfill(4)}>" for x in range(self.num_patch_index_tokens)]
 
-        for idx, token in enumerate(self.tag_tokens + patch_index_tokens):
+        for idx, token in enumerate(tag_tokens + patch_index_tokens):
             self.add_tokens(AddedToken(token, lstrip=True, rstrip=False), special_tokens=True)
             self.fairseq_tokens_to_ids[token] = len(self.sp_model) + self.fairseq_offset + 1 + idx
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
-
-        # =================================================================
 
     def __getstate__(self):
         state = self.__dict__.copy()
