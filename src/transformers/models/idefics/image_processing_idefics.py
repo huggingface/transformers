@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for Idefics."""
 
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, List, Optional, Union
 
 from PIL import Image
 
@@ -55,19 +55,42 @@ class IdeficsImageProcessor(BaseImageProcessor):
     Args:
         image_size (`int`, *optional*, defaults to `224`):
             Resize to image size
+        image_num_channels (`int`, *optional*, defaults to `3`):
+            Number of image channels.
+        image_mean (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
+            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
+            overridden by the `image_mean` parameter in the `preprocess` method.
+        image_std (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
+            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
+            Can be overridden by the `image_std` parameter in the `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]
 
-    def __init__(self, do_resize: bool = True, image_size: int = 224, **kwargs) -> None:
+    def __init__(
+        self,
+        image_size: int = 224,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        image_num_channels: Optional[int] = 3,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
 
         self.image_size = image_size
+        self.image_num_channels = image_num_channels
+        self.image_mean = image_mean
+        self.image_std = image_std
 
     def preprocess(
         self,
         images: ImageInput,
+        image_num_channels: Optional[int] = 3,
         image_size: Optional[Dict[str, int]] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
         transform: Callable = None,
         **kwargs,
     ) -> TensorType.PYTORCH:
@@ -78,7 +101,17 @@ class IdeficsImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 A list of images to preprocess.
             image_size (`int`, *optional*, defaults to `self.image_size`):
-                Controls the size of the image in `resize` transform in inference.
+                Resize to image size
+            image_num_channels (`int`, *optional*, defaults to `self.image_num_channels`):
+                Number of image channels.
+            image_mean (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_MEAN`):
+                Mean to use if normalizing the image. This is a float or list of floats the length of the number of
+                channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can
+                be overridden by the `image_mean` parameter in the `preprocess` method.
+            image_std (`float` or `List[float]`, *optional*, defaults to `IDEFICS_STANDARD_STD`):
+                Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
+                number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess`
+                method. Can be overridden by the `image_std` parameter in the `preprocess` method.
             transform (`Callable`, *optional*, defaults to `None`):
                 A custom transform function that accepts a single image can be passed for training. For example,
                 `torchvision.Compose` can be used to compose multiple transforms. If `None` - an inference mode is
@@ -89,10 +122,16 @@ class IdeficsImageProcessor(BaseImageProcessor):
 
         """
         image_size = image_size if image_size is not None else self.image_size
+        image_num_channels = image_num_channels if image_num_channels is not None else self.image_num_channels
+        image_mean = image_mean if image_mean is not None else self.image_mean
+        image_std = image_std if image_std is not None else self.image_std
         size = (image_size, image_size)
 
         if len(images) == 0:
             return []
+
+        print(f"{image_mean=}")
+        print(f"{image_std=}")
 
         images = make_list_of_images(images)
 
@@ -102,31 +141,31 @@ class IdeficsImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
-        # For training a user needs to pass their own set of transforms as a Callable
-        # For reference this is what was used in the original IDEFICS training
+        # For training a user needs to pass their own set of transforms as a Callable.
+        # For reference this is what was used in the original IDEFICS training:
         # transform = transforms.Compose([
         #     convert_to_rgb,
         #     transforms.RandomResizedCrop((size, size), scale=(0.9, 1.0), interpolation=transforms.InterpolationMode.BICUBIC),
         #     transforms.ToTensor(),
         #     transforms.Normalize(mean=image_mean, std=image_std),
         # ])
-
         if transform is not None:
             if not is_torch_available():
-                raise ImportError("To pass in transforms torch must be installed")
+                raise ImportError("To pass in `transform` torch must be installed")
             import torch
 
             images = [transform(x) for x in images]
             return torch.stack(images)
 
+        # for inference we do the exact transforms that were used to train IDEFICS
         images = [convert_to_rgb(x) for x in images]
         # further transforms expect numpy arrays
         images = [to_numpy_array(x) for x in images]
         images = [resize(x, size, resample=PILImageResampling.BICUBIC) for x in images]
         images = [self.rescale(image=image, scale=1 / 255) for image in images]
-        images = [self.normalize(x, mean=IDEFICS_STANDARD_MEAN, std=IDEFICS_STANDARD_STD) for x in images]
+        images = [self.normalize(x, mean=image_mean, std=image_std) for x in images]
         images = [to_channel_dimension_format(x, ChannelDimension.FIRST) for x in images]
-        # this converts to torch tensors - switch to convert_to_tensors once it becomes available
+        # TODO: this converts to torch tensors - switch to convert_to_tensors once it becomes available
         images = BatchFeature(data={"pixel_values": images}, tensor_type=TensorType.PYTORCH)["pixel_values"]
 
         return images
