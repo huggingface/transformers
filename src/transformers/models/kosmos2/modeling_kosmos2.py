@@ -552,7 +552,7 @@ class KosmosTextAttention(nn.Module):
         num_heads: int,
         dropout: float = 0.0,
         is_decoder: bool = False,
-        add_inner_attn_layernorm=False,
+        add_inner_attn_layernorm: bool = False,
         bias: bool = True,
     ):
         super().__init__()
