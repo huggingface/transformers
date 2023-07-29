@@ -1328,3 +1328,38 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
             "attention_mask": attention_mask,
             "use_cache": use_cache,
         }
+
+
+class Kosmos2ImageToTextConnector(nn.Module):
+    """The layer that transforms the image model's output to part of the text model's input (namely, image features)"""
+    def __init__(self, config: Kosmos2Config):
+        super().__init__()
+        self.dense = nn.Linear(config.vision_config.hidden_size, config.text_config.embed_dim)
+        self.latent_query = nn.Parameter(torch.randn(config.latent_query_num, config.text_config.embed_dim))
+
+        self.x_attn = KosmosTextAttention(
+            config.text_config,
+            config.text_config.embed_dim,
+            config.text_config.attention_heads,
+            dropout=config.text_config.attention_dropout,
+            is_decoder=False,
+            add_inner_attn_layernorm=False,
+        )
+
+    def forward(self, features):
+
+        hidden_states = self.dense(features)
+
+        # shape = [batch, latent_query_num, h_dim]
+        latent_query = self.latent_query.unsqueeze(0).expand(hidden_states.size(0), -1, -1)
+        key_value_states = torch.cat([hidden_states, latent_query], dim=1)
+
+        hidden_states, attn_weights, _ = self.x_attn(
+            hidden_states=latent_query,
+            key_value_states=key_value_states,
+            past_key_value=None,
+            attention_mask=None,
+            output_attentions=None,
+        )
+
+        return hidden_states, attn_weights
