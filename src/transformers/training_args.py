@@ -1209,6 +1209,18 @@ class TrainingArguments:
         },
     )
 
+    deepspeed_force_lr_scheduler_checkpointing: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Force saving and loading or checkpointing the lr_scheduler when deepspeed is enabled and it does not "
+                "support the lr_scheduler type. "
+                "Use this to force keeping track of lr_scheduler when the model lr_scheduler type does not fall into "
+                "its supported lr_scheduler categories."
+            )
+        },
+    )
+
     def __post_init__(self):
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
