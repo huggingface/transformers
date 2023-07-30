@@ -1273,6 +1273,24 @@ def create_model(num_layers=2):
 if __name__ == "__main__":
 
     # ================================================================================
+    # check tokenizer and processor
+
+    from src.transformers.models.kosmos2.processing_kosmos2 import Kosmos2Processor
+    from src.transformers.models.kosmos2.tokenization_kosmos2 import Kosmos2Tokenizer
+    from src.transformers.models.kosmos2.tokenization_kosmos2_fast import Kosmos2TokenizerFast
+    from transformers import CLIPImageProcessor
+
+    slow_tokenizer = Kosmos2Tokenizer(vocab_file="../../sentencepiece.bpe.model")
+    fast_tokenizer = Kosmos2TokenizerFast()
+    image_processor = CLIPImageProcessor()
+    slow_processor = Kosmos2Processor(tokenizer=slow_tokenizer, image_processor=image_processor)
+    fast_processor = Kosmos2Processor(tokenizer=fast_tokenizer, image_processor=image_processor)
+    print(slow_processor)
+
+    r = slow_processor.tokenizer("I love <phrase>this dog</phrase>")
+    print(r)
+
+    # ================================================================================
     # config & model creation
 
     dummy_model = create_model(num_layers=2)
