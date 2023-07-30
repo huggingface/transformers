@@ -375,7 +375,7 @@ class IdeficsVisionEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer with CLIP->Idefics
+# Adapted from transformers.models.clip.modeling_clip.CLIPVisionTransformer
 class IdeficsVisionTransformer(nn.Module):
     def __init__(self, config: IdeficsVisionConfig):
         super().__init__()
