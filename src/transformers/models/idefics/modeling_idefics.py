@@ -28,7 +28,6 @@ from torch.nn import CrossEntropyLoss
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
-from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PretrainedConfig
 from ...utils import (
@@ -51,36 +50,6 @@ IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "HuggingFaceM4/idefics-80b",
     # See all Idefics models at https://huggingface.co/models?filter=idefics
 ]
-
-
-def deepspeed_gathered_parameters_context_manager(params, modify=True):
-    """
-    Under zero.Init returns a context manager that will gather the sharded param, otherwise returns an empty list
-
-    If `modify` is `True`, gather the shards and once the context exits update the shards with the modified data - one
-    wants that when modifying the gathered param. If one wants to just gather the shards in order to read the param and
-    no modifications are done to it, use `modify=False` as it's more efficient.
-
-    `params` - can be a single parameter, a list, or a tuple of parameters to collect.
-
-    Example:
-
-    from transformers.utils import ContextManagers from m4.training.utils import
-    deepspeed_gathered_parameters_context_manager with
-    ContextManagers(deepspeed_gathered_parameters_context_manager(module.weight, modify=True)):
-        module.weight.data.normal_(mean=0.0, std=std) if module.padding_idx is not None:
-            module.weight.data[module.padding_idx].zero_()
-
-
-    """
-    if is_deepspeed_zero3_enabled():
-        import deepspeed
-
-        # 0 is for updating `params` shards after modifying it, `None` is for read-only (only gather)
-        modifier_rank = 0 if modify else None
-        return [deepspeed.zero.GatheredParameters(params, modifier_rank=modifier_rank)]
-    else:
-        return []
 
 
 def expand_inputs_for_generation(
@@ -215,15 +184,24 @@ class IdeficsDecoupledEmbedding(nn.Embedding):
         num_embeddings,
         num_additional_embeddings,
         embedding_dim,
-        partially_freeze=False,
+        partially_freeze: Optional[bool] = False,
         device=None,
         dtype=None,
         padding_idx=None,
         **kwargs,
     ) -> None:
         """
-        num_additional_embeddings: int. Number of additional embeddings. Only useful when you `partially_freeze=True`.
-        partially_freeze: bool. If True, the regular `weight` will be frozen. `additional_weight` is never frozen.
+        Args:
+            num_embeddings (`int`):
+                Size of the dictionary of embeddings
+            num_additional_embeddings (`int`):
+                Number of additional embeddings. Only useful when you `partially_freeze=True`.
+            embedding_dim (`int`):
+                The size of each embedding vector
+            partially_freeze: (`bool`, *optional*, defaults to `False`):
+                If `True`, the regular `weight` will be frozen. `additional_weight` is never frozen.
+            padding_idx (`int`, *optional*):
+                The padding index (needs to be less than num_embeddings)
 
         Note: there are a lot of other parameters to initialize a standard `nn.Embedding` such as `padding_idx`,
         `max_norm` or `norm_type`. We are not supporting these.
@@ -519,7 +497,9 @@ class IdeficsAttention(nn.Module):
             raise ValueError("this model requires pytorch 2.0 or higher")
 
         if self.is_cross_attention:
-            kv_input_dim = self.hidden_size if not hasattr(config, "vision_embed_dim") else config.vision_embed_dim
+            kv_input_dim = (
+                self.hidden_size if not hasattr(config, "vision_config.embed_dim") else config.vision_config.embed_dim
+            )
             self.q_proj = nn.Linear(
                 self.hidden_size,
                 num_heads * self.head_dim,
@@ -613,7 +593,6 @@ class IdeficsAttention(nn.Module):
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
 
-        # TODO: check if PT version is > 2.0
         attn_output = nn.functional.scaled_dot_product_attention(
             query_states,
             key_states,
@@ -987,7 +966,6 @@ class IdeficsModel(IdeficsPreTrainedModel):
             padding_idx=self.padding_idx,
         )
 
-        # complain that it's not used
         self.image_size = config.vision_config.image_size
         self.vision_config = config.vision_config
         self.vision_model = IdeficsVisionTransformer(config.vision_config)
@@ -997,7 +975,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
             perceiver_config = config.perceiver_config
             self.perceiver_resampler = IdeficsPerceiverResampler(
                 config,
-                config.vision_embed_dim,
+                config.vision_config.embed_dim,
                 perceiver_config.resampler_depth,
                 perceiver_config.resampler_n_heads,
                 perceiver_config.resampler_head_dim,

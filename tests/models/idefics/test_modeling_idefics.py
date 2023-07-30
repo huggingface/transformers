@@ -294,11 +294,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_retain_grad_hidden_states_attentions(self):
         return
 
-    # TODO: re-write this test
-    @unittest.skip(reason="""IDEFICS has a unique initialization that makes the test fail.""")
-    def test_initialization(self):
-        return
-
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True

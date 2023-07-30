@@ -63,7 +63,7 @@ class IdeficsVisionModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Adapted from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->Idefics
 class IdeficsVisionEmbeddings(nn.Module):
     def __init__(self, config: IdeficsVisionConfig):
         super().__init__()
@@ -99,7 +99,7 @@ class IdeficsVisionEmbeddings(nn.Module):
         return embeddings
 
 
-# Adapted from transformers.models.clip.modeling_clip.CLIPAttention
+# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->IdeficsVision
 class IdeficsVisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -204,7 +204,7 @@ class IdeficsVisionAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Adapted from transformers.models.clip.modeling_clip.CLIPMLP
+# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->IdeficsVision
 class IdeficsVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -220,7 +220,7 @@ class IdeficsVisionMLP(nn.Module):
         return hidden_states
 
 
-# Adapted from transformers.models.clip.modeling_clip.CLIPEncoderLayer
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->IdeficsVision
 class IdeficsVisionEncoderLayer(nn.Module):
     def __init__(self, config: IdeficsVisionConfig):
         super().__init__()
@@ -271,7 +271,7 @@ class IdeficsVisionEncoderLayer(nn.Module):
         return outputs
 
 
-# Adapted from transformers.models.clip.modeling_clip.CLIPEncoder
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->IdeficsVision
 class IdeficsVisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
@@ -375,7 +375,7 @@ class IdeficsVisionEncoder(nn.Module):
         )
 
 
-# Adapted from transformers.models.clip.modeling_clip.CLIPVisionTransformer
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionTransformer with CLIP->Idefics
 class IdeficsVisionTransformer(nn.Module):
     def __init__(self, config: IdeficsVisionConfig):
         super().__init__()

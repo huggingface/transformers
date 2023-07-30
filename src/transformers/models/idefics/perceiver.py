@@ -41,22 +41,29 @@ from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 
+from .configuration_idefics import IdeficsConfig
+
 
 class IdeficsPerceiverResampler(nn.Module):
-    def __init__(self, config, embed_dim: int, depth: int, n_heads: int, head_dim: int, n_latents: int) -> None:
+    def __init__(
+        self, config: IdeficsConfig, embed_dim: int, depth: int, n_heads: int, head_dim: int, n_latents: int
+    ) -> None:
         """
         Instantiates a Perceiver Resampler that operates over a sequence of embeddings (say from a ResNet or ViT or
         MAE) of a given dimension, performs `depth` blocks of cross-attention with a fixed `n_latents` inputs, then
         returns a Tensor of shape [bsz, n_latents, embed_dim]. :param embed_dim: Dimensionality of embeddings being fed
-        to the Perceiver Resampler (also dimensionality of
-                          latent embeddings *returned* by the Perceiver Resampler. Could be e.g., VIT embed_dim, ResNet
-                          pool dim, and so on.
+        to the Perceiver Resampler (also dimensionality of latent embeddings *returned* by the Perceiver Resampler.
+        Could be e.g., VIT embed_dim, ResNet pool dim, and so on.
 
         Args:
-            depth: Depth of the Perceiver Resampler (Transformer w/ cross attention). Should be shallow (< 3).
-            n_heads: Number of heads in each Transformer block (for multi-headed self-attention).
-            head_dim: Dimensionality of each head projection in the Transformer block.
-            n_latents: Number of latent embeddings to resample ("compress") the input sequence to (usually < 128).
+            config (`IdeficsConfig`): config object
+            embed_dim (`int`): The size of each embedding vector
+            depth (`int`): Depth of the Perceiver Resampler (Transformer w/ cross attention). Should be shallow (< 3).
+            n_heads (`int`): Number of heads in each Transformer block (for multi-headed self-attention).
+            head_dim (`int`): Dimensionality of each head projection in the Transformer block.
+            n_latents (`int`):
+                Number of latent embeddings to resample ("compress") the input sequence to (usually < 128).
+
         """
         super().__init__()
         self.embed_dim, self.n_heads, self.head_dim, self.n_latents = embed_dim, n_heads, head_dim, n_latents
@@ -66,7 +73,9 @@ class IdeficsPerceiverResampler(nn.Module):
         self.latents = nn.Parameter(torch.randn(self.n_latents, self.embed_dim), requires_grad=True)
 
         self.intermediate_dim = (
-            self.embed_dim * 4 if not hasattr(config, "vision_embed_dim") else config.vision_embed_dim * 4
+            self.embed_dim * 4
+            if not hasattr(config.vision_config, "embed_dim")
+            else config.vision_config.embed_dim * 4
         )
         # Create Transformer Blocks
         self.blocks = nn.ModuleList(
@@ -122,10 +131,14 @@ class IdeficsPerceiverAttention(nn.Module):
         Runs Perceiver Self-Attention, with special (context, latents) appended along the `seq` dimension!
 
         Args:
-            context: Tensor of shape [bsz, seq, embed_dim] representing long-form context to resample.
-            latents: Tensor of shape [bsz, n_latents, embed_dim] representing fixed length latents to compress to.
+            context (`torch.Tensor`):
+                Tensor of shape `[bsz, seq, embed_dim]` representing long-form context to resample.
+            latents (`torch.Tensor`):
+                Tensor of shape `[bsz, n_latents, embed_dim]` representing fixed length latents to compress to.
 
-        Returns: Tensor of shape [bsz, n_latents, embed_dim] representing attention over latents w/ cross from context.
+        Returns:
+            `torch.Tensor`: Tensor of shape `[bsz, n_latents, embed_dim]` representing attention over latents w/ cross
+            from context.
         """
         context = self.context_layer_norm(context)
         latents = self.latents_layer_norm(latents)
@@ -157,10 +170,10 @@ class IdeficsPerceiverAttention(nn.Module):
 
 
 class IdeficsMLP(nn.Module):
-    def __init__(self, intermediate_size, config):
+    def __init__(self, intermediate_size, config: IdeficsConfig):
         """Simple MLP block with intermediate_size and embedding size"""
         super().__init__()
-        self.embed_dim = config.vision_embed_dim
+        self.embed_dim = config.vision_config.embed_dim
         self.ln = nn.LayerNorm(self.embed_dim)
         self.fc = nn.Linear(self.embed_dim, intermediate_size, bias=False)
         self.act = nn.ReLU()

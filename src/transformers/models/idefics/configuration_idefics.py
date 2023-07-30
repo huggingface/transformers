@@ -50,7 +50,6 @@ class IdeficsVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vision_model_name="google/vit-base-patch16-224",
         embed_dim=768,
         image_size=224,
         intermediate_size=5120,
@@ -65,7 +64,6 @@ class IdeficsVisionConfig(PretrainedConfig):
         initializer_factor=1.0,
         **kwargs,
     ):
-        self.vision_model_name = vision_model_name
         self.embed_dim = embed_dim
         self.image_size = image_size
         self.intermediate_size = intermediate_size
@@ -126,7 +124,6 @@ class IdeficsConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the Idefics model. Defines the number of different tokens that can be represented by the
@@ -150,7 +147,8 @@ class IdeficsConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings(`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        Example:
+
+    Example:
 
     ```python
     >>> from transformers import IdeficsModel, IdeficsConfig
@@ -238,8 +236,6 @@ class IdeficsConfig(PretrainedConfig):
             self.vision_config = IdeficsVisionConfig(**vision_config)
         elif isinstance(vision_config, IdeficsVisionConfig):
             self.vision_config = vision_config
-
-        self.vision_embed_dim = self.vision_config.embed_dim
 
         super().__init__(
             pad_token_id=pad_token_id,
