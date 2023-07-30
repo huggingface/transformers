@@ -187,7 +187,7 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
 
         self.grd_token = "<grounding>"
 
-        tag_tokens = [
+        self.tag_tokens = [
             self.eod_token,
             self.boi_token,
             self.eoi_token,
@@ -204,7 +204,7 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
         self.num_patch_index_tokens = num_patch_index_tokens
         patch_index_tokens = [f"<patch_index_{str(x).zfill(4)}>" for x in range(self.num_patch_index_tokens)]
 
-        for idx, token in enumerate(tag_tokens + patch_index_tokens):
+        for idx, token in enumerate(self.tag_tokens + patch_index_tokens):
             self.add_tokens(AddedToken(token, lstrip=True, rstrip=False), special_tokens=True)
             self.fairseq_tokens_to_ids[token] = len(self.sp_model) + self.fairseq_offset + 1 + idx
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}

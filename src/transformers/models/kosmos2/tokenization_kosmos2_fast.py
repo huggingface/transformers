@@ -156,6 +156,20 @@ class Kosmos2TokenizerFast(PreTrainedTokenizerFast):
 
         self.grd_token = "<grounding>"
 
+        self.tag_tokens = [
+            self.eod_token,
+            self.boi_token,
+            self.eoi_token,
+            self.eoc_token,
+            self.eol_token,
+            self.bop_token,
+            self.eop_token,
+            self.boo_token,
+            self.eoo_token,
+            self.dom_token,
+            self.grd_token,
+        ]
+
         self.num_patch_index_tokens = num_patch_index_tokens
 
     def build_inputs_with_special_tokens(

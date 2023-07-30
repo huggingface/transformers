@@ -384,17 +384,16 @@ class Kosmos2Processor(ProcessorMixin):
 
         return token_1, token_2
 
-    @staticmethod
-    def _add_remove_spaces_around_tag_tokens(text):
+    def _add_remove_spaces_around_tag_tokens(self, text):
 
-        targets = ["<phrase>", "</phrase>", "<image>", "</image>"]
-        pattern = "|".join(targets)
+        tag_tokens = set(self.tokenizer.tag_tokens + [f"<patch_index_{str(x).zfill(4)}>" for x in range(self.tokenizer.num_patch_index_tokens)])
+        pattern = "|".join(tag_tokens)
         splits = re.split(rf"({pattern})", text)
 
         output = ""
         prev_str_in_targets = False
         for split in splits:
-            if split in targets:
+            if split in tag_tokens:
                 prev_str_in_targets = True
                 output = output.rstrip() + split
             else:
