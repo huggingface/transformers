@@ -1332,13 +1332,20 @@ if __name__ == "__main__":
     print(r7)
 
     generated_ids = [
-        64012,   712,  1648,     9,
-        64007,    94, 17772, 64008, 64009, 64092, 65029, 64011, 64148, 65021,
-        64010,  1280,    12, 64007,     5,  4464, 64008, 64009, 64013, 65036,
-        64010,     2
+        64012,   712,  1648,     9, 64007,    94, 17772, 64008, 64009, 64092, 65029, 64011, 64148, 65021,
+        64010,  1280,    12, 64007,     5,  4464, 64008, 64009, 64013, 65036, 64010,     2
     ]
     r8 = fast_processor.decode(generated_ids)
     print(r8)
+
+    # slow_tokenizer.push_to_hub("ydshieh/kosmos-2-patch14-224", use_auth_token="XXX")
+    # fast_tokenizer.push_to_hub("ydshieh/kosmos-2-patch14-224", use_auth_token="XXX")
+    # image_processor.push_to_hub("ydshieh/kosmos-2-patch14-224", use_auth_token="XXX")
+    # fast_processor.push_to_hub("ydshieh/kosmos-2-patch14-224", use_auth_token="XXX")
+
+    # fast_processor = Kosmos2Processor.from_pretrained("ydshieh/kosmos-2-patch14-224")
+    # r9 = fast_processor.decode(generated_ids)
+    # print(r9)
 
     exit(0)
 
