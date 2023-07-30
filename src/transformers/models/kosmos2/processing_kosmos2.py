@@ -271,8 +271,9 @@ class Kosmos2Processor(ProcessorMixin):
                 # Add `<object> <patch_idx_xxxx> <patch_idx_yyy> </object>` after `<phrase> phrase text </phrase>`
                 text = self._insert_patch_index_tokens(text, bboxes)
 
-                # TODO: we want to avoid space before <x> and having a space after it (if not followed by <y>)
+                # Remove spaces before tag tokens (e.g. `<x>`) and ensure a space after it (if not followed another tag)
                 # This is to avoid the inconsistency of encoding results between slow and fast tokenizers.
+                text = self._add_remove_spaces_around_tag_tokens(text)
 
             return text
 
@@ -382,6 +383,28 @@ class Kosmos2Processor(ProcessorMixin):
         token_2 = f"<patch_index_{str(idx_2).zfill(4)}>"
 
         return token_1, token_2
+
+    @staticmethod
+    def _add_remove_spaces_around_tag_tokens(text):
+
+        targets = ["<phrase>", "</phrase>", "<image>", "</image>"]
+        pattern = "|".join(targets)
+        splits = re.split(rf"({pattern})", text)
+
+        output = ""
+        prev_str_in_targets = False
+        for split in splits:
+            if split in targets:
+                prev_str_in_targets = True
+                output = output.rstrip() + split
+            else:
+                if prev_str_in_targets and not split.startswith(" "):
+                    output += " " + split
+                else:
+                    output += split
+                prev_str_in_targets = False
+
+        return output
 
 
 def coordinate_to_patch_index(bbox: Tuple[float, float, float, float], num_patches_per_side: int) -> Tuple[int, int]:
