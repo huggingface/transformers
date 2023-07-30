@@ -331,7 +331,7 @@ class Kosmos2Processor(ProcessorMixin):
         return token_1, token_2
 
     @staticmethod
-    def coordinate_to_patch_index(bbox: Tuple[float], num_patches_per_side: int) -> tuple[int, int]:
+    def coordinate_to_patch_index(bbox: Tuple[float], num_patches_per_side: int) -> Tuple[int, int]:
         """Convert a bounding box to a pair of patch indices.
 
         Args:
