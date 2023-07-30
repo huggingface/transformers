@@ -281,6 +281,29 @@ class Kosmos2Processor(ProcessorMixin):
 
         return result
 
+    # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
+    def batch_decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
+        refer to the docstring of this method for more information.
+        """
+        return self.tokenizer.batch_decode(*args, **kwargs)
+
+    # Copied from transformers.models.blip.processing_blip.BlipProcessor.decode with BertTokenizerFast->PreTrainedTokenizer
+    def decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
+        to the docstring of this method for more information.
+        """
+        return self.tokenizer.decode(*args, **kwargs)
+
+    @property
+    # Copied from transformers.models.blip.processing_blip.BlipProcessor.model_input_names
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
     def _insert_patch_index_tokens(self, text: str, bboxes: Union[List[Tuple[int]], List[Tuple[float]]]) -> str:
         if bboxes is None or len(bboxes) == 0:
             return text
@@ -305,8 +328,7 @@ class Kosmos2Processor(ProcessorMixin):
             patch_index_strings = []
             # A phrase could have multiple bboxes
             for box in bbox:
-                num_patches_per_side = self.image_processor.image_size // self.image_processor.patch_size
-                patch_index_1, patch_index_2 = self._convert_bbox_to_patch_index_tokens(box, num_patches_per_side)
+                patch_index_1, patch_index_2 = self._convert_bbox_to_patch_index_tokens(box)
                 patch_index_strings.append(f"{patch_index_1} {patch_index_2}")
             position_str = " </delimiter_of_multi_objects/> ".join(patch_index_strings)
             buffer.append(f"<object> {position_str} </object>")
@@ -317,107 +339,89 @@ class Kosmos2Processor(ProcessorMixin):
         text = " ".join(buffer)
         return text
 
-    def _convert_bbox_to_patch_index_tokens(self, bbox: Tuple[float], num_grids_per_side: int) -> Tuple[int]:
+    def _convert_bbox_to_patch_index_tokens(
+        self, bbox: Union[Tuple[int, int], Tuple[float, float, float, float]]
+    ) -> Tuple[str, str]:
         # already computed patch indices
         if len(bbox) == 2:
             idx_1, idx_2 = bbox
         # bbox specified with (normalized) coordinates
         else:
-            idx_1, idx_2 = self.coordinate_to_patch_index(bbox, num_grids_per_side)
+            # use `self.tokenizer` to get `num_patches_per_side`
+            num_patches_per_side = int(math.sqrt(self.tokenizer.num_patch_index_tokens))
+            idx_1, idx_2 = coordinate_to_patch_index(bbox, num_patches_per_side)
 
         token_1 = f"<patch_index_{str(idx_1).zfill(4)}>"
         token_2 = f"<patch_index_{str(idx_2).zfill(4)}>"
 
         return token_1, token_2
 
-    @staticmethod
-    def coordinate_to_patch_index(bbox: Tuple[float], num_patches_per_side: int) -> Tuple[int, int]:
-        """Convert a bounding box to a pair of patch indices.
 
-        Args:
-            bbox (`Tuple[float]`):
-                The 4 coordinates of the bounding box, with the format being (x1, y1, x2, y2) specifying the upper-left
-                and lower-right corners of the box. It should have x2 > x1 and  y1 > y2.
-            num_patches_per_side (`int`): the number of patches along each side.
+def coordinate_to_patch_index(bbox: Tuple[float, float, float, float], num_patches_per_side: int) -> Tuple[int, int]:
+    """Convert a bounding box to a pair of patch indices.
 
-        Returns:
-            `Tuple[int, int]`: A pair of patch indices.
-        """
-        (x1, y1, x2, y2) = bbox
+    Args:
+        bbox (`Tuple[float, float, float, float]`):
+            The 4 coordinates of the bounding box, with the format being (x1, y1, x2, y2) specifying the upper-left
+            and lower-right corners of the box. It should have x2 > x1 and  y1 > y2.
+        num_patches_per_side (`int`): the number of patches along each side.
 
-        ul_x = math.floor(x1 * num_patches_per_side)
-        ul_y = math.floor(y1 * num_patches_per_side)
+    Returns:
+        `Tuple[int, int]`: A pair of patch indices.
+    """
+    (x1, y1, x2, y2) = bbox
 
-        lr_x = math.ceil(x2 * num_patches_per_side - 1)
-        lr_y = math.ceil(y2 * num_patches_per_side - 1)
+    ul_x = math.floor(x1 * num_patches_per_side)
+    ul_y = math.floor(y1 * num_patches_per_side)
 
-        ul_idx = ul_y * num_patches_per_side + ul_x
-        lr_idx = lr_y * num_patches_per_side + lr_x
+    lr_x = math.ceil(x2 * num_patches_per_side - 1)
+    lr_y = math.ceil(y2 * num_patches_per_side - 1)
 
-        return ul_idx, lr_idx
+    ul_idx = ul_y * num_patches_per_side + ul_x
+    lr_idx = lr_y * num_patches_per_side + lr_x
 
-    # copied from https://github.com/microsoft/unilm/blob/97e4923e97d3ee10b57e97013556e3fd0d207a9b/kosmos-2/demo/decode_string.py#L35C1-L75C38
-    def patch_index_to_coordinate(self, ul_idx: int, lr_idx: int, num_patches_per_side: int):
-        """
-        Given a grid of length `num_patches_per_side` and the indices of the upper-left and lower-right corners of a
-        bounding box, returns the normalized coordinates of the bounding box, in the form (x1, y1, x2, y2).
+    return ul_idx, lr_idx
 
-        Args:
-            ul_idx (`int`): the index of the grid cell that corresponds to the upper-left corner of the bounding box.
-            lr_idx (`int`): the index of the grid cell that corresponds to the lower-right corner of the bounding box.
-            num_patches_per_side (`int`): the number of patches along each side.
 
-        Returns:
-            `Tuple[float]`: the normalized coordinates of the bounding box, in the form (x1, y1, x2, y2).
-        """
-        # Compute the size of each cell in the grid
-        cell_size = 1.0 / num_patches_per_side
+# copied from https://github.com/microsoft/unilm/blob/97e4923e97d3ee10b57e97013556e3fd0d207a9b/kosmos-2/demo/decode_string.py#L35C1-L75C38
+def patch_index_to_coordinate(ul_idx: int, lr_idx: int, num_patches_per_side: int):
+    """
+    Given a grid of length `num_patches_per_side` and the indices of the upper-left and lower-right corners of a
+    bounding box, returns the normalized coordinates of the bounding box, in the form (x1, y1, x2, y2).
 
-        # Compute the x and y indices of the upper-left and lower-right corners of the bounding box
-        ul_x = ul_idx % num_patches_per_side
-        ul_y = ul_idx // num_patches_per_side
+    Args:
+        ul_idx (`int`): the index of the grid cell that corresponds to the upper-left corner of the bounding box.
+        lr_idx (`int`): the index of the grid cell that corresponds to the lower-right corner of the bounding box.
+        num_patches_per_side (`int`): the number of patches along each side.
 
-        lr_x = lr_idx % num_patches_per_side
-        lr_y = lr_idx // num_patches_per_side
+    Returns:
+        `Tuple[float]`: the normalized coordinates of the bounding box, in the form (x1, y1, x2, y2).
+    """
+    # Compute the size of each cell in the grid
+    cell_size = 1.0 / num_patches_per_side
 
-        # Compute the normalized coordinates of the bounding box
-        if ul_idx == lr_idx:
-            x1 = ul_x * cell_size
-            y1 = ul_y * cell_size
-            x2 = lr_x * cell_size + cell_size
-            y2 = lr_y * cell_size + cell_size
-        elif ul_x == lr_x or ul_y == lr_y:
-            x1 = ul_x * cell_size
-            y1 = ul_y * cell_size
-            x2 = lr_x * cell_size + cell_size
-            y2 = lr_y * cell_size + cell_size
-        else:
-            x1 = ul_x * cell_size + cell_size / 2
-            y1 = ul_y * cell_size + cell_size / 2
-            x2 = lr_x * cell_size + cell_size / 2
-            y2 = lr_y * cell_size + cell_size / 2
+    # Compute the x and y indices of the upper-left and lower-right corners of the bounding box
+    ul_x = ul_idx % num_patches_per_side
+    ul_y = ul_idx // num_patches_per_side
 
-        return x1, y1, x2, y2
+    lr_x = lr_idx % num_patches_per_side
+    lr_y = lr_idx // num_patches_per_side
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
+    # Compute the normalized coordinates of the bounding box
+    if ul_idx == lr_idx:
+        x1 = ul_x * cell_size
+        y1 = ul_y * cell_size
+        x2 = lr_x * cell_size + cell_size
+        y2 = lr_y * cell_size + cell_size
+    elif ul_x == lr_x or ul_y == lr_y:
+        x1 = ul_x * cell_size
+        y1 = ul_y * cell_size
+        x2 = lr_x * cell_size + cell_size
+        y2 = lr_y * cell_size + cell_size
+    else:
+        x1 = ul_x * cell_size + cell_size / 2
+        y1 = ul_y * cell_size + cell_size / 2
+        x2 = lr_x * cell_size + cell_size / 2
+        y2 = lr_y * cell_size + cell_size / 2
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.decode with BertTokenizerFast->PreTrainedTokenizer
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
-        to the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.model_input_names
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+    return x1, y1, x2, y2
