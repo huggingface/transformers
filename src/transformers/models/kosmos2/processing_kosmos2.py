@@ -205,7 +205,7 @@ class Kosmos2Processor(ProcessorMixin):
         texts: Union[TextInput, List[TextInput]],
         images: ImageInput = None,
         bboxes: Union[List[Tuple[int]], List[Tuple[float]], List[List[Tuple[int]]], List[List[Tuple[float]]]] = None,
-        num_image_tokens: Optional[int] = 64
+        num_image_tokens: Optional[int] = 64,
     ) -> Union[str, List[str]]:
         """Add image and bounding box information to `texts` as image and patch index tokens.
 
