@@ -1311,6 +1311,17 @@ if __name__ == "__main__":
     # {'input_ids': [0, 13, 275, 64007, 38, 1133, 64008, 2], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1]}
     print(r3)
 
+    texts = ["<grounding>I love  <phrase> this dog</phrase> and <phrase>those 2 cats </phrase>"]
+    # Fake value
+    image = True
+    bboxes = [[(1, 2), [(1, 64), (7, 100)]]]
+
+    r4 = slow_processor.preprocess_text(texts=texts, images=image, bboxes=bboxes)
+    print(r4)
+
+    r5 = slow_processor.preprocess_text(texts=texts, images=image, bboxes=bboxes)
+    print(r5)
+
     exit(0)
 
     # ================================================================================
