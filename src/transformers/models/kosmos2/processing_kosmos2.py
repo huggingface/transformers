@@ -20,9 +20,9 @@ import re
 from typing import List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, is_batched
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import PaddingStrategy, TextInput, TruncationStrategy
 from ...utils import TensorType
 from ...utils import is_tf_available, is_torch_available
 
@@ -255,7 +255,7 @@ class Kosmos2Processor(ProcessorMixin):
             batched = False
             texts = [texts]
 
-        if not isinstance(images, list):
+        if not is_batched(images):
             images = [images]
         if len(texts) != len(images):
             raise ValueError(f"The number of examples in `texts` and `images` should be the same. Got {len(texts)} v.s. {len(images)} instead.")
