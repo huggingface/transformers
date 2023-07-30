@@ -231,7 +231,7 @@ class Kosmos2Processor(ProcessorMixin):
         img_info = " ".join(["<image>"] + img_tokens + ["</image>"])
 
         def check_bboxes_for_single_text(bboxes):
-            """Verify `bboxes` for a single text example. It should be `None` or a list of tuples."""
+            """Verify `bboxes` for a single text example. It should be `None` or a list of containing `None`, tuples or a list of tuples."""
             if bboxes is None:
                 return
             elif not isinstance(bboxes, list):
