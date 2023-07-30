@@ -498,7 +498,7 @@ class IdeficsAttention(nn.Module):
 
         if self.is_cross_attention:
             kv_input_dim = (
-                self.hidden_size if not hasattr(config, "vision_config.embed_dim") else config.vision_config.embed_dim
+                self.hidden_size if not hasattr(config.vision_config, "embed_dim") else config.vision_config.embed_dim
             )
             self.q_proj = nn.Linear(
                 self.hidden_size,
