@@ -35,6 +35,9 @@ if is_tf_available():
     import tensorflow as tf
 
 
+BboxInput = Union[List[Tuple[int, 2]], List[Tuple[float, 4]], List[List[Tuple[int, 2]]], List[List[Tuple[float, 4]]]]
+
+
 class Kosmos2Processor(ProcessorMixin):
     r"""
     Constructs an KOSMOS-2 processor which wraps a CLIP image processor and a KOSMOS-2 tokenizer into a single
@@ -62,7 +65,7 @@ class Kosmos2Processor(ProcessorMixin):
         self,
         images: ImageInput = None,
         text: Union[TextInput, List[TextInput]] = None,
-        bboxes: Union[List[Tuple[int]], List[Tuple[float]], List[List[Tuple[int]]], List[List[Tuple[float]]]] = None,
+        bboxes: BboxInput = None,
         num_image_tokens: Optional[int] = 64,
         first_image_token_id: Optional[int] = None,
         add_special_tokens: bool = True,
@@ -204,7 +207,7 @@ class Kosmos2Processor(ProcessorMixin):
         self,
         texts: Union[TextInput, List[TextInput]],
         images: ImageInput = None,
-        bboxes: Union[List[Tuple[int]], List[Tuple[float]], List[List[Tuple[int]]], List[List[Tuple[float]]]] = None,
+        bboxes: BboxInput = None,
         num_image_tokens: Optional[int] = 64,
     ) -> Union[str, List[str]]:
         """Add image and bounding box information to `texts` as image and patch index tokens.
@@ -213,7 +216,7 @@ class Kosmos2Processor(ProcessorMixin):
             texts (`Union[TextInput, List[TextInput]]`): The texts to be processed.
             images (`ImageInput`, *optional*): The images associated to `texts`.
             bboxes (`Union[List[Tuple[int]], List[Tuple[float]], List[List[Tuple[int]]], List[List[Tuple[float]]]]`, *optional*): The bounding bboxes associated to `texts`.
-            num_image_tokens (`int`, *optional*, defaults to 64): The number of image tokens (used as latent queries).
+            num_image_tokens (`int`, *optional*, defaults to 64): The number of image tokens (used as latent queries). This should corresponds to the `latent_query_num` attribute in `Kosmos2Config`.
 
         Returns:
             `Union[TextInput, List[TextInput]]`: The processed texts with image and patch index tokens.
