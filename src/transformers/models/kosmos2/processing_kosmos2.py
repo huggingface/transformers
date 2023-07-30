@@ -231,7 +231,17 @@ class Kosmos2Processor(ProcessorMixin):
         img_info = " ".join(["<image>"] + img_tokens + ["</image>"])
 
         def check_bboxes_for_single_text(bboxes):
-            """Verify `bboxes` for a single text example. It should be `None` or a list of containing `None`, tuples or a list of tuples."""
+            """
+            Check `bboxes` for a single text example. It could be
+                - `None`: no bounding box associated to a text.
+                - A list with each element being the bounding boxes associated to one `<phrase> ... </phrase>` pair
+                  found in a text. This could be:
+                      - `None`: no bounding box associated to a `<phrase> ... </phrase>` pair.
+                      - A tuple of 2 integers: A single bounding box specified by patch indices.
+                      - A tuple of 4 float point number: A single bounding box specified by (normalized) coordinates.
+                      - A list containing the above 2 tuple types: Multiple bounding boxes for a
+                       `<phrase> ... </phrase>` pair.
+            """
             if bboxes is None:
                 return
             elif not isinstance(bboxes, list):
@@ -245,7 +255,12 @@ class Kosmos2Processor(ProcessorMixin):
                     bbox = [bbox]
                 for elt in bbox:
                     if not isinstance(elt, tuple) or not ((len(elt) == 2 and all(isinstance(x, int) for x in elt)) or (len(elt) == 4 and all(isinstance(x, float) for x in elt))):
-                        raise ValueError("Each element in `bboxes` (for a single text example) should be `None`, a tuple containing 2 integers or 4 float point numbers, or a list containing `None` or such tuples.")
+                        raise ValueError(
+                            "Each element in `bboxes` (for a single text example) should be `None`, a tuple containing "
+                            "2 integers or 4 float point numbers, or a list containing such tuples. Also "
+                            "make sure the arguments `texts` and `bboxes` passed to `preprocess_text` are both in "
+                            "batches or both for a single example."
+                    )
 
         def preprocess_single(text, image, bboxes):
 
