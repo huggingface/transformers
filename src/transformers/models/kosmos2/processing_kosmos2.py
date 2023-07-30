@@ -364,7 +364,7 @@ class Kosmos2Processor(ProcessorMixin):
         if curr_pos < len(text):
             buffer.append(text[curr_pos:])
 
-        text = " ".join(buffer)
+        text = "".join(buffer)
         return text
 
     def _convert_bbox_to_patch_index_tokens(
