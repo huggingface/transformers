@@ -35,7 +35,12 @@ if is_tf_available():
     import tensorflow as tf
 
 
-BboxInput = Union[List[Tuple[int, 2]], List[Tuple[float, 4]], List[List[Tuple[int, 2]]], List[List[Tuple[float, 4]]]]
+BboxInput = Union[
+    List[Tuple[int, int]],
+    List[Tuple[float, float, float, float]],
+    List[List[Tuple[int, int]]],
+    List[List[Tuple[float, float, float]]]
+]
 
 
 class Kosmos2Processor(ProcessorMixin):
