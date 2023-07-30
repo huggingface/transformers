@@ -24,4 +24,4 @@ rendered properly in your Markdown viewer.
 
 ## 더 빠른 추론을 위한 `BetterTransformer` [[bettertransformer-for-faster-inference]]
 
-우리는 최근 텍스트, 이미지 및 오디오 모델에 대한 다중 GPU에서 더 빠른 추론을 위해 `BetterTransformer`를 통합했습니다. 자세한 내용은 이 통합에 대한 문서 [여기](https://huggingface.co/docs/optimum/bettertransformer/overview)를 확인하십시오.
+우리는 최근 텍스트, 이미지 및 오디오 모델에 대한 다중 GPU에서 더 빠른 추론을 위해 `BetterTransformer`를 통합했습니다. 자세한 내용은 이 통합에 대한 [문서](https://huggingface.co/docs/optimum/bettertransformer/overview)를 확인하십시오.
