@@ -271,6 +271,9 @@ class Kosmos2Processor(ProcessorMixin):
                 # Add `<object> <patch_idx_xxxx> <patch_idx_yyy> </object>` after `<phrase> phrase text </phrase>`
                 text = self._insert_patch_index_tokens(text, bboxes)
 
+                # TODO: we want to avoid space before <x> and having a space after it (if not followed by <y>)
+                # This is to avoid the inconsistency of encoding results between slow and fast tokenizers.
+
             return text
 
         # make batch to simplify processing logic
