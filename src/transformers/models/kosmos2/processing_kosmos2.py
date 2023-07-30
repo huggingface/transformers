@@ -237,6 +237,7 @@ class Kosmos2Processor(ProcessorMixin):
             elif not isinstance(bboxes, list):
                 raise ValueError("`bboxes` (for a single text example) should be `None` or a list.")
 
+            # `bbox` is the bounding boxes for a single <phrase> </phrase> pair
             for bbox in bboxes:
                 if bbox is None:
                     continue
@@ -244,7 +245,7 @@ class Kosmos2Processor(ProcessorMixin):
                     bbox = [bbox]
                 for elt in bbox:
                     if not isinstance(elt, tuple) or not ((len(elt) == 2 and all(isinstance(x, int) for x in elt)) or (len(elt) == 4 and all(isinstance(x, float) for x in elt))):
-                        raise ValueError("Each element in `bboxes` (for a single text example) should be `None`, a tuple containing 2 integers or 4 float point numbers, or a list containing such tuples.")
+                        raise ValueError("Each element in `bboxes` (for a single text example) should be `None`, a tuple containing 2 integers or 4 float point numbers, or a list containing `None` or such tuples.")
 
         def preprocess_single(text, image, bboxes):
 
