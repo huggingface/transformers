@@ -335,8 +335,6 @@
         title: HerBERT
       - local: model_doc/ibert
         title: I-BERT
-      - local: model_doc/idefics
-        title: IDEFICS
       - local: model_doc/jukebox
         title: Jukebox
       - local: model_doc/led
@@ -687,6 +685,8 @@
         title: Decision Transformer
       - local: model_doc/trajectory_transformer
         title: Trajectory Transformer
+      - local: model_doc/idefics
+        title: IDEFICS
       title: Reinforcement learning models
     - isExpanded: false
       sections:
