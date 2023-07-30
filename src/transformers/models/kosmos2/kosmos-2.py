@@ -1319,8 +1319,26 @@ if __name__ == "__main__":
     r4 = slow_processor.preprocess_text(texts=texts, images=image, bboxes=bboxes)
     print(r4)
 
-    r5 = slow_processor.preprocess_text(texts=texts, images=image, bboxes=bboxes)
+    r5 = fast_processor.preprocess_text(texts=texts, images=image, bboxes=bboxes)
     print(r5)
+
+    from PIL import Image
+    image = Image.open("dog_cats.jpg")
+
+    r6 = slow_processor(text=texts, images=image, bboxes=bboxes)
+    print(r6)
+
+    r7 = fast_processor(text=texts, images=image, bboxes=bboxes)
+    print(r7)
+
+    generated_ids = [
+        64012,   712,  1648,     9,
+        64007,    94, 17772, 64008, 64009, 64092, 65029, 64011, 64148, 65021,
+        64010,  1280,    12, 64007,     5,  4464, 64008, 64009, 64013, 65036,
+        64010,     2
+    ]
+    r8 = fast_processor.decode(generated_ids)
+    print(r8)
 
     exit(0)
 
