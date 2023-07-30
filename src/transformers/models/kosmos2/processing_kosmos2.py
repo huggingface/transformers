@@ -12,19 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Processor class for Kosmos-2. Largely copy of Blip2Processor with addition of a tokenizer for the Q-Former.
-"""
+"""Processor class for KOSMOS-2."""
 
-import os
-from typing import List, Optional, Union
+import math
+import numpy as np
+import re
+from typing import List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
-from ..auto import AutoTokenizer
 from ...utils import is_tf_available, is_torch_available
 
 import copy
@@ -38,7 +37,7 @@ if is_tf_available():
 
 class Kosmos2Processor(ProcessorMixin):
     r"""
-    Constructs an Kosmos-2 processor which wraps a CLIP image processor and a Kosmos-2 tokenizer into a single
+    Constructs an KOSMOS-2 processor which wraps a CLIP image processor and a KOSMOS-2 tokenizer into a single
     processor.
 
     [`Kosmos2Processor`] offers all the functionalities of [`CLIPImageProcessor`] and [`Kosmos2TokenizerFast`]. See the
@@ -55,14 +54,17 @@ class Kosmos2Processor(ProcessorMixin):
     tokenizer_class = ("Kosmos2Tokenizer", "Kosmos2TokenizerFast")
 
     def __init__(self, image_processor, tokenizer):
+        tokenizer.return_token_type_ids = False
         super().__init__(image_processor, tokenizer)
         self.current_processor = self.image_processor
 
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        bbox: Union[None] = None,
+        text: Union[TextInput, List[TextInput]] = None,
+        bboxes: Union[List[Tuple[int]], List[Tuple[float]], List[List[Tuple[int]]], List[List[Tuple[float]]]] = None,
+        num_image_tokens: Optional[int] = 64,
+        first_image_token_id: Optional[int] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -86,9 +88,9 @@ class Kosmos2Processor(ProcessorMixin):
         Please refer to the docstring of the above two methods for more information.
         """
         if text is None:
-            raise ValueError("You have to specify at least text.")
+            raise ValueError("You have to specify at least `text`.")
 
-        text = self.preprocess_text(text, images, bbox)
+        text = self.preprocess_text(text, images, bboxes, num_image_tokens=num_image_tokens)
 
         encoding = BatchFeature()
 
@@ -110,44 +112,42 @@ class Kosmos2Processor(ProcessorMixin):
             return_tensors=return_tensors,
             **kwargs,
         )
-        encoding["decoder_input_ids"] = text_encoding["input_ids"]
-        encoding["decoder_attention_mask"] = text_encoding["attention_mask"]
+        encoding.update(text_encoding)
 
         if images is not None:
             image_encoding = self.image_processor(images, return_tensors=return_tensors)
-            encoding["pixel_values"] = image_encoding["pixel_values"]
+            encoding.update(image_encoding)
 
-            # Add `img_attn_mask`
+            # Use the id of the first token after <unk>
+            if first_image_token_id is None:
+                first_image_token_id = self.tokenizer.unk_token_id + 1
 
-            # The leading and trailing `0` are for <boi> and <eoi> tokens. The `1`s indicate the places of image tokens.
-            image_token_ids = list(range(4, 4 + 64))
-            base_img_attn_mask = [0] + [1] * 64 + [0]
-            # To see if we need one more `0` for `img_attn_mask` at the beginning
+            # To see if we need one more `0` (for `<s>`) at the beginning of `img_attn_mask`.
             with_bos = add_special_tokens
 
-            # The start of 2nd <image>
+            # The first (actual) `<image>` token is always at the 1st or 2nd place (after `<s>` if any). Here we look
+            # for the second `<image>` token (which indicate the first image token).
             start_index = int(with_bos) + 1
 
             if return_tensors:
 
-                import numpy as np
+                # change the ids for the fake `<image>` tokens in `input_ids`
+                input_ids = np.array(encoding["input_ids"])
+                input_ids[:, start_index:(start_index + num_image_tokens)] = np.arange(first_image_token_id, first_image_token_id + num_image_tokens)
 
-                # change <image> ids in `decoder_input_ids`
-                decoder_input_ids = np.array(encoding["decoder_input_ids"])
-                decoder_input_ids[:, start_index:(start_index + 64)] = np.arange(4, 4 + 64)
-
-                batch_size, seq_len = decoder_input_ids.shape[:2]
+                batch_size, seq_len = input_ids.shape[:2]
                 img_attn_mask = []
                 if with_bos:
+                    # for `<s>`
                     img_attn_mask.append(np.zeros(shape=(batch_size, 1), dtype=np.int64))
-                # <boi>
+                # for `<image>` (the real one)
                 img_attn_mask.append(np.zeros(shape=(batch_size, 1), dtype=np.int64))
-                # image tokens
+                # for image tokens
                 img_attn_mask.append(np.ones(shape=(batch_size, 64), dtype=np.int64))
-                # <eoi>
+                # for `</image>`
                 img_attn_mask.append(np.zeros(shape=(batch_size, 1), dtype=np.int64))
-                # trailing part
-                seq_len -= (int(with_bos) + 1 + 64 + 1)
+                # trailing part (which are not related to the image)
+                seq_len -= (int(with_bos) + 1 + num_image_tokens + 1)
                 img_attn_mask.append(np.zeros(shape=(batch_size, seq_len), dtype=np.int64))
 
                 # concatenate along the sequence dimension
@@ -155,46 +155,101 @@ class Kosmos2Processor(ProcessorMixin):
 
                 # to the target tensor type
                 if return_tensors == "pt":
-                    decoder_input_ids = torch.from_numpy(decoder_input_ids)
+                    input_ids = torch.from_numpy(input_ids)
                     img_attn_mask = torch.from_numpy(img_attn_mask)
                 elif return_tensors == "tf":
-                    decoder_input_ids = tf.convert_to_tensor(decoder_input_ids)
+                    input_ids = tf.convert_to_tensor(input_ids)
                     img_attn_mask = tf.convert_to_tensor(img_attn_mask)
 
-                encoding["decoder_input_ids"] = decoder_input_ids
+                encoding["input_ids"] = input_ids
                 encoding["img_attn_mask"] = img_attn_mask
 
             else:
-                # loop over `text_encoding["input_ids"]`
+                # Add `img_attn_mask`: the leading and trailing `0` are for `boi` and `eoi` tokens. The `1` indicates
+                # the places of image tokens.
+                image_token_ids = list(range(first_image_token_id, first_image_token_id + num_image_tokens))
+                base_img_attn_mask = [0] + [1] * num_image_tokens + [0]
+
+                # loop over `encoding["input_ids"]`
                 input_ids = []
                 img_attn_mask = []
-                all_input_ids = encoding["decoder_input_ids"]
-                # not batched -> batch of size 1
+                all_input_ids = encoding["input_ids"]
+                # not batched -> (changed to) batch of size 1
                 if isinstance(text, str):
                     all_input_ids = [all_input_ids]
                 for text_ids in all_input_ids:
-                    text_ids = text_ids[:start_index] + image_token_ids + text_ids[start_index + 64:]
+                    # change the ids for the fake `<image>` tokens in `input_ids`
+                    text_ids = text_ids[:start_index] + image_token_ids + text_ids[start_index + num_image_tokens:]
                     input_ids.append(text_ids)
+
                     mask = copy.copy(base_img_attn_mask)
                     if with_bos:
+                        # for `<s>`
                         mask = [0] + mask
+                    # trailing part (which are not related to the image)
                     mask += [0] * (len(text_ids) - len(mask))
                     img_attn_mask.append(mask)
 
-                # un-batch
+                # un-batch if necessary
                 if isinstance(text, str):
                     input_ids = input_ids[0]
                     img_attn_mask = img_attn_mask[0]
-                encoding["decoder_input_ids"] = input_ids
+
+                encoding["input_ids"] = input_ids
                 encoding["img_attn_mask"] = img_attn_mask
 
         return encoding
 
-    def preprocess_text(self, texts, images=None, bboxes=None):
+    def preprocess_text(
+        self,
+        texts: Union[TextInput, List[TextInput]],
+        images: ImageInput = None,
+        bboxes: Union[List[Tuple[int]], List[Tuple[float]], List[List[Tuple[int]]], List[List[Tuple[float]]]] = None,
+        num_image_tokens: Optional[int] = 64
+    ) -> Union[str, List[str]]:
+        """Add image and bounding box information to `texts` as image and patch index tokens.
 
-        if images is None:
-            return texts
+        Args:
+            texts (`Union[TextInput, List[TextInput]]`): The texts to be processed.
+            images (`ImageInput`, *optional*): The images associated to `texts`.
+            bboxes (`Union[List[Tuple[int]], List[Tuple[float]], List[List[Tuple[int]]], List[List[Tuple[float]]]]`, *optional*): The bounding bboxes associated to `texts`.
+            num_image_tokens (`int`, *optional*, defaults to 64): The number of image tokens (used as latent queries).
 
+        Returns:
+            `Union[TextInput, List[TextInput]]`: The processed texts with image and patch index tokens.
+        """
+        # These are fake `<image>` tokens enclosed between (the actual) `<image>` token and `</image>`.
+        img_tokens = ["<image>"] * num_image_tokens
+        img_info = " ".join(["<image>"] + img_tokens + ["</image>"])
+
+        def check_bboxes_for_single_text(bboxes):
+            """Verify `bboxes` for a single text example. It should be `None` or a list of tuples."""
+            if bboxes is None:
+                return
+            elif not isinstance(bboxes, list):
+                raise ValueError("`bboxes` (for a single text example) should be `None` or a list.")
+
+            for bbox in bboxes:
+                if bbox is None:
+                    continue
+                elif not isinstance(bbox, list):
+                    bbox = [bbox]
+                for elt in bbox:
+                    if not isinstance(elt, tuple) or not ((len(elt) == 2 and all(isinstance(x, int) for x in elt)) or (len(elt) == 4 and all(isinstance(x, float) for x in elt))):
+                        raise ValueError("Each element in `bboxes` (for a single text example) should be `None`, a tuple containing 2 integers or 4 float point numbers, or a list containing such tuples.")
+
+        def preprocess_single(text, image, bboxes):
+
+            if image is not None:
+                # Add `<image> ... (fake) image tokens ... </image>`
+                text = f"{img_info} {text}"
+
+                # Add `<object> <patch_idx_xxxx> <patch_idx_yyy> </object>` after `<phrase> phrase text </phrase>`
+                text = self._insert_patch_index_tokens(text, bboxes)
+
+            return text
+
+        # make batch to simplify processing logic
         batched = True
         if isinstance(texts, str):
             batched = False
@@ -202,94 +257,147 @@ class Kosmos2Processor(ProcessorMixin):
 
         if not isinstance(images, list):
             images = [images]
-        assert len(texts) == len(images)
+        if len(texts) != len(images):
+            raise ValueError(f"The number of examples in `texts` and `images` should be the same. Got {len(texts)} v.s. {len(images)} instead.")
 
-        if bboxes is not None:
+        if not batched:
+            check_bboxes_for_single_text(bboxes)
+            bboxes = [bboxes]
+        elif bboxes is not None:
             if not isinstance(bboxes, list):
-                # A tuple of 2 elements: (float, float)
-                bboxes = [bboxes]
-            elif bboxes[0] is None or isinstance(bboxes[0], tuple):
-                bboxes = [bboxes]
-            assert len(texts) == len(bboxes)
+                raise ValueError("`bboxes` should be `None` or a list (as a batch) when `texts` is passed as a batch.")
+            for x in bboxes:
+                check_bboxes_for_single_text(x)
         else:
             bboxes = [None] * len(texts)
 
-        # These are same as text tokens, but they will be enclosed between <image> and </image>.
-        img_tokens = ["<image>"] * 64
-        img_info = " ".join(["<image>"] + img_tokens + ["</image>"])
-
-        def preprocess_single(text, image, bbox):
-
-            # Add <image> tag </image>
-            if image is not None:
-                text = f"{img_info} {text}"
-
-                # Add `<object> <patch_idx_xxxx> <patch_idx_yyy> </object>` after `<phrase> text </phrase>`
-                if bbox is not None and len(bbox) > 0:
-                    text = self.insert_patch_index_tokens(text, bbox)
-
-            return text
+        if len(bboxes) != len(texts):
+            raise ValueError(f"The number of examples in `texts` and `bboxes` should be the same. Got {len(texts)} v.s. {len(bboxes)} instead.")
 
         result = [preprocess_single(text, image, bbox) for text, image, bbox in zip(texts, images, bboxes)]
+        # un-batch if necessary
         if not batched:
             result = result[0]
 
         return result
 
-    def insert_patch_index_tokens(self, text, bboxes):
+    def _insert_patch_index_tokens(self, text: str, bboxes: Union[List[Tuple[int]], List[Tuple[float]]]) -> str:
+        if bboxes is None or len(bboxes) == 0:
+            return text
 
-        import re
         matched_phrases = list(re.finditer(r"<phrase>.+?</phrase>", string=text))
+        if len(matched_phrases) != len(bboxes):
+            raise ValueError(f"The number of elements in `bboxes` should be the same as the number of `<phrase> ... </phrase>` pairs in `text`. Got {len(matched_phrases)} v.s. {len(bboxes)} instead.")
 
-        assert len(matched_phrases) == len(bboxes)
-
+        # insert object's patch index tokens after the found `<phrase> ... </phrase>` pairs.
         curr_pos = 0
         buffer = []
         for matched, bbox in zip(matched_phrases, bboxes):
             _, end = matched.span()
             buffer.append(text[curr_pos:end])
             curr_pos = end
-            if bbox is not None:
-                if isinstance(bbox, tuple):
-                    bbox = [bbox]
-                patch_index_strings = []
-                for box in bbox:
-                    patch_index_1, patch_index_2 = self.convert_bbox_to_patch_index_tokens(box)
-                    patch_index_strings.append(f"{patch_index_1} {patch_index_2}")
-                position_str = " </delimiter_of_multi_objects/> ".join(patch_index_strings)
-                buffer.append(f"<object> {position_str} </object>")
+            # A phrase without bbox
+            if bbox is None:
+                continue
+            # A phrase with a single bbox
+            if isinstance(bbox, tuple):
+                bbox = [bbox]
+            patch_index_strings = []
+            # A phrase could have multiple bboxes
+            for box in bbox:
+                num_patches_per_side = self.image_processor.image_size // self.image_processor.patch_size
+                patch_index_1, patch_index_2 = self._convert_bbox_to_patch_index_tokens(box, num_patches_per_side)
+                patch_index_strings.append(f"{patch_index_1} {patch_index_2}")
+            position_str = " </delimiter_of_multi_objects/> ".join(patch_index_strings)
+            buffer.append(f"<object> {position_str} </object>")
         # remaining
         if curr_pos < len(text):
             buffer.append(text[curr_pos:])
 
         text = " ".join(buffer)
-
         return text
 
-        # processor.insert_patch_index_tokens2("hello <phrase> I am good </phrase><phrase>dog</phrase>", None, bboxes=[(1, 2), (3, 4)])
-        # processor.insert_patch_index_tokens("hello <phrase> I am good </phrase>", None, bboxes=[(1, 2), (3, 4)])
-    def convert_bbox_to_patch_index_tokens(self, bbox):
-
-        if not isinstance(bbox, tuple):
-            raise ValueError(f"`bbox` needs to be a tuple. Got {type(bbox)} instead.")
-        elif len(bbox) not in [2, 4]:
-            raise ValueError(f"`bbox` needs to be a tuple of 2 or 4 elements. Got a tuple of {len(bbox)} elements instead.")
-
+    def _convert_bbox_to_patch_index_tokens(self, bbox: Tuple[float], num_grids_per_side: int) -> Tuple[int]:
         # already computed patch indices
         if len(bbox) == 2:
-            if not all(isinstance(c, int) for c in bbox):
-                raise ValueError(f"`bbox` needs to be a tuple of the same type `int` when it has 2 elements. Got `{tuple(type(c) for c in bbox)}` instead.")
             idx_1, idx_2 = bbox
-        # bbox specified with coordinates
+        # bbox specified with (normalized) coordinates
         else:
-            if not all(isinstance(c, float) for c in bbox):
-                raise ValueError(f"`bbox` needs to be a tuple of the same type `float` when it has 4 elements. Got `{tuple(type(c) for c in bbox)}` instead.")
-            idx_1, idx_2 = self.coordinate_to_patch_index(bbox)
+            idx_1, idx_2 = self.coordinate_to_patch_index(bbox, num_grids_per_side)
 
         token_1 = f"<patch_index_{str(idx_1).zfill(4)}>"
         token_2 = f"<patch_index_{str(idx_2).zfill(4)}>"
 
         return token_1, token_2
+
+    @staticmethod
+    def coordinate_to_patch_index(bbox: Tuple[float], num_patches_per_side: int) -> tuple[int, int]:
+        """Convert a bounding box to a pair of patch indices.
+
+        Args:
+            bbox (`Tuple[float]`):
+                The 4 coordinates of the bounding box, with the format being (x1, y1, x2, y2) specifying the upper-left
+                and lower-right corners of the box. It should have x2 > x1 and  y1 > y2.
+            num_patches_per_side (`int`): the number of patches along each side.
+
+        Returns:
+            `Tuple[int, int]`: A pair of patch indices.
+        """
+        (x1, y1, x2, y2) = bbox
+
+        ul_x = math.floor(x1 * num_patches_per_side)
+        ul_y = math.floor(y1 * num_patches_per_side)
+
+        lr_x = math.ceil(x2 * num_patches_per_side - 1)
+        lr_y = math.ceil(y2 * num_patches_per_side - 1)
+
+        ul_idx = ul_y * num_patches_per_side + ul_x
+        lr_idx = lr_y * num_patches_per_side + lr_x
+
+        return ul_idx, lr_idx
+
+    # copied from https://github.com/microsoft/unilm/blob/97e4923e97d3ee10b57e97013556e3fd0d207a9b/kosmos-2/demo/decode_string.py#L35C1-L75C38
+    def patch_index_to_coordinate(self, ul_idx: int, lr_idx: int, num_patches_per_side: int):
+        """
+        Given a grid of length `num_patches_per_side` and the indices of the upper-left and lower-right corners of a
+        bounding box, returns the normalized coordinates of the bounding box, in the form (x1, y1, x2, y2).
+
+        Args:
+            ul_idx (`int`): the index of the grid cell that corresponds to the upper-left corner of the bounding box.
+            lr_idx (`int`): the index of the grid cell that corresponds to the lower-right corner of the bounding box.
+            num_patches_per_side (`int`): the number of patches along each side.
+
+        Returns:
+            `Tuple[float]`: the normalized coordinates of the bounding box, in the form (x1, y1, x2, y2).
+        """
+        # Compute the size of each cell in the grid
+        cell_size = 1.0 / num_patches_per_side
+
+        # Compute the x and y indices of the upper-left and lower-right corners of the bounding box
+        ul_x = ul_idx % num_patches_per_side
+        ul_y = ul_idx // num_patches_per_side
+
+        lr_x = lr_idx % num_patches_per_side
+        lr_y = lr_idx // num_patches_per_side
+
+        # Compute the normalized coordinates of the bounding box
+        if ul_idx == lr_idx:
+            x1 = ul_x * cell_size
+            y1 = ul_y * cell_size
+            x2 = lr_x * cell_size + cell_size
+            y2 = lr_y * cell_size + cell_size
+        elif ul_x == lr_x or ul_y == lr_y:
+            x1 = ul_x * cell_size
+            y1 = ul_y * cell_size
+            x2 = lr_x * cell_size + cell_size
+            y2 = lr_y * cell_size + cell_size
+        else:
+            x1 = ul_x * cell_size + cell_size / 2
+            y1 = ul_y * cell_size + cell_size / 2
+            x2 = lr_x * cell_size + cell_size / 2
+            y2 = lr_y * cell_size + cell_size / 2
+
+        return x1, y1, x2, y2
 
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
     def batch_decode(self, *args, **kwargs):
@@ -313,65 +421,3 @@ class Kosmos2Processor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-
-    def coordinate_to_patch_index(self, bbox, P=32):
-        # TODO: un-normalized version
-
-        # The assumption is: x2 > x1 and  y1 > y2
-        (x1, y1, x2, y2) = bbox
-
-        import math
-        ul_x = math.floor(x1 * P)
-        ul_y = math.floor(y1 * P)
-
-        lr_x = math.ceil(x2 * P - 1)
-        lr_y = math.ceil(y2 * P - 1)
-
-        ul_idx = ul_y * P + ul_x
-        lr_idx = lr_y * P + lr_x
-
-        return ul_idx, lr_idx
-
-    # copied from https://github.com/microsoft/unilm/blob/97e4923e97d3ee10b57e97013556e3fd0d207a9b/kosmos-2/demo/decode_string.py#L35C1-L75C38
-    # TODO: clean up + un-normalized version
-    def patch_index_to_coordinate(self, ul_idx, lr_idx, P=32):
-        """
-        Given a grid of length P and the indices of the upper-left and lower-right corners of a bounding box,
-        returns the normalized coordinates of the bounding box, in the form [x1, y1, x2, y2].
-
-        Args:
-        - P (int): the length of the grid
-        - ul_idx (int): the index of the grid cell that corresponds to the upper-left corner of the bounding box
-        - lr_idx (int): the index of the grid cell that corresponds to the lower-right corner of the bounding box
-
-        Returns:
-        - box_coords (np.array of shape (4,)): the normalized coordinates of the bounding box, in the form [x1, y1, x2, y2]
-        """
-        # Compute the size of each cell in the grid
-        cell_size = 1.0 / P
-
-        # Compute the x and y indices of the upper-left and lower-right corners of the bounding box
-        ul_x = ul_idx % P
-        ul_y = ul_idx // P
-
-        lr_x = lr_idx % P
-        lr_y = lr_idx // P
-
-        # Compute the normalized coordinates of the bounding box
-        if ul_idx == lr_idx:
-            x1 = ul_x * cell_size
-            y1 = ul_y * cell_size
-            x2 = lr_x * cell_size + cell_size
-            y2 = lr_y * cell_size + cell_size
-        elif ul_x == lr_x or ul_y == lr_y:
-            x1 = ul_x * cell_size
-            y1 = ul_y * cell_size
-            x2 = lr_x * cell_size + cell_size
-            y2 = lr_y * cell_size + cell_size
-        else:
-            x1 = ul_x * cell_size + cell_size / 2
-            y1 = ul_y * cell_size + cell_size / 2
-            x2 = lr_x * cell_size + cell_size / 2
-            y2 = lr_y * cell_size + cell_size / 2
-
-        return x1, y1, x2, y2
