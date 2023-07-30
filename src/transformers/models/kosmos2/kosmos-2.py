@@ -4,7 +4,9 @@ import torch
 
 # Get this from the original kosmos-2 demo
 original_kosmos2_checkpoint_only_2_layers = "kosmos-2-state-dict-num-layers-2.bin"
-dog_sample_file = "sample.bin"
+dog_sample_file = "sample_dog.bin"
+snowman_sample_file = "sample_snowman.bin"
+snowman_sample_detail_file = "sample_snowman_detail.bin"
 
 
 from transformers.models.kosmos2.configuration_kosmos2 import Kosmos2Config, Kosmos2VisionConfig
@@ -1205,6 +1207,88 @@ def check_real_model_with_dog_sample(model):
     assert generated_output[0, 71:].tolist() == expected_generation
 
 
+def check_real_model_with_snowman_sample(model):
+
+    # --------------------------------------------------------------------
+    # real input: (snowman)
+
+    sample = torch.load(snowman_sample_file, map_location=torch.device('cpu'))
+
+    pixel_values = sample["net_input"]["img_src_tokens"]
+    # It's of shape [1, 1, 3, 224, 224]. Change it to `[1, 3, 224, 224]`
+    pixel_values = pixel_values[0]
+
+    input_ids = sample["net_input"]["src_tokens"]
+    img_attn_mask = sample["net_input"]["img_gpt_input_mask"]
+    # We need a `bool` value
+    img_attn_mask = img_attn_mask.bool()
+
+    # --------------------------------------------------------------------
+    # generation with `use_cache`
+
+    expected_generation = [64007, 10, 43867, 64008, 64009, 64057, 64876, 64010, 5950, 597, 32, 64007, 10, 646, 64008, 64009, 64018, 64924, 64010, 4, 2]
+
+    # use `model`
+    # with `use_cache=True`
+    generated_output = model.generate(
+        pixel_values=pixel_values,
+        input_ids=input_ids,
+        use_cache=True,
+        past_key_values=None,
+        img_features=None,
+        img_attn_mask=img_attn_mask,
+        max_new_tokens=len(expected_generation),
+    )
+    assert generated_output[0, 71:].tolist() == expected_generation
+
+
+def check_real_model_with_snowman_detail_sample(model):
+
+    # --------------------------------------------------------------------
+    # real input: (snowman detail)
+
+    sample = torch.load(snowman_sample_detail_file, map_location=torch.device('cpu'))
+
+    pixel_values = sample["net_input"]["img_src_tokens"]
+    # It's of shape [1, 1, 3, 224, 224]. Change it to `[1, 3, 224, 224]`
+    pixel_values = pixel_values[0]
+
+    input_ids = sample["net_input"]["src_tokens"]
+    img_attn_mask = sample["net_input"]["img_gpt_input_mask"]
+    # We need a `bool` value
+    img_attn_mask = img_attn_mask.bool()
+
+    # --------------------------------------------------------------------
+    # generation with `use_cache`
+
+    expected_generation = [
+        24,  1648,  1338,    10, 43867,  1280,
+        32, 64007,    10, 30879, 64008, 64009, 64018, 65020, 64010,    12,
+        5,  1842,     4,    71,    17,  1679, 64007,    10,  3958, 64008,
+        64009, 64061, 64263, 64010,     6, 64007, 15719, 64008, 64009, 64253,
+        64617, 64010,     6,     8, 64007,  9626, 64008, 64009, 64413, 64545,
+        64010,     6,    23, 64007,    10,  4363, 64008, 64009, 64623, 64885,
+        64010,  2255,     8, 64007,    10,  3486, 64008, 64009, 64809, 65036,
+        64010,  1560,  2255,     4,    24, 43867,  1684,     7,    27,  3774,
+        5, 10356,     9,     5,   646,     6,     8,    22,  1684,     7,
+        30,    10,  2007,     8, 16239,  4337,     4,     2
+    ]
+
+    # use `model`
+    # with `use_cache=True`
+    generated_output = model.generate(
+        pixel_values=pixel_values,
+        input_ids=input_ids,
+        use_cache=True,
+        past_key_values=None,
+        img_features=None,
+        img_attn_mask=img_attn_mask,
+        max_new_tokens=len(expected_generation),
+    )
+    assert generated_output[0, 75:].tolist() == expected_generation
+    # generated_output = model.generate(pixel_values=pixel_values, input_ids=input_ids, use_cache=True, past_key_values=None, img_features=None, img_attn_mask=img_attn_mask, max_new_tokens=94)
+
+
 def check_head_base_model_loading(config):
 
     model = Kosmos2ForConditionalGeneration(config=config)
@@ -1347,6 +1431,14 @@ if __name__ == "__main__":
     # r9 = fast_processor.decode(generated_ids)
     # print(r9)
 
+    text = "<grounding>Describe this image in detail:"
+    image = Image.open("snowman.jpg")
+    bboxes = None
+
+    # There is a big problem if the tag token is at the beginning of the sentence
+    inputs = fast_processor(text=text, images=image, bboxes=bboxes)
+    print(inputs)
+
     exit(0)
 
     # ================================================================================
@@ -1405,6 +1497,14 @@ if __name__ == "__main__":
 
     # ================================================================================
 
-    check_real_model_with_dog_sample(real_model)
+    #check_real_model_with_dog_sample(real_model)
+
+    # ================================================================================
+
+    #check_real_model_with_snowman_sample(real_model)
+
+    # ================================================================================
+
+    check_real_model_with_snowman_detail_sample(real_model)
 
     # ================================================================================
