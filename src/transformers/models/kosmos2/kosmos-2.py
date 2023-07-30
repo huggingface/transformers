@@ -1280,15 +1280,38 @@ if __name__ == "__main__":
     from src.transformers.models.kosmos2.tokenization_kosmos2_fast import Kosmos2TokenizerFast
     from transformers import CLIPImageProcessor
 
-    slow_tokenizer = Kosmos2Tokenizer(vocab_file="../../sentencepiece.bpe.model")
-    fast_tokenizer = Kosmos2TokenizerFast()
+    slow_tokenizer = Kosmos2Tokenizer(vocab_file="sentencepiece.bpe.model")
+    fast_tokenizer = Kosmos2TokenizerFast(__slow_tokenizer=slow_tokenizer)
     image_processor = CLIPImageProcessor()
     slow_processor = Kosmos2Processor(tokenizer=slow_tokenizer, image_processor=image_processor)
     fast_processor = Kosmos2Processor(tokenizer=fast_tokenizer, image_processor=image_processor)
     print(slow_processor)
 
-    r = slow_processor.tokenizer("I love <phrase>this dog</phrase>")
-    print(r)
+    r1 = slow_tokenizer.tokenize("I love <phrase>this dog</phrase>")
+    # ['▁I', '▁love', '<phrase>', '▁this', '▁dog', '</phrase>']
+    print(r1)
+    r1 = slow_tokenizer("I love <phrase>this dog</phrase>")
+    # {'input_ids': [0, 13, 275, 64007, 38, 1133, 64008, 2], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1]}
+    print(r1)
+
+    # for fast tokenizer, we will get extra token if a tag token has a space before it.
+    # we also get an extra token before "this" token.
+    r2 = fast_tokenizer.tokenize("I love <phrase>this dog</phrase>")
+    # ['▁I', '▁love', '▁', '<phrase>', 'this', '▁dog', '</phrase>']
+    print(r2)
+    r2 = fast_tokenizer("I love <phrase>this dog</phrase>")
+    # {'input_ids': [0, 13, 275, 106, 64007, 5966, 1133, 64008, 2], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1]}
+    print(r2)
+
+    # Avoid this issue by `removing that space` + `having a space before a normal token that is after a tag token`
+    r3 = fast_tokenizer.tokenize("I love<phrase> this dog</phrase>")
+    # ['▁I', '▁love', '<phrase>', '▁this', '▁dog', '</phrase>']
+    print(r3)
+    r3 = fast_tokenizer("I love<phrase> this dog</phrase>")
+    # {'input_ids': [0, 13, 275, 64007, 38, 1133, 64008, 2], 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1]}
+    print(r3)
+
+    exit(0)
 
     # ================================================================================
     # config & model creation
