@@ -439,10 +439,10 @@ class EtaLogitsWarper(LogitsWarper):
 
 def _get_ngrams(ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int):
     """
-    Assume ngram_size =2 and input tokenized tensor([[ 40, 2883, 2712, 4346, 319, 262, 21511]]) 
-    The output of generated ngrams look like this {(40,): [2883, 1053], (2883,): [2712], (2712,): [4346]} (Note this is only a subset of the
-    dictionary to illustrate a simplified representation of the generated n-grams). The key is a generated word and the
-    value is a list of the next words observed.
+    Assume ngram_size =2 and prev_input_ids= tensor([[ 40, 2883, 2712, 4346, 319, 262, 21511]]). The output of
+    generated ngrams look like this {(40,): [2883, 1053], (2883,): [2712], (2712,): [4346]} (Note this is only a subset
+    of the dictionary to illustrate a simplified representation of the generated n-grams). The key is a generated word
+    and the value is a list of the next words observed.
 
     Args:
         ngram_size (`int`):
@@ -471,15 +471,11 @@ def _get_ngrams(ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int):
 def _get_generated_ngrams(banned_ngrams, prev_input_ids, ngram_size, cur_len):
     """
     This function is responsible for determining the tokens that are banned for each hypothesis based on the previously
-    generated n-grams. 
-    generated_ngrams = { (40,): [2883, 1053], (2883,): [2712], (2712,): [4346] } 
-    prev_input_ids = torch.tensor([[40, 2883, 2712, 4346, 319, 262, 21511]]) 
-    cur_len = 3 
-    The function then calculates the banned tokens for each index by looking at the last ngram_size - 1 tokens 
-    (excluding the last token) of the current hypothesis and checking if they form an n-gram that exists 
-    in the banned_ngrams dictionary. In this case, 
-    start_idx = 2
-    ngram_idx = (2712,) which matches the key from the banned_ngrams list output returns: [4346]
+    generated n-grams. Let's consider generated_ngrams = { (40,): [2883, 1053], (2883,): [2712], (2712,): [4346] },
+    prev_input_ids = torch.tensor([[40, 2883, 2712, 4346, 319, 262, 21511]]), cur_len = 3. The function then calculates
+    the banned tokens for each index by looking at the last ngram_size - 1 tokens (excluding the last token) of the
+    current hypothesis and checking if they form an n-gram that exists in the banned_ngrams dictionary. In this case,
+    start_idx = 2 ngram_idx = (2712,) which matches the key from the banned_ngrams list output returns: [4346]
 
     Args:
         banned_ngrams (`dict`):
