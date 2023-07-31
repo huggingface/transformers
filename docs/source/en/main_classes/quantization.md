@@ -106,9 +106,9 @@ Note also that `device_map` is optional but setting `device_map = 'auto'` is pre
 
 </Tip>
 
-#### Advanced usecases
+#### Advanced use cases
 
-Here we will cover some advanced usecases you can perform with FP4 quantization 
+Here we will cover some advanced use cases you can perform with FP4 quantization 
 
 ##### Change the compute dtype
 
@@ -184,13 +184,13 @@ model = AutoModelForCausalLM.from_pretrained("{your_username}/bloom-560m-8bit", 
 Note that in this case, you don't need to specify the arguments `load_in_8bit=True`, but you need to make sure that `bitsandbytes` and `accelerate` are installed.
 Note also that `device_map` is optional but setting `device_map = 'auto'` is prefered for inference as it will dispatch efficiently the model on the available ressources.
 
-### Advanced usecases
+### Advanced use cases
 
 This section is intended to advanced users, that want to explore what it is possible to do beyond loading and running 8-bit models.
 
 #### Offload between `cpu` and `gpu`
 
-One of the advanced usecase of this is being able to load a model and dispatch the weights between `CPU` and `GPU`. Note that the weights that will be dispatched on CPU **will not** be converted in 8-bit, thus kept in `float32`. This feature is intended for users that want to fit a very large model and dispatch the model between GPU and CPU.
+One of the advanced use case of this is being able to load a model and dispatch the weights between `CPU` and `GPU`. Note that the weights that will be dispatched on CPU **will not** be converted in 8-bit, thus kept in `float32`. This feature is intended for users that want to fit a very large model and dispatch the model between GPU and CPU.
 
 First, load a `BitsAndBytesConfig` from `transformers` and set the attribute `llm_int8_enable_fp32_cpu_offload` to `True`:
 
@@ -226,7 +226,7 @@ And that's it! Enjoy your model!
 
 You can play with the `llm_int8_threshold` argument to change the threshold of the outliers. An "outlier" is a hidden state value that is greater than a certain threshold. 
 This corresponds to the outlier threshold for outlier detection as described in `LLM.int8()` paper. Any hidden states value that is above this threshold will be considered an outlier and the operation on those values will be done in fp16. Values are usually normally distributed, that is, most values are in the range [-3.5, 3.5], but there are some exceptional systematic outliers that are very differently distributed for large models. These outliers are often in the interval [-60, -6] or [6, 60]. Int8 quantization works well for values of magnitude ~5, but beyond that, there is a significant performance penalty. A good default threshold is 6, but a lower threshold might be needed for more unstable models (small models, fine-tuning).
-This argument can impact the inference speed of the model. We suggest to play with this parameter to find which one is the best for your usecase.
+This argument can impact the inference speed of the model. We suggest to play with this parameter to find which one is the best for your use case.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -280,4 +280,4 @@ Note that you don't need to pass `device_map` when loading the model for trainin
 
 ## Quantization with 🤗 `optimum` 
 
-Please have a look at [Optimum documentation](https://huggingface.co/docs/optimum/index) to learn more about quantization methods that are supported by `optimum` and see if these are applicable for your usecase.
+Please have a look at [Optimum documentation](https://huggingface.co/docs/optimum/index) to learn more about quantization methods that are supported by `optimum` and see if these are applicable for your use case.
