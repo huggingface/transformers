@@ -118,15 +118,12 @@ class IdeficsProcessor(ProcessorMixin):
         tokenizer (`LlamaTokenizerFast`):
             An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
         image_size (`int`, *optional*, defaults to 224): Image size (assuming a square image)
-        add_end_of_utterance_token (`bool`, *optional*, defaults to `True`):
-            Whether to automatically add `<end_of_utterance>` after each prompt's text input (unless followed by an
-            image). (provided by `preprocessing_config.json`)
     """
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "IdeficsImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"
 
-    def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=True, **kwargs):
+    def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -136,14 +133,16 @@ class IdeficsProcessor(ProcessorMixin):
         self.current_processor = self.image_processor
         self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
 
-        print(self.image_processor.add_end_of_utterance_token)
-
-        self.add_end_of_utterance_token = add_end_of_utterance_token
-
         self.default_image_dims = (
             self.image_processor.image_num_channels,
             self.image_processor.image_size,
             self.image_processor.image_size,
+        )
+
+        self.tokenizer_was_trained_with_end_of_utterance_token = (
+            True
+            if "<end_of_utterance>" in self.tokenizer.special_tokens_map.get("additional_special_tokens", [])
+            else False
         )
 
     def __call__(
@@ -154,6 +153,7 @@ class IdeficsProcessor(ProcessorMixin):
         max_length: Optional[int] = None,
         transform: Callable = None,
         add_eos_token=False,
+        add_end_of_utterance_token=None,
         debug=False,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchEncoding:
@@ -183,6 +183,10 @@ class IdeficsProcessor(ProcessorMixin):
                 set of transforms will be applied to the images
             add_eos_token (`bool`, *optional*, defaults to `False`):
                 Adds `eos_token` at the end of the final prompt if True`
+            add_end_of_utterance_token (`bool`, *optional*)
+                Whether to automatically add `<end_of_utterance>` after each prompt's text input (unless followed by an
+                image). If `None` the tokenizer will be checked instead and if this token is found in
+                `additional_special_tokens` then the value will be `True`.
             debug (`bool`, *optional*, defaults to `False`):
                 `True` value will help debug prompt generation by dumping useful information
             return_tensors (`str` or `TensorType`, *optional*, defaults to `TensorType.PYTORCH`):
@@ -258,12 +262,9 @@ class IdeficsProcessor(ProcessorMixin):
 
         """
 
-        # XXX: this is very bogus, but that's the only way I found to get the non-image processor value out of preprocessing_config.json which ends up inside ImageProcessor instead
-        add_end_of_utterance_token = (
-            self.image_processor.add_end_of_utterance_token
-            if hasattr(self.image_processor, "add_end_of_utterance_token")
-            else self.add_end_of_utterance_token
-        )
+        # if the value isn't overriden by the user, check if the tokenizer was trained with this token and then use it
+        if add_end_of_utterance_token is None:
+            add_end_of_utterance_token = self.tokenizer_was_trained_with_end_of_utterance_token
 
         # turn non-batched prompts into batched
         if not any(isinstance(i, list) for i in prompts):
