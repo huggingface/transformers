@@ -50,7 +50,7 @@ class QuantizationConfigMixin:
     @classmethod
     def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
         """
-        Instantiates a [`QuantizationConfig`] from a Python dictionary of parameters.
+        Instantiates a [`QuantizationConfigMixin`] from a Python dictionary of parameters.
 
         Args:
             config_dict (`Dict[str, Any]`):
@@ -62,7 +62,7 @@ class QuantizationConfigMixin:
                 Additional parameters from which to initialize the configuration object.
 
         Returns:
-            [`QuantizationConfig`]: The configuration object instantiated from those parameters.
+            [`QuantizationConfigMixin`]: The configuration object instantiated from those parameters.
         """
 
         config = cls(**config_dict)
