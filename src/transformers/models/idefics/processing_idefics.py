@@ -117,12 +117,13 @@ class IdeficsProcessor(ProcessorMixin):
             An instance of [`IdeficsImageProcessor`]. The image processor is a required input.
         tokenizer (`LlamaTokenizerFast`):
             An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
+        image_size (`int`, *optional*, defaults to 224): Image size (assuming a square image)
     """
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "IdeficsImageProcessor"
     tokenizer_class = "LlamaTokenizerFast"
 
-    def __init__(self, image_processor, tokenizer=None, image_size=224, **kwargs):
+    def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
@@ -138,6 +139,12 @@ class IdeficsProcessor(ProcessorMixin):
             self.image_processor.image_size,
         )
 
+        self.tokenizer_was_trained_with_end_of_utterance_token = (
+            True
+            if "<end_of_utterance>" in self.tokenizer.special_tokens_map.get("additional_special_tokens", [])
+            else False
+        )
+
     def __call__(
         self,
         prompts: Union[List[TextInput], List[List[TextInput]]],
@@ -146,6 +153,7 @@ class IdeficsProcessor(ProcessorMixin):
         max_length: Optional[int] = None,
         transform: Callable = None,
         add_eos_token=False,
+        add_end_of_utterance_token=None,
         debug=False,
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchEncoding:
@@ -175,6 +183,10 @@ class IdeficsProcessor(ProcessorMixin):
                 set of transforms will be applied to the images
             add_eos_token (`bool`, *optional*, defaults to `False`):
                 Adds `eos_token` at the end of the final prompt if True`
+            add_end_of_utterance_token (`bool`, *optional*)
+                Whether to automatically add `<end_of_utterance>` after each prompt's text input (unless followed by an
+                image). If `None` the tokenizer will be checked instead and if this token is found in
+                `additional_special_tokens` then the value will be `True`.
             debug (`bool`, *optional*, defaults to `False`):
                 `True` value will help debug prompt generation by dumping useful information
             return_tensors (`str` or `TensorType`, *optional*, defaults to `TensorType.PYTORCH`):
@@ -250,12 +262,17 @@ class IdeficsProcessor(ProcessorMixin):
 
         """
 
+        # if the value isn't overriden by the user, check if the tokenizer was trained with this token and then use it
+        if add_end_of_utterance_token is None:
+            add_end_of_utterance_token = self.tokenizer_was_trained_with_end_of_utterance_token
+
         # turn non-batched prompts into batched
         if not any(isinstance(i, list) for i in prompts):
             prompts = [prompts]
 
         fake_token = "<fake_token_around_image>"
         image_token = "<image>"
+        end_of_utterance_token = "<end_of_utterance>"
 
         def image_tokens(last_was_image):
             if last_was_image:
@@ -272,7 +289,11 @@ class IdeficsProcessor(ProcessorMixin):
             # an image can either be an image object in the item or the url, everything else is a verbatim prompt text
             image_objects = []
             last_was_image = False
-            for item in sample:
+            last_was_text = False
+            for i, item in enumerate(sample):
+                if i > 0:
+                    last_was_text = True if not last_was_image else False
+
                 if isinstance(item, str):
                     item = item.strip(" ")
                     if is_url(item):
@@ -281,6 +302,9 @@ class IdeficsProcessor(ProcessorMixin):
                         image_objects.append(image)
                         last_was_image = True
                     else:
+                        # we add end_of_utterance_token between each subsequent text prompts (but not at the last one!)
+                        if add_end_of_utterance_token and last_was_text:
+                            full_text += end_of_utterance_token
                         full_text += item
                         last_was_image = False
                 else:
