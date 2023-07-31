@@ -2271,6 +2271,7 @@ class Trainer:
                     )
         if is_torch_tpu_available():
             xm.set_rng_state(checkpoint_rng_state["xla"])
+    
 
     def _save_checkpoint(self, model, trial, metrics=None):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
@@ -2751,6 +2752,7 @@ class Trainer:
                         if os.path.isfile(file):
                             os.remove(file)
                 save_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir)
+                self._save_tokenizer_and_configs(output_dir)
 
         elif self.is_deepspeed_enabled:
             # this takes care of everything as long as we aren't under zero3
@@ -2802,6 +2804,16 @@ class Trainer:
         if self.tokenizer is not None and self.args.should_save:
             self.tokenizer.save_pretrained(output_dir)
 
+    def _save_tokenizer_and_configs(self, output_dir: Optional[str] = None):
+        # Only save the tokenizer and config, can be used for special model saving scenarios like FSDP
+        output_dir = output_dir if output_dir is not None else self.args.output_dir
+        os.makedirs(output_dir, exist_ok=True)
+        logger.info(f"Saving tokenizer and model configs to {output_dir}")
+        if self.tokenizer is not None:
+            self.tokenizer.save_pretrained(output_dir)
+        if self.model.config is not None:
+            self.model.config.save_pretrained(output_dir)
+    
     def _save(self, output_dir: Optional[str] = None, state_dict=None):
         # If we are executing this function, we are the process zero, so we don't check for that.
         output_dir = output_dir if output_dir is not None else self.args.output_dir
