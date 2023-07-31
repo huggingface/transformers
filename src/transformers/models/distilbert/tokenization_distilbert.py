@@ -195,9 +195,8 @@ class DistilBertTokenizer(PreTrainedTokenizer):
         return dict(self.vocab, **self.added_tokens_encoder)
 
     # Copied from transformers.models.bert.tokenization_bert.BertTokenizer._tokenize
-    def _tokenize(self, text):
+    def _tokenize(self, text, split_special_tokens=False):
         split_tokens = []
-        split_special_tokens = kwargs.pop("split_special_tokens", False)
         if self.do_basic_tokenize:
             for token in self.basic_tokenizer.tokenize(
                 text, never_split=self.all_special_tokens if split_special_tokens else None

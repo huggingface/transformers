@@ -238,7 +238,7 @@ class BertTokenizer(PreTrainedTokenizer):
     def get_vocab(self):
         return dict(self.vocab, **self.added_tokens_encoder)
 
-    def _tokenize(self, text, split_special_tokens = False):
+    def _tokenize(self, text, split_special_tokens=False):
         split_tokens = []
         if self.do_basic_tokenize:
             for token in self.basic_tokenizer.tokenize(
