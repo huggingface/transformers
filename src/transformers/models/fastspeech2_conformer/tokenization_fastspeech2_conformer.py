@@ -48,6 +48,17 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
+        bos_token (`str`, *optional*, defaults to `"<sos/eos>"`):
+            The begin of sequence token. Note that for FastSpeech2, it is the same as the `eos_token`.
+        eos_token (`str`, *optional*, defaults to `"<sos/eos>"`):
+            The end of sequence token. Note that for FastSpeech2, it is the same as the `bos_token`.
+        pad_token (`str`, *optional*, defaults to `"<blank>"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        should_strip_spaces (`bool`, *optional*, defaults to `False`):
+            Whether or not to strip the spaces from the list of tokens.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

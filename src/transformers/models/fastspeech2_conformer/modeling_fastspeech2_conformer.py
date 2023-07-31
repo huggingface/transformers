@@ -397,7 +397,7 @@ class FastSpeech2ConformerDimensionalLayerNorm(nn.Module):
 
 
 class FastSpeech2ConformerVariancePredictorLayer(nn.Module):
-    def __init__(self, input_channels, num_chans, kernel_size, dropout_rate, bias):
+    def __init__(self, input_channels, num_chans, kernel_size, dropout_rate):
         super().__init__()
         self.layer = nn.ModuleList(
             [
@@ -407,7 +407,7 @@ class FastSpeech2ConformerVariancePredictorLayer(nn.Module):
                     kernel_size,
                     stride=1,
                     padding=(kernel_size - 1) // 2,
-                    bias=bias,
+                    bias=True,
                 ),
                 nn.ReLU(),
                 FastSpeech2ConformerDimensionalLayerNorm(num_chans),
@@ -424,11 +424,10 @@ class FastSpeech2ConformerVariancePredictorLayer(nn.Module):
 class FastSpeech2ConformerVariancePredictor(nn.Module):
     def __init__(
         self,
-        input_dim,
+        config: FastSpeech2ConformerConfig,
         num_layers=2,
         num_chans=384,
         kernel_size=3,
-        bias=True,
         dropout_rate=0.5,
     ):
         """
@@ -444,10 +443,8 @@ class FastSpeech2ConformerVariancePredictor(nn.Module):
         super().__init__()
         self.conv_layers = nn.ModuleList()
         for idx in range(num_layers):
-            input_channels = input_dim if idx == 0 else num_chans
-            layer = FastSpeech2ConformerVariancePredictorLayer(
-                input_channels, num_chans, kernel_size, dropout_rate, bias
-            )
+            input_channels = config.hidden_size if idx == 0 else num_chans
+            layer = FastSpeech2ConformerVariancePredictorLayer(input_channels, num_chans, kernel_size, dropout_rate)
             self.conv_layers.append(layer)
         self.linear = nn.Linear(num_chans, 1)
 
@@ -620,17 +617,17 @@ class FastSpeech2ConformerAttention(nn.Module):
 
 
 class FastSpeech2ConformerConvolutionModule(nn.Module):
-    def __init__(self, channels, kernel_size, bias=True):
+    def __init__(self, config: FastSpeech2ConformerConfig, kernel_size):
         super().__init__()
         # kernel_size should be an odd number for 'SAME' padding
-
+        channels = config.hidden_size
         self.pointwise_conv1 = nn.Conv1d(
             channels,
             2 * channels,
             kernel_size=1,
             stride=1,
             padding=0,
-            bias=bias,
+            bias=True,
         )
         self.depthwise_conv = nn.Conv1d(
             channels,
@@ -639,7 +636,7 @@ class FastSpeech2ConformerConvolutionModule(nn.Module):
             stride=1,
             padding=(kernel_size - 1) // 2,
             groups=channels,
-            bias=bias,
+            bias=True,
         )
         self.norm = nn.BatchNorm1d(channels)
         self.pointwise_conv2 = nn.Conv1d(
@@ -648,7 +645,7 @@ class FastSpeech2ConformerConvolutionModule(nn.Module):
             kernel_size=1,
             stride=1,
             padding=0,
-            bias=bias,
+            bias=True,
         )
 
     def forward(self, hidden_states):
@@ -716,7 +713,7 @@ class FastSpeech2ConformerEncoderLayer(nn.Module):
         # convolution module definition
         self.use_cnn_module = config.use_cnn_in_conformer
         if self.use_cnn_module:
-            self.conv_module = FastSpeech2ConformerConvolutionModule(config.hidden_size, cnn_module_kernel)
+            self.conv_module = FastSpeech2ConformerConvolutionModule(config, cnn_module_kernel)
             self.conv_layer_norm = nn.LayerNorm(config.hidden_size)
             self.final_layer_norm = nn.LayerNorm(config.hidden_size)
 
@@ -1223,7 +1220,6 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         self.num_mel_bins = config.num_mel_bins
         self.hidden_size = config.hidden_size
         self.reduction_factor = config.reduction_factor
-        self.speaking_speed = config.speaking_speed
         self.stop_gradient_from_pitch_predictor = config.stop_gradient_from_pitch_predictor
         self.stop_gradient_from_energy_predictor = config.stop_gradient_from_energy_predictor
 
@@ -1256,7 +1252,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         self.duration_predictor = FastSpeech2ConformerDurationPredictor(config)
 
         self.pitch_predictor = FastSpeech2ConformerVariancePredictor(
-            input_dim=self.hidden_size,
+            config,
             num_layers=config.pitch_predictor_layers,
             num_chans=config.pitch_predictor_channels,
             kernel_size=config.pitch_predictor_kernel_size,
@@ -1271,7 +1267,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         )
 
         self.energy_predictor = FastSpeech2ConformerVariancePredictor(
-            input_dim=self.hidden_size,
+            config,
             num_layers=config.energy_predictor_layers,
             num_chans=config.energy_predictor_channels,
             kernel_size=config.energy_predictor_kernel_size,
@@ -1439,7 +1435,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
             embedded_pitch_curve = self.pitch_embed(pitch_predictions)
             embedded_energy_curve = self.energy_embed(energy_predictions)
             hidden_states = hidden_states + embedded_energy_curve + embedded_pitch_curve
-            hidden_states = self.length_regulator(hidden_states, duration_predictions, self.speaking_speed)
+            hidden_states = self.length_regulator(hidden_states, duration_predictions, self.config.speaking_speed)
         else:
             # use groundtruth in training
             embedded_pitch_curve = self.pitch_embed(pitch_labels)
@@ -1812,39 +1808,3 @@ class FastSpeech2ConformerWithHifiGan(PreTrainedModel):
             return model_outputs + (waveform,)
 
         return FastSpeech2ConformerWithHifiGanOutput(**model_outputs, waveform=waveform)
-
-    @torch.no_grad()
-    def generate_speech(self, input_ids: torch.LongTensor, **kwargs) -> torch.FloatTensor:
-        """
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Input sequence of text vectors.
-            kwargs:
-                Arguments to be passed to the forward call of `FastSpeech2ConformerModel` model-specific kwargs that
-                will be forwarded to the `forward` function of the model.
-
-        Example:
-
-        ```python
-        >>> from transformers import (
-        ...     FastSpeech2ConformerTokenizer,
-        ...     FastSpeech2ConformerWithHifiGan,
-        ... )
-
-        >>> tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("connor-henderson/fastspeech2_conformer")
-        >>> inputs = tokenizer("some text to convert to speech", return_tensors="pt")
-        >>> input_ids = inputs["input_ids"]
-
-        >>> model = FastSpeech2ConformerWithHifiGan.from_pretrained(
-        ...     "connor-henderson/fastspeech2_conformer_with_hifigan"
-        ... )
-        >>> waveform = model.generate_speech(input_ids)
-        >>> print(waveform.shape)
-        torch.Size([1, 49664])
-        ```
-        """
-        kwargs.update({"return_dict": True})
-        output_dict = self.model(input_ids, **kwargs)
-        spectrogram = output_dict["spectrogram"]
-        waveform = self.vocoder(spectrogram)
-        return waveform
