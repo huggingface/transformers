@@ -1519,14 +1519,15 @@ class UdopStack(UdopPreTrainedModel):
     UDOP_START_DOCSTRING,
 )
 class UdopModel(UdopPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"decoder.relative_bias.biases.0.relative_attention_bias.weight",
+    _tied_weights_keys = [
         "encoder.embed_tokens.weight",
-        "encoder.relative_bias.biases.0.relative_attention_bias.weight",
+        "decoder.embed_tokens.weight",
         "encoder.embed_patches.proj.weight",
         "encoder.embed_patches.proj.bias",
-        "decoder.embed_tokens.weight",
+        "encoder.relative_bias.biases.0.relative_attention_bias.weight",
+        "decoder.relative_bias.biases.0.relative_attention_bias.weight",
     ]
+
     """ """
 
     def __init__(self, config):
@@ -1683,14 +1684,14 @@ class UdopModel(UdopPreTrainedModel):
     UDOP_START_DOCSTRING,
 )
 class UdopForConditionalGeneration(UdopPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"lm_head.weight",
-        "decoder.relative_bias.biases.0.relative_attention_bias.weight",
+    _tied_weights_keys = [
         "encoder.embed_tokens.weight",
-        "encoder.relative_bias.biases.0.relative_attention_bias.weight",
+        "decoder.embed_tokens.weight",
         "encoder.embed_patches.proj.weight",
         "encoder.embed_patches.proj.bias",
-        "decoder.embed_tokens.weight",
+        "encoder.relative_bias.biases.0.relative_attention_bias.weight",
+        "decoder.relative_bias.biases.0.relative_attention_bias.weight",
+        "lm_head.weight",
     ]
 
     def __init__(self, config):
@@ -1926,11 +1927,11 @@ class UdopForConditionalGeneration(UdopPreTrainedModel):
     UDOP_START_DOCSTRING,
 )
 class UdopEncoderModel(UdopPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.embed_tokens.weight",
-        r"encoder.embed_patches.proj.weight",
-        r"encoder.embed_patches.proj.bias",
-        r"encoder.relative_bias.biases.0.relative_attention_bias.weight",
+    _tied_weights_keys = [
+        "encoder.embed_tokens.weight",
+        "encoder.embed_patches.proj.weight",
+        "encoder.embed_patches.proj.bias",
+        "encoder.relative_bias.biases.0.relative_attention_bias.weight",
     ]
 
     def __init__(self, config: UdopConfig):
