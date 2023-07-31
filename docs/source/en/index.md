@@ -467,6 +467,7 @@ Flax), PyTorch, and/or TensorFlow.
 |        Transformer-XL         |       ✅        |         ✅         |      ❌      |
 |             TrOCR             |       ✅        |         ❌         |      ❌      |
 |             TVLT              |       ✅        |         ❌         |      ❌      |
+|             UDOP              |       ✅        |         ❌         |      ❌      |
 |             UMT5              |       ✅        |         ❌         |      ❌      |
 |           UniSpeech           |       ✅        |         ❌         |      ❌      |
 |         UniSpeechSat          |       ✅        |         ❌         |      ❌      |

@@ -7619,8 +7619,6 @@ class UMT5ForSequenceClassification(metaclass=DummyObject):
 
 
 class UMT5Model(metaclass=DummyObject):
-class UdopModel(metaclass=DummyObject):
-class UMT5Model(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
