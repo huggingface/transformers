@@ -1333,6 +1333,12 @@ class GenerationMixin:
         )
         batch_size = inputs_tensor.shape[0]
 
+        # Auto move input to the device of input_embedding weights if necessary
+        embedding_device = self.get_input_embeddings().weight.device
+        if inputs_tensor.device != embedding_device:
+            logger.info(f"Moving input tensor from device `{inputs_tensor.device}` to `{embedding_device}`")
+            inputs_tensor = inputs_tensor.to(self.get_input_embeddings().weight.device)
+
         # 4. Define other model kwargs
         model_kwargs["output_attentions"] = generation_config.output_attentions
         model_kwargs["output_hidden_states"] = generation_config.output_hidden_states
