@@ -139,7 +139,6 @@ class IdeficsProcessor(ProcessorMixin):
         print(self.image_processor.add_end_of_utterance_token)
 
         self.add_end_of_utterance_token = add_end_of_utterance_token
-        self.add_end_of_utterance_token = add_end_of_utterance_token
 
         self.default_image_dims = (
             self.image_processor.image_num_channels,
