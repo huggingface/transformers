@@ -11,10 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
+import inspect
 from typing import Optional
 
-from ..utils import ADAPTER_CONFIG_NAME, cached_file, is_peft_available, logging, requires_backends
+from ..utils import find_adapter_config_file, is_accelerate_available, is_peft_available, logging, requires_backends
+
+
+if is_accelerate_available():
+    from accelerate import dispatch_model
+    from accelerate.utils import get_balanced_memory, infer_auto_device_map
 
 
 logger = logging.get_logger(__name__)
@@ -35,7 +40,11 @@ class PeftAdapterMixin:
         revision: Optional[str] = None,
         use_auth_token: Optional[str] = None,
         commit_hash: Optional[str] = None,
-    ):
+        device_map: Optional[str] = "auto",
+        max_memory: Optional[int] = None,
+        offload_dir: Optional[str] = None,
+        offload_index: Optional[int] = None,
+    ) -> None:
         """
         Load adapter weights from file. Requires peft as a backend to load the adapter weights
         """
@@ -49,7 +58,7 @@ class PeftAdapterMixin:
             self.peft_config = {}
             self._hf_peft_config_loaded = True
 
-        adapter_config_file = self._find_adapter_config_file(
+        adapter_config_file = find_adapter_config_file(
             peft_model_id,
             revision=revision,
             use_auth_token=use_auth_token,
@@ -107,7 +116,17 @@ class PeftAdapterMixin:
                     f" {incompatible_keys.unexpected_keys}. "
                 )
 
-    def set_adapter(self, adapter_name: str):
+        # @pacman100 why this was needed?
+        if (
+            (getattr(self, "hf_device_map", None) is not None)
+            and (len(set(self.hf_device_map.values()).intersection({"cpu", "disk"})) > 0)
+            and len(self.peft_config) == 1
+        ):
+            self._dispatch_accelerate_model(
+                device_map=device_map, max_memory=max_memory, offload_dir=offload_dir, offload_index=offload_index
+            )
+
+    def set_adapter(self, adapter_name: str) -> None:
         r"""
         Sets an adapter to switch easily between multiple adapters.
         """
@@ -134,9 +153,9 @@ class PeftAdapterMixin:
             )
 
     @property
-    def current_active_adapter(self):
+    def current_active_adapter(self) -> str:
         r"""
-        Gets the current active adapter of the model
+        Gets the current active adapter of the model.
         """
         if not is_peft_available():
             raise ImportError("PEFT is not available. Please install PEFT to use this function: `pip install peft`.")
@@ -150,31 +169,49 @@ class PeftAdapterMixin:
             if isinstance(module, BaseTunerLayer):
                 return module.active_adapter
 
-    def _find_adapter_config_file(
+    def _dispatch_accelerate_model(
         self,
-        model_id: str,
-        revision: str = None,
-        use_auth_token: Optional[str] = None,
-        commit_hash: Optional[str] = None,
-    ) -> Optional[str]:
+        device_map: str,
+        max_memory: Optional[int] = None,
+        offload_dir: Optional[str] = None,
+        offload_index: Optional[int] = None,
+    ) -> None:
         r"""
-        Simply checks if the model stored on the Hub or locally is an adapter model or not, return the path the the
-        adapter config file if it is, None otherwise.
-        """
-        adapter_cached_filename = None
-        if os.path.isdir(model_id):
-            list_remote_files = os.listdir(model_id)
-            if ADAPTER_CONFIG_NAME in list_remote_files:
-                adapter_cached_filename = os.path.join(model_id, ADAPTER_CONFIG_NAME)
-        else:
-            adapter_cached_filename = cached_file(
-                model_id,
-                ADAPTER_CONFIG_NAME,
-                revision=revision,
-                use_auth_token=use_auth_token,
-                _commit_hash=commit_hash,
-                _raise_exceptions_for_missing_entries=False,
-                _raise_exceptions_for_connection_errors=False,
-            )
+        Optionnal re-dispatch the model and attach new hooks to the model in case the model has been loaded with
+        accelerate (i.e. with `device_map=xxx`)
 
-        return adapter_cached_filename
+        Args:
+            device_map (`str`):
+                The device map used to load the model with accelerate.
+            max_memory (`int`, `optional`):
+                The maximum memory argument to be passed to `accelerate.get_balanced_memory` method.
+            offload_dir (`str`, `optional`):
+                The offload_dir argument to be passed to `accelerate.dispatch_model` method.
+            offload_index (`int`, `optional`):
+                The offload_index argument to be passed to `accelerate.dispatch_model` method.
+        """
+        dispatch_model_kwargs = {}
+        # Safety checker for previous `accelerate` versions
+        # `offload_index` was introduced in https://github.com/huggingface/accelerate/pull/873/
+        if "offload_index" in inspect.signature(dispatch_model).parameters:
+            dispatch_model_kwargs["offload_index"] = offload_index
+
+        no_split_module_classes = self._no_split_modules
+
+        if device_map != "sequential":
+            max_memory = get_balanced_memory(
+                self,
+                max_memory=max_memory,
+                no_split_module_classes=no_split_module_classes,
+                low_zero=(device_map == "balanced_low_0"),
+            )
+        if isinstance(device_map, str):
+            device_map = infer_auto_device_map(
+                self, max_memory=max_memory, no_split_module_classes=no_split_module_classes
+            )
+        dispatch_model(
+            self,
+            device_map=device_map,
+            offload_dir=offload_dir,
+            **dispatch_model_kwargs,
+        )

@@ -68,6 +68,7 @@ from .utils import (
     is_bitsandbytes_available,
     is_offline_mode,
     is_optimum_available,
+    is_peft_available,
     is_remote_url,
     is_safetensors_available,
     is_torch_tpu_available,
@@ -113,6 +114,9 @@ if is_sagemaker_mp_enabled():
     IS_SAGEMAKER_MP_POST_1_10 = version.parse(SMP_VERSION) >= version.parse("1.10")
 else:
     IS_SAGEMAKER_MP_POST_1_10 = False
+
+if is_peft_available():
+    from .utils import find_adapter_config_file
 
 
 @contextmanager
@@ -2212,6 +2216,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
+        _adapter_model_path = kwargs.pop("_adapter_model_path", None)
 
         if use_auth_token is not None:
             warnings.warn(
@@ -2236,6 +2241,24 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
                 " ignored."
             )
+
+        if is_peft_available() and _adapter_model_path is None:
+            maybe_adapter_model_path = find_adapter_config_file(
+                pretrained_model_name_or_path,
+                revision=revision,
+                subfolder=subfolder,
+                use_auth_token=use_auth_token,
+                commit_hash=commit_hash,
+            )
+        elif is_peft_available() and _adapter_model_path is not None:
+            maybe_adapter_model_path = _adapter_model_path
+        else:
+            maybe_adapter_model_path = None
+
+        has_adapter_config = maybe_adapter_model_path is not None
+
+        if has_adapter_config:
+            adapter_model_id = _adapter_model_path
 
         # change device_map into a map if we passed an int, a str or a torch.device
         if isinstance(device_map, torch.device):
@@ -2981,6 +3004,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if "skip_keys" in inspect.signature(dispatch_model).parameters:
                 kwargs["skip_keys"] = model._skip_keys_device_placement
             dispatch_model(model, **kwargs)
+
+        if has_adapter_config:
+            model.load_adapter(
+                adapter_model_id,
+                adapter_name="default",
+                revision=revision,
+                use_auth_token=use_auth_token,
+                commit_hash=commit_hash,
+            )
 
         if output_loading_info:
             if loading_info is None:
