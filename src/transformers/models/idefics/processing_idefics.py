@@ -137,7 +137,6 @@ class IdeficsProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
 
         print(self.image_processor.add_end_of_utterance_token)
-        # die
 
         self.add_end_of_utterance_token = add_end_of_utterance_token
         self.add_end_of_utterance_token = add_end_of_utterance_token
@@ -322,7 +321,6 @@ class IdeficsProcessor(ProcessorMixin):
 
             if debug is True:
                 print(f"{full_text=}")
-            # die
 
             image_objects = self.image_processor(image_objects, transform=transform)
 
