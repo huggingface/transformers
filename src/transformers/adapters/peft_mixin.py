@@ -124,7 +124,7 @@ class PeftAdapterMixin:
         _adapters_has_been_set = False
 
         for _, module in self.named_modules():
-            if isinstance(module, BaseTunerLayerMixin) and module.peft_is_plugable:
+            if isinstance(module, BaseTunerLayerMixin):
                 module.active_adapter = adapter_name
                 _adapters_has_been_set = True
 
@@ -147,7 +147,7 @@ class PeftAdapterMixin:
         from peft.tuners.tuners_utils import BaseTunerLayerMixin
 
         for _, module in self.named_modules():
-            if isinstance(module, BaseTunerLayerMixin) and module.peft_is_plugable:
+            if isinstance(module, BaseTunerLayerMixin):
                 return module.active_adapter
 
     def _find_adapter_config_file(
