@@ -340,7 +340,8 @@ class Kosmos2Processor(ProcessorMixin):
         if len(matched_phrases) != len(bboxes):
             raise ValueError(f"The number of elements in `bboxes` should be the same as the number of `<phrase> ... </phrase>` pairs in `text`. Got {len(matched_phrases)} v.s. {len(bboxes)} instead.")
 
-        # insert object's patch index tokens after the found `<phrase> ... </phrase>` pairs.
+        # insert object's patch index tokens
+        # the found `<phrase> ... </phrase>` pairs.
         curr_pos = 0
         buffer = []
         for matched, bbox in zip(matched_phrases, bboxes):
@@ -397,7 +398,8 @@ class Kosmos2Processor(ProcessorMixin):
                 prev_str_in_targets = True
                 output = output.rstrip() + split
             else:
-                # we don't need this part anymore with the new implementation of kosmos-2 tokenizer
+                # we don't need to ensure a space before a normal token that is after a tag token. But having it and
+                # keeps a standard format is good anyway.
                 if prev_str_in_targets and not split.startswith(" "):
                     output += " " + split
                 else:
