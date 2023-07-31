@@ -1,13 +1,25 @@
 import torch
 
-from transformers import VitDetBackbone, VitDetConfig
+from transformers import VitDetModel, VitDetConfig
 
 
-config = VitDetConfig(out_features=["stage1", "stage2", "stage3", "stage4"])
+config = VitDetConfig()
 
-model = VitDetBackbone(config)
+model = VitDetModel(config)
 
-outputs = model(torch.randn(1, 3, 224, 224))
+outputs = model(torch.randn(1, 3, 224, 224), output_hidden_states=True, output_attentions=True)
 
-for i in outputs.feature_maps:
-    print(i.shape)
+output = outputs[0]
+
+hidden_states = outputs.hidden_states[0]
+attentions = outputs.attentions[0]
+hidden_states.retain_grad()
+attentions.retain_grad()
+
+print(attentions.shape)
+
+output.flatten()[0].backward(retain_graph=True)
+
+assert hidden_states.grad is not None
+# only works when commenting out the code of reshaping attention_probs
+assert attentions.grad is not None

@@ -119,7 +119,7 @@ class VitDetModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
-            (self.batch_size, self.num_patches_one_direction, self.num_patches_one_direction, self.hidden_size),
+            (self.batch_size, self.hidden_size, self.num_patches_one_direction, self.num_patches_one_direction),
         )
 
     def create_and_check_backbone(self, config, pixel_values, labels):
@@ -253,6 +253,39 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_retain_grad_hidden_states_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = self.has_attentions
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        print("Model class: ", model_class)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+
+        output = outputs[0]
+        
+        # Encoder-/Decoder-only models
+        hidden_states = outputs.hidden_states[0]
+        hidden_states.retain_grad()
+
+        if self.has_attentions:
+            attentions = outputs.attentions[0]
+            attentions.retain_grad()
+
+        output.flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(hidden_states.grad)
+
+        if self.has_attentions:
+            self.assertIsNotNone(attentions.grad)
 
     @slow
     def test_model_from_pretrained(self):

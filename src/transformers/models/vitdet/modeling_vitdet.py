@@ -130,13 +130,15 @@ class VitDetEmbeddings(nn.Module):
             )
         embeddings = self.projection(pixel_values)
 
-        # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
-        embeddings = embeddings.permute(0, 2, 3, 1)
-
         if self.position_embeddings is not None:
+            # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
+            embeddings = embeddings.permute(0, 2, 3, 1)
+            # add position embeddings
             embeddings = embeddings + self.get_absolute_positions(
                 self.position_embeddings, True, embeddings.shape[1], embeddings.shape[2]
             )
+            # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
+            embeddings = embeddings.permute(0, 3, 1, 2)
 
         return embeddings
 
@@ -523,6 +525,9 @@ class VitDetLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+       
+        hidden_states = hidden_states.permute(0, 2, 3, 1)
+       
         shortcut = hidden_states
 
         hidden_states = self.norm1(hidden_states)
@@ -548,8 +553,10 @@ class VitDetLayer(nn.Module):
 
         hidden_states = hidden_states + self.drop_path(self.mlp(self.norm2(hidden_states)))
 
+        hidden_states = hidden_states.permute(0, 3, 1, 2)
+
         if self.use_residual_block:
-            hidden_states = self.residual(hidden_states.permute(0, 3, 1, 2)).permute(0, 2, 3, 1)
+            hidden_states = self.residual(hidden_states)
 
         outputs = (hidden_states,) + outputs
 
@@ -592,7 +599,7 @@ class VitDetEncoder(nn.Module):
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states.permute(0, 3, 1, 2),)
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
@@ -618,7 +625,7 @@ class VitDetEncoder(nn.Module):
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states.permute(0, 3, 1, 2),)
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
