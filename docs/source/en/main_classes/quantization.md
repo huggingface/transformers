@@ -43,10 +43,10 @@ model_4bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_4
 By default all other modules (e.g. `torch.nn.LayerNorm`) will be converted in `torch.float16`, but if you want to change their `dtype` you can overwrite the `torch_dtype` argument:
 
 ```python
-import torch
-from transformers import AutoModelForCausalLM
+>>> import torch
+>>> from transformers import AutoModelForCausalLM
 
-model_8bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_8bit=True, torch_dtype=torch.float32)
+>>> model_8bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_8bit=True, torch_dtype=torch.float32)
 >>> model_8bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
 torch.float32
 ```
