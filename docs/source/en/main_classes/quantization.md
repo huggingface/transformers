@@ -33,16 +33,20 @@ You need to have the following requirements installed to run the code below:
 `pip install auto-gptq`
 
 - Install latest `optimum` from source 
-`pip install --upgrade optimum`
+`pip install git+https://github.com/huggingface/optimum.git`
 
 - Install latest `transformers` from source 
-`pip install --upgrade transformers`
+`pip install git+https://github.com/huggingface/transformers.git`
 
-- Install latest `accelerate` from source 
+- Install latest `accelerate` library 
 `pip install --upgrade accelerate`
+GPTQ integration supports for now only text models and you may encounter unexpected behaviour for vision, speech or multi-modal models.
 
 ### Load and quantize a model
 
+GPTQ is a quantization method that requires weights calibration before using the quantized models. If you want to quantize transformers model from scratch, it might take some time before producing the quantized model (~10 min on a Google colab for `facebook/opt-350m` model. 
+
+Hence, there are two different scenarios where you want to use GPTQ-quantized models. The first use case would be to load models that has been already quantized by other users that are available on the Hub, the second use case would be to quantize your model from scratch and save it or push it on the Hub so that other users can also use it.
 #### GPTQ Configuration
 
 In order to load and quantize a model, you need to create a [`GPTQConfig`]. You need to pass the number of `bits`, a `dataset` in order to calibrate the quantization and the `tokenizer` of the model in order prepare the dataset.
