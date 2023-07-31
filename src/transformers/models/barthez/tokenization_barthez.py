@@ -47,6 +47,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 SPIECE_UNDERLINE = "▁"
 
+# TODO this class is useless. This is the most standard sentencpiece model. Let's find which one is closest and nuke this.
 
 class BarthezTokenizer(PreTrainedTokenizer):
     """

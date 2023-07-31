@@ -55,7 +55,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     rust_tokenizer_class = LlamaTokenizerFast
 
     # FIXME this does not work, support should come
-    # test_rust_tokenizer = True
+    test_rust_tokenizer = False
     test_sentencepiece = True
     from_pretrained_kwargs = {}
 
@@ -514,9 +514,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     def setUpClass(cls):
         tokenizer = LlamaTokenizer(SAMPLE_VOCAB, extra_ids=0, add_bos_token=False, legacy=False)
         tokenizer.add_special_tokens({"additional_special_tokens": ["<s>"]})
-        tokenizer._create_trie(tokenizer.all_special_tokens)
-        # TODO ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
-        # So the extra ids are split....
+        tokenizer._create_trie()
         cls.tokenizer = tokenizer
         return cls
 
