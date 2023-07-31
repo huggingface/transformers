@@ -199,7 +199,9 @@ class DistilBertTokenizer(PreTrainedTokenizer):
         split_tokens = []
         split_special_tokens = kwargs.pop("split_special_tokens", False)
         if self.do_basic_tokenize:
-            for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens if split_special_tokens else None):
+            for token in self.basic_tokenizer.tokenize(
+                text, never_split=self.all_special_tokens if split_special_tokens else None
+            ):
                 # If the token is part of the never_split set
                 if token in self.basic_tokenizer.never_split:
                     split_tokens.append(token)

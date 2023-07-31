@@ -180,9 +180,8 @@ class SqueezeBertTokenizer(PreTrainedTokenizer):
     def get_vocab(self):
         return dict(self.vocab, **self.added_tokens_encoder)
 
-    def _tokenize(self, text, **kwargs):
+    def _tokenize(self, text, split_special_tokens = False):
         split_tokens = []
-        split_special_tokens = kwargs.pop("split_special_tokens", False)
         if self.do_basic_tokenize:
             for token in self.basic_tokenizer.tokenize(
                 text, never_split=self.all_special_tokens if split_special_tokens else None

@@ -3959,7 +3959,7 @@ class TokenizerTesterMixin:
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-                
+
                 if not tokenizer.is_fast:
                     # bloom, gptneox etc only have a fast
                     special_token = "[SPECIAL_TOKEN]"
