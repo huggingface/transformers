@@ -63,11 +63,12 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual(vocab_keys[0], "<unk>")
         self.assertEqual(vocab_keys[1], "<s>")
-        self.assertEqual(vocab_keys[-1], "<pad>")
+        self.assertEqual(vocab_keys[1000], "<pad>")
         self.assertEqual(len(vocab_keys), 1_101)
 
     def test_vocab_size(self):
-        self.assertEqual(self.get_tokenizer().vocab_size, 1_100)
+        self.assertEqual(self.get_tokenizer().vocab_size, 1000)
+        self.assertEqual(len(self.get_tokenizer()), 1100)
 
     def test_full_tokenizer(self):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB)
@@ -412,7 +413,6 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     def setUpClass(cls):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=0, legacy=False)
         tokenizer.add_special_tokens({"additional_special_tokens": ["<extra_id_0>"]})
-        tokenizer._create_trie(tokenizer.all_special_tokens)
         # TODO ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
         # So the extra ids are split....
         cls.tokenizer = tokenizer
