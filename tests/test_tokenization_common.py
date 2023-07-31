@@ -3909,6 +3909,7 @@ class TokenizerTesterMixin:
                     # Should not raise an error
                     self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
 
+    # TODO This is ran for all models but only tests bert...
     def test_clean_up_tokenization_spaces(self):
         tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         assert tokenizer.clean_up_tokenization_spaces is True
@@ -3956,13 +3957,15 @@ class TokenizerTesterMixin:
 
     def test_split_special_tokens(self):
         tokenizer = self.get_tokenizer(fast=False)
-        special_token = "[SPECIAL_TOKEN]"
+        if not tokenizer.is_fast:
+            # bloom, gptneox etc only have a fast
+            special_token = "[SPECIAL_TOKEN]"
 
-        tokenizer.add_special_tokens({"additional_special_tokens": [special_token]})
-        encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False)
-        self.assertEqual(len(encoded_special_token), 1)
+            tokenizer.add_special_tokens({"additional_special_tokens": [special_token]})
+            encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False)
+            self.assertEqual(len(encoded_special_token), 1)
 
-        encoded_split_special_token = tokenizer.encode(
-            special_token, add_special_tokens=False, split_special_tokens=True
-        )
-        self.assertTrue(len(encoded_split_special_token) > 1)
+            encoded_split_special_token = tokenizer.encode(
+                special_token, add_special_tokens=False, split_special_tokens=True
+            )
+            self.assertTrue(len(encoded_split_special_token) > 1)
