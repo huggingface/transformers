@@ -560,11 +560,11 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         {
             "conversational": T5ForConditionalGeneration,
             "feature-extraction": T5Model,
+            "question-answering": T5ForQuestionAnswering,
             "summarization": T5ForConditionalGeneration,
+            "text-classification": T5ForSequenceClassification,
             "text2text-generation": T5ForConditionalGeneration,
             "translation": T5ForConditionalGeneration,
-            "question-answering": T5ForQuestionAnswering,
-            "text-classification": T5ForSequenceClassification,
             "zero-shot": T5ForSequenceClassification,
         }
         if is_torch_available()

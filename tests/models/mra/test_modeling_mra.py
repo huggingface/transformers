@@ -22,6 +22,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -280,7 +281,7 @@ class MraModelTester:
 
 
 @require_torch
-class MraModelTest(ModelTesterMixin, unittest.TestCase):
+class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             MraModel,
@@ -299,6 +300,18 @@ class MraModelTest(ModelTesterMixin, unittest.TestCase):
     has_attentions = False
 
     all_generative_model_classes = ()
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": MraModel,
+            "fill-mask": MraForMaskedLM,
+            "question-answering": MraForQuestionAnswering,
+            "text-classification": MraForSequenceClassification,
+            "token-classification": MraForTokenClassification,
+            "zero-shot": MraForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
 
     def setUp(self):
         self.model_tester = MraModelTester(self)
