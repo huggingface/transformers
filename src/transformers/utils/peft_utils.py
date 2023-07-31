@@ -1,8 +1,8 @@
 import os
-
 from typing import Optional
 
 from .hub import cached_file
+
 
 ADAPTER_CONFIG_NAME = "adapter_config.json"
 ADAPTER_WEIGHTS_NAME = "adapter_model.bin"
