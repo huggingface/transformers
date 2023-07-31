@@ -509,7 +509,7 @@ class UdopModelIntegrationTests(unittest.TestCase):
     @cached_property
     def processor(self):
         # TODO update organization
-        return UdopProcessor.from_pretrained("nielsr/udop-large")
+        return UdopProcessor.from_pretrained("ArthurZ/udop")
 
     @cached_property
     def model(self):

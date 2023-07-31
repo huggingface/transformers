@@ -145,7 +145,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("nielsr/udop-large")
+        tokenizer = self.tokenizer_class.from_pretrained("ArthurZ/udop")
 
         question, words, boxes = self.get_question_words_and_boxes()
 
@@ -1342,7 +1342,7 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         words, boxes = self.get_words_and_boxes()
 
         # TODO update path
-        tokenizer = UdopTokenizer.from_pretrained("nielsr/udop-large", model_max_length=512)
+        tokenizer = UdopTokenizer.from_pretrained("ArthurZ/udop", model_max_length=512)
 
         for i in range(12, 512):
             new_encoded_inputs = tokenizer.encode_boxes(words, boxes=boxes, max_length=i, truncation=True)
@@ -1745,28 +1745,29 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         word_labels = [0, 1]
 
         # test slow tokenizer
-        tokenizer_p = UdopTokenizer.from_pretrained("nielsr/udop-large")
+        # TODO update org
+        tokenizer_p = UdopTokenizer.from_pretrained("ArthurZ/udop")
         encoding = tokenizer_p(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [0, 1, -100, -100, -100])
 
-        tokenizer_p = UdopTokenizer.from_pretrained("nielsr/udop-large", only_label_first_subword=False)
+        tokenizer_p = UdopTokenizer.from_pretrained("ArthurZ/udop", only_label_first_subword=False)
         encoding = tokenizer_p(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [0, 1, 1, 1, -100])
 
         # test fast tokenizer
-        tokenizer_r = UdopTokenizerFast.from_pretrained("nielsr/udop-large")
+        tokenizer_r = UdopTokenizerFast.from_pretrained("ArthurZ/udop")
         encoding = tokenizer_r(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [0, 1, -100, -100, -100])
 
-        tokenizer_r = UdopTokenizerFast.from_pretrained("nielsr/udop-large", only_label_first_subword=False)
+        tokenizer_r = UdopTokenizerFast.from_pretrained("ArthurZ/udop", only_label_first_subword=False)
         encoding = tokenizer_r(words, boxes=boxes, word_labels=word_labels)
         self.assertListEqual(encoding.labels, [0, 1, 1, 1, -100])
 
     @slow
     def test_udop_integration_test(self):
         # TODO update organization everywhere
-        tokenizer_p = UdopTokenizer.from_pretrained("nielsr/udop-large")
-        tokenizer_r = UdopTokenizerFast.from_pretrained("nielsr/udop-large")
+        tokenizer_p = UdopTokenizer.from_pretrained("ArthurZ/udop")
+        tokenizer_r = UdopTokenizerFast.from_pretrained("ArthurZ/udop")
 
         # There are 3 cases:
         # CASE 1: document image classification (training + inference), document image token classification (inference),
@@ -1870,8 +1871,8 @@ class UdopTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_text_target(self):
         # TODO update organization everywhere
-        tokenizer_p = UdopTokenizer.from_pretrained("nielsr/udop-large")
-        tokenizer_r = UdopTokenizerFast.from_pretrained("nielsr/udop-large")
+        tokenizer_p = UdopTokenizer.from_pretrained("ArthurZ/udop")
+        tokenizer_r = UdopTokenizerFast.from_pretrained("ArthurZ/udop")
 
         text = "hello world"
         expected_decoding = "hello world</s>"

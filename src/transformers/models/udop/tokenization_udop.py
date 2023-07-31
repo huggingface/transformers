@@ -150,17 +150,17 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.
 # TODO update path here
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "nielsr/udop-large": "https://huggingface.co/nielsr/udop-large/resolve/main/spiece.model",
+        "ArthurZ/udop": "https://huggingface.co/ArthurZ/udop/resolve/main/spiece.model",
     },
     "tokenizer_file": {
-        "nielsr/udop-large": "https://huggingface.co/nielsr/udop-large/resolve/main/tokenizer.json",
+        "ArthurZ/udop": "https://huggingface.co/ArthurZ/udop/resolve/main/tokenizer.json",
     },
 }
 
 
 # TODO(PVP) - this should be removed in Transformers v5
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "nielsr/udop-large": 512,
+    "ArthurZ/udop": 512,
 }
 
 
