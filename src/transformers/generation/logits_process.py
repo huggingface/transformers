@@ -507,7 +507,7 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
      N-grams are groups of "n" consecutive words, characters, or tokens taken from a sequence of text. Given a
      sentence: " She runs fast ", the bi-grams (n = 2) would be ("she","runs") and ("runs","fast"). In text generation,
      avoiding repetitions of word sequences provides a more diverse output. This [`LogitsProcessor`] enforces no
-     repetition of n-grams by setting the scores of banned tokens to negative infinity (-float("inf")) which eliminates
+     repetition of n-grams by setting the scores of banned tokens to negative infinity which eliminates
      those tokens from consideration when further processing the scores.
      [Fairseq](https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345).
 
