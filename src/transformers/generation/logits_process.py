@@ -468,13 +468,13 @@ def _get_ngrams(ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int):
 def _get_generated_ngrams(banned_ngrams, prev_input_ids, ngram_size, cur_len):
     """
     Parameters:
-        banned_ngrams (dict):
+        banned_ngrams (`dict`):
             A dictionary containing previously generated n-grams for each hypothesis.
-        prev_input_ids (torch.Tensor):
-            A tensor containing tokenized input for each hypothesis in the current batch.
+        prev_input_ids (`torch.Tensor`):
+            A `tensor` containing tokenized input for each hypothesis in the current batch.
         ngram_size (int):
             `ngram_size` that can only occur once.
-        cur_len (int):
+        cur_len (`int`):
             The current length of the token sequences for which the n-grams are being checked.
 
     Returns:
