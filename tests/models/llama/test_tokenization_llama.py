@@ -293,6 +293,45 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             pickled_tokenizer = pickle.dumps(tokenizer)
         pickle.loads(pickled_tokenizer)
 
+    def test_tokenizers_common_ids_setters(self):
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                attributes_list = [
+                    "bos_token",
+                    "eos_token",
+                    "unk_token",
+                    "sep_token",
+                    "pad_token",
+                    "cls_token",
+                    "mask_token",
+                ]
+
+                vocab = tokenizer.get_vocab()
+                token_id_to_test_setters = next(iter(vocab.values()))
+                token_to_test_setters = tokenizer.convert_ids_to_tokens(
+                    token_id_to_test_setters, skip_special_tokens=False
+                )
+
+                for attr in attributes_list:
+                    setattr(tokenizer, attr + "_id", None)
+                    if attr == "pad_token":
+                        self.assertEqual(getattr(tokenizer, attr + "_id"), -1)
+                    else:
+                        self.assertEqual(getattr(tokenizer, attr + "_id"), None)
+
+                    setattr(tokenizer, attr + "_id", token_id_to_test_setters)
+                    self.assertEqual(getattr(tokenizer, attr), token_to_test_setters)
+                    self.assertEqual(getattr(tokenizer, attr + "_id"), token_id_to_test_setters)
+
+                setattr(tokenizer, "additional_special_tokens_ids", [])
+                self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [])
+                self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [])
+
+                setattr(tokenizer, "additional_special_tokens_ids", [token_id_to_test_setters])
+                self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [token_to_test_setters])
+                self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [token_id_to_test_setters])
+
 
 @require_torch
 @require_sentencepiece
