@@ -31,7 +31,7 @@ Here are the things you can do using `bitsandbytes` integration
 
 ### General usage
 
-You can quantize a model by using the `load_in_8bit` or `load_in_4bit` argument when calling the `.from_pretrained` method as long as your model supports accelerate loading and contains `torch.nn.Linear` layers. This should work for any modality as well.
+You can quantize a model by using the `load_in_8bit` or `load_in_4bit` argument when calling the [`~PreTrainedModel.from_pretrained`] method as long as your model supports loading with 🤗 Accelerate and contains `torch.nn.Linear` layers. This should work for any modality as well.
 
 ```python
 from transformers import AutoModelForCausalLM
