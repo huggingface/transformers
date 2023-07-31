@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import copy
 import inspect
 import unittest
 
@@ -70,6 +70,7 @@ class UdopModelTester:
         scope=None,
         decoder_layers=None,
         range_bbox=1000,
+        decoder_start_token_id=0,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -93,6 +94,7 @@ class UdopModelTester:
         self.scope = None
         self.decoder_layers = decoder_layers
         self.range_bbox = range_bbox
+        self.decoder_start_token_id = decoder_start_token_id
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -147,6 +149,7 @@ class UdopModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.decoder_start_token_id,
         )
 
     def create_and_check_model(
@@ -272,6 +275,16 @@ class UdopModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = UdopModelTester(self)
         self.config_tester = ConfigTester(self, config_class=UdopConfig, d_model=37)
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = copy.deepcopy(inputs_dict)
+        if model_class.__name__ == "UdopForConditionalGeneration":
+            if return_labels:
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+
+        return inputs_dict
 
     def test_config(self):
         self.config_tester.run_common_tests()
