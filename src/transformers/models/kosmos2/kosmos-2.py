@@ -1435,6 +1435,9 @@ if __name__ == "__main__":
     image = Image.open("snowman.jpg")
     bboxes = None
 
+    inputs = slow_processor(text=text, images=image, bboxes=bboxes)
+    print(inputs)
+
     # There is a big problem if the tag token is at the beginning of the sentence
     inputs = fast_processor(text=text, images=image, bboxes=bboxes)
     print(inputs)
