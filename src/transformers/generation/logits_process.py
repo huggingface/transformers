@@ -524,7 +524,7 @@ class EtaLogitsWarper(LogitsWarper):
     >>> model.generation_config.pad_token_id = model.config.eos_token_id
 
     >>> # The below sequence intentionally contains two subjects to show the difference between the two approaches
-    >>> sequence = "a quadcopter flight controller (RTFQ Flip MWC) that supports I2C sensors for adding thing like a barometer, magnetometer, and GPS system. The officially supported sensor block (BMP180, HMC5883L on one board) is discontinued, as far as I know, everyone involved lived to sing another day. . . disorder and an extreme state of dysmetabolism characterized by extensive erythema and a significant reduction in uncovered"
+    >>> sequence = "a quadcopter flight controller (RTFQ Flip MWC) that supports I2C sensors for adding things like a barometer, magnetometer, and GPS system. The officially supported sensor block (BMP180, HMC5883L on one board) is discontinued, as far as I know, everyone involved lived to sing another day. . . disorder and an extreme state of dysmetabolism characterized by extensive erythema and a significant reduction in uncovered"
 
     >>> # Tokenize the sequence
     >>> inputs = tokenizer(sequence, return_tensors="pt")
