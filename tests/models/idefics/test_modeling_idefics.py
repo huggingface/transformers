@@ -29,7 +29,7 @@ if is_torch_available():
     import torch
 
     from transformers import IdeficsForVisionText2Text, IdeficsModel, IdeficsProcessor
-    from transformers.models.idefics.configuration_idefics import IdeficsVisionConfig
+    from transformers.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
     from transformers.models.idefics.modeling_idefics import IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
 else:
@@ -75,6 +75,11 @@ class IdeficsModelTester:
         vision_num_attention_heads=4,
         vision_num_hidden_layers=5,
         vision_intermediate_size=37,
+        perceiver_qk_layer_norms_perceiver=False,
+        perceiver_resampler_depth=2,
+        perceiver_resampler_head_dim=8,
+        perceiver_resampler_n_heads=2,
+        perceiver_resampler_n_latents=16,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -118,6 +123,20 @@ class IdeficsModelTester:
             num_attention_heads=self.vision_num_attention_heads,
             num_hidden_layers=self.vision_num_hidden_layers,
             intermediate_size=self.vision_intermediate_size,
+        )
+
+        self.perceiver_qk_layer_norms_perceiver = perceiver_qk_layer_norms_perceiver
+        self.perceiver_resampler_depth = perceiver_resampler_depth
+        self.perceiver_resampler_head_dim = perceiver_resampler_head_dim
+        self.perceiver_resampler_n_heads = perceiver_resampler_n_heads
+        self.perceiver_resampler_n_latents = perceiver_resampler_n_latents
+
+        self.perceiver_config = IdeficsPerceiverConfig(
+            qk_layer_norms_perceiver=self.perceiver_qk_layer_norms_perceiver,
+            resampler_depth=self.perceiver_resampler_depth,
+            resampler_head_dim=self.perceiver_resampler_head_dim,
+            resampler_n_heads=self.perceiver_resampler_n_heads,
+            resampler_n_latents=self.perceiver_resampler_n_latents,
         )
 
         # we set the expected sequence length (which is used in several tests)
