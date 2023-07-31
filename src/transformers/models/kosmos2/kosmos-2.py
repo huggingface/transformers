@@ -1425,10 +1425,12 @@ if __name__ == "__main__":
     r8 = fast_processor.decode(generated_ids)
     print(r8)
 
-    # slow_tokenizer.push_to_hub("ydshieh/kosmos-2-patch14-224", use_auth_token="XXX")
-    # fast_tokenizer.push_to_hub("ydshieh/kosmos-2-patch14-224", use_auth_token="XXX")
-    # image_processor.push_to_hub("ydshieh/kosmos-2-patch14-224", use_auth_token="XXX")
-    # fast_processor.push_to_hub("ydshieh/kosmos-2-patch14-224", use_auth_token="XXX")
+    token = "XXX"
+
+    # slow_tokenizer.push_to_hub("ydshieh/kosmos-2-patch14-224", use_auth_token=token)
+    # fast_tokenizer.push_to_hub("ydshieh/kosmos-2-patch14-224", use_auth_token=token)
+    # image_processor.push_to_hub("ydshieh/kosmos-2-patch14-224", use_auth_token=token)
+    # fast_processor.push_to_hub("ydshieh/kosmos-2-patch14-224", use_auth_token=token)
 
     # fast_processor = Kosmos2Processor.from_pretrained("ydshieh/kosmos-2-patch14-224")
     # r9 = fast_processor.decode(generated_ids)
