@@ -174,17 +174,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         target_lang=None,
         **kwargs,
     ):
-        super().__init__(
-            unk_token=unk_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            do_lower_case=do_lower_case,
-            word_delimiter_token=word_delimiter_token,
-            replace_word_delimiter_char=replace_word_delimiter_char,
-            target_lang=target_lang,
-            **kwargs,
-        )
+
 
         self._word_delimiter_token = word_delimiter_token
 
@@ -206,11 +196,34 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         # make sure that tokens made of several
         # characters are not split at tokenization
+        
+        # TODO they should be part of the added tokens encoder then ? 
+        # since we remove the `unique_no_split_tokens` logic in favor of AddedTokens
+        # unique no split tokens is only used in 3 files...
+        # this is more reliable as :
+        # 1. unique_no_split_tokens is hidden, vs added_tokens_encoder that will be printed with the tokenizer
+        # 2. tokens can be added to the list more than once no? 
+        # 3. we could actually create the trie with a set of added_tokens_encoder and the unique_no_split_tokens. 
+        # this would allow for better backard comp, but I don't really like the fact that it gives more freedom, and is one
+        # more private attribute to save. (IT IS CURRENTLY NOT SAVED, so initializing and doing a from pretrained will produce different results)
         for token in self.encoder.keys():
             if len(token) > 1:
                 self.unique_no_split_tokens.append(token)
 
         self._create_trie(self.unique_no_split_tokens)
+        
+        super().__init__(
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            do_lower_case=do_lower_case,
+            word_delimiter_token=word_delimiter_token,
+            replace_word_delimiter_char=replace_word_delimiter_char,
+            target_lang=target_lang,
+            **kwargs,
+        )
+                
 
     def set_target_lang(self, target_lang: str):
         """
