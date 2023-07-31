@@ -189,12 +189,12 @@ class IdeficsConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the decoder.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        alpha_initializer (`str`, *optional*, defaults to `"ones"`):
+        alpha_initializer (`str`, *optional*, defaults to `"zeros"`):
             Initialization type for the alphas.
         alphas_initializer_range (`float`, *optional*, defaults to 0.0):
             The standard deviation of the truncated_normal_initializer for initializing the alphas in the Gated Cross
             Attention.
-        alpha_type (`str`, *optional*, defaults to `"vector"`):
+        alpha_type (`str`, *optional*, defaults to `"float"`):
             Whether the gating alphas should be vectors or single floats.
         rms_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the rms normalization layers.
@@ -251,9 +251,9 @@ class IdeficsConfig(PretrainedConfig):
         dropout=0.0,
         hidden_act="silu",
         initializer_range=0.02,
-        alpha_initializer="ones",
+        alpha_initializer="zeros",
         alphas_initializer_range=0.0,
-        alpha_type="vector",
+        alpha_type="float",
         rms_norm_eps=1e-6,
         use_cache=True,
         pad_token_id=0,
