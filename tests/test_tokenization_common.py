@@ -3956,16 +3956,19 @@ class TokenizerTesterMixin:
         assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
 
     def test_split_special_tokens(self):
-        tokenizer = self.get_tokenizer(fast=False)
-        if not tokenizer.is_fast:
-            # bloom, gptneox etc only have a fast
-            special_token = "[SPECIAL_TOKEN]"
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                
+                if not tokenizer.is_fast:
+                    # bloom, gptneox etc only have a fast
+                    special_token = "[SPECIAL_TOKEN]"
 
-            tokenizer.add_special_tokens({"additional_special_tokens": [special_token]})
-            encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False)
-            self.assertEqual(len(encoded_special_token), 1)
+                    tokenizer.add_special_tokens({"additional_special_tokens": [special_token]})
+                    encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False)
+                    self.assertEqual(len(encoded_special_token), 1)
 
-            encoded_split_special_token = tokenizer.encode(
-                special_token, add_special_tokens=False, split_special_tokens=True
-            )
-            self.assertTrue(len(encoded_split_special_token) > 1)
+                    encoded_split_special_token = tokenizer.encode(
+                        special_token, add_special_tokens=False, split_special_tokens=True
+                    )
+                    self.assertTrue(len(encoded_split_special_token) > 1)
