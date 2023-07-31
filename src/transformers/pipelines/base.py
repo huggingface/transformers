@@ -775,12 +775,19 @@ class Pipeline(_ScikitCompat):
         self.modelcard = modelcard
         self.framework = framework
 
-        if self.framework == "pt" and device is not None and not (isinstance(device, int) and device < 0):
+        # `accelerate` device map
+        hf_device_map = getattr(self.model, "hf_device_map", None)
+
+        # We shouldn't call `model.to()` for models loaded with accelerate
+        if (
+            self.framework == "pt"
+            and device is not None
+            and not (isinstance(device, int) and device < 0)
+            and hf_device_map is None
+        ):
             self.model.to(device)
 
         if device is None:
-            # `accelerate` device map
-            hf_device_map = getattr(self.model, "hf_device_map", None)
             if hf_device_map is not None:
                 # Take the first device used by `accelerate`.
                 device = next(iter(hf_device_map.values()))
