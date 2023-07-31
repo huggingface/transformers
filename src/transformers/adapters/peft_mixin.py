@@ -119,12 +119,12 @@ class PeftAdapterMixin:
                 f"Adapter with name {adapter_name} not found. Please pass the correct adapter name among {list(self.peft_config.keys())}"
             )
 
-        from peft.tuners.tuners_utils import BaseTunerLayerMixin
+        from peft.tuners.tuners_utils import BaseTunerLayer
 
         _adapters_has_been_set = False
 
         for _, module in self.named_modules():
-            if isinstance(module, BaseTunerLayerMixin):
+            if isinstance(module, BaseTunerLayer):
                 module.active_adapter = adapter_name
                 _adapters_has_been_set = True
 
