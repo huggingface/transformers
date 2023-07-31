@@ -344,10 +344,7 @@ else:
                 ),
             ),
             ("tapas", ("TapasTokenizer", None)),
-            ("tapas", ("TapasTokenizer", None)),
             ("tapex", ("TapexTokenizer", None)),
-            ("tapex", ("TapexTokenizer", None)),
-            ("transfo-xl", ("TransfoXLTokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
             (
                 "udop",
