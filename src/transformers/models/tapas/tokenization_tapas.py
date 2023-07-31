@@ -351,30 +351,6 @@ class TapasTokenizer(PreTrainedTokenizer):
         else:
             additional_special_tokens = [empty_token]
 
-        super().__init__(
-            do_lower_case=do_lower_case,
-            do_basic_tokenize=do_basic_tokenize,
-            never_split=never_split,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            pad_token=pad_token,
-            cls_token=cls_token,
-            mask_token=mask_token,
-            empty_token=empty_token,
-            tokenize_chinese_chars=tokenize_chinese_chars,
-            strip_accents=strip_accents,
-            cell_trim_length=cell_trim_length,
-            max_column_id=max_column_id,
-            max_row_id=max_row_id,
-            strip_column_names=strip_column_names,
-            update_answer_coordinates=update_answer_coordinates,
-            min_question_length=min_question_length,
-            max_question_length=max_question_length,
-            model_max_length=model_max_length,
-            additional_special_tokens=additional_special_tokens,
-            **kwargs,
-        )
-
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
@@ -400,6 +376,31 @@ class TapasTokenizer(PreTrainedTokenizer):
         self.update_answer_coordinates = update_answer_coordinates
         self.min_question_length = min_question_length
         self.max_question_length = max_question_length
+
+        super().__init__(
+            do_lower_case=do_lower_case,
+            do_basic_tokenize=do_basic_tokenize,
+            never_split=never_split,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            empty_token=empty_token,
+            tokenize_chinese_chars=tokenize_chinese_chars,
+            strip_accents=strip_accents,
+            cell_trim_length=cell_trim_length,
+            max_column_id=max_column_id,
+            max_row_id=max_row_id,
+            strip_column_names=strip_column_names,
+            update_answer_coordinates=update_answer_coordinates,
+            min_question_length=min_question_length,
+            max_question_length=max_question_length,
+            model_max_length=model_max_length,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs,
+        )
+
 
     @property
     def do_lower_case(self):

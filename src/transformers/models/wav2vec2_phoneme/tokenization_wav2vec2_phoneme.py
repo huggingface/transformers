@@ -143,18 +143,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         phonemizer_backend="espeak",
         **kwargs,
     ):
-        super().__init__(
-            unk_token=unk_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            word_delimiter_token=word_delimiter_token,
-            phone_delimiter_token=phone_delimiter_token,
-            do_phonemize=do_phonemize,
-            phonemizer_lang=phonemizer_lang,
-            phonemizer_backend=phonemizer_backend,
-            **kwargs,
-        )
 
         self._word_delimiter_token = word_delimiter_token
         self._phone_delimiter_token = phone_delimiter_token
@@ -168,6 +156,19 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
+        super().__init__(
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            word_delimiter_token=word_delimiter_token,
+            phone_delimiter_token=phone_delimiter_token,
+            do_phonemize=do_phonemize,
+            phonemizer_lang=phonemizer_lang,
+            phonemizer_backend=phonemizer_backend,
+            **kwargs,
+        )
+
 
     @property
     def vocab_size(self) -> int:

@@ -244,26 +244,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         additional_special_tokens: Optional[List[str]] = None,
         **kwargs,
     ):
-        super().__init__(
-            do_lower_case=do_lower_case,
-            do_basic_tokenize=do_basic_tokenize,
-            never_split=never_split,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            pad_token=pad_token,
-            cls_token=cls_token,
-            mask_token=mask_token,
-            cls_token_box=cls_token_box,
-            sep_token_box=sep_token_box,
-            pad_token_box=pad_token_box,
-            pad_token_label=pad_token_label,
-            only_label_first_subword=only_label_first_subword,
-            tokenize_chinese_chars=tokenize_chinese_chars,
-            strip_accents=strip_accents,
-            model_max_length=model_max_length,
-            additional_special_tokens=additional_special_tokens,
-            **kwargs,
-        )
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
@@ -288,6 +268,27 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         self.pad_token_box = pad_token_box
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
+        super().__init__(
+            do_lower_case=do_lower_case,
+            do_basic_tokenize=do_basic_tokenize,
+            never_split=never_split,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            cls_token_box=cls_token_box,
+            sep_token_box=sep_token_box,
+            pad_token_box=pad_token_box,
+            pad_token_label=pad_token_label,
+            only_label_first_subword=only_label_first_subword,
+            tokenize_chinese_chars=tokenize_chinese_chars,
+            strip_accents=strip_accents,
+            model_max_length=model_max_length,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs,
+        )
+
 
     @property
     def do_lower_case(self):

@@ -128,13 +128,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         **kwargs,
     ):
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        super().__init__(
-            unk_token=unk_token,
-            n_genres=n_genres,
-            version=version,
-            max_n_lyric_tokens=max_n_lyric_tokens,
-            **kwargs,
-        )
         self.version = version
         self.max_n_lyric_tokens = max_n_lyric_tokens
         self.n_genres = n_genres
@@ -157,6 +150,14 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         self.artists_decoder = {v: k for k, v in self.artists_encoder.items()}
         self.genres_decoder = {v: k for k, v in self.genres_encoder.items()}
         self.lyrics_decoder = {v: k for k, v in self.lyrics_encoder.items()}
+        super().__init__(
+            unk_token=unk_token,
+            n_genres=n_genres,
+            version=version,
+            max_n_lyric_tokens=max_n_lyric_tokens,
+            **kwargs,
+        )
+
 
     @property
     def vocab_size(self):

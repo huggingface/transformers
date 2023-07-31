@@ -223,6 +223,7 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
+
         super().__init__(
             errors=errors,
             bos_token=bos_token,

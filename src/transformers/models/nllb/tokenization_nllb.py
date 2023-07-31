@@ -149,23 +149,6 @@ class NllbTokenizer(PreTrainedTokenizer):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
         self.legacy_behaviour = legacy_behaviour
 
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            tokenizer_file=tokenizer_file,
-            src_lang=src_lang,
-            tgt_lang=tgt_lang,
-            additional_special_tokens=additional_special_tokens,
-            sp_model_kwargs=self.sp_model_kwargs,
-            legacy_behaviour=legacy_behaviour,
-            **kwargs,
-        )
-
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
@@ -200,6 +183,24 @@ class NllbTokenizer(PreTrainedTokenizer):
 
         self._src_lang = src_lang if src_lang is not None else "eng_Latn"
         self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
+
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            tokenizer_file=tokenizer_file,
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+            additional_special_tokens=additional_special_tokens,
+            sp_model_kwargs=self.sp_model_kwargs,
+            legacy_behaviour=legacy_behaviour,
+            **kwargs,
+        )
+
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
 

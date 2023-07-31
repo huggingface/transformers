@@ -195,23 +195,6 @@ class PLBartTokenizer(PreTrainedTokenizer):
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            language_codes=language_codes,
-            tokenizer_file=tokenizer_file,
-            src_lang=src_lang,
-            tgt_lang=tgt_lang,
-            additional_special_tokens=additional_special_tokens,
-            sp_model_kwargs=self.sp_model_kwargs,
-            **kwargs,
-        )
         src_lang = self._convert_lang_code_special_format(src_lang)
         tgt_lang = self._convert_lang_code_special_format(tgt_lang)
 
@@ -261,6 +244,24 @@ class PLBartTokenizer(PreTrainedTokenizer):
         else:
             self._src_lang = src_lang if src_lang is not None else "__en_XX__"
             self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
+
+
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            language_codes=language_codes,
+            tokenizer_file=tokenizer_file,
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+            additional_special_tokens=additional_special_tokens,
+            sp_model_kwargs=self.sp_model_kwargs,
+            **kwargs,
+        )
 
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)

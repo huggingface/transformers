@@ -134,17 +134,6 @@ class BertweetTokenizer(PreTrainedTokenizer):
         mask_token="<mask>",
         **kwargs,
     ):
-        super().__init__(
-            normalization=normalization,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            **kwargs,
-        )
 
         try:
             from emoji import demojize
@@ -178,6 +167,18 @@ class BertweetTokenizer(PreTrainedTokenizer):
 
         self.normalization = normalization
         self.tweetPreprocessor = TweetTokenizer()
+        super().__init__(
+            normalization=normalization,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            **kwargs,
+        )
+
 
         self.special_puncts = {"’": "'", "…": "..."}
 

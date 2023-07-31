@@ -236,6 +236,7 @@ class BartTokenizer(PreTrainedTokenizer):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
+
         
     @property
     def vocab_size(self):

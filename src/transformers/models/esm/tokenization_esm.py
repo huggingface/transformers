@@ -64,7 +64,6 @@ class EsmTokenizer(PreTrainedTokenizer):
         eos_token="<eos>",
         **kwargs,
     ):
-        super().__init__(**kwargs)
         self.all_tokens = load_vocab_file(vocab_file)
         self._id_to_token = dict(enumerate(self.all_tokens))
         self._token_to_id = {tok: ind for ind, tok in enumerate(self.all_tokens)}
@@ -73,6 +72,8 @@ class EsmTokenizer(PreTrainedTokenizer):
         self.pad_token = pad_token
         self.mask_token = mask_token
         self.eos_token = eos_token
+        super().__init__(**kwargs)
+
         self.unique_no_split_tokens = self.all_tokens
         self._create_trie(self.unique_no_split_tokens)
 

@@ -131,16 +131,6 @@ class PhobertTokenizer(PreTrainedTokenizer):
         mask_token="<mask>",
         **kwargs,
     ):
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            **kwargs,
-        )
 
         self.vocab_file = vocab_file
         self.merges_file = merges_file
@@ -158,6 +148,17 @@ class PhobertTokenizer(PreTrainedTokenizer):
         with open(merges_file, encoding="utf-8") as merges_handle:
             merges = merges_handle.read().split("\n")[:-1]
         merges = [tuple(merge.split()[:-1]) for merge in merges]
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            **kwargs,
+        )
+
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
 

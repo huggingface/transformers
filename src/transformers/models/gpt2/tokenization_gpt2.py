@@ -203,6 +203,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
+
     @property
     def vocab_size(self):
         return len(self.encoder)

@@ -151,6 +151,7 @@ class CTRLTokenizer(PreTrainedTokenizer):
         self.cache = {}
         super().__init__(unk_token=unk_token, **kwargs)
 
+
     @property
     def vocab_size(self):
         return len(self.encoder)

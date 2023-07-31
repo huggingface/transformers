@@ -303,24 +303,6 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        super().__init__(
-            errors=errors,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            add_prefix_space=add_prefix_space,
-            cls_token_box=cls_token_box,
-            sep_token_box=sep_token_box,
-            pad_token_box=pad_token_box,
-            pad_token_label=pad_token_label,
-            only_label_first_subword=only_label_first_subword,
-            **kwargs,
-        )
-
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -343,6 +325,25 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         self.pad_token_box = pad_token_box
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
+
+
+        super().__init__(
+            errors=errors,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
+            cls_token_box=cls_token_box,
+            sep_token_box=sep_token_box,
+            pad_token_box=pad_token_box,
+            pad_token_label=pad_token_label,
+            only_label_first_subword=only_label_first_subword,
+            **kwargs,
+        )
 
     @property
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.vocab_size

@@ -181,21 +181,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         language="en",
         **kwargs,
     ):
-        super().__init__(
-            special=special,
-            min_freq=min_freq,
-            max_size=max_size,
-            lower_case=lower_case,
-            delimiter=delimiter,
-            vocab_file=vocab_file,
-            pretrained_vocab_file=pretrained_vocab_file,
-            never_split=never_split,
-            unk_token=unk_token,
-            eos_token=eos_token,
-            additional_special_tokens=additional_special_tokens,
-            language=language,
-            **kwargs,
-        )
         requires_backends(self, "sacremoses")
 
         if never_split is None:
@@ -255,6 +240,22 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
         if vocab_file is not None:
             self.build_vocab()
+        super().__init__(
+            special=special,
+            min_freq=min_freq,
+            max_size=max_size,
+            lower_case=lower_case,
+            delimiter=delimiter,
+            vocab_file=vocab_file,
+            pretrained_vocab_file=pretrained_vocab_file,
+            never_split=never_split,
+            unk_token=unk_token,
+            eos_token=eos_token,
+            additional_special_tokens=additional_special_tokens,
+            language=language,
+            **kwargs,
+        )
+
 
     @property
     def do_lower_case(self):

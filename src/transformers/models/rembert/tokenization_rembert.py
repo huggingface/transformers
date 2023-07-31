@@ -111,6 +111,14 @@ class RemBertTokenizer(PreTrainedTokenizer):
         mask_token="[MASK]",
         **kwargs,
     ):
+
+        self.do_lower_case = do_lower_case
+        self.remove_space = remove_space
+        self.keep_accents = keep_accents
+        self.vocab_file = vocab_file
+
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(vocab_file)
         super().__init__(
             do_lower_case=do_lower_case,
             remove_space=remove_space,
@@ -125,13 +133,6 @@ class RemBertTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        self.do_lower_case = do_lower_case
-        self.remove_space = remove_space
-        self.keep_accents = keep_accents
-        self.vocab_file = vocab_file
-
-        self.sp_model = spm.SentencePieceProcessor()
-        self.sp_model.Load(vocab_file)
 
     @property
     def vocab_size(self):
