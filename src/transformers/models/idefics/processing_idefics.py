@@ -118,7 +118,7 @@ class IdeficsProcessor(ProcessorMixin):
         tokenizer (`LlamaTokenizerFast`):
             An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
         image_size (`int`, *optional*, defaults to 224): Image size (assuming a square image)
-        add_end_of_utterance_token (`bool`, *optional*, defaults to `False`):
+        add_end_of_utterance_token (`bool`, *optional*, defaults to `True`):
             Whether to automatically add `<end_of_utterance>` after each prompt's text input (unless followed by an
             image). (provided by `preprocessing_config.json`)
     """
