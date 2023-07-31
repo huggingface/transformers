@@ -302,7 +302,7 @@ Flax), PyTorch, and/or TensorFlow.
 |        BlenderbotSmall        |       ✅        |         ✅         |      ✅      |
 |             BLIP              |       ✅        |         ✅         |      ❌      |
 |            BLIP-2             |       ✅        |         ❌         |      ❌      |
-|             BLOOM             |       ✅        |         ❌         |      ❌      |
+|             BLOOM             |       ✅        |         ❌         |      ✅      |
 |          BridgeTower          |       ✅        |         ❌         |      ❌      |
 |           CamemBERT           |       ✅        |         ✅         |      ❌      |
 |            CANINE             |       ✅        |         ❌         |      ❌      |
@@ -394,6 +394,7 @@ Flax), PyTorch, and/or TensorFlow.
 |           MobileViT           |       ✅        |         ✅         |      ❌      |
 |          MobileViTV2          |       ✅        |         ❌         |      ❌      |
 |             MPNet             |       ✅        |         ✅         |      ❌      |
+|              MPT              |       ✅        |         ❌         |      ❌      |
 |              MRA              |       ✅        |         ❌         |      ❌      |
 |              MT5              |       ✅        |         ✅         |      ✅      |
 |           MusicGen            |       ✅        |         ❌         |      ❌      |
