@@ -273,7 +273,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         other_extra_ids=200,
         additional_special_tokens=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        legacy=True,
+        legacy=None,
         **kwargs,
     ) -> None:
         # Add extra_ids to the special token list
@@ -295,11 +295,12 @@ class UdopTokenizer(PreTrainedTokenizer):
                 additional_special_tokens = []
             additional_special_tokens.extend(["<other_{}>".format(i) for i in range(other_extra_ids)])
 
-        if legacy:
+        if legacy is None:
             logger.warning_once(
-                f"You are using the legacy behaviour of the {self.__class__}. This means that tokens that come after special tokens will not be properly handled. We recommend you to"
-                " read the related pull request available at https://github.com/huggingface/transformers/pull/24565"
+                f"You are using the default legacy behaviour of the {self.__class__}. This means that tokens that come after special tokens will not be properly handled. We recommend you to"
+                " read the related pull request available at https://github.com/huggingface/transformers/pull/24565, and set the legacy attribute accordingly."
             )
+            legacy = True
 
         self.legacy = legacy
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs

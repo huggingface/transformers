@@ -104,7 +104,7 @@ def convert_udop_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_h
     assert unexpected_keys == ["pos_embed"]
 
     # prepare dummy inputs
-    tokenizer = UdopTokenizer.from_pretrained("t5-base")
+    tokenizer = UdopTokenizer.from_pretrained("t5-base", legacy=True)
     image_processor = UdopImageProcessor()
     processor = UdopProcessor(image_processor=image_processor, tokenizer=tokenizer)
     # input_ids, bbox, image = prepare_dummy_inputs(tokenizer, image_processor)
