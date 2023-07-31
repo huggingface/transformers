@@ -143,17 +143,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
 
-    @PreTrainedTokenizer.pad_token_id.getter
-    def pad_token_id(self) -> str:
-        """
-        `str`: Padding token. Log an error if used while not having been set.
-        """
-        if self._pad_token is None:
-            if self.verbose:
-                logger.error("Using pad_token, but it is not set yet. Defaulting to `-1`")
-            return -1
-        return self.convert_tokens_to_ids(self.pad_token)
-
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None

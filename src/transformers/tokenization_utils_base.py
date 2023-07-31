@@ -2478,15 +2478,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     max_length = self.model_max_length
 
         # Test if we have a padding token
-        if padding_strategy != PaddingStrategy.DO_NOT_PAD and (not self.pad_token and self.pad_token_id < 0):
-            if verbose:
-                logger.warning_once(
-                    "Asking to pad but the tokenizer does not have a padding token. "
-                    f"A padding index was detected and is equal to {self.pad_token_id} which will be used "
-                    "for padding. Make sure that the model's embedding layer is initialized"
-                    "accordingly."
-                )
-        elif padding_strategy != PaddingStrategy.DO_NOT_PAD and (not self.pad_token):
+        if padding_strategy != PaddingStrategy.DO_NOT_PAD and (not self.pad_token or self.pad_token_id < 0):
             raise ValueError(
                 "Asking to pad but the tokenizer does not have a padding token. "
                 "Please select a token to use as `pad_token` `(tokenizer.pad_token = tokenizer.eos_token e.g.)` "
