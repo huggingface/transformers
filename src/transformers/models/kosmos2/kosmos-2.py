@@ -1371,6 +1371,9 @@ if __name__ == "__main__":
     fast_processor = Kosmos2Processor(tokenizer=fast_tokenizer, image_processor=image_processor)
     print(slow_processor)
 
+    # The following outputs are using the first implementation of kosmos-2 fast tokenizer.
+    # It has been changed and the outputs are different now.
+
     r1 = slow_tokenizer.tokenize("I love <phrase>this dog</phrase>")
     # ['▁I', '▁love', '<phrase>', '▁this', '▁dog', '</phrase>']
     print(r1)
@@ -1438,7 +1441,7 @@ if __name__ == "__main__":
     inputs = slow_processor(text=text, images=image, bboxes=bboxes)
     print(inputs)
 
-    # There is a big problem if the tag token is at the beginning of the sentence
+    # Fixed: (There is a big problem if the tag token is at the beginning of the sentence)
     inputs = fast_processor(text=text, images=image, bboxes=bboxes)
     print(inputs)
 

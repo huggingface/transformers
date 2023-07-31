@@ -397,6 +397,7 @@ class Kosmos2Processor(ProcessorMixin):
                 prev_str_in_targets = True
                 output = output.rstrip() + split
             else:
+                # we don't need this part anymore with the new implementation of kosmos-2 tokenizer
                 if prev_str_in_targets and not split.startswith(" "):
                     output += " " + split
                 else:
