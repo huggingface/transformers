@@ -3024,6 +3024,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if quantization_method_from_args == QuantizationMethod.GPTQ:
             if quantization_config.tokenizer is None:
                 quantization_config.tokenizer = pretrained_model_name_or_path
+            if cls.main_input_name != "input_ids":
+                raise RuntimeError("We can only quantize pure text model.")
             quantizer.quantize_model(model, quantization_config.tokenizer, verbose=True)
             model._is_gptq_quantized = True
             model.config.quantization_config = GPTQConfig.from_dict(quantizer.to_dict())
