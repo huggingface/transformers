@@ -42,6 +42,36 @@ class IdeficsVisionConfig(PretrainedConfig):
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer. (elsewhere referred to as `hidden_size`)
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
+        intermediate_size (`int`, *optional*, defaults to 5120):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        patch_size (`int`, *optional*, defaults to 14):
+            The size (resolution) of each patch.
+        num_hidden_layers (`int`, *optional*, defaults to 32):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        image_num_channels (`int`, *optional*, defaults to `3`):
+            Number of image channels.
+        hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the layer normalization layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        initializer_factor (`float`, *optional*, defaults to 1.0):
+            A factor for initializing all weight matrices (should be kept to 1.0, used internally for initialization
+            testing).
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
     model_type = "idefics"
     attribute_map = {
@@ -90,6 +120,20 @@ class IdeficsPerceiverConfig(PretrainedConfig):
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        use_resampler (`bool`, *optional*, defaults to `False`):
+            Whether or not to use the resampler
+        resampler_n_latents (`int`, *optional*, defaults to ):
+            Number of latent embeddings to resample ("compress") the input sequence to (usually < 128).
+        resampler_depth (`int`, *optional*, defaults to 6):
+            Depth of the Perceiver Resampler (Transformer w/ cross attention). Should be shallow (< 3).
+        resampler_n_heads (`int`, *optional*, defaults to 16):
+            Number of heads in each Transformer block (for multi-headed self-attention).
+        resampler_head_dim (`int`, *optional*, defaults to 96):
+            Dimensionality of each head projection in the Transformer block.
+        qk_layer_norms_perceiver (`bool`, *optional*, defaults to `False`):
+            Whether or not to use qk layer norms in perceiver
     """
     model_type = "idefics"
 
@@ -125,6 +169,9 @@ class IdeficsConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
+        additional_vocab_size (`int`, *optional`, defaults to 0):
+            Additional vocabulary size of the model, typically for the special "<img>" token. Additional vocab tokens
+            are always trainable whereas regular vocab tokens can be frozen or not.
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the Idefics model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`~IdeficsModel`]
@@ -136,17 +183,45 @@ class IdeficsConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
+        dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-12):
+        alpha_initializer (`str`, *optional*, defaults to `"ones"`):
+            Initialization type for the alphas.
+        alphas_initializer_range (`float`, *optional*, defaults to 0.0):
+            The standard deviation of the truncated_normal_initializer for initializing the alphas in the Gated Cross
+            Attention.
+        alpha_type (`str`, *optional*, defaults to `"vector"`):
+            Whether the gating alphas should be vectors or single floats.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        pad_token_id (`int`, *optional*, defaults to 0)
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 1)
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 2)
+            End of stream token id.
         tie_word_embeddings(`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
+        cross_layer_interval (`int`, *optional*, default to 1)
+            Interval for cross attention (from text to image) layers.
+        qk_layer_norms (`bool`, *optional*, defaults to `False`): Whether to add layer norm after q and k
+        freeze_text_layers (`bool`, *optional*, defaults to `True`): Whether to freeze text layers
+        freeze_text_module_exceptions (`bool`, *optional*, defaults to `[]`):
+            Exceptions to freezing text layers when `freeze_text_layers` is `True`
+        freeze_lm_head (`bool`, *optional*, defaults to `False`): Whether to freeze lm head
+        freeze_vision_layers (`bool`, *optional*, defaults to `True`):  Whether to freeze vision layers
+        freeze_vision_module_exceptions (`bool`, *optional*, defaults to `[]`):
+            Exceptions to freezing vision layers when `freeze_vision_layers` is `True`
+        use_resampler (`bool`, *optional*, defaults to `False`): Whether to use the Resampler
+        vision_config (`IdeficsVisionConfig`,  *optional*): Custom vision config
+        perceiver_config (`IdeficsPerceiverConfig`,  *optional*): Custom perceiver config
 
     Example:
 
