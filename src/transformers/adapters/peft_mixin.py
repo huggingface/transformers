@@ -144,10 +144,10 @@ class PeftAdapterMixin:
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
 
-        from peft.tuners.tuners_utils import BaseTunerLayerMixin
+        from peft.tuners.tuners_utils import BaseTunerLayer
 
         for _, module in self.named_modules():
-            if isinstance(module, BaseTunerLayerMixin):
+            if isinstance(module, BaseTunerLayer):
                 return module.active_adapter
 
     def _find_adapter_config_file(
