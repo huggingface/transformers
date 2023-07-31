@@ -362,7 +362,16 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     test_torchscript = False
     test_head_masking = False
     pipeline_model_mapping = (
-        {"feature-extraction": MptModel, "text-generation": MptForCausalLM} if is_torch_available() else {}
+        {
+            "feature-extraction": MptModel,
+            "question-answering": MptForQuestionAnswering,
+            "text-classification": MptForSequenceClassification,
+            "text-generation": MptForCausalLM,
+            "token-classification": MptForTokenClassification,
+            "zero-shot": MptForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
 
     def setUp(self):
