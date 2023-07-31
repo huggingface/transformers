@@ -208,6 +208,29 @@ class UdopTokenizer(PreTrainedTokenizer):
             Whether or not to only label the first subword, in case word labels are provided.
         additional_special_tokens (`List[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
+
+        legacy (`bool`, *optional*, defaults to `True`):
+            Whether or not the `legacy` behaviour of the tokenizer should be used. Legacy is before the merge of #24622
+            which includes fixes to properly handle tokens that appear after special tokens. A simple example:
+            - `legacy=True`:
+            ```python
+            >>> from transformers import T5Tokenizer
+
+            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=True)
+            >>> tokenizer.encode("Hello <extra_id_0>.")
+            [8774, 32099, 3, 5, 1]
+            ```
+            - `legacy=False`:
+            ```python
+            >>> from transformers import T5Tokenizer
+
+            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
+            >>> tokenizer.encode("Hello <extra_id_0>.")  # the extra space `[3]` is no longer here
+            [8774, 32099, 5, 1]
+            ```
+            Checkout the pull request and the issue [here](https://github.com/huggingface/transformers/pull/24565) for
+            more details.
+
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
@@ -250,6 +273,7 @@ class UdopTokenizer(PreTrainedTokenizer):
         other_extra_ids=200,
         additional_special_tokens=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        legacy=True,
         **kwargs,
     ) -> None:
         # Add extra_ids to the special token list
@@ -271,6 +295,13 @@ class UdopTokenizer(PreTrainedTokenizer):
                 additional_special_tokens = []
             additional_special_tokens.extend(["<other_{}>".format(i) for i in range(other_extra_ids)])
 
+        if legacy:
+            logger.warning_once(
+                f"You are using the legacy behaviour of the {self.__class__}. This means that tokens that come after special tokens will not be properly handled. We recommend you to"
+                " read the related pull request available at https://github.com/huggingface/transformers/pull/24565"
+            )
+
+        self.legacy = legacy
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         super().__init__(
@@ -287,6 +318,7 @@ class UdopTokenizer(PreTrainedTokenizer):
             other_extra_ids=other_extra_ids,
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
+            legacy=legacy,
             **kwargs,
         )
 
@@ -434,16 +466,32 @@ class UdopTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
     def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
-        if not text.startswith(" "):
-            text = " " + text
+        # Replace the SPIECE_UNDERLINE with a space to make sure SPIECE_UNDERLINE is only used at
+        # the beginning of the text
+        if not self.legacy:
+            text = SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " ")
         return super().tokenize(text, **kwargs)
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
     def _tokenize(self, text: str) -> List[str]:
-        """Take as input a string and return a list of strings (tokens) for words/sub-words"""
+        """
+        Returns a tokenized string.
+
+        Since the sentencepiece internal model always adds a SPIECE_UNDERLINE, at the beginning of the provided text,
+        we need to remove it by hand when the current text is a subsequence. This happens whenever the `self.tokenize`
+        function is called with specials tokens: the input is split on the special tokens, and each subsequence is
+        passed to `_tokenize`. Thus if a subsequence did not start with a `" "` or SPIECE_UNDERLINE, we have to remove
+        the extra `SPIECE_UNDERLINE` prepended.
+        """
+        if not self.legacy:
+            is_first = text.startswith(SPIECE_UNDERLINE)
+            if is_first:
+                text = text[1:]
+
         tokens = self.sp_model.encode(text, out_type=str)
-        if not text.startswith(" ") and tokens[0] == SPIECE_UNDERLINE:
-            tokens = tokens[1:]
+
+        if not self.legacy and not is_first and not text.startswith(" ") and tokens[0].startswith(SPIECE_UNDERLINE):
+            tokens = ([tokens[0][1:]] if len(tokens[0]) > 1 else []) + tokens[1:]
         return tokens
 
     def _convert_token_to_id(self, token):
