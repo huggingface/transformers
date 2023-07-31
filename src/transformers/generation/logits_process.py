@@ -439,9 +439,21 @@ class EtaLogitsWarper(LogitsWarper):
 
 def _get_ngrams(ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int):
     """
+    Parameters:
     The key is a generated word and the value is a list of the next words observed.
-    With an example of no_repeat_ngram =2, generated ngrams look like this {(40,): [2883, 1053], (2883,): [2712], (2712,): [4346]}.
+        ngram_size (`int`):
+            `ngram_size` that can only occur once.
+        prev_input_ids (`torch.Tensor`):
+            A tensor containing tokenized input for each hypothesis.
+        num_hypos (`int`):
+            The number of hypotheses for which n-grams need to be generated.
+
+    Returns:
+        Dictionary of generated ngrams. With an example of no_repeat_ngram =2, assuming input tokenized tensor([[ 40,
+        2883, 2712, 4346, 319, 262, 21511]]) generated ngrams look like this {(40,): [2883, 1053], (2883,): [2712],
+        (2712,): [4346]}.
     """
+    # Initialize an empty list of dictionaries, one for each hypothesis (index) in the range of num_hypos
     generated_ngrams = [{} for _ in range(num_hypos)]
     for idx in range(num_hypos):
         gen_tokens = prev_input_ids[idx].tolist()
@@ -454,10 +466,24 @@ def _get_ngrams(ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int):
 
 
 def _get_generated_ngrams(banned_ngrams, prev_input_ids, ngram_size, cur_len):
+    """
+    Parameters:
+        banned_ngrams (dict):
+            A dictionary containing previously generated n-grams for each hypothesis.
+        prev_input_ids (torch.Tensor):
+            A tensor containing tokenized input for each hypothesis in the current batch.
+        ngram_size (int):
+            `ngram_size` that can only occur once.
+        cur_len (int):
+            The current length of the token sequences for which the n-grams are being checked.
+
+    Returns:
+        List of tokens that are banned, output eg: [[], [836], [], [], [4346]]
+
+    """
     # Before decoding the next token, prevent decoding of ngrams that have already appeared
     start_idx = cur_len + 1 - ngram_size
     ngram_idx = tuple(prev_input_ids[start_idx:cur_len].tolist())
-    # list of tokens that are banned, output eg: [[], [836], [], [], [4346]]
     return banned_ngrams.get(ngram_idx, [])
 
 
@@ -478,42 +504,43 @@ def _calc_banned_ngram_tokens(
 
 class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     r"""
-    N-grams are groups of "n" consecutive words, characters, or tokens taken from a sequence of text. Given a sentence:
-    " She runs fast ", the bi-grams (n = 2) would be ("she","runs") and ("runs","fast"). In text generation, avoiding
-    repetitions of word sequences provides a more diverse output. This [`LogitsProcessor`] enforces no
-    repetition of n-grams. See
-    [Fairseq](https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345).
-    
-    <Tip> 
-    
-    Use n-gram penalties with care. For instance, penalizing 2-grams (bigrams) in an article about the city of
-    New York might lead to undesirable outcomes where the city's name appears only once in the entire text.
-    [Reference](https://huggingface.co/blog/how-to-generate)
+     N-grams are groups of "n" consecutive words, characters, or tokens taken from a sequence of text. Given a
+     sentence: " She runs fast ", the bi-grams (n = 2) would be ("she","runs") and ("runs","fast"). In text generation,
+     avoiding repetitions of word sequences provides a more diverse output. This [`LogitsProcessor`] enforces no
+     repetition of n-grams by setting the scores of banned tokens to negative infinity (-float("inf")) which eliminates
+     those tokens from consideration when further processing the scores.
+     [Fairseq](https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345).
 
-    </Tip>
+     <Tip>
 
-    Args:
-        ngram_size (`int`):
-            All ngrams of size `ngram_size` can only occur once.
+     Use n-gram penalties with care. For instance, penalizing 2-grams (bigrams) in an article about the city of New
+     York might lead to undesirable outcomes where the city's name appears only once in the entire text.
+     [Reference](https://huggingface.co/blog/how-to-generate)
 
-    Examples:
+     </Tip>
 
-    ```py
-    >>> from transformers import GPT2Tokenizer, AutoModelForCausalLM
+     Args:
+         ngram_size (`int`):
+             All ngrams of size `ngram_size` can only occur once.
 
-    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
-    >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-    >>> inputs = tokenizer(["I enjoy watching football"], return_tensors="pt")
+     Examples:
 
-    >>> output = model.generate(**inputs, max_length=50)
-    >>> print(tokenizer.decode(output[0], skip_special_tokens=True))
-    "I enjoy playing football on the weekends, but I'm not a big fan of the idea of playing in the middle of the night. I'm not a big fan of the idea of playing in the middle of the night. I'm not a big"
+     ```py
+     >>> from transformers import GPT2Tokenizer, AutoModelForCausalLM
 
-    >>> # Now let's add ngram size using <no_repeat_ngram_size> in model.generate. This should stop the repetitions in the output.
-    >>> output = model.generate(**inputs, max_length=50, no_repeat_ngram_size=2)
-    >>> print(tokenizer.decode(output[0], skip_special_tokens=True))
-   "I enjoy playing football on the weekends, but I'm not a big fan of the idea of playing in the middle of a game. I think it's a bit of an overreaction to the fact that we're playing a team that's playing"
-    ```
+     >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+     >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+     >>> inputs = tokenizer(["I enjoy watching football"], return_tensors="pt")
+
+     >>> output = model.generate(**inputs, max_length=50)
+     >>> print(tokenizer.decode(output[0], skip_special_tokens=True))
+     "I enjoy playing football on the weekends, but I'm not a big fan of the idea of playing in the middle of the night. I'm not a big fan of the idea of playing in the middle of the night. I'm not a big"
+
+     >>> # Now let's add ngram size using <no_repeat_ngram_size> in model.generate. This should stop the repetitions in the output.
+     >>> output = model.generate(**inputs, max_length=50, no_repeat_ngram_size=2)
+     >>> print(tokenizer.decode(output[0], skip_special_tokens=True))
+     I enjoy playing football on the weekends, but I'm not a big fan of the idea of playing in the middle of a game. I think it's a bit of an overreaction to the fact that we're playing a team that's playing"
+     ```
     """
 
     def __init__(self, ngram_size: int):
@@ -525,7 +552,6 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
         num_batch_hypotheses = scores.shape[0]
         cur_len = input_ids.shape[-1]
         banned_batch_tokens = _calc_banned_ngram_tokens(self.ngram_size, input_ids, num_batch_hypotheses, cur_len)
-
         for i, banned_tokens in enumerate(banned_batch_tokens):
             scores[i, banned_tokens] = -float("inf")
 
