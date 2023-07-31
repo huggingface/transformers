@@ -34,7 +34,7 @@ IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class IdeficsVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~IdeficsModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`IdeficsModel`]. It is used to instantiate an
     Idefics model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Idefics-9B.
 
@@ -82,7 +82,7 @@ class IdeficsVisionConfig(PretrainedConfig):
 
 class IdeficsPerceiverConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~IdeficsModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`IdeficsModel`]. It is used to instantiate an
     Idefics model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Idefics-9B.
 
@@ -115,7 +115,7 @@ class IdeficsPerceiverConfig(PretrainedConfig):
 
 class IdeficsConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~IdeficsModel`]. It is used to instantiate an
+    This is the configuration class to store the configuration of a [`IdeficsModel`]. It is used to instantiate an
     Idefics model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Idefics-9B.
 
