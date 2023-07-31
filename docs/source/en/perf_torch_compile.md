@@ -290,7 +290,7 @@ Below you can find inference durations in milliseconds for each model with and w
 | Object Detection/Conditional-DETR | 1137.513 | 897.390|
 
 ## PyTorch Nightly
-We also benchmarked on PyTorch nightly (2.1.0dev) for CUDA 11.8 (find wheel [here](https://download.pytorch.org/whl/nightly/cu118)) and observed improvement in latency both for uncompiled and compiled models. You can install the same version with below snippet. 
+We also benchmarked on PyTorch nightly (2.1.0dev, find the wheel [here](https://download.pytorch.org/whl/nightly/cu118)) and observed improvement in latency both for uncompiled and compiled models. 
 
 ### A100
 | **Task/Model** | **Batch Size** | **torch 2.0 - no compile** | **torch 2.0 -<br> compile** |
