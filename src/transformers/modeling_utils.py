@@ -3029,6 +3029,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             quantizer.quantize_model(model, quantization_config.tokenizer, verbose=True)
             model._is_gptq_quantized = True
             model.config.quantization_config = GPTQConfig.from_dict(quantizer.to_dict())
+        if quantization_method_from_config == QuantizationMethod.GPTQ:
+            model = quantizer.get_compatible_with_peft(model)
 
         if output_loading_info:
             if loading_info is None:
