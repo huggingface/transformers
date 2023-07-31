@@ -4671,7 +4671,7 @@ if TYPE_CHECKING:
         TransfoXLTokenizer,
     )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
-    from .models.tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig, TvltProcessor
+    from .models.tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig, TvltFeatureExtractor, TvltProcessor
     from .models.udop import UDOP_PRETRAINED_CONFIG_ARCHIVE_MAP, UdopConfig, UdopProcessor
     from .models.umt5 import UMT5Config
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
