@@ -785,22 +785,22 @@ class Kosmos2Converter(SpmConverter):
         ]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
         vocab += [("<mask>", 0.0)]
-        # fmt: off
-        vocab += [
-            ("</doc>", 0.0),
-            ("<image>", 0.0),
-            ("</image>", 0.0),
-            ("</chunk>", 0.0),
-            ("</line>", 0.0),
-            ("<phrase>", 0.0),
-            ("</phrase>", 0.0),
-            ("<object>", 0.0),
-            ("</object>", 0.0),
-            ("</delimiter_of_multi_objects/>", 0.0),
-            ("<grounding>", 0.0),
-        ]
-        # fmt: on
-        vocab += [(f"<patch_index_{str(i).zfill(4)}>", 0.0) for i in range(self.original_tokenizer.num_patch_index_tokens)]
+        # # fmt: off
+        # vocab += [
+        #     ("</doc>", 0.0),
+        #     ("<image>", 0.0),
+        #     ("</image>", 0.0),
+        #     ("</chunk>", 0.0),
+        #     ("</line>", 0.0),
+        #     ("<phrase>", 0.0),
+        #     ("</phrase>", 0.0),
+        #     ("<object>", 0.0),
+        #     ("</object>", 0.0),
+        #     ("</delimiter_of_multi_objects/>", 0.0),
+        #     ("<grounding>", 0.0),
+        # ]
+        # # fmt: on
+        # vocab += [(f"<patch_index_{str(i).zfill(4)}>", 0.0) for i in range(self.original_tokenizer.num_patch_index_tokens)]
 
         return vocab
 
