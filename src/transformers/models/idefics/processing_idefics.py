@@ -302,7 +302,7 @@ class IdeficsProcessor(ProcessorMixin):
                         image_objects.append(image)
                         last_was_image = True
                     else:
-                        # we add end_of_utterance_token between each subsequent text prompts (and at the very end)
+                        # we add end_of_utterance_token between each subsequent text prompts (but not at the last one!)
                         if add_end_of_utterance_token and last_was_text:
                             full_text += end_of_utterance_token
                         full_text += item
@@ -312,9 +312,6 @@ class IdeficsProcessor(ProcessorMixin):
                     full_text += image_tokens(last_was_image)
                     image_objects.append(item)
                     last_was_image = True
-
-            if add_end_of_utterance_token:
-                full_text += end_of_utterance_token
 
             if add_eos_token:
                 full_text += self.tokenizer.eos_token
