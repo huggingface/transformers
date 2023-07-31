@@ -1422,6 +1422,7 @@ if __name__ == "__main__":
         64012,   712,  1648,     9, 64007,    94, 17772, 64008, 64009, 64092, 65029, 64011, 64148, 65021,
         64010,  1280,    12, 64007,     5,  4464, 64008, 64009, 64013, 65036, 64010,     2
     ]
+    # we need to remove the ending </s> by set `skip_special_tokens=True`
     r8 = fast_processor.decode(generated_ids)
     print(r8)
 
