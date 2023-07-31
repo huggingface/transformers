@@ -583,6 +583,16 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
         self.model_tester = T5ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=T5Config, d_model=37)
 
+    # `QAPipelineTests` is not working well with slow tokenizers (for some models) and we don't want to touch the file
+    # `src/transformers/data/processors/squad.py` (where this test fails for this model)
+    def is_pipeline_test_to_skip(
+        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+    ):
+        if pipeline_test_casse_name == "QAPipelineTests" and not tokenizer_name.endswith("Fast"):
+            return True
+
+        return False
+
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
         if not is_torch_fx_available() or not self.fx_compatible:
             return
