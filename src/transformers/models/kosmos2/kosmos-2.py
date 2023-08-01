@@ -1333,7 +1333,9 @@ def check_real_model_with_snowman_detail_sample_end_to_end():
     slow_generated_ids = slow_generated_output[0, len(slow_inputs["input_ids"][0]):]
     fast_generated_ids = fast_generated_output[0, len(fast_inputs["input_ids"][0]):]
 
-    slow_generation = slow_processor.decode(slow_generated_ids, skip_special_tokens=True)
+    # Set `spaces_between_special_tokens=False` so we won't get space before a tag/patch_index token with the slow
+    # tokenizer (as the fast tokenizer doesn't support `spaces_between_special_tokens`).
+    slow_generation = slow_processor.decode(slow_generated_ids, skip_special_tokens=True, spaces_between_special_tokens=False)
     fast_generation = fast_processor.decode(fast_generated_ids, skip_special_tokens=True)
 
     print(slow_generation)
