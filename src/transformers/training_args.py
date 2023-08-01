@@ -1628,8 +1628,8 @@ class TrainingArguments:
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"
             self.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.hf_deepspeed_config)
         elif strtobool(os.environ.get("ACCELERATE_USE_DEEPSPEED", "false")):
-            deepspeed_plugin = DeepSpeedPlugin()
-            deepspeed_plugin.set_deepspeed_weakref()
+            self.deepspeed_plugin = DeepSpeedPlugin()
+            self.deepspeed_plugin.set_deepspeed_weakref()
 
         if self.push_to_hub_token is not None:
             warnings.warn(
