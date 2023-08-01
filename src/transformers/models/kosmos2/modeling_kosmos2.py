@@ -1611,11 +1611,11 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
 
     def generate(
         self,
-        pixel_values=None,
         input_ids=None,
         attention_mask=None,
         img_features=None,
         inputs_embeds=None,
+        pixel_values=None,
         **kwargs,
     ):
         # in order to allow `inputs` argument (as in `GenerationMixin`)
