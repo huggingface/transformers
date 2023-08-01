@@ -40,6 +40,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+
 from .configuration_vitpose import ViTPoseConfig
 
 
@@ -70,18 +71,18 @@ class ViTPosePatchEmbed(nn.Module):
     Transformer.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: ViTPoseConfig):
         super().__init__()
-        self.num_channels = config.num_channels
+        self.num_channels = 3
         self.embed_dim = config.embed_dim
         self.patch_size = config.patch_size
-        self.image_size, patch_size = config.image_size
-        self.image_size = self.image_size if isinstance(self.image_size, collections.abc.Iterable) else (self.image_size, self.image_size)
+        self.image_size = config.img_size
+       # self.image_size = self.image_size if isinstance(self.image_size, collections.abc.Iterable) else (self.image_size, self.image_size)
         self.patch_size = self.patch_size if isinstance(self.patch_size, collections.abc.Iterable) else (self.patch_size, self.patch_size)
 
         self.projection = nn.Conv2d(self.num_channels, self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size, padding = (2,2))
 
-    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: Optional[bool]) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: Optional[bool]=False) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -97,7 +98,7 @@ class ViTPosePatchEmbed(nn.Module):
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return embeddings
 
-## to be changed
+## GREEN
 class ViTPoseAttention(nn.Module):
     def __init__(self, config: ViTPoseConfig) -> None:
         super().__init__()
@@ -109,29 +110,33 @@ class ViTPoseAttention(nn.Module):
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.embed_dim / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size * config.num_channels
+        self.all_head_size = self.attention_head_size * config.num_attention_heads
 
         #self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         #self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         #self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-        self.qkv = nn.Linear(config.embed_dim, self.all_head_size, bias=config.qkv_bias)
-
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.qkv = nn.Linear(config.embed_dim, self.all_head_size*3, bias=config.qkv_bias)
+        self.attn_drop = nn.Dropout(config.dropout_p)
+        self.proj = nn.Linear(self.all_head_size, config.embed_dim, bias=config.qkv_bias)
+        self.proj_drop = nn.Dropout(config.dropout_p)
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
+        x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
     def forward(
         self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        mixed_query_layer = self.query(hidden_states)
+        qkv_layer = self.qkv(hidden_states)
 
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        query_layer, key_layer, value_layer = torch.chunk(qkv_layer, 3, dim=-1)
+
+        value_layer = self.transpose_for_scores(value_layer)
+        key_layer = self.transpose_for_scores(key_layer)
+        query_layer = self.transpose_for_scores(query_layer)
+
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -143,7 +148,7 @@ class ViTPoseAttention(nn.Module):
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
+        attention_probs = self.attn_drop(attention_probs)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -153,23 +158,20 @@ class ViTPoseAttention(nn.Module):
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
+        context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        attention_output = self.proj(context_layer)
+        attention_output = self.proj_drop(attention_output)
 
-        return outputs
+        return attention_output
 
 class mlp(nn.Module):
-    def __init__(self, in_feature, hidden_features, out_features = None, dropout=.0):
+    def __init__(self, config: ViTPoseConfig):
         super().__init__()
-        if hidden_features is None:
-          hidden_featurea = in_features
-        if out_features is None:
-          out_features = in_features
 
         self.fc1 = nn.Linear(in_features=config.embed_dim, out_features=config.embed_dim*config.mlp_ratio,bias=True)
         self.act = nn.GELU()
-        self.fc2 = nn.Linar(inf_features=config.embed_dim*config.mlp_ratio, out_features=config.embed_dim)
+        self.fc2 = nn.Linear(in_features=config.embed_dim*config.mlp_ratio, out_features=config.embed_dim)
         self.dropout = nn.Dropout(config.dropout_p, inplace=True)
 
     def forward(self,x):
@@ -185,8 +187,8 @@ class ViTPoseBlock(nn.Module):
     def __init__(self, config: ViTPoseConfig):
         super().__init__()
         self.norm1 = nn.LayerNorm(config.embed_dim, eps=1e-06, elementwise_affine=True)
-        self.attn = Attention(dim, num_heads, qkv_bias=True, qk_scale=qk_value, attn_drop=attn_drop, proj_drop=drop)
-        self.drop_path = Identity()
+        self.attn = ViTPoseAttention(config)
+        self.drop_path = DropPath(p = config.drop_path_rate)
         self.norm2 = nn.LayerNorm(config.embed_dim, eps=1e-06, elementwise_affine=True)
         self.mlp = mlp(config)
 
@@ -196,7 +198,20 @@ class ViTPoseBlock(nn.Module):
         return x
     pass
 
+class DropPath(nn.Module):
+    def __init__(self, p=0.0):
+        super(DropPath, self).__init__()
+        self.p = p
 
+    def forward(self, x):
+        if not self.training or self.p == 0.0:
+            return x
+        keep_prob = 1 - self.p
+        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
+        random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+        random_tensor.floor_()  # binarize
+        output = x.div(keep_prob) * random_tensor
+        return output
 
 ## to be changed
 #class ViTBackbone(nn.Module):
@@ -492,92 +507,92 @@ class ViTPoseModel(ViTPosePreTrainedModel):
 
         return keypoint_outputs
 
-class ViTForImageClassification(ViTPreTrainedModel):
-    def __init__(self, config: ViTConfig) -> None:
-        super().__init__(config)
-
-        self.num_labels = config.num_labels
-        self.vitpose = ViTPoseModel(config, add_pooling_layer=False)
-
-        # Classifier head
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
-    def forward(
-        self,
-        pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ImageClassifierOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.vit(
-            pixel_values,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        logits = self.classifier(sequence_output[:, 0, :])
-
-        loss = None
-        if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return ImageClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+#class ViTForImageClassification(ViTPosePreTrainedModel):
+#    def __init__(self, config: ViTConfig) -> None:
+#        super().__init__(config)
+#
+#        self.num_labels = config.num_labels
+#        self.vitpose = ViTPoseModel(config, add_pooling_layer=False)
+#
+#        # Classifier head
+#        self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+#
+#        # Initialize weights and apply final processing
+#        self.post_init()
+#
+#    @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING)
+#    @add_code_sample_docstrings(
+#        checkpoint=_IMAGE_CLASS_CHECKPOINT,
+#        output_type=ImageClassifierOutput,
+#        config_class=_CONFIG_FOR_DOC,
+#        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+#    )
+#    def forward(
+#        self,
+#        pixel_values: Optional[torch.Tensor] = None,
+#        head_mask: Optional[torch.Tensor] = None,
+#        labels: Optional[torch.Tensor] = None,
+#        output_attentions: Optional[bool] = None,
+#        output_hidden_states: Optional[bool] = None,
+#        interpolate_pos_encoding: Optional[bool] = None,
+#        return_dict: Optional[bool] = None,
+#    ) -> Union[tuple, ImageClassifierOutput]:
+#        r"""
+#        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+#            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+#            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+#            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+#        """
+#        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+#
+#        outputs = self.vit(
+#            pixel_values,
+#            head_mask=head_mask,
+#            output_attentions=output_attentions,
+#            output_hidden_states=output_hidden_states,
+#            interpolate_pos_encoding=interpolate_pos_encoding,
+#            return_dict=return_dict,
+#        )
+#
+#        sequence_output = outputs[0]
+#
+#        logits = self.classifier(sequence_output[:, 0, :])
+#
+#        loss = None
+#        if labels is not None:
+#            # move labels to correct device to enable model parallelism
+#            labels = labels.to(logits.device)
+#            if self.config.problem_type is None:
+#                if self.num_labels == 1:
+#                    self.config.problem_type = "regression"
+#                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+#                    self.config.problem_type = "single_label_classification"
+#                else:
+#                    self.config.problem_type = "multi_label_classification"
+#
+#            if self.config.problem_type == "regression":
+#                loss_fct = MSELoss()
+#                if self.num_labels == 1:
+#                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+#                else:
+#                    loss = loss_fct(logits, labels)
+#            elif self.config.problem_type == "single_label_classification":
+#                loss_fct = CrossEntropyLoss()
+#                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+#            elif self.config.problem_type == "multi_label_classification":
+#                loss_fct = BCEWithLogitsLoss()
+#                loss = loss_fct(logits, labels)
+#
+#        if not return_dict:
+#            output = (logits,) + outputs[1:]
+#            return ((loss,) + output) if loss is not None else output
+#
+#        return ImageClassifierOutput(
+#            loss=loss,
+#            logits=logits,
+#            hidden_states=outputs.hidden_states,
+#            attentions=outputs.attentions,
+#        )
 #]
 #
 #class ViTLayer(nn.Module):
@@ -836,3 +851,10 @@ class ViTForImageClassification(ViTPreTrainedModel):
 #    """,
 #    VIT_START_DOCSTRING,
 #)
+
+import numpy
+m = ViTPosePatchEmbed(ViTPoseConfig())
+model = ViTPoseBlock(ViTPoseConfig())
+print(model(m(torch.Tensor(numpy.zeros([1,3,256,192])))))
+
+
