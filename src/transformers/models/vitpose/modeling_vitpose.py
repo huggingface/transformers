@@ -298,18 +298,18 @@ class ViTPoseBackbone(nn.Module):
 class ViTPoseTopDownHeatMap(nn.Module):
     # keypoint head - mse loss]
     ## deconv layers and all the other remaining things with the final layer
-    def __init__(self):
+    def __init__(self, config: ViTPoseConfig):
         super().__init__()
         self.deconv_layers = []
-        for i in range(config.num_deconv_layer):
-            in_channels = config.embed_dim if i == 0 else config.num_deconv_filters[i - 1]
-            out_channels = config.num_deconv_filters[i]
-            kernel_size = num_deconv_kernels[i]
-            self.deconv_layer.append(nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride=2, padding=1, bias=False))
-            self.deconv_layer.append(nn.BatchNorm2d(out_channels))
-            self.deconv_layer.append(nn.ReLU(inplace=True))
-        self.deconv_layers = nn.Sequential(*deconv_layers)
-        self.final_layer = nn.Conv2d(config.num_deconv_filters[-1], config.num_output_channels, kernel_siz=1, stride=1)
+        for i in range(config.keypoint_num_deconv_layer):
+            in_channels = config.embed_dim if i == 0 else config.keypoint_num_deconv_filters[i - 1]
+            out_channels = config.keypoint_num_deconv_filters[i]
+            kernel_size = config.keypoint_num_deconv_kernels[i]
+            self.deconv_layers.append(nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride=2, padding=1, bias=False))
+            self.deconv_layers.append(nn.BatchNorm2d(out_channels))
+            self.deconv_layers.append(nn.ReLU(inplace=True))
+        self.deconv_layers = nn.Sequential(*self.deconv_layers)
+        self.final_layer = nn.Conv2d(config.keypoint_num_deconv_filters[-1], config.num_output_channels, kernel_size=1, stride=1)
 
     def forward(self, x):
         x = self.deconv_layers(x)
@@ -317,6 +317,7 @@ class ViTPoseTopDownHeatMap(nn.Module):
         return keypoints
 
 
+## to be changed
 class ViTPosePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -343,17 +344,18 @@ class ViTPosePreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, ViTPosePatchEmbed):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.position_embeddings.dtype)
+            pass
+        #    module.position_embeddings.data = nn.init.trunc_normal_(
+        #        module.position_embeddings.data.to(torch.float32),
+        #        mean=0.0,
+        #        std=self.config.initializer_range,
+        #    ).to(module.position_embeddings.dtype)
 
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.cls_token.dtype)
+        #    module.cls_token.data = nn.init.trunc_normal_(
+        #        module.cls_token.data.to(torch.float32),
+        #        mean=0.0,
+        #        std=self.config.initializer_range,
+        #    ).to(module.cls_token.dtype)
 
    # def _set_gradient_checkpointing(self, module: ViTEncoder, value: bool = False) -> None:
    #     if isinstance(module, ViTEncoder):

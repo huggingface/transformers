@@ -102,11 +102,12 @@ class ViTPoseConfig(PretrainedConfig):
         qkv_bias=True,
         drop_path_rate = .1,
         keypoint_in_channels = 382,
-        keypoint_num_deconv_layers = 2,
+        keypoint_num_deconv_layer = 2,
         keypoint_num_deconv_filters = (256, 256),
         keypoint_num_deconv_kernels= (4,4),
         dropout_p = 0.0,
         num_output_channels = 17,
+        initializer_range = 1,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -122,10 +123,11 @@ class ViTPoseConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.drop_path_rate = drop_path_rate
         self.keypoint_in_channels = keypoint_in_channels
-        self.keypoint_num_deconv_layers = keypoint_num_deconv_layers
+        self.keypoint_num_deconv_layer = keypoint_num_deconv_layer
         self.keypoint_num_deconv_filters = keypoint_num_deconv_filters
         self.keypoint_num_deconv_kernels = keypoint_num_deconv_kernels
         self.dropout_p = dropout_p
         self.num_output_channels = num_output_channels
+        self.initializer_range = initializer_range
 
 
