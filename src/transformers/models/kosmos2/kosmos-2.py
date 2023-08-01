@@ -1307,8 +1307,8 @@ def check_real_model_with_snowman_detail_sample_end_to_end():
     image = Image.open("snowman.jpg")
     bboxes = None
 
-    slow_inputs = slow_processor(text=text, images=image, bboxes=bboxes)
-    fast_inputs = fast_processor(text=text, images=image, bboxes=bboxes)
+    slow_inputs = slow_processor(text=text, images=image, bboxes=bboxes, return_tensors="pt")
+    fast_inputs = fast_processor(text=text, images=image, bboxes=bboxes, return_tensors="pt")
 
     slow_generated_output = model.generate(
         pixel_values=slow_inputs["pixel_values"],
@@ -1319,11 +1319,11 @@ def check_real_model_with_snowman_detail_sample_end_to_end():
         use_cache=True,
     )
     fast_generated_output = model.generate(
+        pixel_values=fast_inputs["pixel_values"],
         input_ids=fast_inputs["input_ids"],
-        attention_mask=fast_inputs["input_ids"],
+        attention_mask=fast_inputs["attention_mask"],
         img_features=None,
         img_attn_mask=fast_inputs["img_attn_mask"],
-        pixel_values=fast_inputs["pixel_values"],
         use_cache=True,
     )
 
