@@ -214,8 +214,8 @@ class DropPath(nn.Module):
         output = x.div(keep_prob) * random_tensor
         return output
 
-## to be changed
-class ViTBackbone(nn.Module):
+## LOOKS GREEN
+class ViTPoseBackbone(nn.Module):
     """
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
     """
@@ -228,7 +228,7 @@ class ViTBackbone(nn.Module):
         self.patch_embeddings = ViTPosePatchEmbed(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.embed_dim))
-        self.dropout = nn.Dropout(config.dropout_p)
+        self.blocks = nn.ModuleList([ViTPoseBlock(config) for i in range(config.depth)])
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -290,37 +290,10 @@ class ViTBackbone(nn.Module):
         else:
             embeddings = embeddings + self.position_embeddings
 
-        embeddings = self.dropout(embeddings)
+        for i,layer in enumerate(self.blocks):
+            embeddings = self.blocks[i//2](embeddings) + layer(embeddings)
 
         return embeddings
-
-
-class ViTPoseBackbone(nn.Module):
-    def __init__(self, config: ViTPoseConfig):
-        super().__init__()
-        num_patches = (img_size // patch_size) ** 2
-        patch_dim = in_channels * (patch_size ** 2)
-        self.patch_embed = ViTPosePatchEmbed(in_channels, embed_dim, patch_size)
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim))
-        self.dropout = nn.Dropout(dropout)
-        self.blocks = nn.ModuleList([Block(embed_dim, num_heads, mlp_ratio, dropout) for _ in range(depth)])
-        self.norm = nn.LayerNorm(embed_dim)
-
-    def forward(self, x):
-        B = x.shape[0]
-        x = self.patch_embed(x)
-        cls_token = self.cls_token.expand(B, -1, -1)
-        x = torch.cat((cls_token, x), dim=1)
-        x = x + self.pos_embed
-        x = self.dropout(x)
-
-        for block in self.blocks:
-            x = block(x)
-
-        x = self.norm(x)
-        return x
-
 
 class ViTPoseTopDownHeatMap(nn.Module):
     # keypoint head - mse loss]
@@ -855,6 +828,7 @@ class ViTPoseModel(ViTPosePreTrainedModel):
 
 import numpy
 model = ViTPoseBackbone(ViTPoseConfig())
-print(model)
+test = torch.Tensor(numpy.zeros([1,3,256,192]))
+print(model(test))
 
 
