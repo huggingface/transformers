@@ -499,7 +499,18 @@ class LlamaIntegrationTest(unittest.TestCase):
 
                 self.assertEqual(decoded1, decoded2)
 
-
+    def test_special_token_special_word(self):
+        # the word inform should be split as ['in', 'form']
+        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-13b-hf", legacy = False)
+        tokenizer.add_tokens(['<REPR_END>'], special_tokens=True)
+        out1 = tokenizer.decode(tokenizer.encode("<REPR_END>inform", add_special_tokens = False), spaces_between_special_tokens = False)
+        self.assertEquals(out1, "<REPR_END>inform")
+        tokenizer.decode(tokenizer.encode("<REPR_END>inform", add_special_tokens = False), spaces_between_special_tokens = True)
+        self.assertEquals(out1, " <REPR_END> inform")
+        input_ids = tokenizer("<REPR_END>inform", add_special_tokens = False)
+        self.assertEquals(input_ids,[29871, 32003, 262, 689] ) # 29871 is the spiece underline, '▁'
+        
+        
 @require_sentencepiece
 @require_tokenizers
 class CommonSpmIntegrationTests(unittest.TestCase):
