@@ -329,8 +329,6 @@ class GPTQConfig(QuantizationConfigMixin):
             "Whether to perform sequential quantization even within a single Transformer block." "Instead of quantizing
             the entire block at once, we perform layer-wise quantization." "As a result, each layer undergoes
             quantization using inputs that have passed through the previously quantized layers."
-        pack_sequentially (`bool`, *optional*, defaults to `False`):
-            Whether to pack the layer just after it is quantized. If False, we will pack the model at the end.
         use_cuda_fp16 (`bool`, *optional*, defaults to `False`):
             "Whether or not to use optimized cuda kernel for fp16 model. Need to have model in fp16.
         model_seqlen (`int`, *optional*, defaults to `None`):
@@ -355,7 +353,6 @@ class GPTQConfig(QuantizationConfigMixin):
         desc_act: bool = True,
         sym: bool = True,
         true_sequential: bool = True,
-        pack_sequentially: bool = False,
         use_cuda_fp16: bool = False,
         model_seqlen: Optional[int] = None,
         block_name_to_quantize: Optional[str] = None,
@@ -373,7 +370,6 @@ class GPTQConfig(QuantizationConfigMixin):
         self.desc_act = desc_act
         self.sym = sym
         self.true_sequential = true_sequential
-        self.pack_sequentially = pack_sequentially
         self.use_cuda_fp16 = use_cuda_fp16
         self.model_seqlen = model_seqlen
         self.block_name_to_quantize = block_name_to_quantize
