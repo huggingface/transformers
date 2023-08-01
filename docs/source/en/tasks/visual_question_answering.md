@@ -117,10 +117,8 @@ Take a look at the image and consider which answer would you give:
 >>> image
 ```
 
-[//]: # (TODO: add the image)
-
 <div class="flex justify-center">
-     <img src="" alt="VQA Image Example"/>
+     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/vqa-example.png" alt="VQA Image Example"/>
 </div>
 
 Due to the questions and answers ambiguity, datasets like this are treated as a multi-label classification problem (as 
