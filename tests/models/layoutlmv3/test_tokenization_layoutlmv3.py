@@ -266,7 +266,7 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @unittest.skip("Not implemented")
     def test_test_split_special_tokens(self):
-        ...
+        pass
 
     def test_encode_plus_with_padding(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
