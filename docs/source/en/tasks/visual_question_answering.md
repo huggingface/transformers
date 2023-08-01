@@ -18,17 +18,25 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-[//]: # (TODO: intro) 
-Visual Question Answering is a task ...
+Visual Question Answering (VQA) is the task of answering open-ended questions based on an image. 
+The input to models supporting this task is typically a combination of an image and a question, and the output is an 
+answer expressed in natural language.
 
-This guide illustrates how to:
+Some noteworthy use case examples for VQA include:
+* Accessibility applications for visually impaired individuals.
+* Education: posing questions about visual materials presented in lectures or textbooks. VQA can also be utilized in interactive museum exhibits or historical sites.
+* Customer service and e-commerce: VQA can enhance user experience by letting users ask questions about products. 
+* Image retrieval: VQA models can be used to retrieve images with specific characteristics. For example, the user can ask "Is there a dog?" to find all images with dogs from a set of images.
 
-- Fine-tune [ViLT](../model_doc/vilt) on the [`Graphcore/vqa` dataset](https://huggingface.co/datasets/Graphcore/vqa).
+In this guide you'll learn how to:
+
+- Fine-tune a VQA model, specifically [ViLT](../model_doc/vilt), on the [`Graphcore/vqa` dataset](https://huggingface.co/datasets/Graphcore/vqa).
 - Use your fine-tuned model for inference.
 
-[//]: # (TODO: add the automated Tip if there are other models that support this task)
-
-[//]: # (TODO: couple of words about ViLT)
+ViLT model incorporates text embeddings into a Vision Transformer (ViT), allowing it to have a minimal design for 
+Vision-and-Language Pre-training (VLP). This model can be used for several downstream tasks. For the VQA task, a classifier 
+head is placed on top (a linear layer on top of the final hidden state of the [CLS] token) and randomly initialized. 
+Visual Question Answering is thus treated as a classification problem.
 
 Before you begin, make sure you have all the necessary libraries installed. 
 
@@ -53,18 +61,19 @@ Let's define the model checkpoint as a global variable.
 
 ## Load the data
 
-In this guide we use a very small sample of the `Graphcore/vqa` dataset, which you can find on 🤗 Hub.
+For illustration purposes, in this guide we use a very small sample of the annotated visual question answering `Graphcore/vqa` dataset. 
+You can find the full dataset on [🤗 Hub](https://huggingface.co/datasets/Graphcore/vqa).
 
-[//]: # (TODO: Explain where this dataset originally comes from? )
+Let's load the first 200 examples from the validation split and explore the dataset's features:  
 
 ```python
 >>> from datasets import load_dataset
 
->>> dataset = load_dataset("Graphcore/vqa", split="validation[:100]")
+>>> dataset = load_dataset("Graphcore/vqa", split="validation[:200]")
 >>> dataset
 Dataset({
     features: ['question', 'question_type', 'question_id', 'image_id', 'answer_type', 'label'],
-    num_rows: 100
+    num_rows: 200
 })
 ```
 
@@ -84,10 +93,22 @@ Let's take a look at an example to understand the dataset's features:
    0.30000001192092896]}}
 ```
 
-[//]: # (TODO: explain the features. different answers, and weights)
-[//]: # (As we can see, the example contains several answers (collected by different human annotators). The answer to a question can be a bit subjective: for instance for the question "where is he looking?", some people annotated this with "down", others with "table", another one with "skateboard", etc. So there's a bit of disambiguity among the annotators :))
+The features relevant to the task include: 
+* `question`: the question to be answered from the image
+* `image_id`: the path to the image the question refers to
+* `label`: the annotations
 
-Let's see what the image for this example is: 
+We can remove the rest of the features as they won't be necessary: 
+
+```py 
+>>> dataset = dataset.remove_columns(['question_type', 'question_id', 'answer_type'])
+```
+
+As you can see, the `label` feature contains several answers to the same question (called `ids` here) collected by different human annotators. 
+This is because the answer to a question can be subjective. In this case, the question is "where is he looking?". Some people 
+annotated this with "down", others with "at table", another one with "skateboard", etc. 
+
+Take a look at the image and consider which answer would you give:
 
 ```python
 >>> from PIL import Image
@@ -102,7 +123,15 @@ Let's see what the image for this example is:
      <img src="" alt="VQA Image Example"/>
 </div>
 
-[//]: # (TODO: create label to id mapping)
+Due to the questions and answers ambiguity, datasets like this are treated as a multi-label classification problem (as 
+multiple answers are possibly valid). Moreover, rather than just creating a one-hot encoded vector, one creates a 
+soft encoding, based on the number of times a certain answer appeared in the annotations.
+
+For instance, in the example above, because the answer "down" is selected way more often than other answers, it has a 
+score (called `weight` in the dataset) of 1.0, and the rest of the answers have scores < 1.0. 
+
+To later instantiate the model with an appropriate classification head, let's create two dictionaries: one that maps 
+the label name to an integer and vice versa:
 
 ```py
 >>> import itertools
@@ -115,11 +144,9 @@ Let's see what the image for this example is:
 >>> id2label = {idx: label for label, idx in label2id.items()} 
 ```
 
-Now that we have the mappings....
+Now that we have the mappings, we can replace the string answers with their ids, and flatten the dataset for a more convenient further preprocessing. 
 
 ```python
-# replace actual labels with their ids
-
 >>> def replace_ids(inputs):
 ...   inputs["label"]["ids"] = [label2id[x] for x in inputs["label"]["ids"]]
 ...   return inputs
@@ -129,21 +156,31 @@ Now that we have the mappings....
 >>> flat_dataset = dataset.flatten()
 >>> flat_dataset.features
 {'question': Value(dtype='string', id=None),
- 'question_type': Value(dtype='string', id=None),
- 'question_id': Value(dtype='int32', id=None),
  'image_id': Value(dtype='string', id=None),
- 'answer_type': Value(dtype='string', id=None),
  'label.ids': Sequence(feature=Value(dtype='int64', id=None), length=-1, id=None),
  'label.weights': Sequence(feature=Value(dtype='float64', id=None), length=-1, id=None)}
 ```
 
 ## Preprocessing data
 
+The next step is to load a ViLT processor to prepare the image and text data for the model. 
+[`ViLTProcessor`] wraps a BERT tokenizer and ViLT image processor into a convenient single processor:
+
 ```py 
 >>> from transformers import ViltProcessor
 
 >>> processor = ViltProcessor.from_pretrained(model_checkpoint)
 ```
+
+To preprocess the data we need to encode the images and questions using the [`ViLTProcessor`]. The processor will use 
+the [`BertTokenizerFast`] to tokenize the text and create `input_ids`, `attention_mask` and `token_type_ids` for the text data. 
+As for images, the processor will leverage [`ViltFeatureExtractor`] to resize and normalize the image, and create `pixel_values` and `pixel_mask`.
+
+All these preprocessing steps are done under the hood, we only need to call the `processor`. However, we still need to 
+prepare the target labels. Labels are represented as a soft encoded vector where of shape (num_labels,) where the each 
+element represents a potential answer (label): for valid answers the element contains their score (weight), and the rest are zeroes.
+
+The following function applies the `processor` to the images and questions and formats the labels as described above:
 
 ```py
 >>> import torch
@@ -171,16 +208,21 @@ Now that we have the mappings....
 ...     encoding["labels"] = targets
     
 ...     return encoding
+```
 
+To apply the preprocessing function over the entire dataset, use 🤗 Datasets map function. You can speed up map by 
+setting `batched=True` to process multiple elements of the dataset at once. At this point, feel free to remove the columns you don't need.
+
+```py
 >>> processed_dataset = flat_dataset.map(preprocess_data, batched=True, remove_columns=['question','question_type', 'question_id', 'image_id', 'answer_type', 'label.ids', 'label.weights'])
 >>> processed_dataset
 Dataset({
     features: ['input_ids', 'token_type_ids', 'attention_mask', 'pixel_values', 'pixel_mask', 'labels'],
-    num_rows: 100
+    num_rows: 200
 })
 ```
 
-Data collator 
+As a final preprocessing step, create a batch of examples using [`DefaultDataCollator`]:
 
 ```py
 >>> from transformers import DefaultDataCollator
@@ -190,18 +232,23 @@ Data collator
 
 ## Train the model
 
+You’re ready to start training your model now! Load ViLT with `ViltForQuestionAnswering`. Specify the number of labels 
+along with the label mappings:
+
 ```py
 >>> from transformers import ViltForQuestionAnswering
 
->>> model = ViltForQuestionAnswering.from_pretrained("dandelin/vilt-b32-mlm", num_labels=len(id2label), id2label=id2label, label2id=label2id)
+>>> model = ViltForQuestionAnswering.from_pretrained(model_checkpoint, num_labels=len(id2label), id2label=id2label, label2id=label2id)
 ```
 
-Training arguments
+At this point, only three steps remain:
+
+1. Define your training hyperparameters in [`TrainingArguments`]:
 
 ```py
 >>> from transformers import TrainingArguments
 
->>> repo_id = "MariaK/vilt_finetuned_100"
+>>> repo_id = "MariaK/vilt_finetuned_200"
 
 >>> training_args = TrainingArguments(
 ...     output_dir=repo_id,
@@ -216,7 +263,7 @@ Training arguments
 ... )
 ```
 
-Trainer
+2. Pass the training arguments to [`Trainer`] along with the model, dataset, processpe, and data collator.
 
 ```py
 >>> from transformers import Trainer
@@ -228,39 +275,69 @@ Trainer
 ...     train_dataset=processed_dataset,
 ...     tokenizer=processor,
 ... )
-
->>> trainer.train() 
-Step	Training Loss
-50	22.692400
-100	6.525900
-150	5.436700
-200	4.800800
-250	4.475900
-300	3.639400
-350	3.137100
-400	2.702400
-450	2.366200
-500	2.181200
 ```
 
-Push to Hub
+3.Call `train` to finetune your model.
+
+```py
+>>> trainer.train() 
+```
+
+Once training is completed, share your model to the Hub with the `push_to_hub` method to share your final model on the 🤗 Hub:
+
 ```py
 >>> trainer.push_to_hub()
 ```
 
 ## Inference
 
+Now that you have fine-tuned a ViLT model, and uploaded it to the 🤗 Hub, you can use it for inference. The simplest
+way to try out your fine-tuned model for inference is to use it in a [`Pipeline`].
+
 ```py
 >>> from transformers import pipeline
 
->>> pipe = pipeline("visual-question-answering", model="MariaK/vilt_finetuned_100")
+>>> pipe = pipeline("visual-question-answering", model="MariaK/vilt_finetuned_200")
 ```
+
+The model in this guide has only been trained on 200 examples, so don't expect a lot of it. Let's see if it at least 
+learned something from the data and take the first example from the dataset to illustrate inference:
 
 ```py
-example = dataset[0]
-image = Image.open(example['image_id'])
-
-question = example['question']
-
-pipe(image, question, top_k=1)
+>>> example = dataset[0]
+>>> image = Image.open(example['image_id'])
+>>> question = example['question']
+>>> print(question)
+>>> pipe(image, question, top_k=1)
+"Where is he looking?"
+[{'score': 0.5498199462890625, 'answer': 'down'}]
 ```
+
+Even though not very confident, the model indeed has learned something. With more examples and longer training, you'll get far better results!
+
+You can also manually replicate the results of the pipeline if you'd like:
+1. Take an image and a question, prepare them for the model using the processor from your model.
+2. Forward the result or preprocessing through the model.
+3. From the logits, get the most likely answer's id, and find the actual answer in the `id2label`.
+
+```py
+>>> processor = ViltProcessor.from_pretrained("MariaK/vilt_finetuned_200")
+
+>>> image = Image.open(example['image_id'])
+>>> question = example['question']
+
+>>> # prepare inputs
+>>> inputs = processor(image, question, return_tensors="pt")
+
+>>> model = ViltForQuestionAnswering.from_pretrained("MariaK/vilt_finetuned_200")
+
+>>> # forward pass
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+
+>>> logits = outputs.logits
+>>> idx = logits.argmax(-1).item()
+>>> print("Predicted answer:", model.config.id2label[idx])
+Predicted answer: down
+```
+
