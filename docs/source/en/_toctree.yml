@@ -78,8 +78,10 @@
     title: Multimodal
     isExpanded: false
   - sections:
+      - local: autoregressive_generation
+        title: Auto-regressive generation
       - local: generation_strategies
-        title: Customize text generation strategy
+        title: Customize generation strategy
     title: Generation
     isExpanded: false
   title: Task Guides
