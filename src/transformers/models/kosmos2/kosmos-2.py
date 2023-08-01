@@ -1496,8 +1496,6 @@ if __name__ == "__main__":
     inputs = fast_processor(text=text, images=image, bboxes=bboxes)
     print(inputs)
 
-    exit(0)
-
     # ================================================================================
     # config & model creation
 
