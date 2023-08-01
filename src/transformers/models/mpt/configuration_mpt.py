@@ -101,6 +101,23 @@ class MptAttentionConfig(PretrainedConfig):
                 f"`attn_type` has to be either `multihead_attention` or `multiquery_attention`. Received: {attn_type}"
             )
 
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+
+        if config_dict.get("model_type") == "mpt":
+            config_dict = config_dict["attn_config"]
+
+        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
+            logger.warning(
+                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
+                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
+            )
+
+        return cls.from_dict(config_dict, **kwargs)
+
 
 class MptConfig(PretrainedConfig):
     """
@@ -180,6 +197,7 @@ class MptConfig(PretrainedConfig):
         "hidden_size": "d_model",
         "num_hidden_layers": "n_layers",
     }
+    is_composition = True
 
     def __init__(
         self,
@@ -204,6 +222,7 @@ class MptConfig(PretrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
+        self.attn_config = attn_config
         self.d_model = d_model
         self.n_heads = n_heads
         self.n_layers = n_layers
@@ -222,19 +241,24 @@ class MptConfig(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.use_cache = use_cache
         self.initializer_range = initializer_range
+        super().__init__(**kwargs)
 
+    @property
+    def attn_config(self):
+        return self._attn_config
+
+    @attn_config.setter
+    def attn_config(self, attn_config):
         if attn_config is None:
-            self.attn_config = MptAttentionConfig()
+            self._attn_config = MptAttentionConfig()
         elif isinstance(attn_config, dict):
-            self.attn_config = MptAttentionConfig(**attn_config)
+            self._attn_config = MptAttentionConfig(**attn_config)
         elif isinstance(attn_config, MptAttentionConfig):
-            self.attn_config = attn_config
+            self._attn_config = attn_config
         else:
             raise ValueError(
                 f"`attn_config` has to be either a `MptAttentionConfig` or a dictionary. Received: {type(attn_config)}"
             )
-
-        super().__init__(**kwargs)
 
     def to_dict(self):
         """
@@ -245,7 +269,8 @@ class MptConfig(PretrainedConfig):
         """
         output = copy.deepcopy(self.__dict__)
         output["attn_config"] = (
-            self.attn_config.to_dict() if not isinstance(self.attn_config, dict) else self.attn_config
+            self._attn_config.to_dict() if not isinstance(self.attn_config, dict) else self.attn_config
         )
+        del output["_attn_config"]
         output["model_type"] = self.__class__.model_type
         return output

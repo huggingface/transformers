@@ -280,7 +280,7 @@ def main():
         return_attention_mask=model_args.attention_mask,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
     )
 
     # `datasets` takes care of automatically loading and resampling the audio,
@@ -340,7 +340,7 @@ def main():
         finetuning_task="audio-classification",
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
     )
     model = AutoModelForAudioClassification.from_pretrained(
         model_args.model_name_or_path,
@@ -348,7 +348,7 @@ def main():
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=True if model_args.use_auth_token else None,
         ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
     )
 

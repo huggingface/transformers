@@ -278,9 +278,9 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     pipeline_model_mapping = (
         {
             "feature-extraction": FalconModel,
+            "question-answering": FalconForQuestionAnswering,
             "text-classification": FalconForSequenceClassification,
             "text-generation": FalconForCausalLM,
-            "question-answering": FalconForQuestionAnswering,
             "token-classification": FalconForTokenClassification,
             "zero-shot": FalconForSequenceClassification,
         }

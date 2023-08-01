@@ -2240,7 +2240,14 @@ else:
         ]
     )
     _import_structure["models.mt5"].extend(
-        ["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5ForQuestionAnswering", "MT5Model", "MT5PreTrainedModel"]
+        [
+            "MT5EncoderModel",
+            "MT5ForConditionalGeneration",
+            "MT5ForQuestionAnswering",
+            "MT5ForSequenceClassification",
+            "MT5Model",
+            "MT5PreTrainedModel",
+        ]
     )
     _import_structure["models.musicgen"].extend(
         [
@@ -2694,6 +2701,7 @@ else:
             "T5EncoderModel",
             "T5ForConditionalGeneration",
             "T5ForQuestionAnswering",
+            "T5ForSequenceClassification",
             "T5Model",
             "T5PreTrainedModel",
             "load_tf_weights_in_t5",
@@ -2763,6 +2771,7 @@ else:
             "UMT5EncoderModel",
             "UMT5ForConditionalGeneration",
             "UMT5ForQuestionAnswering",
+            "UMT5ForSequenceClassification",
             "UMT5Model",
             "UMT5PreTrainedModel",
         ]
@@ -3881,6 +3890,13 @@ else:
             "FlaxBlenderbotSmallForConditionalGeneration",
             "FlaxBlenderbotSmallModel",
             "FlaxBlenderbotSmallPreTrainedModel",
+        ]
+    )
+    _import_structure["models.bloom"].extend(
+        [
+            "FlaxBloomForCausalLM",
+            "FlaxBloomModel",
+            "FlaxBloomPreTrainedModel",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -5930,6 +5946,7 @@ if TYPE_CHECKING:
             MT5EncoderModel,
             MT5ForConditionalGeneration,
             MT5ForQuestionAnswering,
+            MT5ForSequenceClassification,
             MT5Model,
             MT5PreTrainedModel,
         )
@@ -6303,6 +6320,7 @@ if TYPE_CHECKING:
             T5EncoderModel,
             T5ForConditionalGeneration,
             T5ForQuestionAnswering,
+            T5ForSequenceClassification,
             T5Model,
             T5PreTrainedModel,
             load_tf_weights_in_t5,
@@ -6356,6 +6374,7 @@ if TYPE_CHECKING:
             UMT5EncoderModel,
             UMT5ForConditionalGeneration,
             UMT5ForQuestionAnswering,
+            UMT5ForSequenceClassification,
             UMT5Model,
             UMT5PreTrainedModel,
         )
@@ -7263,6 +7282,7 @@ if TYPE_CHECKING:
             FlaxBlenderbotSmallModel,
             FlaxBlenderbotSmallPreTrainedModel,
         )
+        from .models.bloom import FlaxBloomForCausalLM, FlaxBloomModel, FlaxBloomPreTrainedModel
         from .models.clip import (
             FlaxCLIPModel,
             FlaxCLIPPreTrainedModel,

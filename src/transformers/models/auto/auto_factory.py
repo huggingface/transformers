@@ -16,6 +16,7 @@
 import copy
 import importlib
 import os
+import warnings
 from collections import OrderedDict
 
 from ...configuration_utils import PretrainedConfig
@@ -449,8 +450,25 @@ class _BaseAutoModelClass:
             "revision",
             "subfolder",
             "use_auth_token",
+            "token",
         ]
         hub_kwargs = {name: kwargs.pop(name) for name in hub_kwargs_names if name in kwargs}
+
+        token = hub_kwargs.pop("token", None)
+        use_auth_token = hub_kwargs.pop("use_auth_token", None)
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
+
+        if token is not None:
+            hub_kwargs["token"] = token
+
         if not isinstance(config, PretrainedConfig):
             kwargs_orig = copy.deepcopy(kwargs)
             # ensure not to pollute the config object with torch_dtype="auto" - since it's
