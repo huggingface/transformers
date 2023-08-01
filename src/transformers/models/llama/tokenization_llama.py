@@ -189,6 +189,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         # Replace the SPIECE_UNDERLINE with a space to make sure SPIECE_UNDERLINE is only used at
         # the beginning of the text
         if not self.legacy:
+            # replacing " " by SPIECE_UNDERLINE prevents any form of stripping...
             text = SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " ")
         return super().tokenize(text, **kwargs)
 

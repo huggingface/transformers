@@ -448,9 +448,11 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode("▁He is not<extra_id_0>             ▁He")
         # TODO another example of lstrip
         self.assertEqual(input_ids, [156, 46, 44, 1000, 262, 15, 2])
-        
+
         tokens = self.tokenizer.tokenize("▁He is not<extra_id_0>              ▁He")
-        self.assertEqual(tokens, ['▁He', '▁is', '▁not', '<extra_id_0>', 'H', 'e'])  # spaces are eaten by spm + our strip
+        self.assertEqual(
+            tokens, ["▁He", "▁is", "▁not", "<extra_id_0>", "H", "e"]
+        )  # spaces are eaten by spm + our strip
         # make sure that the output after the extra id is the same as if
         # extra_id was not there
         input_ids = self.tokenizer.encode("▁He is not             ▁He")
@@ -483,7 +485,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(input_ids, [284, 1000, 262, 15, 2])
         # spaces are eaten by rstrip / lstrip, so this is expected. Don't strip otherwise you break
         tokens = self.tokenizer.tokenize("No <extra_id_0> He")
-        self.assertEqual(tokens, ['▁No', '<extra_id_0>', 'H', 'e'])
+        self.assertEqual(tokens, ["▁No", "<extra_id_0>", "H", "e"])
 
         # Make sure this does not happen if we don't strip
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=0)
