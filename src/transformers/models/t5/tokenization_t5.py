@@ -22,8 +22,10 @@ from shutil import copyfile
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
+from sentencepiece import SentencePieceProcessor
 
 from ...tokenization_utils import PreTrainedTokenizer
+from ...utils import sentencepiece_model_pb2
 
 
 if TYPE_CHECKING:
@@ -187,8 +189,22 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
 
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
+        self.sp_model = self.get_spm_processor()
+
+        self.unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
+
+    def get_spm_processor(self):
+        tokenizer = SentencePieceProcessor(**self.sp_model_kwargs)
+        with open(self.vocab_file, "rb") as f:
+            sp_model = f.read()
+            model = sentencepiece_model_pb2.ModelProto.FromString(sp_model)
+            if not self.legacy:
+                normalizer_spec = sentencepiece_model_pb2.NormalizerSpec()
+                normalizer_spec.add_dummy_prefix = False
+                model.normalizer_spec.MergeFrom(normalizer_spec)
+            sp_model = model.SerializeToString()
+            tokenizer.LoadFromSerializedProto(sp_model)
+        return tokenizer
 
     @staticmethod
     def _eventually_correct_t5_max_length(pretrained_model_name_or_path, max_model_length, init_max_model_length):
@@ -335,6 +351,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         # Replace the SPIECE_UNDERLINE with a space to make sure SPIECE_UNDERLINE is only used at
         # the beginning of the text
         if not self.legacy:
+            # replacing " " by SPIECE_UNDERLINE prevents any form of stripping...
             text = SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " ")
         return super().tokenize(text, **kwargs)
 
@@ -349,15 +366,10 @@ class T5Tokenizer(PreTrainedTokenizer):
         the extra `SPIECE_UNDERLINE` prepended.
         """
         if not self.legacy:
-            is_first = text.startswith(SPIECE_UNDERLINE)
-            if is_first:
-                text = text[1:]
-
-        tokens = self.sp_model.encode(text, out_type=str)
-
-        if not self.legacy and not is_first and not text.startswith(" ") and tokens[0].startswith(SPIECE_UNDERLINE):
-            tokens = ([tokens[0][1:]] if len(tokens[0]) > 1 else []) + tokens[1:]
-        return tokens
+            text = self.unk_token + text
+            tokens = self.sp_model.encode(text, out_type=str)
+            return tokens[self.unk_token_length :]
+        return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
@@ -378,6 +390,8 @@ class T5Tokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         current_sub_tokens = []
+        # since we manually add the prefix space, we have to remove it
+        tokens[0] = tokens[0].strip(SPIECE_UNDERLINE)
         out_string = ""
         prev_is_special = False
         for token in tokens:

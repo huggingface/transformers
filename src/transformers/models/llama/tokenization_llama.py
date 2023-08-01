@@ -24,11 +24,10 @@ from shutil import copyfile
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
+from sentencepiece import SentencePieceProcessor
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import logging
-from sentencepiece import SentencePieceProcessor
-from ...utils import sentencepiece_model_pb2
+from ...utils import logging, sentencepiece_model_pb2
 
 
 if TYPE_CHECKING:
@@ -147,9 +146,9 @@ class LlamaTokenizer(PreTrainedTokenizer):
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
         self.sp_model = self.get_spm_processor()
-        
+
         self.unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
-        
+
     def get_spm_processor(self):
         tokenizer = SentencePieceProcessor(**self.sp_model_kwargs)
         with open(self.vocab_file, "rb") as f:
@@ -162,7 +161,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
             sp_model = model.SerializeToString()
             tokenizer.LoadFromSerializedProto(sp_model)
         return tokenizer
-
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -208,7 +206,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         if not self.legacy:
             text = self.unk_token + text
             tokens = self.sp_model.encode(text, out_type=str)
-            return tokens[self.unk_token_length:]
+            return tokens[self.unk_token_length :]
         return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token):
