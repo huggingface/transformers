@@ -1466,7 +1466,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 new_num_tokens = old_embeddings.weight.shape[0]
             new_num_tokens = ((new_num_tokens // pad_to_multiple_of) + 1) * pad_to_multiple_of
         else:
-            logger.warnonce(
+            logger.warning(
                 "You are resizing the embedding layer without providing a `pad_to_multiple_of` parameter. This means that the new embeding"
                 f" dimension will be {new_num_tokens}. This might induce some performance reduction as *Tensor Cores* will not be available."
                 " For more details  about this, or help on choosing the correct value for resizing, refer to this guide:"
