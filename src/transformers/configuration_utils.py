@@ -816,7 +816,7 @@ class PretrainedConfig(PushToHubMixin):
         default_config_dict = PretrainedConfig().to_dict()
 
         # get class specific config dict
-        class_config_dict = self.__class__().to_dict()
+        class_config_dict = self.__class__().to_dict() if not self.is_composition else {}
 
         serializable_config_dict = {}
 
@@ -1043,7 +1043,7 @@ def recursive_diff_dict(dict_a, dict_b):
             diff_value = recursive_diff_dict(value, dict_b[key])
             if len(diff_value) > 0:
                 diff[key] = recursive_diff_dict(value, dict_b[key])
-        elif key in dict_b and value != dict_b[key]:
+        elif key not in dict_b or value != dict_b[key]:
             diff[key] = value
     return diff
 

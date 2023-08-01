@@ -297,7 +297,6 @@ class CLIPConfig(PretrainedConfig):
     ```"""
 
     model_type = "clip"
-    is_composition = True
 
     def __init__(
         self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
