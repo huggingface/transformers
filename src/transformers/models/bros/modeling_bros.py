@@ -991,18 +991,15 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         logits = self.classifier(sequence_output)
 
         loss = None
-        if labels is not None and box_first_token_mask is not None:
+        if labels is not None:
             loss_fct = CrossEntropyLoss()
-
             if box_first_token_mask is not None:
                 box_first_token_mask = box_first_token_mask.view(-1)
                 loss = loss_fct(
                     logits.view(-1, self.num_labels)[box_first_token_mask], labels.view(-1)[box_first_token_mask]
                 )
             else:
-                loss = loss_fct(
-                    logits.view(-1, self.num_labels)[box_first_token_mask], labels.view(-1)[box_first_token_mask]
-                )
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
