@@ -241,7 +241,7 @@ class TableTransformerFrozenBatchNorm2d(nn.Module):
 # Copied from transformers.models.detr.modeling_detr.replace_batch_norm with Detr->TableTransformer
 def replace_batch_norm(model):
     r"""
-    Reucrsively replace all `torch.nn.BatchNorm2d` with `TableTransformerFrozenBatchNorm2d`.
+    Recursively replace all `torch.nn.BatchNorm2d` with `TableTransformerFrozenBatchNorm2d`.
 
     Args:
         model (torch.nn.Module):

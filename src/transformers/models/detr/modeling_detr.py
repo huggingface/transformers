@@ -306,7 +306,7 @@ class DetrFrozenBatchNorm2d(nn.Module):
 
 def replace_batch_norm(model):
     r"""
-    Reucrsively replace all `torch.nn.BatchNorm2d` with `DetrFrozenBatchNorm2d`.
+    Recursively replace all `torch.nn.BatchNorm2d` with `DetrFrozenBatchNorm2d`.
 
     Args:
         model (torch.nn.Module):

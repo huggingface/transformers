@@ -312,7 +312,7 @@ class ConditionalDetrFrozenBatchNorm2d(nn.Module):
 # Copied from transformers.models.detr.modeling_detr.replace_batch_norm with Detr->ConditionalDetr
 def replace_batch_norm(model):
     r"""
-    Reucrsively replace all `torch.nn.BatchNorm2d` with `ConditionalDetrFrozenBatchNorm2d`.
+    Recursively replace all `torch.nn.BatchNorm2d` with `ConditionalDetrFrozenBatchNorm2d`.
 
     Args:
         model (torch.nn.Module):
