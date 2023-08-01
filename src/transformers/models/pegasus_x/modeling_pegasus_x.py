@@ -1551,7 +1551,6 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
     def get_decoder(self):
         return self.model.get_decoder()
 
-
     def get_output_embeddings(self):
         return self.lm_head
 
