@@ -117,6 +117,7 @@ class Kosmos2TokenizerFast(PreTrainedTokenizerFast):
         pad_token="<pad>",
         mask_token="<mask>",
         num_patch_index_tokens=1024,
+        add_tag_and_patch_index_tokens=False,
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
@@ -173,8 +174,9 @@ class Kosmos2TokenizerFast(PreTrainedTokenizerFast):
         self.num_patch_index_tokens = num_patch_index_tokens
         patch_index_tokens = [f"<patch_index_{str(x).zfill(4)}>" for x in range(self.num_patch_index_tokens)]
 
-        for idx, token in enumerate(self.tag_tokens + patch_index_tokens):
-            self.add_tokens(AddedToken(token, lstrip=True, rstrip=False), special_tokens=True)
+        if add_tag_and_patch_index_tokens:
+            for idx, token in enumerate(self.tag_tokens + patch_index_tokens):
+                self.add_tokens(AddedToken(token, lstrip=True, rstrip=False), special_tokens=True)
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None

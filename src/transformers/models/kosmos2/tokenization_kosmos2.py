@@ -130,6 +130,7 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         mask_token="<mask>",
         num_patch_index_tokens=1024,
+        add_tag_and_patch_index_tokens=False,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> None:
@@ -204,10 +205,9 @@ class Kosmos2Tokenizer(PreTrainedTokenizer):
         self.num_patch_index_tokens = num_patch_index_tokens
         patch_index_tokens = [f"<patch_index_{str(x).zfill(4)}>" for x in range(self.num_patch_index_tokens)]
 
-        for idx, token in enumerate(self.tag_tokens + patch_index_tokens):
-            self.add_tokens(AddedToken(token, lstrip=True, rstrip=False), special_tokens=True)
-            self.fairseq_tokens_to_ids[token] = len(self.sp_model) + self.fairseq_offset + 1 + idx
-        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+        if add_tag_and_patch_index_tokens:
+            for idx, token in enumerate(self.tag_tokens + patch_index_tokens):
+                self.add_tokens(AddedToken(token, lstrip=True, rstrip=False), special_tokens=True)
 
     def __getstate__(self):
         state = self.__dict__.copy()
