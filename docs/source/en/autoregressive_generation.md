@@ -19,19 +19,15 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Autoregressive generation is the inference-time procedure of iterativelly calling a model with its own generated
-outputs, given a few initial inputs. This procedure, well explained in
-[our blog post](https://huggingface.co/blog/how-to-generate), is used with several tasks in different modalities,
-including:
+Autoregressive generation is the inference-time procedure of iterativelly calling a model with its own generated outputs, given a few initial inputs. This procedure, well explained in [our blog post](https://huggingface.co/blog/how-to-generate), is used with several tasks in different modalities, including:
 * [Causal language modeling](tasks/masked_language_modeling)
 * [Translation](tasks/translation)
 * [Summarization](tasks/summarization)
 * [Automatic speech recognition](tasks/asr)
-* [Image captioning](tasks/image_captioning)
 * [Text to speech](tasks/text-to-speech)
+* [Image captioning](tasks/image_captioning)
 
-Despite the glaring input differences, autoregressive generation in 🤗 `transformers` shares the same core principles
-and interface across use cases.
+Despite the glaring input differences, autoregressive generation in 🤗 `transformers` shares the same core principles and interface across use cases.
 
 This guide will show you how to:
 
@@ -46,10 +42,9 @@ pip install transformers bitsandbytes>=0.39.0 -q
 ```
 
 
-## Generation with an LLM
+## Generation with LLMs
 
-Let's start with the original and most popular use-case of autoregressive generation with transformers: language
-models.
+Let's start with the original and most popular use-case of autoregressive generation with transformers: language models. A language model trained on causal language modeling will take as input a sequence of text tokens, and will return the probability distribution for the next token.
 
 <!-- [GIF 1 -- FWD PASS] -->
 <figure class="image table text-center m-0 w-full">
@@ -59,6 +54,8 @@ models.
         src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/assisted-generation/gif_1_1080p.mov"
     ></video>
 </figure>
+
+
 
 
 <!-- [GIF 2 -- TEXT GENERATION] -->
@@ -72,8 +69,33 @@ models.
 
 
 
-## Generation with non-text input
+## Generation with other modalities
+
+Autoregressive generation with other modalities behave mostly as described above for LLMs. As such, let's focus on the differences that you may enconter when generating with other modalities:
+* Non-text model inputs rely on the [`AutoProcessor`](https://huggingface.co/docs/transformers/model_doc/auto#transformers.AutoProcessor) class for pre-processing;
+* If the output of your model forward pass is not a discrete set (e.g. if they are embeddings), then the logit processing step described above does not apply.
+
+And... that's it!
+
+
+
 
 ## Common pitfalls
 
-## Further references
+## Further resources
+
+While the core principles of autoregressive generation are simple, taking the most out of your generative model can be a challenging endeavour. This section is here to guide you on next steps.
+
+### Advanced generate usage
+aaa
+
+### LLMs
+aaa
+### Performance
+aaa
+
+### API reference
+aaa
+
+### Related libraries
+aaa

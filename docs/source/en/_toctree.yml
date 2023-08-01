@@ -79,7 +79,7 @@
     isExpanded: false
   - sections:
       - local: autoregressive_generation
-        title: Auto-regressive generation
+        title: Autoregressive generation
       - local: generation_strategies
         title: Customize generation strategy
     title: Generation
