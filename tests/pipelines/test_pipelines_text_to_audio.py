@@ -13,17 +13,17 @@
 # limitations under the License.
 
 import unittest
+
 import numpy as np
 
 from transformers import (
     MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING,
+    AutoProcessor,
     TextToAudioPipeline,
     pipeline,
-    AutoProcessor,
 )
 from transformers.testing_utils import (
     is_pipeline_test,
-    is_torch_available,
     require_torch,
     require_torch_gpu,
     require_torch_or_tf,
@@ -31,10 +31,6 @@ from transformers.testing_utils import (
 )
 
 from .test_pipelines_common import ANY
-
-
-if is_torch_available():
-    import torch
 
 
 @is_pipeline_test
@@ -77,16 +73,17 @@ class TextToAudioPipelineTests(unittest.TestCase):
             ],
             audio,
         )
-        
-        
+
         # test batching
-        outputs = speech_generator(["This is a test", "This is a second test"], forward_params=forward_params, batch_size=2)
-        
-        self.assertEqual(
-            ANY(np.ndarray), outputs[0]["audio"], 
+        outputs = speech_generator(
+            ["This is a test", "This is a second test"], forward_params=forward_params, batch_size=2
         )
 
-        
+        self.assertEqual(
+            ANY(np.ndarray),
+            outputs[0]["audio"],
+        )
+
     @slow
     @require_torch
     def test_large_model_pt(self):
@@ -99,18 +96,19 @@ class TextToAudioPipelineTests(unittest.TestCase):
             "do_sample": False,
             "semantic_max_new_tokens": 100,
         }
-        
-        
+
         # atm, must do to stay coherent with BarkProcessor
         preprocess_params = {
-                "max_length": 256,
-                "add_special_tokens": False,
-                "return_attention_mask": True,
-                "return_token_type_ids": False,
-                "padding": "max_length",
+            "max_length": 256,
+            "add_special_tokens": False,
+            "return_attention_mask": True,
+            "return_token_type_ids": False,
+            "padding": "max_length",
         }
 
-        outputs = speech_generator("This is a test", forward_params=forward_params, preprocess_params=preprocess_params)
+        outputs = speech_generator(
+            "This is a test", forward_params=forward_params, preprocess_params=preprocess_params
+        )
 
         self.assertEqual(
             {"audio": ANY(np.ndarray), "sampling_rate": 24000},
@@ -118,7 +116,11 @@ class TextToAudioPipelineTests(unittest.TestCase):
         )
 
         # test two examples side-by-side
-        outputs = speech_generator(["This is a test", "This is a second test"], forward_params=forward_params, preprocess_params=preprocess_params)
+        outputs = speech_generator(
+            ["This is a test", "This is a second test"],
+            forward_params=forward_params,
+            preprocess_params=preprocess_params,
+        )
 
         audio = [output["audio"] for output in outputs]
 
@@ -129,8 +131,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
             ],
             audio,
         )
-        
-        
+
         # test other generation strategy
 
         forward_params = {
@@ -151,19 +152,23 @@ class TextToAudioPipelineTests(unittest.TestCase):
             ANY(np.ndarray),
             audio,
         )
-        
+
         # test using a speaker embedding
-        
+
         processor = AutoProcessor.from_pretrained("suno/bark-small")
-        
+
         temp_inp = processor("hey, how are you?", voice_preset="v2/en_speaker_5")
-        
+
         history_prompt = temp_inp["history_prompt"]
-        
+
         forward_params["history_prompt"] = history_prompt
-        
-        outputs = speech_generator(["This is a test", "This is a second test"], forward_params=forward_params, preprocess_params=preprocess_params, batch_size=2)
-        
+
+        outputs = speech_generator(
+            ["This is a test", "This is a second test"],
+            forward_params=forward_params,
+            preprocess_params=preprocess_params,
+            batch_size=2,
+        )
 
         audio = [output["audio"] for output in outputs]
 
@@ -174,29 +179,25 @@ class TextToAudioPipelineTests(unittest.TestCase):
             ],
             audio,
         )
-        
-        
-    
+
     @slow
     @require_torch_gpu
     def test_conversion_additional_tensor(self):
-        speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt",
-                                    device=0)
+        speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt", device=0)
         processor = AutoProcessor.from_pretrained("suno/bark-small")
-        
 
         forward_params = {
             "do_sample": True,
             "semantic_max_new_tokens": 100,
         }
-        
+
         # atm, must do to stay coherent with BarkProcessor
         preprocess_params = {
-                "max_length": 256,
-                "add_special_tokens": False,
-                "return_attention_mask": True,
-                "return_token_type_ids": False,
-                "padding": "max_length",
+            "max_length": 256,
+            "add_special_tokens": False,
+            "return_attention_mask": True,
+            "return_token_type_ids": False,
+            "padding": "max_length",
         }
 
         outputs = speech_generator(
@@ -204,16 +205,17 @@ class TextToAudioPipelineTests(unittest.TestCase):
             forward_params=forward_params,
             preprocess_params=preprocess_params,
         )
-        
+
         temp_inp = processor("hey, how are you?", voice_preset="v2/en_speaker_5")
-        history_prompt = temp_inp["history_prompt"]        
+        history_prompt = temp_inp["history_prompt"]
         forward_params["history_prompt"] = history_prompt
-        
-        
+
         # history_prompt is a torch.Tensor passed as a forward_param
         # if generation is successfull, it means that it was passed to the right device
-        outputs = speech_generator("This is a test", forward_params=forward_params, preprocess_params=preprocess_params)
-        
+        outputs = speech_generator(
+            "This is a test", forward_params=forward_params, preprocess_params=preprocess_params
+        )
+
         self.assertEqual(
             {"audio": ANY(np.ndarray), "sampling_rate": 24000},
             outputs,

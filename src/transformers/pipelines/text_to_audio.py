@@ -43,7 +43,7 @@ class TextToAudioPipeline(Pipeline):
             raise ValueError("The TextToAudioPipeline is only available in PyTorch.")
 
         self.forward_method = self.model.generate if self.model.can_generate() else self.model
-        
+
         self.vocoder = None
         if self.model.__class__ in MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING.values():
             self.vocoder = (
@@ -79,8 +79,7 @@ class TextToAudioPipeline(Pipeline):
         return output
 
     def _forward(self, model_inputs, **kwargs):
-        
-        # we expect some kwargs to be additional tensors which need to be on the right device 
+        # we expect some kwargs to be additional tensors which need to be on the right device
         kwargs = self._ensure_tensor_on_device(kwargs, device=self.device)
 
         # call the generate by defaults or the forward method if the model cannot generate
