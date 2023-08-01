@@ -263,17 +263,12 @@ class Kosmos2Processor(ProcessorMixin):
                     )
 
         def preprocess_single(text, image, bboxes):
-
             if image is not None:
                 # Add `<image> ... (fake) image tokens ... </image>`
                 text = f"{img_info} {text}"
 
                 # Add `<object> <patch_idx_xxxx> <patch_idx_yyy> </object>` after `<phrase> phrase text </phrase>`
                 text = self._insert_patch_index_tokens(text, bboxes)
-
-                # Remove spaces before tag tokens (e.g. `<x>`) (and ensure a space after it, if not followed another tag
-                # token, despite this is not necessary). This avoids the inconsistency of tokenization results between
-                # slow and fast tokenizers.
                 text = self._add_remove_spaces_around_tag_tokens(text)
 
             return text
@@ -387,6 +382,11 @@ class Kosmos2Processor(ProcessorMixin):
         return token_1, token_2
 
     def _add_remove_spaces_around_tag_tokens(self, text):
+        """
+        Remove spaces before tag tokens (e.g. `<x>`). Also ensure a space after a tag token, if it is not followed by
+        another tag token (this is not technically necessary, but good for a standard/consistent format). This avoids
+        the inconsistency of tokenization results between kosmos-2 slow and fast tokenizers.
+        """
 
         tag_tokens = set(self.tokenizer.tag_tokens + [f"<patch_index_{str(x).zfill(4)}>" for x in range(self.tokenizer.num_patch_index_tokens)])
         pattern = "|".join(tag_tokens)
