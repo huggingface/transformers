@@ -1502,8 +1502,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " should either use a different resize function or make sure that `old_embeddings` are an instance of"
                 f" {nn.Embedding}."
             )
-        breakpoint()
-
         # Build new embeddings
         new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
         new_embeddings.to(old_embeddings.weight.device, dtype=old_embeddings.weight.dtype)
