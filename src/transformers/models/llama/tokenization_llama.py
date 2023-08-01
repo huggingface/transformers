@@ -27,7 +27,9 @@ import sentencepiece as spm
 from sentencepiece import SentencePieceProcessor
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import logging, sentencepiece_model_pb2
+from ...utils import logging
+from ...convert_slow_tokenizer import import_protobuf
+
 
 
 if TYPE_CHECKING:
@@ -149,13 +151,15 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         self.unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
 
+    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
     def get_spm_processor(self):
         tokenizer = SentencePieceProcessor(**self.sp_model_kwargs)
         with open(self.vocab_file, "rb") as f:
             sp_model = f.read()
-            model = sentencepiece_model_pb2.ModelProto.FromString(sp_model)
+            model_pb2 = import_protobuf()
+            model = model_pb2.ModelProto.FromString(sp_model)
             if not self.legacy:
-                normalizer_spec = sentencepiece_model_pb2.NormalizerSpec()
+                normalizer_spec = model_pb2.NormalizerSpec()
                 normalizer_spec.add_dummy_prefix = False
                 model.normalizer_spec.MergeFrom(normalizer_spec)
             sp_model = model.SerializeToString()
