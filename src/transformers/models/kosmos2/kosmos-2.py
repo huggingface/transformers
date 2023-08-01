@@ -1317,6 +1317,7 @@ def check_real_model_with_snowman_detail_sample_end_to_end():
         img_attn_mask=slow_inputs["img_attn_mask"],
         past_key_values=None,
         use_cache=True,
+        max_new_tokens=64,
     )
     fast_generated_output = model.generate(
         pixel_values=fast_inputs["pixel_values"],
@@ -1325,6 +1326,7 @@ def check_real_model_with_snowman_detail_sample_end_to_end():
         img_features=None,
         img_attn_mask=fast_inputs["img_attn_mask"],
         use_cache=True,
+        max_new_tokens=64,
     )
 
     slow_generated_ids = slow_generated_output[0, len(slow_inputs["input_ids"][0]):]
