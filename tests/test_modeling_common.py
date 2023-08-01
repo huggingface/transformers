@@ -1416,12 +1416,6 @@ class ModelTesterMixin:
 
             self.assertTrue(models_equal)
 
-    def test_resize_tokens_embeddings_pad_to_multiple_of(self):
-        original_config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        if not self.test_resize_embeddings:
-            return
-
-        for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config)
             model.to(torch_device)
