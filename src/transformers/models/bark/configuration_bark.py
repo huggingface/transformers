@@ -14,7 +14,6 @@
 # limitations under the License.
 """ BARK model configuration"""
 
-import copy
 import os
 from typing import Dict, Optional, Union
 
@@ -271,7 +270,6 @@ class BarkConfig(PretrainedConfig):
     """
 
     model_type = "bark"
-    is_composition = True
 
     def __init__(
         self,
@@ -329,20 +327,3 @@ class BarkConfig(PretrainedConfig):
             codec_config=codec_config.to_dict(),
             **kwargs,
         )
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-
-        output["semantic_config"] = self.semantic_config.to_dict()
-        output["coarse_acoustics_config"] = self.coarse_acoustics_config.to_dict()
-        output["fine_acoustics_config"] = self.fine_acoustics_config.to_dict()
-        output["codec_config"] = self.codec_config.to_dict()
-
-        output["model_type"] = self.__class__.model_type
-        return output

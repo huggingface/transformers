@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Mpt configuration"""
-import copy
 from typing import TYPE_CHECKING, Optional, Union
 
 
@@ -197,7 +196,6 @@ class MptConfig(PretrainedConfig):
         "hidden_size": "d_model",
         "num_hidden_layers": "n_layers",
     }
-    is_composition = True
 
     def __init__(
         self,
@@ -259,18 +257,3 @@ class MptConfig(PretrainedConfig):
             raise ValueError(
                 f"`attn_config` has to be either a `MptAttentionConfig` or a dictionary. Received: {type(attn_config)}"
             )
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["attn_config"] = (
-            self._attn_config.to_dict() if not isinstance(self.attn_config, dict) else self.attn_config
-        )
-        del output["_attn_config"]
-        output["model_type"] = self.__class__.model_type
-        return output
