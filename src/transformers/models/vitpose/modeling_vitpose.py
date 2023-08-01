@@ -62,6 +62,7 @@ VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all ViTPose models at https://huggingface.co/models?filter=vitpose
 ]
 
+## GREEN
 class ViTPosePatchEmbed(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -69,7 +70,6 @@ class ViTPosePatchEmbed(nn.Module):
     Transformer.
     """
 
-    ## change variable names from config, looks good othervise
     def __init__(self, config):
         super().__init__()
         self.num_channels = config.num_channels
@@ -81,19 +81,19 @@ class ViTPosePatchEmbed(nn.Module):
 
         self.projection = nn.Conv2d(self.num_channels, self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size, padding = (2,2))
 
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: Optional[bool]) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
                 f" Expected {self.num_channels} but got {num_channels}."
             )
-        #if not interpolate_pos_encoding:
-        #    if height != self.image_size[0] or width != self.image_size[1]:
-        #        raise ValueError(
-        #            f"Input image size ({height}*{width}) doesn't match model"
-        #            f" ({self.image_size[0]}*{self.image_size[1]})."
-        #        )
+        if not interpolate_pos_encoding:
+            if height != self.image_size[0] or width != self.image_size[1]:
+                raise ValueError(
+                    f"Input image size ({height}*{width}) doesn't match model"
+                    f" ({self.image_size[0]}*{self.image_size[1]})."
+                )
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return embeddings
 
@@ -103,17 +103,19 @@ class ViTPoseAttention(nn.Module):
         super().__init__()
         if config.embed_dim % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"The hidden size {config.embed_dim,} is not a multiple of the number of attention "
                 f"heads {config.num_attention_heads}."
             )
 
         self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.attention_head_size = int(config.embed_dim / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size * config.num_channels
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        #self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        #self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        #self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+
+        self.qkv = nn.Linear(config.embed_dim, self.all_head_size, bias=config.qkv_bias)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
