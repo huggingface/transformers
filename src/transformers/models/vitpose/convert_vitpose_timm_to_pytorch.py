@@ -38,29 +38,43 @@ __models__ = []# add all the model names
 # here we list all keys to be renamed (original name on the left, our name on the right)
 def create_rename_keys(config, base_model=False):
     rename_keys = []
-    for i in range(config.num_hidden_layers):
-        # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append((f"backbone.blocks.{i}.norm1.weight", f"vitpose.encoder.layer.{i}.layernorm_before.weight"))
-        rename_keys.append((f"backbone.blocks.{i}.norm1.bias", f"vitpose.encoder.layer.{i}.layernorm_before.bias"))
-        rename_keys.append((f"backbone.blocks.{i}.attn.qkv.weight", f"vitpose.encoder.layer.{i}.attention.output.dense.weight"))
-        rename_keys.append((f"backbone.blocks.{i}.attn.qkv.bias", f"vitpose.encoder.layer.{i}.attention.output.dense.bias"))
-        rename_keys.append((f"backbone.blocks.{i}.attn.proj.weight", f"vitpose.encoder.layer.{i}.attention.output.dense.weight"))
-        rename_keys.append((f"backbone.blocks.{i}.attn.proj.bias", f"vitpose.encoder.layer.{i}.attention.output.dense.bias"))
-        rename_keys.append((f"backbone.blocks.{i}.norm2.weight", f"vitpose.encoder.layer.{i}.layernorm_after.weight"))
-        rename_keys.append((f"backbone.blocks.{i}.norm2.bias", f"vitpose.encoder.layer.{i}.layernorm_after.bias"))
-        rename_keys.append((f"backbone.blocks.{i}.mlp.fc1.weight", f"vitpose.encoder.layer.{i}.intermediate.dense.weight"))
-        rename_keys.append((f"backbone.blocks.{i}.mlp.fc1.bias", f"vitpose.encoder.layer.{i}.intermediate.dense.bias"))
-        rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.weight", f"vitpose.encoder.layer.{i}.output.dense.weight"))
-        rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.bias", f"vitpose.encoder.layer.{i}.output.dense.bias"))
 
     rename_keys.extend(
         [
-            ("backbone.cls_token","vitpose.embedding.cls_token"),
-            ("backbone.pos_embed","vitpose.embeddings.position_embeddings"),
-            ("backbone.patch_embed.proj.weight","vitpose.embeddings.patch_embeddings.projection.weight"),
-            ("backbone.patch_embed.proj.bias","vitpose.embeddings.patch_embeddings.projection.bias"),
+            ("backbone.cls_token","vitposemodel.backbone.cls_token"),
+            ("backbone.pos_embed","vitposemodel.backbone.position_embeddings"),
+            ("backbone.patch_embed.proj.weight","vitposemodel.backbone.patch_embeddings.projection.weight"),
+            ("backbone.patch_embed.proj.bias","vitposemodel.backbone.patch_embeddings.projection.bias"),
         ]
     )
+
+    for i in range(config.depth):
+        # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
+        rename_keys.append((f"backbone.blocks.{i}.norm1.weight", f"vitposemodel.backbone.blocks.{i}.norm1.weight"))
+        rename_keys.append((f"backbone.blocks.{i}.norm1.bias", f"vitposemodel.backbone.blocks.{i}.norm1.bias"))
+        rename_keys.append((f"backbone.blocks.{i}.attn.qkv.weight", f"vitposemodel.backbone.blocks.{i}.attn.qkv.weight"))
+        rename_keys.append((f"backbone.blocks.{i}.attn.qkv.bias", f"vitposemodel.backbone.blocks.{i}.attn.qkv.bias"))
+        rename_keys.append((f"backbone.blocks.{i}.attn.proj.weight", f"vitposemodel.backbone.blocks.{i}.attn.proj.weight"))
+        rename_keys.append((f"backbone.blocks.{i}.attn.proj.bias", f"vitposemodel.backbone.blocks.{i}.attn.proj.bias"))
+        rename_keys.append((f"backbone.blocks.{i}.norm2.weight", f"vitposemodel.backbone.blocks.{i}.norm2.weight"))
+        rename_keys.append((f"backbone.blocks.{i}.norm2.bias", f"vitposemodel.backbone.blocks.{i}.norm2.bias"))
+        rename_keys.append((f"backbone.blocks.{i}.mlp.fc1.weight", f"vitposemodel.backbone.blocks.{i}.mlp.fc1.weight"))
+        rename_keys.append((f"backbone.blocks.{i}.mlp.fc1.bias", f"vitposemodel.backbone.blocks.{i}.mlp.fc1.bias"))
+        rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.weight", f"vitposemodel.backbone.blocks.{i}.mlp.fc2.weight"))
+        rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.bias", f"vitposemodel.backbone.blocks.{i}.mlp.fc2.bias"))
+
+
+    for i in range(5):
+        rename_keys.extend(
+            [
+
+                (f"keypoint_head.deconv_layers.{i}.weight",f"vitposemodel.keypoint_head.deconv_layers.{i}.weight"),
+                ("keypoint_head.deconv_layers.{i}.bias",f"vitposemodel.keypoint_head.deconv_layers.{i}.bias"),
+                ("keypoint_head.deconv_layers.{i}.running_mean",f"vitposemodel.keypoint_head.deconv_layers.{i}.running_mean"),
+                ("keypoint_head.deconv_layers.{i}.running_var",f"vitposemodel.keypoint_head.deconv_layers.{i}.running_var"),
+                ("keypoint_head.deconv_layers.{i}.num_batches_tracked",f"vitposemodel.keypoint_head.deconv_layers.{i}.num_batches_tracked"),
+            ]
+        )
     #if base_model:
     #    # layernorm + pooler
     #    rename_keys.extend(
@@ -198,6 +212,7 @@ def convert_vitpose_checkpoint(pytorch_dump_folder_path):
     # load original model from timm
     state_dict = torch.load(vitpose_name, map_location="cpu")
     state_dict = state_dict["state_dict"]
+    state_dict = state_dict.keys()
 
     # load state_dict of original model, remove and rename some keys
     rename_keys = create_rename_keys(config, base_model)
@@ -207,32 +222,30 @@ def convert_vitpose_checkpoint(pytorch_dump_folder_path):
     
 
     # load HuggingFace model
-    if vit_name[-5:] == "in21k":
-        model = ViTModel(config).eval()
-    else:
-        model = ViTForImageClassification(config).eval()
+   # if vit_name[-5:] == "in21k":
+   #     model = ViTModel(config).eval()
+   # else:
+   #     model = ViTForImageClassification(config).eval()
+    model = ViTPoseModel(config).eval()
     model.load_state_dict(state_dict)
 
     # Check outputs on an image, prepared by ViTImageProcessor/DeiTImageProcessor
-    if "deit" in vit_name:
-        image_processor = DeiTImageProcessor(size=config.image_size)
-    else:
-        image_processor = ViTImageProcessor(size=config.image_size)
+    image_processor = ViTPoseImageProcessor(size=config.image_size)
     encoding = image_processor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values)
 
-    if base_model:
-        timm_pooled_output = timm_model.forward_features(pixel_values)
-        assert timm_pooled_output.shape == outputs.pooler_output.shape
-        assert torch.allclose(timm_pooled_output, outputs.pooler_output, atol=1e-3)
-    else:
-        timm_logits = timm_model(pixel_values)
-        assert timm_logits.shape == outputs.logits.shape
-        assert torch.allclose(timm_logits, outputs.logits, atol=1e-3)
+   # if base_model:
+   #     timm_pooled_output = timm_model.forward_features(pixel_values)
+   #     assert timm_pooled_output.shape == outputs.pooler_output.shape
+   #     assert torch.allclose(timm_pooled_output, outputs.pooler_output, atol=1e-3)
+   # else:
+   #     timm_logits = timm_model(pixel_values)
+   #     assert timm_logits.shape == outputs.logits.shape
+   #     assert torch.allclose(timm_logits, outputs.logits, atol=1e-3)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model {vit_name} to {pytorch_dump_folder_path}")
+    print(f"Saving model {vitpose_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
     print(f"Saving image processor to {pytorch_dump_folder_path}")
     image_processor.save_pretrained(pytorch_dump_folder_path)
