@@ -1412,8 +1412,8 @@ if __name__ == "__main__":
     from src.transformers.models.kosmos2.tokenization_kosmos2_fast import Kosmos2TokenizerFast
     from transformers import CLIPImageProcessor
 
-    slow_tokenizer = Kosmos2Tokenizer(vocab_file="sentencepiece.bpe.model")
-    fast_tokenizer = Kosmos2TokenizerFast(__slow_tokenizer=slow_tokenizer)
+    slow_tokenizer = Kosmos2Tokenizer(vocab_file="sentencepiece.bpe.model", add_tag_and_patch_index_tokens=True)
+    fast_tokenizer = Kosmos2TokenizerFast(__slow_tokenizer=slow_tokenizer, add_tag_and_patch_index_tokens=True)
     image_processor = CLIPImageProcessor()
     slow_processor = Kosmos2Processor(tokenizer=slow_tokenizer, image_processor=image_processor)
     fast_processor = Kosmos2Processor(tokenizer=fast_tokenizer, image_processor=image_processor)
@@ -1564,6 +1564,8 @@ if __name__ == "__main__":
 
     # ================================================================================
 
+    del real_model
+    import gc; gc.collect()
     check_real_model_with_snowman_detail_sample_end_to_end()
 
     # ================================================================================
