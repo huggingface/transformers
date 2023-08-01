@@ -1420,15 +1420,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None):
         old_embeddings = self.get_input_embeddings()
-        new_embeddings, new_num_tokens = self._get_resized_embeddings(
-            old_embeddings, new_num_tokens, pad_to_multiple_of
-        )
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens, pad_to_multiple_of)
         self.set_input_embeddings(new_embeddings)
 
         # if word embeddings are not tied, make sure that lm head is resized as well
         if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
             old_lm_head = self.get_output_embeddings()
-            new_lm_head = self._get_resized_lm_head(old_lm_head, new_num_tokens)
+            new_lm_head = self._get_resized_lm_head(old_lm_head, self.vocab_size)
             self.set_output_embeddings(new_lm_head)
 
         return self.get_input_embeddings(), new_num_tokens
@@ -1483,7 +1481,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         if new_num_tokens is None:
-            return old_embeddings, new_num_tokens
+            return old_embeddings
 
         if is_deepspeed_zero3_enabled():
             import deepspeed
@@ -1494,7 +1492,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
 
         if old_num_tokens == new_num_tokens:
-            return old_embeddings, new_num_tokens
+            return old_embeddings
 
         if not isinstance(old_embeddings, nn.Embedding):
             raise TypeError(
@@ -1502,6 +1500,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " should either use a different resize function or make sure that `old_embeddings` are an instance of"
                 f" {nn.Embedding}."
             )
+
         # Build new embeddings
         new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
         new_embeddings.to(old_embeddings.weight.device, dtype=old_embeddings.weight.dtype)
@@ -1522,7 +1521,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
 
-        return new_embeddings, new_num_tokens
+        return new_embeddings
 
     def _get_resized_lm_head(
         self, old_lm_head: nn.Linear, new_num_tokens: Optional[int] = None, transposed: Optional[bool] = False
