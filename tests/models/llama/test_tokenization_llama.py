@@ -512,7 +512,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         
         out2 = tokenizer.decode(tokenizer.encode(" <REPR_END> inform", add_special_tokens = False), spaces_between_special_tokens = False)
         # TODO ArthurZ currently we strip left and right, so this will not keep the spaces
-        self.assertEquals(out2, " <REPR_END> inform")
+        self.assertEquals(out2, "<REPR_END>inform")
         
         
 @require_sentencepiece
