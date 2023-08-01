@@ -18,7 +18,7 @@ import math
 import unittest
 
 from transformers import MptConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -362,7 +362,16 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     test_torchscript = False
     test_head_masking = False
     pipeline_model_mapping = (
-        {"feature-extraction": MptModel, "text-generation": MptForCausalLM} if is_torch_available() else {}
+        {
+            "feature-extraction": MptModel,
+            "question-answering": MptForQuestionAnswering,
+            "text-classification": MptForSequenceClassification,
+            "text-generation": MptForCausalLM,
+            "token-classification": MptForTokenClassification,
+            "zero-shot": MptForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
 
     def setUp(self):
@@ -421,6 +430,7 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
 @slow
 @require_torch_gpu
+@require_bitsandbytes
 class MptIntegrationTests(unittest.TestCase):
     def test_generation_8k(self):
         model_id = "mosaicml/mpt-7b-8k"
@@ -432,7 +442,7 @@ class MptIntegrationTests(unittest.TestCase):
         )
 
         input_text = "Hello"
-        expected_output = "Hello my name is [name] and I am a [type] at [company]. I have a [number]"
+        expected_output = """Hello, I\'m a new user of the forum. I have a question about the "Solaris"""
 
         inputs = tokenizer(input_text, return_tensors="pt")
         outputs = model.generate(**inputs, max_new_tokens=20)
@@ -450,7 +460,9 @@ class MptIntegrationTests(unittest.TestCase):
         )
 
         input_text = "Hello"
-        expected_output = "Hello my name is Kaitlyn and I am a senior at the University of Wisconsin-Stout. I am major"
+        expected_output = (
+            "Hello and welcome to the first day of the new release countdown for the month of May!\nToday"
+        )
 
         inputs = tokenizer(input_text, return_tensors="pt")
         outputs = model.generate(**inputs, max_new_tokens=20)

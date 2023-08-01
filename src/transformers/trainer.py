@@ -129,7 +129,6 @@ from .utils import (
     WEIGHTS_NAME,
     can_return_loss,
     find_labels,
-    get_full_repo_name,
     is_accelerate_available,
     is_apex_available,
     is_datasets_available,
@@ -3396,22 +3395,22 @@ class Trainer:
         """
         if not self.is_world_process_zero():
             return
-        if self.args.hub_model_id is None:
-            repo_name = Path(self.args.output_dir).absolute().name
-        else:
-            repo_name = self.args.hub_model_id
-        if "/" not in repo_name:
-            repo_name = get_full_repo_name(repo_name, token=self.args.hub_token)
 
-        # Make sure the repo exists.
-        create_repo(repo_name, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True)
+        # Make sure the repo exists + retrieve "real" repo_id
+        repo_name = self.args.hub_model_id
+        if repo_name is None:
+            repo_name = Path(self.args.output_dir).absolute().name
+        repo_id = create_repo(
+            repo_id=repo_name, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True
+        ).repo_id
+
         try:
-            self.repo = Repository(self.args.output_dir, clone_from=repo_name, token=self.args.hub_token)
+            self.repo = Repository(self.args.output_dir, clone_from=repo_id, token=self.args.hub_token)
         except EnvironmentError:
             if self.args.overwrite_output_dir and at_init:
                 # Try again after wiping output_dir
                 shutil.rmtree(self.args.output_dir)
-                self.repo = Repository(self.args.output_dir, clone_from=repo_name, token=self.args.hub_token)
+                self.repo = Repository(self.args.output_dir, clone_from=repo_id, token=self.args.hub_token)
             else:
                 raise
 
