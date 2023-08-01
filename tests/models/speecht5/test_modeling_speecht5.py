@@ -1020,6 +1020,10 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         generated_speech = model.generate_speech(input_ids)
         self.assertEqual(generated_speech.shape, (1820, model.config.num_mel_bins))
 
+        # test model.generate, same method than generate_speech but with additional kwargs to absorb kwargs such as attention_mask
+        generated_speech_with_generate = model.generate(input_ids, attention_mask=None)
+        self.assertEqual(generated_speech_with_generate.shape, (1820, model.config.num_mel_bins))
+
 
 @require_torch
 class SpeechT5ForSpeechToSpeechTester:
