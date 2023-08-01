@@ -25,7 +25,7 @@ import requests
 from huggingface_hub import HfFolder, hf_hub_download, list_spaces
 
 from ..models.auto import AutoTokenizer
-from ..utils import is_openai_available, is_torch_available, logging
+from ..utils import is_offline_mode, is_openai_available, is_torch_available, logging
 from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, load_tool, supports_remote
 from .prompts import CHAT_MESSAGE_PROMPT, download_prompt
 from .python_interpreter import evaluate
@@ -75,6 +75,10 @@ HUGGINGFACE_DEFAULT_TOOLS_FROM_HUB = [
 
 
 def get_remote_tools(organization="huggingface-tools"):
+    if is_offline_mode():
+        logger.info("You are in offline mode, so remote tools are not available.")
+        return {}
+
     spaces = list_spaces(author=organization)
     tools = {}
     for space_info in spaces:
