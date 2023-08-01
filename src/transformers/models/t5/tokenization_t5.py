@@ -108,8 +108,8 @@ class T5Tokenizer(PreTrainedTokenizer):
 
             - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
               BPE-dropout.
-        legacy (`bool`, *optional*, defaults to `True`):
-            Whether or not the `legacy` behaviour of the tokenizer should be used. Legacy is before the merge of #24622
+        legacy (`bool`, *optional*):
+            Whether or not the `legacy` behaviour of the tokenizer should be used. Legacy is before the merge of #24622 and #25224
             which includes fixes to properly handle tokens that appear after special tokens. A simple example:
 
             - `legacy=True`:
@@ -128,7 +128,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             >>> tokenizer.encode("Hello <extra_id_0>.")  # the extra space `[3]` is no longer here
             [8774, 32099, 5, 1]
             ```
-            Checkout the pull request and the issue [here](https://github.com/huggingface/transformers/pull/24565) for
+            Checkout the pull request and the issue [here](https://github.com/huggingface/transformers/pull/25224) for
             more details.
 
     Attributes:
