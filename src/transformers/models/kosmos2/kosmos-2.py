@@ -1286,7 +1286,55 @@ def check_real_model_with_snowman_detail_sample(model):
         max_new_tokens=len(expected_generation),
     )
     assert generated_output[0, 75:].tolist() == expected_generation
-    # generated_output = model.generate(pixel_values=pixel_values, input_ids=input_ids, use_cache=True, past_key_values=None, img_features=None, img_attn_mask=img_attn_mask, max_new_tokens=94)
+
+
+def check_real_model_with_snowman_detail_sample_end_to_end():
+
+    ckpt = "ydshieh/kosmos-2-patch14-224"
+
+    slow_tokenizer = Kosmos2Tokenizer.from_pretrained(ckpt)
+    fast_tokenizer = Kosmos2TokenizerFast.from_pretrained(ckpt)
+    image_processor = CLIPImageProcessor(ckpt)
+    # TODO: change to use `from_pretrained` once ready
+    slow_processor = Kosmos2Processor(tokenizer=slow_tokenizer, image_processor=image_processor)
+    fast_processor = Kosmos2Processor(tokenizer=fast_tokenizer, image_processor=image_processor)
+    model = Kosmos2ForConditionalGeneration.from_pretrained(ckpt)
+
+    # --------------------------------------------------------------------
+    # real input: (snowman detail)
+
+    text = "<grounding>Describe this image in detail:"
+    image = Image.open("snowman.jpg")
+    bboxes = None
+
+    slow_inputs = slow_processor(text=text, images=image, bboxes=bboxes)
+    fast_inputs = fast_processor(text=text, images=image, bboxes=bboxes)
+
+    slow_generated_output = model.generate(
+        pixel_values=slow_inputs["pixel_values"],
+        input_ids=slow_inputs["input_ids"],
+        img_features=None,
+        img_attn_mask=slow_inputs["img_attn_mask"],
+        past_key_values=None,
+        use_cache=True,
+    )
+    fast_generated_output = model.generate(
+        input_ids=fast_inputs["input_ids"],
+        attention_mask=fast_inputs["input_ids"],
+        img_features=None,
+        img_attn_mask=fast_inputs["img_attn_mask"],
+        pixel_values=fast_inputs["pixel_values"],
+        use_cache=True,
+    )
+
+    slow_generated_ids = slow_generated_output[0, len(slow_inputs["input_ids"][0]):]
+    fast_generated_ids = fast_generated_output[0, len(fast_inputs["input_ids"][0]):]
+
+    slow_generation = slow_processor.decode(slow_generated_ids, skip_special_tokens=True)
+    fast_generation = fast_processor.decode(fast_generated_ids, skip_special_tokens=True)
+
+    print(slow_generation)
+    print(fast_generation)
 
 
 def check_head_base_model_loading(config):
@@ -1515,5 +1563,9 @@ if __name__ == "__main__":
     # ================================================================================
 
     check_real_model_with_snowman_detail_sample(real_model)
+
+    # ================================================================================
+
+    check_real_model_with_snowman_detail_sample_end_to_end()
 
     # ================================================================================
