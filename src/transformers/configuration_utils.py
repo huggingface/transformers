@@ -822,7 +822,12 @@ class PretrainedConfig(PushToHubMixin):
 
         # only serialize values that differ from the default config
         for key, value in config_dict.items():
-            if isinstance(value, dict) and key in class_config_dict and isinstance(class_config_dict[key], dict):
+            if (
+                isinstance(getattr(self, key, None), PretrainedConfig)
+                and key in class_config_dict
+                and isinstance(class_config_dict[key], dict)
+            ):
+                # For nested configs we need to clean the diff recursively
                 diff = recursive_diff_dict(value, class_config_dict[key])
                 if len(diff) > 0:
                     serializable_config_dict[key] = diff
