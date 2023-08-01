@@ -855,6 +855,8 @@ class ViTPoseModel(ViTPosePreTrainedModel):
 import numpy
 m = ViTPosePatchEmbed(ViTPoseConfig())
 model = ViTPoseBlock(ViTPoseConfig())
-print(model(m(torch.Tensor(numpy.zeros([1,3,256,192])))))
+print(m)
+for i in range(8):
+    print(model)
 
 
