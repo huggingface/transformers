@@ -177,7 +177,7 @@ class IdeficsProcessor(ProcessorMixin):
                 Maximum length of the returned list and optionally padding length (see above).
             truncation (`bool`, *optional*):
                 Activates truncation to cut input sequences longer than `max_length` to `max_length`.
-            transform (`Callable`, *optional*, defaults to `None`):
+            transform (`Callable`, *optional*):
                 A custom transform function that accepts a single image can be passed for training. For example,
                 `torchvision.Compose` can be used to compose multiple functions. If `None` a preset inference-specific
                 set of transforms will be applied to the images
