@@ -27,6 +27,8 @@ import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from sentencepiece import SentencePieceProcessor
+from ...utils import sentencepiece_model_pb2
 
 
 if TYPE_CHECKING:
@@ -111,6 +113,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
+        spaces_between_special_tokens=False,
         legacy=None,
         **kwargs,
     ):
@@ -128,6 +131,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             add_eos_token=add_eos_token,
             sp_model_kwargs=self.sp_model_kwargs,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            spaces_between_special_tokens=spaces_between_special_tokens,
             legacy=legacy,
             **kwargs,
         )
@@ -142,8 +146,21 @@ class LlamaTokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
+        self.sp_model = self.get_spm_processor()
+
+    def get_spm_processor(self):
+        tokenizer = SentencePieceProcessor(**self.sp_model_kwargs)
+        with open(self.vocab_file, "rb") as f:
+            sp_model = f.read()
+            model = sentencepiece_model_pb2.ModelProto.FromString(sp_model)
+            if not self.legacy:
+                normalizer_spec = sentencepiece_model_pb2.NormalizerSpec()
+                normalizer_spec.add_dummy_prefix = False
+                model.normalizer_spec.MergeFrom(normalizer_spec)
+            sp_model = model.SerializeToString()
+            tokenizer.LoadFromSerializedProto(sp_model)
+        return tokenizer
+
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -186,15 +203,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         passed to `_tokenize`. Thus if a subsequence did not start with a `" "` or SPIECE_UNDERLINE, we have to remove
         the extra `SPIECE_UNDERLINE` prepended.
         """
-        if not self.legacy:
-            is_first = text.startswith(SPIECE_UNDERLINE)
-            if is_first:
-                text = text[1:]
-
         tokens = self.sp_model.encode(text, out_type=str)
-
-        if not self.legacy and not is_first and not text.startswith(" ") and tokens[0].startswith(SPIECE_UNDERLINE):
-            tokens = ([tokens[0][1:]] if len(tokens[0]) > 1 else []) + tokens[1:]
         return tokens
 
     def _convert_token_to_id(self, token):
@@ -209,6 +218,8 @@ class LlamaTokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         current_sub_tokens = []
+        # since we manually add the prefix space, we have to remove it
+        tokens[0] = tokens[0].strip(SPIECE_UNDERLINE)
         out_string = ""
         prev_is_special = False
         for i, token in enumerate(tokens):
