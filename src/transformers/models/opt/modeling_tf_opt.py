@@ -71,7 +71,9 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     # mask_cond = tf.range(shape_list(mask)[-1])
     #
     # mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (shape_list(mask)[-1], 1)), 0.0, mask)
-    mask = tf.experimental.numpy.triu(tf.fill((tgt_len, tgt_len), tf.cast(LARGE_NEGATIVE, tf.float32)), k=1)
+    # We need triu with k = 1 but TF expects known compile-time dims for that, so we hack around it
+    mask = tf.fill((tgt_len, tgt_len), tf.cast(LARGE_NEGATIVE, tf.float32))
+    mask = tf.linalg.band_part(mask, 0, -1) - tf.linalg.band_part(mask, 0, 0)
 
     if past_key_values_length > 0:
         mask = tf.concat([tf.zeros((tgt_len, past_key_values_length)), mask], axis=-1)
@@ -93,7 +95,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
 
-class TFOPTLearnedPositionalEmbedding(TFSharedEmbeddings):
+class TFOPTLearnedPositionalEmbedding(tf.keras.layers.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
@@ -167,9 +169,6 @@ class TFOPTAttention(tf.keras.layers.Layer):
         # for the decoder
         is_cross_attention = key_value_states is not None
         bsz, tgt_len, embed_dim = shape_list(hidden_states)
-        if tgt_len == 0:
-            import pdb
-            pdb.set_trace()
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -520,22 +519,21 @@ class TFOPTDecoder(tf.keras.layers.Layer):
         # create causal mask
         # # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         _, seq_length = input_shape
-        if seq_length + past_key_values_length != tf.shape(attention_mask)[1]:
-            raise ValueError(
-                "Attention mask shape should be (batch_size, seq_length + past_key_values_length)"
-                f" but is {attention_mask.shape} with input_ids shape {input_shape} and past length"
-                f" {past_key_values_length}."
-            )
-        if seq_length > 1:
-            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
+        tf.debugging.assert_equal(
+            seq_length + past_key_values_length,
+            shape_list(attention_mask)[1],
+            message="Attention mask shape should be (batch_size, seq_length + past_key_values_length)"
+            f" but is {shape_list(attention_mask)[1]} with input_ids shape {input_shape} and past length"
+            f" {past_key_values_length}.",
+        )
 
-        if attention_mask is not None:
-            expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]).to(
-                inputs_embeds.device
-            )
+        expanded_attn_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
+        if seq_length > 1:
             combined_attention_mask = (
-                expanded_attn_mask if combined_attention_mask is None else expanded_attn_mask + combined_attention_mask
+                _make_causal_mask(input_shape, past_key_values_length=past_key_values_length) + expanded_attn_mask
             )
+        else:
+            combined_attention_mask = expanded_attn_mask
 
         return combined_attention_mask
 
@@ -625,20 +623,17 @@ class TFOPTDecoder(tf.keras.layers.Layer):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if attention_mask is None:
-            attention_mask = tf.ones(inputs_embeds.shape[:2] + past_key_values_length, dtype=tf.bool)
+            attention_mask = tf.ones((input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.bool)
         else:
             tf.debugging.assert_equal(
-                tf.shape(attention_mask)[1],
+                shape_list(attention_mask)[1],
                 past_key_values_length + input_shape[1],
                 message=(
-                    f"The provided attention mask has length {attention_mask.shape[1]}, but its length should be "
+                    f"The provided attention mask has length {tf.shape(attention_mask)[1]}, but its length should be "
                     f"{past_key_values_length + input_shape[1]} (sum of the lengths of current and past inputs)"
                 ),
             )
         pos_embeds = self.embed_positions(attention_mask, past_key_values_length)
-        if pos_embeds.shape[1] == 0:
-            import pdb
-            pdb.set_trace()
 
         attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values_length)
 
