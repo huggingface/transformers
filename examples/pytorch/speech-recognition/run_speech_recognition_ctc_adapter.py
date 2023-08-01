@@ -503,7 +503,9 @@ def main():
     # the tokenizer
     # load config
     config = AutoConfig.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, token=data_args.token,
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        token=data_args.token,
     )
 
     # 4. Next, if no tokenizer file is defined,
@@ -517,7 +519,10 @@ def main():
     vocab_dict = {}
     if tokenizer_name_or_path is not None:
         # load vocabulary of other adapter languages so that new language can be appended
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, token=data_args.token,)
+        tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_name_or_path,
+            token=data_args.token,
+        )
         vocab_dict = tokenizer.vocab.copy()
         if tokenizer.target_lang is None:
             raise ValueError("Make sure to load a multi-lingual tokenizer with a set target language.")
@@ -587,7 +592,9 @@ def main():
         **tokenizer_kwargs,
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, token=data_args.token,
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        token=data_args.token,
     )
 
     # adapt config

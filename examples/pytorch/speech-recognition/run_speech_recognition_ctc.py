@@ -507,7 +507,9 @@ def main():
     # the tokenizer
     # load config
     config = AutoConfig.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, token=data_args.token,
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        token=data_args.token,
     )
 
     # 4. Next, if no tokenizer file is defined,
@@ -567,7 +569,9 @@ def main():
         **tokenizer_kwargs,
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, token=data_args.token,
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        token=data_args.token,
     )
 
     # adapt config
