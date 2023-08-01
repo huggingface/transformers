@@ -990,25 +990,15 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         logits = self.classifier(sequence_output)
 
         loss = None
-        if labels is not None and box_first_token_mask is not None:
+        if labels is not None:
             loss_fct = CrossEntropyLoss()
-
-            box_first_token_mask = box_first_token_mask.view(-1)
-
-            # Only keep active parts of the loss
-            if attention_mask is not None:
-                active_loss = attention_mask.view(-1) == 1
-                active_logits = logits.view(-1, self.num_labels)
-                active_labels = torch.where(
-                    active_loss,
-                    labels.view(-1),
-                    torch.tensor(loss_fct.ignore_index).type_as(labels),
-                )
-                loss = loss_fct(active_logits[box_first_token_mask], active_labels[box_first_token_mask])
+            logits = logits.view(-1, self.num_labels)
+            labels = labels.view(-1)
+            if box_first_token_mask is not None:
+                box_first_token_mask = box_first_token_mask.view(-1)
+                loss = loss_fct(logits[box_first_token_mask], labels[box_first_token_mask])
             else:
-                loss = loss_fct(
-                    logits.view(-1, self.num_labels)[box_first_token_mask], labels.view(-1)[box_first_token_mask]
-                )
+                loss = loss_fct(logits, labels)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
