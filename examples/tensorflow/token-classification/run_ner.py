@@ -75,12 +75,21 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    use_auth_token: bool = field(
-        default=False,
+    token: str = field(
+        default=None,
         metadata={
             "help": (
                 "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
+            )
+        },
+    )
+    use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": (
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. "
+                "Please use `token`."
             )
         },
     )
@@ -228,7 +237,7 @@ def main():
         raw_datasets = load_dataset(
             data_args.dataset_name,
             data_args.dataset_config_name,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     else:
         data_files = {}
@@ -240,7 +249,7 @@ def main():
         raw_datasets = load_dataset(
             extension,
             data_files=data_files,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.

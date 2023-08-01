@@ -16,6 +16,7 @@
 import logging
 import os
 import sys
+import warnings
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -153,12 +154,21 @@ class ModelArguments:
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
     image_processor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
-    use_auth_token: bool = field(
-        default=False,
+    token: str = field(
+        default=None,
         metadata={
             "help": (
                 "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
+            )
+        },
+    )
+    use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": (
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. "
+                "Please use `token`."
             )
         },
     )
@@ -239,6 +249,14 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    if model_args.use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+        )
+        if model_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        model_args.token = model_args.use_auth_token
+
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_mim", model_args, data_args)
@@ -288,7 +306,7 @@ def main():
         data_args.dataset_config_name,
         data_files=data_args.data_files,
         cache_dir=model_args.cache_dir,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
     )
 
     # If we don't have a validation split, split off a percentage of train as validation.
@@ -305,7 +323,7 @@ def main():
     config_kwargs = {
         "cache_dir": model_args.cache_dir,
         "revision": model_args.model_revision,
-        "use_auth_token": True if model_args.use_auth_token else None,
+        "token": model_args.token,
     }
     if model_args.config_name_or_path:
         config = AutoConfig.from_pretrained(model_args.config_name_or_path, **config_kwargs)
@@ -357,7 +375,7 @@ def main():
             config=config,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     else:
         logger.info("Training new model from scratch")

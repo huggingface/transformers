@@ -16,6 +16,7 @@
 import logging
 import os
 import sys
+import warnings
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -142,12 +143,21 @@ class ModelArguments:
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
     image_processor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
-    use_auth_token: bool = field(
-        default=False,
+    token: str = field(
+        default=None,
         metadata={
             "help": (
                 "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
+            )
+        },
+    )
+    use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": (
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. "
+                "Please use `token`."
             )
         },
     )
@@ -175,6 +185,14 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    if model_args.use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+        )
+        if model_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        model_args.token = model_args.use_auth_token
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
@@ -229,7 +247,7 @@ def main():
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
             task="image-classification",
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     else:
         data_files = {}
@@ -276,7 +294,7 @@ def main():
         finetuning_task="image-classification",
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        token=True if model_args.use_auth_token else None,
+        token=model_args.token,
     )
     model = AutoModelForImageClassification.from_pretrained(
         model_args.model_name_or_path,
@@ -284,14 +302,14 @@ def main():
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        token=True if model_args.use_auth_token else None,
+        token=model_args.token,
         ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
     )
     image_processor = AutoImageProcessor.from_pretrained(
         model_args.image_processor_name or model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        token=True if model_args.use_auth_token else None,
+        token=model_args.token,
     )
 
     # Define torchvision transforms to be applied to each image.
