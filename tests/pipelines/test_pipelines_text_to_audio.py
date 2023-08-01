@@ -13,16 +13,19 @@
 # limitations under the License.
 
 import unittest
+import numpy as np
 
 from transformers import (
     MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING,
     TextToAudioPipeline,
     pipeline,
+    AutoProcessor,
 )
 from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
     require_torch,
+    require_torch_gpu,
     require_torch_or_tf,
     slow,
 )
@@ -38,74 +41,182 @@ if is_torch_available():
 @require_torch_or_tf
 class TextToAudioPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING
+    # for now only text_to_waveform and not text_to_spectrogram
 
+    @slow
     @require_torch
     def test_small_model_pt(self):
-        speech_generator = pipeline(
-            task="text-to-audio", model="microsoft/speecht5_tts", framework="pt", vocoder="microsoft/speecht5_hifigan"
+        speech_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small", framework="pt")
+
+        forward_params = {
+            "do_sample": False,
+            "max_new_tokens": 250,
+        }
+
+        outputs = speech_generator("This is a test", forward_params=forward_params)
+
+        # musicgen sampling_rate is not straightforward to get
+        self.assertIsNone(outputs["sampling_rate"])
+
+        audio = outputs["audio"]
+
+        self.assertEqual(
+            ANY(np.ndarray),
+            audio,
         )
 
-        # test if sampling_rate defined
+        # test two examples side-by-side
+        outputs = speech_generator(["This is a test", "This is a second test"], forward_params=forward_params)
 
-        # Using `do_sample=False` to force deterministic output
-        outputs = speech_generator("This is a test", do_sample=False)
-        self.assertEqual(
-            outputs,
-            ANY(torch.Tensor),
-        )
+        audio = [output["audio"] for output in outputs]
 
-        outputs = speech_generator(["This is a test", "This is a second test"])
         self.assertEqual(
-            outputs,
             [
-                ANY(torch.Tensor),
-                ANY(torch.Tensor),
+                ANY(np.ndarray),
+                ANY(np.ndarray),
             ],
+            audio,
         )
-
-        speaker_embeddings = torch.zeros((1, 512))
-
-        outputs = speech_generator(
-            "This is a test", do_sample=True, num_return_sequences=2, speaker_embeddings=speaker_embeddings
-        )
+        
+        
+        # test batching
+        outputs = speech_generator(["This is a test", "This is a second test"], forward_params=forward_params, batch_size=2)
+        
         self.assertEqual(
-            outputs,
-            ANY(torch.Tensor),
+            ANY(np.ndarray), outputs[0]["audio"], 
         )
 
+        
     @slow
     @require_torch
     def test_large_model_pt(self):
         speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt")
 
-        # test if sampling_rate defined, test text-to-speech
+        # test text-to-speech
 
-        # Using `do_sample=False` to force deterministic output
-        outputs = speech_generator("This is a test", do_sample=False, semantic_max_new_tokens=100)
+        forward_params = {
+            # Using `do_sample=False` to force deterministic output
+            "do_sample": False,
+            "semantic_max_new_tokens": 100,
+        }
+        
+        
+        # atm, must do to stay coherent with BarkProcessor
+        preprocess_params = {
+                "max_length": 256,
+                "add_special_tokens": False,
+                "return_attention_mask": True,
+                "return_token_type_ids": False,
+                "padding": "max_length",
+        }
+
+        outputs = speech_generator("This is a test", forward_params=forward_params, preprocess_params=preprocess_params)
+
         self.assertEqual(
+            {"audio": ANY(np.ndarray), "sampling_rate": 24000},
             outputs,
-            ANY(torch.Tensor),
         )
 
-        outputs = speech_generator(["This is a test", "This is a second test"])
+        # test two examples side-by-side
+        outputs = speech_generator(["This is a test", "This is a second test"], forward_params=forward_params, preprocess_params=preprocess_params)
+
+        audio = [output["audio"] for output in outputs]
+
         self.assertEqual(
-            outputs,
             [
-                ANY(torch.Tensor),
-                ANY(torch.Tensor),
+                ANY(np.ndarray),
+                ANY(np.ndarray),
             ],
+            audio,
         )
+        
+        
+        # test other generation strategy
+
+        forward_params = {
+            "do_sample": True,
+            "semantic_max_new_tokens": 100,
+            "semantic_num_return_sequences": 2,
+        }
 
         outputs = speech_generator(
             "This is a test",
-            do_sample=True,
-            semantic_num_return_sequences=2,
-            speaker_embeddings="en_speaker_1",
-            semantic_max_new_tokens=100,
+            forward_params=forward_params,
+            preprocess_params=preprocess_params,
         )
+
+        audio = outputs["audio"]
+
         self.assertEqual(
+            ANY(np.ndarray),
+            audio,
+        )
+        
+        # test using a speaker embedding
+        
+        processor = AutoProcessor.from_pretrained("suno/bark-small")
+        
+        temp_inp = processor("hey, how are you?", voice_preset="v2/en_speaker_5")
+        
+        history_prompt = temp_inp["history_prompt"]
+        
+        forward_params["history_prompt"] = history_prompt
+        
+        outputs = speech_generator(["This is a test", "This is a second test"], forward_params=forward_params, preprocess_params=preprocess_params, batch_size=2)
+        
+
+        audio = [output["audio"] for output in outputs]
+
+        self.assertEqual(
+            [
+                ANY(np.ndarray),
+                ANY(np.ndarray),
+            ],
+            audio,
+        )
+        
+        
+    
+    @slow
+    @require_torch_gpu
+    def test_conversion_additional_tensor(self):
+        speech_generator = pipeline(task="text-to-audio", model="suno/bark-small", framework="pt",
+                                    device=0)
+        processor = AutoProcessor.from_pretrained("suno/bark-small")
+        
+
+        forward_params = {
+            "do_sample": True,
+            "semantic_max_new_tokens": 100,
+        }
+        
+        # atm, must do to stay coherent with BarkProcessor
+        preprocess_params = {
+                "max_length": 256,
+                "add_special_tokens": False,
+                "return_attention_mask": True,
+                "return_token_type_ids": False,
+                "padding": "max_length",
+        }
+
+        outputs = speech_generator(
+            "This is a test",
+            forward_params=forward_params,
+            preprocess_params=preprocess_params,
+        )
+        
+        temp_inp = processor("hey, how are you?", voice_preset="v2/en_speaker_5")
+        history_prompt = temp_inp["history_prompt"]        
+        forward_params["history_prompt"] = history_prompt
+        
+        
+        # history_prompt is a torch.Tensor passed as a forward_param
+        # if generation is successfull, it means that it was passed to the right device
+        outputs = speech_generator("This is a test", forward_params=forward_params, preprocess_params=preprocess_params)
+        
+        self.assertEqual(
+            {"audio": ANY(np.ndarray), "sampling_rate": 24000},
             outputs,
-            ANY(torch.Tensor),
         )
 
     def get_test_pipeline(self, model, tokenizer, processor):
@@ -116,14 +227,14 @@ class TextToAudioPipelineTests(unittest.TestCase):
         outputs = speech_generator("This is a test")
         self.assertEqual(
             outputs,
-            ANY(torch.Tensor),
+            ANY(np.ndarray),
         )
 
         outputs = speech_generator(["This is great !", "Something else"], num_return_sequences=2, do_sample=True)
         self.assertEqual(
             outputs,
             [
-                ANY(torch.Tensor),
-                ANY(torch.Tensor),
+                ANY(np.ndarray),
+                ANY(np.ndarray),
             ],
         )
