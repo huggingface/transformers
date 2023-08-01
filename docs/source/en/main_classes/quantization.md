@@ -29,6 +29,29 @@ If you want to quantize your own pytorch model, check out this [documentation](h
 
 Here are the things you can do using `bitsandbytes` integration
 
+### General usage
+
+You can quantize a model by using the `load_in_8bit` or `load_in_4bit` argument when calling the [`~PreTrainedModel.from_pretrained`] method as long as your model supports loading with 🤗 Accelerate and contains `torch.nn.Linear` layers. This should work for any modality as well.
+
+```python
+from transformers import AutoModelForCausalLM
+
+model_8bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_8bit=True)
+model_4bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_4bit=True)
+```
+
+By default all other modules (e.g. `torch.nn.LayerNorm`) will be converted in `torch.float16`, but if you want to change their `dtype` you can overwrite the `torch_dtype` argument:
+
+```python
+>>> import torch
+>>> from transformers import AutoModelForCausalLM
+
+>>> model_8bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_8bit=True, torch_dtype=torch.float32)
+>>> model_8bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
+torch.float32
+```
+
+
 ### FP4 quantization 
 
 #### Requirements
@@ -41,7 +64,7 @@ Make sure that you have installed the requirements below before running any of t
 - Install latest `accelerate`
 `pip install --upgrade accelerate`
 
-- Install latest `transformers` from source 
+- Install latest `transformers`
 `pip install --upgrade transformers`
 
 #### Tips and best practices
