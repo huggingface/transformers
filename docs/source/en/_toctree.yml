@@ -77,14 +77,17 @@
         title: Text to speech
     title: Multimodal
     isExpanded: false
+  - sections:
+      - local: generation_strategies
+        title: Customize text generation strategy
+    title: Generation
+    isExpanded: false
   title: Task Guides
 - sections:
     - local: fast_tokenizers
       title: Use fast tokenizers from 🤗 Tokenizers
     - local: multilingual
       title: Run inference with multilingual models
-    - local: generation_strategies
-      title: Customize text generation strategy
     - local: create_a_model
       title: Use model-specific APIs
     - local: custom_models
