@@ -1357,21 +1357,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 "Checkpoint loading failed as no optimizer is attached to the model. "
                 "This is most likely caused by the model not being compiled."
             )
-        if not os.path.isdir(repo_path_or_name):
+        if os.path.isdir(repo_path_or_name):
+            local_dir = repo_path_or_name
+        else:
             # If this isn't a local path, check that the remote repo exists and has a checkpoint in it
             repo_files = list_repo_files(repo_path_or_name)
             for file in ("checkpoint/weights.h5", "checkpoint/extra_data.pickle"):
                 if file not in repo_files:
                     raise FileNotFoundError(f"Repo {repo_path_or_name} does not contain checkpoint file {file}!")
-            if "/" not in repo_path_or_name:
-                model_id = repo_path_or_name
-                repo_path_or_name = self.get_full_repo_name(repo_path_or_name)
-            else:
-                model_id = repo_path_or_name.split("/")[-1]
-            repo = Repository(model_id, clone_from=f"https://huggingface.co/{repo_path_or_name}")
+            repo = Repository(repo_path_or_name.split("/")[-1], clone_from=repo_path_or_name)
             local_dir = repo.local_dir
-        else:
-            local_dir = repo_path_or_name
 
         # Now make sure the repo actually has a checkpoint in it.
         checkpoint_dir = os.path.join(local_dir, "checkpoint")
@@ -2335,6 +2330,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         max_shard_size: Union[int, str] = "10GB",
         create_pr: bool = False,
         safe_serialization: bool = False,
+        token: Optional[Union[str, bool]] = None,
         **kwargs,
     ):
         """
@@ -2371,10 +2367,27 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 Whether or not to create a PR with the uploaded files or directly commit.
             safe_serialization (`bool`, *optional*, defaults to `False`):
                 Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
-
-            kwargs:
+            token (`str` or `bool`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+            kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        use_auth_token = kwargs.pop("use_auth_token", None)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
+
+        if token is not None:
+            kwargs["token"] = token
+
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
@@ -2479,7 +2492,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 repo_id,
                 files_timestamps,
                 commit_message=commit_message,
-                token=kwargs.get("use_auth_token"),
+                token=token,
             )
 
     @classmethod
@@ -2666,7 +2679,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 resume_download=resume_download,
                 proxies=proxies,
                 local_files_only=local_files_only,
-                token=use_auth_token,
+                token=token,
                 revision=revision,
                 _from_auto=from_auto_class,
                 _from_pipeline=from_pipeline,
@@ -2753,7 +2766,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         "proxies": proxies,
                         "resume_download": resume_download,
                         "local_files_only": local_files_only,
-                        "use_auth_token": token,
+                        "token": token,
                         "user_agent": user_agent,
                         "revision": revision,
                         "subfolder": subfolder,
@@ -2800,7 +2813,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         has_file_kwargs = {
                             "revision": revision,
                             "proxies": proxies,
-                            "use_auth_token": token,
+                            "token": token,
                         }
                         if has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
                             raise EnvironmentError(
@@ -2847,7 +2860,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 proxies=proxies,
                 resume_download=resume_download,
                 local_files_only=local_files_only,
-                use_auth_token=token,
+                token=token,
                 user_agent=user_agent,
                 revision=revision,
                 _commit_hash=commit_hash,
@@ -3037,6 +3050,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         commit_message: Optional[str] = None,
         private: Optional[bool] = None,
         max_shard_size: Optional[Union[int, str]] = "10GB",
+        token: Optional[Union[bool, str]] = None,
+        # (`use_auth_token` is deprecated: we have to keep it here as we don't have **kwargs)
         use_auth_token: Optional[Union[bool, str]] = None,
         create_pr: bool = False,
         **base_model_card_args,
@@ -3055,7 +3070,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 Message to commit while pushing. Will default to `"Upload model"`.
             private (`bool`, *optional*):
                 Whether or not the repository created should be private.
-            use_auth_token (`bool` or `str`, *optional*):
+            token (`bool` or `str`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `huggingface-cli login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
                 is not specified.
@@ -3080,6 +3095,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         model.push_to_hub("huggingface/my-finetuned-bert")
         ```
         """
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
+
         if "repo_path_or_name" in base_model_card_args:
             warnings.warn(
                 "The `repo_path_or_name` argument is deprecated and will be removed in v5 of Transformers. Use "
@@ -3097,7 +3122,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             working_dir = repo_id.split("/")[-1]
 
         repo_id = self._create_repo(
-            repo_id, private=private, use_auth_token=use_auth_token, repo_url=repo_url, organization=organization
+            repo_id, private=private, token=token, repo_url=repo_url, organization=organization
         )
 
         if use_temp_dir is None:
@@ -3122,7 +3147,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 repo_id,
                 files_timestamps,
                 commit_message=commit_message,
-                token=use_auth_token,
+                token=token,
                 create_pr=create_pr,
             )
 
@@ -3166,7 +3191,7 @@ class TFConv1D(tf.keras.layers.Layer):
             The number of input features.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation to use to initialize the weights.
-        kwargs:
+        kwargs (`Dict[str, Any]`, *optional*):
             Additional keyword arguments passed along to the `__init__` of `tf.keras.layers.Layer`.
     """
 
@@ -3208,7 +3233,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         initializer_range (`float`, *optional*):
             The standard deviation to use when initializing the weights. If no value is provided, it will default to
             \\(1/\sqrt{hidden\_size}\\).
-        kwargs:
+        kwargs (`Dict[str, Any]`, *optional*):
             Additional keyword arguments passed along to the `__init__` of `tf.keras.layers.Layer`.
     """
     # TODO (joao): flagged for delection due to embeddings refactor
@@ -3322,7 +3347,7 @@ class TFSequenceSummary(tf.keras.layers.Layer):
             - **summary_last_dropout** (`float`)-- Optional dropout probability after the projection and activation.
 
         initializer_range (`float`, defaults to 0.02): The standard deviation to use to initialize the weights.
-        kwargs:
+        kwargs (`Dict[str, Any]`, *optional*):
             Additional keyword arguments passed along to the `__init__` of `tf.keras.layers.Layer`.
     """
 

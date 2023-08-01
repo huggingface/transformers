@@ -115,7 +115,7 @@ _deps = [
     "faiss-cpu",
     "fastapi",
     "filelock",
-    "flax>=0.4.1,<=0.6.9",
+    "flax>=0.4.1,<=0.7.0",
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
@@ -124,8 +124,8 @@ _deps = [
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
-    "jax>=0.2.8,!=0.3.2,<=0.3.6",
-    "jaxlib>=0.1.65,<=0.3.6",
+    "jax>=0.2.8,!=0.3.2,<=0.4.13",
+    "jaxlib>=0.1.65,<=0.4.13",
     "jieba",
     "kenlm",
     "keras-nlp>=0.3.1",
@@ -427,7 +427,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.31.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.32.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
@@ -444,7 +444,7 @@ setup(
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
     python_requires=">=3.8.0",
-    install_requires=install_requires,
+    install_requires=list(install_requires),
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",

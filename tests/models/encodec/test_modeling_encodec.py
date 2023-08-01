@@ -77,16 +77,25 @@ class EncodecModelTester:
         batch_size=12,
         num_channels=2,
         is_training=False,
-        num_hidden_layers=4,
         intermediate_size=40,
+        hidden_size=32,
+        num_filters=8,
+        num_residual_layers=1,
+        upsampling_ratios=[8, 4],
+        num_lstm_layers=1,
+        codebook_size=64,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.is_training = is_training
-
-        self.num_hidden_layers = num_hidden_layers
         self.intermediate_size = intermediate_size
+        self.hidden_size = hidden_size
+        self.num_filters = num_filters
+        self.num_residual_layers = num_residual_layers
+        self.upsampling_ratios = upsampling_ratios
+        self.num_lstm_layers = num_lstm_layers
+        self.codebook_size = codebook_size
 
     def prepare_config_and_inputs(self):
         input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
@@ -99,7 +108,16 @@ class EncodecModelTester:
         return config, inputs_dict
 
     def get_config(self):
-        return EncodecConfig(audio_channels=self.num_channels, chunk_in_sec=None)
+        return EncodecConfig(
+            audio_channels=self.num_channels,
+            chunk_in_sec=None,
+            hidden_size=self.hidden_size,
+            num_filters=self.num_filters,
+            num_residual_layers=self.num_residual_layers,
+            upsampling_ratios=self.upsampling_ratios,
+            num_lstm_layers=self.num_lstm_layers,
+            codebook_size=self.codebook_size,
+        )
 
     def create_and_check_model_forward(self, config, inputs_dict):
         model = EncodecModel(config=config).to(torch_device).eval()
