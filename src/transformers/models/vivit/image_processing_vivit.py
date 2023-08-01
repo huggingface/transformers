@@ -179,10 +179,11 @@ class VivitImageProcessor(BaseImageProcessor):
         """
         Rescale an image by a scale factor.
 
-        If offset is True, the image is rescaled between [-1, 1].
-            image = image * scale * 2 - 1
+        If `offset` is `True`, the image has its values rescaled by `scale` and then offset by 1. If `scale` is
+        1/127.5, the image is rescaled between [-1, 1].
+            image = image * scale - 1
 
-        If offset is False, the image is rescaled between [0, 1].
+        If `offset` is `False`, and `scale` is 1/255, the image is rescaled between [0, 1].
             image = image * scale
 
         Args:
@@ -195,7 +196,6 @@ class VivitImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        scale = scale * 2 if offset else scale
         rescaled_image = rescale(image, scale=scale, data_format=data_format, **kwargs)
 
         if offset:
