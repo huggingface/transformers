@@ -279,7 +279,9 @@ class Kosmos2Processor(ProcessorMixin):
             batched = False
             texts = [texts]
 
-        if not is_batched(images):
+        if images is None:
+            images = [None] * len(texts)
+        elif not is_batched(images):
             images = [images]
         if len(texts) != len(images):
             raise ValueError(f"The number of examples in `texts` and `images` should be the same. Got {len(texts)} v.s. {len(images)} instead.")
