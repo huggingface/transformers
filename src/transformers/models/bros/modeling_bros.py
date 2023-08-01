@@ -999,7 +999,7 @@ class BrosForTokenClassification(BrosPreTrainedModel):
                     logits.view(-1, self.num_labels)[box_first_token_mask], labels.view(-1)[box_first_token_mask]
                 )
             else:
-                loss = loss_fct(logits, labels)
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[2:]
