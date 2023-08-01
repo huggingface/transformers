@@ -1550,8 +1550,6 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
                 all_attentions = all_attentions + (layer_outputs[3],)
                 if encoder_hidden_states is not None:
                     all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
-                else:
-                    all_cross_attentions = all_cross_attentions + (None,)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
