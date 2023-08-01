@@ -553,7 +553,6 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs[0].tolist(), expected_outputs)
         self.assertEqual(
             generated_text,
-            # "The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while driving on a busy city street.",
             "The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while driving on a busy city street.",
         )
 
