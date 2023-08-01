@@ -3976,6 +3976,8 @@ class TokenizerTesterMixin:
                     breakpoint()
                     if len(encoded_split_special_token) == 1:
                         # if we have subword tokenization or special vocab
-                        self.assertTrue(encoded_split_special_token[0] != tokenizer.convert_tokens_to_ids(special_token) )
+                        self.assertTrue(
+                            encoded_split_special_token[0] != tokenizer.convert_tokens_to_ids(special_token)
+                        )
                     else:
                         self.assertTrue(len(encoded_split_special_token) > 1)
