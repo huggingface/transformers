@@ -828,7 +828,11 @@ class PretrainedConfig(PushToHubMixin):
                 and isinstance(class_config_dict[key], dict)
             ):
                 # For nested configs we need to clean the diff recursively
-                diff = recursive_diff_dict(value, class_config_dict[key])
+                print(key, value)
+                diff = recursive_diff_dict(value, class_config_dict[key], config_obj=getattr(self, key, None))
+                if "model_type" in value:
+                    # Needs to be set even if it's not in the diff
+                    diff["model_type"] = value["model_type"]
                 if len(diff) > 0:
                     serializable_config_dict[key] = diff
             elif (
@@ -1037,18 +1041,20 @@ def get_configuration_file(configuration_files: List[str]) -> str:
     return configuration_file
 
 
-def recursive_diff_dict(dict_a, dict_b):
+def recursive_diff_dict(dict_a, dict_b, config_obj=None):
     """
     Helper function to recursively take the diff between two nested dictionaries. The resulting diff only contains the
     values from `dict_a` that are different from values in `dict_b`.
     """
     diff = {}
+    default = config_obj.__class__().to_dict() if config_obj is not None else {}
     for key, value in dict_a.items():
-        if isinstance(value, dict) and key in dict_b and isinstance(dict_b[key], dict):
-            diff_value = recursive_diff_dict(value, dict_b[key])
+        obj_value = getattr(config_obj, str(key), None)
+        if isinstance(obj_value, PretrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
+            diff_value = recursive_diff_dict(value, dict_b[key], config_obj=obj_value)
             if len(diff_value) > 0:
-                diff[key] = recursive_diff_dict(value, dict_b[key])
-        elif key not in dict_b or value != dict_b[key]:
+                diff[key] = diff_value
+        elif key not in dict_b or value != dict_b[key] or key not in default or value != default[key]:
             diff[key] = value
     return diff
 
