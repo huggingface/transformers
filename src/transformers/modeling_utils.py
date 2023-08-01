@@ -2380,8 +2380,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 from optimum.gptq import GPTQQuantizer
             if quantization_method_from_config == QuantizationMethod.GPTQ:
                 quantization_config = GPTQConfig.from_dict(config.quantization_config)
-                torch_dtype = config.torch_dtype
-            else:
+                config.quantization_config = quantization_config
                 logger.info(
                     f"Overriding torch_dtype={torch_dtype} with `torch_dtype=torch.float16` due to "
                     "requirements of `auto-gptq` to enable model quantization "
@@ -2826,6 +2825,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
         if quantization_method_from_config == QuantizationMethod.GPTQ:
             model = quantizer.convert_model(model)
+            model.is_gptq_quantized = True
 
         if isinstance(device_map, str):
             special_dtypes = {}
@@ -3027,10 +3027,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if cls.main_input_name != "input_ids":
                 raise RuntimeError("We can only quantize pure text model.")
             quantizer.quantize_model(model, quantization_config.tokenizer)
-            model._is_gptq_quantized = True
             model.config.quantization_config = GPTQConfig.from_dict(quantizer.to_dict())
-        if quantization_method_from_config == QuantizationMethod.GPTQ:
-            model = quantizer.get_compatible_with_peft(model)
+            model.is_gptq_quantized = True
 
         if output_loading_info:
             if loading_info is None:
