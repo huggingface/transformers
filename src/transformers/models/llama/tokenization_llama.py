@@ -73,8 +73,9 @@ class LlamaTokenizer(PreTrainedTokenizer):
         vocab_file (`str`):
             Path to the vocabulary file.
         legacy (`bool`, *optional*):
-            Whether or not the `legacy` behaviour of the tokenizer should be used. Legacy is before the merge of #24622 and #25224
-            which includes fixes to properly handle tokens that appear after special tokens. A simple example:
+            Whether or not the `legacy` behaviour of the tokenizer should be used. Legacy is before the merge of #24622
+            and #25224 which includes fixes to properly handle tokens that appear after special tokens. A simple
+            example:
 
             - `legacy=True`:
             ```python

@@ -109,8 +109,9 @@ class T5Tokenizer(PreTrainedTokenizer):
             - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
               BPE-dropout.
         legacy (`bool`, *optional*):
-            Whether or not the `legacy` behaviour of the tokenizer should be used. Legacy is before the merge of #24622 and #25224
-            which includes fixes to properly handle tokens that appear after special tokens. A simple example:
+            Whether or not the `legacy` behaviour of the tokenizer should be used. Legacy is before the merge of #24622
+            and #25224 which includes fixes to properly handle tokens that appear after special tokens. A simple
+            example:
 
             - `legacy=True`:
             ```python
