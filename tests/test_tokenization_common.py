@@ -3973,7 +3973,6 @@ class TokenizerTesterMixin:
                     encoded_split_special_token = tokenizer.encode(
                         special_token, add_special_tokens=False, split_special_tokens=True
                     )
-                    breakpoint()
                     if len(encoded_split_special_token) == 1:
                         # if we have subword tokenization or special vocab
                         self.assertTrue(
