@@ -152,7 +152,7 @@ class PeftAdapterMixin:
                 "Did not succeeded in setting the adapter. Please make sure you are using a model that supports adapters."
             )
 
-    @property
+    # TODO: change it to a property but torch.jit fails. Maybe we should return None is PEFT is not available
     def current_active_adapter(self) -> str:
         r"""
         Gets the current active adapter of the model.
