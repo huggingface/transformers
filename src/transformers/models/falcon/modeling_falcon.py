@@ -1040,7 +1040,7 @@ class FalconForSequenceClassification(FalconPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = torch.ne(input_ids, self.config.pad_token_id).sum(dim=-1) - 1
+                sequence_lengths = (torch.ne(input_ids, self.config.pad_token_id).sum(dim=-1) - 1).to(logits.device)
             else:
                 sequence_lengths = -1
                 logger.warning(

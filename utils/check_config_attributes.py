@@ -98,6 +98,9 @@ SPECIAL_CASES_TO_ALLOW.update(
         "LayoutLMv2Config": True,
         "MaskFormerSwinConfig": True,
         "MT5Config": True,
+        # For backward compatibility with trust remote code models
+        "MptConfig": True,
+        "MptAttentionConfig": True,
         "NatConfig": True,
         "OneFormerConfig": True,
         "PerceiverConfig": True,
@@ -238,7 +241,7 @@ def check_config_attributes_being_used(config_class):
     modeling_sources = []
     for path in modeling_paths:
         if os.path.isfile(path):
-            with open(path) as fp:
+            with open(path, encoding="utf8") as fp:
                 modeling_sources.append(fp.read())
 
     unused_attributes = []

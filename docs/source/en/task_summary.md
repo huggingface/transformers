@@ -335,7 +335,7 @@ Document question answering is a task that answers natural language questions fr
 ...     image=image,
 ... )
 >>> preds
-[{'score': 0.8531239628791809, 'answer': '17,000', 'start': 4, 'end': 4}]
+[{'score': 0.8531, 'answer': '17,000', 'start': 4, 'end': 4}]
 ```
 
 Hopefully, this page has given you some more background information about all the types of tasks in each modality and the practical importance of each one. In the next [section](tasks_explained), you'll learn **how** 🤗 Transformers work to solve these tasks.

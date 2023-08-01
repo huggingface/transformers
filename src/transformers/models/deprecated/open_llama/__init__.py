@@ -13,7 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
+from ....utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_sentencepiece_available,
