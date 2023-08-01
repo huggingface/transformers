@@ -1554,11 +1554,11 @@ if __name__ == "__main__":
 
     # ================================================================================
 
-    #check_real_model_with_dog_sample(real_model)
+    check_real_model_with_dog_sample(real_model)
 
     # ================================================================================
 
-    #check_real_model_with_snowman_sample(real_model)
+    check_real_model_with_snowman_sample(real_model)
 
     # ================================================================================
 
