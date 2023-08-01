@@ -1245,7 +1245,7 @@ class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel):
 
     def resize_token_embeddings(self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None) -> nn.Embedding:
         new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        self._resize_final_logits_bias(new_num_tokens)
+        self._resize_final_logits_bias(self.vocab_size)
         return new_embeddings
 
     def _resize_final_logits_bias(self, new_num_tokens: int) -> None:
