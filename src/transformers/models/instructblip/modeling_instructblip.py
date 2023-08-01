@@ -1559,6 +1559,9 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel):
         # with the tokenizer's bos token being set to </s> which has ID=2,
         # whereas the model's text config has bos token id = 0
         if self.config.text_config.architectures[0] == "LLaMAForCausalLM":
-            outputs[outputs == 0] = 2
+            if isinstance(outputs, torch.Tensor):
+                outputs[outputs == 0] = 2
+            else:
+                outputs.sequences[outputs.sequences == 0] = 2
 
         return outputs
