@@ -220,8 +220,8 @@ class IdeficsConfig(PretrainedConfig):
         freeze_vision_module_exceptions (`bool`, *optional*, defaults to `[]`):
             Exceptions to freezing vision layers when `freeze_vision_layers` is `True`
         use_resampler (`bool`, *optional*, defaults to `False`): Whether to use the Resampler
-        vision_config (`IdeficsVisionConfig`,  *optional*): Custom vision config
-        perceiver_config (`IdeficsPerceiverConfig`,  *optional*): Custom perceiver config
+        vision_config (`IdeficsVisionConfig`,  *optional*): Custom vision config or dict
+        perceiver_config (`IdeficsPerceiverConfig`,  *optional*): Custom perceiver config or dict
 
     Example:
 
