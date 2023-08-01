@@ -505,10 +505,14 @@ class LlamaIntegrationTest(unittest.TestCase):
         tokenizer.add_tokens(['<REPR_END>'], special_tokens=True)
         out1 = tokenizer.decode(tokenizer.encode("<REPR_END>inform", add_special_tokens = False), spaces_between_special_tokens = False)
         self.assertEquals(out1, "<REPR_END>inform")
-        tokenizer.decode(tokenizer.encode("<REPR_END>inform", add_special_tokens = False), spaces_between_special_tokens = True)
-        self.assertEquals(out1, " <REPR_END> inform")
-        input_ids = tokenizer("<REPR_END>inform", add_special_tokens = False)
-        self.assertEquals(input_ids,[29871, 32003, 262, 689] ) # 29871 is the spiece underline, '▁'
+        out2 = tokenizer.decode(tokenizer.encode("<REPR_END>inform", add_special_tokens = False), spaces_between_special_tokens = True)
+        self.assertEquals(out2, " <REPR_END> inform")
+        input_ids = tokenizer.encode("<REPR_END>inform", add_special_tokens = False)
+        self.assertEquals(input_ids,[29871, 32000, 262, 689] ) # 29871 is the spiece underline, '▁'
+        
+        out2 = tokenizer.decode(tokenizer.encode(" <REPR_END> inform", add_special_tokens = False), spaces_between_special_tokens = False)
+        # TODO ArthurZ currently we strip left and right, so this will not keep the spaces
+        self.assertEquals(out2, " <REPR_END> inform")
         
         
 @require_sentencepiece
@@ -534,7 +538,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode(". Hello")
         self.assertEqual(input_ids, [7, 4, 156, 86, 20])
         sp_encode = self.tokenizer.sp_model.encode(". Hello")
-        self.assertEqual(input_ids, sp_encode)
+        self.assertEqual(input_ids, [7] + sp_encode)
         tokens = self.tokenizer.tokenize(". Hello")
         self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
 
@@ -545,7 +549,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode("       . Hello")
         self.assertEqual(input_ids, [7, 4, 156, 86, 20])
         sp_encode = self.tokenizer.sp_model.encode("       . Hello")
-        self.assertEqual(input_ids, sp_encode)
+        self.assertEqual(input_ids, [7] + sp_encode)
         tokens = self.tokenizer.tokenize(" . Hello")
         self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
 
@@ -553,7 +557,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode("▁He is not")
         self.assertEqual(input_ids, [156, 46, 44])
         tokens = self.tokenizer.tokenize("▁He is not")
-        sp_encode = self.tokenizer.sp_model.encode("▁He is not")
+        sp_encode = [self.tokenizer.sp_model.piece_to_id("▁He"), self.tokenizer.sp_model.piece_to_id("▁is"), self.tokenizer.sp_model.piece_to_id("▁not")]
         self.assertEqual(input_ids, sp_encode)
         self.assertEqual(tokens, ["▁He", "▁is", "▁not"])  # no extra space added
 

@@ -147,7 +147,9 @@ class LlamaTokenizer(PreTrainedTokenizer):
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
         self.sp_model = self.get_spm_processor()
-
+        
+        self.unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
+        
     def get_spm_processor(self):
         tokenizer = SentencePieceProcessor(**self.sp_model_kwargs)
         with open(self.vocab_file, "rb") as f:
@@ -203,8 +205,11 @@ class LlamaTokenizer(PreTrainedTokenizer):
         passed to `_tokenize`. Thus if a subsequence did not start with a `" "` or SPIECE_UNDERLINE, we have to remove
         the extra `SPIECE_UNDERLINE` prepended.
         """
-        tokens = self.sp_model.encode(text, out_type=str)
-        return tokens
+        if not self.legacy:
+            text = self.unk_token + text
+            tokens = self.sp_model.encode(text, out_type=str)
+            return tokens[self.unk_token_length:]
+        return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
