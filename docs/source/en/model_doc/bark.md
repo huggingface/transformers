@@ -148,6 +148,7 @@ The original code can be found [here](https://github.com/suno-ai/bark).
 
 [[autodoc]] BarkModel
     - generate
+    - enable_cpu_offload
 
 ## BarkSemanticModel
 
