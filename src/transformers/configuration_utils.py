@@ -816,13 +816,17 @@ class PretrainedConfig(PushToHubMixin):
         default_config_dict = PretrainedConfig().to_dict()
 
         # get class specific config dict
-        class_config_dict = self.__class__().to_dict() if not self.is_composition else {}
+        class_config_dict = self.__class__().to_dict()
 
         serializable_config_dict = {}
 
         # only serialize values that differ from the default config
         for key, value in config_dict.items():
-            if (
+            if isinstance(value, dict) and key in class_config_dict and isinstance(class_config_dict[key], dict):
+                diff = recursive_diff_dict(value, class_config_dict[key])
+                if len(diff) > 0:
+                    serializable_config_dict[key] = diff
+            elif (
                 key not in default_config_dict
                 or key == "transformers_version"
                 or value != default_config_dict[key]
@@ -858,6 +862,14 @@ class PretrainedConfig(PushToHubMixin):
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
+
+        for key, value in output.items():
+            # Deal with nested configs like CLIP
+            if isinstance(value, PretrainedConfig):
+                value = value.to_dict()
+                del value["transformers_version"]
+
+            output[key] = value
 
         if hasattr(self, "quantization_config"):
             output["quantization_config"] = (
@@ -1018,6 +1030,22 @@ def get_configuration_file(configuration_files: List[str]) -> str:
             break
 
     return configuration_file
+
+
+def recursive_diff_dict(dict_a, dict_b):
+    """
+    Helper function to recursively take the diff between two nested dictionaries. The resulting diff only contains the
+    values from `dict_a` that are different from values in `dict_b`.
+    """
+    diff = {}
+    for key, value in dict_a.items():
+        if isinstance(value, dict) and key in dict_b and isinstance(dict_b[key], dict):
+            diff_value = recursive_diff_dict(value, dict_b[key])
+            if len(diff_value) > 0:
+                diff[key] = recursive_diff_dict(value, dict_b[key])
+        elif key in dict_b and value != dict_b[key]:
+            diff[key] = value
+    return diff
 
 
 PretrainedConfig.push_to_hub = copy_func(PretrainedConfig.push_to_hub)
