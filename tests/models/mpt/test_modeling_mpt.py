@@ -18,7 +18,7 @@ import math
 import unittest
 
 from transformers import MptConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -430,6 +430,7 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
 @slow
 @require_torch_gpu
+@require_bitsandbytes
 class MptIntegrationTests(unittest.TestCase):
     def test_generation_8k(self):
         model_id = "mosaicml/mpt-7b-8k"
