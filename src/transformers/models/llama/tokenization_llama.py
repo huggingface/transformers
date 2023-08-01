@@ -26,10 +26,9 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 import sentencepiece as spm
 from sentencepiece import SentencePieceProcessor
 
+from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
-from ...convert_slow_tokenizer import import_protobuf
-
 
 
 if TYPE_CHECKING:

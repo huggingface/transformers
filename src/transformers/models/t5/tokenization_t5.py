@@ -24,8 +24,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 import sentencepiece as spm
 from sentencepiece import SentencePieceProcessor
 
+from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import sentencepiece_model_pb2
 
 
 if TYPE_CHECKING:
@@ -197,9 +197,10 @@ class T5Tokenizer(PreTrainedTokenizer):
         tokenizer = SentencePieceProcessor(**self.sp_model_kwargs)
         with open(self.vocab_file, "rb") as f:
             sp_model = f.read()
-            model = sentencepiece_model_pb2.ModelProto.FromString(sp_model)
+            model_pb2 = import_protobuf()
+            model = model_pb2.ModelProto.FromString(sp_model)
             if not self.legacy:
-                normalizer_spec = sentencepiece_model_pb2.NormalizerSpec()
+                normalizer_spec = model_pb2.NormalizerSpec()
                 normalizer_spec.add_dummy_prefix = False
                 model.normalizer_spec.MergeFrom(normalizer_spec)
             sp_model = model.SerializeToString()
