@@ -1310,21 +1310,22 @@ def check_real_model_with_snowman_detail_sample_end_to_end():
     slow_inputs = slow_processor(text=text, images=image, bboxes=bboxes, return_tensors="pt")
     fast_inputs = fast_processor(text=text, images=image, bboxes=bboxes, return_tensors="pt")
 
+    # TODO: remove this [:, :-1] thing and make things work in a more smooth way
     slow_generated_output = model.generate(
         pixel_values=slow_inputs["pixel_values"],
-        input_ids=slow_inputs["input_ids"],
+        input_ids=slow_inputs["input_ids"][:, :-1],
         img_features=None,
-        img_attn_mask=slow_inputs["img_attn_mask"],
+        img_attn_mask=slow_inputs["img_attn_mask"][:, :-1],
         past_key_values=None,
         use_cache=True,
         max_new_tokens=64,
     )
     fast_generated_output = model.generate(
         pixel_values=fast_inputs["pixel_values"],
-        input_ids=fast_inputs["input_ids"],
-        attention_mask=fast_inputs["attention_mask"],
+        input_ids=fast_inputs["input_ids"][:, :-1],
+        attention_mask=fast_inputs["attention_mask"][:, :-1],
         img_features=None,
-        img_attn_mask=fast_inputs["img_attn_mask"],
+        img_attn_mask=fast_inputs["img_attn_mask"][:, :-1],
         use_cache=True,
         max_new_tokens=64,
     )
