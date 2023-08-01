@@ -220,7 +220,12 @@ class MptConfig(PretrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        self.attn_config = attn_config
+        if attn_config is None:
+            self.attn_config = MptAttentionConfig()
+        elif isinstance(attn_config, dict):
+            self.attn_config = MptAttentionConfig(**attn_config)
+        else:
+            self.attn_config = attn_config
         self.d_model = d_model
         self.n_heads = n_heads
         self.n_layers = n_layers
@@ -240,20 +245,3 @@ class MptConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.initializer_range = initializer_range
         super().__init__(**kwargs)
-
-    @property
-    def attn_config(self):
-        return self._attn_config
-
-    @attn_config.setter
-    def attn_config(self, attn_config):
-        if attn_config is None:
-            self._attn_config = MptAttentionConfig()
-        elif isinstance(attn_config, dict):
-            self._attn_config = MptAttentionConfig(**attn_config)
-        elif isinstance(attn_config, MptAttentionConfig):
-            self._attn_config = attn_config
-        else:
-            raise ValueError(
-                f"`attn_config` has to be either a `MptAttentionConfig` or a dictionary. Received: {type(attn_config)}"
-            )
