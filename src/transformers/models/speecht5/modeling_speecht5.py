@@ -2815,7 +2815,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 Used to calculate the minimum required length for the output sequence.
             maxlenratio (`float`, *optional*, defaults to 20.0):
                 Used to calculate the maximum allowed length for the output sequence.
-            vocoder (`nn.Module`, *optional*, defaults to `None`):
+            vocoder (`nn.Module`, *optional*):
                 The vocoder that converts the mel spectrogram into a speech waveform. If `None`, the output is the mel
                 spectrogram.
             output_cross_attentions (`bool`, *optional*, defaults to `False`):
