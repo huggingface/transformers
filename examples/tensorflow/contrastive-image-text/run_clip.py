@@ -362,14 +362,14 @@ def main():
             model_args.image_processor_name or model_args.model_name_or_path,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=True if model_args.use_auth_token else None,
         )
         with training_args.strategy.scope():
             model = TFAutoModel.from_pretrained(
                 model_args.model_name_or_path,
                 cache_dir=model_args.cache_dir,
                 revision=model_args.model_revision,
-                use_auth_token=True if model_args.use_auth_token else None,
+                token=True if model_args.use_auth_token else None,
             )
     else:
         # Load image_processor, in this script we only use this to get the mean and std for normalization.
@@ -377,14 +377,14 @@ def main():
             model_args.image_processor_name or model_args.vision_model_name_or_path,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=True if model_args.use_auth_token else None,
         )
         with training_args.strategy.scope():
             model = TFVisionTextDualEncoderModel.from_vision_text_pretrained(
                 vision_model_name_or_path=model_args.vision_model_name_or_path,
                 text_model_name_or_path=model_args.text_model_name_or_path,
                 cache_dir=model_args.cache_dir,
-                use_auth_token=True if model_args.use_auth_token else None,
+                token=True if model_args.use_auth_token else None,
             )
     config = model.config
 

@@ -300,7 +300,7 @@ Flax), PyTorch, and/or TensorFlow.
 |        BlenderbotSmall        |       ✅        |         ✅         |      ✅      |
 |             BLIP              |       ✅        |         ✅         |      ❌      |
 |            BLIP-2             |       ✅        |         ❌         |      ❌      |
-|             BLOOM             |       ✅        |         ❌         |      ❌      |
+|             BLOOM             |       ✅        |         ❌         |      ✅      |
 |          BridgeTower          |       ✅        |         ❌         |      ❌      |
 |           CamemBERT           |       ✅        |         ✅         |      ❌      |
 |            CANINE             |       ✅        |         ❌         |      ❌      |
