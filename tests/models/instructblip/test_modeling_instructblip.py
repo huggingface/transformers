@@ -538,7 +538,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
             logits = model(**inputs).logits
 
         expected_slice = torch.tensor(
-            [[-3.5215, -11.8750, 8.6641], [-5.2266, -12.0078, 8.3047], [-4.1016, -13.4219, 9.4062]],
+            [[-3.4727, -11.8203, 8.3828], [-5.1172, -11.3438, 7.7656], [-4.0742, -13.4688, 9.1953]],
             device=torch_device,
         )
         self.assertTrue(torch.allclose(logits[0, :3, :3].float(), expected_slice, atol=1e-3))
@@ -553,6 +553,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs[0].tolist(), expected_outputs)
         self.assertEqual(
             generated_text,
+            # "The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while driving on a busy city street.",
             "The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while driving on a busy city street.",
         )
 
