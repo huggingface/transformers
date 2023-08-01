@@ -109,16 +109,17 @@ def _setup_default_tools():
         description = tool_class.description
         HUGGINGFACE_DEFAULT_TOOLS[tool_class.name] = PreTool(task=task_name, description=description, repo_id=None)
 
-    for task_name in HUGGINGFACE_DEFAULT_TOOLS_FROM_HUB:
-        found = False
-        for tool_name, tool in remote_tools.items():
-            if tool.task == task_name:
-                HUGGINGFACE_DEFAULT_TOOLS[tool_name] = tool
-                found = True
-                break
+    if not is_offline_mode():
+        for task_name in HUGGINGFACE_DEFAULT_TOOLS_FROM_HUB:
+            found = False
+            for tool_name, tool in remote_tools.items():
+                if tool.task == task_name:
+                    HUGGINGFACE_DEFAULT_TOOLS[tool_name] = tool
+                    found = True
+                    break
 
-        if not found:
-            raise ValueError(f"{task_name} is not implemented on the Hub.")
+            if not found:
+                raise ValueError(f"{task_name} is not implemented on the Hub.")
 
     _tools_are_initialized = True
 
