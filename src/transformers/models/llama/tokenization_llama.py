@@ -209,10 +209,11 @@ class LlamaTokenizer(PreTrainedTokenizer):
         the extra `SPIECE_UNDERLINE` prepended.
         """
         if not self.legacy:
-            text = self.unk_token + text
-            tokens = self.sp_model.encode(text, out_type=str)
-            return tokens[self.unk_token_length :]
-        return self.sp_model.encode(text, out_type=str)
+        if self.legacy:
+            return self.sp_model.encode(text, out_type=str) 
+        text = self.unk_token + text
+        tokens = self.sp_model.encode(text, out_type=str)
+        return tokens[self.unk_token_length :]
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
