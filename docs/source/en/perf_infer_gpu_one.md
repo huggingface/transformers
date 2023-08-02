@@ -71,7 +71,39 @@ model.to_bettertransformer()
 input_text = "Hello my dog is cute and"
 inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
 
-with torch.backends.cuda.sdp_kernel(enable_flash=True):
+with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+    outputs = model.generate(**inputs)
+
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
+
+If you see a bug with a traceback saying 
+
+```bash
+RuntimeError: No available kernel.  Aborting execution.
+```
+
+Install the PyTorch nightly version
+
+```bash
+pip3 install -U --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu118
+```
+
+Or alternatively try to add an autocast context manager in addition to the SDPA context manager:
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m").to("cuda")
+# convert the model to BetterTransformer
+model.to_bettertransformer()
+
+input_text = "Hello my dog is cute and"
+inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
+
+with torch.cuda.amp.autocast(), torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
     outputs = model.generate(**inputs)
 
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
