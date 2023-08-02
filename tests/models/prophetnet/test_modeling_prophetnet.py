@@ -440,7 +440,7 @@ class ProphetNetModelTester:
         self.parent.assertTrue(torch.allclose(result.loss, torch.tensor(4.5892, device=torch_device), atol=1e-3))
 
         expected_logit_slice = torch.tensor(
-            [-0.0184,  0.0758, -0.0543, -0.0093,  0.0050, -0.0660, -0.1453], device=torch_device
+            [-0.0184, 0.0758, -0.0543, -0.0093, 0.0050, -0.0660, -0.1453], device=torch_device
         )
         self.parent.assertTrue(torch.allclose(result.logits[0, :, 1], expected_logit_slice, atol=1e-3))
 
