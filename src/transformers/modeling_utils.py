@@ -1916,7 +1916,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @wraps(torch.nn.Module.cuda)
     def cuda(self, *args, **kwargs):
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_quantized", False):
+        if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
             raise ValueError(
                 "Calling `cuda()` is not supported for `4-bit` or `8-bit` quantized models. Please use the model as it is, since the"
                 " model has already been set to the correct devices and casted to the correct `dtype`."
@@ -1936,20 +1936,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return super().to(*args, **kwargs)
 
     def half(self, *args):
-        # Checks if the model is quantized with bitsandbytes
-        if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
+        # Checks if the model is quantized
+        if getattr(self, "is_quantized", False):
             raise ValueError(
-                "`.half()` is not supported for `4-bit` or `8-bit` models. Please use the model as it is, since the"
+                "`.half()` is not supported for quantized model. Please use the model as it is, since the"
                 " model has already been casted to the correct `dtype`."
             )
         else:
             return super().half(*args)
 
     def float(self, *args):
-        # Checks if the model is quantized with bitsandbytes
-        if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
+        # Checks if the model is quantized
+        if getattr(self, "is_quantized", False):
             raise ValueError(
-                "`.float()` is not supported for `4-bit` or `8-bit` models. Please use the model as it is, since the"
+                "`.float()` is not supported for quantized model. Please use the model as it is, since the"
                 " model has already been casted to the correct `dtype`."
             )
         else:
