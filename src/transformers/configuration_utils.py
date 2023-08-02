@@ -828,7 +828,6 @@ class PretrainedConfig(PushToHubMixin):
                 and isinstance(class_config_dict[key], dict)
             ):
                 # For nested configs we need to clean the diff recursively
-                print(key, value)
                 diff = recursive_diff_dict(value, class_config_dict[key], config_obj=getattr(self, key, None))
                 if "model_type" in value:
                     # Needs to be set even if it's not in the diff
