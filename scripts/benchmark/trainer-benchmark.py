@@ -181,7 +181,6 @@ def get_original_command(max_width=80, full_python_path=False):
 
 
 def get_base_command(args, output_dir):
-
     # unwrap multi-line input
     args.base_cmd = re.sub(r"[\\\n]+", " ", args.base_cmd)
 
@@ -197,7 +196,6 @@ def get_base_command(args, output_dir):
 
 
 def process_run_single(id, cmd, variation, output_dir, target_metric_key, metric_keys, verbose):
-
     # Enable to debug everything but the run itself, to do it fast and see the progress.
     # This is useful for debugging the output formatting quickly - we can remove it later once
     # everybody is happy with the output
@@ -296,7 +294,6 @@ Hardware:
 
 
 def process_results(results, target_metric_key, report_metric_keys, base_variation, output_dir):
-
     df = pd.DataFrame(results)
     variation_key = "variation"
     diff_key = "diff_%"

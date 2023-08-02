@@ -392,16 +392,55 @@ class TopKLogitsWarper(LogitsWarper):
 
 class TypicalLogitsWarper(LogitsWarper):
     r"""
-    [`LogitsWarper`] that performs typical decoding. See [Typical Decoding for Natural Language
-    Generation](https://arxiv.org/abs/2202.00666) for more information.
+    [`LogitsWarper`]  This warping technique aims to produce more coherent and fluent text by selecting words that have information content close to the expected information content,
+    i.e., the conditional entropy of the model. See [Typical Decoding for Natural Language Generation](https://arxiv.org/abs/2202.00666) for more information.
+
+     <Tip>
+      When using probabilistic language models for text generation, pass do_sample=True to enable locally typical sampling with reduced repetitions and improved coherence.
+    </Tip>
 
     Args:
         mass (`float`):
-            Value of typical_p between 0 and 1 inclusive, defaults to 0.9.
+             The proportion of probability mass to retain while warping the logits. The value should be between 0 and 1.
+                Higher values (close to 1.0) retain more probability mass, leading to more typical sampling, whereas lower
+                values (close to 0.0) retain less probability mass, leading to more diverse sampling. The default is 0.9.
         filter_value (`float`, *optional*, defaults to `-float("Inf")`):
-            All filtered values will be set to this float value.
+             The value used to filter out logits that fall below this threshold. Any logits less than this value will be
+                set to -infinity before applying the softmax function. This helps in excluding unlikely tokens during sampling.
+                Default is -infinity.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
-            Minimum number of tokens that cannot be filtered.
+           The minimum number of tokens to always keep during sampling. The default is 1.
+
+    Example:
+
+    ```python
+    >>> from transformers import GPT2Tokenizer, GPT2LMHeadModel, TypicalLogitsWarper, set_seed
+
+    >>> # Load pre-trained model and tokenizer
+    >>> model_name = "gpt2"
+    >>> tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+    >>> model = GPT2LMHeadModel.from_pretrained(model_name)
+
+    >>> # Set up the warper with desired parameters
+    >>> warper = TypicalLogitsWarper(tikohn_n=3, pi=0.95)
+
+    >>> # Set a seed for reproducibility
+    >>> set_seed(42)
+
+    >>> # Input sequence
+    >>> input_text = "joe had to go"
+
+    >>> # Tokenize the sequence
+    >>> input_ids = tokenizer.encode(input_text, return_tensors="pt")
+
+    >>> # Generate text using the model and warper
+    >>> output = model.generate(input_ids, do_sample=True, max_length=50, warper=warper)
+
+    >>> # Decode and print the generated text
+    >>> generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
+    >>> print("Generated Text:", generated_text)
+    Generated Text: Joe had to go to the store and buy some groceries. He picked up a carton of milk, a loaf of bread, and some fresh fruits. After that, he went to the park for a quick walk and enjoyed the beautiful weather. Later, he returned home and prepared a delicious meal for dinner.
+    ```
     """
 
     def __init__(self, mass: float = 0.9, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):

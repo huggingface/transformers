@@ -35,8 +35,30 @@ mname_tiny = "tiny-wmt19-en-ru"
 
 # Build
 
-# borrowed from a test 
-vocab = [ "l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "w</w>", "r</w>", "t</w>", "lo", "low", "er</w>", "low</w>", "lowest</w>", "newer</w>", "wider</w>", "<unk>", ]
+# borrowed from a test
+vocab = [
+    "l",
+    "o",
+    "w",
+    "e",
+    "r",
+    "s",
+    "t",
+    "i",
+    "d",
+    "n",
+    "w</w>",
+    "r</w>",
+    "t</w>",
+    "lo",
+    "low",
+    "er</w>",
+    "low</w>",
+    "lowest</w>",
+    "newer</w>",
+    "wider</w>",
+    "<unk>",
+]
 vocab_tokens = dict(zip(vocab, range(len(vocab))))
 merges = ["l o 123", "lo w 1456", "e r</w> 1789", ""]
 
@@ -45,26 +67,33 @@ with tempfile.TemporaryDirectory() as tmpdirname:
     src_vocab_file = build_dir / VOCAB_FILES_NAMES["src_vocab_file"]
     tgt_vocab_file = build_dir / VOCAB_FILES_NAMES["tgt_vocab_file"]
     merges_file = build_dir / VOCAB_FILES_NAMES["merges_file"]
-    with open(src_vocab_file, "w") as fp: fp.write(json.dumps(vocab_tokens))
-    with open(tgt_vocab_file, "w") as fp: fp.write(json.dumps(vocab_tokens))
-    with open(merges_file, "w") as fp   : fp.write("\n".join(merges))
+    with open(src_vocab_file, "w") as fp:
+        fp.write(json.dumps(vocab_tokens))
+    with open(tgt_vocab_file, "w") as fp:
+        fp.write(json.dumps(vocab_tokens))
+    with open(merges_file, "w") as fp:
+        fp.write("\n".join(merges))
 
     tokenizer = FSMTTokenizer(
         langs=["en", "ru"],
-        src_vocab_size = len(vocab),
-        tgt_vocab_size = len(vocab),
+        src_vocab_size=len(vocab),
+        tgt_vocab_size=len(vocab),
         src_vocab_file=src_vocab_file,
         tgt_vocab_file=tgt_vocab_file,
         merges_file=merges_file,
     )
-    
+
 config = FSMTConfig(
-    langs=['ru', 'en'],
-    src_vocab_size=1000, tgt_vocab_size=1000,
+    langs=["ru", "en"],
+    src_vocab_size=1000,
+    tgt_vocab_size=1000,
     d_model=4,
-    encoder_layers=1, decoder_layers=1,
-    encoder_ffn_dim=4, decoder_ffn_dim=4,
-    encoder_attention_heads=1, decoder_attention_heads=1,
+    encoder_layers=1,
+    decoder_layers=1,
+    encoder_ffn_dim=4,
+    decoder_ffn_dim=4,
+    encoder_attention_heads=1,
+    decoder_attention_heads=1,
 )
 
 tiny_model = FSMTForConditionalGeneration(config)
@@ -77,7 +106,7 @@ outputs = tiny_model(**batch)
 print("test output:", len(outputs.logits[0]))
 
 # Save
-tiny_model.half() # makes it smaller
+tiny_model.half()  # makes it smaller
 tiny_model.save_pretrained(mname_tiny)
 tokenizer.save_pretrained(mname_tiny)
 
