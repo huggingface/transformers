@@ -229,6 +229,7 @@ class ViTPoseBackbone(nn.Module):
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.embed_dim))
         self.blocks = nn.ModuleList([ViTPoseBlock(config) for i in range(config.depth)])
+        self.last_norm = nn.LayerNorm(config.embed_dim, eps=1e-06, elementwise_affine=True)
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -293,7 +294,7 @@ class ViTPoseBackbone(nn.Module):
         for i,layer in enumerate(self.blocks):
             embeddings = self.blocks[i//2](embeddings) + layer(embeddings)
 
-        return embeddings
+        return self.last_norm(embeddings)
 
 class ViTPoseTopDownHeatMap(nn.Module):
     # keypoint head - mse loss]
@@ -463,18 +464,18 @@ class ViTPoseModel(ViTPosePreTrainedModel):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        head_mask = self.get_head_mask(head_mask, self.config.depth)
 
         # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
-        expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
-        pixel_values = pixel_values.to(expected_dtype) if dtype(pixel_values) != expected_dtype else pixel_values
+        expected_dtype = self.backbone.patch_embeddings.projection.weight.dtype
+        pixel_values = pixel_values.to(expected_dtype) if type(pixel_values) != expected_dtype else pixel_values
 
         backbone_output = self.backbone(
             pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
         )
 
-        keypoint_outputs = self.keypointhead(
-            embedding_output,
+        keypoint_outputs = self.keypoint_head(
+            backbone_output,
         )
 
         if not return_dict:

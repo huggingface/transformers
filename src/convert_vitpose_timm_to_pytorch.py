@@ -25,7 +25,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import ViTPoseConfig, ViTPoseModel
+from transformers import ViTPoseConfig, ViTPoseModel,ViTImageProcessor
 from transformers.utils import logging
 
 
@@ -41,27 +41,46 @@ def create_rename_keys(config, base_model=False):
 
     rename_keys.extend(
         [
-            ("backbone.cls_token","vitposebackbone.cls_token"),
-            ("backbone.pos_embed","vitposebackbone.position_embeddings"),
-            ("backbone.patch_embed.proj.weight","vitposebackbone.patch_embeddings.proj.weight"),
-            ("backbone.patch_embed.proj.bias","vitposebackbone.patch_embeddings.proj.bias"),
+            #("backbone.cls_token","vitposemodel.backbone.cls_token"),
+            ("backbone.pos_embed","backbone.position_embeddings"),
+            ("backbone.patch_embed.proj.weight","backbone.patch_embeddings.projection.weight"),
+            ("backbone.patch_embed.proj.bias","backbone.patch_embeddings.projection.bias"),
         ]
     )
 
-    for i in range(config.depth):
-        # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append((f"backbone.blocks.{i}.norm1.weight", f"vitposebackbone.blocks.{i}.norm1.weight"))
-        rename_keys.append((f"backbone.blocks.{i}.norm1.bias", f"vitposebackbone.blocks.{i}.norm1.bias"))
-        rename_keys.append((f"backbone.blocks.{i}.attn.qkv.weight", f"vitposebackbone.blocks.{i}.attn.qkv.weight"))
-        rename_keys.append((f"backbone.blocks.{i}.attn.qkv.bias", f"vitposebackbone.blocks.{i}.attn.qkv.bias"))
-        rename_keys.append((f"backbone.blocks.{i}.attn.proj.weight", f"vitposebackbone.blocks.{i}.attn.proj.weight"))
-        rename_keys.append((f"backbone.blocks.{i}.attn.proj.bias", f"vitposebackbone.blocks.{i}.attn.proj.bias"))
-        rename_keys.append((f"backbone.blocks.{i}.norm2.weight", f"vitposebackbone.blocks.{i}.norm2.weight"))
-        rename_keys.append((f"backbone.blocks.{i}.norm2.bias", f"vitposebackbone.blocks.{i}.norm2.bias"))
-        rename_keys.append((f"backbone.blocks.{i}.mlp.fc1.weight", f"vitposebackbone.blocks.{i}.vitposemlp.fc1.weight"))
-        rename_keys.append((f"backbone.blocks.{i}.mlp.fc1.bias", f"vitposebackbone.blocks.{i}.vitposemlp.fc1.bias"))
-        rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.weight", f"vitposebackbone.blocks.{i}.vitposemlp.fc2.weight"))
-        rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.bias", f"vitposebackbone.blocks.{i}.vitposemlp.fc2.bias"))
+   # for i in range(config.depth):
+   #     # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
+   #     rename_keys.append((f"backbone.blocks.{i}.norm1.weight", f"vitposemodel.backbone.blocks.{i}.norm1.weight"))
+   #     rename_keys.append((f"backbone.blocks.{i}.norm1.bias", f"vitposemodel.backbone.blocks.{i}.norm1.bias"))
+   #     rename_keys.append((f"backbone.blocks.{i}.attn.qkv.weight", f"vitposemodel.backbone.blocks.{i}.attn.qkv.weight"))
+   #     rename_keys.append((f"backbone.blocks.{i}.attn.qkv.bias", f"vitposemodel.backbone.blocks.{i}.attn.qkv.bias"))
+   #     rename_keys.append((f"backbone.blocks.{i}.attn.proj.weight", f"vitposemodel.backbone.blocks.{i}.attn.proj.weight"))
+   #     rename_keys.append((f"backbone.blocks.{i}.attn.proj.bias", f"vitposemodel.backbone.blocks.{i}.attn.proj.bias"))
+   #     rename_keys.append((f"backbone.blocks.{i}.norm2.weight", f"vitposemodel.backbone.blocks.{i}.norm2.weight"))
+   #     rename_keys.append((f"backbone.blocks.{i}.norm2.bias", f"vitposemodel.backbone.blocks.{i}.norm2.bias"))
+   #     rename_keys.append((f"backbone.blocks.{i}.mlp.fc1.weight", f"vitposemodel.backbone.blocks.{i}.mlp.fc1.weight"))
+   #     rename_keys.append((f"backbone.blocks.{i}.mlp.fc1.bias", f"vitposemodel.backbone.blocks.{i}.mlp.fc1.bias"))
+   #     rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.weight", f"vitposemodel.backbone.blocks.{i}.mlp.fc2.weight"))
+   #     rename_keys.append((f"backbone.blocks.{i}.mlp.fc2.bias", f"vitposemodel.backbone.blocks.{i}.mlp.fc2.bias"))
+
+
+    #for i in range(5):
+    #    rename_keys.extend(
+    #        [
+    #            (f"keypoint_head.deconv_layers.{i}.weight",f"vitposemodel.keypoint_head.deconv_layers.{i}.weight"),
+    #            (f"keypoint_head.deconv_layers.{i}.bias",f"vitposemodel.keypoint_head.deconv_layers.{i}.bias"),
+    #            (f"keypoint_head.deconv_layers.{i}.running_mean",f"vitposemodel.keypoint_head.deconv_layers.{i}.running_mean"),
+    #            (f"keypoint_head.deconv_layers.{i}.running_var",f"vitposemodel.keypoint_head.deconv_layers.{i}.running_var"),
+    #            (f"keypoint_head.deconv_layers.{i}.num_batches_tracked",f"vitposemodel.keypoint_head.deconv_layers.{i}.num_batches_tracked"),
+    #        ]
+    #    )
+
+    rename_keys.extend(
+        [
+            ("keypoint_head.last_layer.weight", "keypoint_head.final_layer.weight"),
+            ("keypoint_head.last_layer.bias", "keypoint_head.final_layer.bias"),
+        ]
+    )
 
     #if base_model:
     #    # layernorm + pooler
@@ -125,15 +144,15 @@ def remove_classification_head_(state_dict):
 
 ## change it to a simple for loop 
 def rename_key(state_dict, old, new):
-    val = state_dict.pop(old)
-    state_dict[new] = val
+    if old in state_dict:
+        val = state_dict.pop(old)
+        state_dict[new] = val
 
 
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
-    print(im)
     return im
 
 
@@ -200,7 +219,6 @@ def convert_vitpose_checkpoint(pytorch_dump_folder_path):
     # load original model from timm
     state_dict = torch.load(vitpose_name, map_location="cpu")
     state_dict = state_dict["state_dict"]
-    state_dict = state_dict.keys()
 
     # load state_dict of original model, remove and rename some keys
     rename_keys = create_rename_keys(config, base_model)
@@ -210,32 +228,31 @@ def convert_vitpose_checkpoint(pytorch_dump_folder_path):
     
 
     # load HuggingFace model
-    if vit_name[-5:] == "in21k":
-        model = ViTModel(config).eval()
-    else:
-        model = ViTForImageClassification(config).eval()
+   # if vit_name[-5:] == "in21k":
+   #     model = ViTModel(config).eval()
+   # else:
+   #     model = ViTForImageClassification(config).eval()
+    model = ViTPoseModel(config).eval()
+    print(state_dict.keys())
     model.load_state_dict(state_dict)
 
     # Check outputs on an image, prepared by ViTImageProcessor/DeiTImageProcessor
-    if "deit" in vit_name:
-        image_processor = DeiTImageProcessor(size=config.image_size)
-    else:
-        image_processor = ViTImageProcessor(size=config.image_size)
+    image_processor = ViTImageProcessor(size=config.img_size)
     encoding = image_processor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values)
 
-    if base_model:
-        timm_pooled_output = timm_model.forward_features(pixel_values)
-        assert timm_pooled_output.shape == outputs.pooler_output.shape
-        assert torch.allclose(timm_pooled_output, outputs.pooler_output, atol=1e-3)
-    else:
-        timm_logits = timm_model(pixel_values)
-        assert timm_logits.shape == outputs.logits.shape
-        assert torch.allclose(timm_logits, outputs.logits, atol=1e-3)
+   # if base_model:
+   #     timm_pooled_output = timm_model.forward_features(pixel_values)
+   #     assert timm_pooled_output.shape == outputs.pooler_output.shape
+   #     assert torch.allclose(timm_pooled_output, outputs.pooler_output, atol=1e-3)
+   # else:
+   #     timm_logits = timm_model(pixel_values)
+   #     assert timm_logits.shape == outputs.logits.shape
+   #     assert torch.allclose(timm_logits, outputs.logits, atol=1e-3)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    print(f"Saving model {vit_name} to {pytorch_dump_folder_path}")
+    print(f"Saving model {vitpose_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
     print(f"Saving image processor to {pytorch_dump_folder_path}")
     image_processor.save_pretrained(pytorch_dump_folder_path)
