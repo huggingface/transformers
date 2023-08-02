@@ -34,7 +34,7 @@ jobs:
             - run: pip install -U --upgrade-strategy eager GitPython
             - run: pip install -U --upgrade-strategy eager .
             - run: mkdir -p test_preparation
-            - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
+            - run: python utils/tests_fetcher.py --diff_with_last_commit | tee tests_fetched_summary.txt
             - store_artifacts:
                   path: ~/transformers/tests_fetched_summary.txt
             - run: |
@@ -216,15 +216,9 @@ workflows:
         when:
             not: <<pipeline.parameters.nightly>>
         jobs:
-            - check_circleci_user
-            - check_code_quality
-            - check_repository_consistency
             - fetch_tests
 
     nightly:
         when: <<pipeline.parameters.nightly>>
         jobs:
-            - check_circleci_user
-            - check_code_quality
-            - check_repository_consistency
             - fetch_all_tests

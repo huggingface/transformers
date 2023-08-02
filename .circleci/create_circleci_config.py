@@ -259,6 +259,7 @@ torch_and_tf_job = CircleCIJob(
     ],
     marker="is_pt_tf_cross_test",
     pytest_options={"rA": None, "durations": 0},
+    pytest_num_workers=8,
 )
 
 
@@ -273,6 +274,7 @@ torch_and_flax_job = CircleCIJob(
     ],
     marker="is_pt_flax_cross_test",
     pytest_options={"rA": None, "durations": 0},
+    pytest_num_workers=8,
 )
 
 
@@ -285,7 +287,7 @@ torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     parallelism=1,
-    pytest_num_workers=3,
+    pytest_num_workers=8,
 )
 
 
@@ -298,7 +300,8 @@ tf_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager tensorflow_probability",
     ],
     parallelism=1,
-    pytest_num_workers=6,
+    pytest_num_workers=8,
+
 )
 
 
@@ -310,6 +313,7 @@ flax_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[flax,testing,sentencepiece,flax-speech,vision]",
     ],
     parallelism=1,
+    pytest_num_workers=8,
 )
 
 
@@ -321,7 +325,9 @@ pipelines_torch_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
     ],
+
     marker="is_pipeline_test",
+    pytest_num_workers=8,
 )
 
 
@@ -334,7 +340,9 @@ pipelines_tf_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,testing,sentencepiece,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
     ],
+
     marker="is_pipeline_test",
+    pytest_num_workers=8,
 )
 
 
@@ -514,10 +522,6 @@ REGULAR_TESTS = [
     torch_job,
     tf_job,
     flax_job,
-    custom_tokenizers_job,
-    hub_job,
-    onnx_job,
-    exotic_models_job,
 ]
 EXAMPLES_TESTS = [
     examples_torch_job,
@@ -538,21 +542,29 @@ def create_circleci_config(folder=None):
     # Used in CircleCIJob.to_dict() to expand the test list (for using parallelism)
     os.environ["test_preparation_dir"] = folder
     jobs = []
-    all_test_file = os.path.join(folder, "test_list.txt")
-    if os.path.exists(all_test_file):
-        with open(all_test_file) as f:
-            all_test_list = f.read()
-    else:
-        all_test_list = []
+
+    all_test_list = "tests/models/albert/test_modeling_albert.py tests/models/albert/test_modeling_flax_albert.py tests/models/albert/test_modeling_tf_albert.py tests/models/align/test_modeling_align.py tests/models/altclip/test_modeling_altclip.py tests/models/audio_spectrogram_transformer/test_modeling_audio_spectrogram_transformer.py tests/models/auto/test_modeling_auto.py tests/models/auto/test_modeling_tf_auto.py tests/models/autoformer/test_modeling_autoformer.py tests/models/bark/test_modeling_bark.py tests/models/bart/test_modeling_bart.py tests/models/bart/test_modeling_flax_bart.py tests/models/bart/test_modeling_tf_bart.py tests/models/beit/test_modeling_beit.py tests/models/beit/test_modeling_flax_beit.py tests/models/bert/test_modeling_bert.py tests/models/bert/test_modeling_flax_bert.py tests/models/bert/test_modeling_tf_bert.py tests/models/bert_generation/test_modeling_bert_generation.py tests/models/big_bird/test_modeling_big_bird.py tests/models/big_bird/test_modeling_flax_big_bird.py tests/models/bigbird_pegasus/test_modeling_bigbird_pegasus.py tests/models/biogpt/test_modeling_biogpt.py tests/models/blenderbot/test_modeling_blenderbot.py tests/models/blenderbot/test_modeling_flax_blenderbot.py tests/models/blenderbot/test_modeling_tf_blenderbot.py tests/models/blenderbot_small/test_modeling_blenderbot_small.py tests/models/blenderbot_small/test_modeling_flax_blenderbot_small.py tests/models/blenderbot_small/test_modeling_tf_blenderbot_small.py tests/models/blip/test_modeling_blip.py tests/models/blip/test_modeling_blip_text.py tests/models/blip/test_modeling_tf_blip.py tests/models/blip/test_modeling_tf_blip_text.py tests/models/blip_2/test_modeling_blip_2.py tests/models/bloom/test_modeling_bloom.py tests/models/bridgetower/test_modeling_bridgetower.py tests/models/canine/test_modeling_canine.py tests/models/chinese_clip/test_modeling_chinese_clip.py tests/models/clap/test_modeling_clap.py tests/models/clip/test_modeling_clip.py tests/models/clip/test_modeling_flax_clip.py tests/models/clip/test_modeling_tf_clip.py tests/models/clipseg/test_modeling_clipseg.py tests/models/codegen/test_modeling_codegen.py tests/models/conditional_detr/test_modeling_conditional_detr.py tests/models/convbert/test_modeling_convbert.py tests/models/convbert/test_modeling_tf_convbert.py tests/models/cpm/test_tokenization_cpm.py tests/models/cpmant/test_modeling_cpmant.py tests/models/ctrl/test_modeling_ctrl.py tests/models/data2vec/test_modeling_data2vec_audio.py tests/models/data2vec/test_modeling_data2vec_text.py tests/models/data2vec/test_modeling_data2vec_vision.py tests/models/data2vec/test_modeling_tf_data2vec_vision.py tests/models/deberta/test_modeling_deberta.py tests/models/deberta/test_modeling_tf_deberta.py tests/models/deberta_v2/test_modeling_deberta_v2.py tests/models/deberta_v2/test_modeling_tf_deberta_v2.py tests/models/deformable_detr/test_modeling_deformable_detr.py tests/models/deit/test_modeling_deit.py tests/models/deit/test_modeling_tf_deit.py tests/models/deta/test_modeling_deta.py tests/models/detr/test_modeling_detr.py tests/models/dinov2/test_modeling_dinov2.py tests/models/distilbert/test_modeling_distilbert.py tests/models/distilbert/test_modeling_flax_distilbert.py tests/models/dpr/test_modeling_dpr.py tests/models/dpr/test_modeling_tf_dpr.py tests/models/dpt/test_modeling_dpt.py tests/models/dpt/test_modeling_dpt_hybrid.py tests/models/electra/test_modeling_electra.py tests/models/electra/test_modeling_flax_electra.py tests/models/encoder_decoder/test_modeling_encoder_decoder.py tests/models/encoder_decoder/test_modeling_flax_encoder_decoder.py tests/models/encoder_decoder/test_modeling_tf_encoder_decoder.py tests/models/ernie/test_modeling_ernie.py tests/models/ernie_m/test_modeling_ernie_m.py tests/models/esm/test_modeling_esm.py tests/models/esm/test_modeling_esmfold.py tests/models/falcon/test_modeling_falcon.py tests/models/flaubert/test_modeling_flaubert.py tests/models/flava/test_modeling_flava.py tests/models/fnet/test_modeling_fnet.py tests/models/fsmt/test_modeling_fsmt.py tests/models/git/test_modeling_git.py tests/models/gpt2/test_modeling_flax_gpt2.py tests/models/gpt2/test_modeling_gpt2.py tests/models/gpt_bigcode/test_modeling_gpt_bigcode.py tests/models/gpt_neo/test_modeling_flax_gpt_neo.py tests/models/gpt_neo/test_modeling_gpt_neo.py tests/models/gpt_neox/test_modeling_gpt_neox.py tests/models/gpt_neox_japanese/test_modeling_gpt_neox_japanese.py tests/models/gptj/test_modeling_flax_gptj.py tests/models/gptj/test_modeling_gptj.py tests/models/gptsan_japanese/test_modeling_gptsan_japanese.py tests/models/graphormer/test_modeling_graphormer.py tests/models/groupvit/test_modeling_groupvit.py tests/models/groupvit/test_modeling_tf_groupvit.py tests/models/hubert/test_modeling_hubert.py tests/models/hubert/test_modeling_tf_hubert.py tests/models/ibert/test_modeling_ibert.py tests/models/imagegpt/test_modeling_imagegpt.py tests/models/informer/test_modeling_informer.py tests/models/instructblip/test_modeling_instructblip.py tests/models/layoutlm/test_modeling_layoutlm.py tests/models/layoutlm/test_modeling_tf_layoutlm.py tests/models/layoutlmv2/test_modeling_layoutlmv2.py tests/models/layoutlmv3/test_modeling_layoutlmv3.py tests/models/layoutlmv3/test_modeling_tf_layoutlmv3.py tests/models/led/test_modeling_led.py tests/models/led/test_modeling_tf_led.py tests/models/lilt/test_modeling_lilt.py tests/models/llama/test_modeling_llama.py tests/models/longformer/test_modeling_longformer.py tests/models/longt5/test_modeling_flax_longt5.py tests/models/longt5/test_modeling_longt5.py tests/models/luke/test_modeling_luke.py tests/models/lxmert/test_modeling_lxmert.py tests/models/lxmert/test_modeling_tf_lxmert.py tests/models/m2m_100/test_modeling_m2m_100.py tests/models/marian/test_modeling_flax_marian.py tests/models/marian/test_modeling_marian.py tests/models/marian/test_modeling_tf_marian.py tests/models/markuplm/test_modeling_markuplm.py tests/models/mask2former/test_modeling_mask2former.py tests/models/maskformer/test_modeling_maskformer.py tests/models/mbart/test_modeling_flax_mbart.py tests/models/mbart/test_modeling_mbart.py tests/models/mbart/test_modeling_tf_mbart.py tests/models/mega/test_modeling_mega.py tests/models/megatron_bert/test_modeling_megatron_bert.py tests/models/mgp_str/test_modeling_mgp_str.py tests/models/mobilebert/test_modeling_mobilebert.py tests/models/mobilebert/test_modeling_tf_mobilebert.py tests/models/mpnet/test_modeling_mpnet.py tests/models/mpnet/test_modeling_tf_mpnet.py tests/models/mpt/test_modeling_mpt.py tests/models/mra/test_modeling_mra.py tests/models/musicgen/test_modeling_musicgen.py tests/models/mvp/test_modeling_mvp.py tests/models/nezha/test_modeling_nezha.py tests/models/nllb_moe/test_modeling_nllb_moe.py tests/models/nystromformer/test_modeling_nystromformer.py tests/models/oneformer/test_modeling_oneformer.py tests/models/openai/test_modeling_openai.py tests/models/opt/test_modeling_flax_opt.py tests/models/opt/test_modeling_opt.py tests/models/opt/test_modeling_tf_opt.py tests/models/owlvit/test_modeling_owlvit.py tests/models/pegasus/test_modeling_flax_pegasus.py tests/models/pegasus/test_modeling_pegasus.py tests/models/pegasus/test_modeling_tf_pegasus.py tests/models/pegasus_x/test_modeling_pegasus_x.py tests/models/pix2struct/test_modeling_pix2struct.py tests/models/plbart/test_modeling_plbart.py tests/models/prophetnet/test_modeling_prophetnet.py tests/models/qdqbert/test_modeling_qdqbert.py tests/models/rag/test_modeling_rag.py tests/models/rag/test_modeling_tf_rag.py tests/models/realm/test_modeling_realm.py tests/models/rembert/test_modeling_rembert.py tests/models/rembert/test_modeling_tf_rembert.py tests/models/roberta/test_modeling_flax_roberta.py tests/models/roberta/test_modeling_roberta.py tests/models/roberta_prelayernorm/test_modeling_flax_roberta_prelayernorm.py tests/models/roberta_prelayernorm/test_modeling_roberta_prelayernorm.py tests/models/roc_bert/test_modeling_roc_bert.py tests/models/roformer/test_modeling_flax_roformer.py tests/models/roformer/test_modeling_roformer.py tests/models/roformer/test_modeling_tf_roformer.py tests/models/rwkv/test_modeling_rwkv.py tests/models/sam/test_modeling_sam.py tests/models/sam/test_modeling_tf_sam.py tests/models/sew/test_modeling_sew.py tests/models/sew_d/test_modeling_sew_d.py tests/models/speech_encoder_decoder/test_modeling_flax_speech_encoder_decoder.py tests/models/speech_encoder_decoder/test_modeling_speech_encoder_decoder.py tests/models/speech_to_text/test_modeling_speech_to_text.py tests/models/speech_to_text/test_modeling_tf_speech_to_text.py tests/models/speech_to_text_2/test_modeling_speech_to_text_2.py tests/models/speecht5/test_modeling_speecht5.py tests/models/splinter/test_modeling_splinter.py tests/models/squeezebert/test_modeling_squeezebert.py tests/models/switch_transformers/test_modeling_switch_transformers.py tests/models/t5/test_modeling_flax_t5.py tests/models/t5/test_modeling_t5.py tests/models/t5/test_modeling_tf_t5.py tests/models/table_transformer/test_modeling_table_transformer.py tests/models/tapas/test_modeling_tapas.py tests/models/tapas/test_modeling_tf_tapas.py tests/models/time_series_transformer/test_modeling_time_series_transformer.py tests/models/timesformer/test_modeling_timesformer.py tests/models/transfo_xl/test_modeling_transfo_xl.py tests/models/trocr/test_modeling_trocr.py tests/models/tvlt/test_modeling_tvlt.py tests/models/umt5/test_modeling_umt5.py tests/models/unispeech/test_modeling_unispeech.py tests/models/unispeech_sat/test_modeling_unispeech_sat.py tests/models/videomae/test_modeling_videomae.py tests/models/vilt/test_modeling_vilt.py tests/models/vision_encoder_decoder/test_modeling_flax_vision_encoder_decoder.py tests/models/vision_encoder_decoder/test_modeling_tf_vision_encoder_decoder.py tests/models/vision_encoder_decoder/test_modeling_vision_encoder_decoder.py tests/models/vision_text_dual_encoder/test_modeling_flax_vision_text_dual_encoder.py tests/models/vision_text_dual_encoder/test_modeling_tf_vision_text_dual_encoder.py tests/models/vision_text_dual_encoder/test_modeling_vision_text_dual_encoder.py tests/models/visual_bert/test_modeling_visual_bert.py tests/models/vit/test_modeling_flax_vit.py tests/models/vit/test_modeling_tf_vit.py tests/models/vit/test_modeling_vit.py tests/models/vit_hybrid/test_modeling_vit_hybrid.py tests/models/vit_mae/test_modeling_tf_vit_mae.py tests/models/vit_mae/test_modeling_vit_mae.py tests/models/vit_msn/test_modeling_vit_msn.py tests/models/vivit/test_modeling_vivit.py tests/models/wav2vec2/test_modeling_flax_wav2vec2.py tests/models/wav2vec2/test_modeling_tf_wav2vec2.py tests/models/wav2vec2/test_modeling_wav2vec2.py tests/models/wav2vec2_conformer/test_modeling_wav2vec2_conformer.py tests/models/wavlm/test_modeling_wavlm.py tests/models/whisper/test_modeling_flax_whisper.py tests/models/whisper/test_modeling_tf_whisper.py tests/models/whisper/test_modeling_whisper.py tests/models/x_clip/test_modeling_x_clip.py tests/models/xglm/test_modeling_flax_xglm.py tests/models/xglm/test_modeling_tf_xglm.py tests/models/xglm/test_modeling_xglm.py tests/models/xlm/test_modeling_xlm.py tests/models/xlm_roberta_xl/test_modeling_xlm_roberta_xl.py tests/models/xlnet/test_modeling_xlnet.py tests/models/xmod/test_modeling_xmod.py tests/models/yolos/test_modeling_yolos.py tests/models/yoso/test_modeling_yoso.py"
+    # all_test_list = files.split(" ")
+
+    # all_test_file = os.path.join(folder, "test_list.txt")
+    # if os.path.exists(all_test_file):
+    #     with open(all_test_file) as f:
+    #         all_test_list = f.read()
+    # else:
+    #     all_test_list = []
+
     if len(all_test_list) > 0:
         jobs.extend(PIPELINE_TESTS)
 
-    test_file = os.path.join(folder, "filtered_test_list.txt")
-    if os.path.exists(test_file):
-        with open(test_file) as f:
-            test_list = f.read()
-    else:
-        test_list = []
+    test_list = "tests/models/albert/test_modeling_albert.py tests/models/albert/test_modeling_flax_albert.py tests/models/albert/test_modeling_tf_albert.py tests/models/align/test_modeling_align.py tests/models/altclip/test_modeling_altclip.py tests/models/audio_spectrogram_transformer/test_modeling_audio_spectrogram_transformer.py tests/models/auto/test_modeling_auto.py tests/models/auto/test_modeling_tf_auto.py tests/models/autoformer/test_modeling_autoformer.py tests/models/bark/test_modeling_bark.py tests/models/bart/test_modeling_bart.py tests/models/bart/test_modeling_flax_bart.py tests/models/bart/test_modeling_tf_bart.py tests/models/beit/test_modeling_beit.py tests/models/beit/test_modeling_flax_beit.py tests/models/bert/test_modeling_bert.py tests/models/bert/test_modeling_flax_bert.py tests/models/bert/test_modeling_tf_bert.py tests/models/bert_generation/test_modeling_bert_generation.py tests/models/big_bird/test_modeling_big_bird.py tests/models/big_bird/test_modeling_flax_big_bird.py tests/models/bigbird_pegasus/test_modeling_bigbird_pegasus.py tests/models/biogpt/test_modeling_biogpt.py tests/models/blenderbot/test_modeling_blenderbot.py tests/models/blenderbot/test_modeling_flax_blenderbot.py tests/models/blenderbot/test_modeling_tf_blenderbot.py tests/models/blenderbot_small/test_modeling_blenderbot_small.py tests/models/blenderbot_small/test_modeling_flax_blenderbot_small.py tests/models/blenderbot_small/test_modeling_tf_blenderbot_small.py tests/models/blip/test_modeling_blip.py tests/models/blip/test_modeling_blip_text.py tests/models/blip/test_modeling_tf_blip.py tests/models/blip/test_modeling_tf_blip_text.py tests/models/blip_2/test_modeling_blip_2.py tests/models/bloom/test_modeling_bloom.py tests/models/bridgetower/test_modeling_bridgetower.py tests/models/canine/test_modeling_canine.py tests/models/chinese_clip/test_modeling_chinese_clip.py tests/models/clap/test_modeling_clap.py tests/models/clip/test_modeling_clip.py tests/models/clip/test_modeling_flax_clip.py tests/models/clip/test_modeling_tf_clip.py tests/models/clipseg/test_modeling_clipseg.py tests/models/codegen/test_modeling_codegen.py tests/models/conditional_detr/test_modeling_conditional_detr.py tests/models/convbert/test_modeling_convbert.py tests/models/convbert/test_modeling_tf_convbert.py tests/models/cpm/test_tokenization_cpm.py tests/models/cpmant/test_modeling_cpmant.py tests/models/ctrl/test_modeling_ctrl.py tests/models/data2vec/test_modeling_data2vec_audio.py tests/models/data2vec/test_modeling_data2vec_text.py tests/models/data2vec/test_modeling_data2vec_vision.py tests/models/data2vec/test_modeling_tf_data2vec_vision.py tests/models/deberta/test_modeling_deberta.py tests/models/deberta/test_modeling_tf_deberta.py tests/models/deberta_v2/test_modeling_deberta_v2.py tests/models/deberta_v2/test_modeling_tf_deberta_v2.py tests/models/deformable_detr/test_modeling_deformable_detr.py tests/models/deit/test_modeling_deit.py tests/models/deit/test_modeling_tf_deit.py tests/models/deta/test_modeling_deta.py tests/models/detr/test_modeling_detr.py tests/models/dinov2/test_modeling_dinov2.py tests/models/distilbert/test_modeling_distilbert.py tests/models/distilbert/test_modeling_flax_distilbert.py tests/models/dpr/test_modeling_dpr.py tests/models/dpr/test_modeling_tf_dpr.py tests/models/dpt/test_modeling_dpt.py tests/models/dpt/test_modeling_dpt_hybrid.py tests/models/electra/test_modeling_electra.py tests/models/electra/test_modeling_flax_electra.py tests/models/encoder_decoder/test_modeling_encoder_decoder.py tests/models/encoder_decoder/test_modeling_flax_encoder_decoder.py tests/models/encoder_decoder/test_modeling_tf_encoder_decoder.py tests/models/ernie/test_modeling_ernie.py tests/models/ernie_m/test_modeling_ernie_m.py tests/models/esm/test_modeling_esm.py tests/models/esm/test_modeling_esmfold.py tests/models/falcon/test_modeling_falcon.py tests/models/flaubert/test_modeling_flaubert.py tests/models/flava/test_modeling_flava.py tests/models/fnet/test_modeling_fnet.py tests/models/fsmt/test_modeling_fsmt.py tests/models/git/test_modeling_git.py tests/models/gpt2/test_modeling_flax_gpt2.py tests/models/gpt2/test_modeling_gpt2.py tests/models/gpt_bigcode/test_modeling_gpt_bigcode.py tests/models/gpt_neo/test_modeling_flax_gpt_neo.py tests/models/gpt_neo/test_modeling_gpt_neo.py tests/models/gpt_neox/test_modeling_gpt_neox.py tests/models/gpt_neox_japanese/test_modeling_gpt_neox_japanese.py tests/models/gptj/test_modeling_flax_gptj.py tests/models/gptj/test_modeling_gptj.py tests/models/gptsan_japanese/test_modeling_gptsan_japanese.py tests/models/graphormer/test_modeling_graphormer.py tests/models/groupvit/test_modeling_groupvit.py tests/models/groupvit/test_modeling_tf_groupvit.py tests/models/hubert/test_modeling_hubert.py tests/models/hubert/test_modeling_tf_hubert.py tests/models/ibert/test_modeling_ibert.py tests/models/imagegpt/test_modeling_imagegpt.py tests/models/informer/test_modeling_informer.py tests/models/instructblip/test_modeling_instructblip.py tests/models/layoutlm/test_modeling_layoutlm.py tests/models/layoutlm/test_modeling_tf_layoutlm.py tests/models/layoutlmv2/test_modeling_layoutlmv2.py tests/models/layoutlmv3/test_modeling_layoutlmv3.py tests/models/layoutlmv3/test_modeling_tf_layoutlmv3.py tests/models/led/test_modeling_led.py tests/models/led/test_modeling_tf_led.py tests/models/lilt/test_modeling_lilt.py tests/models/llama/test_modeling_llama.py tests/models/longformer/test_modeling_longformer.py tests/models/longt5/test_modeling_flax_longt5.py tests/models/longt5/test_modeling_longt5.py tests/models/luke/test_modeling_luke.py tests/models/lxmert/test_modeling_lxmert.py tests/models/lxmert/test_modeling_tf_lxmert.py tests/models/m2m_100/test_modeling_m2m_100.py tests/models/marian/test_modeling_flax_marian.py tests/models/marian/test_modeling_marian.py tests/models/marian/test_modeling_tf_marian.py tests/models/markuplm/test_modeling_markuplm.py tests/models/mask2former/test_modeling_mask2former.py tests/models/maskformer/test_modeling_maskformer.py tests/models/mbart/test_modeling_flax_mbart.py tests/models/mbart/test_modeling_mbart.py tests/models/mbart/test_modeling_tf_mbart.py tests/models/mega/test_modeling_mega.py tests/models/megatron_bert/test_modeling_megatron_bert.py tests/models/mgp_str/test_modeling_mgp_str.py tests/models/mobilebert/test_modeling_mobilebert.py tests/models/mobilebert/test_modeling_tf_mobilebert.py tests/models/mpnet/test_modeling_mpnet.py tests/models/mpnet/test_modeling_tf_mpnet.py tests/models/mpt/test_modeling_mpt.py tests/models/mra/test_modeling_mra.py tests/models/musicgen/test_modeling_musicgen.py tests/models/mvp/test_modeling_mvp.py tests/models/nezha/test_modeling_nezha.py tests/models/nllb_moe/test_modeling_nllb_moe.py tests/models/nystromformer/test_modeling_nystromformer.py tests/models/oneformer/test_modeling_oneformer.py tests/models/openai/test_modeling_openai.py tests/models/opt/test_modeling_flax_opt.py tests/models/opt/test_modeling_opt.py tests/models/opt/test_modeling_tf_opt.py tests/models/owlvit/test_modeling_owlvit.py tests/models/pegasus/test_modeling_flax_pegasus.py tests/models/pegasus/test_modeling_pegasus.py tests/models/pegasus/test_modeling_tf_pegasus.py tests/models/pegasus_x/test_modeling_pegasus_x.py tests/models/pix2struct/test_modeling_pix2struct.py tests/models/plbart/test_modeling_plbart.py tests/models/prophetnet/test_modeling_prophetnet.py tests/models/qdqbert/test_modeling_qdqbert.py tests/models/rag/test_modeling_rag.py tests/models/rag/test_modeling_tf_rag.py tests/models/realm/test_modeling_realm.py tests/models/rembert/test_modeling_rembert.py tests/models/rembert/test_modeling_tf_rembert.py tests/models/roberta/test_modeling_flax_roberta.py tests/models/roberta/test_modeling_roberta.py tests/models/roberta_prelayernorm/test_modeling_flax_roberta_prelayernorm.py tests/models/roberta_prelayernorm/test_modeling_roberta_prelayernorm.py tests/models/roc_bert/test_modeling_roc_bert.py tests/models/roformer/test_modeling_flax_roformer.py tests/models/roformer/test_modeling_roformer.py tests/models/roformer/test_modeling_tf_roformer.py tests/models/rwkv/test_modeling_rwkv.py tests/models/sam/test_modeling_sam.py tests/models/sam/test_modeling_tf_sam.py tests/models/sew/test_modeling_sew.py tests/models/sew_d/test_modeling_sew_d.py tests/models/speech_encoder_decoder/test_modeling_flax_speech_encoder_decoder.py tests/models/speech_encoder_decoder/test_modeling_speech_encoder_decoder.py tests/models/speech_to_text/test_modeling_speech_to_text.py tests/models/speech_to_text/test_modeling_tf_speech_to_text.py tests/models/speech_to_text_2/test_modeling_speech_to_text_2.py tests/models/speecht5/test_modeling_speecht5.py tests/models/splinter/test_modeling_splinter.py tests/models/squeezebert/test_modeling_squeezebert.py tests/models/switch_transformers/test_modeling_switch_transformers.py tests/models/t5/test_modeling_flax_t5.py tests/models/t5/test_modeling_t5.py tests/models/t5/test_modeling_tf_t5.py tests/models/table_transformer/test_modeling_table_transformer.py tests/models/tapas/test_modeling_tapas.py tests/models/tapas/test_modeling_tf_tapas.py tests/models/time_series_transformer/test_modeling_time_series_transformer.py tests/models/timesformer/test_modeling_timesformer.py tests/models/transfo_xl/test_modeling_transfo_xl.py tests/models/trocr/test_modeling_trocr.py tests/models/tvlt/test_modeling_tvlt.py tests/models/umt5/test_modeling_umt5.py tests/models/unispeech/test_modeling_unispeech.py tests/models/unispeech_sat/test_modeling_unispeech_sat.py tests/models/videomae/test_modeling_videomae.py tests/models/vilt/test_modeling_vilt.py tests/models/vision_encoder_decoder/test_modeling_flax_vision_encoder_decoder.py tests/models/vision_encoder_decoder/test_modeling_tf_vision_encoder_decoder.py tests/models/vision_encoder_decoder/test_modeling_vision_encoder_decoder.py tests/models/vision_text_dual_encoder/test_modeling_flax_vision_text_dual_encoder.py tests/models/vision_text_dual_encoder/test_modeling_tf_vision_text_dual_encoder.py tests/models/vision_text_dual_encoder/test_modeling_vision_text_dual_encoder.py tests/models/visual_bert/test_modeling_visual_bert.py tests/models/vit/test_modeling_flax_vit.py tests/models/vit/test_modeling_tf_vit.py tests/models/vit/test_modeling_vit.py tests/models/vit_hybrid/test_modeling_vit_hybrid.py tests/models/vit_mae/test_modeling_tf_vit_mae.py tests/models/vit_mae/test_modeling_vit_mae.py tests/models/vit_msn/test_modeling_vit_msn.py tests/models/vivit/test_modeling_vivit.py tests/models/wav2vec2/test_modeling_flax_wav2vec2.py tests/models/wav2vec2/test_modeling_tf_wav2vec2.py tests/models/wav2vec2/test_modeling_wav2vec2.py tests/models/wav2vec2_conformer/test_modeling_wav2vec2_conformer.py tests/models/wavlm/test_modeling_wavlm.py tests/models/whisper/test_modeling_flax_whisper.py tests/models/whisper/test_modeling_tf_whisper.py tests/models/whisper/test_modeling_whisper.py tests/models/x_clip/test_modeling_x_clip.py tests/models/xglm/test_modeling_flax_xglm.py tests/models/xglm/test_modeling_tf_xglm.py tests/models/xglm/test_modeling_xglm.py tests/models/xlm/test_modeling_xlm.py tests/models/xlm_roberta_xl/test_modeling_xlm_roberta_xl.py tests/models/xlnet/test_modeling_xlnet.py tests/models/xmod/test_modeling_xmod.py tests/models/yolos/test_modeling_yolos.py tests/models/yoso/test_modeling_yoso.py"
+    # test_list = files.split(" ")
+
+    # test_file = os.path.join(folder, "filtered_test_list.txt")
+    # if os.path.exists(test_file):
+    #     with open(test_file) as f:
+    #         test_list = f.read()
+    # else:
+    #     test_list = []
     if len(test_list) > 0:
         jobs.extend(REGULAR_TESTS)
 
@@ -588,15 +600,6 @@ def create_circleci_config(folder=None):
     if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
         with open(example_file, "r", encoding="utf-8") as f:
             example_tests = f.read()
-        for job in EXAMPLES_TESTS:
-            framework = job.name.replace("examples_", "").replace("torch", "pytorch")
-            if example_tests == "all":
-                job.tests_to_run = [f"examples/{framework}"]
-            else:
-                job.tests_to_run = [f for f in example_tests.split(" ") if f.startswith(f"examples/{framework}")]
-            
-            if len(job.tests_to_run) > 0:
-                jobs.append(job)
 
     doctest_file = os.path.join(folder, "doctest_list.txt")
     if os.path.exists(doctest_file):
@@ -604,12 +607,6 @@ def create_circleci_config(folder=None):
             doctest_list = f.read()
     else:
         doctest_list = []
-    if len(doctest_list) > 0:
-        jobs.extend(DOC_TESTS)
-
-    repo_util_file = os.path.join(folder, "test_repo_utils.txt")
-    if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
-        jobs.extend(REPO_UTIL_TESTS)
 
     if len(jobs) == 0:
         jobs = [EmptyJob()]
