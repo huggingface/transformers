@@ -276,6 +276,18 @@ torch_and_flax_job = CircleCIJob(
 )
 
 
+non_modeling_job = CircleCIJob(
+    "non_modeling",
+    install_steps=[
+        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm, tf-cpu,tf-speech,flax,flax-speech]",
+        "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
+    ],
+    parallelism=1,
+)
+
+
 torch_job = CircleCIJob(
     "torch",
     install_steps=[
@@ -516,6 +528,7 @@ REGULAR_TESTS = [
     # hub_job,
     # onnx_job,
     # exotic_models_job,
+    non_modeling_job,
 ]
 EXAMPLES_TESTS = [
     examples_torch_job,
@@ -557,6 +570,8 @@ def create_circleci_config(folder=None):
         for job in jobs:
             if job.job_name in ["tests_torch", "tests_tf", "test_flax"]:
                 job.tests_to_run = [x for x in test_list.split() if "/test_modeling_" in x]
+            elif job.job_name == "tests_non_modeling":
+                job.tests_to_run = [x for x in test_list.split() if "/test_" in x and "/test_modeling_" not in x]
 
         extended_tests_to_run = set(test_list.split())
         # Extend the test files for cross test jobs
