@@ -429,20 +429,20 @@ class TypicalLogitsWarper(LogitsWarper):
     >>> # Set a seed for reproducibility
     >>> set_seed(0)
 
-    >>> # Business-related prompt
+    >>> # prompt
     >>> input_prompt = "In today's meeting, the CEO discussed the company's future plans to"
 
     >>> # Tokenize the sequence
     >>> input_ids = tokenizer.encode(input_prompt, return_tensors="pt")
 
     >>> # Generate text using the model and warper
-    >>> output = model.generate(input_ids, do_sample=True, max_length=50, warper=warper)
+    >>> typical_p = 0.9  
+    >>> output = model.generate(input_ids, do_sample=True, max_length=50, typical_p=typical_p)
 
     >>> # Decode and print the generated text
     >>> generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
     >>> print("Generated Text:", generated_text)
-    In today's meeting, the CEO discussed the company's future plans to expand its global presence by entering new markets and forming strategic partnerships with key industry players. The focus will be on leveraging innovative technologies to drive sustainable growth and enhance customer experiences. Additionally, efforts will be made to optimize internal processes and foster a culture of innovation and collaboration across the organization.
-    ```
+    In today's meeting, the CEO discussed the company's future plans to expand its market presence in new regions and explore innovative product offerings. The team was excited about the opportunities ahead and is committed to driving growth and success.
     ```
     """
 
