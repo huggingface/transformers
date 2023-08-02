@@ -411,8 +411,6 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=1, legacy=False)
-        # tokenizer.add_tokens("<extra_id_0>", special_tokens = True)
-        # tokenizer._additional_special_tokens = ["<extra_id_0>"]
         tokenizer._create_trie(tokenizer.all_special_tokens)
         tokenizer.unique_no_split_tokens = ["<extra_id_0>"]
         # TODO ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
