@@ -115,8 +115,8 @@ class MobileViTModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             classifier_dropout_prob=self.classifier_dropout_prob,
             initializer_range=self.initializer_range,
-            hidden_sizes=[12, 16, 20],
-            neck_hidden_sizes=[8, 8, 16, 16, 32, 32, 32],
+            hidden_sizes=[12, 16],
+            neck_hidden_sizes=[8, 16],
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):

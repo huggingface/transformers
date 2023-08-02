@@ -63,7 +63,7 @@ class DPTModelTester:
         initializer_range=0.02,
         num_labels=3,
         backbone_featmap_shape=[1, 32, 24, 24],
-        neck_hidden_sizes=[16, 16, 32, 32],
+        neck_hidden_sizes=[16, 32],
         is_hybrid=True,
         scope=None,
     ):
