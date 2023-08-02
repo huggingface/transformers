@@ -1135,7 +1135,7 @@ class ModelTesterMixin:
             self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 0)
             self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads - 2)
 
-            heads_to_prune = {0: [0], 2: [1, 2]}
+            heads_to_prune = {0: [0], 1: [1, 2]}
             model.prune_heads(heads_to_prune)
 
             with torch.no_grad():
