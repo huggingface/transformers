@@ -228,7 +228,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         """Converts a sequence of tokens (string) in a single string."""
         current_sub_tokens = []
         # since we manually add the prefix space, we have to remove it
-        tokens[0] = tokens[0].strip(SPIECE_UNDERLINE)
+        tokens[0] = tokens[0].lstrip(SPIECE_UNDERLINE)
         out_string = ""
         prev_is_special = False
         for i, token in enumerate(tokens):
