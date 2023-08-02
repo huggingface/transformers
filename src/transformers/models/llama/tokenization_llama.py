@@ -200,7 +200,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         tokens = super().tokenize(text, **kwargs)
 
         # make sure the first token is not an extra space to match legacy and fast tokenizer
-        # TODO ArthurZ long term, normalization should be applied on the token, then also add
+        # TODO @ArthurZ long term, normalization should be applied on the token, then also add
         # it to the trie, and the added_tokens_decoder, which will support multiple
         # tokens pointing to the same id. In this case `_<s>` and `<s>`.
         if tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
@@ -236,9 +236,11 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
+        # since we manually add the prefix space, we have to remove it when decoding
+        if tokens[0].startswith(SPIECE_UNDERLINE):
+            tokens[0] = tokens[0][1:]
+
         current_sub_tokens = []
-        # since we manually add the prefix space, we have to remove it
-        tokens[0] = tokens[0].lstrip(SPIECE_UNDERLINE)
         out_string = ""
         prev_is_special = False
         for i, token in enumerate(tokens):
