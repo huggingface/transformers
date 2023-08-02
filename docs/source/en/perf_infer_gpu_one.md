@@ -17,7 +17,9 @@ rendered properly in your Markdown viewer.
 
 In addition to this guide, relevant information can be found as well in [the guide for training on a single GPU](perf_train_gpu_one) and [the guide for inference on CPUs](perf_infer_cpu).
 
-## Better Transformer: PyTorch-native transformer fastpath
+## Better Transformer: PyTorch-native transformer fastpath that uses Flash Attention
+
+### `BetterTransformer` API for encoder models
 
 PyTorch-native [`nn.MultiHeadAttention`](https://pytorch.org/blog/a-better-transformer-for-fast-transformer-encoder-inference/) attention fastpath, called BetterTransformer, can be used with Transformers through the integration in the [🤗 Optimum library](https://huggingface.co/docs/optimum/bettertransformer/overview).
 
@@ -36,7 +38,46 @@ model = model.reverse_bettertransformer()
 model.save_pretrained("saved_model")
 ```
 
+### `BetterTransformer` API and Flash attention for decoder models
+
 As of PyTorch 2.0, the attention fastpath is supported for both encoders and decoders. The list of supported architectures can be found [here](https://huggingface.co/docs/optimum/bettertransformer/overview#supported-models).
+
+For decoder-based models (e.g. GPT, T5, Llama, etc.), the `BetterTransformer` API will convert all attention operations to use the [`torch.nn.functional.scaled_dot_product_attention` method](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention) (SDPA), that is available only from PyTorch 2.0 and onwards. 
+
+An example usage of the `BetterTransformer` API is shown below:
+
+```python
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m")
+# convert the model to BetterTransformer
+model.to_bettertransformer()
+
+# Use it for training or inference
+```
+
+According to the official documentation, `torch.nn.functional.scaled_dot_product_attention` can also call [Flash-Attention](https://arxiv.org/abs/2205.14135) kernels under the hood. If you want to force the usage of Flash Attention, you can use the [`torch.backends.cuda.sdp_kernel(enable_flash=True)`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as below:
+
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m").to("cuda")
+# convert the model to BetterTransformer
+model.to_bettertransformer()
+
+input_text = "Hello my dog is cute and"
+inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
+
+with torch.backends.cuda.sdp_kernel(enable_flash=True):
+    outputs = model.generate(**inputs)
+
+print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+```
+
+Have a look at [this detailed blogpost](https://pytorch.org/blog/out-of-the-box-acceleration/) to read more about what is possible to do with `BetterTransformer` + SDPA API.
 
 ## `bitsandbytes` integration for FP4 mixed-precision inference
 
