@@ -762,6 +762,10 @@ class PretrainedConfig(PushToHubMixin):
         to_remove = []
         for key, value in kwargs.items():
             if hasattr(config, key):
+                current_attr = getattr(config, key)
+                # To authorize passing a custom subconfig as kwarg in models that have nested configs.
+                if isinstance(current_attr, PretrainedConfig) and isinstance(value, dict):
+                    value = current_attr.__class__(**value)
                 setattr(config, key, value)
                 if key != "torch_dtype":
                     to_remove.append(key)
