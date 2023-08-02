@@ -517,9 +517,27 @@ class LlamaIntegrationTest(unittest.TestCase):
         out2 = tokenizer.decode(
             tokenizer.encode(" <REPR_END> inform", add_special_tokens=False), spaces_between_special_tokens=False
         )
-        # TODO ArthurZ currently we strip left and right, so this will not keep the spaces
+        # TODO @ArthurZ currently we strip left and right, so this will not keep the spaces
         self.assertEqual(out2, "<REPR_END>inform")
-
+        
+        ### Let's make sure decoding does not add extra spaces here and there
+        # TODO @ArthurZ this should be affected by the lstrip/rstrip/single word /normalize refactoring
+        # Since currently we always strip left and right of the token, results are as such
+        input_ids = tokenizer.encode("<s> Hello<s>how", add_special_tokens = False)
+        self.assertEqual(input_ids, [1, 15043, 1, 3525])
+        tokens = tokenizer.tokenize("<s> Hello<s>how", add_special_tokens = False)
+        self.assertEqual(tokens, ['<s>', '▁Hello', '<s>', 'how'])
+        decoded_tokens = tokenizer.decode(input_ids)
+        self.assertEqual(decoded_tokens, '<s> Hello<s>how')
+        
+        
+        # Let's make sure that if there are any spaces, we don't remove them!
+        input_ids = tokenizer.encode(" <s> Hello<s> how", add_special_tokens = False)
+        self.assertEqual(input_ids, [259, 1, 15043, 1, 920])
+        tokens = tokenizer.tokenize(" <s> Hello<s> how", add_special_tokens = False)
+        self.assertEqual(tokens,['▁▁', '<s>', '▁Hello', '<s>', '▁how'])
+        decoded_tokens = tokenizer.decode(input_ids)
+        self.assertEqual(decoded_tokens, ' <s> Hello<s> how')
 
 @require_sentencepiece
 @require_tokenizers
@@ -533,7 +551,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         tokenizer = LlamaTokenizer(SAMPLE_VOCAB, extra_ids=0, add_bos_token=False, legacy=False)
         tokenizer.add_special_tokens({"additional_special_tokens": ["<s>"]})
         tokenizer._create_trie(tokenizer.all_special_tokens)
-        # TODO ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
+        # TODO @ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
         # So the extra ids are split....
         cls.tokenizer = tokenizer
         return cls

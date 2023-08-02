@@ -413,7 +413,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=1, legacy=False)
         tokenizer._create_trie(tokenizer.all_special_tokens)
         tokenizer.unique_no_split_tokens = ["<extra_id_0>"]
-        # TODO ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
+        # TODO @ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
         # So the extra ids are split....
         cls.tokenizer = tokenizer
 
@@ -506,7 +506,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
         ds = load_dataset("xnli", "all_languages", split="train+test+validation")
 
-        # TODO ArthurZucker fix the 3 commented tests with #23909
+        # TODO @ArthurZucker fix the 3 commented tests with #23909
         input_texts = [
             "Bonjour <extra_id_0>.",
             # "Bonjour<extra_id_0>.",  # this will fail. In T5 the special token has to be at the end.
