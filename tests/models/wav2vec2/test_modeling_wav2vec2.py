@@ -1151,7 +1151,8 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
 
-    def test_load_and_new_target_lang_adapter(self):
+    # test that loading adapter weights with mismatched vocab sizes can be loaded
+    def test_load_target_lang_with_mismatched_size(self):
         processor = Wav2Vec2Processor.from_pretrained(
             "hf-internal-testing/tiny-random-wav2vec2", return_attention_mask=True
         )
