@@ -106,7 +106,7 @@
     - local: in_translation
       title: (번역중) Overview
     - local: perf_train_gpu_one
-      title: 단일 GPU를 사용한 효율적인 훈련
+      title: 단일 GPU에서의 효율적인 훈련
     - local: in_translation
       title: (번역중) Training on many GPUs
     - local: in_translation
