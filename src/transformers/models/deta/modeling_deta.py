@@ -1463,7 +1463,7 @@ class DetaModel(DetaPreTrainedModel):
     def get_proposal_pos_embed(self, proposals):
         """Get the position embedding of the proposals."""
 
-        num_pos_feats = 128
+        num_pos_feats = self.config.d_model // 2
         temperature = 10000
         scale = 2 * math.pi
 
