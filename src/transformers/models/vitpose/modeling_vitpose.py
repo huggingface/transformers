@@ -96,12 +96,15 @@ class ViTPosePatchEmbed(nn.Module):
                     f"Input image size ({height}*{width}) doesn't match model"
                     f" ({self.image_size[0]}*{self.image_size[1]})."
                 )
-        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
-        return embeddings
+
+        embeddings = self.projection(pixel_values)
+        Hp, Wp = embeddings.shape[2], embeddings.shape[3]
+        embeddings = embeddings.flatten(2).transpose(1, 2)
+        return embeddings, (Hp, Wp)
 
 ## GREEN
 class ViTPoseAttention(nn.Module):
-    def __init__(self, config: ViTPoseConfig) -> None:
+    def __init__(self, config: ViTPoseConfig, qk_scale = None) -> None:
         super().__init__()
         if config.embed_dim % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -109,8 +112,9 @@ class ViTPoseAttention(nn.Module):
                 f"heads {config.num_attention_heads}."
             )
 
+        self.qk_scale = qk_scale
         self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.embed_dim / config.num_attention_heads)
+        self.attention_head_size = config.embed_dim // config.num_attention_heads
         self.all_head_size = self.attention_head_size * config.num_attention_heads
 
         #self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
@@ -119,7 +123,7 @@ class ViTPoseAttention(nn.Module):
 
         self.qkv = nn.Linear(config.embed_dim, self.all_head_size*3, bias=config.qkv_bias)
         self.attn_drop = nn.Dropout(config.dropout_p)
-        self.proj = nn.Linear(self.all_head_size, config.embed_dim, bias=config.qkv_bias)
+        self.proj = nn.Linear(self.all_head_size, config.embed_dim)
         self.proj_drop = nn.Dropout(config.dropout_p)
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
@@ -130,17 +134,18 @@ class ViTPoseAttention(nn.Module):
     def forward(
         self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        B, N, C = hidden_states.shape
         qkv_layer = self.qkv(hidden_states)
+        qkv_layer = qkv_layer.reshape(B, N, 3, self.num_attention_heads, -1).permute(2, 0, 3, 1, 4)
 
-        query_layer, key_layer, value_layer = torch.chunk(qkv_layer, 3, dim=-1)
+        query_layer, key_layer, value_layer = qkv_layer[0], qkv_layer[1], qkv_layer[2]
 
-        value_layer = self.transpose_for_scores(value_layer)
-        key_layer = self.transpose_for_scores(key_layer)
-        query_layer = self.transpose_for_scores(query_layer)
-
+       # value_layer = self.transpose_for_scores(value_layer)
+       # key_layer = self.transpose_for_scores(key_layer)
+       # query_layer = self.transpose_for_scores(query_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_scores = torch.matmul(query_layer, key_layer.transpose(-2, -1))
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
@@ -157,9 +162,7 @@ class ViTPoseAttention(nn.Module):
 
         context_layer = torch.matmul(attention_probs, value_layer)
 
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
+        context_layer = context_layer.transpose(1,2).reshape(B, N, -1)
 
         attention_output = self.proj(context_layer)
         attention_output = self.proj_drop(attention_output)
@@ -178,8 +181,8 @@ class ViTPoseMLP(nn.Module):
     def forward(self,x):
         x = self.fc1(x)
         x = self.act(x)
-        x = self.dropout(x)
         x = self.fc2(x)
+        x = self.dropout(x)
         return x
 
     pass
@@ -190,7 +193,7 @@ class ViTPoseBlock(nn.Module):
         self.layer = layer
         self.norm1 = nn.LayerNorm(config.embed_dim, eps=1e-06, elementwise_affine=True)
         self.attn = ViTPoseAttention(config)
-        self.drop_path = DropPath(p = config.drop_path_rate, layer = self.layer)
+        self.drop_path = DropPath(p = config.drop_path_rate, layer = self.layer) if config.drop_path_rate > 0. else nn.Identity()
         self.norm2 = nn.LayerNorm(config.embed_dim, eps=1e-06, elementwise_affine=True)
         self.mlp = ViTPoseMLP(config)
 
@@ -203,7 +206,7 @@ class ViTPoseBlock(nn.Module):
 class DropPath(nn.Module):
     def __init__(self, p=0.0, layer=0):
         super(DropPath, self).__init__()
-        self.p = p * layer
+        self.p = p
 
     def forward(self, x):
         if not self.training or self.p == 0.0:
@@ -214,6 +217,10 @@ class DropPath(nn.Module):
         random_tensor.floor_()  # binarize
         output = x.div(keep_prob) * random_tensor
         return output
+
+    def extra_repr(self):
+        return 'p={}', format(self.p)
+        
 
 ## LOOKS GREEN
 class ViTPoseBackbone(nn.Module):
@@ -273,7 +280,7 @@ class ViTPoseBackbone(nn.Module):
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
-        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        embeddings, (Hp,Wp) = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
 
         if bool_masked_pos is not None:
             seq_length = embeddings.shape[1]
@@ -283,21 +290,20 @@ class ViTPoseBackbone(nn.Module):
             embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
         # add the [CLS] token to the embedded patch tokens
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+        #cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        #embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
-        if interpolate_pos_encoding:
+        if interpolate_pos_encoding is not None:
             embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-        else:
-            embeddings = embeddings + self.position_embeddings
 
-        print(embeddings.shape)
-        for i,layer in enumerate(self.blocks):
-            embeddings = self.blocks[i//2](embeddings) + layer(embeddings)
+        for blk in self.blocks:
+            embeddings = blk(embeddings)
 
 
-        return self.last_norm(embeddings)
+        embeddings = self.last_norm(embeddings)
+
+        return embeddings.permute(0,2,1).reshape(batch_size, -1, Hp, Wp).contiguous()
 
 class ViTPoseTopDownHeatMap(nn.Module):
     # keypoint head - mse loss]
@@ -836,9 +842,6 @@ class ViTPoseModel(ViTPosePreTrainedModel):
 
 
 
-import numpy
-model = ViTPoseModel(ViTPoseConfig())
-print(model)
 #print(model(torch.Tensor(numpy.zeros([1,3,256,192]))))
 
 
