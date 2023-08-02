@@ -1927,7 +1927,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @wraps(torch.nn.Module.to)
     def to(self, *args, **kwargs):
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_quantized", False):
+        if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
             raise ValueError(
                 "`.to` is not supported for `4-bit` or `8-bit` models. Please use the model as it is, since the"
                 " model has already been set to the correct devices and casted to the correct `dtype`."
@@ -1936,8 +1936,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return super().to(*args, **kwargs)
 
     def half(self, *args):
-        # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_quantized", False):
+        # Checks if the model is quantized with bitsandbytes
+        if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
             raise ValueError(
                 "`.half()` is not supported for `4-bit` or `8-bit` models. Please use the model as it is, since the"
                 " model has already been casted to the correct `dtype`."
@@ -1946,8 +1946,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return super().half(*args)
 
     def float(self, *args):
-        # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_quantized", False):
+        # Checks if the model is quantized with bitsandbytes
+        if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
             raise ValueError(
                 "`.float()` is not supported for `4-bit` or `8-bit` models. Please use the model as it is, since the"
                 " model has already been casted to the correct `dtype`."
@@ -2295,6 +2295,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         if quantization_config is None and (load_in_8bit or load_in_4bit):
+            quantization_method_from_args = QuantizationMethod.BITS_AND_BYTES
             quantization_config, kwargs = BitsAndBytesConfig.from_dict(
                 config_dict={"load_in_8bit": load_in_8bit, "load_in_4bit": load_in_4bit},
                 return_unused_kwargs=True,
@@ -2858,7 +2859,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
         if quantization_method_from_config == QuantizationMethod.GPTQ:
             model = quantizer.convert_model(model)
-            model.is_gptq_quantized = True
+            model._is_quantized_training_enabled = True
+
+        if quantization_method_from_config is not None:
+            model.quantization_method = quantization_method_from_config
+        elif quantization_method_from_args is not None:
+            model.quantization_method = quantization_method_from_args
+        if hasattr(model, "quantization_method"):
+            model.is_quantized = True
 
         if isinstance(device_map, str):
             special_dtypes = {}
@@ -3010,13 +3018,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 offload_folder=offload_folder,
                 offload_state_dict=offload_state_dict,
                 dtype=torch_dtype,
-                is_quantized=(load_in_8bit or load_in_4bit),
+                is_quantized=(getattr(model, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES),
                 keep_in_fp32_modules=keep_in_fp32_modules,
             )
 
         model.is_loaded_in_4bit = load_in_4bit
         model.is_loaded_in_8bit = load_in_8bit
-        model.is_quantized = load_in_8bit or load_in_4bit
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -3061,7 +3068,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise RuntimeError("We can only quantize pure text model.")
             quantizer.quantize_model(model, quantization_config.tokenizer)
             model.config.quantization_config = GPTQConfig.from_dict(quantizer.to_dict())
-            model.is_gptq_quantized = True
+            model._is_quantized_training_enabled = True
 
         if output_loading_info:
             if loading_info is None:
