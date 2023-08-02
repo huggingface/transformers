@@ -556,7 +556,7 @@ def create_circleci_config(folder=None):
 
         for job in jobs:
             if job.job_name in ["tests_torch", "tests_tf", "test_flax"]:
-                job.tests_to_run = " ".join([x for x in test_list.split() if "/test_modeling_" in x])
+                job.tests_to_run = [x for x in test_list.split() if "/test_modeling_" in x]
 
         extended_tests_to_run = set(test_list.split())
         # Extend the test files for cross test jobs
