@@ -50,7 +50,7 @@ class PeftAdapterMixin:
         """
         requires_backends(self.load_adapter, "peft")
 
-        from peft import PeftConfig, create_and_replace, load_peft_weights
+        from peft import PeftConfig, inject_adapter_in_model, load_peft_weights
         from peft.utils import set_peft_model_state_dict
         from peft.utils.other import TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING
 
@@ -88,7 +88,7 @@ class PeftAdapterMixin:
             raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
 
         # Replace the adapter with the loaded adapter
-        create_and_replace(loaded_peft_config, self, adapter_name)
+        inject_adapter_in_model(loaded_peft_config, self, adapter_name)
 
         adapter_state_dict = load_peft_weights(
             peft_model_id,
