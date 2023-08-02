@@ -3054,7 +3054,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Retrieve missing & unexpected_keys
         model_state_dict = model.state_dict()
         expected_keys = list(model_state_dict.keys())
-
         prefix = model.base_model_prefix
 
         def _fix_key(key):
@@ -3227,7 +3226,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             folder = os.path.sep.join(resolved_archive_file[0].split(os.path.sep)[:-1])
         else:
             folder = None
-
         if device_map is not None and is_safetensors:
             param_device_map = expand_device_map(device_map, original_loaded_keys)
 
@@ -3285,7 +3283,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if len(resolved_archive_file) > 1:
                 resolved_archive_file = logging.tqdm(resolved_archive_file, desc="Loading checkpoint shards")
-
             for shard_file in resolved_archive_file:
                 # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
                 if shard_file in disk_only_shard_files:
