@@ -185,11 +185,12 @@ class ViTPoseMLP(nn.Module):
     pass
 
 class ViTPoseBlock(nn.Module):
-    def __init__(self, config: ViTPoseConfig):
+    def __init__(self, config: ViTPoseConfig, layer: int):
         super().__init__()
+        self.layer = layer
         self.norm1 = nn.LayerNorm(config.embed_dim, eps=1e-06, elementwise_affine=True)
         self.attn = ViTPoseAttention(config)
-        self.drop_path = DropPath(p = config.drop_path_rate)
+        self.drop_path = DropPath(p = config.drop_path_rate, layer = self.layer)
         self.norm2 = nn.LayerNorm(config.embed_dim, eps=1e-06, elementwise_affine=True)
         self.mlp = ViTPoseMLP(config)
 
@@ -200,9 +201,9 @@ class ViTPoseBlock(nn.Module):
     pass
 
 class DropPath(nn.Module):
-    def __init__(self, p=0.0):
+    def __init__(self, p=0.0, layer=0):
         super(DropPath, self).__init__()
-        self.p = p
+        self.p = p * layer
 
     def forward(self, x):
         if not self.training or self.p == 0.0:
@@ -228,7 +229,7 @@ class ViTPoseBackbone(nn.Module):
         self.patch_embeddings = ViTPosePatchEmbed(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.embed_dim))
-        self.blocks = nn.ModuleList([ViTPoseBlock(config) for i in range(config.depth)])
+        self.blocks = nn.ModuleList([ViTPoseBlock(config, i) for i in range(config.depth)])
         self.last_norm = nn.LayerNorm(config.embed_dim, eps=1e-06, elementwise_affine=True)
         self.config = config
 
@@ -291,8 +292,10 @@ class ViTPoseBackbone(nn.Module):
         else:
             embeddings = embeddings + self.position_embeddings
 
+        print(embeddings.shape)
         for i,layer in enumerate(self.blocks):
             embeddings = self.blocks[i//2](embeddings) + layer(embeddings)
+
 
         return self.last_norm(embeddings)
 
@@ -313,6 +316,7 @@ class ViTPoseTopDownHeatMap(nn.Module):
         self.final_layer = nn.Conv2d(config.keypoint_num_deconv_filters[-1], config.num_output_channels, kernel_size=1, stride=1)
 
     def forward(self, x):
+        print(self.deconv_layers)
         x = self.deconv_layers(x)
         keypoints = self.final_layer(x)
         return keypoints
@@ -829,9 +833,12 @@ class ViTPoseModel(ViTPosePreTrainedModel):
 #    VIT_START_DOCSTRING,
 #)
 
+
+
+
 import numpy
-model = ViTPoseBackbone(ViTPoseConfig())
-test = torch.Tensor(numpy.zeros([1,3,256,192]))
-print(model(test))
+model = ViTPoseModel(ViTPoseConfig())
+print(model)
+#print(model(torch.Tensor(numpy.zeros([1,3,256,192]))))
 
 

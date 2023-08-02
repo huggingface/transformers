@@ -219,7 +219,9 @@ def convert_vitpose_checkpoint(pytorch_dump_folder_path):
     # load original model from timm
     state_dict = torch.load(vitpose_name, map_location="cpu")
     state_dict = state_dict["state_dict"]
-
+    for i in state_dict.items():
+        print(i[0],i[1].shape)
+    return
     # load state_dict of original model, remove and rename some keys
     rename_keys = create_rename_keys(config, base_model)
     for src, dest in rename_keys:
@@ -233,7 +235,6 @@ def convert_vitpose_checkpoint(pytorch_dump_folder_path):
    # else:
    #     model = ViTForImageClassification(config).eval()
     model = ViTPoseModel(config).eval()
-    print(state_dict.keys())
     model.load_state_dict(state_dict)
 
     # Check outputs on an image, prepared by ViTImageProcessor/DeiTImageProcessor
