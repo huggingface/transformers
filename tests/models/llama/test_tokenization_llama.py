@@ -300,7 +300,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 class LlamaIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        checkpoint_name = "hf-internal-testing/llama-tokenizer"
+        checkpoint_name = "hf-internal-testing/llama-tokenizer-non-normalized"
         cls.tokenizer: LlamaTokenizer = LlamaTokenizer.from_pretrained(checkpoint_name)
         cls.rust_tokenizer = LlamaTokenizerFast.from_pretrained(checkpoint_name)
         return cls
