@@ -1007,6 +1007,79 @@ append_replace_return_docstrings(
 )
 
 
+class FlaxCLIPTextModuleWithProjection(nn.Module):
+    config: CLIPTextConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.text_model = FlaxCLIPTextTransformer(self.config, dtype=self.dtype)
+        self.text_projection = nn.Dense(self.config.projection_dim, use_bias=False)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask,
+        position_ids,
+        deterministic: bool = True,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ):
+        text_outputs = self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            deterministic=deterministic,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+        )
+
+        pooled_output = text_outputs.pooler_output
+        text_embeds = self.text_projection(pooled_output)
+
+        if not return_dict:
+            return (text_embeds, pooled_output) + text_outputs[2:]
+
+        return FlaxBaseModelOutputWithPooling(
+            last_hidden_state=text_embeds,
+            pooler_output=pooled_output,
+            hidden_states=text_outputs.hidden_states,
+            attentions=text_outputs.attentions,
+        )
+
+
+class FlaxCLIPTextModelWithProjection(FlaxCLIPTextPreTrainedModel):
+    module_class = FlaxCLIPTextModuleWithProjection
+
+
+FLAX_CLIP_TEXT_MODEL_WITH_PROJECTION_DOCSTRING = """
+    Returns:
+
+    Example:
+
+    ```python
+    >>> from transformers import AutoTokenizer, FlaxCLIPTextModelWithProjection
+
+    >>> model = FlaxCLIPTextModelWithProjection.from_pretrained("openai/clip-vit-base-patch32")
+    >>> tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+
+    >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="np")
+
+    >>> outputs = model(**inputs)
+    >>> text_embeds = outputs.last_hidden_state  # text embeddings: projection layer(pooler_output)
+    >>> pooler_output = outputs.pooler_output  # pooled (EOS token) states
+    ```
+"""
+
+overwrite_call_docstring(
+    FlaxCLIPTextModelWithProjection, CLIP_TEXT_INPUTS_DOCSTRING + FLAX_CLIP_TEXT_MODEL_WITH_PROJECTION_DOCSTRING
+)
+append_replace_return_docstrings(
+    FlaxCLIPTextModelWithProjection, output_type=FlaxBaseModelOutputWithPooling, config_class=CLIPTextConfig
+)
+
+
 class FlaxCLIPVisionModule(nn.Module):
     config: CLIPVisionConfig
     dtype: jnp.dtype = jnp.float32
