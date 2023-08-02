@@ -22,7 +22,6 @@ from shutil import copyfile
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
-from sentencepiece import SentencePieceProcessor
 
 from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import PreTrainedTokenizer
@@ -195,7 +194,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
 
     def get_spm_processor(self):
-        tokenizer = SentencePieceProcessor(**self.sp_model_kwargs)
+        tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         with open(self.vocab_file, "rb") as f:
             sp_model = f.read()
             model_pb2 = import_protobuf()
@@ -367,11 +366,12 @@ class T5Tokenizer(PreTrainedTokenizer):
         passed to `_tokenize`. Thus if a subsequence did not start with a `" "` or SPIECE_UNDERLINE, we have to remove
         the extra `SPIECE_UNDERLINE` prepended.
         """
-        if not self.legacy:
-            text = self.unk_token + text
-            tokens = self.sp_model.encode(text, out_type=str)
-            return tokens[self.unk_token_length :]
-        return self.sp_model.encode(text, out_type=str)
+        if self.legacy:
+            return self.sp_model.encode(text, out_type=str)
+
+        text = self.unk_token + text
+        tokens = self.sp_model.encode(text, out_type=str)
+        return tokens[self.unk_token_length :]
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
