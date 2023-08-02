@@ -40,6 +40,7 @@ _lock = threading.Lock()
 _default_handler: Optional[logging.Handler] = None
 
 log_levels = {
+    "detail": logging.DEBUG,  # will also print filename and line number
     "debug": logging.DEBUG,
     "info": logging.INFO,
     "warning": logging.WARNING,
@@ -95,6 +96,11 @@ def _configure_library_root_logger() -> None:
         library_root_logger = _get_library_root_logger()
         library_root_logger.addHandler(_default_handler)
         library_root_logger.setLevel(_get_default_logging_level())
+        # if logging level is debug, we add pathname and lineno to formatter for easy debugging
+        if os.getenv("TRANSFORMERS_VERBOSITY", None) == "detail":
+            formatter = logging.Formatter("[%(levelname)s|%(pathname)s:%(lineno)s] %(asctime)s >> %(message)s")
+            _default_handler.setFormatter(formatter)
+
         library_root_logger.propagate = False
 
 
