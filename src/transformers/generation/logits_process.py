@@ -945,9 +945,14 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         mask = torch.full_like(scores, -math.inf)
-        for batch_id, beam_sent in enumerate(input_ids.view(-1, self._num_beams, input_ids.shape[-1])):
-            for beam_id, sent in enumerate(beam_sent):
-                mask[batch_id * self._num_beams + beam_id, self._prefix_allowed_tokens_fn(batch_id, sent)] = 0
+
+        input_ids_view = input_ids.view(-1, self._num_beams, input_ids.shape[-1])
+
+        beam_range = torch.arange(self._num_beams, device=input_ids.device)
+        batch_range = torch.arange(input_ids.size(0), device=input_ids.device)
+        idx = batch_range[:, None] * self._num_beams + beam_range
+        allowed_tokens = self._prefix_allowed_tokens_fn(batch_range, input_ids_view)
+        mask.view(-1, mask.size(-1))[idx.view(-1), allowed_tokens.view(-1)] = 0
 
         return scores + mask
 
