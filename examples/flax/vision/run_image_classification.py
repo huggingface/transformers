@@ -164,18 +164,15 @@ class ModelArguments:
         default=None,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
             )
         },
     )
     use_auth_token: bool = field(
         default=None,
         metadata={
-            "help": (
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. "
-                "Please use `token`."
-            )
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
         },
     )
 
