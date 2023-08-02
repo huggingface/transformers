@@ -2930,6 +2930,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
 
+            model.tie_weights()
             (
                 model,
                 missing_keys,
