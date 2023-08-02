@@ -351,7 +351,7 @@ class T5Tokenizer(PreTrainedTokenizer):
     def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         # Replace the SPIECE_UNDERLINE with a space to make sure SPIECE_UNDERLINE is only used at
         # the beginning of the text
-        if not self.legacy:
+        if not self.legacy and len(text) > 0:
             # replacing " " by SPIECE_UNDERLINE prevents any form of stripping...
             text = SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " ")
         return super().tokenize(text, **kwargs)
@@ -393,7 +393,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         """Converts a sequence of tokens (string) in a single string."""
         current_sub_tokens = []
         # since we manually add the prefix space, we have to remove it
-        tokens[0] = tokens[0].strip(SPIECE_UNDERLINE)
+        tokens[0] = tokens[0].lstrip(SPIECE_UNDERLINE)
         out_string = ""
         prev_is_special = False
         for token in tokens:
