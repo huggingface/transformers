@@ -126,6 +126,32 @@ class PeftAdapterMixin:
                 device_map=device_map, max_memory=max_memory, offload_dir=offload_dir, offload_index=offload_index
             )
 
+    def add_adapter(
+        self,
+        adapter_config,
+        adapter_name: Optional[str] = "default",
+    ):
+        requires_backends(self.add_adapter, "peft")
+        r"""
+        Adds a fresh new adapter to the current model.
+        """
+        from peft import PeftConfig, inject_adapter_in_model
+
+        if not self._hf_peft_config_loaded:
+            self.peft_config = {}
+            self._hf_peft_config_loaded = True
+        elif adapter_name in self.peft_config:
+            raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
+
+        self.peft_config[adapter_name] = adapter_config
+
+        if not isinstance(adapter_config, PeftConfig):
+            raise ValueError(
+                f"adapter_config should be an instance of PeftConfig. Got {type(adapter_config)} instead."
+            )
+
+        inject_adapter_in_model(adapter_config, self, adapter_name)
+
     def set_adapter(self, adapter_name: str) -> None:
         r"""
         Sets an adapter to switch easily between multiple adapters.
