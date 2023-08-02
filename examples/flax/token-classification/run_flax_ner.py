@@ -21,6 +21,7 @@ import os
 import random
 import sys
 import time
+import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from itertools import chain
@@ -149,13 +150,19 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    use_auth_token: bool = field(
-        default=False,
+    token: str = field(
+        default=None,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
             )
+        },
+    )
+    use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
         },
     )
 
@@ -377,6 +384,12 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    if model_args.use_auth_token is not None:
+        warnings.warn("The `use_auth_token` argument is deprecated and will be removed in v4.34.", FutureWarning)
+        if model_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        model_args.token = model_args.use_auth_token
+
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_ner", model_args, data_args, framework="flax")
@@ -422,7 +435,7 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     else:
         # Loading the dataset from local csv or json file.
@@ -436,7 +449,7 @@ def main():
             extension,
             data_files=data_files,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     # See more about loading any type of standard or custom dataset at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
@@ -490,7 +503,7 @@ def main():
         finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        token=True if model_args.use_auth_token else None,
+        token=model_args.token,
     )
     tokenizer_name_or_path = model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path
     if config.model_type in {"gpt2", "roberta"}:
@@ -498,7 +511,7 @@ def main():
             tokenizer_name_or_path,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            token=True if model_args.use_auth_token else None,
+            token=model_args.token,
             add_prefix_space=True,
         )
     else:
@@ -506,14 +519,14 @@ def main():
             tokenizer_name_or_path,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     model = FlaxAutoModelForTokenClassification.from_pretrained(
         model_args.model_name_or_path,
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        token=True if model_args.use_auth_token else None,
+        token=model_args.token,
     )
 
     # Preprocessing the datasets
