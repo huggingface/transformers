@@ -124,6 +124,51 @@ class MixedInt8Test(BaseMixedInt8Test):
         gc.collect()
         torch.cuda.empty_cache()
 
+    def test_get_keys_to_not_convert(self):
+        r"""
+        Test the `get_keys_to_not_convert` function.
+        """
+        from accelerate import init_empty_weights
+
+        from transformers import AutoModelForMaskedLM, Blip2ForConditionalGeneration, MptForCausalLM, OPTForCausalLM
+        from transformers.utils.bitsandbytes import get_keys_to_not_convert
+
+        config = AutoConfig.from_pretrained("mosaicml/mpt-7b", trust_remote_code=True)
+        with init_empty_weights():
+            model = AutoModelForCausalLM.from_config(config, trust_remote_code=True)
+        self.assertEqual(get_keys_to_not_convert(model), ["transformer.wte"])
+
+        config = AutoConfig.from_pretrained("mosaicml/mpt-7b")
+        with init_empty_weights():
+            model = MptForCausalLM(config)
+        # The order of the keys does not matter, so we sort them before comparing, same for the other tests.
+        self.assertEqual(get_keys_to_not_convert(model).sort(), ["lm_head", "transformer.wte"].sort())
+
+        model_id = "Salesforce/blip2-opt-2.7b"
+        config = AutoConfig.from_pretrained(model_id)
+
+        with init_empty_weights():
+            model = Blip2ForConditionalGeneration(config)
+        self.assertEqual(
+            get_keys_to_not_convert(model).sort(),
+            ["language_model.lm_head", "language_model.model.decoder.embed_tokens"].sort(),
+        )
+
+        model_id = "facebook/opt-350m"
+        config = AutoConfig.from_pretrained(model_id)
+        with init_empty_weights():
+            model = OPTForCausalLM(config)
+        self.assertEqual(get_keys_to_not_convert(model).sort(), ["lm_head", "model.decoder.embed_tokens"].sort())
+
+        model_id = "roberta-large"
+        config = AutoConfig.from_pretrained(model_id)
+        with init_empty_weights():
+            model = AutoModelForMaskedLM.from_config(config)
+        self.assertEqual(
+            get_keys_to_not_convert(model).sort(),
+            ["'roberta.embeddings.word_embeddings', 'lm_head', 'lm_head.decoder"].sort(),
+        )
+
     def test_quantization_config_json_serialization(self):
         r"""
         A simple test to check if the quantization config is correctly serialized and deserialized
