@@ -44,7 +44,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
 
 ## Generation with LLMs
 
-Let's start with the original and most popular use-case of autoregressive generation with transformers: language models. A language model trained on causal language modeling will take as input a sequence of text tokens, and will return the probability distribution for the next token. Here's how your LLM's forward pass looks like:
+Let's start with the original and most popular use case of autoregressive generation with transformers: language models. A language model trained on causal language modeling will take a sequence of text tokens as input, and returns the probability distribution for the next token. Here's how your LLM's forward pass looks like:
 
 <!-- [GIF 1 -- FWD PASS] -->
 <figure class="image table text-center m-0 w-full">
@@ -55,7 +55,7 @@ Let's start with the original and most popular use-case of autoregressive genera
     ></video>
 </figure>
 
-A critical ingredient of autoregressive generation with LLMs is selecting the next token from this probability distribution. Anything goes in this step, as long as you end up with a token selected for the next iteration. This means it can be as simple as selecting the most likely token from the probability distribution, or relying on a dozen of transformations before sampling from the resulting distribution. Visually, it looks like this:
+A critical ingredient of autoregressive generation with LLMs is selecting the next token from this probability distribution. Anything goes in this step, as long as you end up with a token selected for the next iteration. This means it can be as simple as selecting the most likely token from the probability distribution, or as complex as applying a dozen transformations before sampling from the resulting distribution. Visually, it looks like this:
 
 <!-- [GIF 2 -- TEXT GENERATION] -->
 <figure class="image table text-center m-0 w-full">
@@ -66,32 +66,74 @@ A critical ingredient of autoregressive generation with LLMs is selecting the ne
     ></video>
 </figure>
 
-The process depicted above is repeated iterativelly until some stopping criteria is reached. Ideally, this stopping condition is dictated by the model, which should learn how to output an end-of-sequence (EOS) token at the right time. When it doesn't happen, generation stops when some pre-defined maximum length is reached.
+The process depicted above is repeated iterativelly until some stopping criteria is reached. Ideally, this stopping condition is dictated by the model, which should learn when to output an end-of-sequence (EOS) token. When this doesn't happen, generation stops when some pre-defined maximum length is reached.
 
-Properly setting up the token selection step and the stopping criteria is essential to make your model behave as you'd expect on your task. That is why we have a `generation_config.json` file associated with each model, which contains a good default generative parameterization.
+Properly setting up the token selection step and the stopping criteria is essential to make your model behave as you'd expect on your task. That is why we have a [`~generation.GenerationConfig`] file associated with each model, which contains a good default generative parameterization and is loaded alongside your model.
 
-Let's talk code! There are two APIs you can use: the high-level `pipeline` for basic usage, or the lower-level `generate` for further control. If you're reading this guide, we are assuming you want to go beyond basic use cases, so our examples will be built with `generate`.
+Let's talk code! If you're interested in basic usage of an LLM, using our high-level [pipeline](pipeline_tutorial) interface is a candidate starting point. However, LLMs often require advanced features like quantization and fine control of the token selection step, which is best done through our [`~generation.GenerationMixin.generate`]. Autoregressive generation with LLMs is also resource-intensive, and should be executed in a GPU for adequate throughput.
 
-First, you need to preprocess your text with a [tokenizer](tokenizer_summary).
+<!-- TODO: update example to llama 2 (or a newer popular baseline) when it becomes ungated -->
+First, you need to load the model.
 
 ```py
-from transformers import AutoTokenizer
+>>> from transformers import AutoModelForCausalLM
 
-input_text = "A list of colors: red, blue"
-
-tokenizer = AutoTokenizer.from_pretrained("openlm-research/open_llama_7b")
-model_inputs = tokenizer([input_text], return_tensors="pt")
+>>> model = AutoModelForCausalLM.from_pretrained(
+...     "openlm-research/open_llama_7b", device_map="auto", load_in_4bit=True
+... )
 ```
 
-Since LLMs are
+Note the two flags in the `from_pretrained` call, `device_map` and `load_in_4bit`. The former ensures the model is moved to your GPU(s), while the later applies [4-bit dynamic quantization](main_classes/quantization) to massivelly reduce the resource requirements. There are other ways to initialize the model (more on that later), but this a good baseline to experiment with an LLM.
+
+Next, you need to preprocess your text input with a [tokenizer](tokenizer_summary).
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("openlm-research/open_llama_7b")
+>>> model_inputs = tokenizer(["A list of colors: red, blue"], return_tensors="pt")
+```
+
+The `model_inputs` variable holds the tokenized text input, as well as the attention mask. While [`~generation.GenerationMixin.generate`] does its best effort to infer the attention mask when it is not passed, we recommend to pass it whenever possible for optimal results.
+
+Finally, you can call the [`~generation.GenerationMixin.generate`] method. It returns the generated tokens, which should be converted to text before printing.
+
+```py
+>>> generated_output = model.generate(**model_inputs)
+>>> tokenizer.batch_decode(generated_output, skip_special_tokens=True)
+['A list of colors: red, blue, green, yellow, black, white, and brown']
+```
+
 
 ## Generation with other modalities
 
 Autoregressive generation with other modalities behave mostly as described above for LLMs. As such, let's focus on the differences that you may enconter when generating with other modalities:
 * Non-text model inputs rely on the [`AutoProcessor`](https://huggingface.co/docs/transformers/model_doc/auto#transformers.AutoProcessor) class for pre-processing;
-* If the output of your model's forward pass is not a discrete set (e.g. if they are embeddings), then the logit processing step described above does not apply, but there may be custom output processing steps between iterations.
+* If the output of your model's forward pass is not a discrete set (e.g. if they are embeddings), then the logit processing step described above does not apply, but there may be custom model output processing steps between iterations.
 
 And... that's it!
+
+For instance, let's take the image captioning problem.
+
+```py
+>>> from PIL import Image
+>>> import requests
+
+>>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
+>>> image = Image.open(requests.get(url, stream=True).raw)
+```
+
+The variable `image` contains a lovely image of two cats.
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png" alt="Test image"/>
+</div>
+
+You can now use the same workflow as above, replacing the `AutoTokenizer` by the `AutoProcessor` and importing the appropriate model class.
+
+```py
+from transformers import AutoProcessor,
+```
 
 
 
