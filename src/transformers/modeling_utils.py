@@ -3122,6 +3122,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 offload_state_dict = True
 
         is_sharded_safetensors = is_safetensors and sharded_metadata is not None
+
+        # tie the model weights before retrieving the state_dict
+        model.tie_weights()
+
         # Retrieve missing & unexpected_keys
         model_state_dict = model.state_dict()
         expected_keys = list(model_state_dict.keys())
@@ -3167,7 +3171,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model_buffers = {".".join([prefix, key]) for key in model_buffers}
         unexpected_keys = list(unexpected_keys - model_buffers)
 
-        model.tie_weights()
         if device_map is None:
             ptrs = collections.defaultdict(list)
             for name, tensor in model.state_dict().items():
