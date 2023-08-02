@@ -714,7 +714,7 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filter_models=T
 
     # test_files_to_run = ["tests"]
     import glob
-    test_files_to_run = sorted([x for x in glob.glob("tests/models/*/**.py") if "test_modeling_" in x])
+    test_files_to_run = sorted([x for x in glob.glob("tests/models/*/**.py") if "test_" in x and not "test_modeling" in x])
 
     repo_utils_launch = False
 
