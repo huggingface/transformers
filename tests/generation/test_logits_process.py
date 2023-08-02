@@ -596,7 +596,7 @@ class LogitsProcessorTest(unittest.TestCase):
         scores = self._get_uniform_logits(batch_size, vocab_size)
 
         def prefix_allowed_tokens_fn(batch_id, inputs_ids):
-            return [[0, 1], [2, 3]][batch_id]
+            return torch.tensor([[0, 1], [2, 3]])[batch_id]
 
         prefix_constrained_logits_proc = PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, 1)
 
