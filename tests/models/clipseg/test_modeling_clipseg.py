@@ -346,7 +346,15 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class CLIPSegModelTester:
-    def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
+    def __init__(
+        self,
+        parent,
+        text_kwargs=None,
+        vision_kwargs=None,
+        is_training=True,
+        # This should respect the `num_hidden_layers` in `CLIPSegVisionModelTester`
+        extract_layers=(1,),
+    ):
         if text_kwargs is None:
             text_kwargs = {}
         if vision_kwargs is None:
@@ -356,6 +364,7 @@ class CLIPSegModelTester:
         self.text_model_tester = CLIPSegTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = CLIPSegVisionModelTester(parent, **vision_kwargs)
         self.is_training = is_training
+        self.extract_layers = extract_layers
 
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
@@ -371,7 +380,7 @@ class CLIPSegModelTester:
             self.vision_model_tester.get_config(),
             projection_dim=64,
             reduce_dim=32,
-            extract_layers=[1, 2, 3],
+            extract_layers=self.extract_layers,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
