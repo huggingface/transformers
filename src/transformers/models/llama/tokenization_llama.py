@@ -187,7 +187,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
     def tokenize(self, text, **kwargs) -> List[str]:
         # Replace the SPIECE_UNDERLINE with a space to make sure SPIECE_UNDERLINE is only used at
         # the beginning of the text
@@ -199,11 +198,11 @@ class LlamaTokenizer(PreTrainedTokenizer):
             text = SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " ")
 
         tokens = super().tokenize(text, **kwargs)
-        
+
         # make sure the first token is not an extra space to match legacy and fast tokenizer
         # TODO ArthurZ long term, normalization should be applied on the token, then also add
-        # it to the trie, and the added_tokens_decoder, which will support multiple 
-        # tokens pointing to the same id. In this case `_<s>` and `<s>`. 
+        # it to the trie, and the added_tokens_decoder, which will support multiple
+        # tokens pointing to the same id. In this case `_<s>` and `<s>`.
         if tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
             tokens = tokens[1:]
         return tokens
