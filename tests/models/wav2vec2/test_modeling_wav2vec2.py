@@ -1174,7 +1174,9 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         input_features = [np.random.random(16_000 * s) for s in [1, 3, 2, 6]]
 
-        model = Wav2Vec2ForCTC.from_pretrained("hf-internal-testing/tiny-random-wav2vec2-adapter", target_lang="fr", ignore_mismatched_sizes=True)
+        model = Wav2Vec2ForCTC.from_pretrained(
+            "hf-internal-testing/tiny-random-wav2vec2-adapter", target_lang="fr", ignore_mismatched_sizes=True
+        )
 
         logits = get_logits(model, input_features)
 
