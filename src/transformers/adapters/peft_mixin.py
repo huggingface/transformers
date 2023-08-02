@@ -14,7 +14,13 @@
 import inspect
 from typing import Optional
 
-from ..utils import find_adapter_config_file, is_accelerate_available, is_peft_available, logging, requires_backends
+from ..utils import (
+    find_adapter_config_file,
+    is_accelerate_available,
+    is_peft_available,
+    logging,
+    requires_backends,
+)
 
 
 if is_accelerate_available():
@@ -52,11 +58,11 @@ class PeftAdapterMixin:
 
         from peft import PeftConfig, inject_adapter_in_model, load_peft_weights
         from peft.utils import set_peft_model_state_dict
-        from peft.utils.other import TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING
 
         if not self._hf_peft_config_loaded:
-            self.peft_config = {}
             self._hf_peft_config_loaded = True
+        elif adapter_name in self.peft_config:
+            raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
 
         adapter_config_file = find_adapter_config_file(
             peft_model_id,
@@ -77,15 +83,6 @@ class PeftAdapterMixin:
             use_auth_token=use_auth_token,
             commit_hash=commit_hash,
         )
-
-        if not hasattr(loaded_peft_config, "target_modules"):
-            target_modules = TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING[self.config.model_type]
-            loaded_peft_config.target_modules = target_modules
-
-        if adapter_name not in self.peft_config:
-            self.peft_config[adapter_name] = loaded_peft_config
-        else:
-            raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
 
         # Replace the adapter with the loaded adapter
         inject_adapter_in_model(loaded_peft_config, self, adapter_name)
@@ -130,20 +127,18 @@ class PeftAdapterMixin:
         self,
         adapter_config,
         adapter_name: Optional[str] = "default",
-    ):
-        requires_backends(self.add_adapter, "peft")
+    ) -> None:
         r"""
-        Adds a fresh new adapter to the current model.
+        Adds a fresh new adapter to the current model for training purpose.
         """
+        requires_backends(self.add_adapter, "peft")
+
         from peft import PeftConfig, inject_adapter_in_model
 
         if not self._hf_peft_config_loaded:
-            self.peft_config = {}
             self._hf_peft_config_loaded = True
         elif adapter_name in self.peft_config:
             raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
-
-        self.peft_config[adapter_name] = adapter_config
 
         if not isinstance(adapter_config, PeftConfig):
             raise ValueError(
@@ -194,6 +189,26 @@ class PeftAdapterMixin:
         for _, module in self.named_modules():
             if isinstance(module, BaseTunerLayer):
                 return module.active_adapter
+
+    def get_adapter_state_dict(
+        self,
+        adapter_name: Optional[str] = None,
+    ) -> dict:
+        r"""
+        Gets the adapter state dict.
+        """
+        requires_backends(self.save_adapter, "peft")
+
+        if not self._hf_peft_config_loaded:
+            raise ValueError("No adapter loaded. Please load an adapter first.")
+
+        from peft import get_peft_model_state_dict
+
+        if adapter_name is None:
+            adapter_name = self.current_active_adapter
+
+        adapter_state_dict = get_peft_model_state_dict(self, adapter_name=adapter_name)
+        return adapter_state_dict
 
     def _dispatch_accelerate_model(
         self,
