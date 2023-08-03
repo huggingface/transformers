@@ -47,12 +47,36 @@ class PeftAdapterMixin:
         use_auth_token: Optional[str] = None,
         commit_hash: Optional[str] = None,
         device_map: Optional[str] = "auto",
-        max_memory: Optional[int] = None,
+        max_memory: Optional[str] = None,
         offload_dir: Optional[str] = None,
         offload_index: Optional[int] = None,
     ) -> None:
         """
-        Load adapter weights from file. Requires peft as a backend to load the adapter weights
+        Load adapter weights from file or remote Hub folder. Requires peft as a backend to load the adapter weights.
+
+        Args:
+            peft_model_id (`str`):
+                The identifier of the model to look for on the Hub, or a local path to the saved adapter config file
+                and adapter weights.
+            adapter_name (`str`, `optional`):
+                The adapter name to use. If not set, will use the default adapter.
+            revision (`str`, `optional`):
+                revision argument to be passed to `hf_hub_download` method from `huggingface_hub`.
+            use_auth_token (`str`, `optional`):
+                use_auth_token argument to be passed to `hf_hub_download` method from `huggingface_hub`.
+            commit_hash (`str`, `optional`):
+                commit_hash argument to be passed to `hf_hub_download` method from `huggingface_hub`.
+            device_map (`str`, `optional`):
+                The device map to use for the adapter. Used only in the case the model is offloaded into the CPU to
+                correctly re-dispatch the model together with the adapter weights.
+            max_memory (`str`, `optional`):
+                The maximum memory to use for the adapter. Used only in the case the model is offloaded into the CPU
+                for the same reasons stated above.
+            offload_dir (`str`, `optional`):
+                The directory to use for offloading the model. Used only in the case the model is offloaded into the
+                CPU.
+            offload_index (`int`, `optional`):
+                `offload_index` argument to be passed to `accelerate.dispatch_model` method.
         """
         check_peft_version(min_version="0.4.0")
 
@@ -131,7 +155,15 @@ class PeftAdapterMixin:
         adapter_name: Optional[str] = None,
     ) -> None:
         r"""
-        Adds a fresh new adapter to the current model for training purpose.
+        Adds a fresh new adapter to the current model for training purpose. If no adapter name is passed, a default
+        name is assigned to the adapter to follow the convention of PEFT library
+
+        Args:
+            adapter_config (`~peft.PeftConfig`):
+                The configuration of the adapter to add, supported adapters are non-prefix tuning and adaption prompts
+                methods
+            adapter_name (`str`, **optional**, defaults to `"default"`):
+                The name of the adapter to add. If no name is passed, a default name is assigned to the adapter.
         """
         check_peft_version(min_version="0.4.0")
 
@@ -207,7 +239,6 @@ class PeftAdapterMixin:
             if isinstance(module, BaseTunerLayer):
                 module.disable_adapters = False
 
-    # TODO: change it to a property but torch.jit fails. Maybe we should return None is PEFT is not available
     def active_adapter(self) -> str:
         r"""
         Gets the current active adapter of the model.
