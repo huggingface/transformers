@@ -129,9 +129,10 @@ class PeftAdapterMixin:
 
         # We need to pre-process the state dict to remove unneeded prefixes - for backward compatibility
         processed_adapter_state_dict = {}
+        prefix = "base_model.model"
         for key, value in adapter_state_dict.items():
-            if "base_model.model" in key:
-                new_key = key.replace("base_model.model.", "")
+            if key.startswith(prefix):
+                new_key = key[len(prefix):]
             else:
                 new_key = key
             processed_adapter_state_dict[new_key] = value
