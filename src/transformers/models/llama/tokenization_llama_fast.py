@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Optional, Tuple
 
 from tokenizers import processors
 
+from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
 from ...utils.versions import require_version
@@ -84,6 +85,10 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             Wether to cleanup spaces after decoding, cleanup consists in removing potential artifacts like extra
             spaces.
 
+        add_prefix_space (`bool`, *optional*, defaults to `False`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word.
+
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -105,6 +110,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         vocab_file=None,
         tokenizer_file=None,
         clean_up_tokenization_spaces=False,
+        add_prefix_space=False,
         unk_token="<unk>",
         bos_token="<s>",
         eos_token="</s>",
@@ -116,6 +122,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            add_prefix_space=add_prefix_space,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -127,6 +134,27 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
 
         self.vocab_file = vocab_file
         self.can_save_slow_tokenizer = False if not self.vocab_file else True
+
+        self.add_prefix_space = add_prefix_space
+
+    def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
+        is_split_into_words = kwargs.get("is_split_into_words", False)
+        assert self.add_prefix_space or not is_split_into_words, (
+            f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
+            "to use it with pretokenized inputs."
+        )
+
+        return super()._batch_encode_plus(*args, **kwargs)
+
+    def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
+        is_split_into_words = kwargs.get("is_split_into_words", False)
+
+        assert self.add_prefix_space or not is_split_into_words, (
+            f"You need to instantiate {self.__class__.__name__} with add_prefix_space=True "
+            "to use it with pretokenized inputs."
+        )
+
+        return super()._encode_plus(*args, **kwargs)
 
     def update_post_processor(self):
         """

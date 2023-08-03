@@ -70,6 +70,9 @@ class LlamaTokenizer(PreTrainedTokenizer):
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
+        add_prefix_space (`bool`, *optional*, defaults to `False`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word.
         legacy (`bool`, *optional*, defaults to `True`):
             Whether or not the `legacy` behaviour of the tokenizer should be used. Legacy is before the merge of #24622
             which includes fixes to properly handle tokens that appear after special tokens. A simple example:
@@ -111,6 +114,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
+        add_prefix_space=False,
         legacy=None,
         **kwargs,
     ):
@@ -128,6 +132,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             add_eos_token=add_eos_token,
             sp_model_kwargs=self.sp_model_kwargs,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            add_prefix_space=add_prefix_space,
             legacy=legacy,
             **kwargs,
         )
@@ -138,6 +143,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             )
             legacy = True
 
+        self.add_prefix_space = add_prefix_space
         self.legacy = legacy
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
@@ -393,3 +399,9 @@ class LlamaTokenizer(PreTrainedTokenizer):
             f"{B_INST} {(dialogue[-1][1]).strip()} {E_INST}", add_special_tokens=False
         )
         return dialog_tokens
+
+    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
+        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
+        if is_split_into_words or add_prefix_space:
+            text = " " + text
+        return (text, kwargs)
