@@ -226,6 +226,8 @@ class TokenizerTesterMixin:
             del self.tokenizers
         if hasattr(self, "tf_tokenizers"):
             del self.tf_tokenizers
+        if hasattr(self, "tokenizers_list"):
+            del self.tokenizers_list
         import gc
         gc.collect()
 
