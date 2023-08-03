@@ -74,6 +74,9 @@ class EsmTokenizer(PreTrainedTokenizer):
         self.eos_token = eos_token
         super().__init__(**kwargs)
 
+        # TODO, all the tokens are added? But they are also part of the vocab... bit strange. 
+        # none of them are special, but they all need special splitting.
+
         self.unique_no_split_tokens = self.all_tokens
         self._create_trie(self.unique_no_split_tokens)
 

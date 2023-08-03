@@ -174,8 +174,11 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
         # The first "real" token "," has position 15 in the embedding vocab and position 3 in the spm vocab
         self.fairseq_offset = 12
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
-        for k in self.fairseq_tokens_to_ids.keys():
-            self.unique_no_split_tokens.append(k)
+        
+        # TODO
+        # fairseq tokens should not be split? Why? if indeed they are not added tokens, could make sense, but they are added.....
+        # for k in self.fairseq_tokens_to_ids.keys():
+        #     self.unique_no_split_tokens.append(k)
 
         super().__init__(
             bos_token=bos_token,
