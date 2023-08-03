@@ -393,7 +393,7 @@ class BarkFineModelTester:
         return config, inputs_dict
 
     def get_config(self):
-        return self.BarkFineConfig(
+        return BarkFineConfig(
             vocab_size=self.vocab_size,
             output_vocab_size=self.output_vocab_size,
             hidden_size=self.hidden_size,
