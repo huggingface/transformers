@@ -287,7 +287,7 @@ def align_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 
 # Copied from transformers.models.efficientnet.modeling_efficientnet.round_filters with EfficientNet -> AlignVision
-def round_filters(config: AlignVisionConfig, num_channels: int):
+def round_filters(config: EfficientNetConfig, num_channels: int):
     r"""
     Round number of filters based on depth multiplier.
     """

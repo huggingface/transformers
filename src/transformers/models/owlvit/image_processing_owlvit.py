@@ -48,7 +48,7 @@ logger = logging.get_logger(__name__)
 
 
 # Copied from transformers.models.detr.modeling_detr._upcast
-def _upcast(t):
+def _upcast(t: Tensor) -> Tensor:
     # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
     if t.is_floating_point():
         return t if t.dtype in (torch.float32, torch.float64) else t.float()

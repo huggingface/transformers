@@ -468,7 +468,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._build_conversation_input_ids
-    def _build_conversation_input_ids(self, conversation) -> List[int]:
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         input_ids = []
         for is_user, text in conversation.iter_texts():
             input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])

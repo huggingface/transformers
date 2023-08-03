@@ -861,7 +861,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         return target
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare
-    def prepare(self, image, target, return_segmentation_masks=False, masks_path=None):
+    def prepare(self, image, target, return_segmentation_masks=None, masks_path=None):
         logger.warning_once(
             "The `prepare` method is deprecated and will be removed in a v4.33. "
             "Please use `prepare_annotation` instead. Note: the `prepare_annotation` method "

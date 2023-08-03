@@ -168,7 +168,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         return vocab
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
-    def tokenize(self, text, **kwargs) -> List[str]:
+    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         # Replace the SPIECE_UNDERLINE with a space to make sure SPIECE_UNDERLINE is only used at
         # the beginning of the text
         if not self.legacy:
@@ -176,7 +176,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         return super().tokenize(text, **kwargs)
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
-    def _tokenize(self, text):
+    def _tokenize(self, text, **kwargs):
         """
         Returns a tokenized string.
 
