@@ -1789,7 +1789,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Save the config
         if is_main_process:
-            if not model_to_save._hf_peft_config_loaded:
+            if not getattr(model_to_save, "_hf_peft_config_loaded", False):
                 model_to_save.config.save_pretrained(save_directory)
             if self.can_generate():
                 model_to_save.generation_config.save_pretrained(save_directory)
