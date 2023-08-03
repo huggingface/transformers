@@ -42,6 +42,7 @@ from ...utils import TensorType, is_torch_available, logging
 
 if is_torch_available():
     import torch
+    from torch import Tensor
 
 
 logger = logging.get_logger(__name__)

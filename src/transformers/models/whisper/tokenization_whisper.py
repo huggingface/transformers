@@ -15,7 +15,7 @@
 """Tokenization classes for Whisper."""
 import json
 import os
-from typing import List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
 import regex as re
@@ -23,6 +23,10 @@ import regex as re
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 from .english_normalizer import EnglishTextNormalizer
+
+
+if TYPE_CHECKING:
+    from ...pipelines.conversational import Conversation
 
 
 VOCAB_FILES_NAMES = {

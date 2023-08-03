@@ -222,7 +222,6 @@ def check_codes_match(observed_code, theoretical_code):
 
     diff_index = 0
     if theoretical_code_header != observed_code_header:
-        print(theoretical_code_header, observed_code_header)
         return 0
 
     diff_index = 1

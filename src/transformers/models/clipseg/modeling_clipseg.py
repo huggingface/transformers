@@ -160,8 +160,8 @@ class CLIPSegImageSegmentationOutput(ModelOutput):
 
 
 class CLIPSegVisionEmbeddings(nn.Module):
-    # Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings.__init__
-    def __init__(self, config: CLIPVisionConfig):
+    # Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings.__init__ with CLIP->CLIPSeg
+    def __init__(self, config: CLIPSegVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size

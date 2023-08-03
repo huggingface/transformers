@@ -22,7 +22,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from torch import nn
+from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
