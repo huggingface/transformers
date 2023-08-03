@@ -51,11 +51,12 @@ def find_adapter_config_file(
 
             </Tip>
 
+        subfolder (`str`, *optional*, defaults to `""`):
+            In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+            specify the folder name here.
         use_auth_token (`str`, `optional`):
             Whether to use authentication token to load the remote folder. Userful to load private repositories that
             are on HuggingFace Hub. You might need to call `huggingface-cli login` and paste your tokens to cache it.
-        commit_hash (`str`, `optional`):
-            commit_hash argument to be passed to `hf_hub_download` method from `huggingface_hub`.
     """
     adapter_cached_filename = None
     if os.path.isdir(model_id):
