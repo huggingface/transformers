@@ -222,6 +222,13 @@ class TokenizerTesterMixin:
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+        if hasattr(self, "tokenizers"):
+            del self.tokenizers
+        if hasattr(self, "tf_tokenizers"):
+            del self.tf_tokenizers
+        import gc
+        gc.collect()
+
     def get_input_output_texts(self, tokenizer):
         input_txt = self.get_clean_sequence(tokenizer)[0]
         return input_txt, input_txt
