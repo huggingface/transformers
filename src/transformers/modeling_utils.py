@@ -1405,7 +1405,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Return:
             `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
         """
-        model_embeds, new_num_tokens = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
         if new_num_tokens is None:
             return model_embeds
 
@@ -1429,7 +1429,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             new_lm_head = self._get_resized_lm_head(old_lm_head, new_embeddings.weight.shape[0])
             self.set_output_embeddings(new_lm_head)
 
-        return self.get_input_embeddings(), new_num_tokens
+        return self.get_input_embeddings()
 
     def _get_resized_embeddings(
         self,
