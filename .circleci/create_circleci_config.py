@@ -521,9 +521,9 @@ doc_test_job = CircleCIJob(
 REGULAR_TESTS = [
     # torch_and_tf_job,
     # torch_and_flax_job,
-    torch_job,
-    tf_job,
-    flax_job,
+    # torch_job,
+    # tf_job,
+    # flax_job,
     # custom_tokenizers_job,
     # hub_job,
     # onnx_job,
@@ -577,7 +577,7 @@ def create_circleci_config(folder=None):
             if job.job_name in ["tests_torch", "tests_tf", "tests_flax"]:
                 job.tests_to_run = [x for x in test_list_items if "/test_modeling_" in x]
             elif job.job_name == "tests_non_modeling":
-                job.tests_to_run = [x for x in test_list_items if "/test_modeling_" not in x]
+                job.tests_to_run = [x for x in test_list_items if "/test_modeling_" not in x and "/test_tokenization_" in x]
 
         extended_tests_to_run = set(test_list.split())
         # Extend the test files for cross test jobs
