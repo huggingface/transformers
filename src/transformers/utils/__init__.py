@@ -177,7 +177,13 @@ from .import_utils import (
     requires_backends,
     torch_only_method,
 )
-from .peft_utils import ADAPTER_CONFIG_NAME, ADAPTER_SAFE_WEIGHTS_NAME, ADAPTER_WEIGHTS_NAME, find_adapter_config_file
+from .peft_utils import (
+    ADAPTER_CONFIG_NAME,
+    ADAPTER_SAFE_WEIGHTS_NAME,
+    ADAPTER_WEIGHTS_NAME,
+    check_peft_version,
+    find_adapter_config_file,
+)
 
 
 WEIGHTS_NAME = "pytorch_model.bin"

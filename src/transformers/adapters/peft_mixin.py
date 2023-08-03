@@ -15,6 +15,7 @@ import inspect
 from typing import Optional
 
 from ..utils import (
+    check_peft_version,
     find_adapter_config_file,
     is_accelerate_available,
     is_peft_available,
@@ -39,6 +40,7 @@ class PeftAdapterMixin:
 
     _hf_peft_config_loaded = False
 
+    @check_peft_version(min_version="0.4.0")
     def load_adapter(
         self,
         peft_model_id: str,
@@ -125,6 +127,7 @@ class PeftAdapterMixin:
                 device_map=device_map, max_memory=max_memory, offload_dir=offload_dir, offload_index=offload_index
             )
 
+    @check_peft_version(min_version="0.4.0")
     def add_adapter(
         self,
         adapter_config,
@@ -151,6 +154,7 @@ class PeftAdapterMixin:
 
         inject_adapter_in_model(adapter_config, self, adapter_name)
 
+    @check_peft_version(min_version="0.4.0")
     def set_adapter(self, adapter_name: str) -> None:
         r"""
         Sets an adapter to switch easily between multiple adapters.
@@ -177,6 +181,7 @@ class PeftAdapterMixin:
                 "Did not succeeded in setting the adapter. Please make sure you are using a model that supports adapters."
             )
 
+    @check_peft_version(min_version="0.4.0")
     def disable_adapters(self) -> None:
         r"""
         Disable all adapters that are attached to the model
@@ -192,6 +197,7 @@ class PeftAdapterMixin:
             if isinstance(module, BaseTunerLayer):
                 module.disable_adapters = True
 
+    @check_peft_version(min_version="0.4.0")
     def enable_adapters(self) -> None:
         r"""
         Enable all adapters that are attached to the model
@@ -208,6 +214,7 @@ class PeftAdapterMixin:
                 module.disable_adapters = False
 
     # TODO: change it to a property but torch.jit fails. Maybe we should return None is PEFT is not available
+    @check_peft_version(min_version="0.4.0")
     def active_adapter(self) -> str:
         r"""
         Gets the current active adapter of the model.
@@ -224,6 +231,7 @@ class PeftAdapterMixin:
             if isinstance(module, BaseTunerLayer):
                 return module.active_adapter
 
+    @check_peft_version(min_version="0.4.0")
     def get_adapter_state_dict(
         self,
         adapter_name: Optional[str] = None,

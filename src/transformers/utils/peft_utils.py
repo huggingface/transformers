@@ -11,13 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import importlib
 import os
 from contextlib import contextmanager
-import importlib
+from typing import Optional
 
 from packaging import version
-
-from typing import Optional
 
 from .hub import cached_file
 
@@ -77,9 +76,7 @@ def check_peft_version(min_version: str) -> None:
         version (`str`):
             The version of PEFT to check against.
     """
-    is_peft_version_compatible = version.parse(importlib.metadata.version("peft")) <= version.parse(
-        min_version
-    )
+    is_peft_version_compatible = version.parse(importlib.metadata.version("peft")) <= version.parse(min_version)
 
     if not is_peft_version_compatible:
         raise ValueError(
@@ -88,7 +85,7 @@ def check_peft_version(min_version: str) -> None:
         )
 
     try:
-        yield 
+        yield
     finally:
         # Do nothing
         pass
