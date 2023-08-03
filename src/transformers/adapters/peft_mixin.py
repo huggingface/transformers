@@ -42,7 +42,7 @@ class PeftAdapterMixin:
     def load_adapter(
         self,
         peft_model_id: str,
-        adapter_name: Optional[str] = None
+        adapter_name: Optional[str] = None,
         revision: Optional[str] = None,
         use_auth_token: Optional[str] = None,
         commit_hash: Optional[str] = None,
@@ -55,6 +55,8 @@ class PeftAdapterMixin:
         Load adapter weights from file. Requires peft as a backend to load the adapter weights
         """
         requires_backends(self.load_adapter, "peft")
+
+        adapter_name = adapter_name or "default"
 
         from peft import PeftConfig, inject_adapter_in_model, load_peft_weights
         from peft.utils import set_peft_model_state_dict
@@ -126,7 +128,7 @@ class PeftAdapterMixin:
     def add_adapter(
         self,
         adapter_config,
-        adapter_name: Optional[str] = "default",
+        adapter_name: Optional[str] = None,
     ) -> None:
         r"""
         Adds a fresh new adapter to the current model for training purpose.
@@ -134,6 +136,8 @@ class PeftAdapterMixin:
         requires_backends(self.add_adapter, "peft")
 
         from peft import PeftConfig, inject_adapter_in_model
+
+        adapter_name = adapter_name or "default"
 
         if not self._hf_peft_config_loaded:
             self._hf_peft_config_loaded = True
