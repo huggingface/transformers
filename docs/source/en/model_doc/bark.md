@@ -35,6 +35,10 @@ Bark can be optimized with just a few extra lines of code, which **significantly
 You can speed up inference and reduce memory footprint by 50% simply by loading the model in half-precision.
 
 ```python
+from transformers import BarkModel
+import torch
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
 model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16).to(device)
 ```
 
@@ -62,6 +66,11 @@ model.enable_cpu_offload()
 You can combine optimization techniques, and use CPU offload, half-precision and 🤗 Better Transformer all at once.
 
 ```python
+from transformers import BarkModel
+import torch
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
 # load in fp16
 model = BarkModel.from_pretrained("suno/bark-small", torch_dtype=torch.float16).to(device)
 
