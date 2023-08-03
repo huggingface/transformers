@@ -169,7 +169,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
             self.encoder.update({i + 3: additional_special_tokens[i] for i in range(1, self.offset - 1)})
 
         self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
-        
+
         super().__init__(
             eos_token=eos_token,
             unk_token=unk_token,
@@ -181,7 +181,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-                
 
     @property
     def vocab_size(self) -> int:

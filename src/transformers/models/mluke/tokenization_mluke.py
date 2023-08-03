@@ -277,27 +277,6 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            sp_model_kwargs=self.sp_model_kwargs,
-            task=task,
-            max_entity_length=max_entity_length,
-            max_mention_length=max_mention_length,
-            entity_token_1=entity_token_1,
-            entity_token_2=entity_token_2,
-            entity_unk_token=entity_unk_token,
-            entity_pad_token=entity_pad_token,
-            entity_mask_token=entity_mask_token,
-            entity_mask2_token=entity_mask2_token,
-            **kwargs,
-        )
-
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
@@ -344,6 +323,27 @@ class MLukeTokenizer(PreTrainedTokenizer):
             )
 
         self.max_mention_length = max_mention_length
+
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            sp_model_kwargs=self.sp_model_kwargs,
+            task=task,
+            max_entity_length=max_entity_length,
+            max_mention_length=max_mention_length,
+            entity_token_1=entity_token_1,
+            entity_token_2=entity_token_2,
+            entity_unk_token=entity_unk_token,
+            entity_pad_token=entity_pad_token,
+            entity_mask_token=entity_mask_token,
+            entity_mask2_token=entity_mask2_token,
+            **kwargs,
+        )
 
     def __getstate__(self):
         state = self.__dict__.copy()

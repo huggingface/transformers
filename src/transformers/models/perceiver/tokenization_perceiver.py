@@ -89,7 +89,6 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         self._num_special_tokens = len(self.special_tokens_encoder)
         self.special_tokens_decoder: Dict[int, str] = {v: k for k, v in self.special_tokens_encoder.items()}
 
-
         super().__init__(
             pad_token=pad_token,
             bos_token=bos_token,
@@ -100,7 +99,6 @@ class PerceiverTokenizer(PreTrainedTokenizer):
             model_max_length=model_max_length,
             **kwargs,
         )
-
 
     def get_vocab(self) -> Dict[str, int]:
         vocab = self.special_tokens_encoder.copy()

@@ -150,7 +150,7 @@ class PhobertTokenizer(PreTrainedTokenizer):
 
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
-        
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -161,7 +161,6 @@ class PhobertTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             **kwargs,
         )
-
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None

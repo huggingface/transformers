@@ -139,18 +139,6 @@ class BartphoTokenizer(PreTrainedTokenizer):
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            sp_model_kwargs=self.sp_model_kwargs,
-            **kwargs,
-        )
-
         self.vocab_file = vocab_file
         self.monolingual_vocab_file = monolingual_vocab_file
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
@@ -173,6 +161,18 @@ class BartphoTokenizer(PreTrainedTokenizer):
             self.fairseq_tokens_to_ids[str(mask_token)] = len(self.fairseq_tokens_to_ids)
 
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            sp_model_kwargs=self.sp_model_kwargs,
+            **kwargs,
+        )
 
     def __getstate__(self):
         state = self.__dict__.copy()
