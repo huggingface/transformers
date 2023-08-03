@@ -83,7 +83,7 @@ First, you need to load the model.
 ... )
 ```
 
-Note the two flags in the `from_pretrained` call, `device_map` and `load_in_4bit`. The former ensures the model is moved to your GPU(s), while the later applies [4-bit dynamic quantization](main_classes/quantization) to massivelly reduce the resource requirements. There are other ways to initialize the model (more on that later), but this a good baseline to experiment with an LLM.
+Note the two flags in the `from_pretrained` call, `device_map` and `load_in_4bit`. The former ensures the model is moved to your GPU(s), while the later applies [4-bit dynamic quantization](main_classes/quantization) to massively reduce the resource requirements. There are other ways to initialize the model (more on that later), but this a good baseline to experiment with an LLM.
 
 Next, you need to preprocess your text input with a [tokenizer](tokenizer_summary).
 
