@@ -473,6 +473,61 @@ class BarkFineModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
 
+class BarkFineModelTester:
+    def __init__(
+        self, parent,
+        semantic_kwargs=None,
+        coarse_acoustics_kwargs=None,
+        fine_acoustics_kwargs=None,
+        is_training=True
+    ):
+        if text_kwargs is None:
+            text_kwargs = {}
+        if vision_kwargs is None:
+            vision_kwargs = {}
+
+        self.parent = parent
+        self.text_model_tester = CLIPTextModelTester(parent, **text_kwargs)
+        self.vision_model_tester = CLIPVisionModelTester(parent, **vision_kwargs)
+        self.is_training = is_training
+
+    def prepare_config_and_inputs(self):
+        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
+        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+
+        config = self.get_config()
+
+        return config, input_ids, attention_mask, pixel_values
+
+    def get_config(self):
+        return CLIPConfig.from_text_vision_configs(
+            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+        )
+
+    def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
+        model = CLIPModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            result = model(input_ids, pixel_values, attention_mask)
+        self.parent.assertEqual(
+            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
+        )
+        self.parent.assertEqual(
+            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, input_ids, attention_mask, pixel_values = config_and_inputs
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "pixel_values": pixel_values,
+            "return_loss": True,
+        }
+        return config, inputs_dict
+
+
+
 @require_torch
 class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BarkSemanticModel,) if is_torch_available() else ()
