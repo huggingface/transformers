@@ -74,8 +74,6 @@ class BarkSemanticModelTester:
         initializer_range=0.02,
         n_codes_total=8,  # for BarkFineModel
         n_codes_given=1,  # for BarkFineModel
-        config_class=BarkSemanticConfig,
-        model_class=BarkSemanticModel,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -100,8 +98,6 @@ class BarkSemanticModelTester:
         self.n_codes_given = n_codes_given
 
         self.is_encoder_decoder = False
-        self.config_class = config_class
-        self.model_class = model_class
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -123,7 +119,7 @@ class BarkSemanticModelTester:
         return config, inputs_dict
 
     def get_config(self):
-        return self.config_class(
+        return BarkSemanticConfig(
             vocab_size=self.vocab_size,
             output_vocab_size=self.output_vocab_size,
             hidden_size=self.hidden_size,
@@ -146,7 +142,7 @@ class BarkSemanticModelTester:
         return config, inputs_dict
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
-        model = self.model_class(config=config).to(torch_device).eval()
+        model = BarkSemanticModel(config=config).to(torch_device).eval()
 
         input_ids = inputs_dict["input_ids"]
         attention_mask = inputs_dict["attention_mask"]
@@ -213,8 +209,6 @@ class BarkCoarseModelTester:
         initializer_range=0.02,
         n_codes_total=8,  # for BarkFineModel
         n_codes_given=1,  # for BarkFineModel
-        config_class=BarkCoarseConfig,
-        model_class=BarkCoarseModel,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -239,8 +233,6 @@ class BarkCoarseModelTester:
         self.n_codes_given = n_codes_given
 
         self.is_encoder_decoder = False
-        self.config_class = config_class
-        self.model_class = model_class
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -262,7 +254,7 @@ class BarkCoarseModelTester:
         return config, inputs_dict
 
     def get_config(self):
-        return self.config_class(
+        return BarkCoarseConfig(
             vocab_size=self.vocab_size,
             output_vocab_size=self.output_vocab_size,
             hidden_size=self.hidden_size,
@@ -285,7 +277,7 @@ class BarkCoarseModelTester:
         return config, inputs_dict
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
-        model = self.model_class(config=config).to(torch_device).eval()
+        model = BarkCoarseModel(config=config).to(torch_device).eval()
 
         input_ids = inputs_dict["input_ids"]
         attention_mask = inputs_dict["attention_mask"]
@@ -352,8 +344,6 @@ class BarkFineModelTester:
         initializer_range=0.02,
         n_codes_total=8,  # for BarkFineModel
         n_codes_given=1,  # for BarkFineModel
-        config_class=BarkFineConfig,
-        model_class=BarkFineModel,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -378,8 +368,6 @@ class BarkFineModelTester:
         self.n_codes_given = n_codes_given
 
         self.is_encoder_decoder = False
-        self.config_class = config_class
-        self.model_class = model_class
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length, self.n_codes_total], self.vocab_size)
@@ -405,7 +393,7 @@ class BarkFineModelTester:
         return config, inputs_dict
 
     def get_config(self):
-        return self.config_class(
+        return self.BarkFineConfig(
             vocab_size=self.vocab_size,
             output_vocab_size=self.output_vocab_size,
             hidden_size=self.hidden_size,
@@ -428,7 +416,7 @@ class BarkFineModelTester:
         return config, inputs_dict
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
-        model = self.model_class(config=config).to(torch_device).eval()
+        model = BarkFineModel(config=config).to(torch_device).eval()
 
         input_ids = inputs_dict["input_ids"]
         attention_mask = inputs_dict["attention_mask"]
