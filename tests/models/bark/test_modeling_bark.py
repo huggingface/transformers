@@ -74,8 +74,8 @@ class BarkSemanticModelTester:
         initializer_range=0.02,
         n_codes_total=8,  # for BarkFineModel
         n_codes_given=1,  # for BarkFineModel
-        config_class=None,
-        model_class=None,
+        config_class=BarkSemanticConfig,
+        model_class=BarkSemanticModel,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -213,8 +213,8 @@ class BarkCoarseModelTester:
         initializer_range=0.02,
         n_codes_total=8,  # for BarkFineModel
         n_codes_given=1,  # for BarkFineModel
-        config_class=None,
-        model_class=None,
+        config_class=BarkCoarseConfig,
+        model_class=BarkCoarseModel,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -352,8 +352,8 @@ class BarkFineModelTester:
         initializer_range=0.02,
         n_codes_total=8,  # for BarkFineModel
         n_codes_given=1,  # for BarkFineModel
-        config_class=None,
-        model_class=None,
+        config_class=BarkFineConfig,
+        model_class=BarkFineModel,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -545,9 +545,7 @@ class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     test_resize_embeddings = True
 
     def setUp(self):
-        self.model_tester = BarkSemanticModelTester(
-            self, config_class=BarkSemanticConfig, model_class=BarkSemanticModel
-        )
+        self.model_tester = BarkSemanticModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BarkSemanticConfig, n_embd=37)
 
     def test_config(self):
@@ -613,7 +611,7 @@ class BarkCoarseModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     test_resize_embeddings = True
 
     def setUp(self):
-        self.model_tester = BarkCoarseModelTester(self, config_class=BarkCoarseConfig, model_class=BarkCoarseModel)
+        self.model_tester = BarkCoarseModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BarkCoarseConfig, n_embd=37)
 
     def test_config(self):
@@ -680,7 +678,7 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = True
 
     def setUp(self):
-        self.model_tester = BarkFineModelTester(self, config_class=BarkFineConfig, model_class=BarkFineModel)
+        self.model_tester = BarkFineModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BarkFineConfig, n_embd=37)
 
     def test_config(self):
