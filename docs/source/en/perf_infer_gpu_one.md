@@ -17,9 +17,9 @@ rendered properly in your Markdown viewer.
 
 In addition to this guide, relevant information can be found as well in [the guide for training on a single GPU](perf_train_gpu_one) and [the guide for inference on CPUs](perf_infer_cpu).
 
-## Better Transformer: PyTorch-native transformer fastpath that uses Flash Attention
+## BetterTransformer
 
-### `BetterTransformer` API for encoder models
+### Encoder models
 
 PyTorch-native [`nn.MultiHeadAttention`](https://pytorch.org/blog/a-better-transformer-for-fast-transformer-encoder-inference/) attention fastpath, called BetterTransformer, can be used with Transformers through the integration in the [🤗 Optimum library](https://huggingface.co/docs/optimum/bettertransformer/overview).
 
@@ -38,7 +38,7 @@ model = model.reverse_bettertransformer()
 model.save_pretrained("saved_model")
 ```
 
-### `BetterTransformer` API and Flash attention for decoder models
+### Decoder models
 
 As of PyTorch 2.0, the attention fastpath is supported for both encoders and decoders. The list of supported architectures can be found [here](https://huggingface.co/docs/optimum/bettertransformer/overview#supported-models).
 

@@ -22,13 +22,13 @@ Note: A multi GPU setup can use the majority of the strategies described in the 
 
 </Tip>
 
-## `BetterTransformer` API and Flash Attention for faster inference
+## BetterTransformer and Flash Attention
 
-We have recently integrated `BetterTransformer` for faster inference on multi-GPU for text, image and audio models. Check the documentation about this integration [here](https://huggingface.co/docs/optimum/bettertransformer/overview) for more details. 
+[`BetterTransformer`](https://huggingface.co/docs/optimum/bettertransformer/overview) is supported for faster inference on multi-GPU for text, image, and audio models.
 
-For text models, especially decoder-based models (e.g. GPT, T5, Llama, etc.), the `BetterTransformer` API will convert all attention operations to use the [`torch.nn.functional.scaled_dot_product_attention` method](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention) (SDPA), that is available only from PyTorch 2.0 and onwards. 
+For text models, especially decoder-based models (GPT, T5, Llama, etc.), the `BetterTransformer` API converts all attention operations to use the [`torch.nn.functional.scaled_dot_product_attention` method](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention) (SDPA) that is only available in PyTorch 2.0 and onwards. 
 
-An example usage of the `BetterTransformer` API is shown below:
+To convert a model to `BetterTransformer`:
 
 ```python
 from transformers import AutoModelForCausalLM
@@ -40,7 +40,7 @@ model.to_bettertransformer()
 # Use it for training or inference
 ```
 
-According to the official documentation, `torch.nn.functional.scaled_dot_product_attention` can also call [Flash-Attention](https://arxiv.org/abs/2205.14135) kernels under the hood. If you want to force the usage of Flash Attention, you can use the [`torch.backends.cuda.sdp_kernel(enable_flash=True)`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as below:
+SDPA can also call [Flash-Attention](https://arxiv.org/abs/2205.14135) kernels under the hood. If you want to force the usage of Flash Attention, use [`torch.backends.cuda.sdp_kernel(enable_flash=True)`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel):
 
 
 ```python
@@ -93,11 +93,11 @@ with torch.cuda.amp.autocast(), torch.backends.cuda.sdp_kernel(enable_flash=True
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
-For encoder models, the method [`~PreTrainedModel.reverse_bettertransformer`] allows to go back to the original modeling, which should be used before saving the model in order to use the canonical transformers modeling:
+For encoder models, the [`~PreTrainedModel.reverse_bettertransformer`] method reverts to the original model, which should be used before saving the model to use the canonical transformers modeling:
 
 ```python
 model = model.reverse_bettertransformer()
 model.save_pretrained("saved_model")
 ```
 
-Have a look at [this detailed blogpost](https://pytorch.org/blog/out-of-the-box-acceleration/) to read more about what is possible to do with `BetterTransformer` + SDPA API.
+Have a look at this [blog post](https://pytorch.org/blog/out-of-the-box-acceleration/) to learn more about what is possible to with the `BetterTransformer` + SDPA API.
