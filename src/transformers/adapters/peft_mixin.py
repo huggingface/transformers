@@ -121,18 +121,14 @@ class PeftAdapterMixin:
         # Replace the adapter with the loaded adapter
         inject_adapter_in_model(loaded_peft_config, self, adapter_name)
 
-        adapter_state_dict = load_peft_weights(
-            peft_model_id,
-            revision=revision,
-            use_auth_token=use_auth_token,
-        )
+        adapter_state_dict = load_peft_weights(peft_model_id, revision=revision, use_auth_token=use_auth_token)
 
         # We need to pre-process the state dict to remove unneeded prefixes - for backward compatibility
         processed_adapter_state_dict = {}
         prefix = "base_model.model"
         for key, value in adapter_state_dict.items():
             if key.startswith(prefix):
-                new_key = key[len(prefix):]
+                new_key = key[len(prefix) :]
             else:
                 new_key = key
             processed_adapter_state_dict[new_key] = value
@@ -148,7 +144,7 @@ class PeftAdapterMixin:
                     f" {incompatible_keys.unexpected_keys}. "
                 )
 
-        # @pacman100 why this was needed?
+        # Re-dispatch model and hooks in case the model is offloaded to CPU / Disk.
         if (
             (getattr(self, "hf_device_map", None) is not None)
             and (len(set(self.hf_device_map.values()).intersection({"cpu", "disk"})) > 0)
@@ -158,11 +154,7 @@ class PeftAdapterMixin:
                 device_map=device_map, max_memory=max_memory, offload_dir=offload_dir, offload_index=offload_index
             )
 
-    def add_adapter(
-        self,
-        adapter_config,
-        adapter_name: Optional[str] = None,
-    ) -> None:
+    def add_adapter(self, adapter_config, adapter_name: Optional[str] = None) -> None:
         r"""
         Adds a fresh new adapter to the current model for training purpose. If no adapter name is passed, a default
         name is assigned to the adapter to follow the convention of PEFT library
@@ -266,10 +258,7 @@ class PeftAdapterMixin:
             if isinstance(module, BaseTunerLayer):
                 return module.active_adapter
 
-    def get_adapter_state_dict(
-        self,
-        adapter_name: Optional[str] = None,
-    ) -> dict:
+    def get_adapter_state_dict(self, adapter_name: Optional[str] = None) -> dict:
         """
         Gets the adapter state dict.
         """
