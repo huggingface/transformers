@@ -159,33 +159,26 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     >>> input_ids = tokenizer.encode(input_context, return_tensors="pt")
 
     >>> # Without `eos_token_id`, it will generate the default length, 20, ignoring `min_new_tokens`
-    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=30, temperature=0.0001, do_sample=True)
+    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=30)
     >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
     Hugging Face Company is a company that has been working on a new product for the past year.
 
     >>> # If `eos_token_id` is set to ` company` it will take into account how many `min_new_tokens` have been generated
     >>> # before stopping.
-    >>> outputs = model.generate(
-    ...     input_ids=input_ids, min_new_tokens=1, eos_token_id=1664, temperature=0.0001, do_sample=True
-    ... )
+    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=1, eos_token_id=1664)
     >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
     Hugging Face Company is a company
 
     >>> # Increasing `min_new_tokens` will bury the first occurrence of ` company` generating a different sequence.
-    >>> outputs = model.generate(
-    ...     input_ids=input_ids, min_new_tokens=2, eos_token_id=1664, temperature=0.0001, do_sample=True
-    ... )
+    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=2, eos_token_id=1664)
     >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
     Hugging Face Company is a new company
 
     >>> # If no more occurrences of the `eos_token` happen after `min_new_tokens` it returns to the 20 default tokens.
-    >>> outputs = model.generate(
-    ...     input_ids=input_ids, min_new_tokens=10, eos_token_id=1664, temperature=0.0001, do_sample=True
-    ... )
+    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=10, eos_token_id=1664)
     >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
     Hugging Face Company is a new and innovative brand of facial recognition technology that is designed to help you
     ```
-
     """
 
     def __init__(self, prompt_length_to_skip: int, min_new_tokens: int, eos_token_id: Union[int, List[int]]):
