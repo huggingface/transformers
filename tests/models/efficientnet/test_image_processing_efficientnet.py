@@ -200,10 +200,10 @@ class EfficientNetImageProcessorTest(ImageProcessingSavingTestMixin, unittest.Te
 
         image_processor = self.image_processing_class(**self.image_processor_dict)
 
-        rescaled_image = image_processor.rescale(image, scale=1 / 255)
-        expected_image = image.astype(np.float32) * (2 / 255.0) - 1
+        rescaled_image = image_processor.rescale(image, scale=1 / 127.5)
+        expected_image = (image * (1 / 127.5)).astype(np.float32) - 1
         self.assertTrue(np.allclose(rescaled_image, expected_image))
 
         rescaled_image = image_processor.rescale(image, scale=1 / 255, offset=False)
-        expected_image = image.astype(np.float32) / 255.0
+        expected_image = (image / 255.0).astype(np.float32)
         self.assertTrue(np.allclose(rescaled_image, expected_image))
