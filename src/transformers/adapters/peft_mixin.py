@@ -36,6 +36,7 @@ class PeftAdapterMixin:
     A class containing all functions for loading and using adapters weights that are supported in PEFT library.
     Currently supported PEFT methods are all non-prefix tuning methods
     """
+
     _hf_peft_config_loaded = False
 
     def load_adapter(
@@ -180,13 +181,12 @@ class PeftAdapterMixin:
 
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
-        
+
         from peft.tuners.tuners_utils import BaseTunerLayer
 
         for _, module in self.named_modules():
             if isinstance(module, BaseTunerLayer):
                 module.disable_adapters = True
-
 
     def enable_adapters(self) -> None:
         r"""
@@ -196,13 +196,12 @@ class PeftAdapterMixin:
 
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
-        
+
         from peft.tuners.tuners_utils import BaseTunerLayer
 
         for _, module in self.named_modules():
             if isinstance(module, BaseTunerLayer):
                 module.disable_adapters = False
-        
 
     # TODO: change it to a property but torch.jit fails. Maybe we should return None is PEFT is not available
     def active_adapter(self) -> str:
