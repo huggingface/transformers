@@ -97,6 +97,8 @@ with torch.cuda.amp.autocast(), torch.backends.cuda.sdp_kernel(enable_flash=True
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
+Have a look at this [blog post](https://pytorch.org/blog/out-of-the-box-acceleration/) to learn more about what is possible to do with the `BetterTransformer` + SDPA API.
+
 ### Encoder models
 
 For encoder models, the [`~PreTrainedModel.reverse_bettertransformer`] method reverts to the original model, which should be used before saving the model to use the canonical transformers modeling:
@@ -106,4 +108,4 @@ model = model.reverse_bettertransformer()
 model.save_pretrained("saved_model")
 ```
 
-Have a look at this [blog post](https://pytorch.org/blog/out-of-the-box-acceleration/) to learn more about what is possible to with the `BetterTransformer` + SDPA API.
+Have a look at this [blog post](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2) to learn more about what is possible to do with `BetterTransformer` API for encoder based models.
