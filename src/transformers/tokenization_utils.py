@@ -433,6 +433,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 # if some tokens were added at the beginning ignore them HACK
                 new_idx = len(self)
                 if not special_tokens and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
+                    # TODO not writable.... why the hell haha
                     token.content = token.content.lower()
                 self._added_tokens_decoder[new_idx] = token
                 added_tokens += 1
