@@ -1183,7 +1183,7 @@ class LlamaConverter(SpmConverter):
         )
 
     def pre_tokenizer(self, replacement, add_prefix_space):
-        return super().pre_tokenizer(replacement, add_prefix_space=self.original_tokenizer.add_prefix_space)
+        return super().pre_tokenizer(replacement, self.original_tokenizer.add_prefix_space)
 
     def post_processor(self):
         # 3 possible case :
