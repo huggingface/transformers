@@ -34,7 +34,15 @@ logger = logging.get_logger(__name__)
 class PeftAdapterMixin:
     """
     A class containing all functions for loading and using adapters weights that are supported in PEFT library.
-    Currently supported PEFT methods are all non-prefix tuning methods
+    Currently supported PEFT methods are all non-prefix tuning methods.
+
+    With this mixin, if the correct PEFT version is installed, it is possible to:
+
+    - Load an adapter stored on a local path or in a remote Hub repository, and inject it in the model
+    - Attach new adapters in the model and train them with Trainer or by your own.
+    - Attach multiple adapters and iteratively activate / deactivate them
+    - Activate / deactivate all adapters from the model.
+    - Get the `state_dict` of the active adapter.
     """
 
     _hf_peft_config_loaded = False
