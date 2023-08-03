@@ -334,20 +334,6 @@ class HerbertTokenizer(PreTrainedTokenizer):
         id2lang=None,
         **kwargs,
     ):
-        super().__init__(
-            unk_token=unk_token,
-            bos_token=bos_token,
-            sep_token=sep_token,
-            pad_token=pad_token,
-            cls_token=cls_token,
-            mask_token=mask_token,
-            additional_special_tokens=additional_special_tokens,
-            lang2id=lang2id,
-            id2lang=id2lang,
-            do_lowercase_and_remove_accent=do_lowercase_and_remove_accent,
-            tokenizer_file=None,
-            **kwargs,
-        )
 
         try:
             import sacremoses
@@ -389,6 +375,22 @@ class HerbertTokenizer(PreTrainedTokenizer):
             tokenize_chinese_chars=False,
             strip_accents=False,
         )
+        super().__init__(
+            unk_token=unk_token,
+            bos_token=bos_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            additional_special_tokens=additional_special_tokens,
+            lang2id=lang2id,
+            id2lang=id2lang,
+            do_lowercase_and_remove_accent=do_lowercase_and_remove_accent,
+            tokenizer_file=None,
+            **kwargs,
+        )
+
+
 
     @property
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.do_lower_case

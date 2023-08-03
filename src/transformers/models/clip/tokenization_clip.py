@@ -313,15 +313,6 @@ class CLIPTokenizer(PreTrainedTokenizer):
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
 
-        super().__init__(
-            errors=errors,
-            unk_token=unk_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            **kwargs,
-        )
-
         try:
             import ftfy
 
@@ -348,6 +339,15 @@ class CLIPTokenizer(PreTrainedTokenizer):
             re.IGNORECASE,
         )
 
+        super().__init__(
+            errors=errors,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            **kwargs,
+        )
+        
     @property
     def vocab_size(self):
         return len(self.encoder)

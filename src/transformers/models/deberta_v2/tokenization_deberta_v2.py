@@ -124,6 +124,17 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
+        if not os.path.isfile(vocab_file):
+            raise ValueError(
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
+                " model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+            )
+        self.do_lower_case = do_lower_case
+        self.split_by_punct = split_by_punct
+        self.vocab_file = vocab_file
+        self._tokenizer = SPMTokenizer(
+            vocab_file, self.all_special_tokens, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs
+        )
         super().__init__(
             do_lower_case=do_lower_case,
             bos_token=bos_token,
@@ -138,17 +149,6 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        if not os.path.isfile(vocab_file):
-            raise ValueError(
-                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
-                " model use `tokenizer = AutoTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
-            )
-        self.do_lower_case = do_lower_case
-        self.split_by_punct = split_by_punct
-        self.vocab_file = vocab_file
-        self._tokenizer = SPMTokenizer(
-            vocab_file, self.all_special_tokens, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs
-        )
 
     @property
     def vocab_size(self):
