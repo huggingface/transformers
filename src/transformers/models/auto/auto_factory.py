@@ -482,7 +482,7 @@ class _BaseAutoModelClass:
             )
 
             if maybe_adapter_path is not None:
-                with open(maybe_adapter_path, "r") as f:
+                with open(maybe_adapter_path, "r", encoding="utf-8") as f:
                     adapter_config = json.load(f)
 
                     kwargs["_adapter_model_path"] = pretrained_model_name_or_path

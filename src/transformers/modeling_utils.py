@@ -2302,7 +2302,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if _adapter_model_path is not None:
                 adapter_model_id = _adapter_model_path
             else:
-                with open(maybe_adapter_model_path, "r") as f:
+                with open(maybe_adapter_model_path, "r", encoding="utf-8") as f:
                     adapter_model_id = pretrained_model_name_or_path
                     pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
 
