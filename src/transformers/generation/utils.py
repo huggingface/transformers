@@ -829,6 +829,46 @@ class GenerationMixin:
             warpers.append(LogitNormalization())
         return warpers
 
+    def _get_generation_mode(
+        self, generation_config: GenerationConfig, assistant_model: Optional["PreTrainedModel"]
+    ) -> str:
+        """
+        Returns the generation model triggered by a [`GenerationConfig`] instance.
+        """
+        if generation_config.num_beams == 1:
+            if generation_config.do_sample is False:
+                if (
+                    generation_config.top_k is not None
+                    and generation_config.top_k > 1
+                    and generation_config.penalty_alpha is not None
+                    and generation_config.penalty_alpha > 0
+                ):
+                    generation_mode = "contrastive_search"
+                else:
+                    generation_mode = "greedy_search"
+            else:  # do_sample=True
+                generation_mode = "sample"
+        else:
+            if generation_config.constraints is not None or generation_config.force_words_ids is not None:
+                generation_mode = "constrained_beam_search"
+            elif generation_config.num_beam_groups > 1:
+                generation_mode = "group_beam_search"
+            elif generation_config.do_sample is True:
+                generation_mode = "beam_sample"
+            else:
+                generation_mode = "beam_search"
+
+        # Assisted generation may extend some generation modes
+        if assistant_model is not None:
+            if generation_mode in ("greedy_search", "sample"):
+                generation_mode = "assisted_generation"
+            else:
+                raise ValueError(
+                    "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
+                    "is only supported with Greedy Search and Sample."
+                )
+        return generation_mode
+
     def _get_logits_processor(
         self,
         generation_config: GenerationConfig,
@@ -1422,65 +1462,11 @@ class GenerationMixin:
             )
 
         # 7. determine generation mode
-        is_constraint_gen_mode = (
-            generation_config.constraints is not None or generation_config.force_words_ids is not None
-        )
-
-        is_contrastive_search_gen_mode = (
-            (generation_config.num_beams == 1)
-            and generation_config.top_k is not None
-            and generation_config.top_k > 1
-            and generation_config.do_sample is False
-            and generation_config.penalty_alpha is not None
-            and generation_config.penalty_alpha > 0
-        )
-
-        is_greedy_gen_mode = (
-            (generation_config.num_beams == 1)
-            and (generation_config.num_beam_groups == 1)
-            and generation_config.do_sample is False
-            and not is_constraint_gen_mode
-            and not is_contrastive_search_gen_mode
-        )
-        is_sample_gen_mode = (
-            (generation_config.num_beams == 1)
-            and (generation_config.num_beam_groups == 1)
-            and generation_config.do_sample is True
-            and not is_constraint_gen_mode
-            and not is_contrastive_search_gen_mode
-        )
-        is_beam_gen_mode = (
-            (generation_config.num_beams > 1)
-            and (generation_config.num_beam_groups == 1)
-            and generation_config.do_sample is False
-            and not is_constraint_gen_mode
-            and not is_contrastive_search_gen_mode
-        )
-        is_beam_sample_gen_mode = (
-            (generation_config.num_beams > 1)
-            and (generation_config.num_beam_groups == 1)
-            and generation_config.do_sample is True
-            and not is_constraint_gen_mode
-            and not is_contrastive_search_gen_mode
-        )
-        is_group_beam_gen_mode = (
-            (generation_config.num_beams > 1)
-            and (generation_config.num_beam_groups > 1)
-            and not is_constraint_gen_mode
-            and not is_contrastive_search_gen_mode
-        )
-        is_assisted_gen_mode = False
-        if assistant_model is not None:
-            if not (is_greedy_gen_mode or is_sample_gen_mode):
-                raise ValueError(
-                    "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
-                    "is only supported with Greedy Search and Sample."
-                )
-            is_assisted_gen_mode = True
+        generation_mode = self._get_generation_mode(generation_config, assistant_model)
 
         if generation_config.num_beam_groups > generation_config.num_beams:
             raise ValueError("`num_beam_groups` has to be smaller or equal to `num_beams`")
-        if is_group_beam_gen_mode and generation_config.do_sample is True:
+        if generation_mode == "group_beam_search" and generation_config.do_sample is True:
             raise ValueError(
                 "Diverse beam search cannot be used in sampling mode. Make sure that `do_sample` is set to `False`."
             )
@@ -1515,7 +1501,7 @@ class GenerationMixin:
             generation_config=generation_config, stopping_criteria=stopping_criteria
         )
         # 10. go into different generation modes
-        if is_assisted_gen_mode:
+        if generation_mode == "assisted_generation":
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     "num_return_sequences has to be 1 when doing assisted generate, "
@@ -1553,7 +1539,7 @@ class GenerationMixin:
                 streamer=streamer,
                 **model_kwargs,
             )
-        if is_greedy_gen_mode:
+        if generation_mode == "greedy_search":
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     "num_return_sequences has to be 1 when doing greedy search, "
@@ -1574,7 +1560,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_contrastive_search_gen_mode:
+        elif generation_mode == "contrastive_search":
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     "num_return_sequences has to be 1 when doing contrastive search, "
@@ -1599,7 +1585,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_sample_gen_mode:
+        elif generation_mode == "sample":
             # 11. prepare logits warper
             logits_warper = self._get_logits_warper(generation_config)
 
@@ -1626,7 +1612,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_beam_gen_mode:
+        elif generation_mode == "beam_search":
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
@@ -1664,7 +1650,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_beam_sample_gen_mode:
+        elif generation_mode == "beam_sample":
             # 11. prepare logits warper
             logits_warper = self._get_logits_warper(generation_config)
 
@@ -1703,7 +1689,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_group_beam_gen_mode:
+        elif generation_mode == "group_beam_search":
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
@@ -1754,7 +1740,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_constraint_gen_mode:
+        elif generation_mode == "constrained_beam_search":
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
