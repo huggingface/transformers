@@ -149,9 +149,7 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     Examples:
 
     ```python
-    >>> import torch
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM
-
 
     >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
     >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
@@ -240,7 +238,6 @@ class TemperatureLogitsWarper(LogitsWarper):
     ```python
     >>> import torch
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM
-
 
     >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
     >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
