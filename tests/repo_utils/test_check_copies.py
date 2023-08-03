@@ -155,7 +155,6 @@ class CopyCheckTester(unittest.TestCase):
         reference_code = (
             "class BertAttention(nn.Module):\n    def __init__(self, config):\n        super().__init__()\n"
         )
-        print(code, reference_code)
         self.assertEqual(code, reference_code)
 
     def test_is_copy_consistent(self):
