@@ -1426,7 +1426,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # if word embeddings are not tied, make sure that lm head is resized as well
         if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
             old_lm_head = self.get_output_embeddings()
-            new_lm_head = self._get_resized_lm_head(old_lm_head, self.vocab_size)
+            new_lm_head = self._get_resized_lm_head(old_lm_head, new_embeddings.weight.shape[0])
             self.set_output_embeddings(new_lm_head)
 
         return self.get_input_embeddings(), new_num_tokens
