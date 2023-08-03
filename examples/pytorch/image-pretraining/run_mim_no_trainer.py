@@ -513,7 +513,10 @@ def main():
         )
     else:
         logger.info("Training new model from scratch")
-        model = AutoModelForMaskedImageModeling.from_config(config)
+        model = AutoModelForMaskedImageModeling.from_config(
+            config,
+            trust_remote_code=args.trust_remote_code,
+        )
 
     column_names = ds["train"].column_names
 
