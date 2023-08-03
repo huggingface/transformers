@@ -19,6 +19,7 @@ from typing import Optional
 from packaging import version
 
 from .hub import cached_file
+from .import_utils import is_peft_available
 
 
 ADAPTER_CONFIG_NAME = "adapter_config.json"
@@ -76,6 +77,9 @@ def check_peft_version(min_version: str) -> None:
         version (`str`):
             The version of PEFT to check against.
     """
+    if not is_peft_available():
+        raise ValueError("PEFT is not installed. Please install it with `pip install peft`")
+
     is_peft_version_compatible = version.parse(importlib.metadata.version("peft")) <= version.parse(min_version)
 
     if not is_peft_version_compatible:
