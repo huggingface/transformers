@@ -1793,23 +1793,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if self.can_generate():
                 model_to_save.generation_config.save_pretrained(save_directory)
 
-        if model_to_save._hf_peft_config_loaded:
-            logger.info(
-                "Detected adapters on the model, saving the model in the PEFT format, only adapter weights will be saved."
-            )
-            state_dict = model_to_save.get_adapter_state_dict()
-
-            if save_peft_format:
+            if model_to_save._hf_peft_config_loaded:
                 logger.info(
-                    "To match the expected format of the PEFT library, all keys of the state dict of adapters will be pre-pended with `base_model.model`."
+                    "Detected adapters on the model, saving the model in the PEFT format, only adapter weights will be saved."
                 )
-                peft_state_dict = {}
-                for key, value in state_dict.items():
-                    peft_state_dict[f"base_model.model.{key}"] = value
-                state_dict = peft_state_dict
+                state_dict = model_to_save.get_adapter_state_dict()
 
-            current_peft_config = self.peft_config[self.active_adapter()]
-            current_peft_config.save_pretrained(save_directory)
+                if save_peft_format:
+                    logger.info(
+                        "To match the expected format of the PEFT library, all keys of the state dict of adapters will be pre-pended with `base_model.model`."
+                    )
+                    peft_state_dict = {}
+                    for key, value in state_dict.items():
+                        peft_state_dict[f"base_model.model.{key}"] = value
+                    state_dict = peft_state_dict
+
+                current_peft_config = self.peft_config[self.active_adapter()]
+                current_peft_config.save_pretrained(save_directory)
 
         # Save the model
         if state_dict is None:

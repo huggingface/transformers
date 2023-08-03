@@ -88,7 +88,7 @@ class PeftAdapterMixin:
         """
         check_peft_version(min_version="0.4.0")
 
-        adapter_name = adapter_name if adapater_name is not None else "default"
+        adapter_name = adapter_name if adapter_name is not None else "default"
 
         from peft import PeftConfig, inject_adapter_in_model, load_peft_weights
         from peft.utils import set_peft_model_state_dict
