@@ -402,7 +402,7 @@ class RoFormerTokenizer(PreTrainedTokenizer):
                 "See https://pypi.org/project/rjieba/ for installation."
             )
         self.jieba = rjieba
-        
+
         super().__init__(
             do_lower_case=do_lower_case,
             do_basic_tokenize=do_basic_tokenize,
@@ -416,7 +416,6 @@ class RoFormerTokenizer(PreTrainedTokenizer):
             strip_accents=strip_accents,
             **kwargs,
         )
-
 
     @property
     def do_lower_case(self):
