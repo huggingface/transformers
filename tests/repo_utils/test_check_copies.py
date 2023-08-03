@@ -171,7 +171,9 @@ class CopyCheckTester(unittest.TestCase):
             with patch_transformer_repo_path(tmp_folder):
                 code = find_code_in_transformers("models.bert.modeling_bert.BertAttention")
 
-        reference_code = "    def __init__(self, config):\n        super().__init__()\n"
+        reference_code = (
+            "class BertAttention(nn.Module):\n    def __init__(self, config):\n        super().__init__()\n"
+        )
         print(code, reference_code)
         self.assertEqual(code, reference_code)
 

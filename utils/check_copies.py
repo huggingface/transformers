@@ -165,7 +165,7 @@ def find_code_in_transformers(object_name):
         raise ValueError(f" {object_name} does not match any function or class in {module}.")
 
     # We found the beginning of the class / func, now let's find the end (when the indent diminishes).
-    start_index = line_index
+    start_index = line_index - 1
     while line_index < len(lines) and _should_continue(lines[line_index], indent):
         line_index += 1
     # Clean up empty lines at the end (if any).
@@ -204,6 +204,29 @@ def blackify(code):
     return result[len("class Bla:\n") :] if has_indent else result
 
 
+def check_codes_match(observed_code, theoretical_code):
+    """
+    Checks if the code in `observed_code` and `theoretical_code` match with the exception of the class/function name.
+    Returns the index of the first line where there is a difference (if any) and `None` if the codes match.
+    """
+    observed_code_header = observed_code.split("\n")[0]
+    theoretical_code_header = theoretical_code.split("\n")[0]
+
+    _re_class_match = re.compile(r"class\s+([^\(:]+)(?:\(|:)")
+    _re_func_match = re.compile(r"def\s+([^\(]+)\(")
+    for re_pattern in [_re_class_match, _re_func_match]:
+        if re_pattern.match(observed_code_header) is not None:
+            observed_obj_name = re_pattern.search(observed_code_header).groups()[0]
+            theoretical_name = re_pattern.search(theoretical_code_header).groups()[0]
+            theoretical_code = theoretical_code.replace(theoretical_name, observed_obj_name)
+
+    diff_index = 0
+    for observed_line, theoretical_line in zip(observed_code.split("\n"), theoretical_code.split("\n")):
+        if observed_line != theoretical_line:
+            return diff_index
+        diff_index += 1
+
+
 def is_copy_consistent(filename, overwrite=False):
     """
     Check if the code commented as a copy in `filename` matches the original.
@@ -226,10 +249,11 @@ def is_copy_consistent(filename, overwrite=False):
         theoretical_code = find_code_in_transformers(object_name)
         theoretical_indent = get_indent(theoretical_code)
 
-        start_index = line_index + 1 if indent == theoretical_indent else line_index + 2
-        indent = theoretical_indent
-        line_index = start_index
+        start_index = line_index + 1 if indent == theoretical_indent else line_index
+        line_index = start_index + 1
 
+        subcode = "\n".join(theoretical_code.split("\n")[1:])
+        indent = get_indent(subcode)
         # Loop to check the observed code, stop when indentation diminishes or if we see a End copy comment.
         should_continue = True
         while line_index < len(lines) and should_continue:
@@ -260,19 +284,12 @@ def is_copy_consistent(filename, overwrite=False):
                     theoretical_code = re.sub(obj1.lower(), obj2.lower(), theoretical_code)
                     theoretical_code = re.sub(obj1.upper(), obj2.upper(), theoretical_code)
 
-            # Blackify after replacement. To be able to do that, we need the header (class or function definition)
-            # from the previous line
-            theoretical_code = blackify(lines[start_index - 1] + theoretical_code)
-            theoretical_code = theoretical_code[len(lines[start_index - 1]) :]
+            theoretical_code = blackify(theoretical_code)
 
         # Test for a diff and act accordingly.
-        if observed_code != theoretical_code:
-            diff_index = start_index + 1
-            for observed_line, theoretical_line in zip(observed_code.split("\n"), theoretical_code.split("\n")):
-                if observed_line != theoretical_line:
-                    break
-                diff_index += 1
-            diffs.append([object_name, diff_index])
+        diff_index = check_codes_match(observed_code, theoretical_code)
+        if diff_index is not None:
+            diffs.append([object_name, diff_index + start_index + 1])
             if overwrite:
                 lines = lines[:start_index] + [theoretical_code] + lines[line_index:]
                 line_index = start_index + 1
