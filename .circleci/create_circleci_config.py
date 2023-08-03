@@ -578,6 +578,9 @@ def create_circleci_config(folder=None):
             elif job.job_name == "tests_non_modeling":
                 job.tests_to_run = [x for x in test_list_items if "/test_modeling_" not in x]
 
+        # Since we filter tests above, we need to keep only those jobs that have tests to be run.
+        jobs = [x for x in jobs if len(x.tests_to_run) > 0]
+
         extended_tests_to_run = set(test_list.split())
         # Extend the test files for cross test jobs
         for job in jobs:
