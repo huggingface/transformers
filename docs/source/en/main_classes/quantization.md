@@ -29,6 +29,29 @@ If you want to quantize your own pytorch model, check out this [documentation](h
 
 Here are the things you can do using `bitsandbytes` integration
 
+### General usage
+
+You can quantize a model by using the `load_in_8bit` or `load_in_4bit` argument when calling the [`~PreTrainedModel.from_pretrained`] method as long as your model supports loading with 🤗 Accelerate and contains `torch.nn.Linear` layers. This should work for any modality as well.
+
+```python
+from transformers import AutoModelForCausalLM
+
+model_8bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_8bit=True)
+model_4bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_4bit=True)
+```
+
+By default all other modules (e.g. `torch.nn.LayerNorm`) will be converted in `torch.float16`, but if you want to change their `dtype` you can overwrite the `torch_dtype` argument:
+
+```python
+>>> import torch
+>>> from transformers import AutoModelForCausalLM
+
+>>> model_8bit = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", load_in_8bit=True, torch_dtype=torch.float32)
+>>> model_8bit.model.decoder.layers[-1].final_layer_norm.weight.dtype
+torch.float32
+```
+
+
 ### FP4 quantization 
 
 #### Requirements
@@ -41,7 +64,7 @@ Make sure that you have installed the requirements below before running any of t
 - Install latest `accelerate`
 `pip install --upgrade accelerate`
 
-- Install latest `transformers` from source 
+- Install latest `transformers`
 `pip install --upgrade transformers`
 
 #### Tips and best practices
@@ -106,9 +129,9 @@ Note also that `device_map` is optional but setting `device_map = 'auto'` is pre
 
 </Tip>
 
-#### Advanced usecases
+#### Advanced use cases
 
-Here we will cover some advanced usecases you can perform with FP4 quantization 
+Here we will cover some advanced use cases you can perform with FP4 quantization 
 
 ##### Change the compute dtype
 
@@ -184,13 +207,13 @@ model = AutoModelForCausalLM.from_pretrained("{your_username}/bloom-560m-8bit", 
 Note that in this case, you don't need to specify the arguments `load_in_8bit=True`, but you need to make sure that `bitsandbytes` and `accelerate` are installed.
 Note also that `device_map` is optional but setting `device_map = 'auto'` is prefered for inference as it will dispatch efficiently the model on the available ressources.
 
-### Advanced usecases
+### Advanced use cases
 
 This section is intended to advanced users, that want to explore what it is possible to do beyond loading and running 8-bit models.
 
 #### Offload between `cpu` and `gpu`
 
-One of the advanced usecase of this is being able to load a model and dispatch the weights between `CPU` and `GPU`. Note that the weights that will be dispatched on CPU **will not** be converted in 8-bit, thus kept in `float32`. This feature is intended for users that want to fit a very large model and dispatch the model between GPU and CPU.
+One of the advanced use case of this is being able to load a model and dispatch the weights between `CPU` and `GPU`. Note that the weights that will be dispatched on CPU **will not** be converted in 8-bit, thus kept in `float32`. This feature is intended for users that want to fit a very large model and dispatch the model between GPU and CPU.
 
 First, load a `BitsAndBytesConfig` from `transformers` and set the attribute `llm_int8_enable_fp32_cpu_offload` to `True`:
 
@@ -226,7 +249,7 @@ And that's it! Enjoy your model!
 
 You can play with the `llm_int8_threshold` argument to change the threshold of the outliers. An "outlier" is a hidden state value that is greater than a certain threshold. 
 This corresponds to the outlier threshold for outlier detection as described in `LLM.int8()` paper. Any hidden states value that is above this threshold will be considered an outlier and the operation on those values will be done in fp16. Values are usually normally distributed, that is, most values are in the range [-3.5, 3.5], but there are some exceptional systematic outliers that are very differently distributed for large models. These outliers are often in the interval [-60, -6] or [6, 60]. Int8 quantization works well for values of magnitude ~5, but beyond that, there is a significant performance penalty. A good default threshold is 6, but a lower threshold might be needed for more unstable models (small models, fine-tuning).
-This argument can impact the inference speed of the model. We suggest to play with this parameter to find which one is the best for your usecase.
+This argument can impact the inference speed of the model. We suggest to play with this parameter to find which one is the best for your use case.
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
@@ -280,4 +303,4 @@ Note that you don't need to pass `device_map` when loading the model for trainin
 
 ## Quantization with 🤗 `optimum` 
 
-Please have a look at [Optimum documentation](https://huggingface.co/docs/optimum/index) to learn more about quantization methods that are supported by `optimum` and see if these are applicable for your usecase.
+Please have a look at [Optimum documentation](https://huggingface.co/docs/optimum/index) to learn more about quantization methods that are supported by `optimum` and see if these are applicable for your use case.

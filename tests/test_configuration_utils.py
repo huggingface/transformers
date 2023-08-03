@@ -119,7 +119,7 @@ class ConfigPushToHubTester(unittest.TestCase):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
-        config.push_to_hub("test-config", use_auth_token=self._token)
+        config.push_to_hub("test-config", token=self._token)
 
         new_config = BertConfig.from_pretrained(f"{USER}/test-config")
         for k, v in config.to_dict().items():
@@ -131,7 +131,7 @@ class ConfigPushToHubTester(unittest.TestCase):
 
         # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            config.save_pretrained(tmp_dir, repo_id="test-config", push_to_hub=True, use_auth_token=self._token)
+            config.save_pretrained(tmp_dir, repo_id="test-config", push_to_hub=True, token=self._token)
 
         new_config = BertConfig.from_pretrained(f"{USER}/test-config")
         for k, v in config.to_dict().items():

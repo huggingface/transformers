@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import sys
+import warnings
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -157,13 +158,19 @@ class ModelArguments:
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
     image_processor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
-    use_auth_token: bool = field(
-        default=False,
+    token: str = field(
+        default=None,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
             )
+        },
+    )
+    use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
         },
     )
     ignore_mismatched_sizes: bool = field(
@@ -226,6 +233,12 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    if model_args.use_auth_token is not None:
+        warnings.warn("The `use_auth_token` argument is deprecated and will be removed in v4.34.", FutureWarning)
+        if model_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        model_args.token = model_args.use_auth_token
+
     if not (training_args.do_train or training_args.do_eval or training_args.do_predict):
         exit("Must specify at least one of --do_train, --do_eval or --do_predict!")
 
@@ -275,7 +288,7 @@ def main():
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
             task="image-classification",
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     else:
         data_files = {}
@@ -309,13 +322,13 @@ def main():
         finetuning_task="image-classification",
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
     )
     image_processor = AutoImageProcessor.from_pretrained(
         model_args.image_processor_name or model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
     )
 
     # If we don't have a validation split, split off a percentage of train as validation.
@@ -435,7 +448,7 @@ def main():
             from_pt=bool(".bin" in model_path),
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
             ignore_mismatched_sizes=model_args.ignore_mismatched_sizes,
         )
         num_replicas = training_args.strategy.num_replicas_in_sync
