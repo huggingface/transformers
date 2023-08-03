@@ -130,7 +130,7 @@ class PeftAdapterMixin:
             use_auth_token=use_auth_token,
         )
 
-        # Replace the adapter with the loaded adapter
+        # Create and add fresh new adapters into the model.
         inject_adapter_in_model(loaded_peft_config, self, adapter_name)
 
         adapter_state_dict = load_peft_weights(peft_model_id, revision=revision, use_auth_token=use_auth_token)
