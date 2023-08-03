@@ -33,8 +33,18 @@ logger = logging.get_logger(__name__)
 
 class PeftAdapterMixin:
     """
-    A class containing all functions for loading and using adapters weights that are supported in PEFT library.
-    Currently supported PEFT methods are all non-prefix tuning methods.
+    A class containing all functions for loading and using adapters weights that are supported in PEFT library. For
+    more details about adapters and injecting them on a transformer-based model, check out the documentation of PEFT
+    library: https://huggingface.co/docs/peft/index
+
+    Currently supported PEFT methods are all non-prefix tuning methods. Below is the list of supported PEFT methods
+    that anyone can load, train and run with this mixin class:
+    - Low Rank Adapters (LoRA): https://huggingface.co/docs/peft/conceptual_guides/lora
+    - IA3: https://huggingface.co/docs/peft/conceptual_guides/ia3
+    - AdaLora: https://arxiv.org/abs/2303.10512
+
+    Other PEFT models such as prompt tuning, prompt learning are out of scope as these adapters are not "injectable"
+    into a torch module. For using these methods, please refer to the usage guide of PEFT library.
 
     With this mixin, if the correct PEFT version is installed, it is possible to:
 
@@ -59,7 +69,10 @@ class PeftAdapterMixin:
         offload_index: Optional[int] = None,
     ) -> None:
         """
-        Load adapter weights from file or remote Hub folder. Requires peft as a backend to load the adapter weights.
+        Load adapter weights from file or remote Hub folder. If you are not familiar with adapters and PEFT methods, we
+        invite you to read more about them on PEFT official documentation: https://huggingface.co/docs/peft
+
+        Requires peft as a backend to load the adapter weights.
 
         Args:
             peft_model_id (`str`):
@@ -171,8 +184,12 @@ class PeftAdapterMixin:
 
     def add_adapter(self, adapter_config, adapter_name: Optional[str] = None) -> None:
         r"""
+        If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
+        official documentation: https://huggingface.co/docs/peft
+
         Adds a fresh new adapter to the current model for training purpose. If no adapter name is passed, a default
-        name is assigned to the adapter to follow the convention of PEFT library
+        name is assigned to the adapter to follow the convention of PEFT library (in PEFT we use "default" as the
+        default adapter name).
 
         Args:
             adapter_config (`~peft.PeftConfig`):
@@ -203,7 +220,14 @@ class PeftAdapterMixin:
 
     def set_adapter(self, adapter_name: str) -> None:
         """
-        Sets an adapter to switch easily between multiple adapters.
+        If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
+        official documentation: https://huggingface.co/docs/peft
+
+        Sets a specific adapter by forcing the model to use a that adapter and disable the other adapters.
+
+        Args:
+            adapter_name (`str`):
+                The name of the adapter to set.
         """
         check_peft_version(min_version="0.4.0")
         if not self._hf_peft_config_loaded:
@@ -229,7 +253,10 @@ class PeftAdapterMixin:
 
     def disable_adapters(self) -> None:
         r"""
-        Disable all adapters that are attached to the model
+        If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
+        official documentation: https://huggingface.co/docs/peft
+
+        Disable all adapters that are attached to the model. This leads to inferring with the base model only.
         """
         check_peft_version(min_version="0.4.0")
 
@@ -244,7 +271,10 @@ class PeftAdapterMixin:
 
     def enable_adapters(self) -> None:
         """
-        Enable all adapters that are attached to the model
+        If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
+        official documentation: https://huggingface.co/docs/peft
+
+        Enable adapters that are attached to the model. The model will use `self.active_adapter()`
         """
         check_peft_version(min_version="0.4.0")
 
@@ -259,6 +289,9 @@ class PeftAdapterMixin:
 
     def active_adapter(self) -> str:
         """
+        If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
+        official documentation: https://huggingface.co/docs/peft
+
         Gets the current active adapter of the model.
         """
         check_peft_version(min_version="0.4.0")
@@ -277,7 +310,15 @@ class PeftAdapterMixin:
 
     def get_adapter_state_dict(self, adapter_name: Optional[str] = None) -> dict:
         """
-        Gets the adapter state dict.
+        If you are not familiar with adapters and PEFT methods, we invite you to read more about them on the PEFT
+        official documentation: https://huggingface.co/docs/peft
+
+        Gets the adapter state dict that should only contain the weights tensors of the specified adapter_name adapter.
+        If no adapter_name is passed, the active adapter is used.
+
+        Args:
+            adapter_name (`str`, **optional**):
+                The name of the adapter to get the state dict from. If no name is passed, the active adapter is used.
         """
         check_peft_version(min_version="0.4.0")
 
