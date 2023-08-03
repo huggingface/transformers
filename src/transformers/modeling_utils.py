@@ -2258,6 +2258,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
         _adapter_model_path = kwargs.pop("_adapter_model_path", None)
+        adapter_name = kwargs.pop("adapter_name", "default")
 
         if use_auth_token is not None:
             warnings.warn(
@@ -3056,10 +3057,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if has_adapter_config:
             model.load_adapter(
                 adapter_model_id,
-                adapter_name="default",
+                adapter_name=adapter_name,
                 revision=revision,
                 use_auth_token=use_auth_token,
-                commit_hash=commit_hash,
             )
 
         if output_loading_info:

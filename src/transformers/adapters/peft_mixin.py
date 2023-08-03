@@ -137,7 +137,7 @@ class PeftAdapterMixin:
 
         # We need to pre-process the state dict to remove unneeded prefixes - for backward compatibility
         processed_adapter_state_dict = {}
-        prefix = "base_model.model"
+        prefix = "base_model.model."
         for key, value in adapter_state_dict.items():
             if key.startswith(prefix):
                 new_key = key[len(prefix) :]
@@ -198,6 +198,8 @@ class PeftAdapterMixin:
             )
 
         inject_adapter_in_model(adapter_config, self, adapter_name)
+
+        self.set_adapter(adapter_name)
 
     def set_adapter(self, adapter_name: str) -> None:
         """
