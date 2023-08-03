@@ -24,6 +24,7 @@ import math
 import os
 import sys
 import time
+import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from functools import partial
@@ -56,7 +57,7 @@ from transformers import (
     HfArgumentParser,
     is_tensorboard_available,
 )
-from transformers.utils import get_full_repo_name, is_offline_mode, send_example_telemetry
+from transformers.utils import is_offline_mode, send_example_telemetry
 
 
 logger = logging.getLogger(__name__)
@@ -188,13 +189,19 @@ class ModelArguments:
             )
         },
     )
-    use_auth_token: bool = field(
-        default=False,
+    token: str = field(
+        default=None,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
             )
+        },
+    )
+    use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
         },
     )
 
@@ -417,6 +424,12 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    if model_args.use_auth_token is not None:
+        warnings.warn("The `use_auth_token` argument is deprecated and will be removed in v4.34.", FutureWarning)
+        if model_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        model_args.token = model_args.use_auth_token
+
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_summarization", model_args, data_args, framework="flax")
@@ -452,14 +465,14 @@ def main():
 
     # Handle the repository creation
     if training_args.push_to_hub:
-        if training_args.hub_model_id is None:
-            repo_name = get_full_repo_name(
-                Path(training_args.output_dir).absolute().name, token=training_args.hub_token
-            )
-        else:
-            repo_name = training_args.hub_model_id
-        create_repo(repo_name, exist_ok=True, token=training_args.hub_token)
-        repo = Repository(training_args.output_dir, clone_from=repo_name, token=training_args.hub_token)
+        # Retrieve of infer repo_name
+        repo_name = training_args.hub_model_id
+        if repo_name is None:
+            repo_name = Path(training_args.output_dir).absolute().name
+        # Create repo and retrieve repo_id
+        repo_id = create_repo(repo_name, exist_ok=True, token=training_args.hub_token).repo_id
+        # Clone repo locally
+        repo = Repository(training_args.output_dir, clone_from=repo_id, token=training_args.hub_token)
 
     # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
@@ -475,7 +488,7 @@ def main():
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
             keep_in_memory=False,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     else:
         data_files = {}
@@ -492,7 +505,7 @@ def main():
             extension,
             data_files=data_files,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
@@ -503,13 +516,13 @@ def main():
         config = AutoConfig.from_pretrained(
             model_args.config_name,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     elif model_args.model_name_or_path:
         config = AutoConfig.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=model_args.cache_dir,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
@@ -520,14 +533,14 @@ def main():
             model_args.tokenizer_name,
             cache_dir=model_args.cache_dir,
             use_fast=model_args.use_fast_tokenizer,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     elif model_args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=model_args.cache_dir,
             use_fast=model_args.use_fast_tokenizer,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     else:
         raise ValueError(
@@ -541,7 +554,7 @@ def main():
             config=config,
             seed=training_args.seed,
             dtype=getattr(jnp, model_args.dtype),
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
     else:
         model = FlaxAutoModelForSeq2SeqLM.from_config(

@@ -113,7 +113,9 @@ def rescale(
     rescaled_image = image * scale
     if data_format is not None:
         rescaled_image = to_channel_dimension_format(rescaled_image, data_format)
+
     rescaled_image = rescaled_image.astype(dtype)
+
     return rescaled_image
 
 

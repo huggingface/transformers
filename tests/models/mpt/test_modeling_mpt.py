@@ -18,7 +18,7 @@ import math
 import unittest
 
 from transformers import MptConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -54,7 +54,7 @@ class MptModelTester:
         use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -327,6 +327,20 @@ class MptModelTester:
         return config, inputs_dict
 
 
+class MptConfigTester(ConfigTester):
+    def __init__(self, parent, config_class=None, has_text_modality=True, common_properties=None, **kwargs):
+        super().__init__(parent, config_class, has_text_modality, common_properties, **kwargs)
+
+    def test_attn_config_as_dict(self):
+        config = self.config_class(**self.inputs_dict, attn_config={"attn_impl": "flash", "softmax_scale": None})
+        self.parent.assertTrue(config.attn_config.attn_impl == "flash")
+        self.parent.assertTrue(config.attn_config.softmax_scale is None)
+
+    def run_common_tests(self):
+        self.test_attn_config_as_dict()
+        return super().run_common_tests()
+
+
 @require_torch
 class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
@@ -348,12 +362,21 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     test_torchscript = False
     test_head_masking = False
     pipeline_model_mapping = (
-        {"feature-extraction": MptModel, "text-generation": MptForCausalLM} if is_torch_available() else {}
+        {
+            "feature-extraction": MptModel,
+            "question-answering": MptForQuestionAnswering,
+            "text-classification": MptForSequenceClassification,
+            "text-generation": MptForCausalLM,
+            "token-classification": MptForTokenClassification,
+            "zero-shot": MptForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
 
     def setUp(self):
         self.model_tester = MptModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MptConfig, n_embd=37)
+        self.config_tester = MptConfigTester(self, config_class=MptConfig, n_embd=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -407,6 +430,7 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
 @slow
 @require_torch_gpu
+@require_bitsandbytes
 class MptIntegrationTests(unittest.TestCase):
     def test_generation_8k(self):
         model_id = "mosaicml/mpt-7b-8k"
@@ -418,7 +442,7 @@ class MptIntegrationTests(unittest.TestCase):
         )
 
         input_text = "Hello"
-        expected_output = "Hello my name is [name] and I am a [type] at [company]. I have a [number]"
+        expected_output = """Hello, I\'m a new user of the forum. I have a question about the "Solaris"""
 
         inputs = tokenizer(input_text, return_tensors="pt")
         outputs = model.generate(**inputs, max_new_tokens=20)
@@ -436,7 +460,9 @@ class MptIntegrationTests(unittest.TestCase):
         )
 
         input_text = "Hello"
-        expected_output = "Hello my name is Kaitlyn and I am a senior at the University of Wisconsin-Stout. I am major"
+        expected_output = (
+            "Hello and welcome to the first day of the new release countdown for the month of May!\nToday"
+        )
 
         inputs = tokenizer(input_text, return_tensors="pt")
         outputs = model.generate(**inputs, max_new_tokens=20)

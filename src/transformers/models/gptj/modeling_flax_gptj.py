@@ -194,7 +194,8 @@ class FlaxGPTJAttention(nn.Module):
             cached_value.value = value
             num_updated_cache_vectors = query.shape[1]
             cache_index.value = cache_index.value + num_updated_cache_vectors
-            # causal mask for cached decoder self-attention: our single query position should only attend to those key positions that have already been generated and cached, not the remaining zero elements.
+            # causal mask for cached decoder self-attention: our single query position should only attend to those key
+            # positions that have already been generated and cached, not the remaining zero elements.
             pad_mask = jnp.broadcast_to(
                 jnp.arange(max_length) < cur_index + num_updated_cache_vectors,
                 tuple(batch_dims) + (1, num_updated_cache_vectors, max_length),

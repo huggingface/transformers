@@ -20,7 +20,6 @@ import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
-    center_crop,
     get_resize_output_image_size,
     resize,
     to_channel_dimension_format,
@@ -158,29 +157,6 @@ class LevitImageProcessor(BaseImageProcessor):
         return resize(
             image, size=(size_dict["height"], size_dict["width"]), resample=resample, data_format=data_format, **kwargs
         )
-
-    def center_crop(
-        self,
-        image: np.ndarray,
-        size: Dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Center crop an image.
-
-        Args:
-            image (`np.ndarray`):
-                Image to center crop.
-            size (`Dict[str, int]`):
-                Dict `{"height": int, "width": int}` specifying the size of the output image after cropping.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"Size dict must have keys 'height' and 'width'. Got {size.keys()}")
-        return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
 
     def preprocess(
         self,

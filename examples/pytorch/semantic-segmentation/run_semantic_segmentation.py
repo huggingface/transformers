@@ -18,6 +18,7 @@ import logging
 import os
 import random
 import sys
+import warnings
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -241,13 +242,19 @@ class ModelArguments:
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
     image_processor_name: str = field(default=None, metadata={"help": "Name or path of preprocessor config."})
-    use_auth_token: bool = field(
-        default=False,
+    token: str = field(
+        default=None,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
             )
+        },
+    )
+    use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
         },
     )
 
@@ -264,6 +271,12 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    if model_args.use_auth_token is not None:
+        warnings.warn("The `use_auth_token` argument is deprecated and will be removed in v4.34.", FutureWarning)
+        if model_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        model_args.token = model_args.use_auth_token
 
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
@@ -379,7 +392,7 @@ def main():
         id2label=id2label,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
     )
     model = AutoModelForSemanticSegmentation.from_pretrained(
         model_args.model_name_or_path,
@@ -387,13 +400,13 @@ def main():
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
     )
     image_processor = AutoImageProcessor.from_pretrained(
         model_args.image_processor_name or model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        use_auth_token=True if model_args.use_auth_token else None,
+        token=model_args.token,
     )
 
     # Define torchvision transforms to be applied to each image + target.

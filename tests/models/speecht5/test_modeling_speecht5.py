@@ -105,7 +105,7 @@ class SpeechT5ModelTester:
         is_training=False,
         vocab_size=81,
         hidden_size=24,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         intermediate_size=4,
     ):
@@ -249,7 +249,7 @@ class SpeechT5ForSpeechToTextTester:
         decoder_seq_length=7,
         is_training=False,
         hidden_size=24,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         intermediate_size=4,
         conv_dim=(32, 32, 32),
@@ -786,7 +786,7 @@ class SpeechT5ForTextToSpeechTester:
         decoder_seq_length=1024,  # speech is longer
         is_training=False,
         hidden_size=24,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         intermediate_size=4,
         vocab_size=81,
@@ -1020,6 +1020,10 @@ class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
         generated_speech = model.generate_speech(input_ids)
         self.assertEqual(generated_speech.shape, (1820, model.config.num_mel_bins))
 
+        # test model.generate, same method than generate_speech but with additional kwargs to absorb kwargs such as attention_mask
+        generated_speech_with_generate = model.generate(input_ids, attention_mask=None)
+        self.assertEqual(generated_speech_with_generate.shape, (1820, model.config.num_mel_bins))
+
 
 @require_torch
 class SpeechT5ForSpeechToSpeechTester:
@@ -1031,7 +1035,7 @@ class SpeechT5ForSpeechToSpeechTester:
         decoder_seq_length=1024,
         is_training=False,
         hidden_size=24,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         intermediate_size=4,
         conv_dim=(32, 32, 32),

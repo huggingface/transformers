@@ -21,6 +21,8 @@
     title: 🤗 Accelerate로 분산 학습 구성하기
   - local: model_sharing
     title: 만든 모델 공유하기
+  - local: transformers_agents
+    title: 에이전트
   title: 튜토리얼
 - sections:
   - sections:
@@ -125,8 +127,8 @@
       title: CPU로 추론하기
     - local: in_translation
       title: (번역중) Inference on one GPU
-    - local: in_translation
-      title: (번역중) Inference on many GPUs
+    - local: perf_infer_gpu_many
+      title: 여러 GPU에서 추론
     - local: in_translation
       title: (번역중) Inference on Specialized Hardware
     - local: perf_hardware
