@@ -127,8 +127,8 @@
       title: CPU로 추론하기
     - local: in_translation
       title: (번역중) Inference on one GPU
-    - local: in_translation
-      title: (번역중) Inference on many GPUs
+    - local: perf_infer_gpu_many
+      title: 여러 GPU에서 추론
     - local: in_translation
       title: (번역중) Inference on Specialized Hardware
     - local: perf_hardware
