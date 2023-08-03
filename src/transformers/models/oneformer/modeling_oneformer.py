@@ -1380,9 +1380,8 @@ class OneFormerPixelDecoder(nn.Module):
         sources = []
         position_embeddings_list = []
         for level, source in enumerate(features[::-1][: self.num_feature_levels]):
-            feats = source.to(source.dtype)
-            sources.append(self.input_projections[level](feats))
-            position_embeddings_list.append(self.position_embedding(feats))
+            sources.append(self.input_projections[level](source))
+            position_embeddings_list.append(self.position_embedding(source))
 
         masks = [torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool) for x in sources]
 
