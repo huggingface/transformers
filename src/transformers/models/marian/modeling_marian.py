@@ -1321,7 +1321,7 @@ class MarianMTModel(MarianPreTrainedModel):
             self._resize_final_logits_bias(new_num_tokens)
         return new_embeddings
 
-    def _resize_token_embeddings(self, new_num_tokens: int, pad_to_multiple_of = None) -> nn.Embedding:
+    def _resize_token_embeddings(self, new_num_tokens: int, pad_to_multiple_of=None) -> nn.Embedding:
         old_embeddings = self.get_input_embeddings()
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens, pad_to_multiple_of)
         self.set_input_embeddings(new_embeddings)
