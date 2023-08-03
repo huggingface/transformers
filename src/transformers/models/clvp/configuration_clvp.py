@@ -66,25 +66,6 @@ class CLVPTextConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the feed-forward layers in [`CLVPMLP`].
-        use_attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in Query, Key and Value representations of self-attention layers.
-        use_glu_in_ff (`bool`, *optional*, defaults to `True`):
-            Whether to use [`CLVPGatedLinearUnit`] instead of a vanilla feed-forward layer in the first feed-forward
-            layer in [`CLVPMLP`].
-        ff_post_act_layer_norm (`bool`, *optional*, defaults to `False`):
-            Whether to use norm after activation function of first feed-forward layer in [`CLVPMLP`].
-        use_pre_branch_norm (`bool`, *optional*, defaults to `True`):
-            Whether to apply norm to hidden_states before applying the [`CLVPAttention`] and [`CLVPMLP`] blocks in
-            [`CLVPEncoderLayer`].
-        use_post_branch_norm (`bool`, *optional*, defaults to `False`):
-            Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks before the residual
-            addition in [`CLVPEncoderLayer`].
-        use_post_main_norm (`bool`, *optional*, defaults to `False`):
-            Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks after the residual
-            addition in [`CLVPEncoderLayer`].
-        norm_type (`str`, *optional*, defaults to `"rms_norm"`):
-            What type of norm to use in [`CLVPEncoder`]. `"rms_norm"`, `"scale_norm"`, `"rms_scale_shift_norm"` and
-            `"layer_norm"` are supported.
         use_rotary_embedding (`bool`, *optional*, defaults to `True`):
             Whether to use rotary_embedding or not.
         summary_type (`str`, *optional*, defaults to `"mean"`):
@@ -122,13 +103,6 @@ class CLVPTextConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         attention_dropout=0.1,
         dropout=0.1,
-        use_attention_bias=False,
-        use_glu_in_ff=True,
-        ff_post_act_layer_norm=False,
-        use_pre_branch_norm=True,
-        use_post_branch_norm=False,
-        use_post_main_norm=False,
-        norm_type="rms_norm",
         use_rotary_embedding=True,
         summary_type="mean",
         initializer_factor=1.0,
@@ -150,13 +124,6 @@ class CLVPTextConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.dropout = dropout
-        self.use_attention_bias = use_attention_bias
-        self.use_glu_in_ff = use_glu_in_ff
-        self.ff_post_act_layer_norm = ff_post_act_layer_norm
-        self.use_pre_branch_norm = use_pre_branch_norm
-        self.use_post_branch_norm = use_post_branch_norm
-        self.use_post_main_norm = use_post_main_norm
-        self.norm_type = norm_type
         self.use_rotary_embedding = use_rotary_embedding
         self.summary_type = summary_type
 
@@ -212,25 +179,6 @@ class CLVPSpeechConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the feed forward layers in [`CLVPMLP`].
-        use_attention_bias (`bool`, *optional*, defaults to `False`):
-            Wheater to use bias in Query, Key and Value representations of self-attention layers.
-        use_glu_in_ff (`bool`, *optional*, defaults to `True`):
-            Whether to use [`CLVPGatedLinearUnit`] instead of a vanilla feed-forward layer in the first feed-forward
-            layer in [`CLVPMLP`].
-        ff_post_act_layer_norm (`bool`, *optional*, defaults to `False`):
-            Whether to use norm after activation function of first feed-forward layer in [`CLVPMLP`].
-        use_pre_branch_norm (`bool`, *optional*, defaults to `True`):
-            Whether to apply norm to hidden_states before applying the [`CLVPAttention`] and [`CLVPMLP`] blocks in
-            [`CLVPEncoderLayer`].
-        use_post_branch_norm (`bool`, *optional*, defaults to `False`):
-            Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks before the residual
-            addition in [`CLVPEncoderLayer`].
-        use_post_main_norm (`bool`, *optional*, defaults to `False`):
-            Whether to apply norm to outputs of the [`CLVPAttention`] and [`CLVPMLP`] blocks after the residual
-            addition in [`CLVPEncoderLayer`].
-        norm_type (`str`, *optional*, defaults to `"rms_norm"`):
-            What type of norm to use in [`CLVPEncoder`]. `"rms_norm"`, `"scale_norm"`, `"rms_scale_shift_norm"` and
-            `"layer_norm"` are supported.
         use_rotary_embedding (`bool`, *optional*, defaults to `True`):
             Whether to use rotary_embedding or not.
         summary_type (`str`, *optional*, defaults to `"mean"`):
@@ -269,13 +217,6 @@ class CLVPSpeechConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         attention_dropout=0.1,
         dropout=0.1,
-        use_attention_bias=False,
-        use_glu_in_ff=True,
-        ff_post_act_layer_norm=False,
-        use_pre_branch_norm=True,
-        use_post_branch_norm=False,
-        use_post_main_norm=False,
-        norm_type="rms_norm",
         use_rotary_embedding=True,
         summary_type="mean",
         initializer_factor=1.0,
@@ -297,13 +238,6 @@ class CLVPSpeechConfig(PretrainedConfig):
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.dropout = dropout
-        self.use_attention_bias = use_attention_bias
-        self.use_glu_in_ff = use_glu_in_ff
-        self.ff_post_act_layer_norm = ff_post_act_layer_norm
-        self.use_pre_branch_norm = use_pre_branch_norm
-        self.use_post_branch_norm = use_post_branch_norm
-        self.use_post_main_norm = use_post_main_norm
-        self.norm_type = norm_type
         self.use_rotary_embedding = use_rotary_embedding
         self.summary_type = summary_type
 

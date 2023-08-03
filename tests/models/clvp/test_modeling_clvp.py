@@ -58,13 +58,13 @@ class CLVPSpeechModelTester:
     def __init__(
         self,
         parent,
-        batch_size=12,
+        batch_size=2,
         vocab_size=30,
         seq_length=10,
         is_training=True,
         hidden_size=32,
         projection_dim=8,
-        num_hidden_layers=5,
+        num_hidden_layers=3,
         num_attention_heads=4,
         intermediate_size=64,
         dropout=0.1,
@@ -239,9 +239,11 @@ class CLVPSpeechModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertTrue(models_equal)
 
+    @unittest.skip(reason="CLVPSpeechModelWithProjection does not output loss")
     def test_training(self):
         pass
 
+    @unittest.skip(reason="CLVPSpeechModelWithProjection does not output loss")
     def test_training_gradient_checkpointing(self):
         pass
 
@@ -271,7 +273,7 @@ class CLVPTextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=12,
+        batch_size=2,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
@@ -279,7 +281,7 @@ class CLVPTextModelTester:
         vocab_size=99,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=5,
+        num_hidden_layers=3,
         num_attention_heads=4,
         intermediate_size=64,
         dropout=0.1,
@@ -384,9 +386,11 @@ class CLVPTextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
 
+    @unittest.skip(reason="CLVPTextModelWithProjection does not output loss")
     def test_training(self):
         pass
 
+    @unittest.skip(reason="CLVPTextModelWithProjection does not output loss")
     def test_training_gradient_checkpointing(self):
         pass
 
