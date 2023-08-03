@@ -125,6 +125,9 @@ class LlamaTokenizer(PreTrainedTokenizer):
                 f"You are using the legacy behaviour of the {self.__class__}. This means that tokens that come after special tokens will not be properly handled. We recommend you to"
                 " read the related pull request available at https://github.com/huggingface/transformers/pull/24565, and set the legacy attribute accordingly."
             )
+            legacy = True 
+            
+    
         self.legacy = legacy
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
