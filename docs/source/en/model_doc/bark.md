@@ -50,6 +50,7 @@ Better Transformer is an 🤗 Optimum feature that performs kernel fusion under 
 model =  model.to_bettertransformer()
 ```
 
+Note that 🤗 Optimum must be installed before using this feature. [Here's how to install it.](https://huggingface.co/docs/optimum/installation)
 
 #### Using CPU offload
 
@@ -60,6 +61,9 @@ If you're using a CUDA device, a simple solution to benefit from an 80% reductio
 ```python
 model.enable_cpu_offload()
 ```
+
+Note that 🤗 Accelerate must be installed before using this feature. [Here's how to install it.](https://huggingface.co/docs/accelerate/basic_tutorials/install)
+
 
 #### Combining optimizaton techniques
 
