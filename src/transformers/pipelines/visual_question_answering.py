@@ -55,12 +55,14 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         super().__init__(*args, **kwargs)
         self.check_model_type(MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES)
 
-    def _sanitize_parameters(self, top_k=None, padding=None, truncation=None, **kwargs):
+    def _sanitize_parameters(self, top_k=None, padding=None, truncation=None, timeout=None, **kwargs):
         preprocess_params, postprocess_params = {}, {}
         if padding is not None:
             preprocess_params["padding"] = padding
         if truncation is not None:
             preprocess_params["truncation"] = truncation
+        if timeout is not None:
+            preprocess_params["timeout"] = timeout
         if top_k is not None:
             postprocess_params["top_k"] = top_k
         return preprocess_params, {}, postprocess_params
@@ -90,6 +92,9 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             top_k (`int`, *optional*, defaults to 5):
                 The number of top labels that will be returned by the pipeline. If the provided number is higher than
                 the number of labels available in the model configuration, it will default to the number of labels.
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
         Return:
             A dictionary or a list of dictionaries containing the result. The dictionaries contain the following keys:
 
@@ -109,8 +114,8 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         results = super().__call__(inputs, **kwargs)
         return results
 
-    def preprocess(self, inputs, padding=False, truncation=False):
-        image = load_image(inputs["image"])
+    def preprocess(self, inputs, padding=False, truncation=False, timeout=None):
+        image = load_image(inputs["image"], timeout=timeout)
         model_inputs = self.tokenizer(
             inputs["question"], return_tensors=self.framework, padding=padding, truncation=truncation
         )
