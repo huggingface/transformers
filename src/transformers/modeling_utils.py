@@ -49,6 +49,8 @@ from .pytorch_utils import (  # noqa: F401
     prune_linear_layer,
 )
 from .utils import (
+    ADAPTER_SAFE_WEIGHTS_NAME,
+    ADAPTER_WEIGHTS_NAME,
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
@@ -1718,6 +1720,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         use_auth_token = kwargs.pop("use_auth_token", None)
 
+        # For backward compatibility with PEFT library all keys of the state dict of adapters needs to be pre-pended with
+        # `base_model.model`. Users can disable this behaviours by setting `save_peft_format` to `False`.
+        save_peft_format = kwargs.pop("save_peft_format", True)
+
         if use_auth_token is not None:
             warnings.warn(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
@@ -1782,9 +1788,28 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Save the config
         if is_main_process:
-            model_to_save.config.save_pretrained(save_directory)
+            if not model_to_save._hf_peft_config_loaded:
+                model_to_save.config.save_pretrained(save_directory)
             if self.can_generate():
                 model_to_save.generation_config.save_pretrained(save_directory)
+
+        if model_to_save._hf_peft_config_loaded:
+            logger.info(
+                "Detected adapters on the model, saving the model in the PEFT format, only adapter weights will be saved."
+            )
+            state_dict = model_to_save.get_adapter_state_dict()
+
+            if save_peft_format:
+                logger.info(
+                    "To match the expected format of the PEFT library, all keys of the state dict of adapters will be pre-pended with `base_model.model`."
+                )
+                peft_state_dict = {}
+                for key, value in state_dict.items():
+                    peft_state_dict[f"base_model.model.{key}"] = value
+                state_dict = peft_state_dict
+
+            current_peft_config = self.peft_config[self.active_adapter()]
+            current_peft_config.save_pretrained(save_directory)
 
         # Save the model
         if state_dict is None:
@@ -1840,8 +1865,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
         # Shard the model if it is too big.
-        weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
-        weights_name = _add_variant(weights_name, variant)
+        if not model_to_save._hf_peft_config_loaded:
+            weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
+            weights_name = _add_variant(weights_name, variant)
+        else:
+            weights_name = ADAPTER_SAFE_WEIGHTS_NAME if safe_serialization else ADAPTER_WEIGHTS_NAME
 
         shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size, weights_name=weights_name)
 

@@ -241,7 +241,7 @@ class PeftAdapterMixin:
         from peft import get_peft_model_state_dict
 
         if adapter_name is None:
-            adapter_name = self.current_active_adapter()
+            adapter_name = self.active_adapter()
 
         adapter_state_dict = get_peft_model_state_dict(self, adapter_name=adapter_name)
         return adapter_state_dict
