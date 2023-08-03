@@ -21,8 +21,8 @@ import tempfile
 import unittest
 
 from transformers import (
-    BarkConfig,
     BarkCoarseConfig,
+    BarkConfig,
     BarkFineConfig,
     BarkSemanticConfig,
     is_torch_available,
@@ -35,10 +35,10 @@ from transformers.models.bark.generation_configuration_bark import (
 from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 from transformers.utils import cached_property
 
-from ..encodec.test_modeling_encodec import EncodecModelTester
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ..encodec.test_modeling_encodec import EncodecModelTester
 
 
 if is_torch_available():
@@ -477,7 +477,8 @@ class BarkFineModelTester:
 
 class BarkModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
         semantic_kwargs=None,
         coarse_acoustics_kwargs=None,
         fine_acoustics_kwargs=None,
