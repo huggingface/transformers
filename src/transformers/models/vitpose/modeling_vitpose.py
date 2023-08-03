@@ -508,6 +508,35 @@ class ViTPoseModel(ViTPosePreTrainedModel):
 
         return keypoint_outputs.detach().cpu().numpy()
 
+
+class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
+    def __init__(self, config: ViTPoseConfig) -> None:
+        super().__init__()
+
+        # add object detection pipeline
+        self.output = ViTPoseModel(config)
+
+        ## classifier head or something
+
+    def process_det(self, results):
+        """0 defaults to humans"""
+        bboxes = results[0]
+
+        person_reults = []
+        for bbox in bboxes:
+            person = {}
+            person["bbox"] = bbox
+            person_results.append(person)
+        return person_results
+
+    def forward(self, img):
+        # det pipeline
+        person_results = process_det(img)
+        bboxes = np.array([box['bbox'] for box in person_results])
+
+
+        pass
+
 #class ViTForImageClassification(ViTPosePreTrainedModel):
 #    def __init__(self, config: ViTConfig) -> None:
 #        super().__init__(config)
