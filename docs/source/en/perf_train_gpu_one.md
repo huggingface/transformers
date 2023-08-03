@@ -517,4 +517,12 @@ model = model.to_bettertransformer()
 
 Once converted, train the model as usual.
 
+<Tip warning={true}>
+
+The PyTorch-native `scaled_dot_product_attention` operator can only dispatch to Flash Attention if no `attention_mask` is provided.
+
+Thus, by default in training mode, the BetterTransformer integration **drops the mask support and can only be used for training that do not require a padding mask for batched training**. This is the case for example for masked language modeling or causal language modeling. BetterTransformer is not suited for the fine-tuning of models on tasks that requires a padding mask. 
+
+</Tip>
+
 Check out [this blogpost](https://pytorch.org/blog/out-of-the-box-acceleration/) to read more about what is possible to achieve with SDPA using transformers.

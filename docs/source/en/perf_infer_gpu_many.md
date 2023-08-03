@@ -28,9 +28,15 @@ Note: A multi GPU setup can use the majority of the strategies described in the 
 
 BetterTransformer is also supported for faster inference on multi-GPU for text, image, and audio models.
 
+<Tip>
+
+Flash Attention can only be used for models using fp16 or bf16 dtype. Make sure to cast you model before using BetterTransformer.
+  
+</Tip>
+
 ### Decoder models
 
-For text models, especially decoder-based models (GPT, T5, Llama, etc.), the `BetterTransformer` API converts all attention operations to use the [`torch.nn.functional.scaled_dot_product_attention` method](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention) (SDPA) that is only available in PyTorch 2.0 and onwards. 
+For text models, especially decoder-based models (GPT, T5, Llama, etc.), the `BetterTransformer` API converts all attention operations to use the [`torch.nn.functional.scaled_dot_product_attention` operator](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention) (SDPA) that is only available in PyTorch 2.0 and onwards. 
 
 To convert a model to `BetterTransformer`:
 
@@ -44,7 +50,7 @@ model.to_bettertransformer()
 # Use it for training or inference
 ```
 
-SDPA can also call [Flash-Attention](https://arxiv.org/abs/2205.14135) kernels under the hood. If you want to force the usage of Flash Attention, use [`torch.backends.cuda.sdp_kernel(enable_flash=True)`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel):
+SDPA can also call [Flash-Attention](https://arxiv.org/abs/2205.14135) kernels under the hood. If you want to force the usage of Flash Attention or check that Flash Attention is available in your setting (hardware, problem size), use [`torch.backends.cuda.sdp_kernel(enable_flash=True)`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel):
 
 
 ```python
@@ -71,31 +77,11 @@ If you see a bug with a traceback saying
 RuntimeError: No available kernel.  Aborting execution.
 ```
 
-Install the PyTorch nightly version
+you may try to use the PyTorch nightly version, which may have a larger coverage for Flash Attention:
 
 ```bash
 pip3 install -U --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu118
-```
 
-Or alternatively try to add an autocast context manager in addition to the SDPA context manager:
-
-```python
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m").to("cuda")
-# convert the model to BetterTransformer
-model.to_bettertransformer()
-
-input_text = "Hello my dog is cute and"
-inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
-
-with torch.cuda.amp.autocast(), torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
-    outputs = model.generate(**inputs)
-
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-```
 
 Have a look at this [blog post](https://pytorch.org/blog/out-of-the-box-acceleration/) to learn more about what is possible to do with the `BetterTransformer` + SDPA API.
 

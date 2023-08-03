@@ -21,6 +21,12 @@ In addition to this guide, relevant information can be found as well in [the gui
 
 BetterTransformer API converts 🤗 transformers models to make them use PyTorch-native transformer fastpath that calls optimized kernels such as Flash Attention under the hood.  
 
+<Tip>
+
+Flash Attention can only be used for models using fp16 or bf16 dtype. Make sure to cast you model before using BetterTransformer.
+  
+</Tip>
+
 ### Encoder models
 
 PyTorch-native [`nn.MultiHeadAttention`](https://pytorch.org/blog/a-better-transformer-for-fast-transformer-encoder-inference/) attention fastpath, called BetterTransformer, can be used with Transformers through the integration in the [🤗 Optimum library](https://huggingface.co/docs/optimum/bettertransformer/overview).
@@ -60,7 +66,7 @@ model.to_bettertransformer()
 # Use it for training or inference
 ```
 
-According to the official documentation, `torch.nn.functional.scaled_dot_product_attention` can also call [Flash-Attention](https://arxiv.org/abs/2205.14135) kernels under the hood. If you want to force the usage of Flash Attention, you can use the [`torch.backends.cuda.sdp_kernel(enable_flash=True)`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as below:
+According to the official documentation, `torch.nn.functional.scaled_dot_product_attention` can also call [Flash-Attention](https://arxiv.org/abs/2205.14135) kernels under the hood. If you want to force the usage of Flash Attention or check that Flash Attention is available in your setting (hardware, problem size), you can use the [`torch.backends.cuda.sdp_kernel(enable_flash=True)`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as below:
 
 
 ```python
@@ -93,25 +99,6 @@ Install the PyTorch nightly version
 pip3 install -U --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu118
 ```
 
-Or alternatively try to add an autocast context manager in addition to the SDPA context manager:
-
-```python
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m").to("cuda")
-# convert the model to BetterTransformer
-model.to_bettertransformer()
-
-input_text = "Hello my dog is cute and"
-inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
-
-with torch.cuda.amp.autocast(), torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
-    outputs = model.generate(**inputs)
-
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-```
 
 Have a look at [this detailed blogpost](https://pytorch.org/blog/out-of-the-box-acceleration/) to read more about what is possible to do with `BetterTransformer` + SDPA API.
 
