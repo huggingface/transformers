@@ -35,7 +35,7 @@ In this guide you'll learn how to:
 
 ViLT model incorporates text embeddings into a Vision Transformer (ViT), allowing it to have a minimal design for 
 Vision-and-Language Pre-training (VLP). This model can be used for several downstream tasks. For the VQA task, a classifier 
-head is placed on top (a linear layer on top of the final hidden state of the [CLS] token) and randomly initialized. 
+head is placed on top (a linear layer on top of the final hidden state of the `[CLS]` token) and randomly initialized. 
 Visual Question Answering is thus treated as a classification problem.
 
 Before you begin, make sure you have all the necessary libraries installed. 
@@ -162,7 +162,7 @@ Now that we have the mappings, we can replace the string answers with their ids,
 ## Preprocessing data
 
 The next step is to load a ViLT processor to prepare the image and text data for the model. 
-[`ViLTProcessor`] wraps a BERT tokenizer and ViLT image processor into a convenient single processor:
+[`ViltProcessor`] wraps a BERT tokenizer and ViLT image processor into a convenient single processor:
 
 ```py 
 >>> from transformers import ViltProcessor
@@ -170,9 +170,9 @@ The next step is to load a ViLT processor to prepare the image and text data for
 >>> processor = ViltProcessor.from_pretrained(model_checkpoint)
 ```
 
-To preprocess the data we need to encode the images and questions using the [`ViLTProcessor`]. The processor will use 
+To preprocess the data we need to encode the images and questions using the [`ViltProcessor`]. The processor will use 
 the [`BertTokenizerFast`] to tokenize the text and create `input_ids`, `attention_mask` and `token_type_ids` for the text data. 
-As for images, the processor will leverage [`ViltFeatureExtractor`] to resize and normalize the image, and create `pixel_values` and `pixel_mask`.
+As for images, the processor will leverage [`ViltImageProcessor`] to resize and normalize the image, and create `pixel_values` and `pixel_mask`.
 
 All these preprocessing steps are done under the hood, we only need to call the `processor`. However, we still need to 
 prepare the target labels. Labels are represented as a soft encoded vector where of shape (num_labels,) where the each 
@@ -208,7 +208,7 @@ The following function applies the `processor` to the images and questions and f
 ...     return encoding
 ```
 
-To apply the preprocessing function over the entire dataset, use 🤗 Datasets map function. You can speed up map by 
+To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.map`] function. You can speed up `map` by 
 setting `batched=True` to process multiple elements of the dataset at once. At this point, feel free to remove the columns you don't need.
 
 ```py
@@ -230,7 +230,7 @@ As a final preprocessing step, create a batch of examples using [`DefaultDataCol
 
 ## Train the model
 
-You’re ready to start training your model now! Load ViLT with `ViltForQuestionAnswering`. Specify the number of labels 
+You’re ready to start training your model now! Load ViLT with [`ViltForQuestionAnswering`]. Specify the number of labels 
 along with the label mappings:
 
 ```py
@@ -261,7 +261,7 @@ At this point, only three steps remain:
 ... )
 ```
 
-2. Pass the training arguments to [`Trainer`] along with the model, dataset, processpe, and data collator.
+2. Pass the training arguments to [`Trainer`] along with the model, dataset, processor, and data collator.
 
 ```py
 >>> from transformers import Trainer
@@ -275,13 +275,13 @@ At this point, only three steps remain:
 ... )
 ```
 
-3.Call `train` to finetune your model.
+3. Call [`~Trainer.train`] to finetune your model.
 
 ```py
 >>> trainer.train() 
 ```
 
-Once training is completed, share your model to the Hub with the `push_to_hub` method to share your final model on the 🤗 Hub:
+Once training is completed, share your model to the Hub with the [`~Trainer.push_to_hub`] method to share your final model on the 🤗 Hub:
 
 ```py
 >>> trainer.push_to_hub()
