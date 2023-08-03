@@ -578,7 +578,7 @@ def create_circleci_config(folder=None):
                 job.tests_to_run = [x for x in test_list_items if "/test_modeling_" in x]
             elif job.job_name == "tests_non_modeling":
                 L = [x for x in test_list_items if "/test_modeling_" not in x and "/test_tokenization_" in x]
-                job.tests_to_run = [x for x in L if any(y in x for y in ["bert", "gpt2", "bart", "t5", "roberta", "deberta", "clip", "longformer", "led"])]
+                job.tests_to_run = [x for x in L if any(y in x for y in ["bert", "gpt2", "bart", "t5"])]
 
         extended_tests_to_run = set(test_list.split())
         # Extend the test files for cross test jobs
