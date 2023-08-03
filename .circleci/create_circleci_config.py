@@ -276,6 +276,18 @@ torch_and_flax_job = CircleCIJob(
 )
 
 
+non_modeling_job = CircleCIJob(
+    "non_modeling",
+    install_steps=[
+        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,tf-cpu,tf-speech,flax,flax-speech]",
+        "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
+    ],
+    parallelism=1,
+)
+
+
 torch_job = CircleCIJob(
     "torch",
     install_steps=[
@@ -509,6 +521,7 @@ doc_test_job = CircleCIJob(
 REGULAR_TESTS = [
     torch_and_tf_job,
     torch_and_flax_job,
+    non_modeling_job,
     torch_job,
     tf_job,
     flax_job,
@@ -553,6 +566,17 @@ def create_circleci_config(folder=None):
         test_list = []
     if len(test_list) > 0:
         jobs.extend(REGULAR_TESTS)
+
+        test_list_items = test_list.split()
+        if "tests/models" in test_list_items:
+            test_list_items = [x for x in test_list_items if x != "tests/models"]
+            test_list_items += sorted([x for x in glob.glob("tests/models/*/**.py") if "test_" in x])
+
+        for job in jobs:
+            if job.job_name in ["tests_torch", "tests_tf", "test_flax"]:
+                job.tests_to_run = [x for x in test_list_items if "/test_modeling_" in x]
+            elif job.job_name == "tests_non_modeling":
+                job.tests_to_run = [x for x in test_list_items if "/test_modeling_" not in x]
 
         extended_tests_to_run = set(test_list.split())
         # Extend the test files for cross test jobs
