@@ -61,10 +61,13 @@ class ObjectDetectionPipeline(Pipeline):
         self.check_model_type(mapping)
 
     def _sanitize_parameters(self, **kwargs):
+        preprocess_params = {}
+        if "timeout" in kwargs:
+            preprocess_params["timeout"] = kwargs["timeout"]
         postprocess_kwargs = {}
         if "threshold" in kwargs:
             postprocess_kwargs["threshold"] = kwargs["threshold"]
-        return {}, {}, postprocess_kwargs
+        return preprocess_params, {}, postprocess_kwargs
 
     def __call__(self, *args, **kwargs) -> Union[Predictions, List[Prediction]]:
         """
@@ -82,6 +85,9 @@ class ObjectDetectionPipeline(Pipeline):
                 same format: all as HTTP(S) links, all as local paths, or all as PIL images.
             threshold (`float`, *optional*, defaults to 0.9):
                 The probability necessary to make a prediction.
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
 
         Return:
             A list of dictionaries or a list of list of dictionaries containing the result. If the input is a single
@@ -97,8 +103,8 @@ class ObjectDetectionPipeline(Pipeline):
 
         return super().__call__(*args, **kwargs)
 
-    def preprocess(self, image):
-        image = load_image(image)
+    def preprocess(self, image, timeout=None):
+        image = load_image(image, timeout=timeout)
         target_size = torch.IntTensor([[image.height, image.width]])
         inputs = self.image_processor(images=[image], return_tensors="pt")
         if self.tokenizer is not None:
