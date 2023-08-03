@@ -174,7 +174,6 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         self._src_lang = src_lang if src_lang is not None else "en"
         self.tgt_lang = tgt_lang
         self.cur_lang_id = self.get_lang_id(self._src_lang)
-        self.set_src_lang_special_tokens(self._src_lang)
 
         self.num_madeup_words = num_madeup_words
 
@@ -191,6 +190,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
             num_madeup_words=num_madeup_words,
             **kwargs,
         )
+        self.set_src_lang_special_tokens(self._src_lang)
 
     @property
     def vocab_size(self) -> int:

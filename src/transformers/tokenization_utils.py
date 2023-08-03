@@ -541,6 +541,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     # Strip white spaces on the left
                     if tok_extended.lstrip and left:
                         tokens[i - 1] = left.rstrip()  # Opposite here
+                    # else is only if rstrip and lstrip strip are set to `False``.
+                else:
+                    raise ValueError(f"{tok_extended} cannot be tokenized because it was not properly added"
+                                    f" to the tokenizer. This means that it is not an `AddedToken` but a {type(tok_extended)}")
         # ["This is something", "<special_token_1>", "else"]
         tokenized_text = []
         for token in tokens:
@@ -591,7 +595,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         if token in self.added_tokens_encoder:
             return self.added_tokens_encoder[token]
-
         return self._convert_token_to_id(token)
 
     def _convert_token_to_id(self, token):

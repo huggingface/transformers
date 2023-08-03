@@ -134,10 +134,7 @@ class MBartTokenizer(PreTrainedTokenizer):
                 [t for t in additional_special_tokens if t not in self._additional_special_tokens]
             )
 
-        self._src_lang = src_lang if src_lang is not None else "en_XX"
-        self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
-        self.tgt_lang = tgt_lang
-        self.set_src_lang_special_tokens(self._src_lang)
+
 
         super().__init__(
             bos_token=bos_token,
@@ -154,6 +151,11 @@ class MBartTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
+        
+        self._src_lang = src_lang if src_lang is not None else "en_XX"
+        self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
+        self.tgt_lang = tgt_lang
+        self.set_src_lang_special_tokens(self._src_lang)
 
     def __getstate__(self):
         state = self.__dict__.copy()
