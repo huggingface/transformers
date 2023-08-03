@@ -952,7 +952,7 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
         batch_range = torch.arange(input_ids.size(0), device=input_ids.device)
         idx = batch_range[:, None] * self._num_beams + beam_range
         allowed_tokens = self._prefix_allowed_tokens_fn(batch_range, input_ids_view)
-        mask.view(-1, mask.size(-1))[idx.view(-1), allowed_tokens.view(-1)] = 0
+        mask[idx, allowed_tokens] = 0
 
         return scores + mask
 
