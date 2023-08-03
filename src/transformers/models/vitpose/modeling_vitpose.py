@@ -18,6 +18,7 @@
 import collections.abc
 import math
 from typing import Dict, List, Optional, Set, Tuple, Union
+from timm.models.layers import drop_path
 
 import torch
 import torch.utils.checkpoint
@@ -187,14 +188,13 @@ class ViTPoseBlock(nn.Module):
     def __init__(
         self, 
         config: ViTPoseConfig, 
-        layer: Optional[int]
+        layer: Optional[int] = 0,
     ) -> None:
         super().__init__()
 
-        self.layer = layer
         self.norm1 = nn.LayerNorm(config.embed_dim, eps=1e-06, elementwise_affine=True)
         self.attn = ViTPoseAttention(config)
-        self.drop_path = DropPath(p = config.drop_path_rate, layer = self.layer) if config.drop_path_rate > 0. else nn.Identity()
+        self.drop_path = DropPath(drop_prob = config.drop_path_rate) if config.drop_path_rate > 0. else nn.Identity()
         self.norm2 = nn.LayerNorm(config.embed_dim, eps=1e-06, elementwise_affine=True)
         self.mlp = ViTPoseMLP(config)
 
@@ -206,22 +206,15 @@ class ViTPoseBlock(nn.Module):
         return pixel_values
 
 class DropPath(nn.Module):
-    def __init__(self, p: float = 0.0, layer: Optional[int] = 0) -> None:
+    def __init__(self, drop_prob = 0.0):
         super(DropPath, self).__init__()
-        self.p = p
+        self.drop_prob = drop_prob
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if not self.training or self.p == 0.0:
-            return x
-        keep_prob = 1 - self.p
-        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
-        random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
-        random_tensor.floor_()
-        output = x.div(keep_prob) * random_tensor
-        return output
+    def forward(self, x: torch.Tensor):
+        return drop_path(x, self.drop_prob)
 
     def extra_repr(self) -> str:
-        return 'p={}', format(self.p)
+        return f'p={self.drop_prob}'
         
 
 ## LOOKS GREEN
@@ -292,8 +285,8 @@ class ViTPoseBackbone(nn.Module):
             embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
         # add the [CLS] token to the embedded patch tokens
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+        #cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        #embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
         if interpolate_pos_encoding is not None:
@@ -308,23 +301,36 @@ class ViTPoseBackbone(nn.Module):
         return embeddings.permute(0,2,1).reshape(batch_size, -1, Hp, Wp).contiguous()
 
 class ViTPoseTopDownHeatMap(nn.Module):
-    # keypoint head - mse loss]
-    ## deconv layers and all the other remaining things with the final layer
+    """
+    Top-down heatmap simple head. paper ref: Bin Xiao et al. ``Simple Baselines for Human Pose Estimation and Tracking``.
+
+    TopdownHeatmapSimpleHead is consisted of (>=0) number of deconv layers and a simple conv2d layer.
+    """
+
     def __init__(self, config: ViTPoseConfig):
         super().__init__()
         self.deconv_layers = []
-        for i in range(config.keypoint_num_deconv_layer):
-            in_channels = config.embed_dim if i == 0 else config.keypoint_num_deconv_filters[i - 1]
-            out_channels = config.keypoint_num_deconv_filters[i]
-            kernel_size = config.keypoint_num_deconv_kernels[i]
-            self.deconv_layers.append(nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride=2, padding=1, bias=False))
-            self.deconv_layers.append(nn.BatchNorm2d(out_channels))
-            self.deconv_layers.append(nn.ReLU(inplace=True))
+        if config.keypoint_num_deconv_layer > 0:
+          for i in range(config.keypoint_num_deconv_layer):
+              in_channels = config.embed_dim if i == 0 else config.keypoint_num_deconv_filters[i - 1]
+              out_channels = config.keypoint_num_deconv_filters[i]
+              kernel_size = config.keypoint_num_deconv_kernels[i]
+              self.deconv_layers.append(nn.ConvTranspose2d(in_channels, out_channels, kernel_size, stride=2, padding=1, bias=False))
+              self.deconv_layers.append(nn.BatchNorm2d(out_channels))
+              self.deconv_layers.append(nn.ReLU(inplace=True))
+
+        elif config.keypoint_num_deconv_layer == 0:
+            self.deconv_layers.append(nn.Identity())
+        
+        else:
+            raise ValueError(
+                f"num_deconv_layers ({self.num_deconv_layers}) should >= 0."
+            )
+
         self.deconv_layers = nn.Sequential(*self.deconv_layers)
         self.final_layer = nn.Conv2d(config.keypoint_num_deconv_filters[-1], config.num_output_channels, kernel_size=1, stride=1)
 
     def forward(self, x):
-        print(self.deconv_layers)
         x = self.deconv_layers(x)
         keypoints = self.final_layer(x)
         return keypoints
@@ -448,6 +454,11 @@ class ViTPoseModel(ViTPosePreTrainedModel):
     #    modality="vision",
     #    expected_output=_EXPECTED_OUTPUT_SHAPE,
     #)
+
+    def decode(self, output: numpy.array, **kwargs):
+        """Decode Keypoints from heatmap"""
+
+
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -490,11 +501,12 @@ class ViTPoseModel(ViTPosePreTrainedModel):
             backbone_output,
         )
 
-        if not return_dict:
-            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
-            return head_outputs + encoder_outputs[1:]
+        ##??
+       # if not return_dict:
+       #     head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
+       #     return head_outputs + encoder_outputs[1:]
 
-        return keypoint_outputs
+        return keypoint_outputs.detach().cpu().numpy()
 
 #class ViTForImageClassification(ViTPosePreTrainedModel):
 #    def __init__(self, config: ViTConfig) -> None:
