@@ -271,6 +271,7 @@ class BarkCoarseModelTester:
     def get_pipeline_config(self):
         config = self.get_config()
         config.vocab_size = 300
+        config.output_vocab_size = 300
         return config
 
     def prepare_config_and_inputs_for_common(self):
@@ -410,6 +411,7 @@ class BarkFineModelTester:
     def get_pipeline_config(self):
         config = self.get_config()
         config.vocab_size = 300
+        config.output_vocab_size = 300
         return config
 
     def prepare_config_and_inputs_for_common(self):
@@ -513,6 +515,10 @@ class BarkModelTester:
         config.semantic_config.vocab_size = 300
         config.coarse_acoustics_config.vocab_size = 300
         config.fine_acoustics_config.vocab_size = 300
+
+        config.semantic_config.output_vocab_size = 300
+        config.coarse_acoustics_config.output_vocab_size = 300
+        config.fine_acoustics_config.output_vocab_size = 300
 
         return config
 
