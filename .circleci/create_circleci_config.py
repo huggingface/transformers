@@ -574,7 +574,7 @@ def create_circleci_config(folder=None):
             test_list_items += sorted([x for x in glob.glob("tests/models/*/**.py") if "test_" in x])
 
         for job in jobs:
-            if job.job_name in ["tests_torch", "tests_tf", "test_flax"]:
+            if job.job_name in ["tests_torch", "tests_tf", "tests_flax"]:
                 job.tests_to_run = [x for x in test_list_items if "/test_modeling_" in x]
             elif job.job_name == "tests_non_modeling":
                 job.tests_to_run = [x for x in test_list_items if "/test_modeling_" not in x]
