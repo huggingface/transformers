@@ -1168,6 +1168,7 @@ else:
             "BartForSequenceClassification",
             "BartModel",
             "BartPretrainedModel",
+            "BartPreTrainedModel",
             "PretrainedBartModel",
         ]
     )
@@ -5072,6 +5073,7 @@ if TYPE_CHECKING:
             BartForQuestionAnswering,
             BartForSequenceClassification,
             BartModel,
+            BartPreTrainedModel,
             BartPretrainedModel,
             PretrainedBartModel,
         )

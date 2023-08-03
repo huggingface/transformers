@@ -218,10 +218,15 @@ def check_codes_match(observed_code, theoretical_code):
         if re_pattern.match(observed_code_header) is not None:
             observed_obj_name = re_pattern.search(observed_code_header).groups()[0]
             theoretical_name = re_pattern.search(theoretical_code_header).groups()[0]
-            theoretical_code = theoretical_code.replace(theoretical_name, observed_obj_name)
+            theoretical_code_header = theoretical_code_header.replace(theoretical_name, observed_obj_name)
 
     diff_index = 0
-    for observed_line, theoretical_line in zip(observed_code.split("\n"), theoretical_code.split("\n")):
+    if theoretical_code_header != observed_code_header:
+        print(theoretical_code_header, observed_code_header)
+        return 0
+
+    diff_index = 1
+    for observed_line, theoretical_line in zip(observed_code.split("\n")[1:], theoretical_code.split("\n")[1:]):
         if observed_line != theoretical_line:
             return diff_index
         diff_index += 1
