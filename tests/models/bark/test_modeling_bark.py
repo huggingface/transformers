@@ -21,6 +21,7 @@ import tempfile
 import unittest
 
 from transformers import (
+    BarkConfig,
     BarkCoarseConfig,
     BarkFineConfig,
     BarkSemanticConfig,
@@ -473,59 +474,55 @@ class BarkFineModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
 
-class BarkFineModelTester:
+class BarkModelTester:
     def __init__(
         self, parent,
         semantic_kwargs=None,
         coarse_acoustics_kwargs=None,
         fine_acoustics_kwargs=None,
-        is_training=True
+        is_training=False,  # for now training is not supported
     ):
-        if text_kwargs is None:
-            text_kwargs = {}
-        if vision_kwargs is None:
-            vision_kwargs = {}
+        if semantic_kwargs is None:
+            semantic_kwargs = {}
+        if coarse_acoustics_kwargs is None:
+            coarse_acoustics_kwargs = {}
+        if fine_acoustics_kwargs is None:
+            fine_acoustics_kwargs = {}
 
         self.parent = parent
-        self.text_model_tester = CLIPTextModelTester(parent, **text_kwargs)
-        self.vision_model_tester = CLIPVisionModelTester(parent, **vision_kwargs)
+        self.semantic_model_tester = BarkSemanticModelTester(parent, **semantic_kwargs)
+        self.coarse_acoustics_model_tester = BarkCoarseModelTester(parent, **coarse_acoustics_kwargs)
+        self.fine_acoustics_model_tester = BarkFineModelTester(parent, **fine_acoustics_kwargs)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
-        vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
-
+        # TODO: @Yoach: Preapre `inputs_dict`
+        inputs_dict = {}
         config = self.get_config()
 
-        return config, input_ids, attention_mask, pixel_values
-
-    def get_config(self):
-        return CLIPConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
-        )
-
-    def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
-        model = CLIPModel(config).to(torch_device).eval()
-        with torch.no_grad():
-            result = model(input_ids, pixel_values, attention_mask)
-        self.parent.assertEqual(
-            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size)
-        )
-        self.parent.assertEqual(
-            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
-        )
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, input_ids, attention_mask, pixel_values = config_and_inputs
-        inputs_dict = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "pixel_values": pixel_values,
-            "return_loss": True,
-        }
         return config, inputs_dict
 
+    def get_config(self):
+        return BarkConfig.from_sub_model_configs(
+            self.semantic_model_tester.get_config(),
+            self.coarse_acoustics_model_tester.get_config(),
+            self.fine_acoustics_model_tester.get_config(),
+        )
+
+    def get_pipeline_config(self):
+        config = self.get_config()
+
+        # follow the `get_pipeline_config` of the sub component models
+        config.semantic_config.vocab_size = 300
+        config.coarse_acoustics_config.vocab_size = 300
+        config.fine_acoustics_config.vocab_size = 300
+
+        return config
+
+    def prepare_config_and_inputs_for_common(self):
+        # TODO: @Yoach
+        pass
+        # return config, inputs_dict
 
 
 @require_torch
