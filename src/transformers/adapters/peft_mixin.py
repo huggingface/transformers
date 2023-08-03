@@ -82,13 +82,13 @@ class PeftAdapterMixin:
                 for the same reasons stated above.
             offload_dir (`str`, `optional`):
                 The directory to use for offloading the model. Used only in the case the model is offloaded into the
-                CPU.
+                disk.
             offload_index (`int`, `optional`):
                 `offload_index` argument to be passed to `accelerate.dispatch_model` method.
         """
         check_peft_version(min_version="0.4.0")
 
-        adapter_name = adapter_name or "default"
+        adapter_name = adapter_name if adapater_name is not None else "default"
 
         from peft import PeftConfig, inject_adapter_in_model, load_peft_weights
         from peft.utils import set_peft_model_state_dict
@@ -192,7 +192,7 @@ class PeftAdapterMixin:
         inject_adapter_in_model(adapter_config, self, adapter_name)
 
     def set_adapter(self, adapter_name: str) -> None:
-        r"""
+        """
         Sets an adapter to switch easily between multiple adapters.
         """
         check_peft_version(min_version="0.4.0")
@@ -233,7 +233,7 @@ class PeftAdapterMixin:
                 module.disable_adapters = True
 
     def enable_adapters(self) -> None:
-        r"""
+        """
         Enable all adapters that are attached to the model
         """
         check_peft_version(min_version="0.4.0")
@@ -248,7 +248,7 @@ class PeftAdapterMixin:
                 module.disable_adapters = False
 
     def active_adapter(self) -> str:
-        r"""
+        """
         Gets the current active adapter of the model.
         """
         check_peft_version(min_version="0.4.0")
@@ -269,7 +269,7 @@ class PeftAdapterMixin:
         self,
         adapter_name: Optional[str] = None,
     ) -> dict:
-        r"""
+        """
         Gets the adapter state dict.
         """
         check_peft_version(min_version="0.4.0")
@@ -292,7 +292,7 @@ class PeftAdapterMixin:
         offload_dir: Optional[str] = None,
         offload_index: Optional[int] = None,
     ) -> None:
-        r"""
+        """
         Optionnal re-dispatch the model and attach new hooks to the model in case the model has been loaded with
         accelerate (i.e. with `device_map=xxx`)
 
