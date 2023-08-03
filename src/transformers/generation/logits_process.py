@@ -423,10 +423,7 @@ class TypicalLogitsWarper(LogitsWarper):
     >>> tokenizer = GPT2Tokenizer.from_pretrained(model_name)
     >>> model = GPT2LMHeadModel.from_pretrained(model_name)
 
-    
-    >>> warper = TypicalLogitsWarper(tikohn_n=3, pi=0.95)
-
-    >>> # Set a seed for reproducibility
+     >>> # Set a seed for reproducibility
     >>> set_seed(0)
 
     >>> # prompt
