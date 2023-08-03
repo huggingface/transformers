@@ -18,7 +18,7 @@ import math
 import unittest
 
 from transformers import MptConfig, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -54,7 +54,7 @@ class MptModelTester:
         use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -362,7 +362,16 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     test_torchscript = False
     test_head_masking = False
     pipeline_model_mapping = (
-        {"feature-extraction": MptModel, "text-generation": MptForCausalLM} if is_torch_available() else {}
+        {
+            "feature-extraction": MptModel,
+            "question-answering": MptForQuestionAnswering,
+            "text-classification": MptForSequenceClassification,
+            "text-generation": MptForCausalLM,
+            "token-classification": MptForTokenClassification,
+            "zero-shot": MptForSequenceClassification,
+        }
+        if is_torch_available()
+        else {}
     )
 
     def setUp(self):
@@ -421,6 +430,7 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
 @slow
 @require_torch_gpu
+@require_bitsandbytes
 class MptIntegrationTests(unittest.TestCase):
     def test_generation_8k(self):
         model_id = "mosaicml/mpt-7b-8k"

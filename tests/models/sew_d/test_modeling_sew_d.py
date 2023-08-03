@@ -72,7 +72,7 @@ class SEWDModelTester:
         position_biased_input=False,
         pos_att_type=("p2c", "c2p"),
         norm_rel_ebd="layer_norm",
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         hidden_dropout=0.1,
         intermediate_size=20,
