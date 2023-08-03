@@ -192,10 +192,22 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         self.decoder = {v: k for k, v in self.encoder.items()}
 
+        super().__init__(
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            do_lower_case=do_lower_case,
+            word_delimiter_token=word_delimiter_token,
+            replace_word_delimiter_char=replace_word_delimiter_char,
+            target_lang=target_lang,
+            **kwargs,
+        )
+
         # make sure that tokens made of several
         # characters are not split at tokenization
 
-        # TODO they should be part of the added tokens encoder then ?
+        # TODO @ArthurZ they should be part of the added tokens encoder then ?
         # since we remove the `unique_no_split_tokens` logic in favor of AddedTokens
         # unique no split tokens is only used in 3 files...
         # this is more reliable as :
@@ -209,18 +221,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
                 self.unique_no_split_tokens.append(token)
 
         self._create_trie(self.unique_no_split_tokens)
-
-        super().__init__(
-            unk_token=unk_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            do_lower_case=do_lower_case,
-            word_delimiter_token=word_delimiter_token,
-            replace_word_delimiter_char=replace_word_delimiter_char,
-            target_lang=target_lang,
-            **kwargs,
-        )
 
     def set_target_lang(self, target_lang: str):
         """

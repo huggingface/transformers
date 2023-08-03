@@ -151,15 +151,15 @@ class PegasusTokenizer(PreTrainedTokenizer):
 
         # add special tokens to encoder dict
         self.encoder: Dict[int, str] = {
-            0: self.pad_token,
-            1: self.eos_token,
+            0: pad_token,
+            1: eos_token,
         }
 
         if self.mask_token_sent is not None:
             self.encoder.update(
                 {
                     2: self.mask_token_sent,
-                    3: self.mask_token,
+                    3: mask_token,
                 }
             )
 
