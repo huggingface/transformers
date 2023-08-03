@@ -174,7 +174,7 @@ class PeftAdapterMixin:
             )
 
     # TODO: change it to a property but torch.jit fails. Maybe we should return None is PEFT is not available
-    def current_active_adapter(self) -> str:
+    def active_adapter(self) -> str:
         r"""
         Gets the current active adapter of the model.
         """
