@@ -418,9 +418,9 @@ class EncodecVectorQuantization(nn.Module):
         if self.training:
             # Pass the gradients straight through the quantization, by directly linking the gradients of the input
             # embed_ind with the output quantize in the computation graph.
-            quantize = embed_ind + (quantize - embed_ind).detach()
+            quantize = hidden_states + (quantize - hidden_states).detach()
 
-            commitment_loss = nn.functional.mse_loss(quantize.detach(), embed_ind)
+            commitment_loss = nn.functional.mse_loss(quantize.detach(), hidden_states)
             loss = loss + commitment_loss
 
         quantize = quantize.permute(0, 2, 1)
@@ -483,7 +483,7 @@ class EncodecResidualVectorQuantizer(nn.Module):
             # Note: The source from FB research did not detach the quantized here. There may have been a bug in the
             # commitment loss computation, which could mean that training results would be different between that
             # implementation and this one.
-            residual = residual - quantized.detach()
+            residual = residual - quantized
             quantized_out = quantized_out + quantized
             all_indices.append(embed_ind)
             all_losses.append(loss)
