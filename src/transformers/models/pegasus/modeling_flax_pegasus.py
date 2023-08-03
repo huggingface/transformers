@@ -686,9 +686,7 @@ class FlaxPegasusEncoder(nn.Module):
         self.max_source_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if self.config.scale_embedding else 1.0
 
-        self.embed_positions = create_sinusoidal_positions(
-            self.config.max_position_embeddings, embed_dim, dtype=self.dtype
-        )
+        self.embed_positions = create_sinusoidal_positions(self.config.max_position_embeddings, embed_dim)
         self.layers = FlaxPegasusEncoderLayerCollection(self.config, self.dtype)
         self.layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
@@ -755,9 +753,7 @@ class FlaxPegasusDecoder(nn.Module):
         self.max_target_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(self.config.d_model) if self.config.scale_embedding else 1.0
 
-        self.embed_positions = create_sinusoidal_positions(
-            self.config.max_position_embeddings, embed_dim, dtype=self.dtype
-        )
+        self.embed_positions = create_sinusoidal_positions(self.config.max_position_embeddings, embed_dim)
 
         self.layers = FlaxPegasusDecoderLayerCollection(self.config, self.dtype)
         self.layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
