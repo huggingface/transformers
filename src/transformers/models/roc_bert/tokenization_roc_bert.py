@@ -156,7 +156,6 @@ class RoCBertTokenizer(PreTrainedTokenizer):
         strip_accents=None,
         **kwargs,
     ):
-
         for cur_file in [vocab_file, word_shape_file, word_pronunciation_file]:
             if cur_file is None or not os.path.isfile(cur_file):
                 raise ValueError(
@@ -196,7 +195,6 @@ class RoCBertTokenizer(PreTrainedTokenizer):
             strip_accents=strip_accents,
             **kwargs,
         )
-
 
     @property
     def do_lower_case(self):

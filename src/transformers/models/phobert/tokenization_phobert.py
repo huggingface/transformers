@@ -131,7 +131,6 @@ class PhobertTokenizer(PreTrainedTokenizer):
         mask_token="<mask>",
         **kwargs,
     ):
-
         self.vocab_file = vocab_file
         self.merges_file = merges_file
 

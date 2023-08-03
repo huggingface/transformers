@@ -334,7 +334,6 @@ class HerbertTokenizer(PreTrainedTokenizer):
         id2lang=None,
         **kwargs,
     ):
-
         try:
             import sacremoses
         except ImportError:
@@ -389,8 +388,6 @@ class HerbertTokenizer(PreTrainedTokenizer):
             tokenizer_file=None,
             **kwargs,
         )
-
-
 
     @property
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.do_lower_case

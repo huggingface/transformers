@@ -244,7 +244,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
         additional_special_tokens: Optional[List[str]] = None,
         **kwargs,
     ):
-
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
@@ -288,7 +287,6 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-
 
     @property
     def do_lower_case(self):

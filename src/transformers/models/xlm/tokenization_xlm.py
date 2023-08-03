@@ -613,7 +613,6 @@ class XLMTokenizer(PreTrainedTokenizer):
         do_lowercase_and_remove_accent=True,
         **kwargs,
     ):
-
         try:
             import sacremoses
         except ImportError:
@@ -660,7 +659,6 @@ class XLMTokenizer(PreTrainedTokenizer):
             do_lowercase_and_remove_accent=do_lowercase_and_remove_accent,
             **kwargs,
         )
-
 
     @property
     def do_lower_case(self):

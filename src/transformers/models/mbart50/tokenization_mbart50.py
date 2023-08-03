@@ -137,7 +137,6 @@ class MBart50Tokenizer(PreTrainedTokenizer):
             code for code in FAIRSEQ_LANGUAGE_CODES if code not in kwargs["additional_special_tokens"]
         ]
 
-
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
@@ -168,7 +167,7 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
-        
+
         super().__init__(
             src_lang=src_lang,
             tgt_lang=tgt_lang,
@@ -181,8 +180,6 @@ class MBart50Tokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-
-
 
     @property
     def vocab_size(self) -> int:

@@ -155,7 +155,6 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-
     @property
     def vocab_size(self):
         # self.vocab contains support for character fluctuation unique to Japanese, and has a large number of vocab

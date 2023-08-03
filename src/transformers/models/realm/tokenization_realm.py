@@ -157,7 +157,6 @@ class RealmTokenizer(PreTrainedTokenizer):
         strip_accents=None,
         **kwargs,
     ):
-
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
@@ -187,7 +186,6 @@ class RealmTokenizer(PreTrainedTokenizer):
             strip_accents=strip_accents,
             **kwargs,
         )
-
 
     @property
     def do_lower_case(self):

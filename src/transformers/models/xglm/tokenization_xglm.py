@@ -158,7 +158,7 @@ class XGLMTokenizer(PreTrainedTokenizer):
         self.fairseq_tokens_to_ids.update(madeup_words)
 
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
-        
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -169,7 +169,6 @@ class XGLMTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-
 
     def __getstate__(self):
         state = self.__dict__.copy()

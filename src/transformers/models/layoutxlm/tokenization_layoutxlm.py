@@ -279,7 +279,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         self.pad_token_box = pad_token_box
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
-        
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -296,7 +296,6 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-                
 
     def __getstate__(self):
         state = self.__dict__.copy()

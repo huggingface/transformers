@@ -150,7 +150,6 @@ class RetriBertTokenizer(PreTrainedTokenizer):
 
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=unk_token)
 
-
         super().__init__(
             do_lower_case=do_lower_case,
             do_basic_tokenize=do_basic_tokenize,

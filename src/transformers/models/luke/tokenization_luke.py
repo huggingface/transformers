@@ -385,7 +385,6 @@ class LukeTokenizer(PreTrainedTokenizer):
 
         self.max_mention_length = max_mention_length
 
-
         super().__init__(
             errors=errors,
             bos_token=bos_token,

@@ -143,7 +143,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         phonemizer_backend="espeak",
         **kwargs,
     ):
-
         self._word_delimiter_token = word_delimiter_token
         self._phone_delimiter_token = phone_delimiter_token
         self.do_phonemize = do_phonemize
@@ -168,7 +167,6 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             phonemizer_backend=phonemizer_backend,
             **kwargs,
         )
-
 
     @property
     def vocab_size(self) -> int:

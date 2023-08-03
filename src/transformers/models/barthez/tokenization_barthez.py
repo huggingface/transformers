@@ -49,6 +49,7 @@ SPIECE_UNDERLINE = "▁"
 
 # TODO this class is useless. This is the most standard sentencpiece model. Let's find which one is closest and nuke this.
 
+
 class BarthezTokenizer(PreTrainedTokenizer):
     """
     Adapted from [`CamembertTokenizer`] and [`BartTokenizer`]. Construct a BARThez tokenizer. Based on
@@ -141,7 +142,6 @@ class BarthezTokenizer(PreTrainedTokenizer):
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-
 
         self.vocab_file = vocab_file
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
@@ -248,7 +248,6 @@ class BarthezTokenizer(PreTrainedTokenizer):
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         return self.sp_model.PieceToId(token)
-
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""

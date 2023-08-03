@@ -386,7 +386,7 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
             strip_accents=strip_accents,
             **kwargs,
         )
-                
+
     @property
     def vocab_size(self):
         return len(self.vocab)

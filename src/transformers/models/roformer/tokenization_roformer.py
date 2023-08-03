@@ -125,20 +125,6 @@ class BasicTokenizer(object):
         self.do_lower_case = do_lower_case
         self.never_split = set(never_split)
         self.tokenize_chinese_chars = tokenize_chinese_chars
-        super().__init__(
-            do_lower_case=do_lower_case,
-            do_basic_tokenize=do_basic_tokenize,
-            never_split=never_split,
-            unk_token=unk_token,
-            sep_token=sep_token,
-            pad_token=pad_token,
-            cls_token=cls_token,
-            mask_token=mask_token,
-            tokenize_chinese_chars=tokenize_chinese_chars,
-            strip_accents=strip_accents,
-            **kwargs,
-        )
-
         self.strip_accents = strip_accents
         self.do_split_on_punc = do_split_on_punc
 
@@ -392,7 +378,6 @@ class RoFormerTokenizer(PreTrainedTokenizer):
         strip_accents=None,
         **kwargs,
     ):
-
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
@@ -417,6 +402,21 @@ class RoFormerTokenizer(PreTrainedTokenizer):
                 "See https://pypi.org/project/rjieba/ for installation."
             )
         self.jieba = rjieba
+        
+        super().__init__(
+            do_lower_case=do_lower_case,
+            do_basic_tokenize=do_basic_tokenize,
+            never_split=never_split,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            pad_token=pad_token,
+            cls_token=cls_token,
+            mask_token=mask_token,
+            tokenize_chinese_chars=tokenize_chinese_chars,
+            strip_accents=strip_accents,
+            **kwargs,
+        )
+
 
     @property
     def do_lower_case(self):

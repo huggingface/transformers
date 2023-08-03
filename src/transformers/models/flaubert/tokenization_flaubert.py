@@ -290,7 +290,6 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
 
-
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,

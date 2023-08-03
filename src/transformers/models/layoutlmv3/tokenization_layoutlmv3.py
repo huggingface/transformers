@@ -326,7 +326,6 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
 
-
         super().__init__(
             errors=errors,
             bos_token=bos_token,

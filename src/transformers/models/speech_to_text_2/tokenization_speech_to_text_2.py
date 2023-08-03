@@ -110,7 +110,6 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
         merges_file=None,
         **kwargs,
     ):
-
         self.do_lower_case = do_lower_case
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
@@ -137,7 +136,6 @@ class Speech2Text2Tokenizer(PreTrainedTokenizer):
             do_lower_case=do_lower_case,
             **kwargs,
         )
-
 
     @property
     def vocab_size(self) -> int:

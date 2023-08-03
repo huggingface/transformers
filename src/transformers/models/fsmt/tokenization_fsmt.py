@@ -197,7 +197,6 @@ class FSMTTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         **kwargs,
     ):
-
         try:
             import sacremoses
         except ImportError:
@@ -250,7 +249,6 @@ class FSMTTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             **kwargs,
         )
-
 
     # hack override
     def get_vocab(self) -> Dict[str, int]:

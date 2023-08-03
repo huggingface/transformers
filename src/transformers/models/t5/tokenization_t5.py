@@ -26,6 +26,7 @@ import sentencepiece as spm
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import AddedToken
 
+
 if TYPE_CHECKING:
     from ...tokenization_utils_base import TextInput
 from ...utils import logging
@@ -151,12 +152,14 @@ class T5Tokenizer(PreTrainedTokenizer):
         legacy=None,
         **kwargs,
     ) -> None:
-        pad_token = AddedToken(pad_token, rstrip = True, lstrip = True)
-        unk_token = AddedToken(unk_token, rstrip = True, lstrip = True)
-        eos_token = AddedToken(eos_token, rstrip = True, lstrip = True)
+        pad_token = AddedToken(pad_token, rstrip=True, lstrip=True)
+        unk_token = AddedToken(unk_token, rstrip=True, lstrip=True)
+        eos_token = AddedToken(eos_token, rstrip=True, lstrip=True)
         # Add extra_ids to the special token list
         if extra_ids > 0 and additional_special_tokens is None:
-            additional_special_tokens = [AddedToken(f"<extra_id_{i}>", single_word = True, lstrip = False, rstrip = False) for i in range(extra_ids)]
+            additional_special_tokens = [
+                AddedToken(f"<extra_id_{i}>", single_word=True, lstrip=False, rstrip=False) for i in range(extra_ids)
+            ]
         elif extra_ids > 0 and additional_special_tokens is not None:
             # Check that we have the right number of extra_id special tokens
             extra_tokens = len(set(filter(lambda x: bool("extra_id" in str(x)), additional_special_tokens)))

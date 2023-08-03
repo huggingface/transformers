@@ -160,7 +160,6 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
         jumanpp_kwargs=None,
         **kwargs,
     ):
-
         if subword_tokenizer_type == "sentencepiece":
             if not os.path.isfile(spm_file):
                 raise ValueError(
@@ -233,7 +232,6 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
             jumanpp_kwargs=jumanpp_kwargs,
             **kwargs,
         )
-
 
     @property
     def do_lower_case(self):

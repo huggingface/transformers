@@ -269,8 +269,6 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
-
-
         try:
             import ftfy
             from spacy.lang.en import English

@@ -111,7 +111,6 @@ class RemBertTokenizer(PreTrainedTokenizer):
         mask_token="[MASK]",
         **kwargs,
     ):
-
         self.do_lower_case = do_lower_case
         self.remove_space = remove_space
         self.keep_accents = keep_accents
@@ -132,7 +131,6 @@ class RemBertTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             **kwargs,
         )
-
 
     @property
     def vocab_size(self):

@@ -206,8 +206,6 @@ class BartTokenizer(PreTrainedTokenizer):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-
-
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -237,7 +235,6 @@ class BartTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        
     @property
     def vocab_size(self):
         return len(self.encoder)

@@ -62,7 +62,6 @@ class MgpstrTokenizer(PreTrainedTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(self, vocab_file, unk_token="[GO]", bos_token="[GO]", eos_token="[s]", pad_token="[GO]", **kwargs):
-
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.vocab = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.vocab.items()}
@@ -73,7 +72,6 @@ class MgpstrTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             **kwargs,
         )
-
 
     @property
     def vocab_size(self):

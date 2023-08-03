@@ -23,7 +23,7 @@ import json
 import os
 import re
 import warnings
-from collections import OrderedDict, UserDict
+from collections import UserDict
 from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -1556,7 +1556,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     @property
     def added_tokens_decoder(self) -> Dict[int, AddedToken]:
-        return  self._added_tokens_decoder
+        return self._added_tokens_decoder
 
     @property
     def max_len_single_sentence(self) -> int:

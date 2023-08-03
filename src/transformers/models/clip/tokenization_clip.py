@@ -347,7 +347,7 @@ class CLIPTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             **kwargs,
         )
-        
+
     @property
     def vocab_size(self):
         return len(self.encoder)

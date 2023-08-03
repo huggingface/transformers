@@ -158,7 +158,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-
     @property
     def vocab_size(self):
         return len(self.artists_encoder) + len(self.genres_encoder) + len(self.lyrics_encoder)

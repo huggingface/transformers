@@ -245,7 +245,6 @@ class PLBartTokenizer(PreTrainedTokenizer):
             self._src_lang = src_lang if src_lang is not None else "__en_XX__"
             self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
 
-
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,

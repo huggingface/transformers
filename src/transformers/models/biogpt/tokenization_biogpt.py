@@ -112,7 +112,6 @@ class BioGptTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         **kwargs,
     ):
-
         try:
             import sacremoses
         except ImportError:
@@ -144,7 +143,6 @@ class BioGptTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             **kwargs,
         )
-
 
     @property
     def vocab_size(self):

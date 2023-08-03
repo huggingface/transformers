@@ -144,7 +144,7 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         self.decoder = {v: k for k, v in self.encoder.items()}
 
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.encoder, unk_token=self.unk_token)
-        
+
         super().__init__(
             bod_token=bod_token,
             eod_token=eod_token,
@@ -157,7 +157,6 @@ class CpmAntTokenizer(PreTrainedTokenizer):
             padding_side=padding_side,
             **kwargs,
         )
-                
 
     @property
     def bod_token_id(self):

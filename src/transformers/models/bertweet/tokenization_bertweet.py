@@ -134,7 +134,6 @@ class BertweetTokenizer(PreTrainedTokenizer):
         mask_token="<mask>",
         **kwargs,
     ):
-
         try:
             from emoji import demojize
 
@@ -178,7 +177,6 @@ class BertweetTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             **kwargs,
         )
-
 
         self.special_puncts = {"’": "'", "…": "..."}
 
