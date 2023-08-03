@@ -81,7 +81,7 @@
       - local: autoregressive_generation
         title: Autoregressive generation
       - local: generation_strategies
-        title: Customize generation strategy
+        title: Customize the generation strategy
     title: Generation
     isExpanded: false
   title: Task Guides
