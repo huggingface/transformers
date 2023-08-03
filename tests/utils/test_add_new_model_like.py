@@ -85,6 +85,7 @@ REPO_PATH = Path(transformers.__path__[0]).parent.parent
 @require_torch
 @require_tf
 @require_flax
+@unittest.skip("The file `add_new_model_like.py` requires an installation with `-e` flag.")
 class TestAddNewModelLike(unittest.TestCase):
     def init_file(self, file_name, content):
         with open(file_name, "w", encoding="utf-8") as f:
