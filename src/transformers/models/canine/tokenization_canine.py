@@ -97,18 +97,6 @@ class CanineTokenizer(PreTrainedTokenizer):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        super().__init__(
-            bos_token=bos_token,
-            eos_token=eos_token,
-            sep_token=sep_token,
-            cls_token=cls_token,
-            pad_token=pad_token,
-            mask_token=mask_token,
-            add_prefix_space=add_prefix_space,
-            model_max_length=model_max_length,
-            **kwargs,
-        )
-
         # Creates a mapping for looking up the IDs of special symbols.
         self._special_codepoints: Dict[str, int] = {}
         for codepoint, name in SPECIAL_CODEPOINTS.items():
@@ -121,6 +109,18 @@ class CanineTokenizer(PreTrainedTokenizer):
 
         self._unicode_vocab_size = UNICODE_VOCAB_SIZE
         self._num_special_tokens = len(self._special_codepoints)
+
+        super().__init__(
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
+            model_max_length=model_max_length,
+            **kwargs,
+        )
 
     @property
     def vocab_size(self) -> int:

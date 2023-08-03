@@ -207,11 +207,11 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
         self.subword_tokenizer_type = subword_tokenizer_type
         if do_subword_tokenize:
             if subword_tokenizer_type == "wordpiece":
-                self.subword_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
+                self.subword_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=unk_token)
             elif subword_tokenizer_type == "character":
-                self.subword_tokenizer = CharacterTokenizer(vocab=self.vocab, unk_token=self.unk_token)
+                self.subword_tokenizer = CharacterTokenizer(vocab=self.vocab, unk_token=unk_token)
             elif subword_tokenizer_type == "sentencepiece":
-                self.subword_tokenizer = SentencepieceTokenizer(vocab=self.spm_file, unk_token=self.unk_token)
+                self.subword_tokenizer = SentencepieceTokenizer(vocab=self.spm_file, unk_token=unk_token)
             else:
                 raise ValueError(f"Invalid subword_tokenizer_type '{subword_tokenizer_type}' is specified.")
         super().__init__(

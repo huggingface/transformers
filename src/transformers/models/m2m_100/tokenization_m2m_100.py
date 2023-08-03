@@ -157,20 +157,6 @@ class M2M100Tokenizer(PreTrainedTokenizer):
             if self.get_lang_token(lang_code) not in kwargs["additional_special_tokens"]
         ]
 
-        super().__init__(
-            src_lang=src_lang,
-            tgt_lang=tgt_lang,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            sep_token=sep_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
-            language_codes=language_codes,
-            sp_model_kwargs=self.sp_model_kwargs,
-            num_madeup_words=num_madeup_words,
-            **kwargs,
-        )
-
         self.vocab_file = vocab_file
         self.encoder = load_json(vocab_file)
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -191,6 +177,20 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         self.set_src_lang_special_tokens(self._src_lang)
 
         self.num_madeup_words = num_madeup_words
+
+        super().__init__(
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            sep_token=sep_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            language_codes=language_codes,
+            sp_model_kwargs=self.sp_model_kwargs,
+            num_madeup_words=num_madeup_words,
+            **kwargs,
+        )
 
     @property
     def vocab_size(self) -> int:

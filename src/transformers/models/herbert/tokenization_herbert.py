@@ -368,12 +368,6 @@ class HerbertTokenizer(PreTrainedTokenizer):
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
 
-        self.bert_pre_tokenizer = BasicTokenizer(
-            do_lower_case=False,
-            never_split=self.all_special_tokens,
-            tokenize_chinese_chars=False,
-            strip_accents=False,
-        )
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
@@ -387,6 +381,13 @@ class HerbertTokenizer(PreTrainedTokenizer):
             do_lowercase_and_remove_accent=do_lowercase_and_remove_accent,
             tokenizer_file=None,
             **kwargs,
+        )
+
+        self.bert_pre_tokenizer = BasicTokenizer(
+            do_lower_case=False,
+            never_split=self.all_special_tokens,
+            tokenize_chinese_chars=False,
+            strip_accents=False,
         )
 
     @property

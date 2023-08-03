@@ -135,6 +135,7 @@ class BioGptTokenizer(PreTrainedTokenizer):
         merges = [tuple(merge.split()[:2]) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,

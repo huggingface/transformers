@@ -143,7 +143,7 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         self.encoder = collections.OrderedDict(sorted(self.encoder.items(), key=lambda x: x[1]))
         self.decoder = {v: k for k, v in self.encoder.items()}
 
-        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.encoder, unk_token=self.unk_token)
+        self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.encoder, unk_token=unk_token)
 
         super().__init__(
             bod_token=bod_token,

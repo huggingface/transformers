@@ -787,18 +787,6 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         return_attention_mask=False,
         **kwargs,
     ):
-        super().__init__(
-            unk_token=unk_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            pad_token=pad_token,
-            do_lower_case=do_lower_case,
-            do_normalize=do_normalize,
-            return_attention_mask=return_attention_mask,
-            word_delimiter_token=word_delimiter_token,
-            **kwargs,
-        )
-
         warnings.warn(
             "The class `Wav2Vec2Tokenizer` is deprecated and will be removed in version 5 of Transformers. Please use"
             " `Wav2Vec2Processor` or `Wav2Vec2CTCTokenizer` instead.",
@@ -815,6 +803,18 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
             self.encoder = json.load(vocab_handle)
 
         self.decoder = {v: k for k, v in self.encoder.items()}
+
+        super().__init__(
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            do_lower_case=do_lower_case,
+            do_normalize=do_normalize,
+            return_attention_mask=return_attention_mask,
+            word_delimiter_token=word_delimiter_token,
+            **kwargs,
+        )
 
     @property
     def word_delimiter_token(self) -> str:

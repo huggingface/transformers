@@ -149,10 +149,10 @@ class BertweetTokenizer(PreTrainedTokenizer):
         self.merges_file = merges_file
 
         self.encoder = {}
-        self.encoder[self.bos_token] = 0
-        self.encoder[self.pad_token] = 1
-        self.encoder[self.eos_token] = 2
-        self.encoder[self.unk_token] = 3
+        self.encoder[bos_token] = 0
+        self.encoder[pad_token] = 1
+        self.encoder[eos_token] = 2
+        self.encoder[unk_token] = 3
 
         self.add_from_file(vocab_file)
 
@@ -166,6 +166,8 @@ class BertweetTokenizer(PreTrainedTokenizer):
 
         self.normalization = normalization
         self.tweetPreprocessor = TweetTokenizer()
+        self.special_puncts = {"’": "'", "…": "..."}
+
         super().__init__(
             normalization=normalization,
             bos_token=bos_token,
@@ -177,8 +179,6 @@ class BertweetTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             **kwargs,
         )
-
-        self.special_puncts = {"’": "'", "…": "..."}
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None

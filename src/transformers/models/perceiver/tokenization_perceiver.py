@@ -77,14 +77,16 @@ class PerceiverTokenizer(PreTrainedTokenizer):
 
         self._utf_vocab_size = 2**8  # utf is 8 bits
 
+        # TODO get rid of this. These are all added tokens and you just want the correct order of addition
+        # to the vocab.
         # define special tokens dict
         self.special_tokens_encoder: Dict[str, int] = {
-            self.pad_token: 0,
-            self.bos_token: 1,
-            self.eos_token: 2,
-            self.mask_token: 3,
-            self.cls_token: 4,
-            self.sep_token: 5,
+            pad_token: 0,
+            bos_token: 1,
+            eos_token: 2,
+            mask_token: 3,
+            cls_token: 4,
+            sep_token: 5,
         }
         self._num_special_tokens = len(self.special_tokens_encoder)
         self.special_tokens_decoder: Dict[int, str] = {v: k for k, v in self.special_tokens_encoder.items()}
