@@ -537,6 +537,7 @@ class BarkModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         self.model_tester = BarkModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BarkConfig, n_embd=37)
 
+
 @require_torch
 class BarkSemanticModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BarkSemanticModel,) if is_torch_available() else ()
