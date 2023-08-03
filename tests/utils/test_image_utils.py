@@ -484,10 +484,7 @@ class LoadImageTester(unittest.TestCase):
         img = load_image(INVOICE_URL)
         img_arr = np.array(img)
 
-        self.assertEqual(
-            img_arr.shape,
-            (1061, 750, 3),
-        )
+        self.assertEqual(img_arr.shape, (1061, 750, 3))
 
     def test_load_img_url_timeout(self):
         with self.assertRaises(ReadTimeout):
