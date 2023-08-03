@@ -27,7 +27,7 @@ Autoregressive generation is the inference-time procedure of iterativelly callin
 * [Text to speech](tasks/text-to-speech)
 * [Image captioning](tasks/image_captioning)
 
-Despite the glaring input differences, autoregressive generation in 🤗 `transformers` shares the same core principles and interface across use cases.
+Despite the glaring task differences, autoregressive generation in 🤗 `transformers` shares the same core principles and interface across use cases.
 
 This guide will show you how to:
 
@@ -44,7 +44,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
 
 ## Generation with LLMs
 
-Let's start with the original and most popular use case of autoregressive generation with transformers: language models. A language model trained on causal language modeling will take a sequence of text tokens as input, and returns the probability distribution for the next token. Here's how your LLM's forward pass looks like:
+Let's start with the original and most popular use case of autoregressive generation with transformers: language models. A language model trained on the [causal language modeling task](tasks/masked_language_modeling) will take a sequence of text tokens as input, and returns the probability distribution for the next token. Here's how your LLM forward pass looks like:
 
 <!-- [GIF 1 -- FWD PASS] -->
 <figure class="image table text-center m-0 w-full">
@@ -129,7 +129,7 @@ The variable `image` contains a lovely image of two cats.
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png" alt="Test image"/>
 </div>
 
-You can now use the same workflow as above, replacing the `AutoTokenizer` by the `AutoProcessor` and importing the appropriate model class.
+You can now use the same workflow as above to caption it, replacing the `AutoTokenizer` by the `AutoProcessor` and importing the appropriate model class.
 
 ```py
 >>> from transformers import AutoProcessor, AutoModelForVision2Seq
@@ -148,7 +148,7 @@ You can now use the same workflow as above, replacing the `AutoTokenizer` by the
 
 ## Common pitfalls
 
-Autoregressive generation can be controlled with great precision, as we explain in our [generation strategies guide](generation_strategies). However, before you read our advanced docs, let's go through the most common pitfalls, using a LLM as an example.
+Autoregressive generation can be controlled with great precision, as we explain in our [generation strategies guide](generation_strategies). However, before you read our advanced docs, let's go through the most common pitfalls, using an LLM as an example.
 
 ```py
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -177,7 +177,7 @@ Autoregressive generation can be controlled with great precision, as we explain 
 'A sequence of numbers: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,'
 ```
 
-2. Selecting whether the output is sampled or not. By default, and unless specified in the [`~generation.GenerationConfig`] file, `generate` simply selects the most likely token at each iteration (greedy decoding). Depending on your task, this may be undesirable: creative tasks like a being part of a chatbot or writing an essay benefit from sampling. On the other hand, input-grounded tasks like audio transcription or translation benefit from greedy decoding. You can enable sampling with `do_sample=True`, and we further elaborate on this topic on our [blog post](https://huggingface.co/blog/how-to-generate).
+2. Selecting whether the output is sampled or not. By default, and unless specified in the [`~generation.GenerationConfig`] file, `generate` simply selects the most likely token at each iteration (greedy decoding). Depending on your task, this may be undesirable: creative tasks like being a chatbot or writing an essay benefit from sampling. On the other hand, input-grounded tasks like audio transcription or translation benefit from greedy decoding. You can enable sampling with `do_sample=True`, and we further elaborate on this topic on our [blog post](https://huggingface.co/blog/how-to-generate).
 
 ```py
 >>> # Set seed or reproducibility -- you don't need this unless you want full reproducibility
@@ -228,12 +228,12 @@ While the core principles of autoregressive generation are straightforward, taki
 
 <!-- TODO: complete with new guides -->
 ### Advanced generate usage
-1. [Guide](generation_strategies) on how to select different generation methods, how to control the configuration file, and how to activate streaming;
+1. [Guide](generation_strategies) on how to control different generation methods, how to set up the generation configuration file, and how to stream the output;
 2. API reference on [~generation.GenerationConfig], [~generation.GenerationMixin.generate], and [generate-related classes](internal/generation_utils).
 
 ### LLMs
-1. [Open LLM Leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard), which focuses on the quality of the models;
-2. [Open LLM-Perf Leaderboard](https://huggingface.co/spaces/optimum/llm-perf-leaderboard), which focuses on throughput.
+1. [Open LLM Leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard), which focuses on the quality of the open-source models;
+2. [Open LLM-Perf Leaderboard](https://huggingface.co/spaces/optimum/llm-perf-leaderboard), which focuses on LLM throughput.
 
 ### Latency and Throughput
 1. [Guide](main_classes/quantization) on dynamic quantization, which shows you how to drastically reduce your memory requirements.
