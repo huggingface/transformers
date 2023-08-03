@@ -359,7 +359,7 @@ def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
         `torch.Tensor`: The computed loss between each pairs.
     """
     inputs = inputs.sigmoid().flatten(1)
-    numerator = 2 * torch.einsum("nc,mc->nm", inputs, labels)
+    numerator = 2 * torch.matmul(inputs, labels.T)
     # using broadcasting to get a [num_queries, NUM_CLASSES] matrix
     denominator = inputs.sum(-1)[:, None] + labels.sum(-1)[None, :]
     loss = 1 - (numerator + 1) / (denominator + 1)
@@ -387,9 +387,9 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
     cross_entropy_loss_pos = criterion(inputs, torch.ones_like(inputs))
     cross_entropy_loss_neg = criterion(inputs, torch.zeros_like(inputs))
 
-    loss = torch.einsum("nc,mc->nm", cross_entropy_loss_pos, labels) + torch.einsum(
-        "nc,mc->nm", cross_entropy_loss_neg, (1 - labels)
-    )
+    loss_pos = torch.matmul(cross_entropy_loss_pos, labels.T)
+    loss_neg = torch.matmul(cross_entropy_loss_neg, (1 - labels).T)
+    loss = loss_pos + loss_neg
     loss = loss / height_and_width
     return loss
 
@@ -2012,7 +2012,12 @@ class Mask2FormerMaskPredictor(nn.Module):
         mask_embeddings = self.mask_embedder(outputs.transpose(0, 1))
 
         # Sum up over the channels
-        outputs_mask = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embeddings)
+        # (batch_size, num_queries, num_channels, 1, 1)
+        mask_embeddings = mask_embeddings.unsqueeze(-1).unsqueeze(-1)
+        # (batch_size, 1, num_channels, height, width)
+        pixel_embeddings = pixel_embeddings.unsqueeze(1)
+        # (batch_size, num_queries, height, width)
+        outputs_mask = (mask_embeddings * pixel_embeddings).sum(2)
 
         attention_mask = nn.functional.interpolate(
             outputs_mask, size=attention_mask_target_size, mode="bilinear", align_corners=False
