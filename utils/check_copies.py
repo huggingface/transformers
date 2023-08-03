@@ -12,6 +12,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+Utility that checks whether the copies defined in the library match the original or not. This includes:
+- All code commented with `# Copied from` comments,
+- The list of models in the main README.md matches the ones in the localized READMEs and in the index.md,
+- Files that are registered as full copies of one another in the `FULL_COPIES` constant of this script.
+
+This also checks the list of models in the README is complete (has all models) and add a line to complete if there is
+a model missing.
+
+Use from the root of the repo with:
+
+```bash
+python utils/check_copies.py
+```
+
+for a check that will error in case of inconsistencies (used by `make repo-consistency`) or
+
+```bash
+python utils/check_copies.py --fix_and_overwrite
+```
+
+for a check that will fix all inconsistencies automatically (used by `make fix-copies`).
+"""
 
 import argparse
 import glob
@@ -103,7 +126,9 @@ transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
 
 
 def _should_continue(line, indent):
-    return line.startswith(indent) or len(line) <= 1 or re.search(r"^\s*\)(\s*->.*:|:)\s*$", line) is not None
+    # Helper function. Returns `True` if `line` is empty, starts with the `indent` or is the end parenthesis of a
+    # function definition
+    return line.startswith(indent) or len(line.strip()) == 0 or re.search(r"^\s*\)(\s*->.*:|:)\s*$", line) is not None
 
 
 def find_code_in_transformers(object_name):
@@ -212,6 +237,8 @@ def is_copy_consistent(filename, overwrite=False):
             if line_index >= len(lines):
                 break
             line = lines[line_index]
+            # There is a special pattern `# End copy` to stop early. It's not documented cause it shouldn't really be
+            # used.
             should_continue = _should_continue(line, indent) and re.search(f"^{indent}# End copy", line) is None
         # Clean up empty lines at the end (if any).
         while len(lines[line_index - 1]) <= 1:
@@ -259,6 +286,10 @@ def is_copy_consistent(filename, overwrite=False):
 
 
 def check_copies(overwrite: bool = False):
+    """
+    Check every file is copy-consistent with the original and maybe `overwrite` content when it is not. Also check the
+    model list in the main README and other READMEs/index.md are consistent.
+    """
     all_files = glob.glob(os.path.join(TRANSFORMERS_PATH, "**/*.py"), recursive=True)
     diffs = []
     for filename in all_files:
@@ -275,6 +306,10 @@ def check_copies(overwrite: bool = False):
 
 
 def check_full_copies(overwrite: bool = False):
+    """
+    Check the files that are full copies of others (as indicated in `FULL_COPIES`) are copy-consistent and maybe
+    `overwrite` to fix issues.
+    """
     diffs = []
     for target, source in FULL_COPIES.items():
         with open(source, "r", encoding="utf-8") as f:
@@ -299,7 +334,7 @@ def check_full_copies(overwrite: bool = False):
 
 
 def get_model_list(filename, start_prompt, end_prompt):
-    """Extracts the model list from the README."""
+    """Extracts the model list from a README, between `start_prompt` and `end_prompt`."""
     with open(os.path.join(REPO_PATH, filename), "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
     # Find the start of the list.
@@ -327,7 +362,20 @@ def get_model_list(filename, start_prompt, end_prompt):
 
 
 def convert_to_localized_md(model_list, localized_model_list, format_str):
-    """Convert `model_list` to each localized README."""
+    """
+    Compare the model list from the main README to the one in a localized README.
+
+    Args:
+        model_list (`str`): The model list in the main README.
+        localized_model_list (`str`): The model list in one of the localized README.
+        format_str (`str`):
+            The template for a model entry in the localized README (look at the `format_model_list` in the entries of
+            `LOCALIZED_READMES` for examples).
+
+    Returns:
+        `Tuple[bool, str]`: A tuple where the first value indicates if the READMEs match or not, and the second value
+        is the correct localized README.
+    """
 
     def _rep(match):
         title, model_link, paper_affiliations, paper_title_link, paper_authors, supplements = match.groups()
@@ -341,7 +389,8 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
         )
 
     # This regex captures metadata from an English model description, including model title, model link,
-    # affiliations of the paper, title of the paper, authors of the paper, and supplemental data (see DistilBERT for example).
+    # affiliations of the paper, title of the paper, authors of the paper, and supplemental data (see DistilBERT for
+    # example).
     _re_capture_meta = re.compile(
         r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\* \(from ([^)]*)\)[^\[]*([^\)]*\)).*?by (.*?[A-Za-z\*]{2,}?)\. (.*)$"
     )
@@ -389,6 +438,10 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
 
 
 def convert_readme_to_index(model_list):
+    """
+    Converts the model list of the README to the index.md format.
+    """
+    # We need to replce both link to the main doc and stable doc (the order of the next two instructions is important).
     model_list = model_list.replace("https://huggingface.co/docs/transformers/main/", "")
     return model_list.replace("https://huggingface.co/docs/transformers/", "")
 
@@ -420,7 +473,9 @@ def _find_text_in_file(filename, start_prompt, end_prompt):
 
 
 def check_model_list_copy(overwrite=False, max_per_line=119):
-    """Check the model lists in the README and index.rst are consistent and maybe `overwrite`."""
+    """
+    Check the model lists in the README is consistent with the ones in the other READMES and also with `index.nmd`.
+    """
     # Fix potential doc links in the README
     with open(os.path.join(REPO_PATH, "README.md"), "r", encoding="utf-8", newline="\n") as f:
         readme = f.read()
@@ -490,6 +545,7 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
             )
 
 
+# Map a model name with the name it has in the README for the check_readme check
 SPECIAL_MODEL_NAMES = {
     "Bert Generation": "BERT For Sequence Generation",
     "BigBird": "BigBird-RoBERTa",
@@ -522,7 +578,7 @@ MODELS_NOT_IN_README = [
     "VisionTextDualEncoder",
 ]
 
-
+# Template for new entries to add in the main README when we have missing models.
 README_TEMPLATE = (
     "1. **[{model_name}](https://huggingface.co/docs/main/transformers/model_doc/{model_type})** (from "
     "<FILL INSTITUTION>) released with the paper [<FILL PAPER TITLE>](<FILL ARKIV LINK>) by <FILL AUTHORS>."
@@ -530,6 +586,10 @@ README_TEMPLATE = (
 
 
 def check_readme(overwrite=False):
+    """
+    Check if the main README contains all the models in the library or not. If `overwrite`, will add an entry for the
+    missing models using `README_TEMPLATE`.
+    """
     info = LOCALIZED_READMES["README.md"]
     models, start_index, end_index, lines = _find_text_in_file(
         os.path.join(REPO_PATH, "README.md"),
