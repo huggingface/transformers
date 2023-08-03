@@ -20,7 +20,6 @@ from ..utils import (
     is_accelerate_available,
     is_peft_available,
     logging,
-    requires_backends,
 )
 
 
@@ -40,7 +39,6 @@ class PeftAdapterMixin:
 
     _hf_peft_config_loaded = False
 
-    @check_peft_version(min_version="0.4.0")
     def load_adapter(
         self,
         peft_model_id: str,
@@ -56,7 +54,7 @@ class PeftAdapterMixin:
         """
         Load adapter weights from file. Requires peft as a backend to load the adapter weights
         """
-        requires_backends(self.load_adapter, "peft")
+        check_peft_version(min_version="0.4.0")
 
         adapter_name = adapter_name or "default"
 
@@ -127,7 +125,6 @@ class PeftAdapterMixin:
                 device_map=device_map, max_memory=max_memory, offload_dir=offload_dir, offload_index=offload_index
             )
 
-    @check_peft_version(min_version="0.4.0")
     def add_adapter(
         self,
         adapter_config,
@@ -136,7 +133,7 @@ class PeftAdapterMixin:
         r"""
         Adds a fresh new adapter to the current model for training purpose.
         """
-        requires_backends(self.add_adapter, "peft")
+        check_peft_version(min_version="0.4.0")
 
         from peft import PeftConfig, inject_adapter_in_model
 
@@ -154,12 +151,11 @@ class PeftAdapterMixin:
 
         inject_adapter_in_model(adapter_config, self, adapter_name)
 
-    @check_peft_version(min_version="0.4.0")
     def set_adapter(self, adapter_name: str) -> None:
         r"""
         Sets an adapter to switch easily between multiple adapters.
         """
-        requires_backends(self.set_adapter, "peft")
+        check_peft_version(min_version="0.4.0")
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
         elif adapter_name not in self.peft_config:
@@ -181,12 +177,11 @@ class PeftAdapterMixin:
                 "Did not succeeded in setting the adapter. Please make sure you are using a model that supports adapters."
             )
 
-    @check_peft_version(min_version="0.4.0")
     def disable_adapters(self) -> None:
         r"""
         Disable all adapters that are attached to the model
         """
-        requires_backends(self.disable_adapters, "peft")
+        check_peft_version(min_version="0.4.0")
 
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
@@ -197,12 +192,11 @@ class PeftAdapterMixin:
             if isinstance(module, BaseTunerLayer):
                 module.disable_adapters = True
 
-    @check_peft_version(min_version="0.4.0")
     def enable_adapters(self) -> None:
         r"""
         Enable all adapters that are attached to the model
         """
-        requires_backends(self.disable_adapters, "peft")
+        check_peft_version(min_version="0.4.0")
 
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
@@ -214,11 +208,12 @@ class PeftAdapterMixin:
                 module.disable_adapters = False
 
     # TODO: change it to a property but torch.jit fails. Maybe we should return None is PEFT is not available
-    @check_peft_version(min_version="0.4.0")
     def active_adapter(self) -> str:
         r"""
         Gets the current active adapter of the model.
         """
+        check_peft_version(min_version="0.4.0")
+
         if not is_peft_available():
             raise ImportError("PEFT is not available. Please install PEFT to use this function: `pip install peft`.")
 
@@ -231,7 +226,6 @@ class PeftAdapterMixin:
             if isinstance(module, BaseTunerLayer):
                 return module.active_adapter
 
-    @check_peft_version(min_version="0.4.0")
     def get_adapter_state_dict(
         self,
         adapter_name: Optional[str] = None,
@@ -239,7 +233,7 @@ class PeftAdapterMixin:
         r"""
         Gets the adapter state dict.
         """
-        requires_backends(self.save_adapter, "peft")
+        check_peft_version(min_version="0.4.0")
 
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
@@ -247,7 +241,7 @@ class PeftAdapterMixin:
         from peft import get_peft_model_state_dict
 
         if adapter_name is None:
-            adapter_name = self.current_active_adapter
+            adapter_name = self.current_active_adapter()
 
         adapter_state_dict = get_peft_model_state_dict(self, adapter_name=adapter_name)
         return adapter_state_dict

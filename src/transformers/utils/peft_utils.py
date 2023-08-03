@@ -13,7 +13,6 @@
 # limitations under the License.
 import importlib
 import os
-from contextlib import contextmanager
 from typing import Optional
 
 from packaging import version
@@ -68,7 +67,6 @@ def find_adapter_config_file(
     return adapter_cached_filename
 
 
-@contextmanager
 def check_peft_version(min_version: str) -> None:
     r"""
     Checks if the version of PEFT is compatible.
@@ -87,9 +85,3 @@ def check_peft_version(min_version: str) -> None:
             f"The version of PEFT you are using is not compatible, please use a version that is greater"
             f" than {min_version}"
         )
-
-    try:
-        yield
-    finally:
-        # Do nothing
-        pass
