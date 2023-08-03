@@ -42,7 +42,7 @@ class PeftAdapterMixin:
     def load_adapter(
         self,
         peft_model_id: str,
-        adapter_name: Optional[str] = "default",
+        adapter_name: Optional[str] = None
         revision: Optional[str] = None,
         use_auth_token: Optional[str] = None,
         commit_hash: Optional[str] = None,
