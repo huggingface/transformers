@@ -314,7 +314,7 @@ class BarkConfig(PretrainedConfig):
         semantic_config: BarkSemanticConfig,
         coarse_acoustics_config: BarkCoarseConfig,
         fine_acoustics_config: BarkFineConfig,
-        codec_config: AutoConfig,
+        codec_config: PretrainedConfig,
         **kwargs,
     ):
         r"""
