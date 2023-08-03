@@ -40,10 +40,20 @@ def find_adapter_config_file(
     Args:
         model_id (`str`):
             The identifier of the model to look for, can be either a local path or an id to the repository on the Hub.
-        revision (`str`, `optional`):
-            revision argument to be passed to `hf_hub_download` method from `huggingface_hub`.
+        revision (`str`, *optional*, defaults to `"main"`):
+            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+            git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
+            identifier allowed by git.
+
+            <Tip>
+
+            To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+
+            </Tip>
+
         use_auth_token (`str`, `optional`):
-            use_auth_token argument to be passed to `hf_hub_download` method from `huggingface_hub`.
+            Whether to use authentication token to load the remote folder. Userful to load private repositories that
+            are on HuggingFace Hub. You might need to call `huggingface-cli login` and paste your tokens to cache it.
         commit_hash (`str`, `optional`):
             commit_hash argument to be passed to `hf_hub_download` method from `huggingface_hub`.
     """

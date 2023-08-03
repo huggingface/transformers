@@ -53,10 +53,9 @@ class PeftAdapterMixin:
         adapter_name: Optional[str] = None,
         revision: Optional[str] = None,
         use_auth_token: Optional[str] = None,
-        commit_hash: Optional[str] = None,
         device_map: Optional[str] = "auto",
         max_memory: Optional[str] = None,
-        offload_dir: Optional[str] = None,
+        offload_folder: Optional[str] = None,
         offload_index: Optional[int] = None,
     ) -> None:
         """
@@ -68,21 +67,36 @@ class PeftAdapterMixin:
                 and adapter weights.
             adapter_name (`str`, `optional`):
                 The adapter name to use. If not set, will use the default adapter.
-            revision (`str`, `optional`):
-                revision argument to be passed to `hf_hub_download` method from `huggingface_hub`.
+            revision (`str`, *optional*, defaults to `"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
+                identifier allowed by git.
+
+                <Tip>
+
+                To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>".
+
+                </Tip>
+
             use_auth_token (`str`, `optional`):
-                use_auth_token argument to be passed to `hf_hub_download` method from `huggingface_hub`.
-            commit_hash (`str`, `optional`):
-                commit_hash argument to be passed to `hf_hub_download` method from `huggingface_hub`.
-            device_map (`str`, `optional`):
-                The device map to use for the adapter. Used only in the case the model is offloaded into the CPU to
-                correctly re-dispatch the model together with the adapter weights.
-            max_memory (`str`, `optional`):
-                The maximum memory to use for the adapter. Used only in the case the model is offloaded into the CPU
-                for the same reasons stated above.
-            offload_dir (`str`, `optional`):
-                The directory to use for offloading the model. Used only in the case the model is offloaded into the
-                disk.
+                Whether to use authentication token to load the remote folder. Userful to load private repositories
+                that are on HuggingFace Hub. You might need to call `huggingface-cli login` and paste your tokens to
+                cache it.
+            device_map (`str` or `Dict[str, Union[int, str, torch.device]]` or `int` or `torch.device`, *optional*):
+                A map that specifies where each submodule should go. It doesn't need to be refined to each
+                parameter/buffer name, once a given module name is inside, every submodule of it will be sent to the
+                same device. If we only pass the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank
+                like `1`) on which the model will be allocated, the device map will map the entire model to this
+                device. Passing `device_map = 0` means put the whole model on GPU 0.
+
+                To have Accelerate compute the most optimized `device_map` automatically, set `device_map="auto"`. For
+                more information about each option see [designing a device
+                map](https://hf.co/docs/accelerate/main/en/usage_guides/big_modeling#designing-a-device-map).
+            max_memory (`Dict`, *optional*):
+                A dictionary device identifier to maximum memory. Will default to the maximum memory available for each
+                GPU and the available CPU RAM if unset.
+            offload_folder (`str` or `os.PathLike`, *optional*):
+                If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_index (`int`, `optional`):
                 `offload_index` argument to be passed to `accelerate.dispatch_model` method.
         """
@@ -102,7 +116,6 @@ class PeftAdapterMixin:
             peft_model_id,
             revision=revision,
             use_auth_token=use_auth_token,
-            commit_hash=commit_hash,
         )
 
         if adapter_config_file is None:
@@ -115,7 +128,6 @@ class PeftAdapterMixin:
             peft_model_id,
             revision=revision,
             use_auth_token=use_auth_token,
-            commit_hash=commit_hash,
         )
 
         # Replace the adapter with the loaded adapter
@@ -151,7 +163,10 @@ class PeftAdapterMixin:
             and len(self.peft_config) == 1
         ):
             self._dispatch_accelerate_model(
-                device_map=device_map, max_memory=max_memory, offload_dir=offload_dir, offload_index=offload_index
+                device_map=device_map,
+                max_memory=max_memory,
+                offload_folder=offload_folder,
+                offload_index=offload_index,
             )
 
     def add_adapter(self, adapter_config, adapter_name: Optional[str] = None) -> None:
@@ -279,7 +294,7 @@ class PeftAdapterMixin:
         self,
         device_map: str,
         max_memory: Optional[int] = None,
-        offload_dir: Optional[str] = None,
+        offload_folder: Optional[str] = None,
         offload_index: Optional[int] = None,
     ) -> None:
         """
@@ -287,12 +302,21 @@ class PeftAdapterMixin:
         accelerate (i.e. with `device_map=xxx`)
 
         Args:
-            device_map (`str`):
-                The device map used to load the model with accelerate.
-            max_memory (`int`, `optional`):
-                The maximum memory argument to be passed to `accelerate.get_balanced_memory` method.
-            offload_dir (`str`, `optional`):
-                The offload_dir argument to be passed to `accelerate.dispatch_model` method.
+            device_map (`str` or `Dict[str, Union[int, str, torch.device]]` or `int` or `torch.device`, *optional*):
+                A map that specifies where each submodule should go. It doesn't need to be refined to each
+                parameter/buffer name, once a given module name is inside, every submodule of it will be sent to the
+                same device. If we only pass the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank
+                like `1`) on which the model will be allocated, the device map will map the entire model to this
+                device. Passing `device_map = 0` means put the whole model on GPU 0.
+
+                To have Accelerate compute the most optimized `device_map` automatically, set `device_map="auto"`. For
+                more information about each option see [designing a device
+                map](https://hf.co/docs/accelerate/main/en/usage_guides/big_modeling#designing-a-device-map).
+            max_memory (`Dict`, *optional*):
+                A dictionary device identifier to maximum memory. Will default to the maximum memory available for each
+                GPU and the available CPU RAM if unset.
+            offload_folder (`str` or `os.PathLike`, *optional*):
+                If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_index (`int`, `optional`):
                 The offload_index argument to be passed to `accelerate.dispatch_model` method.
         """
@@ -318,6 +342,6 @@ class PeftAdapterMixin:
         dispatch_model(
             self,
             device_map=device_map,
-            offload_dir=offload_dir,
+            offload_dir=offload_folder,
             **dispatch_model_kwargs,
         )
