@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import center_crop, normalize, rescale, resize, to_channel_dimension_format
+from ...image_transforms import rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -144,30 +144,6 @@ class EfficientNetImageProcessor(BaseImageProcessor):
             image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
         )
 
-    def center_crop(
-        self,
-        image: np.ndarray,
-        size: Dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Center crop an image to `(crop_size["height"], crop_size["width"])`. If the input size is smaller than
-        `crop_size` along any edge, the image is padded with 0's and then center cropped.
-
-        Args:
-            image (`np.ndarray`):
-                Image to center crop.
-            size (`Dict[str, int]`):
-                Size of the output image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
-        return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
-
     def rescale(
         self,
         image: np.ndarray,
@@ -177,7 +153,14 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         **kwargs,
     ):
         """
-        Rescale an image by a scale factor. image = image * scale.
+        Rescale an image by a scale factor.
+
+        If `offset` is `True`, the image has its values rescaled by `scale` and then offset by 1. If `scale` is
+        1/127.5, the image is rescaled between [-1, 1].
+            image = image * scale - 1
+
+        If `offset` is `False`, and `scale` is 1/255, the image is rescaled between [0, 1].
+            image = image * scale
 
         Args:
             image (`np.ndarray`):
@@ -189,37 +172,12 @@ class EfficientNetImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
+        rescaled_image = rescale(image, scale=scale, data_format=data_format, **kwargs)
+
         if offset:
-            rescaled_image = (image - 127.5) * scale
-            if data_format is not None:
-                rescaled_image = to_channel_dimension_format(rescaled_image, data_format)
-            rescaled_image = rescaled_image.astype(np.float32)
-        else:
-            rescaled_image = rescale(image, scale=scale, data_format=data_format, **kwargs)
+            rescaled_image = rescaled_image - 1
+
         return rescaled_image
-
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: Union[float, List[float]],
-        std: Union[float, List[float]],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Normalize an image. image = (image - image_mean) / image_std.
-
-        Args:
-            image (`np.ndarray`):
-                Image to normalize.
-            image_mean (`float` or `List[float]`):
-                Image mean.
-            image_std (`float` or `List[float]`):
-                Image standard deviation.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
     def preprocess(
         self,

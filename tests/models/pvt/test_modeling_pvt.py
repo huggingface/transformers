@@ -30,6 +30,7 @@ from transformers.testing_utils import (
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -154,8 +155,13 @@ def prepare_img():
 
 
 @require_torch
-class PvtModelTest(ModelTesterMixin, unittest.TestCase):
+class PvtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (PvtModel, PvtForImageClassification) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": PvtModel, "image-classification": PvtForImageClassification}
+        if is_torch_available()
+        else {}
+    )
 
     test_head_masking = False
     test_pruning = False
@@ -317,14 +323,13 @@ class PvtModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = PvtForImageClassification.from_pretrained(
-            "Zetatech/pvt-tiny-224", torch_dtype=torch.float16, device_map="auto"
-        )
+        model = PvtForImageClassification.from_pretrained("Zetatech/pvt-tiny-224", torch_dtype=torch.float16)
+        model.to(torch_device)
         image_processor = PvtImageProcessor(size=224)
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device).astype(torch.float16)
+        pixel_values = inputs.pixel_values.to(torch_device, dtype=torch.float16)
 
         # forward pass to make sure inference works in fp16
         with torch.no_grad():
