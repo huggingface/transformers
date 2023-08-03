@@ -19,6 +19,8 @@ In addition to this guide, relevant information can be found as well in [the gui
 
 ## BetterTransformer
 
+BetterTransformer API converts 🤗 transformers models to make them use PyTorch-native transformer fastpath that calls optimized kernels such as Flash Attention under the hood.  
+
 ### Encoder models
 
 PyTorch-native [`nn.MultiHeadAttention`](https://pytorch.org/blog/a-better-transformer-for-fast-transformer-encoder-inference/) attention fastpath, called BetterTransformer, can be used with Transformers through the integration in the [🤗 Optimum library](https://huggingface.co/docs/optimum/bettertransformer/overview).

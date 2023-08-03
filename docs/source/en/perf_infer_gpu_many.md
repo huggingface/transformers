@@ -22,9 +22,13 @@ Note: A multi GPU setup can use the majority of the strategies described in the 
 
 </Tip>
 
-## BetterTransformer and Flash Attention
+## BetterTransformer
 
-[`BetterTransformer`](https://huggingface.co/docs/optimum/bettertransformer/overview) is supported for faster inference on multi-GPU for text, image, and audio models.
+[`BetterTransformer`](https://huggingface.co/docs/optimum/bettertransformer/overview) API converts 🤗 transformers models to make them use PyTorch-native transformer fastpath that calls optimized kernels such as Flash Attention under the hood.  
+
+BetterTransformer is also supported for faster inference on multi-GPU for text, image, and audio models.
+
+### Decoder models
 
 For text models, especially decoder-based models (GPT, T5, Llama, etc.), the `BetterTransformer` API converts all attention operations to use the [`torch.nn.functional.scaled_dot_product_attention` method](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention) (SDPA) that is only available in PyTorch 2.0 and onwards. 
 
@@ -92,6 +96,8 @@ with torch.cuda.amp.autocast(), torch.backends.cuda.sdp_kernel(enable_flash=True
 
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
+
+### Encoder models
 
 For encoder models, the [`~PreTrainedModel.reverse_bettertransformer`] method reverts to the original model, which should be used before saving the model to use the canonical transformers modeling:
 
