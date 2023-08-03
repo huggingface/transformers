@@ -228,15 +228,16 @@ While the core principles of autoregressive generation are straightforward, taki
 
 <!-- TODO: complete with new guides -->
 ### Advanced generate usage
-1. [Guide](generation_strategies) on how to select different generation methods, how to control the configuration file, and how to activate streaming.
-2. API reference
+1. [Guide](generation_strategies) on how to select different generation methods, how to control the configuration file, and how to activate streaming;
+2. API reference on [~generation.GenerationConfig], [~generation.GenerationMixin.generate], and [generate-related classes](internal/generation_utils).
 
 ### LLMs
 1. [Open LLM Leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard), which focuses on the quality of the models;
-2. [Open LLM-Perf Leaderboard](https://huggingface.co/spaces/optimum/llm-perf-leaderboard), which focuses on throughput;
+2. [Open LLM-Perf Leaderboard](https://huggingface.co/spaces/optimum/llm-perf-leaderboard), which focuses on throughput.
 
 ### Latency and Throughput
-1.
+1. [Guide](main_classes/quantization) on dynamic quantization, which shows you how to drastically reduce your memory requirements.
 
 ### Related libraries
-1.
+1. [`text-generation-inference`](https://github.com/huggingface/text-generation-inference), a production-ready server for LLMs;
+2. [`optimum`](https://github.com/huggingface/optimum), an extension of 🤗 `transformers` that optimizes for specific hardware devices.
