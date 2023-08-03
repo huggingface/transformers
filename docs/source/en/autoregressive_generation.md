@@ -91,7 +91,7 @@ Next, you need to preprocess your text input with a [tokenizer](tokenizer_summar
 >>> from transformers import AutoTokenizer
 
 >>> tokenizer = AutoTokenizer.from_pretrained("openlm-research/open_llama_7b")
->>> model_inputs = tokenizer(["A list of colors: red, blue"], return_tensors="pt")
+>>> model_inputs = tokenizer(["A list of colors: red, blue"], return_tensors="pt").to("cuda")
 ```
 
 The `model_inputs` variable holds the tokenized text input, as well as the attention mask. While [`~generation.GenerationMixin.generate`] does its best effort to infer the attention mask when it is not passed, we recommend to pass it whenever possible for optimal results.
@@ -99,9 +99,9 @@ The `model_inputs` variable holds the tokenized text input, as well as the atten
 Finally, you can call the [`~generation.GenerationMixin.generate`] method. It returns the generated tokens, which should be converted to text before printing.
 
 ```py
->>> generated_output = model.generate(**model_inputs)
->>> tokenizer.batch_decode(generated_output, skip_special_tokens=True)
-['A list of colors: red, blue, green, yellow, black, white, and brown']
+>>> generated_ids = model.generate(**model_inputs)
+>>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+'A list of colors: red, blue, green, yellow, black, white, and brown'
 ```
 
 
@@ -132,13 +132,102 @@ The variable `image` contains a lovely image of two cats.
 You can now use the same workflow as above, replacing the `AutoTokenizer` by the `AutoProcessor` and importing the appropriate model class.
 
 ```py
-from transformers import AutoProcessor,
+>>> from transformers import AutoProcessor, AutoModelForVision2Seq
+
+>>> model = AutoModelForVision2Seq.from_pretrained(
+...     "Salesforce/blip2-opt-2.7b", device_map="auto", load_in_4bit=True
+... )
+>>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
+>>> model_inputs = processor(image, return_tensors="pt").to("cuda")
+
+>>> generated_ids = model.generate(**model_inputs)
+>>> processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+'two cats laying on a pink couch\n'
 ```
 
 
-
-
 ## Common pitfalls
+
+Autoregressive generation can be controlled with great precision, as we explain in our [generation strategies guide](generation_strategies). However, before you read our advanced docs, let's go through the most common pitfalls, using a LLM as an example.
+
+```py
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("openlm-research/open_llama_7b")
+>>> model = AutoModelForCausalLM.from_pretrained(
+...     "openlm-research/open_llama_7b", device_map="auto", load_in_4bit=True
+... )
+```
+
+1. Not controlling the maximum length. If not specified in the [`~generation.GenerationConfig`] file, a `generate` call will return up to `20` tokens (our default value). We highly recommend you manually setting `max_new_tokens` in your generate call -- this flag controls the maximum number of new tokens it can return. Please note that LLMs (more precisely, [decoder-only models](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)) also return the input prompt as part of the output.
+
+
+```py
+>>> model_inputs = tokenizer(["A sequence of numbers: 1, 2"], return_tensors="pt").to("cuda")
+
+>>> # By default, the output will contain up to 20 tokens
+>>> generated_ids = model.generate(**model_inputs)
+>>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+'A sequence of numbers: 1, 2, 3, 4, 5'
+
+>>> # Setting `max_new_tokens` allows you to control the maximum length
+>>> generated_ids = model.generate(**model_inputs, max_new_tokens=50)
+>>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+'A sequence of numbers: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,'
+```
+
+2. Selecting whether the output is sampled or not. By default, and unless specified in the [`~generation.GenerationConfig`] file, `generate` simply selects the most likely token at each iteration (greedy decoding). Depending on your task, this may be undesirable: creative tasks like a being part of a chatbot or writing an essay benefit from sampling. On the other hand, input-grounded tasks like audio transcription or translation benefit from greedy decoding. You can enable sampling with `do_sample=True`, and we further elaborate on this topic on our [blog post](https://huggingface.co/blog/how-to-generate).
+
+```py
+>>> # Set seed or reproducibility -- you don't need this unless you want full reproducibility
+>>> from transformers import set_seed
+>>> set_seed(0)
+
+>>> model_inputs = tokenizer(["I am a cat."], return_tensors="pt").to("cuda")
+
+>>> # LLM + greedy decoding = repetitive, boring output
+>>> generated_ids = model.generate(**model_inputs)
+>>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+'I am a cat. I am a cat. I am a cat. I am a cat'
+
+>>> # With sampling, the output becomes more creative!
+>>> generated_ids = model.generate(**model_inputs, do_sample=True)
+>>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+'I am a cat.\nI just need to be. I am always.\nEvery time'
+```
+
+3. Batched LLM inference without left-padding. LLMs are [decoder-only](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt) architectures, which means that they continue your input prompt. If your inputs do not have the same length, they will have to be padded. Since LLMs are not trained to continue from pad tokens, your input needs to be left-padded. Make sure you also don't forget to pass the attention mask to generate!
+
+```py
+>>> # The tokenizer initialized above has right-padding active by default
+>>> tokenizer = AutoTokenizer.from_pretrained(
+...     "openlm-research/open_llama_7b", padding=True
+... )
+>>> model_inputs = tokenizer(
+...     ["1, 2, 3", "A long random sequence that we don't care about"], return_tensors="pt"
+... ).to("cuda")
+>>> generated_ids = model.generate(**model_inputs)
+>>> tokenizer.batch_decode(generated_ids[0], skip_special_tokens=True)[0]
+
+>>> # With left-padding, it works as expected!
+>>> tokenizer = AutoTokenizer.from_pretrained(
+...     "openlm-research/open_llama_7b", padding=True, padding_side="left"
+... )
+>>> model_inputs = tokenizer(
+...     ["1, 2, 3", "A long random sequence that we don't care about"], return_tensors="pt"
+... ).to("cuda")
+>>> generated_ids = model.generate(**model_inputs)
+>>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+```
+
+<!--
+- controlling max length
+- sample of not depending on the task
+- batched left padding + attention mask
+-->
+
+<!-- TODO: when the prompting guide is ready, mention the importance of setting the right prompt in this section -->
 
 ## Further resources
 
@@ -149,6 +238,7 @@ aaa
 
 ### LLMs
 aaa
+
 ### Performance
 aaa
 
