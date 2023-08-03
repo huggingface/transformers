@@ -135,10 +135,10 @@ class PhobertTokenizer(PreTrainedTokenizer):
         self.merges_file = merges_file
 
         self.encoder = {}
-        self.encoder[self.bos_token] = 0
-        self.encoder[self.pad_token] = 1
-        self.encoder[self.eos_token] = 2
-        self.encoder[self.unk_token] = 3
+        self.encoder[bos_token] = 0
+        self.encoder[pad_token] = 1
+        self.encoder[eos_token] = 2
+        self.encoder[unk_token] = 3
 
         self.add_from_file(vocab_file)
 
@@ -147,6 +147,10 @@ class PhobertTokenizer(PreTrainedTokenizer):
         with open(merges_file, encoding="utf-8") as merges_handle:
             merges = merges_handle.read().split("\n")[:-1]
         merges = [tuple(merge.split()[:-1]) for merge in merges]
+
+        self.bpe_ranks = dict(zip(merges, range(len(merges))))
+        self.cache = {}
+        
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -158,8 +162,6 @@ class PhobertTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        self.bpe_ranks = dict(zip(merges, range(len(merges))))
-        self.cache = {}
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None

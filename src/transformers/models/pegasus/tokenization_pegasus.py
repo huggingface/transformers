@@ -144,18 +144,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-
-        super().__init__(
-            eos_token=eos_token,
-            unk_token=unk_token,
-            mask_token=mask_token,
-            pad_token=pad_token,
-            mask_token_sent=mask_token_sent,
-            offset=offset,
-            additional_special_tokens=additional_special_tokens,
-            sp_model_kwargs=self.sp_model_kwargs,
-            **kwargs,
-        )
         self.mask_token_sent = mask_token_sent
         self.vocab_file = vocab_file
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
@@ -181,6 +169,19 @@ class PegasusTokenizer(PreTrainedTokenizer):
             self.encoder.update({i + 3: additional_special_tokens[i] for i in range(1, self.offset - 1)})
 
         self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
+        
+        super().__init__(
+            eos_token=eos_token,
+            unk_token=unk_token,
+            mask_token=mask_token,
+            pad_token=pad_token,
+            mask_token_sent=mask_token_sent,
+            offset=offset,
+            additional_special_tokens=additional_special_tokens,
+            sp_model_kwargs=self.sp_model_kwargs,
+            **kwargs,
+        )
+                
 
     @property
     def vocab_size(self) -> int:

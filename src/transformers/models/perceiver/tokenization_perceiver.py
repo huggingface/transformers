@@ -75,17 +75,6 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
         sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
 
-        super().__init__(
-            pad_token=pad_token,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            mask_token=mask_token,
-            cls_token=cls_token,
-            sep_token=sep_token,
-            model_max_length=model_max_length,
-            **kwargs,
-        )
-
         self._utf_vocab_size = 2**8  # utf is 8 bits
 
         # define special tokens dict
@@ -99,6 +88,19 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         }
         self._num_special_tokens = len(self.special_tokens_encoder)
         self.special_tokens_decoder: Dict[int, str] = {v: k for k, v in self.special_tokens_encoder.items()}
+
+
+        super().__init__(
+            pad_token=pad_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            mask_token=mask_token,
+            cls_token=cls_token,
+            sep_token=sep_token,
+            model_max_length=model_max_length,
+            **kwargs,
+        )
+
 
     def get_vocab(self) -> Dict[str, int]:
         vocab = self.special_tokens_encoder.copy()
