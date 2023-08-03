@@ -35,6 +35,7 @@ from transformers.models.bark.generation_configuration_bark import (
 from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 from transformers.utils import cached_property
 
+from ..encodec.test_modeling_encodec import EncodecModelTester
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -480,6 +481,7 @@ class BarkModelTester:
         semantic_kwargs=None,
         coarse_acoustics_kwargs=None,
         fine_acoustics_kwargs=None,
+        codec_kwargs=None,
         is_training=False,  # for now training is not supported
     ):
         if semantic_kwargs is None:
@@ -493,6 +495,8 @@ class BarkModelTester:
         self.semantic_model_tester = BarkSemanticModelTester(parent, **semantic_kwargs)
         self.coarse_acoustics_model_tester = BarkCoarseModelTester(parent, **coarse_acoustics_kwargs)
         self.fine_acoustics_model_tester = BarkFineModelTester(parent, **fine_acoustics_kwargs)
+        self.codec_model_tester = EncodecModelTester(parent, **codec_kwargs)
+
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -507,6 +511,7 @@ class BarkModelTester:
             self.semantic_model_tester.get_config(),
             self.coarse_acoustics_model_tester.get_config(),
             self.fine_acoustics_model_tester.get_config(),
+            self.codec_model_tester.get_config(),
         )
 
     def get_pipeline_config(self):
