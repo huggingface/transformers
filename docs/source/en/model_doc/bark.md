@@ -64,7 +64,6 @@ model.enable_cpu_offload()
 
 Note that 🤗 Accelerate must be installed before using this feature. [Here's how to install it.](https://huggingface.co/docs/accelerate/basic_tutorials/install)
 
-
 #### Combining optimizaton techniques
 
 You can combine optimization techniques, and use CPU offload, half-precision and 🤗 Better Transformer all at once.
@@ -84,6 +83,8 @@ model = BetterTransformer.transform(model, keep_original_model=False)
 # enable CPU offload
 model.enable_cpu_offload()
 ```
+
+Find out more on inference optimization techniques [here](https://huggingface.co/docs/transformers/perf_infer_gpu_one).
 
 ### Tips
 
