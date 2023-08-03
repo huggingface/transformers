@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 [[open-in-colab]]
 
 Autoregressive generation is the inference-time procedure of iteratively calling a model with its own generated outputs, given a few initial inputs. This procedure, well explained in [our blog post](https://huggingface.co/blog/how-to-generate), is used with several tasks in different modalities, including:
-* [Causal language modeling](tasks/masked_language_modeling)
+* [Causal language modeling](tasks/language_modeling)
 * [Translation](tasks/translation)
 * [Summarization](tasks/summarization)
 * [Automatic speech recognition](tasks/asr)
@@ -44,7 +44,7 @@ pip install transformers bitsandbytes>=0.39.0 -q
 
 ## Generation with LLMs
 
-Let's start with the original and most popular use case of autoregressive generation with transformers: language models. A language model trained on the [causal language modeling task](tasks/masked_language_modeling) will take a sequence of text tokens as input, and returns the probability distribution for the next token. Here's what your LLM forward pass looks like:
+Let's start with the original and most popular use case of autoregressive generation with transformers: language models. A language model trained on the [causal language modeling task](tasks/language_modeling) will take a sequence of text tokens as input, and returns the probability distribution for the next token. Here's what your LLM forward pass looks like:
 
 <!-- [GIF 1 -- FWD PASS] -->
 <figure class="image table text-center m-0 w-full">
@@ -66,9 +66,9 @@ A critical ingredient of autoregressive generation with LLMs is selecting the ne
     ></video>
 </figure>
 
-The process depicted above is repeated iteratively until some stopping criteria is reached. Ideally, this stopping condition is dictated by the model, which should learn when to output an end-of-sequence (EOS) token. When this doesn't happen, generation stops when some pre-defined maximum length is reached.
+The process depicted above is repeated iteratively until some stopping condition is reached. Ideally, this stopping condition is dictated by the model, which should learn when to output an end-of-sequence (EOS) token. When this doesn't happen, generation stops when some pre-defined maximum length is reached.
 
-Properly setting up the token selection step and the stopping criteria is essential to make your model behave as you'd expect on your task. That is why we have a [`~generation.GenerationConfig`] file associated with each model, which contains a good default generative parameterization and is loaded alongside your model.
+Properly setting up the token selection step and the stopping condition is essential to make your model behave as you'd expect on your task. That is why we have a [`~generation.GenerationConfig`] file associated with each model, which contains a good default generative parameterization and is loaded alongside your model.
 
 Let's talk code! If you're interested in basic usage of an LLM, using our high-level [pipeline](pipeline_tutorial) interface is a candidate starting point. However, LLMs often require advanced features like quantization and fine control of the token selection step, which is best done through our [`~generation.GenerationMixin.generate`]. Autoregressive generation with LLMs is also resource-intensive, and should be executed in a GPU for adequate throughput.
 
@@ -109,7 +109,7 @@ Finally, you can call the [`~generation.GenerationMixin.generate`] method. It re
 
 Autoregressive generation with other modalities behave mostly as described above for LLMs. As such, let's focus on the differences that you may enconter when generating with other modalities:
 * Non-text model inputs rely on the [`AutoProcessor`](https://huggingface.co/docs/transformers/model_doc/auto#transformers.AutoProcessor) class for pre-processing;
-* If the output of your model's forward pass is not a discrete set (e.g. if they are embeddings), then the logit processing step described above does not apply, but there may be custom model output processing steps between iterations.
+* If the output of your model's forward pass is not a discrete set (e.g. if they are embeddings), then your model has a custom `generate` function with a similar interface, and you should check your model's docs.
 
 And... that's it!
 
