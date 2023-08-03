@@ -408,6 +408,13 @@ class PoolFormerImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class PvtImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class SamImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -493,6 +500,13 @@ class ViTImageProcessor(metaclass=DummyObject):
 
 
 class ViTHybridImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class VivitImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

@@ -1,3 +1,4 @@
+import inspect
 import types
 import warnings
 from collections.abc import Iterable
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
 if is_tf_available():
     import tensorflow as tf
 
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 
     Dataset = None
 
@@ -39,7 +40,7 @@ if is_torch_available():
     import torch
     from torch.utils.data import Dataset
 
-    from ..models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 
 
 def decode_spans(
@@ -269,7 +270,9 @@ class QuestionAnsweringPipeline(ChunkPipeline):
 
         self._args_parser = QuestionAnsweringArgumentHandler()
         self.check_model_type(
-            TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING if self.framework == "tf" else MODEL_FOR_QUESTION_ANSWERING_MAPPING
+            TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
+            if self.framework == "tf"
+            else MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
         )
 
     @staticmethod
@@ -510,6 +513,10 @@ class QuestionAnsweringPipeline(ChunkPipeline):
     def _forward(self, inputs):
         example = inputs["example"]
         model_inputs = {k: inputs[k] for k in self.tokenizer.model_input_names}
+        # `XXXForSequenceClassification` models should not use `use_cache=True` even if it's supported
+        model_forward = self.model.forward if self.framework == "pt" else self.model.call
+        if "use_cache" in inspect.signature(model_forward).parameters.keys():
+            model_inputs["use_cache"] = False
         output = self.model(**model_inputs)
         if isinstance(output, dict):
             return {"start": output["start_logits"], "end": output["end_logits"], "example": example, **inputs}

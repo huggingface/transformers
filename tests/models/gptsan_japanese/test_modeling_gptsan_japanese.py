@@ -38,14 +38,14 @@ class GPTSanJapaneseTester:
     def __init__(
         self,
         parent,
-        vocab_size=36000,
+        vocab_size=99,
         batch_size=13,
         num_contexts=7,
         # For common tests
         is_training=True,
         hidden_size=32,
         ext_size=42,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_ext_layers=2,
         num_attention_heads=4,
         num_experts=2,

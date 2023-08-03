@@ -27,7 +27,6 @@ from ...image_transforms import (
     center_to_corners_format,
     corners_to_center_format,
     id_to_rgb,
-    normalize,
     pad,
     rescale,
     resize,
@@ -916,18 +915,6 @@ class DetrImageProcessor(BaseImageProcessor):
         """
         return rescale(image, rescale_factor, data_format=data_format)
 
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: Union[float, Iterable[float]],
-        std: Union[float, Iterable[float]],
-        data_format: Optional[ChannelDimension] = None,
-    ) -> np.ndarray:
-        """
-        Normalize the image with the given mean and standard deviation.
-        """
-        return normalize(image, mean=mean, std=std, data_format=data_format)
-
     def normalize_annotation(self, annotation: Dict, image_size: Tuple[int, int]) -> Dict:
         """
         Normalize the boxes in the annotation from `[top_left_x, top_left_y, bottom_right_x, bottom_right_y]` to
@@ -1219,7 +1206,7 @@ class DetrImageProcessor(BaseImageProcessor):
         """
         logger.warning_once(
             "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_object_detection`",
+            " `post_process_object_detection` instead, with `threshold=0.` for equivalent results.",
         )
 
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes

@@ -115,6 +115,9 @@ class MobileViTV2ModelTester:
             width_multiplier=self.width_multiplier,
             ffn_dropout=self.ffn_dropout_prob,
             attn_dropout=self.attn_dropout_prob,
+            base_attn_unit_dims=[16, 24, 32],
+            n_attn_blocks=[1, 1, 2],
+            aspp_out_channels=32,
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
