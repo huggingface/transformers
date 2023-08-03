@@ -73,11 +73,11 @@ class ViTPosePatchEmbed(nn.Module):
 
     def __init__(self, config: ViTPoseConfig):
         super().__init__()
-        self.num_channels = 3
+        self.num_channels = config.num_channels
         self.embed_dim = config.embed_dim
         self.patch_size = config.patch_size
         self.image_size = config.img_size
-       # self.image_size = self.image_size if isinstance(self.image_size, collections.abc.Iterable) else (self.image_size, self.image_size)
+        self.image_size = self.image_size if isinstance(self.image_size, collections.abc.Iterable) else (self.image_size, self.image_size)
         self.patch_size = self.patch_size if isinstance(self.patch_size, collections.abc.Iterable) else (self.patch_size, self.patch_size)
         self.num_patches = (self.image_size[1] // self.patch_size[1]) * (self.image_size[0] // self.patch_size[0])
 
@@ -104,7 +104,7 @@ class ViTPosePatchEmbed(nn.Module):
 
 ## GREEN
 class ViTPoseAttention(nn.Module):
-    def __init__(self, config: ViTPoseConfig, qk_scale = None) -> None:
+    def __init__(self, config: ViTPoseConfig) -> None:
         super().__init__()
         if config.embed_dim % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -112,14 +112,9 @@ class ViTPoseAttention(nn.Module):
                 f"heads {config.num_attention_heads}."
             )
 
-        self.qk_scale = qk_scale
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = config.embed_dim // config.num_attention_heads
         self.all_head_size = self.attention_head_size * config.num_attention_heads
-
-        #self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        #self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        #self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
         self.qkv = nn.Linear(config.embed_dim, self.all_head_size*3, bias=config.qkv_bias)
         self.attn_drop = nn.Dropout(config.dropout_p)
@@ -170,7 +165,7 @@ class ViTPoseAttention(nn.Module):
         return attention_output
 
 class ViTPoseMLP(nn.Module):
-    def __init__(self, config: ViTPoseConfig):
+    def __init__(self, config: ViTPoseConfig) -> None:
         super().__init__()
 
         self.fc1 = nn.Linear(in_features=config.embed_dim, out_features=config.embed_dim*config.mlp_ratio,bias=True)
@@ -178,18 +173,24 @@ class ViTPoseMLP(nn.Module):
         self.fc2 = nn.Linear(in_features=config.embed_dim*config.mlp_ratio, out_features=config.embed_dim)
         self.dropout = nn.Dropout(config.dropout_p, inplace=True)
 
-    def forward(self,x):
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.fc2(x)
-        x = self.dropout(x)
-        return x
+    def forward(self,pixel_values: torch.Tensor) -> torch.Tensor:
 
-    pass
+        """A pretty generic MLP block"""
+        pixel_values = self.fc1(pixel_values)
+        pixel_values = self.act(pixel_values)
+        pixel_values = self.fc2(pixel_values)
+        pixel_values = self.dropout(pixel_values)
+
+        return pixel_values
 
 class ViTPoseBlock(nn.Module):
-    def __init__(self, config: ViTPoseConfig, layer: int):
+    def __init__(
+        self, 
+        config: ViTPoseConfig, 
+        layer: Optional[int]
+    ) -> None:
         super().__init__()
+
         self.layer = layer
         self.norm1 = nn.LayerNorm(config.embed_dim, eps=1e-06, elementwise_affine=True)
         self.attn = ViTPoseAttention(config)
@@ -197,28 +198,29 @@ class ViTPoseBlock(nn.Module):
         self.norm2 = nn.LayerNorm(config.embed_dim, eps=1e-06, elementwise_affine=True)
         self.mlp = ViTPoseMLP(config)
 
-    def forward(self, x):
-        x = x + self.drop_path(self.attn(self.norm1(x)))
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
-        return x
-    pass
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+
+        pixel_values = pixel_values + self.drop_path(self.attn(self.norm1(pixel_values)))
+        pixel_values = pixel_values + self.drop_path(self.mlp(self.norm2(pixel_values)))
+
+        return pixel_values
 
 class DropPath(nn.Module):
-    def __init__(self, p=0.0, layer=0):
+    def __init__(self, p: float = 0.0, layer: Optional[int] = 0) -> None:
         super(DropPath, self).__init__()
         self.p = p
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         if not self.training or self.p == 0.0:
             return x
         keep_prob = 1 - self.p
         shape = (x.shape[0],) + (1,) * (x.ndim - 1)
         random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
-        random_tensor.floor_()  # binarize
+        random_tensor.floor_()
         output = x.div(keep_prob) * random_tensor
         return output
 
-    def extra_repr(self):
+    def extra_repr(self) -> str:
         return 'p={}', format(self.p)
         
 
@@ -290,8 +292,8 @@ class ViTPoseBackbone(nn.Module):
             embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
         # add the [CLS] token to the embedded patch tokens
-        #cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        #embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
         if interpolate_pos_encoding is not None:

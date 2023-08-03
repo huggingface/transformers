@@ -108,6 +108,7 @@ class ViTPoseConfig(PretrainedConfig):
         dropout_p = 0.0,
         num_output_channels = 17,
         initializer_range = 1,
+        num_channels = 3,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -129,5 +130,6 @@ class ViTPoseConfig(PretrainedConfig):
         self.dropout_p = dropout_p
         self.num_output_channels = num_output_channels
         self.initializer_range = initializer_range
+        self.num_channels = num_channels
 
 

@@ -33,7 +33,7 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-__models__ = []# add all the model names 
+__models__ = ["ViTPose-S", "ViTPose-B", "ViTPose-L", "ViTPose-L", "ViTPose-H"]# add all the model names 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
 def create_rename_keys(config, base_model=False):
