@@ -430,6 +430,7 @@ _import_structure = {
     "models.mobilevit": ["MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTConfig"],
     "models.mobilevitv2": ["MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileViTV2Config"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
+    "models.mpt": ["MPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MptConfig"],
     "models.mra": ["MRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MraConfig"],
     "models.mt5": ["MT5Config"],
     "models.musicgen": [
@@ -2219,6 +2220,17 @@ else:
             "MPNetPreTrainedModel",
         ]
     )
+    _import_structure["models.mpt"].extend(
+        [
+            "MPT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MptForCausalLM",
+            "MptForQuestionAnswering",
+            "MptForSequenceClassification",
+            "MptForTokenClassification",
+            "MptModel",
+            "MptPreTrainedModel",
+        ]
+    )
     _import_structure["models.mra"].extend(
         [
             "MRA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2232,7 +2244,14 @@ else:
         ]
     )
     _import_structure["models.mt5"].extend(
-        ["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5ForQuestionAnswering", "MT5Model", "MT5PreTrainedModel"]
+        [
+            "MT5EncoderModel",
+            "MT5ForConditionalGeneration",
+            "MT5ForQuestionAnswering",
+            "MT5ForSequenceClassification",
+            "MT5Model",
+            "MT5PreTrainedModel",
+        ]
     )
     _import_structure["models.musicgen"].extend(
         [
@@ -2686,6 +2705,7 @@ else:
             "T5EncoderModel",
             "T5ForConditionalGeneration",
             "T5ForQuestionAnswering",
+            "T5ForSequenceClassification",
             "T5Model",
             "T5PreTrainedModel",
             "load_tf_weights_in_t5",
@@ -2755,6 +2775,7 @@ else:
             "UMT5EncoderModel",
             "UMT5ForConditionalGeneration",
             "UMT5ForQuestionAnswering",
+            "UMT5ForSequenceClassification",
             "UMT5Model",
             "UMT5PreTrainedModel",
         ]
@@ -3875,6 +3896,13 @@ else:
             "FlaxBlenderbotSmallPreTrainedModel",
         ]
     )
+    _import_structure["models.bloom"].extend(
+        [
+            "FlaxBloomForCausalLM",
+            "FlaxBloomModel",
+            "FlaxBloomPreTrainedModel",
+        ]
+    )
     _import_structure["models.clip"].extend(
         [
             "FlaxCLIPModel",
@@ -4393,6 +4421,7 @@ if TYPE_CHECKING:
     from .models.mobilevit import MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTConfig
     from .models.mobilevitv2 import MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileViTV2Config
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
+    from .models.mpt import MPT_PRETRAINED_CONFIG_ARCHIVE_MAP, MptConfig
     from .models.mra import MRA_PRETRAINED_CONFIG_ARCHIVE_MAP, MraConfig
     from .models.mt5 import MT5Config
     from .models.musicgen import (
@@ -5905,6 +5934,15 @@ if TYPE_CHECKING:
             MPNetModel,
             MPNetPreTrainedModel,
         )
+        from .models.mpt import (
+            MPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MptForCausalLM,
+            MptForQuestionAnswering,
+            MptForSequenceClassification,
+            MptForTokenClassification,
+            MptModel,
+            MptPreTrainedModel,
+        )
         from .models.mra import (
             MRA_PRETRAINED_MODEL_ARCHIVE_LIST,
             MraForMaskedLM,
@@ -5919,6 +5957,7 @@ if TYPE_CHECKING:
             MT5EncoderModel,
             MT5ForConditionalGeneration,
             MT5ForQuestionAnswering,
+            MT5ForSequenceClassification,
             MT5Model,
             MT5PreTrainedModel,
         )
@@ -6292,6 +6331,7 @@ if TYPE_CHECKING:
             T5EncoderModel,
             T5ForConditionalGeneration,
             T5ForQuestionAnswering,
+            T5ForSequenceClassification,
             T5Model,
             T5PreTrainedModel,
             load_tf_weights_in_t5,
@@ -6345,6 +6385,7 @@ if TYPE_CHECKING:
             UMT5EncoderModel,
             UMT5ForConditionalGeneration,
             UMT5ForQuestionAnswering,
+            UMT5ForSequenceClassification,
             UMT5Model,
             UMT5PreTrainedModel,
         )
@@ -7252,6 +7293,7 @@ if TYPE_CHECKING:
             FlaxBlenderbotSmallModel,
             FlaxBlenderbotSmallPreTrainedModel,
         )
+        from .models.bloom import FlaxBloomForCausalLM, FlaxBloomModel, FlaxBloomPreTrainedModel
         from .models.clip import (
             FlaxCLIPModel,
             FlaxCLIPPreTrainedModel,

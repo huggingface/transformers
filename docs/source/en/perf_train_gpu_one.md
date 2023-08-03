@@ -203,6 +203,7 @@ improvement. All you need to do is to add the following to your code:
 ```
 import torch
 torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
 ```
 
 CUDA will automatically switch to using tf32 instead of fp32 where possible, assuming that the used GPU is from the Ampere series.
