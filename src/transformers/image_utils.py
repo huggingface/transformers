@@ -260,6 +260,8 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
     Args:
         image (`str` or `PIL.Image.Image`):
             The image to convert to the PIL Image format.
+        timeout (`float`, *optional*):
+            The timeout value in seconds for the URL request.
 
     Returns:
         `PIL.Image.Image`: A PIL Image.
