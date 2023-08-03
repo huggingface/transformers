@@ -171,6 +171,8 @@ Sometimes the copy is exactly the same except for names: for instance in `Robert
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Roberta
 ```
 
+Note that there shouldn't be any spaces around the arrow (unless that space is part of the pattern to replace of course).
+
 You can add several patterns separated by a comma. For instance here `CamemberForMaskedLM` is a direct copy of `RobertaForMaskedLM` with two replacements: `Roberta` to `Camembert` and `ROBERTA` to `CAMEMBERT`. You can see [here](https://github.com/huggingface/transformers/blob/15082a9dc6950ecae63a0d3e5060b2fc7f15050a/src/transformers/models/camembert/modeling_camembert.py#L929) this is done with the comment:
 
 ```py
@@ -195,9 +197,3 @@ In this case, the code is copied from `BertForSequenceClassification` by replaci
 - `Bert` by `MobileBert` (for instance when using `MobileBertModel` in the init)
 - `bert` by `mobilebert` (for instance when defining `self.mobilebert`)
 - `BERT` by `MOBILEBERT` (in the constant `MOBILEBERT_INPUTS_DOCSTRING`)
-
-<Tip warning={true}>
-
-The utility that check copies are conform to the original checks everything except the first line (so the `class Xxx` line or the `def xxx` line that introduces the class/function). You can thus have inconsistencies when changing the signature of a function or the superclass of a class.
-
-</Tip>
