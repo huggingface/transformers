@@ -413,6 +413,9 @@ class MptModel(MptPreTrainedModel):
     def get_input_embeddings(self):
         return self.wte
 
+    def build_mpt_alibi_tensor(self, num_heads, sequence_length, alibi_bias_max=8, device=None):
+        return build_mpt_alibi_tensor(num_heads, sequence_length, alibi_bias_max, device)
+
     def _prepare_attn_mask(
         self, attention_mask: torch.Tensor, input_shape: Tuple[int, int], past_key_values_length: int
     ) -> torch.BoolTensor:
@@ -507,7 +510,7 @@ class MptModel(MptPreTrainedModel):
         else:
             attention_mask = attention_mask.to(hidden_states.device)
 
-        alibi = build_mpt_alibi_tensor(self.num_heads, self.config.max_seq_len, device=hidden_states.device)
+        alibi = self.build_mpt_alibi_tensor(self.num_heads, self.config.max_seq_len, device=hidden_states.device)
 
         causal_mask = self._prepare_attn_mask(
             attention_mask,
