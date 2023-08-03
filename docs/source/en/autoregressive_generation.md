@@ -154,6 +154,7 @@ Autoregressive generation can be controlled with great precision, as we explain 
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
 >>> tokenizer = AutoTokenizer.from_pretrained("openlm-research/open_llama_7b")
+>>> tokenizer.pad_token = tokenizer.eos_token  # Llama has no pad token by default
 >>> model = AutoModelForCausalLM.from_pretrained(
 ...     "openlm-research/open_llama_7b", device_map="auto", load_in_4bit=True
 ... )
@@ -199,51 +200,43 @@ Autoregressive generation can be controlled with great precision, as we explain 
 3. Batched LLM inference without left-padding. LLMs are [decoder-only](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt) architectures, which means that they continue your input prompt. If your inputs do not have the same length, they will have to be padded. Since LLMs are not trained to continue from pad tokens, your input needs to be left-padded. Make sure you also don't forget to pass the attention mask to generate!
 
 ```py
->>> # The tokenizer initialized above has right-padding active by default
->>> tokenizer = AutoTokenizer.from_pretrained(
-...     "openlm-research/open_llama_7b", padding=True
-... )
+>>> # The tokenizer initialized above has right-padding active by default: the 1st sequence,
+>>> # which is shorter, has padding on the right side. Generation fails.
 >>> model_inputs = tokenizer(
-...     ["1, 2, 3", "A long random sequence that we don't care about"], return_tensors="pt"
+...     ["1, 2, 3", "A, B, C, D, E"], padding=True, return_tensors="pt"
 ... ).to("cuda")
 >>> generated_ids = model.generate(**model_inputs)
 >>> tokenizer.batch_decode(generated_ids[0], skip_special_tokens=True)[0]
+''
 
 >>> # With left-padding, it works as expected!
->>> tokenizer = AutoTokenizer.from_pretrained(
-...     "openlm-research/open_llama_7b", padding=True, padding_side="left"
-... )
+>>> tokenizer = AutoTokenizer.from_pretrained("openlm-research/open_llama_7b", padding_side="left")
+>>> tokenizer.pad_token = tokenizer.eos_token  # Llama has no pad token by default
 >>> model_inputs = tokenizer(
-...     ["1, 2, 3", "A long random sequence that we don't care about"], return_tensors="pt"
+...     ["1, 2, 3", "A, B, C, D, E"], padding=True, return_tensors="pt"
 ... ).to("cuda")
 >>> generated_ids = model.generate(**model_inputs)
 >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
-
+'1, 2, 3, 4, 5, 6,'
 ```
-
-<!--
-- controlling max length
-- sample of not depending on the task
-- batched left padding + attention mask
--->
 
 <!-- TODO: when the prompting guide is ready, mention the importance of setting the right prompt in this section -->
 
 ## Further resources
 
-While the core principles of autoregressive generation are simple, taking the most out of your generative model can be a challenging endeavour. This section is here to guide you on next steps.
+While the core principles of autoregressive generation are straightforward, taking the most out of your generative model can be a challenging endeavour, as there are many moving parts. This section is here to serve as a reference for next steps.
 
+<!-- TODO: complete with new guides -->
 ### Advanced generate usage
-aaa
+1. [Guide](generation_strategies) on how to select different generation methods, how to control the configuration file, and how to activate streaming.
+2. API reference
 
 ### LLMs
-aaa
+1. [Open LLM Leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard), which focuses on the quality of the models;
+2. [Open LLM-Perf Leaderboard](https://huggingface.co/spaces/optimum/llm-perf-leaderboard), which focuses on throughput;
 
-### Performance
-aaa
-
-### API reference
-aaa
+### Latency and Throughput
+1.
 
 ### Related libraries
-aaa
+1.
