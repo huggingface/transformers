@@ -479,6 +479,8 @@ class BarkModelTester:
             coarse_acoustics_kwargs = {}
         if fine_acoustics_kwargs is None:
             fine_acoustics_kwargs = {}
+        if codec_kwargs is None:
+            codec_kwargs = {}
 
         self.parent = parent
         self.semantic_model_tester = BarkSemanticModelTester(parent, **semantic_kwargs)
