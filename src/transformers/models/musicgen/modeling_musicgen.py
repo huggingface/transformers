@@ -2198,6 +2198,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         synced_gpus: Optional[bool] = None,
+        streamer: Optional["BaseStreamer"] = None,
         **kwargs,
     ):
         """
@@ -2238,6 +2239,9 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 generation config an error is thrown. This feature is intended for advanced users.
             synced_gpus (`bool`, *optional*, defaults to `False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+            streamer (`BaseStreamer`, *optional*):
+                Streamer object that will be used to stream the generated sequences. Generated tokens are passed
+                through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -2380,6 +2384,10 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         # stash the delay mask so that we don't have to recompute in each forward pass
         model_kwargs["decoder_delay_pattern_mask"] = decoder_delay_pattern_mask
 
+        # input_ids are ready to be placed on the streamer (if used)
+        if streamer is not None:
+            streamer.put(input_ids.cpu())
+
         # 7. determine generation mode
         is_greedy_gen_mode = (
             (generation_config.num_beams == 1)
@@ -2428,6 +2436,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 
@@ -2454,6 +2463,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 output_scores=generation_config.output_scores,
                 return_dict_in_generate=generation_config.return_dict_in_generate,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 
