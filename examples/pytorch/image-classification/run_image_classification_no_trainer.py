@@ -447,7 +447,7 @@ def main():
             dirs.sort(key=os.path.getctime)
             path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
             checkpoint_path = path
-            path = os.path.basename(args.resume_from_checkpoint)
+            path = os.path.basename(checkpoint_path)
 
         accelerator.print(f"Resumed from checkpoint: {checkpoint_path}")
         accelerator.load_state(path)
