@@ -5022,14 +5022,6 @@ if TYPE_CHECKING:
         from .models.xlnet import XLNetTokenizer
 
     try:
-        if not is_inflect_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        from .utils.dummy_inflect_objects import *
-    else:
-        from .models.clvp import CLVPTokenizer
-
-    try:
         if not is_tokenizers_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
@@ -5095,6 +5087,14 @@ if TYPE_CHECKING:
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
+
+    try:
+        if not is_inflect_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_inflect_objects import *
+    else:
+        from .models.clvp import CLVPTokenizer
 
     try:
         if not (is_sentencepiece_available() and is_tokenizers_available()):

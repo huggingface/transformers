@@ -136,6 +136,13 @@ def _expand_number(m):
 def normalize_numbers(text):
     """
     Converts the numerical values to spoken text.
+
+    Example:
+
+    ```python
+    >>> print(normalize_numbers("$1000.51"))
+    "one thousand dollars, fifty-one cents"
+    ```
     """
 
     text = re.sub(re.compile(r"([0-9][0-9\,]+[0-9])"), _remove_commas, text)
@@ -150,6 +157,13 @@ def normalize_numbers(text):
 def expand_abbreviations(text):
     """
     Expands the abbreviate words.
+
+    Example:
+
+    ```python
+    >>> print(expand_abbreviations("mrs."))
+    "misess"
+    ```
     """
 
     for regex, replacement in _abbreviations:

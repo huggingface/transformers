@@ -815,7 +815,7 @@ class CLVPTransformer(nn.Module):
 class CLVPTextModel(CLVPPreTrainedModel):
     config_class = CLVPTextConfig
 
-    _no_split_modules = ["CLVPEncoderLayer"]
+    _no_split_modules = None
 
     def __init__(self, config: CLVPTextConfig):
         super().__init__(config)
@@ -880,7 +880,7 @@ class CLVPSpeechModel(CLVPPreTrainedModel):
     config_class = CLVPSpeechConfig
     main_input_name = "speech_ids"
 
-    _no_split_modules = ["CLVPEncoderLayer"]
+    _no_split_modules = None
 
     def __init__(self, config: CLVPSpeechConfig):
         super().__init__(config)
@@ -916,6 +916,7 @@ class CLVPSpeechModel(CLVPPreTrainedModel):
 
         >>> model = CLVPSpeechModel.from_pretrained("susnato/clvp_dev")
 
+        >>> # TODO : after FeatureExtractor is implemented we need to change it to something lik FE.__call__(...)
         >>> inputs = {"speech_ids": torch.tensor([[56, 8, 48, 7, 11, 23]]).long()}
 
         >>> outputs = model(**inputs)
@@ -982,6 +983,23 @@ class CLVPModel(CLVPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
+        r"""
+        Returns:
+            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim)`: The text embeddings obtained by
+            applying the projection layer to the pooled output of [`CLVPTextModel`].
+
+        Examples:
+
+        ```python
+        >>> from transformers import CLVPTokenizer, CLVPModel
+
+        >>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
+        >>> tokenizer = CLVPTokenizer.from_pretrained("susnato/clvp_dev")
+
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> text_features = model.get_text_features(**inputs)
+        ```"""
+
         # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1013,6 +1031,30 @@ class CLVPModel(CLVPPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
+        r"""
+        Returns:
+            speech_features (`torch.FloatTensor` of shape `(batch_size, output_dim)`: The speech embeddings obtained by
+            applying the projection layer to the pooled output of [`CLVPSpeechModel`].
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import CLVPModel
+
+        >>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
+        >>> processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> # TODO : after FeatureExtractor is implemented we need to change it to something lik FE.__call__(...)
+        >>> inputs = {"speech_ids": torch.tensor([[56, 8, 48, 7, 11, 23]]).long()}
+
+        >>> image_features = model.get_speech_features(**inputs)
+        ```"""
+
         # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1062,6 +1104,7 @@ class CLVPModel(CLVPPreTrainedModel):
 
         >>> text = "This is a text."
         >>> inputs = tokenizer(text, return_tensors="pt")
+        >>> # TODO : after FeatureExtractor is implemented we need to change it to something lik FE.__call__(...)
         >>> inputs["speech_ids"] = torch.tensor([[10, 55, 101, 37, 21, 102, 41]]).long()
 
         >>> outputs = model(**inputs)
@@ -1138,7 +1181,7 @@ class CLVPModel(CLVPPreTrainedModel):
 class CLVPTextModelWithProjection(CLVPPreTrainedModel):
     config_class = CLVPTextConfig
 
-    _no_split_modules = ["CLVPEncoderLayer"]
+    _no_split_modules = None
 
     def __init__(self, config: CLVPTextConfig):
         super().__init__(config)
@@ -1223,7 +1266,7 @@ class CLVPSpeechModelWithProjection(CLVPPreTrainedModel):
     config_class = CLVPSpeechConfig
     main_input_name = "speech_ids"
 
-    _no_split_modules = ["CLVPEncoderLayer"]
+    _no_split_modules = None
 
     def __init__(self, config: CLVPSpeechConfig):
         super().__init__(config)
@@ -1263,6 +1306,7 @@ class CLVPSpeechModelWithProjection(CLVPPreTrainedModel):
 
         >>> model = CLVPSpeechModelWithProjection.from_pretrained("susnato/clvp_dev")
 
+        >>> # TODO : after FeatureExtractor is implemented we need to change it to something lik FE.__call__(...)
         >>> inputs = {"speech_ids": torch.tensor([[5, 62, 1, 5, 9, 10]]).long()}
 
         >>> outputs = model(**inputs)
