@@ -212,7 +212,7 @@ class CircleCIJob:
         if self.marker is not None:
             test_command += f" -m {self.marker}"
 
-        test_command += ' -k "not test_training_"'
+        # test_command += ' -k "not test_training_"'
 
         if self.name == "pr_documentation_tests":
             # can't use ` | tee tee tests_output.txt` as usual
@@ -580,8 +580,8 @@ def create_circleci_config(folder=None):
             if job.job_name in ["tests_torch", "tests_tf", "tests_flax"]:
                 job.tests_to_run = [x for x in test_list_items if "/test_modeling_" in x]
             elif job.job_name == "tests_non_modeling":
-                L = [x for x in test_list_items if "/test_modeling_" not in x and "/test_tokenization_" in x]
-                job.tests_to_run = [x for x in L if any(y in x for y in ["_bert.py", "_gpt2.py", "_bart.py", "_t5.py", "_roberta.py", "_deberta.py", "_longformer.py", "_led.py", "_albert.py", "_xlm_roberta.py"])]  #, ])]
+                L = sorted([x for x in test_list_items if "/test_modeling_" not in x and "/test_tokenization_" in x])
+                job.tests_to_run = L[:32]  # [x for x in L if any(y in x for y in ["_bert.py", "_gpt2.py", "_bart.py", "_t5.py", "_roberta.py", "_deberta.py", "_longformer.py", "_led.py", "_albert.py", "_xlm_roberta.py"])]  #, ])]
 
         extended_tests_to_run = set(test_list.split())
         # Extend the test files for cross test jobs
