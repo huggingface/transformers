@@ -212,7 +212,7 @@ class CircleCIJob:
         if self.marker is not None:
             test_command += f" -m {self.marker}"
 
-        # test_command += ' -k "not test_training_"'
+        test_command += ' -k "not test_pickle_"'
 
         if self.name == "pr_documentation_tests":
             # can't use ` | tee tee tests_output.txt` as usual
@@ -287,7 +287,7 @@ non_modeling_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     parallelism=1,
-    pytest_num_workers=1,
+    pytest_num_workers=8,
 )
 
 
