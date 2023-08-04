@@ -2853,7 +2853,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if "special_dtypes" in inspect.signature(infer_auto_device_map).parameters:
                 kwargs["special_dtypes"] = special_dtypes
             elif len(special_dtypes) > 0:
-                logger.warn(
+                logger.warning(
                     "This model has some weights that should be kept in higher precision, you need to upgrade "
                     "`accelerate` to properly deal with them (`pip install --upgrade accelerate`)."
                 )
@@ -3359,7 +3359,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if len(unexpected_keys) > 0:
             archs = [] if model.config.architectures is None else model.config.architectures
-            warner = logger.warn if model.__class__.__name__ in archs else logger.info
+            warner = logger.warning if model.__class__.__name__ in archs else logger.info
             warner(
                 f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
                 f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"

@@ -224,12 +224,12 @@ class Agent:
             self._toolbox.update(additional_tools)
             if len(replacements) > 1:
                 names = "\n".join([f"- {n}: {t}" for n, t in replacements.items()])
-                logger.warn(
+                logger.warning(
                     f"The following tools have been replaced by the ones provided in `additional_tools`:\n{names}."
                 )
             elif len(replacements) == 1:
                 name = list(replacements.keys())[0]
-                logger.warn(f"{name} has been replaced by {replacements[name]} as provided in `additional_tools`.")
+                logger.warning(f"{name} has been replaced by {replacements[name]} as provided in `additional_tools`.")
 
         self.prepare_for_new_chat()
 
