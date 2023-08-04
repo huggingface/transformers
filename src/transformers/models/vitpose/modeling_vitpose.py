@@ -33,6 +33,7 @@ from ...modeling_outputs import (
     ImageClassifierOutput,
     MaskedImageModelingOutput,
 )
+from ..yolos import YolosFeatureExtractor, YolosForObjectDetection
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
@@ -310,6 +311,7 @@ class ViTPoseTopDownHeatMap(nn.Module):
 
     def __init__(self, config: ViTPoseConfig):
         super().__init__()
+        self.config = config
         self.deconv_layers = []
         if config.keypoint_num_deconv_layer > 0:
           for i in range(config.keypoint_num_deconv_layer):
@@ -330,6 +332,88 @@ class ViTPoseTopDownHeatMap(nn.Module):
 
         self.deconv_layers = nn.Sequential(*self.deconv_layers)
         self.final_layer = nn.Conv2d(config.keypoint_num_deconv_filters[-1], config.num_output_channels, kernel_size=1, stride=1)
+
+    def transform_preds(self, coords, canter, scale, output_size, use_udp=False):
+        scale = scale * 200.0
+        if use_udp:
+            scale_x = scale[0] / (output_size[0] - 1.0)
+            scale_y = scale[1] / (output_size[1] - 1.0)
+        else:
+            scale_x = scale[0] / output_size[0]
+            scale_y = scale[1] / output_size[1]
+
+        target_coords = np.ones_like(coords)
+        target_coords[:, 0] = coords[:, 0] * scale_x + center[0] - scale[0] * 0.5
+        target_coords[:, 1] = coords[:, 1] * scale_y + center[1] - scale[1] * 0.5
+
+        return target_coords
+
+
+    def post_dark_udp(self, coords, batch_heatmaps, kernel=3):
+        B, K, H, W = batch_heatmaps.shape
+        N = coords.shape[0]
+        assert (B == 1 or B == N)
+        for heatmaps in batch_heatmaps:
+            for heatmap in heatmaps:
+                cv2.GaussianBlur(heatmap, (kernel, kernel), 0, heatmap)
+        np.clip(batch_heatmaps, 0.001, 50, batch_heatmaps)
+        np.log(batch_heatmaps, batch_heatmaps)
+
+        batch_heatmaps_pad = np.pad(
+            batch_heatmaps, ((0, 0), (0, 0), (1, 1), (1, 1)),
+            mode='edge').flatten()
+
+        index = coords[..., 0] + 1 + (coords[..., 1] + 1) * (W + 2)
+        index += (W + 2) * (H + 2) * np.arange(0, B * K).reshape(-1, K)
+        index = index.astype(int).reshape(-1, 1)
+        i_ = batch_heatmaps_pad[index]
+        ix1 = batch_heatmaps_pad[index + 1]
+        iy1 = batch_heatmaps_pad[index + W + 2]
+        ix1y1 = batch_heatmaps_pad[index + W + 3]
+        ix1_y1_ = batch_heatmaps_pad[index - W - 3]
+        ix1_ = batch_heatmaps_pad[index - 1]
+        iy1_ = batch_heatmaps_pad[index - 2 - W]
+
+        dx = 0.5 * (ix1 - ix1_)
+        dy = 0.5 * (iy1 - iy1_)
+        derivative = np.concatenate([dx, dy], axis=1)
+        derivative = derivative.reshape(N, K, 2, 1)
+        dxx = ix1 - 2 * i_ + ix1_
+        dyy = iy1 - 2 * i_ + iy1_
+        dxy = 0.5 * (ix1y1 - ix1 - iy1 + i_ + i_ - ix1_ - iy1_ + ix1_y1_)
+        hessian = np.concatenate([dxx, dxy, dxy, dyy], axis=1)
+        hessian = hessian.reshape(N, K, 2, 2)
+        hessian = np.linalg.inv(hessian + np.finfo(np.float32).eps * np.eye(2))
+        coords -= np.einsum('ijmn,ijnk->ijmk', hessian, derivative).squeeze()
+        return coords
+
+    def keypoints_from_heatpoint(self, heatmaps, center, scale, unbiased=False):
+        heatmaps = heatmaps.copy()
+        ude_udp = config.udp
+        N, K, H, W = heatmaps.shape
+        if use_udp:
+            if self.config.target_type.lower() == "GaussianHeatMap".lower():
+                # GetMaxPreds
+                heatmaps_rehshaped = heatmaps.reshape((N,K,-1))
+                idx = np.argmax(heatmaps_reshaped, 2).reshape((N,K,1))
+                maxvals = np.amax(heatmaps_reshaped, 2).reshape((N,K,1))
+
+                preds = np.tile(idx, (1,1,2)).astype(np.float32)
+                preds[:,:,0] = preds[:,:,0] % W
+                preds[;,;,1] = preds[:,:,1] // W
+                preds = np.where(np.tile(maxvals, (1,1,2)) > 0.0, preds, -1)
+
+                preds = post_dark_udp(preds, heatmaps, kernel=self.config.kernel)
+
+            else:
+                raise ValueError("target_type has to be GaussianHeatMap! no other supported")
+        else:
+            raise ValueError("not supported udp has to be True")
+
+        for i in range(N):
+            preds[i] = self.transform_preds(preds[i], center[i], scale[i], [W,H], use_udp=use_udp)
+
+        return preds, maxvals
 
     def decode(self, img_metas, img, img_size):
         batch_size = len(img_metas)
