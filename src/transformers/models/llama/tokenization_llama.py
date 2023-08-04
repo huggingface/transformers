@@ -133,6 +133,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             spaces_between_special_tokens=spaces_between_special_tokens,
             legacy=legacy,
+            prompt=prompt,
             **kwargs,
         )
         if legacy is None:
