@@ -101,7 +101,7 @@ own regarding how code should be written :-)
 1. The forward pass of your model should be fully written in the modeling file while being fully independent of other
    models in the library. If you want to reuse a block from another model, copy the code and paste it with a
    `# Copied from` comment on top (see [here](https://github.com/huggingface/transformers/blob/v4.17.0/src/transformers/models/roberta/modeling_roberta.py#L160)
-   for a good example).
+   for a good example and [there](pr_checks#check-copies) for more documentation on Copied from). 
 2. The code should be fully understandable, even by a non-native English speaker. This means you should pick
    descriptive variable names and avoid abbreviations. As an example, `activation` is preferred to `act`.
    One-letter variable names are strongly discouraged unless it's an index in a for loop.
