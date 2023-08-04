@@ -2013,7 +2013,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Unable to load vocabulary from file. "
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
-        cls.legacy_save = True
+
         if "added_tokens_decoder" in init_kwargs:
             print(
                 " `added_tokens_decoder` were saved in the `tokenizer_config.json` and will be used to initialise the added_tokens"
@@ -2032,7 +2032,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if not tokenizer.is_fast:
                 tokenizer._create_trie()
 
-        elif cls.legacy_save:
+        else:
             #  Kept for bacward compatibilty, let's not fix the impossible to fix
             special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
             if special_tokens_map_file is not None:
@@ -2251,16 +2251,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             out_str = json.dumps(tokenizer_config, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
             f.write(out_str)
         logger.info(f"tokenizer config file saved in {tokenizer_config_file}")
-        file_names = (tokenizer_config_file,)
-        # Sanitize AddedTokens in special_tokens_map
-        if self.legacy_save:
-            write_dict = self.convert_added_tokens(self.special_tokens_map_extended, add_type_field=False)
-            with open(special_tokens_map_file, "w", encoding="utf-8") as f:
-                out_str = json.dumps(write_dict, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
-                f.write(out_str)
-            logger.info(f"Special tokens file saved in {special_tokens_map_file}")
 
-            file_names += (special_tokens_map_file,)
+        # Sanitize AddedTokens in special_tokens_map
+
+        # TODO kept for forward compatibility, will be removed in transoformers 5
+        write_dict = self.convert_added_tokens(self.special_tokens_map_extended, add_type_field=False)
+        with open(special_tokens_map_file, "w", encoding="utf-8") as f:
+            out_str = json.dumps(write_dict, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+            f.write(out_str)
+        logger.info(f"Special tokens file saved in {special_tokens_map_file}")
+
+        file_names = (tokenizer_config_file, special_tokens_map_file)
 
         save_files = self._save_pretrained(
             save_directory=save_directory,
@@ -2268,6 +2269,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             legacy_format=legacy_format,
             filename_prefix=filename_prefix,
         )
+        added_tokens_file = save_files[-1] + " and " if self.get_added_vocab() else None
+            
+        warnings.warn(
+            f"Saving {added_tokens_file}{special_tokens_map_file} will be removed in `transformers 5`, it is kept for forward compatibility, but it is recommended to update your tokenizer file", FutureWarning
+        )
+                
 
         if push_to_hub:
             self._upload_modified_files(
@@ -2299,23 +2306,24 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         save_directory = str(save_directory)
+
+
+        # TODO always save for now, for forward compatibility? 
+        # -> as much as possible, but outputs with special won't match one to one
+
+        added_tokens_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
+        )
+        added_vocab = self.get_added_vocab()
+        if added_vocab:
+            with open(added_tokens_file, "w", encoding="utf-8") as f:
+                out_str = json.dumps(added_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+                f.write(out_str)
+                logger.info(f"added tokens file saved in {added_tokens_file}")
+
         vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
 
-        file_names += vocab_files
-
-        if self.legacy_save:
-            added_tokens_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
-            )
-            added_vocab = self.get_added_vocab()
-            if added_vocab:
-                with open(added_tokens_file, "w", encoding="utf-8") as f:
-                    out_str = json.dumps(added_vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
-                    f.write(out_str)
-                    logger.info(f"added tokens file saved in {added_tokens_file}")
-            file_names += +(added_tokens_file,)
-
-        return file_names
+        return file_names + vocab_files + (added_tokens_file,)
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
