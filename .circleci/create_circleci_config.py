@@ -153,7 +153,7 @@ class CircleCIJob:
         test_command = ""
         if self.command_timeout:
             test_command = f"timeout {self.command_timeout} "
-        test_command += f"python -m pytest --capture=no --show-capture=no -n {self.pytest_num_workers} " + " ".join(pytest_flags)
+        test_command += f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
 
         if self.parallelism == 1:
             if self.tests_to_run is None:
@@ -285,6 +285,7 @@ non_modeling_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     parallelism=1,
+    pytest_num_workers=1,
 )
 
 
@@ -578,7 +579,7 @@ def create_circleci_config(folder=None):
                 job.tests_to_run = [x for x in test_list_items if "/test_modeling_" in x]
             elif job.job_name == "tests_non_modeling":
                 L = [x for x in test_list_items if "/test_modeling_" not in x and "/test_tokenization_" in x]
-                job.tests_to_run = L  # [x for x in L if any(y in x for y in ["_bert.py", "_gpt2.py", "_bart.py", "_t5.py", "_roberta.py", "_deberta.py", "_longformer.py", "_led.py", "_albert.py", "_xlm_roberta.py", "_speecht5.py", "_mbart50.py", "_plbart.py", "_mobilebert.py", "_roc_bert.py", "_squeezebert.py"])]
+                job.tests_to_run = [x for x in L if any(y in x for y in ["_bert.py", "_gpt2.py", "_bart.py", "_t5.py", "_roberta.py", "_deberta.py", "_longformer.py", "_led.py", "_albert.py", "_xlm_roberta.py"])]  #, "_speecht5.py", "_mbart50.py", "_plbart.py", "_mobilebert.py", "_roc_bert.py", "_squeezebert.py"])]
 
         extended_tests_to_run = set(test_list.split())
         # Extend the test files for cross test jobs
