@@ -434,7 +434,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             elif self.unk_token_id is not None and self.convert_tokens_to_ids(token.content) == self.unk_token_id:
                 # if some tokens were added at the beginning ignore them HACK
                 if not special_tokens and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
-                    # Since we are adding a token to the vocab, let's be consistent: thje vocab probably does not contain any upper-case words
+                    # Since we are adding a token to the vocab, let's be consistent: the vocab probably does not contain any upper-case words
                     # so we lower the AddedToken, this way both encoder and decoder can properly handle the token.
                     content = token.content.lower()
                     token = AddedToken(
@@ -527,7 +527,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
             text = re.sub(pattern, lambda m: m.groups()[0] or m.groups()[1].lower(), text)
 
-        no_split_token = set(self.added_tokens_encoder.keys())  # don't s plit on added tokens
+        no_split_token = set(self.added_tokens_encoder.keys())  # don't split on added tokens
         tokens = self.tokens_trie.split(text)
         # ["This is something", "<special_token_1>", "  else"]
         for i, token in enumerate(tokens):

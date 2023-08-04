@@ -1490,8 +1490,8 @@ INIT_TOKENIZER_DOCSTRING = r"""
             A special token representing a masked token (used by masked-language modeling pretraining objectives, like
             BERT). Will be associated to `self.mask_token` and `self.mask_token_id`.
         additional_special_tokens (tuple or list of `str` or `tokenizers.AddedToken`, *optional*):
-            A tuple or a list of additional special tokens. Add them here to ensure theyare skipped when decoding with
-            `skip_dspecial_tokens` is set to True. If they are not part of the vocabulkary, they will be added at the
+            A tuple or a list of additional special tokens. Add them here to ensure they are skipped when decoding with
+            `skip_special_tokens` is set to True. If they are not part of the vocabulary, they will be added at the
             end of the vocabulary.
         clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
             Whether or not the model should cleanup the spaces that were added when splitting the input text during the
@@ -1781,7 +1781,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
             }
             vocab_files = {**cls.vocab_files_names, **additional_files_names}
-            # TODO process legacy files in priority!
             if "tokenizer_file" in vocab_files:
                 # Try to get the tokenizer config to see if there are versioned tokenizer files.
                 fast_tokenizer_file = FULL_TOKENIZER_FILE
@@ -2075,7 +2074,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         if "added_tokens_decoder" in init_kwargs:
             logger.warn(
-                " `added_tokens_decoder` were saved in the `tokenizer_config.json` and will be used to initialise the added_tokens"
+                " `added_tokens_decoder` were saved in the `tokenizer_config.json` and will be used to initialize the added_tokens"
             )
             added_tokens_decoder = init_kwargs.pop("added_tokens_decoder")
             added_tokens_decoder_sorted = [(k, int(v)) for v, k in sorted(added_tokens_decoder.items())]
