@@ -28,6 +28,7 @@ from transformers import (
     PretrainedConfig,
     T5Config,
 )
+from transformers.generation.streamers import BaseStreamer
 from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
 from transformers.utils import cached_property
 
@@ -455,9 +456,10 @@ class MusicgenTester:
         self.num_filters = num_filters
         self.codebook_size = codebook_size
 
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        decoder_input_ids = ids_tensor([self.batch_size * self.num_codebooks, self.seq_length], self.vocab_size)
+    def prepare_config_and_inputs(self, batch_size=None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        input_ids = ids_tensor([batch_size, self.seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor([batch_size * self.num_codebooks, self.seq_length], self.vocab_size)
 
         config = self.get_config()
         inputs_dict = prepare_musicgen_inputs_dict(config, input_ids, decoder_input_ids=decoder_input_ids)
@@ -496,6 +498,86 @@ class MusicgenTester:
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
+
+
+class MusicgenStreamer(BaseStreamer):
+    """
+    Simple MusicGen streamer that prints audio values to stdout every `play_steps` decoding steps.
+
+    Parameters:
+    model (`MusicgenForConditionalGeneration`):
+        The model used to generate the tokens.
+    play_steps (`int`, *optional*, defaults to 10):
+        The interval of decoding steps with which to print audio values to the stddout.
+    """
+
+    def __init__(self, model: MusicgenForConditionalGeneration, play_steps: int = 10):
+        self.decoder = model.decoder
+        self.audio_encoder = model.audio_encoder
+        self.generation_config = model.generation_config
+
+        # variables used in the streaming process
+        self.play_steps = play_steps
+        self.token_cache = None
+        self.to_print = 0
+
+    def apply_delay_pattern_mask(self, input_ids):
+        # build the delay pattern mask for offsetting each codebook prediction by 1 (this behaviour is specific to MusicGen)
+        _, decoder_delay_pattern_mask = self.decoder.build_delay_pattern_mask(
+            self.token_cache[:, :1],
+            pad_token_id=self.generation_config.decoder_start_token_id,
+            max_length=self.token_cache.shape[-1],
+        )
+        # apply the pattern mask to the input ids
+        input_ids = self.decoder.apply_delay_pattern_mask(self.token_cache, decoder_delay_pattern_mask)
+
+        # revert the pattern delay mask by filtering the pad token id
+        input_ids = input_ids[input_ids != self.generation_config.pad_token_id].reshape(
+            1, self.decoder.num_codebooks, -1
+        )
+
+        # append the frame dimension back to the audio codes
+        input_ids = input_ids[None, ...]
+
+        # send the input_ids to the correct device
+        input_ids = input_ids.to(self.audio_encoder.device)
+
+        output_values = self.audio_encoder.decode(
+            input_ids,
+            audio_scales=[None],
+        )
+        audio_values = output_values.audio_values[0, 0]
+        return audio_values.cpu().numpy()
+
+    def put(self, value):
+        batch_size = value.shape[0] // self.decoder.num_codebooks
+        if batch_size > 1:
+            raise ValueError("MusicgenStreamer only supports batch size 1")
+
+        if self.token_cache is None:
+            self.token_cache = value
+        else:
+            self.token_cache = torch.concatenate([self.token_cache, value[:, None]], dim=-1)
+
+        if self.token_cache.shape[-1] % self.play_steps == 0:
+            audio_values = self.apply_delay_pattern_mask(self.token_cache)
+            self.on_finalized_text(audio_values[self.to_print :])
+            self.to_print += len(audio_values) - self.to_print
+
+    def end(self):
+        """Flushes any remaining cache and prints a newline to stdout."""
+        # Flush the cache, if it exists
+        if self.token_cache is not None:
+            audio_values = self.apply_delay_pattern_mask(self.token_cache)
+        else:
+            audio_values = ""
+
+        self.on_finalized_text(audio_values[self.to_print :], stream_end=True)
+        self.to_print += len(audio_values)
+
+    def on_finalized_text(self, audio: np.ndarray, stream_end: bool = False):
+        """Prints the new audio to stdout. If the stream is ending, also prints a newline."""
+        print(audio, flush=True, end="" if not stream_end else None)
 
 
 @require_torch
@@ -1094,6 +1176,19 @@ class MusicgenTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             # sampling
             model.generate(
                 input_dict["input_ids"], attention_mask=input_dict["attention_mask"], do_sample=True, max_new_tokens=10
+            )
+
+    def test_generate_streamer(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs(batch_size=1)
+        for model_class in self.greedy_sample_model_classes:
+            model = model_class(config).eval().to(torch_device)
+            streamer = MusicgenStreamer(model, play_steps=5)
+
+            model.generate(
+                input_dict["input_ids"],
+                attention_mask=input_dict["attention_mask"],
+                max_new_tokens=15,
+                streamer=streamer,
             )
 
 
