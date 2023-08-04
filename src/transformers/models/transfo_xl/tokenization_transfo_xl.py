@@ -198,7 +198,8 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         self.moses_punct_normalizer = sm.MosesPunctNormalizer(language)
         self.moses_tokenizer = sm.MosesTokenizer(language)
         self.moses_detokenizer = sm.MosesDetokenizer(language)
-
+        self.idx2sym = []
+        self.sym2idx = OrderedDict()
         # This try... catch... is not beautiful but honestly this tokenizer was not made to be used
         # in a library like ours, at all.
         try:
@@ -237,7 +238,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
         if vocab_file is not None:
             self.build_vocab()
-            
+
         super().__init__(
             special=special,
             min_freq=min_freq,
