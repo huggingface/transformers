@@ -133,7 +133,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         self.split_by_punct = split_by_punct
         self.vocab_file = vocab_file
         self._tokenizer = SPMTokenizer(
-            vocab_file, self.all_special_tokens, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs
+            vocab_file, None, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs
         )
         super().__init__(
             do_lower_case=do_lower_case,
@@ -148,6 +148,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
+        self._tokenizer.special_tokens = self.all_special_tokens
 
     @property
     def vocab_size(self):
@@ -341,6 +342,7 @@ class SPMTokenizer:
             tokens.append(self.ids_to_tokens[i])
         return tokens
 
+    # TODO is this ever used???????????
     def decode(self, tokens, start=-1, end=-1, raw_text=None):
         if raw_text is None:
             current_sub_tokens = []
@@ -373,6 +375,7 @@ class SPMTokenizer:
             text = "".join(words[word_start:word_end])
             return text
 
+    # TODO is this ever used?
     def add_special_token(self, token):
         if token not in self.special_tokens:
             self.special_tokens.append(token)
@@ -380,18 +383,6 @@ class SPMTokenizer:
                 self.vocab[token] = len(self.vocab) - 1
                 self.ids_to_tokens.append(token)
         return self.id(token)
-
-    def part_of_whole_word(self, token, is_bos=False):
-        if is_bos:
-            return True
-        if (
-            len(token) == 1
-            and (_is_whitespace(list(token)[0]) or _is_control(list(token)[0]) or _is_punctuation(list(token)[0]))
-        ) or token in self.special_tokens:
-            return False
-
-        word_start = b"\xe2\x96\x81".decode("utf-8")
-        return not token.startswith(word_start)
 
     def pad(self):
         return "[PAD]"
@@ -411,8 +402,6 @@ class SPMTokenizer:
     def sym(self, id):
         return self.ids_to_tokens[id]
 
-    def id(self, sym):
-        return self.vocab[sym] if sym in self.vocab else 1
 
     def _encode_as_pieces(self, text):
         text = convert_to_unicode(text)
@@ -459,16 +448,6 @@ class SPMTokenizer:
 
         return words
 
-    def _run_strip_accents(self, text):
-        """Strips accents from a piece of text."""
-        text = unicodedata.normalize("NFD", text)
-        output = []
-        for char in text:
-            cat = unicodedata.category(char)
-            if cat == "Mn":
-                continue
-            output.append(char)
-        return "".join(output)
 
     def _run_split_on_punc(self, text):
         """Splits punctuation on a piece of text."""
@@ -499,29 +478,6 @@ class SPMTokenizer:
             fs.write(self.spm.serialized_model_proto())
         return (full_path,)
 
-
-def _is_whitespace(char):
-    """Checks whether `chars` is a whitespace character."""
-    # \t, \n, and \r are technically control characters but we treat them
-    # as whitespace since they are generally considered as such.
-    if char == " " or char == "\t" or char == "\n" or char == "\r":
-        return True
-    cat = unicodedata.category(char)
-    if cat == "Zs":
-        return True
-    return False
-
-
-def _is_control(char):
-    """Checks whether `chars` is a control character."""
-    # These are technically control characters but we count them as whitespace
-    # characters.
-    if char == "\t" or char == "\n" or char == "\r":
-        return False
-    cat = unicodedata.category(char)
-    if cat.startswith("C"):
-        return True
-    return False
 
 
 def _is_punctuation(char):
