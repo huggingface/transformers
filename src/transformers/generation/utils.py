@@ -33,7 +33,7 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
-from ..utils import ModelOutput, logging
+from ..utils import ExplicitEnum, ModelOutput, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .configuration_utils import GenerationConfig
@@ -468,6 +468,23 @@ ContrastiveSearchOutput = Union[ContrastiveSearchEncoderDecoderOutput, Contrasti
 GenerateOutput = Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, ContrastiveSearchOutput]
 
 
+class GenerationMode(ExplicitEnum):
+    """
+    Possible generation modes, downstream of the [`~generation.GenerationMixin.generate`] method.
+    """
+
+    # Non-beam methods
+    CONTRASTIVE_SEARCH = "contrastive_search"
+    GREEDY_SEARCH = "greedy_search"
+    SAMPLE = "sample"
+    ASSISTED_GENERATION = "assisted_generation"
+    # Beam methods
+    BEAM_SEARCH = "beam_search"
+    BEAM_SAMPLE = "beam_sample"
+    CONSTRAINED_BEAM_SEARCH = "constrained_beam_search"
+    GROUP_BEAM_SEARCH = "group_beam_search"
+
+
 class GenerationMixin:
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in [`PreTrainedModel`].
@@ -831,7 +848,7 @@ class GenerationMixin:
 
     def _get_generation_mode(
         self, generation_config: GenerationConfig, assistant_model: Optional["PreTrainedModel"]
-    ) -> str:
+    ) -> GenerationMode:
         """
         Returns the generation model triggered by a [`GenerationConfig`] instance.
         """
@@ -843,25 +860,25 @@ class GenerationMixin:
                     and generation_config.penalty_alpha is not None
                     and generation_config.penalty_alpha > 0
                 ):
-                    generation_mode = "contrastive_search"
+                    generation_mode = GenerationMode.CONTRASTIVE_SEARCH
                 else:
-                    generation_mode = "greedy_search"
+                    generation_mode = GenerationMode.GREEDY_SEARCH
             else:  # do_sample=True
-                generation_mode = "sample"
+                generation_mode = GenerationMode.SAMPLE
         else:
             if generation_config.constraints is not None or generation_config.force_words_ids is not None:
-                generation_mode = "constrained_beam_search"
+                generation_mode = GenerationMode.CONSTRAINED_BEAM_SEARCH
             elif generation_config.num_beam_groups > 1:
-                generation_mode = "group_beam_search"
+                generation_mode = GenerationMode.GROUP_BEAM_SEARCH
             elif generation_config.do_sample is True:
-                generation_mode = "beam_sample"
+                generation_mode = GenerationMode.BEAM_SAMPLE
             else:
-                generation_mode = "beam_search"
+                generation_mode = GenerationMode.BEAM_SEARCH
 
         # Assisted generation may extend some generation modes
         if assistant_model is not None:
             if generation_mode in ("greedy_search", "sample"):
-                generation_mode = "assisted_generation"
+                generation_mode = GenerationMode.ASSISTED_GENERATION
             else:
                 raise ValueError(
                     "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
@@ -1466,7 +1483,7 @@ class GenerationMixin:
 
         if generation_config.num_beam_groups > generation_config.num_beams:
             raise ValueError("`num_beam_groups` has to be smaller or equal to `num_beams`")
-        if generation_mode == "group_beam_search" and generation_config.do_sample is True:
+        if generation_mode == GenerationMode.GROUP_BEAM_SEARCH and generation_config.do_sample is True:
             raise ValueError(
                 "Diverse beam search cannot be used in sampling mode. Make sure that `do_sample` is set to `False`."
             )
@@ -1501,7 +1518,7 @@ class GenerationMixin:
             generation_config=generation_config, stopping_criteria=stopping_criteria
         )
         # 10. go into different generation modes
-        if generation_mode == "assisted_generation":
+        if generation_mode == GenerationMode.ASSISTED_GENERATION:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     "num_return_sequences has to be 1 when doing assisted generate, "
@@ -1539,7 +1556,7 @@ class GenerationMixin:
                 streamer=streamer,
                 **model_kwargs,
             )
-        if generation_mode == "greedy_search":
+        if generation_mode == GenerationMode.GREEDY_SEARCH:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     "num_return_sequences has to be 1 when doing greedy search, "
@@ -1560,7 +1577,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif generation_mode == "contrastive_search":
+        elif generation_mode == GenerationMode.CONTRASTIVE_SEARCH:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     "num_return_sequences has to be 1 when doing contrastive search, "
@@ -1585,7 +1602,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif generation_mode == "sample":
+        elif generation_mode == GenerationMode.SAMPLE:
             # 11. prepare logits warper
             logits_warper = self._get_logits_warper(generation_config)
 
@@ -1612,7 +1629,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif generation_mode == "beam_search":
+        elif generation_mode == GenerationMode.BEAM_SEARCH:
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
@@ -1650,7 +1667,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif generation_mode == "beam_sample":
+        elif generation_mode == GenerationMode.BEAM_SAMPLE:
             # 11. prepare logits warper
             logits_warper = self._get_logits_warper(generation_config)
 
@@ -1689,7 +1706,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif generation_mode == "group_beam_search":
+        elif generation_mode == GenerationMode.GROUP_BEAM_SEARCH:
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
