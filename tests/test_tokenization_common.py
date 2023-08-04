@@ -983,7 +983,6 @@ class TokenizerTesterMixin:
                 tokenizer.add_tokens(new_toks)
                 # special tokens should not be normalized...
                 tokenizer.add_tokens([AddedToken("[SAMPLE]", normalized=True)], special_tokens=True)
-                print(tokenizer.added_tokens_encoder)
                 input = "[ABC][DEF][ABC]GHI IHG[DEF]"
                 if self.space_between_special_tokens:
                     output = "[ABC] [DEF] [ABC] GHI IHG [DEF]"
@@ -996,10 +995,7 @@ class TokenizerTesterMixin:
 
                 # TODO Fix the different asserts here, special are never normalized Added can be, and can also not be
                 encoded = tokenizer.encode("[ABC] [DEF][SAMPLE]", add_special_tokens=False)
-                print(tokenizer.all_special_ids)
-                print(tokenizer.additional_special_tokens)
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=True, skip_special_tokens=False)
-                print(decoded)
                 self.assertIn(decoded, ["[ABC] [DEF] [SAMPLE]", "[ABC] [DEF] [SAMPLE]".lower()])
 
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=True, skip_special_tokens=True)

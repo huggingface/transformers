@@ -852,6 +852,16 @@ class SpecialTokensMixin:
                 else:
                     raise TypeError(f"special token {key} has to be either str or AddedToken but got: {type(value)}")
 
+    def sanitize_special_tokens(self) -> int:
+        """
+        The `sanitize_special_tokens` is now deprectaed and does not do anything.
+        It iss only kept for backward compatibility. It will be removed in transformers v5
+        """
+        warnings.warn(
+            "The `sanitize_special_tokens` does not do anything and is only kept for backward compatibility. It will be removed in transformers v5", FuturWarning
+        )
+        return 0
+
     def add_special_tokens(
         self, special_tokens_dict: Dict[str, Union[str, AddedToken]], replace_additional_special_tokens=True
     ) -> int:
@@ -1864,6 +1874,59 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             _is_local=is_local,
             **kwargs,
         )
+        
+    @classmethod
+    def _check_and_add_added_tokens(cls, tokenizer, added_tok_encoder_sorted, has_tokenizer_file) -> int:
+        """
+        Checks and adds the added tokens. added_tok_encoder_sorted should be sorted for iterating.
+        This is an efficient way of adding added tokens and special tokens that can be mixed.
+        
+        Returns the exact number of tokens that were added. If tokens were already part of the tokenizer, then they were not added.
+        """
+        special_tokens = tokenizer.all_special_tokens
+        is_last_special = None
+        tokens = []
+        tokens_added = 0
+        current_index = tokenizer.vocab_size
+        for token, index in added_tok_encoder_sorted:
+            if isinstance(token, dict):
+                token = AddedToken(**token)
+            elif isinstance(token, str):
+                # for backward comp, default to lstrip and rstrip false
+                token = AddedToken(token, rstrip = False, lstrip = False)
+            if (
+                has_tokenizer_file
+                and index != current_index
+                and tokenizer.convert_tokens_to_ids(token) != index
+            ):
+                # Tokenizer fast: added token needs to either be in the vocabulary with the proper index or the
+                # index is the current length of the tokenizer (not in vocabulary)
+                raise ValueError(
+                    f"Wrong index found for {token}: should be {tokenizer.convert_tokens_to_ids(token)} but found "
+                    f"{index}."
+                )
+            elif not has_tokenizer_file and index != current_index:
+                # Tokenizer slow: added token cannot already be in the vocabulary so its index needs to be the
+                # current length of the tokenizer.
+                raise ValueError(
+                    f"Non-consecutive added token '{token}' found. "
+                    f"Should have index {current_index} but has index {index} in saved vocabulary."
+                )
+            
+            # TODO @ArthurZ since the AddedTokens are frozen we have to do this... but we should just have to pass token.special since we loop in _add_tokens.
+            is_special = bool(token in special_tokens)
+            if is_last_special is None or is_last_special == is_special:
+                tokens.append(token)
+            else:
+                tokens_added += tokenizer.add_tokens(tokens, special_tokens=is_last_special)
+                tokens = [token]
+            is_last_special = is_special
+            if index >= tokenizer.vocab_size:
+                current_index += 1
+
+        if tokens:
+            tokens_added += tokenizer.add_tokens(tokens, special_tokens=is_last_special)
+        return tokens_added
 
     @classmethod
     def _from_pretrained(
@@ -1971,11 +2034,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Update with newly provided kwargs
         init_kwargs.update(kwargs)
+
+        # Convert AddedTokens serialized as dict to class instances
         if "added_tokens_decoder" not in init_kwargs:
             init_kwargs = cls.convert_added_tokens(init_kwargs)
-        # Convert AddedTokens serialized as dict to class instances
-        # TODO Bring this back for legacy behaviour
-        # HACK AddedTokens are all added tokens, no need for type
 
         # Set max length if needed
         if pretrained_model_name_or_path in cls.max_model_input_sizes:
@@ -2015,22 +2077,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
 
         if "added_tokens_decoder" in init_kwargs:
-            print(
+            logger.warn(
                 " `added_tokens_decoder` were saved in the `tokenizer_config.json` and will be used to initialise the added_tokens"
             )
             added_tokens_decoder = init_kwargs.pop("added_tokens_decoder")
-            for idx, token in added_tokens_decoder.items():
-                # TODO check that can be converted to int, and might be able to check idx on the fly!
-                id = int(idx)
-                token = AddedToken(**token)
-                # either manually add the tokens:
-                tokenizer._added_tokens_decoder[id] = token
-                # or we add the tokens to the model using add tokens???
-
-                # TODO trie is not created. ADD safeguards to prevent people from modifying these attribute whithout adding a token! this way you force trie update.
-                # OR allow modifications, but harder to maintain!
-            if not tokenizer.is_fast:
-                tokenizer._create_trie()
+            added_tokens_decoder_sorted = [(k, int(v)) for v,k in added_tokens_decoder.items()]
+            added_tokens = cls._check_and_add_added_tokens(tokenizer, added_tokens_decoder_sorted, has_tokenizer_file)
 
         else:
             #  Kept for bacward compatibilty, let's not fix the impossible to fix
@@ -2038,6 +2090,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if special_tokens_map_file is not None:
                 with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
                     special_tokens_map = json.load(special_tokens_map_handle)
+                # ??? why not use add special tokens there? 
                 for key, value in special_tokens_map.items():
                     if key in kwargs and kwargs[key]:
                         # This value has already been redefined by the kwargs
@@ -2051,60 +2104,21 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         value = [AddedToken(**token) if isinstance(token, dict) else token for token in value]
                     setattr(tokenizer, key, value)
 
-            # Add supplementary tokens.
-            special_tokens = tokenizer.all_special_tokens
             if added_tokens_file is not None:
                 # kept for backward comp. Make sure this updates the encoder and decoder added vocab
-
                 with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                     added_tok_encoder = json.load(added_tokens_handle)
                 # Sort added tokens by index
                 added_tok_encoder_sorted = sorted(added_tok_encoder.items(), key=lambda x: x[1])
                 # Accumulate added tokens into batches of special/non-special tokens, because calling add_tokens() for
                 # individual tokens would repeatedly rebuild a trie, which can be slow.
-                is_last_special = None
-                tokens = []
-                current_index = tokenizer.vocab_size
-                for token, index in added_tok_encoder_sorted:
-                    if (
-                        has_tokenizer_file
-                        and index != current_index
-                        and tokenizer.convert_tokens_to_ids(token) != index
-                    ):
-                        # Tokenizer fast: added token needs to either be in the vocabulary with the proper index or the
-                        # index is the current length of the tokenizer (not in vocabulary)
-                        raise ValueError(
-                            f"Wrong index found for {token}: should be {tokenizer.convert_tokens_to_ids(token)} but found "
-                            f"{index}."
-                        )
-                    elif not has_tokenizer_file and index != current_index:
-                        # Tokenizer slow: added token cannot already be in the vocabulary so its index needs to be the
-                        # current length of the tokenizer.
-                        raise ValueError(
-                            f"Non-consecutive added token '{token}' found. "
-                            f"Should have index {current_index} but has index {index} in saved vocabulary."
-                        )
+                added_tokens = cls._check_and_add_added_tokens(tokenizer, added_tok_encoder_sorted, has_tokenizer_file)
 
-                    is_special = bool(token in special_tokens)
-                    if is_last_special is None or is_last_special == is_special:
-                        tokens.append(token)
-                    else:
-                        tokenizer.add_tokens(tokens, special_tokens=is_last_special)
-                        tokens = [token]
-                    is_last_special = is_special
-                    if index >= tokenizer.vocab_size:
-                        current_index += 1
-
-                if tokens:
-                    tokenizer.add_tokens(tokens, special_tokens=is_last_special)
-
-                # Check all our special tokens are registered as "no split" token (we don't cut them) and are in the vocab
-                added_tokens = tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
-                if added_tokens:
-                    logger.warning_advice(
-                        "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
-                        " fine-tuned or trained."
-                    )
+        if added_tokens:
+            logger.warning_advice(
+                "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
+                " fine-tuned or trained."
+            )
 
         return tokenizer
 
