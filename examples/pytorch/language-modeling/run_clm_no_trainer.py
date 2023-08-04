@@ -562,6 +562,9 @@ def main():
             dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
             dirs.sort(key=os.path.getctime)
             path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
+            accelerator.print(f"Resumed from checkpoint: {path}")
+            accelerator.load_state(path)
+            path = os.path.basename(args.resume_from_checkpoint)
         # Extract `epoch_{i}` or `step_{i}`
         training_difference = os.path.splitext(path)[0]
 
