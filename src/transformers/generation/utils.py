@@ -850,7 +850,7 @@ class GenerationMixin:
         self, generation_config: GenerationConfig, assistant_model: Optional["PreTrainedModel"]
     ) -> GenerationMode:
         """
-        Returns the generation model triggered by a [`GenerationConfig`] instance.
+        Returns the generation mode triggered by a [`GenerationConfig`] instance.
         """
         if generation_config.constraints is not None or generation_config.force_words_ids is not None:
             generation_mode = GenerationMode.CONSTRAINED_BEAM_SEARCH
