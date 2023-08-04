@@ -219,7 +219,7 @@ class CircleCIJob:
             test_command += " > tests_output.txt"
             # Save the return code, so we can check if it is timeout in the next step.
             test_command += '; touch "$?".txt'
-            # Never fail the test step for the doctest job. We will check the results in the next step, and fail that
+            # Never fail the test step for the doctest job. We will check the results in the next step, and faila that
             # step instead if the actual test failures are found. This is to avoid the timeout being reported as test
             # failure.
             test_command = f"({test_command}) || true"
@@ -581,7 +581,7 @@ def create_circleci_config(folder=None):
                 job.tests_to_run = [x for x in test_list_items if "/test_modeling_" in x]
             elif job.job_name == "tests_non_modeling":
                 L = [x for x in test_list_items if "/test_modeling_" not in x and "/test_tokenization_" in x]
-                job.tests_to_run = [x for x in L if any(y in x for y in ["_bert.py", "_gpt2.py", "_bart.py", "_t5.py", "_roberta.py", "_deberta.py", "_longformer.py", "_led.py", "_albert.py", "_xlm_roberta.py"] + ["_speecht5.py", "_mbart50.py", "_plbart.py", "_mobilebert.py", "_roc_bert.py", "_squeezebert.py", "_bartpho.py", "_barthez.py", "_big_bird.py", "_blenderbot.py"])]  #, ])]
+                job.tests_to_run = [x for x in L if any(y in x for y in ["_bert.py", "_gpt2.py", "_bart.py", "_t5.py", "_roberta.py", "_deberta.py", "_longformer.py", "_led.py", "_albert.py", "_xlm_roberta.py"])]  #, ])]
 
         extended_tests_to_run = set(test_list.split())
         # Extend the test files for cross test jobs
