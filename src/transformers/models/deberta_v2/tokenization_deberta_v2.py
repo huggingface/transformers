@@ -402,7 +402,6 @@ class SPMTokenizer:
     def sym(self, id):
         return self.ids_to_tokens[id]
 
-
     def _encode_as_pieces(self, text):
         text = convert_to_unicode(text)
         if self.split_by_punct:
@@ -448,7 +447,6 @@ class SPMTokenizer:
 
         return words
 
-
     def _run_split_on_punc(self, text):
         """Splits punctuation on a piece of text."""
         chars = list(text)
@@ -477,7 +475,6 @@ class SPMTokenizer:
         with open(full_path, "wb") as fs:
             fs.write(self.spm.serialized_model_proto())
         return (full_path,)
-
 
 
 def _is_punctuation(char):

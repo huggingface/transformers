@@ -438,9 +438,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     content = token.content.lower()
                     token = AddedToken(
                         content,
-                        single_word =token.single_word,
-                        lstrip = token.lstrip,
-                        rstrip = token.rstrip,
+                        single_word=token.single_word,
+                        lstrip=token.lstrip,
+                        rstrip=token.rstrip,
                     )
 
                 self._added_tokens_decoder[new_idx] = token
@@ -466,12 +466,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def _create_trie(self):
         trie = Trie()
-        # _unique_no_split_tokens is the actual tokens that are never split! Maybe we can extend it with user defined tokens? 
+        # _unique_no_split_tokens is the actual tokens that are never split! Maybe we can extend it with user defined tokens?
         # for example words that are already in the vocab, but we wannat make sure they are not split because the tokenizer is
-        # strange? 
+        # strange?
         for token in self.added_tokens_decoder.values():
             # special tokens should not be normalized?
-            # TODO a bit unclear what the correct approach is here, special should both be added no? 
+            # TODO a bit unclear what the correct approach is here, special should both be added no?
             # normalized and non normalized version?
             trie.add(token.content)
         self.tokens_trie = trie
@@ -554,8 +554,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                         tokens[i - 1] = left.rstrip()  # Opposite here
                     # else is only if rstrip and lstrip strip are set to `False``.
                 else:
-                    raise ValueError(f"{tok_extended} cannot be tokenized because it was not properly added"
-                                    f" to the tokenizer. This means that it is not an `AddedToken` but a {type(tok_extended)}")
+                    raise ValueError(
+                        f"{tok_extended} cannot be tokenized because it was not properly added"
+                        f" to the tokenizer. This means that it is not an `AddedToken` but a {type(tok_extended)}"
+                    )
         # ["This is something", "<special_token_1>", "else"]
         tokenized_text = []
         for token in tokens:

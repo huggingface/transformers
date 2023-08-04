@@ -2270,11 +2270,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             filename_prefix=filename_prefix,
         )
         added_tokens_file = save_files[-1] + " and " if self.get_added_vocab() else None
-            
+
         warnings.warn(
-            f"Saving {added_tokens_file}{special_tokens_map_file} will be removed in `transformers 5`, it is kept for forward compatibility, but it is recommended to update your tokenizer file", FutureWarning
+            f"Saving {added_tokens_file}{special_tokens_map_file} will be removed in `transformers 5`, it is kept for forward compatibility, but it is recommended to update your tokenizer file",
+            FutureWarning,
         )
-                
 
         if push_to_hub:
             self._upload_modified_files(
@@ -2307,8 +2307,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         save_directory = str(save_directory)
 
-
-        # TODO always save for now, for forward compatibility? 
+        # TODO always save for now, for forward compatibility?
         # -> as much as possible, but outputs with special won't match one to one
 
         added_tokens_file = os.path.join(

@@ -23,8 +23,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...tokenization_utils import PreTrainedTokenizer, _insert_one_token_to_ordered_list
-from ...tokenization_utils_base import AddedToken
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import (
     ModelOutput,
     is_flax_available,
@@ -579,31 +578,25 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
     # TODO why was this overwritten?
     # def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
     #     """
-    #     Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
-    #     it with indices starting from length of the current vocabulary.
+    # Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to #
+    it with indices starting from length of the current vocabulary.
 
-    #     Args:
-    #         new_tokens (`List[str]`or `List[tokenizers.AddedToken]`):
-    #             Token(s) to add in vocabulary. A token is only added if it's not already in the vocabulary (tested by
-    #             checking if the tokenizer assign the index of the `unk_token` to them).
-    #         special_tokens (`bool`, *optional*, defaults to `False`):
-    #             Whether or not the tokens should be added as special tokens.
+    # Args: # new_tokens (`List[str]`or `List[tokenizers.AddedToken]`): # Token(s) to add in vocabulary. A token is
+    only added if it's not already in the vocabulary (tested by # checking if the tokenizer assign the index of the
+    `unk_token` to them). # special_tokens (`bool`, *optional*, defaults to `False`): # Whether or not the tokens
+    should be added as special tokens.
 
-    #     Returns:
-    #         `int`: The number of tokens actually added to the vocabulary.
+    # Returns: # `int`: The number of tokens actually added to the vocabulary.
 
-    #     Examples:
+    # Examples:
 
-    #     ```python
-    #     # Let's see how to increase the vocabulary of Bert model and tokenizer
-    #     tokenizer = Wav2Vec2PhonemeCTCTokenizer.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
-    #     model = Wav2Vec2PhonemeForCTC.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
+    # ```python # # Let's see how to increase the vocabulary of Bert model and tokenizer # tokenizer =
+    Wav2Vec2PhonemeCTCTokenizer.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft") # model =
+    Wav2Vec2PhonemeForCTC.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
 
-    #     num_added_toks = tokenizer.add_tokens(["new_tok1", "my_new-tok2"])
-    #     print("We have added", num_added_toks, "tokens")
-    #     # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
-    #     model.resize_token_embeddings(len(tokenizer))
-    #     ```"""
+    # num_added_toks = tokenizer.add_tokens(["new_tok1", "my_new-tok2"]) # print("We have added", num_added_toks,
+    "tokens") # # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length
+    of the tokenizer. # model.resize_token_embeddings(len(tokenizer)) # ```"""
     #     new_tokens = [str(tok) for tok in new_tokens]
 
     #     tokens_to_add = []

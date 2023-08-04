@@ -203,7 +203,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         # This try... catch... is not beautiful but honestly this tokenizer was not made to be used
         # in a library like ours, at all.
         try:
-
             vocab_dict = None
             if pretrained_vocab_file is not None:
                 # Priority on pickle files (support PyTorch and TF)
@@ -254,13 +253,11 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             language=language,
             **kwargs,
         )
-        
+
         # these are not required to initialize the parent class as only used when tokenizing.
         if never_split is None:
             never_split = self.all_special_tokens
         self.never_split = never_split
-        
-        
 
     @property
     def do_lower_case(self):

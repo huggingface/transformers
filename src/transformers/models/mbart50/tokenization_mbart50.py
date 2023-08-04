@@ -163,8 +163,6 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
-
-
         super().__init__(
             src_lang=src_lang,
             tgt_lang=tgt_lang,
@@ -177,7 +175,7 @@ class MBart50Tokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-        
+
         self._src_lang = src_lang if src_lang is not None else "en_XX"
         self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
         self.tgt_lang = tgt_lang
