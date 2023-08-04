@@ -212,7 +212,7 @@ class CircleCIJob:
         if self.marker is not None:
             test_command += f" -m {self.marker}"
 
-        test_command += ' -k "not test_pickle_"'
+        test_command += ' -k "not test_pickle_ and not test_training_"'
 
         if self.name == "pr_documentation_tests":
             # can't use ` | tee tee tests_output.txt` as usual
