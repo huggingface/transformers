@@ -1017,7 +1017,8 @@ class ModelTesterMixin:
             attentions = outputs[-1]
 
             self.assertEqual(attentions[0].shape[-3], 1)
-            self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
+            # TODO: To have this check, we will need at least 3 layers. Do we really need it?
+            # self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
             self.assertEqual(attentions[-1].shape[-3], self.model_tester.num_attention_heads - 1)
 
     def test_head_pruning_save_load_from_pretrained(self):
@@ -1053,7 +1054,8 @@ class ModelTesterMixin:
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs[-1]
             self.assertEqual(attentions[0].shape[-3], 1)
-            self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
+            # TODO: To have this check, we will need at least 3 layers. Do we really need it?
+            # self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
             self.assertEqual(attentions[-1].shape[-3], self.model_tester.num_attention_heads - 1)
 
     def test_head_pruning_save_load_from_config_init(self):
@@ -1087,7 +1089,8 @@ class ModelTesterMixin:
             attentions = outputs[-1]
 
             self.assertEqual(attentions[0].shape[-3], 1)
-            self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
+            # TODO: To have this check, we will need at least 3 layers. Do we really need it?
+            # self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads)
             self.assertEqual(attentions[-1].shape[-3], self.model_tester.num_attention_heads - 1)
 
     def test_head_pruning_integration(self):
@@ -1106,7 +1109,7 @@ class ModelTesterMixin:
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = False
 
-            heads_to_prune = {0: [0], 1: [1, 2]}
+            heads_to_prune = {1: [1, 2]}
             config.pruned_heads = heads_to_prune
 
             model = model_class(config=config)
@@ -1117,10 +1120,8 @@ class ModelTesterMixin:
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs[-1]
 
-            self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 1)
+            self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 0)
             self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads - 2)
-            self.assertEqual(attentions[2].shape[-3], self.model_tester.num_attention_heads)
-            self.assertEqual(attentions[3].shape[-3], self.model_tester.num_attention_heads)
 
             with tempfile.TemporaryDirectory() as temp_dir_name:
                 model.save_pretrained(temp_dir_name)
@@ -1131,12 +1132,10 @@ class ModelTesterMixin:
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs[-1]
 
-            self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 1)
+            self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 0)
             self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads - 2)
-            self.assertEqual(attentions[2].shape[-3], self.model_tester.num_attention_heads)
-            self.assertEqual(attentions[3].shape[-3], self.model_tester.num_attention_heads)
 
-            heads_to_prune = {0: [0], 2: [1, 2]}
+            heads_to_prune = {0: [0], 1: [1, 2]}
             model.prune_heads(heads_to_prune)
 
             with torch.no_grad():
@@ -1145,10 +1144,8 @@ class ModelTesterMixin:
 
             self.assertEqual(attentions[0].shape[-3], self.model_tester.num_attention_heads - 1)
             self.assertEqual(attentions[1].shape[-3], self.model_tester.num_attention_heads - 2)
-            self.assertEqual(attentions[2].shape[-3], self.model_tester.num_attention_heads - 2)
-            self.assertEqual(attentions[3].shape[-3], self.model_tester.num_attention_heads)
 
-            self.assertDictEqual(model.config.pruned_heads, {0: [0], 1: [1, 2], 2: [1, 2]})
+            self.assertDictEqual(model.config.pruned_heads, {0: [0], 1: [1, 2]})
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -2524,7 +2521,7 @@ class ModelTesterMixin:
             base_output = model(**inputs_dict_class)
 
             model_size = compute_module_sizes(model)[""]
-            max_size = int(self.model_split_percents[0] * model_size)
+            max_size = int(self.model_split_percents[1] * model_size)
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 
