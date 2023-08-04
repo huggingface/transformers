@@ -137,7 +137,7 @@
         "model_classes": [
             "BarkModel"
         ],
-        "sha": "TODO"
+        "sha": "187e590fd87359cea47693e8cb11a604cd7b673c"
     },
     "BartForCausalLM": {
         "tokenizer_classes": [
