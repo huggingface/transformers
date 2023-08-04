@@ -2096,7 +2096,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             ]
             added_tokens = cls._check_and_add_added_tokens(tokenizer, added_tokens_decoder_sorted, has_tokenizer_file)
             tokenizer._additional_special_tokens = additional_special_tokens
-            breakpoint()
 
         else:
             #  Kept for bacward compatibilty, let's not fix the impossible to fix
