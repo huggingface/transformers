@@ -439,7 +439,7 @@ class EtaLogitsWarper(LogitsWarper):
 
 def _get_ngrams(ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int):
     """
-    Assume ngram_size=2 and prev_input_ids=tensor([[ 40, 2883, 2712, 4346]]). The output of generated ngrams look
+    Assume ngram_size=2 and prev_input_ids=tensor([[40, 2883, 2712, 4346]]). The output of generated ngrams look
     like this {(40,): [2883], (2883,): [2712], (2712,): [4346]}.
 
     Args:
