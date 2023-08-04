@@ -36,9 +36,6 @@ else:
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}
 
-B_INST, E_INST = "[INST]", "[/INST]"
-B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
-
 # fmt: off
 DEFAULT_SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your \
 answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure\
@@ -110,6 +107,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         eos_token="</s>",
         add_bos_token=True,
         add_eos_token=False,
+        prompt=None,
         **kwargs,
     ):
         super().__init__(
@@ -119,11 +117,20 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
+            prompt=prompt,
             **kwargs,
         )
         self._add_bos_token = add_bos_token
         self._add_eos_token = add_eos_token
         self.update_post_processor()
+        if prompt is None:
+            prompt = {}
+        self.system_message_start = prompt.get("system_message_start", "<<SYS>>\n")
+        self.system_message_end = prompt.get("system_message_end", "\n<</SYS>>\n\n")
+        self.user_message_start = prompt.get("user_message_start", "[INST] ")
+        self.user_message_end = prompt.get("user_message_end", " [/INST]")
+        self.assistant_message_start = prompt.get("assistant_message_start", " ")
+        self.assistant_message_end = prompt.get("assistant_message_end", " ")
 
         self.vocab_file = vocab_file
 
