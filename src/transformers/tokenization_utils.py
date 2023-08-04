@@ -344,6 +344,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     """
 
     def __init__(self, **kwargs):
+        # 1. Init the parent class
         super().__init__(**kwargs)
 
         if self.unk_token is not None and self.unk_token not in self._added_tokens_decoder:
@@ -424,15 +425,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if not isinstance(token, (str, AddedToken)):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
             if isinstance(token, str):
-                token = AddedToken(token)
+                token = AddedToken(token, normalized = special_tokens)
             if token.content == self.unk_token:
-                self.unk_token = token
-                # if we are initializing token should still be added!
-                continue
+                # unk_token and this token have the same pointer, let's update it
+                # even if it is already part of the vocab 
+                self._added_tokens_decoder[self.convert_tokens_to_ids(token.content)] = token
             # if unk_token is not part of the vocab, but we are adding tokens
-            if self.unk_token_id is not None and self.convert_tokens_to_ids(token.content) == self.unk_token_id:
+            elif self.unk_token_id is not None and self.convert_tokens_to_ids(token.content) == self.unk_token_id:
                 # if some tokens were added at the beginning ignore them HACK
-
                 if not special_tokens and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
                     # Since we are adding a token to the vocab, let's be consistent: thje vocab probably does not contain any upper-case words
                     # so we lower the AddedToken, this way both encoder and decoder can properly handle the token.
@@ -454,8 +454,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 self._added_tokens_decoder[new_idx + added_tokens] = token
                 added_tokens += 1
 
-            # if we are adding this as an additional special token
-            if special_tokens and token not in self.all_special_tokens_extended:
+            # if we are adding this as an additional special token (no need to store the added tokens object)
+            if special_tokens and str(token) not in self.all_special_tokens:
                 self._additional_special_tokens.append(token)
 
             if self.verbose:
