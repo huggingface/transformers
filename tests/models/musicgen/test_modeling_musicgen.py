@@ -500,7 +500,6 @@ class MusicgenTester:
         return config, inputs_dict
 
 
-@require_torch
 class MusicgenStreamer(BaseStreamer):
     """
     Simple MusicGen streamer that prints audio values to stdout every `play_steps` decoding steps.
@@ -512,7 +511,7 @@ class MusicgenStreamer(BaseStreamer):
         The interval of decoding steps with which to print audio values to the stddout.
     """
 
-    def __init__(self, model: MusicgenForConditionalGeneration, play_steps: int = 10):
+    def __init__(self, model: "MusicgenForConditionalGeneration", play_steps: int = 10):
         self.decoder = model.decoder
         self.audio_encoder = model.audio_encoder
         self.generation_config = model.generation_config
