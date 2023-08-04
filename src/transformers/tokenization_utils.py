@@ -425,10 +425,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if not isinstance(token, (str, AddedToken)):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
             if isinstance(token, str):
-                token = AddedToken(token, normalized = special_tokens)
+                token = AddedToken(token, normalized=special_tokens)
             if token.content == self.unk_token:
                 # unk_token and this token have the same pointer, let's update it
-                # even if it is already part of the vocab 
+                # even if it is already part of the vocab
                 self._added_tokens_decoder[self.convert_tokens_to_ids(token.content)] = token
             # if unk_token is not part of the vocab, but we are adding tokens
             elif self.unk_token_id is not None and self.convert_tokens_to_ids(token.content) == self.unk_token_id:

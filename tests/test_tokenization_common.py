@@ -737,6 +737,7 @@ class TokenizerTesterMixin:
                 after_tokens = after_tokenizer.encode(sample_text, add_special_tokens=False)
                 after_vocab = after_tokenizer.get_vocab()
                 self.assertListEqual(before_tokens, after_tokens)
+
                 self.assertDictEqual(before_vocab, after_vocab)
                 self.assertIn("bim", after_vocab)
                 self.assertIn("bambam", after_vocab)
@@ -2117,64 +2118,43 @@ class TokenizerTesterMixin:
         if not self.test_slow_tokenizer:
             self.skipTest("Currently this test is only for slow tokenizers")
             return
-        model_ids = self.tokenizer_class.pretrained_vocab_files_map[self.from_pretrained_vocab_key].keys()
-        tokenizer = self.tokenizer_class.from_pretrained(
-            list(model_ids)[0], do_lowercase=False
-        )  # complicates everything FIXME
+        if len(self.tokenizer_class.pretrained_vocab_files_map) < 1:
+            self.skipTest("This test needs a pretrained vocab to work!")
+            return
+        model_ids = [list(k.keys())[0] for k in self.tokenizer_class.pretrained_vocab_files_map.values()]
+        tokenizer = self.tokenizer_class.from_pretrained(model_ids[0], do_lowercase=False)
         new_tokens = []
-        new_tokens.append(AddedToken("<lstrip=False, rstrip=False>", lstrip=False, rstrip=False))
-        new_tokens.append(AddedToken("<lstrip=True, rstrip=False>", lstrip=True, rstrip=False))
-        new_tokens.append(AddedToken("<lstrip=False, rstrip=True>", lstrip=False, rstrip=True))
-        new_tokens.append(AddedToken("<lstrip=True, rstrip=True>", lstrip=True, rstrip=True))
+        new_tokens.append(AddedToken("<lstrip=false, rstrip=false>", lstrip=False, rstrip=False, normalized=False))
+        new_tokens.append(AddedToken("<lstrip=true, rstrip=false>", lstrip=True, rstrip=False, normalized=False))
+        new_tokens.append(AddedToken("<lstrip=false, rstrip=true>", lstrip=False, rstrip=True, normalized=False))
+        new_tokens.append(AddedToken("<lstrip=true, rstrip=true>", lstrip=True, rstrip=True, normalized=False))
 
         for token in new_tokens:
             with self.subTest(f"testing with {token.content[1:-1]}"):
-                space = tokenizer.tokenize(" .")
-                if len(space) > 1:
-                    # BPE adds a spiece underline, but eats aways spaces so don't test it. (cleanup_tokenization_spaces to test)
-                    space = space[0][0]
-                else:
-                    space = []
-
                 tokenizer.add_tokens([token])
+
                 tokens = tokenizer.tokenize(f"This sentence is{token}a test")
                 self.assertIn(token.content, tokens)
 
                 tokens = tokenizer.tokenize(f"This sentence is {token}a test")
                 self.assertIn(token.content, tokens)
-                idx = tokens.index(token.content)
 
-                if len(space) > 0:
-                    if not token.lstrip:
-                        assert tokens[idx - 1] == space
-                    else:
-                        assert tokens[idx - 1] != space
+                left, _ = "".join(tokens).split(token.content)
+                if token.lstrip:
+                    assert left.endswith(tokenizer.tokenize("is")[-1])
 
                 tokens = tokenizer.tokenize(f"This sentence is{token} a test")
                 self.assertIn(token.content, tokens)
-                idx = tokens.index(token.content)
-
-                if len(space) > 0:
-                    if not token.rstrip:
-                        assert space in tokens[idx + 1]
-                    else:
-                        assert space not in tokens[idx + 1]
+                _, right = "".join(tokens).split(token.content)
+                if token.lstrip:
+                    assert right.startswith(tokenizer.tokenize("a")[-1])
 
                 tokens = tokenizer.tokenize(f"This sentence is {token} a test")
                 self.assertIn(token.content, tokens)
-
-                idx = tokens.index(token.content)
-
-                if len(space) > 0:
-                    if not token.rstrip:
-                        assert space in tokens[idx + 1]
-                    else:
-                        assert space not in tokens[idx + 1]
-
-                    if not token.lstrip:
-                        assert tokens[idx - 1] == space
-                    else:
-                        assert tokens[idx - 1] != space
+                left, right = "".join(tokens).split(token.content)
+                if token.lstrip:
+                    assert left.endswith(tokenizer.tokenize("is")[-1])
+                    assert right.startswith(tokenizer.tokenize("a")[-1])
 
     @require_tokenizers
     def test_added_token_are_matched_longest_first(self):
@@ -3733,7 +3713,7 @@ class TokenizerTesterMixin:
                 # the following checks allow us to verify that our test works as expected, i.e. that the tokenizer takes
                 # into account the new value of additional_special_tokens given in the "tokenizer_config.json" and
                 # "special_tokens_map.json" files
-                
+
                 # TODO ArthurZ ... Ok so for legacy we have to support this I guess..... (special_tokens_map + additional)
                 tokenizer_without_change_in_init = tokenizer_class.from_pretrained(
                     tmp_dir,

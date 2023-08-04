@@ -27,7 +27,7 @@ from collections import UserDict
 from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union, OrderedDict
+from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, OrderedDict, Sequence, Tuple, Union
 
 import numpy as np
 from packaging import version
@@ -845,7 +845,7 @@ class SpecialTokensMixin:
                     ), "One of the tokens is not a string or an AddedToken"
                     setattr(self, key, value)
                 elif isinstance(value, (str)):
-                    value = AddedToken(value, normalized = False)
+                    value = AddedToken(value, normalized=False)
                     setattr(self, key, value)
                 elif isinstance(value, AddedToken):
                     setattr(self, key, value)
@@ -950,7 +950,7 @@ class SpecialTokensMixin:
                 if not isinstance(value, (str, AddedToken)):
                     raise ValueError(f"Token {value} for key {key} should be a str or an AddedToken instance")
                 if isinstance(value, (str)):
-                    value = AddedToken(value, normalized = False)
+                    value = AddedToken(value, normalized=False)
                 if isinstance(value, AddedToken):
                     setattr(self, key, value)
                 added_tokens.append(value)
@@ -1103,31 +1103,31 @@ class SpecialTokensMixin:
 
     @bos_token.setter
     def bos_token(self, value):
-        self._bos_token = AddedToken(value, normalized = False) if isinstance(value, str) else value
+        self._bos_token = AddedToken(value, normalized=False) if isinstance(value, str) else value
 
     @eos_token.setter
     def eos_token(self, value):
-        self._eos_token = AddedToken(value, normalized = False) if isinstance(value, str) else value
+        self._eos_token = AddedToken(value, normalized=False) if isinstance(value, str) else value
 
     @unk_token.setter
     def unk_token(self, value):
-        self._unk_token = AddedToken(value, normalized = False) if isinstance(value, str) else value
+        self._unk_token = AddedToken(value, normalized=False) if isinstance(value, str) else value
 
     @sep_token.setter
     def sep_token(self, value):
-        self._sep_token = AddedToken(value, normalized = False) if isinstance(value, str) else value
+        self._sep_token = AddedToken(value, normalized=False) if isinstance(value, str) else value
 
     @pad_token.setter
     def pad_token(self, value):
-        self._pad_token = AddedToken(value, normalized = False) if isinstance(value, str) else value
+        self._pad_token = AddedToken(value, normalized=False) if isinstance(value, str) else value
 
     @cls_token.setter
     def cls_token(self, value):
-        self._cls_token = AddedToken(value, normalized = False) if isinstance(value, str) else value
+        self._cls_token = AddedToken(value, normalized=False) if isinstance(value, str) else value
 
     @mask_token.setter
     def mask_token(self, value):
-        self._mask_token = AddedToken(value, normalized = False) if isinstance(value, str) else value
+        self._mask_token = AddedToken(value, normalized=False) if isinstance(value, str) else value
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
@@ -1289,9 +1289,9 @@ class SpecialTokensMixin:
     @property
     def all_special_tokens_extended(self) -> List[Union[str, AddedToken]]:
         """
-        `List[Union[str, tokenizers.AddedToken]]`: All the special tokens (`'<unk>'`, `'<cls>'`, etc.)
-        The order has nothing to do with the index of each tokens. If you want to know the correct indices, 
-        check `self.added_tokens_encoder`.
+        `List[Union[str, tokenizers.AddedToken]]`: All the special tokens (`'<unk>'`, `'<cls>'`, etc.) The order has
+        nothing to do with the index of each tokens. If you want to know the correct indices, check
+        `self.added_tokens_encoder`.
 
         Don't convert tokens of `tokenizers.AddedToken` type to string so they can be used to control more finely how
         special tokens are tokenized.
@@ -1309,7 +1309,7 @@ class SpecialTokensMixin:
 
         Convert tokens of `tokenizers.AddedToken` type to string.
         """
-        all_toks = list(str(s) for s in self.all_special_tokens_extended)
+        all_toks = [str(s) for s in self.all_special_tokens_extended]
         return all_toks
 
     @property
@@ -1491,8 +1491,8 @@ INIT_TOKENIZER_DOCSTRING = r"""
             BERT). Will be associated to `self.mask_token` and `self.mask_token_id`.
         additional_special_tokens (tuple or list of `str` or `tokenizers.AddedToken`, *optional*):
             A tuple or a list of additional special tokens. Add them here to ensure they are skipped when decoding with
-            `skip_special_tokens` is set to True. If they are not part of the vocabulary, they will be added at the
-            end of the vocabulary.
+            `skip_special_tokens` is set to True. If they are not part of the vocabulary, they will be added at the end
+            of the vocabulary.
         clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
             Whether or not the model should cleanup the spaces that were added when splitting the input text during the
             tokenization process.
@@ -1626,7 +1626,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def get_vocab(self) -> Dict[str, int]:
         """
-        Returns the vocabulary as a dictionary of token to index.
+        Returns the vocabulary as a dictionary of token to index. #TODO we have no way to isolate the size of the
+        actual vocab and the vocab with the added tokens
 
         `tokenizer.get_vocab()[token]` is equivalent to `tokenizer.convert_tokens_to_ids(token)` when `token` is in the
         vocab.
@@ -1634,9 +1635,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Returns:
             `Dict[str, int]`: The vocabulary.
         """
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
-        return vocab
+        raise NotImplementedError()
 
     @classmethod
     def from_pretrained(
@@ -1894,14 +1893,22 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             elif isinstance(token, str):
                 # for backward comp, default to lstrip and rstrip false
                 token = AddedToken(token, rstrip=False, lstrip=False)
-            if has_tokenizer_file and index != current_index and tokenizer.convert_tokens_to_ids(token.content) != index:
+            if (
+                has_tokenizer_file
+                and index != current_index
+                and tokenizer.convert_tokens_to_ids(token.content) != index
+            ):
                 # Tokenizer fast: added token needs to either be in the vocabulary with the proper index or the
                 # index is the current length of the tokenizer (not in vocabulary)
                 raise ValueError(
                     f"Wrong index found for {token}: should be {tokenizer.convert_tokens_to_ids(token.content)} but found "
                     f"{index}."
                 )
-            elif not has_tokenizer_file and index != current_index and tokenizer.convert_tokens_to_ids(token.content) != index:
+            elif (
+                not has_tokenizer_file
+                and index != current_index
+                and tokenizer.convert_tokens_to_ids(token.content) != index
+            ):
                 # Tokenizer slow: added token cannot already be in the vocabulary so its index needs to be the
                 # current length of the tokenizer.
                 raise ValueError(
@@ -2063,6 +2070,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         init_kwargs["name_or_path"] = pretrained_model_name_or_path
 
+        if "added_tokens_decoder" in init_kwargs:
+            # we need to add the additional special tokens after initializing. Otherwise `init`
+            # will have priority. Note that with the new format, additional_special_tokens are in the
+            # added tokens encoder, in the proper order. It is just a list that points to the tokens that are
+            # special, and for convenience can be used to quickly add tokens when initializing a tokenizer.
+            additional_special_tokens = init_kwargs.pop("additional_special_tokens")
+
         # Instantiate tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
@@ -2077,8 +2091,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 " `added_tokens_decoder` were saved in the `tokenizer_config.json` and will be used to initialize the added_tokens"
             )
             added_tokens_decoder = init_kwargs.pop("added_tokens_decoder")
-            added_tokens_decoder_sorted = [(k, int(v)) for v, k in sorted(added_tokens_decoder.items())]
+            added_tokens_decoder_sorted = [
+                (k, int(v)) for v, k in sorted(added_tokens_decoder.items(), key=lambda x: int(x[0]))
+            ]
             added_tokens = cls._check_and_add_added_tokens(tokenizer, added_tokens_decoder_sorted, has_tokenizer_file)
+            tokenizer._additional_special_tokens = additional_special_tokens
+            breakpoint()
 
         else:
             #  Kept for bacward compatibilty, let's not fix the impossible to fix
