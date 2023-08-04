@@ -994,6 +994,7 @@ class TokenizerTesterMixin:
 
                 self.assertIn(decoded, [output, output.lower()])
 
+                # TODO Fix the different asserts here, special are never normalized Added can be, and can also not be
                 encoded = tokenizer.encode("[ABC] [DEF][SAMPLE]", add_special_tokens=False)
                 print(tokenizer.all_special_ids)
                 print(tokenizer.additional_special_tokens)

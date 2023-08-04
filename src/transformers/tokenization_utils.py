@@ -433,8 +433,16 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 # if some tokens were added at the beginning ignore them HACK
                 new_idx = len(self)
                 if not special_tokens and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
-                    # TODO not writable.... why the hell haha
-                    token.content = token.content.lower()
+                    # Since we are adding a token to the vocab, let's be consistent: thje vocab probably does not contain any upper-case words
+                    # so we lower the AddedToken, this way both encoder and decoder can properly handle the token.
+                    content = token.content.lower()
+                    token = AddedToken(
+                        content,
+                        single_word =token.single_word,
+                        lstrip = token.lstrip,
+                        rstrip = token.rstrip,
+                    )
+
                 self._added_tokens_decoder[new_idx] = token
                 added_tokens += 1
             elif self.convert_tokens_to_ids(token.content) is not None:
@@ -458,12 +466,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def _create_trie(self):
         trie = Trie()
-        for token in self.added_tokens_encoder.keys():
-            # special tokens should not be normalized
-            if hasattr(self, "do_lower_case") and self.do_lower_case and token not in self.all_special_tokens:
-                trie.add(token.lower())
-            else:
-                trie.add(token)
+        # _unique_no_split_tokens is the actual tokens that are never split! Maybe we can extend it with user defined tokens? 
+        # for example words that are already in the vocab, but we wannat make sure they are not split because the tokenizer is
+        # strange? 
+        for token in self.added_tokens_decoder.values():
+            # special tokens should not be normalized?
+            # TODO a bit unclear what the correct approach is here, special should both be added no? 
+            # normalized and non normalized version?
+            trie.add(token.content)
         self.tokens_trie = trie
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
