@@ -625,7 +625,7 @@ class BARTBeamSearchGenerator(BARTGenerator):
         # speedy decoding is disabled and no need to reorder
         reordered_decoder_past = []
         for state in past:
-            reordered_decoder_past.append(state.index_select(0, beam_idx.to(state.device)))
+            reordered_decoder_past.append(state.index_select(0, beam_idx))
         return reordered_decoder_past
 
     def beam_search(
