@@ -439,15 +439,14 @@ class EtaLogitsWarper(LogitsWarper):
 
 def _get_ngrams(ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int):
     """
-    Assume ngram_size=2 and prev_input_ids=tensor([[list of generated tokens]]). The output of generated ngrams look
-    like this {(generated word #1,): [tokenized list of next words observed], (generated word #2,): [tokenized list of
-    next words observed] }.
+    Assume ngram_size =2 and prev_input_ids=tensor([[ 40, 2883, 2712, 4346]]). The output of generated ngrams look
+    like this {(40,): [2883], (2883,): [2712], (2712,): [4346]}.
 
     Args:
         ngram_size (`int`):
-            `ngram_size` that can only occur once.
+            The number sequential tokens taken as a group which may only occur once before being banned.
         prev_input_ids (`torch.Tensor`):
-            A tensor containing tokenized input for each hypothesis.
+           Generated token ids for the current hypothesis.
         num_hypos (`int`):
             The number of hypotheses for which n-grams need to be generated.
 
@@ -469,15 +468,15 @@ def _get_ngrams(ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int):
 
 def _get_generated_ngrams(banned_ngrams, prev_input_ids, ngram_size, cur_len):
     """
-    Determines the banned tokens for each hypothesis based on previously generated n-grams.
+    Determines the banned tokens for the current hypothesis based on previously generated n-grams.
 
     Args:
         banned_ngrams (`dict`):
             A dictionary containing previously generated n-grams for each hypothesis.
         prev_input_ids (`torch.Tensor`):
-            A `tensor` containing tokenized input for each hypothesis in the current batch.
+            Generated token ids for the current hypothesis.
         ngram_size (`int`):
-            `ngram_size` that can only occur once.
+            The number sequential tokens taken as a group which may only occur once before being banned.
         cur_len (`int`):
             The current length of the token sequences for which the n-grams are being checked.
 
