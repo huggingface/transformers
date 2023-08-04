@@ -854,11 +854,12 @@ class SpecialTokensMixin:
 
     def sanitize_special_tokens(self) -> int:
         """
-        The `sanitize_special_tokens` is now deprectaed and does not do anything.
-        It iss only kept for backward compatibility. It will be removed in transformers v5
+        The `sanitize_special_tokens` is now deprectaed and does not do anything. It iss only kept for backward
+        compatibility. It will be removed in transformers v5
         """
         warnings.warn(
-            "The `sanitize_special_tokens` does not do anything and is only kept for backward compatibility. It will be removed in transformers v5", FuturWarning
+            "The `sanitize_special_tokens` does not do anything and is only kept for backward compatibility. It will be removed in transformers v5",
+            FutureWarning,
         )
         return 0
 
@@ -1874,14 +1875,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             _is_local=is_local,
             **kwargs,
         )
-        
+
     @classmethod
     def _check_and_add_added_tokens(cls, tokenizer, added_tok_encoder_sorted, has_tokenizer_file) -> int:
         """
-        Checks and adds the added tokens. added_tok_encoder_sorted should be sorted for iterating.
-        This is an efficient way of adding added tokens and special tokens that can be mixed.
-        
-        Returns the exact number of tokens that were added. If tokens were already part of the tokenizer, then they were not added.
+        Checks and adds the added tokens. added_tok_encoder_sorted should be sorted for iterating. This is an efficient
+        way of adding added tokens and special tokens that can be mixed.
+
+        Returns the exact number of tokens that were added. If tokens were already part of the tokenizer, then they
+        were not added.
         """
         special_tokens = tokenizer.all_special_tokens
         is_last_special = None
@@ -1893,12 +1895,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 token = AddedToken(**token)
             elif isinstance(token, str):
                 # for backward comp, default to lstrip and rstrip false
-                token = AddedToken(token, rstrip = False, lstrip = False)
-            if (
-                has_tokenizer_file
-                and index != current_index
-                and tokenizer.convert_tokens_to_ids(token) != index
-            ):
+                token = AddedToken(token, rstrip=False, lstrip=False)
+            if has_tokenizer_file and index != current_index and tokenizer.convert_tokens_to_ids(token) != index:
                 # Tokenizer fast: added token needs to either be in the vocabulary with the proper index or the
                 # index is the current length of the tokenizer (not in vocabulary)
                 raise ValueError(
@@ -1912,7 +1910,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     f"Non-consecutive added token '{token}' found. "
                     f"Should have index {current_index} but has index {index} in saved vocabulary."
                 )
-            
+
             # TODO @ArthurZ since the AddedTokens are frozen we have to do this... but we should just have to pass token.special since we loop in _add_tokens.
             is_special = bool(token in special_tokens)
             if is_last_special is None or is_last_special == is_special:
@@ -2081,7 +2079,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 " `added_tokens_decoder` were saved in the `tokenizer_config.json` and will be used to initialise the added_tokens"
             )
             added_tokens_decoder = init_kwargs.pop("added_tokens_decoder")
-            added_tokens_decoder_sorted = [(k, int(v)) for v,k in added_tokens_decoder.items()]
+            added_tokens_decoder_sorted = [(k, int(v)) for v, k in added_tokens_decoder.items()]
             added_tokens = cls._check_and_add_added_tokens(tokenizer, added_tokens_decoder_sorted, has_tokenizer_file)
 
         else:
@@ -2090,7 +2088,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if special_tokens_map_file is not None:
                 with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
                     special_tokens_map = json.load(special_tokens_map_handle)
-                # ??? why not use add special tokens there? 
+                # ??? why not use add special tokens there?
                 for key, value in special_tokens_map.items():
                     if key in kwargs and kwargs[key]:
                         # This value has already been redefined by the kwargs

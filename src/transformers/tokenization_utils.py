@@ -419,7 +419,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         model.resize_token_embeddings(len(tokenizer))
         ```"""
         added_tokens = 0
-        new_idx = len(self) # only call this once
+        new_idx = len(self)  # only call this once
         for token in new_tokens:
             if not isinstance(token, (str, AddedToken)):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
@@ -432,7 +432,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             # if unk_token is not part of the vocab, but we are adding tokens
             if self.unk_token_id is not None and self.convert_tokens_to_ids(token.content) == self.unk_token_id:
                 # if some tokens were added at the beginning ignore them HACK
-               
+
                 if not special_tokens and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
                     # Since we are adding a token to the vocab, let's be consistent: thje vocab probably does not contain any upper-case words
                     # so we lower the AddedToken, this way both encoder and decoder can properly handle the token.
