@@ -31,6 +31,7 @@ COMMON_ENV_VARIABLES = {
     "RUN_PIPELINE_TESTS": False,
     "RUN_PT_TF_CROSS_TESTS": False,
     "RUN_PT_FLAX_CROSS_TESTS": False,
+    "TRANSFORMERS_VERBOSITY": "error",
 }
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "s": None}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
@@ -212,7 +213,7 @@ class CircleCIJob:
         if self.marker is not None:
             test_command += f" -m {self.marker}"
 
-        test_command += ' -k "not test_pickle_"'
+        # test_command += ' -k "not test_pickle_"'
 
         if self.name == "pr_documentation_tests":
             # can't use ` | tee tee tests_output.txt` as usual
@@ -287,7 +288,7 @@ non_modeling_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     parallelism=1,
-    pytest_num_workers=1,
+    pytest_num_workers=8,
 )
 
 
