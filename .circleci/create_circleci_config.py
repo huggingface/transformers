@@ -288,7 +288,7 @@ non_modeling_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     parallelism=1,
-    pytest_num_workers=8,
+    pytest_num_workers=1,
 )
 
 
@@ -582,7 +582,7 @@ def create_circleci_config(folder=None):
                 job.tests_to_run = [x for x in test_list_items if "/test_modeling_" in x]
             elif job.job_name == "tests_non_modeling":
                 L = sorted([x for x in test_list_items if "/test_modeling_" not in x and "/test_tokenization_" in x])
-                job.tests_to_run = L[:32]  # [x for x in L if any(y in x for y in ["_bert.py", "_gpt2.py", "_bart.py", "_t5.py", "_roberta.py", "_deberta.py", "_longformer.py", "_led.py", "_albert.py", "_xlm_roberta.py"])]  #, ])]
+                job.tests_to_run = L[:64]  # [x for x in L if any(y in x for y in ["_bert.py", "_gpt2.py", "_bart.py", "_t5.py", "_roberta.py", "_deberta.py", "_longformer.py", "_led.py", "_albert.py", "_xlm_roberta.py"])]  #, ])]
 
         extended_tests_to_run = set(test_list.split())
         # Extend the test files for cross test jobs

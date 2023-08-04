@@ -181,7 +181,7 @@ class TokenizerTesterMixin:
     tokenizer_class = None
     rust_tokenizer_class = None
     test_slow_tokenizer = True
-    test_rust_tokenizer = False
+    test_rust_tokenizer = True
     space_between_special_tokens = False
     from_pretrained_kwargs = None
     from_pretrained_filter = None
