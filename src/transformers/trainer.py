@@ -1976,6 +1976,9 @@ class Trainer:
 
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
 
+        # Wait for the checkpoint to be uploaded.
+        self._finish_current_push()
+
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
     def _get_output_dir(self, trial):
@@ -3529,8 +3532,8 @@ class Trainer:
         # Only push from one node.
         if not self.is_world_process_zero() or self.args.hub_strategy == HubStrategy.END:
             return
-        # If we haven't finished the last push, we don't do this one.
-        if self.push_in_progress is not None and not self.push_in_progress.is_done():
+        # If we haven't finished the last push, we don't do this one unless args.hub_push_all=True.
+        if not self.args.hub_push_all and self.push_in_progress is not None and not self.push_in_progress.is_done():
             return
 
         output_dir = self.args.output_dir
@@ -3558,10 +3561,9 @@ class Trainer:
             commit_message=commit_message,
             token=self.args.hub_token,
             run_as_future=True,
-            ignore_patterns=["_*", ".*"],
-            allow_patterns=["*.*"],
+            ignore_patterns=["_*", "**/*"],
         )
-        print(commit_message)
+
         push_jobs = [model_push_job]
 
         if self.args.hub_strategy in [HubStrategy.CHECKPOINT, HubStrategy.ALL_CHECKPOINTS]:
@@ -3578,7 +3580,15 @@ class Trainer:
             )
             push_jobs.append(checkpoint_push)
 
-        self.push_in_progress = PushInProgress(push_jobs)
+        if self.push_in_progress is None or self.push_in_progress.is_done():
+            self.push_in_progress = PushInProgress(push_jobs)
+        else:
+            self.push_in_progress.jobs.extend(push_jobs)
+
+    def _finish_current_push(self):
+        if self.push_in_progress is not None and not self.push_in_progress.is_done():
+            logger.info("Waiting for the current checkpoint push to be finished, this might take a couple of minutes.")
+            self.push_in_progress.wait_until_done()
 
     def push_to_hub(self, commit_message: Optional[str] = "End of training", blocking: bool = True, **kwargs) -> str:
         """
@@ -3617,14 +3627,8 @@ class Trainer:
 
         self.create_model_card(model_name=model_name, **kwargs)
 
-        # Cancel any async push in progress and wait for the current upload to be finished.
-        if self.push_in_progress is not None and not self.push_in_progress.is_done():
-            self.push_in_progress.cancel()
-            logger.info(
-                "Waiting for the current checkpoint push to be finished before pushing the final model, this might "
-                "take a couple of minutes."
-            )
-            self.push_in_progress.wait_until_done()
+        # Wait for the current upload to be finished.
+        self._finish_current_push()
 
         return upload_folder(
             repo_id=self.hub_model_id,
@@ -3632,8 +3636,7 @@ class Trainer:
             commit_message=commit_message,
             token=self.args.hub_token,
             run_as_future=not blocking,
-            ignore_patterns=["_*", ".*"],
-            allow_patterns=["*.*"],
+            ignore_patterns=["_*", "**/*"],
         )
 
     #
