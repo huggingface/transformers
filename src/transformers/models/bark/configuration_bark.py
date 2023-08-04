@@ -19,7 +19,7 @@ from typing import Dict, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings, logging
-from ..auto import AutoConfig
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -299,7 +299,8 @@ class BarkConfig(PretrainedConfig):
         self.semantic_config = BarkSemanticConfig(**semantic_config)
         self.coarse_acoustics_config = BarkCoarseConfig(**coarse_acoustics_config)
         self.fine_acoustics_config = BarkFineConfig(**fine_acoustics_config)
-        self.codec_config = AutoConfig.for_model(**codec_config)
+        codec_model_type = codec_config["model_type"] if "model_type" in codec_config else "encodec"
+        self.codec_config = CONFIG_MAPPING[codec_model_type](**codec_config)
 
         self.initializer_range = initializer_range
 
@@ -311,7 +312,7 @@ class BarkConfig(PretrainedConfig):
         semantic_config: BarkSemanticConfig,
         coarse_acoustics_config: BarkCoarseConfig,
         fine_acoustics_config: BarkFineConfig,
-        codec_config: AutoConfig,
+        codec_config: PretrainedConfig,
         **kwargs,
     ):
         r"""
