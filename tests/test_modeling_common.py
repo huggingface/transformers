@@ -2521,7 +2521,7 @@ class ModelTesterMixin:
             base_output = model(**inputs_dict_class)
 
             model_size = compute_module_sizes(model)[""]
-            max_size = int(self.model_split_percents[0] * model_size)
+            max_size = int(self.model_split_percents[1] * model_size)
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 
