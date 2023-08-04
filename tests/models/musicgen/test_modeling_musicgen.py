@@ -529,7 +529,7 @@ class MusicgenStreamer(BaseStreamer):
             max_length=self.token_cache.shape[-1],
         )
         # apply the pattern mask to the input ids
-        input_ids = self.decoder.apply_delay_pattern_mask(self.token_cache, decoder_delay_pattern_mask)
+        input_ids = self.decoder.apply_delay_pattern_mask(input_ids, decoder_delay_pattern_mask)
 
         # revert the pattern delay mask by filtering the pad token id
         input_ids = input_ids[input_ids != self.generation_config.pad_token_id].reshape(
@@ -561,8 +561,11 @@ class MusicgenStreamer(BaseStreamer):
 
         if self.token_cache.shape[-1] % self.play_steps == 0:
             audio_values = self.apply_delay_pattern_mask(self.token_cache)
-            self.on_finalized_text(audio_values[self.to_print :])
-            self.to_print += len(audio_values) - self.to_print
+            # only print the newly generated audio values
+            audio_values = audio_values[self.to_print :]
+            self.on_finalized_text(audio_values)
+            # update our running total
+            self.to_print += len(audio_values)
 
     def end(self):
         """Flushes any remaining cache and prints a newline to stdout."""
