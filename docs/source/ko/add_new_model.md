@@ -132,7 +132,7 @@ model.config  # model has access to its config
 
 1. 저장소 페이지에서 "Fork" 버튼을 클릭하여 저장소의 사본을 GitHub 사용자 계정으로 만듭니다.
 
-2. `transformers` fork를 로컬 디스크에 클론하고 기본 리포지토리를 원격 저장소로 추가합니다:
+2. `transformers` fork를 로컬 디스크에 클론하고 베이스 저장소를 원격 저장소로 추가합니다:
 
 ```bash
 git clone https://github.com/[your Github handle]/transformers.git
