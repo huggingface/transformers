@@ -15,46 +15,45 @@ rendered properly in your Markdown viewer.
 
 # 어떻게 🤗 Transformers 모델을 TensorFlow로 변환하나요? [[how-to-convert-a-transformers-model-to-tensorflow]]
 
-🤗 Transformers를 사용할 수 있는 여러 가지 프레임워크를 가지고 있으면 응용 프로그램을 설계할 때 그 강점을 활용할 수 있는 유연성이 생깁니다.
-그러나 이는 모델 별로 호환성을 추가해야한다는 것을 의미합니다. 좋은 소식은 기존 모델에 TensorFlow 호환성을 추가하는 것이 [처음부터 새로운 모델을 추가하는 것보다 간단하다는 것입니다](add_new_model)! 
-큰 TensorFlow 모델을 더 깊이 이해하거나, 주요 오픈 소스 기여를 수행하거나, 선택한 모델에 Tensorflow를 사용하려는 경우 이 안내서는 여러분을 위한 것입니다.
+🤗 Transformers에서처럼 사용할 수 있는 여러 가지 프레임워크가 있다는 것은 애플리케이션을 설계할 때 그들의 강점을 유연하게 이용할 수 있다는 장점이 있지만, 모델 별로 호환성을 추가해야 한다는 단점 또한 존재한다는 것을 의미합니다. 좋은 소식은 기존 모델에 TensorFlow 호환성을 추가하는 것이 [처음부터 새로운 모델을 추가하는 것](add_new_model)보다도 간단하다는 것입니다! 
+
+만약 대규모 TensorFlow 모델을 더 깊이 이해하려거나, 오픈 소스에 큰 기여를 하려거나, 선택한 모델에 Tensorflow를 활용하려한다면, 이 안내서는 여러분께 도움이 될 것입니다.
 
 이 가이드는 Hugging Face 팀의 최소한의 감독 아래에서 🤗 Transformers에서 사용되는 TensorFlow 모델 가중치와/또는 아키텍처를 기여할 수 있는 커뮤니티 구성원인 여러분을 대상으로 합니다. 
 새로운 모델을 작성하는 것은 쉬운 일이 아니지만, 이 가이드를 통해 조금 덜 힘들고 훨씬 쉬운 작업으로 만들 수 있습니다. 
-우리의 경험을 모아 활용하는 것은 이 프로세스를 점차적으로 더 쉽게 만드는 데 굉장히 중요하며, 따라서 이 가이드에 대한 개선 제안을 적극적으로 권장합니다!
+모두의 경험을 모으는 것은 이 작업을 점차적으로 더 쉽게 만드는 데 굉장히 중요하기 때문에, 이 가이드를 개선시킬만한 제안이 떠오르면 공유하시는걸 적극적으로 권장합니다!
 
 더 깊이 알아보기 전에, 🤗 Transformers를 처음 접하는 경우 다음 자료를 확인하는 것이 좋습니다:
-- [🤗 Transformers의 일반 개요]
-(add_new_model#general-overview-of-transformers)
+- [🤗 Transformers의 일반 개요](add_new_model#general-overview-of-transformers)
 - [Hugging Face의 TensorFlow 철학](https://huggingface.co/blog/tensorflow-philosophy)
 
 이 가이드의 나머지 부분에서는 새로운 TensorFlow 모델 아키텍처를 추가하는 데 필요한 단계, Pytorch를 TensorFlow 모델 가중치로 변환하는 절차 및 ML 프레임워크 간의 불일치를 효율적으로 디버깅하는 방법을 알게 될 것입니다. 시작해봅시다!
 
-<팁>
+<Tip>
 
 사용하려는 모델이 이미 해당하는 TensorFlow 아키텍처가 있는지 확실하지 않나요?
 
 선택한 모델([예](https://huggingface.co/bert-base-uncased/blob/main/config.json#L14))의 `config.json`의 `model_type` 필드를 확인해보세요. 🤗 Transformers의 해당 모델 폴더에는 "modeling_tf"로 시작하는 파일이 있는 경우, 해당 모델에는 해당 TensorFlow 아키텍처([예](https://github.com/huggingface/transformers/tree/main/src/transformers/models/bert))가 있다는 의미입니다.
 
-</팁>
+</Tip>
 
 ## TensorFlow 모델 아키텍처 코드 추가하는 단계별 가이드 [[step-by-step-guide-to add-tensorFlow-model-architecture-code]]
 
-큰 아키텍처 모델 설계하는 방법이 여러가지 있으며, 해당 설계를 구현하는 방법도 여러 가지 있습니다. 
-그러나 우리는 [🤗 Transformers 일반 개요](add_new_model#general-overview-of-transformers)에서 언급한 대로 일관된 설계 선택에 따라 🤗 Transformers 사용 편의성이 달려 있다는 확고한 의견을 가지고 있습니다.
+대규모 아키텍처를 가진 모델을 설계하는 방법에는 여러가지가 있으며, 해당 설계를 구현하는 방법도 여러 가지입니다. 
+그러나 우리는 [🤗 Transformers 일반 개요](add_new_model#general-overview-of-transformers)에서 언급한 대로 일관된 설계 선택에 따라야지만 🤗 Transformers를 사용하기 편할 것이라는 확고한 의견을 가지고 있습니다.
 우리의 경험을 통해 TensorFlow 모델을 추가하는 데 관련된 중요한 몇 가지 사항을 알려 드릴 수 있습니다:
 
-- 휠 패키지 파일을 다시 만들지 마세요! 대개 최소한 두 개의 참조 구현을 확인해야 합니다: 구현하려는 모델과 동일한 Pytorch 버전 및 동일한 문제 유형의 다른 TensorFlow 모델.
-- 우수한 모델 구현은 시간이 지나도 남아있습니다. 이것은 코드가 아름답다는 이유가 아니라 코드가 명확하고 디버깅 및 개선이 쉬워야 하기 때문입니다. TensorFlow 구현에서 동일한 패턴을 복제하고 Pytorch 구현과의 불일치를 최소화하여 유지 관리자의 업무를 쉽게 할 경우, 기여한 사항이 오래 유지됨을 보장할 수 있습니다.
-- 도움이 필요한 경우 도움을 요청하세요! 🤗 Transformers 팀은 여러분을 돕기 위해 여기에 있으며, 여러분이 직면한 동일한 문제에 대한 해결책을 이미 찾은 경우도 있을 수 있습니다.
+- 이미 있는걸 다시 개발하려 하지 마세요! 최소한 2개의 이미 구현된 모델을 대개 참조해야 합니다. 구현하려는 모델과 기능상 동일한 Pytorch 모델 하나와 같은 문제 유형을 풀고 있는 다른 TensorFlow 모델 하나를 살펴보세요.
+- 우수한 모델 구현은 시간이 지나도 남아있습니다. 이것은 코드가 아름답다는 이유가 아니라 코드가 명확하고 디버깅 및 개선이 쉽기 때문입니다. TensorFlow 구현에서 다른 모델들과 패턴을 똑같이 하고 Pytorch 구현과의 불일치를 최소화하여 메인테이너의 업무를 쉽게 한다면, 기여한 코드가 오래도록 유지될 수 있습니다.
+- 필요하다면 도움을 요청하세요! 🤗 Transformers 팀은 여러분을 돕기 위해 있으며, 여러분이 직면한 동일한 문제에 대한 해결책을 이미 찾은 경우도 있을 수 있습니다.
 
-TensorFlow 모델 아키텍처를 추가하는 데 필요한 단계의 개요를 제공합니다:
+TensorFlow 모델 아키텍처를 추가하는 데 필요한 단계를 개략적으로 써보면:
 1. 변환하려는 모델 선택
 2. transformers 개발 환경 준비
 3. (선택 사항) 이론적 측면 및 기존 구현 이해
 4. 모델 아키텍처 구현
 5. 모델 테스트 구현
-6. pull 요청 제출
+6. PR (pull request) 제출
 7. (선택 사항) 데모 빌드 및 공유
 
 ### 1.-3. 모델 기여 준비 [[1.-3.-prepare-your-model-contribution]]
@@ -69,22 +68,23 @@ TensorFlow에서 사용할 모델이 이미 🤗 Transformers에 TensorFlow 아�
 
 간단히 말해서, 이 안내서의 나머지 부분은 TensorFlow 버전의 *BrandNewBert*([가이드](add_new_model)와 동일한 예제)를 기여하려고 결정했다고 가정합니다.
 
-<팁>
+<Tip>
 
 TensorFlow 모델 아키텍처에 작업을 시작하기 전에 해당 작업이 진행 중인지 확인하세요. 
 `BrandNewBert`를 검색하여
 [pull request GitHub 페이지](https://github.com/huggingface/transformers/pulls?q=is%3Apr)에서 TensorFlow 관련 pull request가 없는지 확인할 수 있습니다.
 
-</팁>
+</Tip>
 
 **2. transformers 개발 환경 준비**
 
 
-모델 아키텍처를 선택한 후, 관련 작업을 수행할 의도를 신호로 알리기 위해 draft PR을 엽니다. 환경을 설정하고 draft PR을 열려면 아래 지침을 따르세요.
+모델 아키텍처를 선택한 후, 관련 작업을 수행할 의도를 미리 알리기 위해 Draft PR을 여세요. 아래 지침대로 하시면 환경을 설정하고 Draft PR을 열 수 있습니다.
 
-1. 'Fork' 버튼을 클릭하여 [repository](https://github.com/huggingface/transformers)를 fork합니다. 이렇게 하면 GitHub 사용자 계정에 코드의 사본이 생성됩니다.
+1. 'Fork' 버튼을 클릭하여 [리포지터리](https://github.com/huggingface/transformers)를 포크하세요. 이렇게 하면 GitHub 사용자 계정에 코드의 사본이 생성됩니다.
 
-2. `transformers` 포크를 로컬 디스크에 클론하고 기본 repository를 원격 repository로 추가합니다.
+
+2. `transformers` 포크를 로컬 디스크에 클론하고 원본 리포지터리를 원격 리포지터리로 추가하세요.
 
 ```bash
 git clone https://github.com/[your Github handle]/transformers.git
@@ -92,7 +92,7 @@ cd transformers
 git remote add upstream https://github.com/huggingface/transformers.git
 ```
 
-3. 개발 환경을 설정합니다. 예를 들어, 다음 명령을 실행하여 개발 환경을 설정할 수 있습니다.
+3. 개발 환경을 설정하세요. 예를 들어, 다음 명령을 실행하여 개발 환경을 설정할 수 있습니다.
 
 ```bash
 python -m venv .env
@@ -100,7 +100,7 @@ source .env/bin/activate
 pip install -e ".[dev]"
 ```
 
-운영 체제에 따라서 Transformers의 선택적 종속성이 증가하면서 이 명령으로 실패할 수도 있습니다. 그런 경우 TensorFlow를 설치한 후 다음을 수행하세요.
+운영 체제에 따라서 Transformers의 선택적 종속성이 증가하면서 위 명령이 실패할 수도 있습니다. 그런 경우 TensorFlow를 설치한 후 다음을 실행하세요.
 
 ```bash
 pip install -e ".[quality]"
@@ -108,22 +108,22 @@ pip install -e ".[quality]"
 
 **참고:** CUDA를 설치할 필요는 없습니다. 새로운 모델이 CPU에서 작동하도록 만드는 것만으로 충분합니다.
 
-4. 메인 브랜치에서 설명적인 이름으로 브랜치를 만듭니다.
+4. 메인 브랜치에서 만드려는 기능이 잘 표현되는 이름으로 브랜치를 만듭니다.
 
 ```bash
 git checkout -b add_tf_brand_new_bert
 ```
 
-5. 현재 메인 브랜치로 페치 및 리베이스합니다.
+5. 메인 브랜치의 현재 상태를 페치(fetch)하고 리베이스하세요.
 
 ```bash
 git fetch upstream
 git rebase upstream/main
 ```
 
-6. `transformers/src/models/brandnewbert/`에 `modeling_tf_brandnewbert.py`라는 빈 `.py` 파일을 추가합니다. 이 파일이 TensorFlow 모델 파일이 될 것입니다.
+6. `transformers/src/models/brandnewbert/`에 `modeling_tf_brandnewbert.py`라는 빈 `.py` 파일을 추가하세요. 이 파일이 TensorFlow 모델 파일이 될 것입니다.
 
-7. 변경 사항을 계정에 푸시합니다.
+7. 변경 사항을 계정에 푸시하세요.
 
 ```bash
 git add .
@@ -131,10 +131,10 @@ git commit -m "initial commit"
 git push -u origin add_tf_brand_new_bert
 ```
 
-8. 만족스러운 경우 GitHub에서 포크된 웹 페이지로 이동합니다. "Pull request"를 클릭합니다. Hugging Face 팀의 GitHub handle을 리뷰어에 추가하여 앞으로의 변경 사항에 대해 Hugging Face 팀이 알림을 받을 수 있도록 합니다.
+8. 만족스러운 경우 GitHub에서 포크된 웹 페이지로 이동합니다. "Pull request"를 클릭합니다. Hugging Face 팀의 GitHub ID를 리뷰어로 추가해서, 앞으로의 변경 사항에 대해 Hugging Face 팀이 알림을 받을 수 있도록 합니다.
 
 
-9. GitHub 풀 요청 웹 페이지 오른쪽에 있는 "Convert to draft"를 클릭하여 PR을 드래프트로 변경합니다.
+9. GitHub Pull Requests 페이지의 오른쪽에 있는 "Convert to draft"를 클릭하여 PR을 초안으로 변경하세요.
 
 이제 🤗 Transformers에서 *BrandNewBert*를 TensorFlow로 변환할 개발 환경을 설정했습니다.
 
@@ -142,7 +142,8 @@ git push -u origin add_tf_brand_new_bert
 **3. (선택 사항) 이론적 측면 및 기존 구현 이해**
 
 
-설명 작업이 있는 경우, 시간을 내어 *BrandNewBert*의 논문을 읽어야 합니다. 이해하기 어려운 부분이 많을 수 있습니다. 그렇다고 해서 걱정하지 마세요! 목표는 논문의 심도있는 이론적 이해가 아니라 TensorFlow를 사용하여 🤗 Transformers에 모델을 효과적으로 다시 구현하는 데 필요한 필수 정보를 추출하는 것입니다. 많은 시간을 이론적 이해에 투자할 필요는 없지만 실용적인 측면에서, 현재 존재하는 모델 문서 페이지(e.g. [model docs for BERT](model_doc/bert))에 집중하는 것이 좋습니다..
+*BrandNewBert*처럼 자세한 글이 있다면 시간을 내어 논문을 읽는걸 추천드립니다. 이해하기 어려운 부분이 많을 수 있습니다. 그렇다고 해서 걱정하지 마세요! 목표는 논문의 심도있는 이론적 이해가 아니라 TensorFlow를 사용하여 🤗 Transformers에 모델을 효과적으로 다시 구현하는 데 필요한 필수 정보를 추출하는 것입니다. 많은 시간을 이론적 이해에 투자할 필요는 없지만 실용적인 측면에서 현재 존재하는 모델 문서 페이지(e.g. [model docs for BERT](model_doc/bert))에 집중하는 것이 좋습니다.
+
 
 모델의 기본 사항을 이해한 후, 기존 구현을 이해하는 것이 중요합니다. 이는 작업 중인 모델에 대한 실제 구현이 여러분의 기대와 일치함을 확인하고, TensorFlow 측면에서의 기술적 문제를 예상할 수 있습니다.
 
