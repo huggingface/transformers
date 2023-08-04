@@ -3586,6 +3586,8 @@ class Trainer:
             self.push_in_progress.jobs.extend(push_jobs)
 
     def _finish_current_push(self):
+        if not hasattr(self, "push_in_progress"):
+            return
         if self.push_in_progress is not None and not self.push_in_progress.is_done():
             logger.info("Waiting for the current checkpoint push to be finished, this might take a couple of minutes.")
             self.push_in_progress.wait_until_done()
