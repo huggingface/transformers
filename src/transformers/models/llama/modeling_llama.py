@@ -605,11 +605,13 @@ class LlamaModel(LlamaPreTrainedModel):
             # This can happen when your prompts are left padded and you want to masked out the left padded tokens
             # However the operation 'expanded_attn_mask + combined_attention_mask' above will cause those left padded tokens
             # to have a fully masked attention tensor, and cause numerical instability(inf) during inference. Therefore
-            # for those tokens who has attention tensor fully masked, force them to at least attend to itself.  
-            indices = torch.arange(combined_attention_mask.size(2)+past_key_values_length, device=combined_attention_mask.device)
+            # for those tokens who has attention tensor fully masked, force them to at least attend to itself.
+            indices = torch.arange(
+                combined_attention_mask.size(2) + past_key_values_length, device=combined_attention_mask.device
+            )
             indices = indices.unsqueeze(0).unsqueeze(0).expand_as(fully_masked)
             # Set the n-th elements in the n-th tensors to be zero
-            combined_attention_mask[fully_masked, indices[fully_masked]] = 0.
+            combined_attention_mask[fully_masked, indices[fully_masked]] = 0.0
         return combined_attention_mask
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
