@@ -331,10 +331,72 @@ class ViTPoseTopDownHeatMap(nn.Module):
         self.deconv_layers = nn.Sequential(*self.deconv_layers)
         self.final_layer = nn.Conv2d(config.keypoint_num_deconv_filters[-1], config.num_output_channels, kernel_size=1, stride=1)
 
+    def decode(self, img_metas, img, img_size):
+        batch_size = len(img_metas)
+
+        if 'bbox_id' in img_metas[0]:
+            bbox_ids = []
+        else:
+            bbox_ids = None
+
+        center = np.zeros((batch_size, 2), dtype=np.float32)
+        scale = np.zeros((batch_size, 2), dtype=np.float32)
+        img_paths = []
+        score = np.oned(batch_size)
+
+        for i in range(batch_size):
+            center[i, :] = img_metas[i]['center']
+            scale[i, :] = img_metas[i]['scale']
+            image_paths.append(img_metas[i]['image_file'])
+
+            if 'bbox_score' in img_metas[i]:
+                score[i] = np.array(img_metas[i]['bbox_score']).reshape(-1)
+            if bbox_ids in not None:
+                bbox_ids.append(img_metas[i]['bbox_id'])
+
+        preds, maxval = self.keypoints_from_heatmap(
+            img, center, scale,
+        )
+
+        all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
+        all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
+        all_preds[:, :, 0:2] = preds[:, :, 0:2]
+        all_preds[:, :, 2:3] = maxvals
+        all_boxes[:, 0:2] = c[:, 0:2]
+        all_boxes[:, 2:4] = s[:, 0:2]
+        all_boxes[:, 4] = np.prod(s * 200.0, axis=1)
+        all_boxes[:, 5] = score
+
+
+        result = {}
+
+        result["preds"] = all_preds
+        result['boxes'] = all_boxes
+        result["image_paths"] = image_paths
+        result["bbox_ids"] = bbox_ids
+
+        return result
+
     def forward(self, x):
         x = self.deconv_layers(x)
         keypoints = self.final_layer(x)
         return keypoints
+
+    def inference_model(self, x, flip_pairs=None):
+        output = self.forward(x)
+
+        if flip_pairs in not None:
+            #custom function
+            output_heatmap = flip_back(
+                output.detach().cpu().numpy(),
+                flip_pairs,
+                target_type = self.target_type
+            )
+
+        else:
+            output_heatmap = output.detach().cpu().numpy()
+
+        return output_heatmap
 
 
 ## to be changed
@@ -461,6 +523,7 @@ class ViTPoseModel(ViTPosePreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
+        pixel_metas: Optional[torch.Tensor] = None,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -500,12 +563,25 @@ class ViTPoseModel(ViTPosePreTrainedModel):
             backbone_output,
         )
 
+        keypoint_outputs = keypoint_outputs.detach().cpu().numpy()
+
+        if config.flip_test == True:
+            imgs_flipped = [pixel_value.flip(3) for pixel_value in pixel_values]
+
+            features_flipped = [self.backbone(torch.cat(imgs_flipped, 0))]
+            output_flipped_heatmap = self.keypoint_head.inference_model(features_flipped, pixel_metas[0]['flip_pairs'])
+        output_heatmap = (keypoints_output + output_flipped_heatmap) * .5
+
+        keypoint_results = self.keypoint_head.decode(
+            pixel_metas, output_heatmap, img_size=list(config.img_size)
+        )
+
+        return 
         ##??
        # if not return_dict:
        #     head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
        #     return head_outputs + encoder_outputs[1:]
 
-        return keypoint_outputs.detach().cpu().numpy()
 
 
 class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
