@@ -577,21 +577,22 @@ class GPTJModel(GPTJPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            seq_length = input_ids.shape[-1]
-            input_ids = input_ids.view(-1, seq_length)
+            input_shape = input_ids.size()
+            input_ids = input_ids.view(-1, input_shape[-1])
             batch_size = input_ids.shape[0]
         elif inputs_embeds is not None:
-            batch_size, seq_length = inputs_embeds.size()[:-1]
+            input_shape = inputs_embeds.size()[:-1]
+            batch_size = inputs_embeds.shape[0]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if token_type_ids is not None:
-            token_type_ids = token_type_ids.view(-1, seq_length)
+            token_type_ids = token_type_ids.view(-1, input_shape[-1])
 
         if position_ids is not None:
-            position_ids = position_ids.view(-1, seq_length).long()
+            position_ids = position_ids.view(-1, input_shape[-1]).long()
 
         if past_key_values is None:
             past_length = 0
@@ -600,8 +601,8 @@ class GPTJModel(GPTJPreTrainedModel):
             past_length = past_key_values[0][0].size(-2)
 
         if position_ids is None:
-            position_ids = torch.arange(past_length, seq_length + past_length, dtype=torch.long, device=device)
-            position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
+            position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
+            position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
 
         # Attention mask.
         if attention_mask is not None:
@@ -640,7 +641,7 @@ class GPTJModel(GPTJPreTrainedModel):
 
         hidden_states = self.drop(hidden_states)
 
-        output_shape = (-1, seq_length, hidden_states.size(-1))
+        output_shape = (-1,) + input_shape[1:] + (hidden_states.size(-1),)
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
