@@ -500,6 +500,7 @@ class MusicgenTester:
         return config, inputs_dict
 
 
+@require_torch
 class MusicgenStreamer(BaseStreamer):
     """
     Simple MusicGen streamer that prints audio values to stdout every `play_steps` decoding steps.
