@@ -130,7 +130,7 @@ model.config  # model has access to its config
 
 ### 2. 개발 환경 설정 [[2-next-prepare-your-environment]]
 
-1. 리포지토리 페이지에서 "Fork" 버튼을 클릭하여 리포지토리의 사본을 GitHub 사용자 계정으로 만듭니다.
+1. 저장소 페이지에서 "Fork" 버튼을 클릭하여 저장소의 사본을 GitHub 사용자 계정으로 만듭니다.
 
 2. `transformers` fork를 로컬 디스크에 클론하고 기본 리포지토리를 원격 저장소로 추가합니다:
 
