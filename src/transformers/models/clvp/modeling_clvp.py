@@ -44,6 +44,7 @@ CLVP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all CLVP models at https://huggingface.co/models?filter=clvp
 ]
 
+
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(
     input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device, past_key_values_length: int = 0
@@ -110,8 +111,8 @@ def apply_rotary_pos_emb(state, freqs):
 
 class CLVPRMSNorm(nn.Module):
     """
-    Root Mean Square Layer Normalization for CLVP.
-    Please refer to the paper https://arxiv.org/abs/1910.07467 to know more.
+    Root Mean Square Layer Normalization for CLVP. Please refer to the paper https://arxiv.org/abs/1910.07467 to know
+    more.
 
     Args:
         normalized_shape(`int`):
@@ -119,6 +120,7 @@ class CLVPRMSNorm(nn.Module):
         eps(`float`):
             The epsilon used by the RMS Norm.
     """
+
     def __init__(self, normalized_shape, eps):
         super().__init__()
         self.scale = normalized_shape**-0.5
@@ -845,11 +847,13 @@ class CLVPTextModel(CLVPPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import CLVPTextModel
+        >>> from transformers import CLVPTextModel, CLVPTokenizer
 
         >>> model = CLVPTextModel.from_pretrained("susnato/clvp_dev")
+        >>> tokenizer = CLVPTokenizer.from_pretrained("susnato/clvp_dev")
 
-        >>> inputs = {"input_ids": torch.tensor([[5, 62, 1, 5, 9, 10]]).long()}
+        >>> text = "This is a text."
+        >>> inputs = tokenizer(text, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
@@ -1052,14 +1056,14 @@ class CLVPModel(CLVPPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import CLVPModel
+        >>> from transformers import CLVPModel, CLVPTokenizer
 
         >>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
+        >>> tokenizer = CLVPTokenizer.from_pretrained("susnato/clvp_dev")
 
-        >>> inputs = {
-        ...     "input_ids": torch.tensor([[5, 62, 1, 9, 44]]).long(),
-        ...     "speech_ids": torch.tensor([[10, 55, 101, 37, 21, 102, 41]]).long(),
-        ... }
+        >>> text = "This is a text."
+        >>> inputs = tokenizer(text, return_tensors="pt")
+        >>> inputs["speech_ids"] = torch.tensor([[10, 55, 101, 37, 21, 102, 41]]).long()
 
         >>> outputs = model(**inputs)
         >>> logits_per_speech = outputs.logits_per_speech  # this is the speech-text similarity score
@@ -1171,11 +1175,13 @@ class CLVPTextModelWithProjection(CLVPPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import CLVPTextModelWithProjection
+        >>> from transformers import CLVPTextModelWithProjection, CLVPTokenizer
 
         >>> model = CLVPTextModelWithProjection.from_pretrained("susnato/clvp_dev")
+        >>> tokenizer = CLVPTokenizer.from_pretrained("susnato/clvp_dev")
 
-        >>> inputs = {"input_ids": torch.tensor([[5, 62, 1, 5, 9, 10]]).long()}
+        >>> text = "This is a sample text."
+        >>> inputs = tokenizer(text, return_tensors="pt")
 
         >>> outputs = model(**inputs)
         >>> text_embeds = outputs.text_embeds

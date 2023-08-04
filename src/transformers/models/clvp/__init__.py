@@ -27,7 +27,9 @@ _import_structure = {
         "CLVPSpeechConfig",
         "CLVPTextConfig",
     ],
+    "tokenization_clvp": ["CLVPTokenizer"],
 }
+
 
 try:
     if not is_torch_available():
@@ -52,6 +54,7 @@ if TYPE_CHECKING:
         CLVPSpeechConfig,
         CLVPTextConfig,
     )
+    from .tokenization_clvp import CLVPTokenizer
 
     try:
         if not is_torch_available():
