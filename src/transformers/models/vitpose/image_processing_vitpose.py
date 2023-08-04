@@ -36,7 +36,7 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-class ViTImageProcessor(BaseImageProcessor):
+class ViTPoseImageProcessor(BaseImageProcessor):
     r"""
     Constructs a ViT image processor.
 
@@ -72,7 +72,7 @@ class ViTImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
+        size: Optional[Dict[str, int]] = {"height": 256, "width": 192},
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -82,7 +82,7 @@ class ViTImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        size = size if size is not None else {"height": 224, "width": 224}
+        size = size if size is not None else {"height": 256, "width": 192}
         size = get_size_dict(size)
         self.do_resize = do_resize
         self.do_rescale = do_rescale
@@ -181,7 +181,7 @@ class ViTImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
+        do_resize: Optional[bool] = True,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
         do_rescale: Optional[bool] = None,

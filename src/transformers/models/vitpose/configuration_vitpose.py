@@ -109,6 +109,11 @@ class ViTPoseConfig(PretrainedConfig):
         num_output_channels = 17,
         initializer_range = 1,
         num_channels = 3,
+        num_joints = 17,
+        flip_test = False,
+        udp = True,
+        target_type = "GaussianHeatMap",
+        kernel = 3,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -131,5 +136,10 @@ class ViTPoseConfig(PretrainedConfig):
         self.num_output_channels = num_output_channels
         self.initializer_range = initializer_range
         self.num_channels = num_channels
+        self.num_joints = num_joints
+        self.flip_test = flip_test
+        self.udp = udp
+        self.target_type = target_type
+        self.kernel = kernel
 
 

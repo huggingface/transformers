@@ -41,7 +41,7 @@ else:
     _import_structure["modeling_vitpose"] = [
         "VITPSOE_PRETRAINED_MODEL_ARCHIVE_LIST",
         #"ViTPoseForImageClassification",
-        #"ViTForMaskedImageModeling",
+        "ViTPoseForPoseEstimation",
         "ViTPoseModel",
         #"ViTPosePreTrainedModel",
     ]
@@ -68,7 +68,7 @@ if TYPE_CHECKING:
         from .modeling_vitpose import (
             VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST,
             #ViTForImageClassification,
-            #ViTForMaskedImageModeling,
+            ViTPoseForPoseEstimation,
             ViTPoseModel,
             #ViTPreTrainedModel,
         )

@@ -19,6 +19,8 @@ import collections.abc
 import math
 from typing import Dict, List, Optional, Set, Tuple, Union
 from timm.models.layers import drop_path
+import numpy as np
+import cv2
 
 import torch
 import torch.utils.checkpoint
@@ -33,7 +35,7 @@ from ...modeling_outputs import (
     ImageClassifierOutput,
     MaskedImageModelingOutput,
 )
-from ..yolos import YolosFeatureExtractor, YolosForObjectDetection
+from ..detr import DetrImageProcessor, DetrForObjectDetection
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
@@ -333,7 +335,7 @@ class ViTPoseTopDownHeatMap(nn.Module):
         self.deconv_layers = nn.Sequential(*self.deconv_layers)
         self.final_layer = nn.Conv2d(config.keypoint_num_deconv_filters[-1], config.num_output_channels, kernel_size=1, stride=1)
 
-    def transform_preds(self, coords, canter, scale, output_size, use_udp=False):
+    def transform_preds(self, coords, center, scale, output_size, use_udp=False):
         scale = scale * 200.0
         if use_udp:
             scale_x = scale[0] / (output_size[0] - 1.0)
@@ -387,23 +389,23 @@ class ViTPoseTopDownHeatMap(nn.Module):
         coords -= np.einsum('ijmn,ijnk->ijmk', hessian, derivative).squeeze()
         return coords
 
-    def keypoints_from_heatpoint(self, heatmaps, center, scale, unbiased=False):
+    def keypoints_from_heatmap(self, heatmaps, center, scale, unbiased=False):
         heatmaps = heatmaps.copy()
-        ude_udp = config.udp
+        use_udp = self.config.udp
         N, K, H, W = heatmaps.shape
         if use_udp:
             if self.config.target_type.lower() == "GaussianHeatMap".lower():
                 # GetMaxPreds
-                heatmaps_rehshaped = heatmaps.reshape((N,K,-1))
+                heatmaps_reshaped = heatmaps.reshape((N,K,-1))
                 idx = np.argmax(heatmaps_reshaped, 2).reshape((N,K,1))
                 maxvals = np.amax(heatmaps_reshaped, 2).reshape((N,K,1))
 
                 preds = np.tile(idx, (1,1,2)).astype(np.float32)
                 preds[:,:,0] = preds[:,:,0] % W
-                preds[;,;,1] = preds[:,:,1] // W
+                preds[:,:,1] = preds[:,:,1] // W
                 preds = np.where(np.tile(maxvals, (1,1,2)) > 0.0, preds, -1)
 
-                preds = post_dark_udp(preds, heatmaps, kernel=self.config.kernel)
+                preds = self.post_dark_udp(preds, heatmaps, kernel=self.config.kernel)
 
             else:
                 raise ValueError("target_type has to be GaussianHeatMap! no other supported")
@@ -416,9 +418,11 @@ class ViTPoseTopDownHeatMap(nn.Module):
         return preds, maxvals
 
     def decode(self, img_metas, img, img_size):
+        img_metas = [img_metas]
         batch_size = len(img_metas)
+        print(batch_size)
 
-        if 'bbox_id' in img_metas[0]:
+        if 'bbox_id' in img_metas:
             bbox_ids = []
         else:
             bbox_ids = None
@@ -426,19 +430,19 @@ class ViTPoseTopDownHeatMap(nn.Module):
         center = np.zeros((batch_size, 2), dtype=np.float32)
         scale = np.zeros((batch_size, 2), dtype=np.float32)
         img_paths = []
-        score = np.oned(batch_size)
+        score = np.ones(batch_size)
 
         for i in range(batch_size):
             center[i, :] = img_metas[i]['center']
             scale[i, :] = img_metas[i]['scale']
-            image_paths.append(img_metas[i]['image_file'])
+            img_paths.append(img_metas[i]['img'])
 
             if 'bbox_score' in img_metas[i]:
                 score[i] = np.array(img_metas[i]['bbox_score']).reshape(-1)
-            if bbox_ids in not None:
+            if bbox_ids is not None:
                 bbox_ids.append(img_metas[i]['bbox_id'])
 
-        preds, maxval = self.keypoints_from_heatmap(
+        preds, maxvals = self.keypoints_from_heatmap(
             img, center, scale,
         )
 
@@ -446,9 +450,9 @@ class ViTPoseTopDownHeatMap(nn.Module):
         all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
         all_preds[:, :, 0:2] = preds[:, :, 0:2]
         all_preds[:, :, 2:3] = maxvals
-        all_boxes[:, 0:2] = c[:, 0:2]
-        all_boxes[:, 2:4] = s[:, 0:2]
-        all_boxes[:, 4] = np.prod(s * 200.0, axis=1)
+        all_boxes[:, 0:2] = center[:, 0:2]
+        all_boxes[:, 2:4] = scale[:, 0:2]
+        all_boxes[:, 4] = np.prod(scale * 200.0, axis=1)
         all_boxes[:, 5] = score
 
 
@@ -456,7 +460,7 @@ class ViTPoseTopDownHeatMap(nn.Module):
 
         result["preds"] = all_preds
         result['boxes'] = all_boxes
-        result["image_paths"] = image_paths
+        result["image_paths"] = img_paths
         result["bbox_ids"] = bbox_ids
 
         return result
@@ -469,7 +473,7 @@ class ViTPoseTopDownHeatMap(nn.Module):
     def inference_model(self, x, flip_pairs=None):
         output = self.forward(x)
 
-        if flip_pairs in not None:
+        if flip_pairs is not None:
             #custom function
             output_heatmap = flip_back(
                 output.detach().cpu().numpy(),
@@ -602,8 +606,6 @@ class ViTPoseModel(ViTPosePreTrainedModel):
     #    expected_output=_EXPECTED_OUTPUT_SHAPE,
     #)
 
-
-
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -619,6 +621,7 @@ class ViTPoseModel(ViTPosePreTrainedModel):
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
         """
+        results = {}
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -647,20 +650,27 @@ class ViTPoseModel(ViTPosePreTrainedModel):
             backbone_output,
         )
 
-        keypoint_outputs = keypoint_outputs.detach().cpu().numpy()
+        output_heatmap = keypoint_outputs.detach().cpu().numpy()
 
-        if config.flip_test == True:
-            imgs_flipped = [pixel_value.flip(3) for pixel_value in pixel_values]
+        if self.config.flip_test == True:
+            imgs_flipped = [pixel_value.flip(2) for pixel_value in pixel_values]
 
             features_flipped = [self.backbone(torch.cat(imgs_flipped, 0))]
             output_flipped_heatmap = self.keypoint_head.inference_model(features_flipped, pixel_metas[0]['flip_pairs'])
-        output_heatmap = (keypoints_output + output_flipped_heatmap) * .5
+
+            output_heatmap = (output_heatmap + output_flipped_heatmap) * .5
 
         keypoint_results = self.keypoint_head.decode(
-            pixel_metas, output_heatmap, img_size=list(config.img_size)
+            pixel_metas, output_heatmap, img_size=list(self.config.img_size)
         )
 
-        return 
+        results.update(keypoint_results)
+
+        if not return_dict:
+            output_heatmap = None
+
+        results["output_heatmap"] = output_heatmap
+        return results
         ##??
        # if not return_dict:
        #     head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
@@ -670,30 +680,24 @@ class ViTPoseModel(ViTPosePreTrainedModel):
 
 class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
     def __init__(self, config: ViTPoseConfig) -> None:
-        super().__init__()
-
-        # add object detection pipeline
+        super().__init__(config)
+        """Gets the architecture from ViTPoseModel above (just a pretty wrapper around the model)"""
+        self.config = config
         self.output = ViTPoseModel(config)
 
-        ## classifier head or something
-
-    def decode(self, output: numpy.array, **kwargs):
-        """Decode Keypoints from heatmap"""
-
     def process_det(self, results):
-        """0 defaults to humans"""
+        """results[0] defaults to humans"""
         bboxes = results[0]
 
-        person_reults = []
+        person_results = []
         for bbox in bboxes:
             person = {}
             person["bbox"] = bbox
             person_results.append(person)
         return person_results
 
-
-    def _box2cs(config, bbox):
-        x, y, w, h = box[:4]
+    def _box2cs(self, config, bbox):
+        x, y, w, h = bbox[:4]
         input_size = config.img_size
         aspect_ratio = input_size[0] / input_size[1]
         center = np.array([x + w * 0.5, y + h * 0.5], dtype=np.float32)
@@ -717,9 +721,9 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         flip_pairs = [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12],
                      [13, 14], [15, 16]]
 
-        batch_date = []
+        batch_data = []
         for bbox in bboxes:
-            center, scale = _box2cs(self.config, bbox)
+            center, scale = self._box2cs(self.config, bbox.detach().numpy())
 
             data = {
                 'center':center,
@@ -727,51 +731,56 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
                 'bbox_scaore': bbox[4] if len(bbox) == 5 else 1,
                 'bbox_id':0,
                 'dataset':"TopDownCocoDataset",
-                'joints_3d':np.zeros((cfg.data_cfg.num_joints, 3), dtype=np.float32),
-                'joints_3d_visible':np.zeros((cfg.data_cfg.num_joints, 3), dtype=np.float32),
+                'joints_3d':np.zeros((self.config.num_joints, 3), dtype=np.float32),
+                'joints_3d_visible':np.zeros((self.config.num_joints, 3), dtype=np.float32),
                 'rotation':0,
                 'ann_info': {
-                    'image_size': np.array(config.img_size),
-                    'num_joints': config.num_joints,
+                    'image_size': np.array(self.config.img_size),
+                    'num_joints': self.config.num_joints,
                     'flip_pairs': flip_pairs
                 }
             }
 
             data['img'] = img
 
-            data = preprocess(data)
+            #data = preprocess(data)
             batch_data.append(data)
 
 
             with torch.no_grad():
-                results = model(config, data)
+                results = model(pixel_values = img, pixel_metas = data)
 
             return results['preds'], results['output_heatmap']
 
-    def yolo(img: torch.Tensor) -> torch.Tensor:
-        feature_extractor = YolosFeatureExtractor.from_pretrained('hustvl/yolos-small')
-        model = YolosForObjectDetection.from_pretrained('hustvl/yolos-small')
+    def yolo(self, pixel_values) -> torch.Tensor:
+        feature_extractor = DetrImageProcessor.from_pretrained('facebook/detr-resnet-50')
+        model = DetrForObjectDetection.from_pretrained('facebook/detr-resnet-50')
 
-        inputs = feature_extractor(images=img, return_tensor="pt")
+        inputs = feature_extractor(images=pixel_values, return_tensor="pt")
         output = model(**inputs)
+        print(output)
 
         return output.pred_boxes
 
-    def forward(self, img):
-        person_results = yolo(img)
-        # det pipeline
+    def forward(self, pixel_values, pred_boxes):
+        """Detection and bounding box pipeling"""
+        #det_out = self.yolo(pixel_values)
+        person_results = self.process_det(pred_boxes)
+        print(pixel_values.shape)
+
         pose_results = []
-        bboxes = np.array([box['bbox'] for box in person_results])
-        boxes_xyxy = box_convert(boxes, 'xywh', 'xyxy')
+        bboxes = [box['bbox'] for box in person_results]
+        bboxes_xyxy = []
+        for bbox in bboxes:
+            bboxes_xyxy.append(box_convert(bbox, 'xywh', 'xyxy'))
+        #bboxes, bboxes_xyxy = bboxes.detach().numpy(), bboxes_xyxy.detach().numpy()
 
-        posses, heatmap = _inference_pose_model(
-            self.model: ViTPoseModel,
-            img: torch.Tensor,
-            bboxes: np.array,
-            return_heatmap = False,
-        )
+        poses, heatmap = self._inference_pose_model(self.output,
+            pixel_values,
+            bboxes,
+            return_heatmap = False)
 
-        for pose, person_results, bbox_xyxy in zip(poses, person_results, bboxes_xyxy):
+        for pose, person_result, bbox_xyxy in zip(poses, person_results, bboxes_xyxy):
             pose_result = person_result.copy()
             pose_result['keypoints'] = pose
             pose_result['bbox'] = bbox_xyxy
