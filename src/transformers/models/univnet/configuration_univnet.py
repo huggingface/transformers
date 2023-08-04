@@ -81,7 +81,6 @@ class UnivNetGanConfig(PretrainedConfig):
         model_in_channels=64,
         model_hidden_channels=32,
         num_mel_channels=100,
-        upsample_rates=[1],
         resblock_kernel_sizes=[3, 3, 3],
         resblock_stride_sizes=[8, 8, 4],
         resblock_dilation_sizes=[[1, 3, 9, 27], [1, 3, 9, 27], [1, 3, 9, 27]],
@@ -96,7 +95,6 @@ class UnivNetGanConfig(PretrainedConfig):
         self.model_in_channels = model_in_channels
         self.model_hidden_channels = model_hidden_channels
         self.num_mel_channels = num_mel_channels
-        self.upsample_rates = upsample_rates
         self.resblock_kernel_sizes = resblock_kernel_sizes
         self.resblock_stride_sizes = resblock_stride_sizes
         self.resblock_dilation_sizes = resblock_dilation_sizes
