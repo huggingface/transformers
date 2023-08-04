@@ -113,7 +113,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
-        use_default_system_prompt=True,
         spaces_between_special_tokens=False,
         legacy=None,
         **kwargs,
@@ -132,7 +131,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
             add_eos_token=add_eos_token,
             sp_model_kwargs=self.sp_model_kwargs,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            use_default_system_prompt=use_default_system_prompt,
             spaces_between_special_tokens=spaces_between_special_tokens,
             legacy=legacy,
             **kwargs,
@@ -151,28 +149,21 @@ class LlamaTokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
-        self.use_default_system_prompt = use_default_system_prompt
-
         self.sp_model = self.get_spm_processor()
 
-    @property
-    def unk_token_length(self):
-        return len(self.sp_model.encode(str(self.unk_token)))
+        self.unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
     def get_spm_processor(self):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        if self.legacy:  # no dependency on protobuf
-            tokenizer.Load(self.vocab_file)
-            return tokenizer
-
         with open(self.vocab_file, "rb") as f:
             sp_model = f.read()
-            model_pb2 = import_protobuf(f"The new behaviour of {self.__class__.__name__} (with `self.legacy = False`)")
+            model_pb2 = import_protobuf()
             model = model_pb2.ModelProto.FromString(sp_model)
-            normalizer_spec = model_pb2.NormalizerSpec()
-            normalizer_spec.add_dummy_prefix = False
-            model.normalizer_spec.MergeFrom(normalizer_spec)
+            if not self.legacy:
+                normalizer_spec = model_pb2.NormalizerSpec()
+                normalizer_spec.add_dummy_prefix = False
+                model.normalizer_spec.MergeFrom(normalizer_spec)
             sp_model = model.SerializeToString()
             tokenizer.LoadFromSerializedProto(sp_model)
         return tokenizer
@@ -225,14 +216,13 @@ class LlamaTokenizer(PreTrainedTokenizer):
         `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
-        tokens = self.sp_model.encode(text, out_type=str)
-        if self.legacy or not text.startswith((SPIECE_UNDERLINE, " ")):
-            return tokens
+        if self.legacy:
+            return self.sp_model.encode(text, out_type=str)
 
-        # 1. Encode string + prefix ex: "<unk> Hey"
-        tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
-        # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
-        return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
+        unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
+        text = self.unk_token + text
+        tokens = self.sp_model.encode(text, out_type=str)
+        return tokens[unk_token_length:]
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
@@ -374,6 +364,17 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         return output
 
+    def _format_chat_message(self, message: str, role: str):
+        if role not in ("user", "assistant", "system"):
+            raise ValueError("Role must be one of 'user', 'assistant', or 'system'.")
+        if role == "system":
+            return f"{self.system_message_start}{message}{self.system_message_end}"
+        elif role == "user":
+            return f"{self.user_message_start}{message}{self.user_message_end}"
+        else:
+            return f"{self.assistant_message_start}{message}{self.assistant_message_end}"
+
+
     def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         r"""Builds the input ids for a conversation.
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
@@ -399,20 +400,18 @@ class LlamaTokenizer(PreTrainedTokenizer):
             `List[int]`:
                 Input ids for the conversation.
         """
-        if self.use_default_system_prompt:
-            if len(conversation.past_user_inputs) > 0:
-                if (
-                    not conversation.past_user_inputs[0].startswith(B_SYS)
-                    or E_SYS not in conversation.past_user_inputs[0]
-                ):
-                    conversation.past_user_inputs[0] = (
-                        B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
-                    )
-            elif conversation.new_user_input:
-                if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
-                    conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
-            else:
-                raise ValueError("Last message must be from user")
+        if len(conversation.past_user_inputs) > 0:
+            # If the first message is not a system message, add the default system prompt
+            if not conversation.past_user_inputs[0].startswith(self.system_message_start) or self.system_message_end not in conversation.past_user_inputs[0]:
+                conversation.past_user_inputs[0] = (
+                    self.system_message_start + DEFAULT_SYSTEM_PROMPT + self.system_message_end + conversation.past_user_inputs[0]
+                )
+        elif conversation.new_user_input:
+            if not conversation.new_user_input.startswith(self.system_message_start) or self.system_message_end not in conversation.new_user_input:
+                # If the user message is not a system message, add the default system prompt
+                conversation.new_user_input = self.system_message_start + DEFAULT_SYSTEM_PROMPT + self.system_message_end + conversation.new_user_input
+        else:
+            raise ValueError("Last message must be from user")
 
         dialogue = list(conversation.iter_texts())
         if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
@@ -427,7 +426,15 @@ class LlamaTokenizer(PreTrainedTokenizer):
             [
                 [self.bos_token_id]
                 + self.encode(
-                    f"{B_INST} {(prompt[1]).strip()} {E_INST} {(answer[1]).strip()} ", add_special_tokens=False
+                    "".join([
+                        self.user_message_start,
+                        prompt[1].strip(),
+                        self.user_message_end,
+                        self.assistant_message_start,
+                        answer[1].strip(),
+                        self.assistant_message_end,
+                    ]),
+                    add_special_tokens=False
                 )
                 + [self.eos_token_id]
                 for prompt, answer in zip(dialogue[::2], dialogue[1::2])
@@ -435,6 +442,10 @@ class LlamaTokenizer(PreTrainedTokenizer):
             [],
         )
         dialog_tokens += [self.bos_token_id] + self.encode(
-            f"{B_INST} {(dialogue[-1][1]).strip()} {E_INST}", add_special_tokens=False
+            "".join([
+                self.user_message_start,
+                dialogue[-1][1].strip(),
+                self.user_message_end,
+            ]), add_special_tokens=False
         )
         return dialog_tokens
