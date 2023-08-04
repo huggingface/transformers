@@ -1757,7 +1757,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif generation_mode == "constrained_beam_search":
+        elif generation_mode == GenerationMode.CONSTRAINED_BEAM_SEARCH:
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
