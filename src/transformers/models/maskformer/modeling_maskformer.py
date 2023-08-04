@@ -1737,7 +1737,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             mask_embeddings = mask_embeddings.unsqueeze(-1).unsqueeze(-1)
             # (batch_size, 1, num_channels, height, width)
             pixel_embeddings = pixel_embeddings.unsqueeze(1)
-            # (batch_size, num_queries, num_channels, height, width)
+            # (batch_size, num_queries, height, width)
             masks_queries_logits = (mask_embeddings * pixel_embeddings).sum(dim=2)
 
         return class_queries_logits, masks_queries_logits, auxiliary_logits
