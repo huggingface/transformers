@@ -54,7 +54,7 @@ class BloomModelTester:
         use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -486,6 +486,33 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             tokenizer.decode(greedy_output[-1, 3:], skip_special_tokens=True),
             tokenizer.decode(greedy_output_without_pad[0, :-3], skip_special_tokens=True),
         )
+
+    @slow
+    @require_torch_gpu
+    def test_batch_generated_text(self):
+        path_560m = "bigscience/bloom-560m"
+
+        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").cuda()
+        model = model.eval()
+        tokenizer = BloomTokenizerFast.from_pretrained(path_560m, padding_side="left")
+
+        input_sentences = [
+            "Hello what is",
+            "Running a quick test with the",
+        ]
+        inputs = tokenizer(input_sentences, return_tensors="pt", padding=True, truncation=True)
+        generated_ids = model.generate(
+            inputs["input_ids"].cuda(), attention_mask=inputs["attention_mask"], max_length=20
+        )
+        generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+
+        # these generations match those of the PyTorch model
+        EXPECTED_GENERATIONS = [
+            "Hello what is the best way to get the data from the server? I have tried",
+            "Running a quick test with the following command:\nsudo apt-get install python3\nsudo apt-get install python2",
+        ]
+
+        self.assertListEqual(generated_text, EXPECTED_GENERATIONS)
 
 
 @require_torch

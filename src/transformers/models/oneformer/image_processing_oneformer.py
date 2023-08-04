@@ -25,7 +25,6 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size
 from ...image_transforms import (
     PaddingMode,
     get_resize_output_image_size,
-    normalize,
     pad,
     rescale,
     resize,
@@ -486,19 +485,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         Rescale the image by the given factor.
         """
         return rescale(image, rescale_factor, data_format=data_format)
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: Union[float, Iterable[float]],
-        std: Union[float, Iterable[float]],
-        data_format: Optional[ChannelDimension] = None,
-    ) -> np.ndarray:
-        """
-        Normalize the image with the given mean and standard deviation.
-        """
-        return normalize(image, mean=mean, std=std, data_format=data_format)
 
     # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.convert_segmentation_map_to_binary_masks
     def convert_segmentation_map_to_binary_masks(

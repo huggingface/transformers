@@ -20,6 +20,7 @@ import re
 import shutil
 import signal
 import sys
+import warnings
 from pathlib import Path
 from typing import Dict, Optional, Union
 
@@ -172,11 +173,12 @@ def get_cached_module_file(
     force_download: bool = False,
     resume_download: bool = False,
     proxies: Optional[Dict[str, str]] = None,
-    use_auth_token: Optional[Union[bool, str]] = None,
+    token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
     repo_type: Optional[str] = None,
     _commit_hash: Optional[str] = None,
+    **deprecated_kwargs,
 ):
     """
     Prepares Downloads a module from a local folder or a distant repo and returns its path inside the cached
@@ -205,7 +207,7 @@ def get_cached_module_file(
         proxies (`Dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-        use_auth_token (`str` or *bool*, *optional*):
+        token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `huggingface-cli login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
@@ -219,13 +221,22 @@ def get_cached_module_file(
 
     <Tip>
 
-    Passing `use_auth_token=True` is required when you want to use a private model.
+    Passing `token=True` is required when you want to use a private model.
 
     </Tip>
 
     Returns:
         `str`: The path to the module inside the cache.
     """
+    use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
+    if use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+        )
+        if token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        token = use_auth_token
+
     if is_offline_mode() and not local_files_only:
         logger.info("Offline mode: forcing local_files_only=True")
         local_files_only = True
@@ -252,7 +263,7 @@ def get_cached_module_file(
             proxies=proxies,
             resume_download=resume_download,
             local_files_only=local_files_only,
-            use_auth_token=use_auth_token,
+            token=token,
             revision=revision,
             repo_type=repo_type,
             _commit_hash=_commit_hash,
@@ -310,7 +321,7 @@ def get_cached_module_file(
                     force_download=force_download,
                     resume_download=resume_download,
                     proxies=proxies,
-                    use_auth_token=use_auth_token,
+                    token=token,
                     revision=revision,
                     local_files_only=local_files_only,
                     _commit_hash=commit_hash,
@@ -337,7 +348,7 @@ def get_class_from_dynamic_module(
     force_download: bool = False,
     resume_download: bool = False,
     proxies: Optional[Dict[str, str]] = None,
-    use_auth_token: Optional[Union[bool, str]] = None,
+    token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
     repo_type: Optional[str] = None,
@@ -382,7 +393,7 @@ def get_class_from_dynamic_module(
         proxies (`Dict[str, str]`, *optional*):
             A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-        use_auth_token (`str` or `bool`, *optional*):
+        token (`str` or `bool`, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `huggingface-cli login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
@@ -400,7 +411,7 @@ def get_class_from_dynamic_module(
 
     <Tip>
 
-    Passing `use_auth_token=True` is required when you want to use a private model.
+    Passing `token=True` is required when you want to use a private model.
 
     </Tip>
 
@@ -418,6 +429,15 @@ def get_class_from_dynamic_module(
     # module.
     cls = get_class_from_dynamic_module("sgugger/my-bert-model--modeling.MyBertModel", "sgugger/another-bert-model")
     ```"""
+    use_auth_token = kwargs.pop("use_auth_token", None)
+    if use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+        )
+        if token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        token = use_auth_token
+
     # Catch the name of the repo if it's specified in `class_reference`
     if "--" in class_reference:
         repo_id, class_reference = class_reference.split("--")
@@ -435,7 +455,7 @@ def get_class_from_dynamic_module(
         force_download=force_download,
         resume_download=resume_download,
         proxies=proxies,
-        use_auth_token=use_auth_token,
+        token=token,
         revision=code_revision,
         local_files_only=local_files_only,
         repo_type=repo_type,
@@ -532,19 +552,27 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
         if has_local_code:
             trust_remote_code = False
         elif has_remote_code and TIME_OUT_REMOTE_CODE > 0:
-            signal.signal(signal.SIGALRM, _raise_timeout_error)
-            signal.alarm(TIME_OUT_REMOTE_CODE)
-            while trust_remote_code is None:
-                answer = input(
-                    f"Loading {model_name} requires to execute some code in that repo, you can inspect the content of "
-                    f"the repository at https://hf.co/{model_name}. You can dismiss this prompt by passing "
-                    "`trust_remote_code=True`.\nDo you accept? [y/N] "
+            try:
+                signal.signal(signal.SIGALRM, _raise_timeout_error)
+                signal.alarm(TIME_OUT_REMOTE_CODE)
+                while trust_remote_code is None:
+                    answer = input(
+                        f"Loading {model_name} requires to execute some code in that repo, you can inspect the content of "
+                        f"the repository at https://hf.co/{model_name}. You can dismiss this prompt by passing "
+                        "`trust_remote_code=True`.\nDo you accept? [y/N] "
+                    )
+                    if answer.lower() in ["yes", "y", "1"]:
+                        trust_remote_code = True
+                    elif answer.lower() in ["no", "n", "0", ""]:
+                        trust_remote_code = False
+                signal.alarm(0)
+            except AttributeError:
+                # OS which does not support signal.SIGALRM
+                raise ValueError(
+                    "Loading this model requires you to execute execute some code in that repo on your local machine. "
+                    f"Make sure you have read the code at https://hf.co/{model_name} to avoid malicious use, then set "
+                    "the option `trust_remote_code=True` to remove this error."
                 )
-                if answer.lower() in ["yes", "y", "1"]:
-                    trust_remote_code = True
-                elif answer.lower() in ["no", "n", "0", ""]:
-                    trust_remote_code = False
-            signal.alarm(0)
         elif has_remote_code:
             # For the CI which puts the timeout at 0
             _raise_timeout_error(None, None)

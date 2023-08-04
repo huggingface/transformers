@@ -229,13 +229,19 @@ class DataTrainingArguments:
             )
         },
     )
-    use_auth_token: bool = field(
-        default=False,
+    token: str = field(
+        default=None,
         metadata={
             "help": (
-                "If :obj:`True`, will use the token generated when running"
-                ":obj:`huggingface-cli login` as HTTP bearer authorization for remote files."
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
             )
+        },
+    )
+    use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
         },
     )
     unk_token: str = field(
@@ -379,6 +385,12 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    if data_args.use_auth_token is not None:
+        warnings.warn("The `use_auth_token` argument is deprecated and will be removed in v4.34.", FutureWarning)
+        if data_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        data_args.token = data_args.use_auth_token
+
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_speech_recognition_ctc", model_args, data_args)
@@ -427,7 +439,7 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             split=data_args.train_split_name,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.token,
         )
 
         if data_args.audio_column_name not in raw_datasets["train"].column_names:
@@ -452,7 +464,7 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             split=data_args.eval_split_name,
-            use_auth_token=data_args.use_auth_token,
+            token=data_args.token,
         )
 
         if data_args.max_eval_samples is not None:
@@ -490,7 +502,9 @@ def main():
     # the tokenizer
     # load config
     config = AutoConfig.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        token=data_args.token,
     )
 
     # 4. Next, if no tokenizer file is defined,
@@ -546,11 +560,13 @@ def main():
     # load feature_extractor and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_name_or_path,
-        use_auth_token=data_args.use_auth_token,
+        token=data_args.token,
         **tokenizer_kwargs,
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        token=data_args.token,
     )
 
     # adapt config
@@ -578,7 +594,7 @@ def main():
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         config=config,
-        use_auth_token=data_args.use_auth_token,
+        token=data_args.token,
     )
 
     # freeze encoder

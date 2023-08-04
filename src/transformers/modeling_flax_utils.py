@@ -727,7 +727,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                         "proxies": proxies,
                         "resume_download": resume_download,
                         "local_files_only": local_files_only,
-                        "use_auth_token": token,
+                        "token": token,
                         "user_agent": user_agent,
                         "revision": revision,
                         "subfolder": subfolder,
@@ -758,7 +758,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                         has_file_kwargs = {
                             "revision": revision,
                             "proxies": proxies,
-                            "use_auth_token": token,
+                            "token": token,
                         }
                         if has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
                             raise EnvironmentError(
@@ -809,7 +809,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 proxies=proxies,
                 resume_download=resume_download,
                 local_files_only=local_files_only,
-                use_auth_token=token,
+                token=token,
                 user_agent=user_agent,
                 revision=revision,
                 subfolder=subfolder,
@@ -1019,7 +1019,13 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             return model, unflatten_dict(state)
 
     def save_pretrained(
-        self, save_directory: Union[str, os.PathLike], params=None, push_to_hub=False, max_shard_size="10GB", **kwargs
+        self,
+        save_directory: Union[str, os.PathLike],
+        params=None,
+        push_to_hub=False,
+        max_shard_size="10GB",
+        token: Optional[Union[str, bool]] = None,
+        **kwargs,
     ):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
@@ -1043,9 +1049,27 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
 
                 </Tip>
 
+            token (`str` or `bool`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
+                the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        use_auth_token = kwargs.pop("use_auth_token", None)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
+
+        if token is not None:
+            kwargs["token"] = token
+
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
@@ -1118,7 +1142,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 repo_id,
                 files_timestamps,
                 commit_message=commit_message,
-                token=kwargs.get("use_auth_token"),
+                token=token,
             )
 
     @classmethod

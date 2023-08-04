@@ -29,7 +29,7 @@ from transformers import (
     InstructBlipQFormerConfig,
     InstructBlipVisionConfig,
 )
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_bitsandbytes, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -64,7 +64,7 @@ class InstructBlipVisionModelTester:
         is_training=True,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -219,7 +219,7 @@ class InstructBlipQFormerModelTester:
         vocab_size=99,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=6,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -295,7 +295,7 @@ class InstructBlipTextModelDecoderOnlyTester:
         use_labels=False,
         vocab_size=99,
         hidden_size=16,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=4,
         hidden_act="gelu",
@@ -521,6 +521,7 @@ def prepare_img():
 @require_torch
 @slow
 class InstructBlipModelIntegrationTest(unittest.TestCase):
+    @require_bitsandbytes
     def test_inference_vicuna_7b(self):
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipForConditionalGeneration.from_pretrained(
@@ -537,7 +538,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
             logits = model(**inputs).logits
 
         expected_slice = torch.tensor(
-            [[-3.5410, -12.2812, 8.2812], [-5.2500, -12.0938, 7.8398], [-4.1523, -13.8281, 9.0000]],
+            [[-3.5020, -12.3281, 8.4453], [-5.1406, -11.9609, 7.8711], [-4.0430, -13.4375, 9.1172]],
             device=torch_device,
         )
         self.assertTrue(torch.allclose(logits[0, :3, :3].float(), expected_slice, atol=1e-3))
