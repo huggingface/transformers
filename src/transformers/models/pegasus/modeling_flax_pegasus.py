@@ -210,7 +210,7 @@ PEGASUS_DECODE_INPUTS_DOCSTRING = r"""
 
 
 # Copied from transformers.models.bart.modeling_flax_bart.shift_tokens_right
-def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_token_id: int) -> np.ndarray:
+def shift_tokens_right(input_ids: jnp.array, pad_token_id: int, decoder_start_token_id: int) -> jnp.ndarray:
     """
     Shift input ids one token to the right.
     """
@@ -223,7 +223,7 @@ def shift_tokens_right(input_ids: np.array, pad_token_id: int, decoder_start_tok
 
 
 # Copied from transformers.models.marian.modeling_flax_marian.create_sinusoidal_positions
-def create_sinusoidal_positions(n_pos, dim, dtype):
+def create_sinusoidal_positions(n_pos, dim):
     position_enc = np.array([[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)])
     sentinel = dim // 2 + dim % 2
     out = np.zeros_like(position_enc)
@@ -686,9 +686,7 @@ class FlaxPegasusEncoder(nn.Module):
         self.max_source_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if self.config.scale_embedding else 1.0
 
-        self.embed_positions = create_sinusoidal_positions(
-            self.config.max_position_embeddings, embed_dim, dtype=self.dtype
-        )
+        self.embed_positions = create_sinusoidal_positions(self.config.max_position_embeddings, embed_dim)
         self.layers = FlaxPegasusEncoderLayerCollection(self.config, self.dtype)
         self.layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
@@ -755,9 +753,7 @@ class FlaxPegasusDecoder(nn.Module):
         self.max_target_positions = self.config.max_position_embeddings
         self.embed_scale = math.sqrt(self.config.d_model) if self.config.scale_embedding else 1.0
 
-        self.embed_positions = create_sinusoidal_positions(
-            self.config.max_position_embeddings, embed_dim, dtype=self.dtype
-        )
+        self.embed_positions = create_sinusoidal_positions(self.config.max_position_embeddings, embed_dim)
 
         self.layers = FlaxPegasusDecoderLayerCollection(self.config, self.dtype)
         self.layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
