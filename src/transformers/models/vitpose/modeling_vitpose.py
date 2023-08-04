@@ -588,12 +588,21 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
 
             return results['preds'], results['output_heatmap']
 
+    def yolo(img: torch.Tensor) -> torch.Tensor:
+        feature_extractor = YolosFeatureExtractor.from_pretrained('hustvl/yolos-small')
+        model = YolosForObjectDetection.from_pretrained('hustvl/yolos-small')
+
+        inputs = feature_extractor(images=img, return_tensor="pt")
+        output = model(**inputs)
+
+        return output.pred_boxes
+
     def forward(self, img):
+        person_results = yolo(img)
         # det pipeline
         pose_results = []
-        person_results = process_det(img)
         bboxes = np.array([box['bbox'] for box in person_results])
-        #convert to i dunno maybe xywh
+        boxes_xyxy = box_convert(boxes, 'xywh', 'xyxy')
 
         posses, heatmap = _inference_pose_model(
             self.model: ViTPoseModel,
