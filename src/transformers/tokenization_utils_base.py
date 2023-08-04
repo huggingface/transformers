@@ -2071,7 +2071,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Unable to load vocabulary from file. "
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
-
+        added_tokens = 0
         if "added_tokens_decoder" in init_kwargs:
             logger.warn(
                 " `added_tokens_decoder` were saved in the `tokenizer_config.json` and will be used to initialize the added_tokens"
