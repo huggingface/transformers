@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_inflect_available,
     is_torch_available,
 )
 
@@ -27,7 +28,6 @@ _import_structure = {
         "CLVPSpeechConfig",
         "CLVPTextConfig",
     ],
-    "tokenization_clvp": ["CLVPTokenizer"],
 }
 
 
@@ -47,6 +47,15 @@ else:
         "CLVPSpeechModelWithProjection",
     ]
 
+try:
+    if not is_inflect_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_clvp"] = ["CLVPTokenizer"]
+
+
 if TYPE_CHECKING:
     from .configuration_clvp import (
         CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -54,7 +63,6 @@ if TYPE_CHECKING:
         CLVPSpeechConfig,
         CLVPTextConfig,
     )
-    from .tokenization_clvp import CLVPTokenizer
 
     try:
         if not is_torch_available():
@@ -71,6 +79,14 @@ if TYPE_CHECKING:
             CLVPTextModel,
             CLVPTextModelWithProjection,
         )
+
+    try:
+        if not is_inflect_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_clvp import CLVPTokenizer
 
 else:
     import sys

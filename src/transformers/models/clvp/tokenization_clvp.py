@@ -14,18 +14,20 @@
 # limitations under the License.
 """Tokenization class for CLVP."""
 
-
 import json
 import os
 from functools import lru_cache
 from typing import List, Optional, Tuple
 
-import inflect
 import regex as re
 from unidecode import unidecode
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import logging
+from ...utils import is_inflect_available, logging, requires_backends
+
+
+if is_inflect_available():
+    import inflect
 
 
 logger = logging.get_logger(__name__)
@@ -48,8 +50,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "clvp_dev": 1024,
 }
 
-
-_inflect = inflect.engine()
 
 # List of (regular expression, replacement) pairs for abbreviations:
 _abbreviations = [
@@ -113,10 +113,12 @@ def _expand_decimal_point(m):
 
 
 def _expand_ordinal(m):
+    _inflect = inflect.engine()
     return _inflect.number_to_words(m.group(0))
 
 
 def _expand_number(m):
+    _inflect = inflect.engine()
     num = int(m.group(0))
     if num > 1000 and num < 3000:
         if num == 2000:
@@ -134,13 +136,6 @@ def _expand_number(m):
 def normalize_numbers(text):
     """
     Converts the numerical values to spoken text.
-
-    Example:
-
-    ```python
-    >>> print(normalize_numbers("$1000.51"))
-    >>> "one thousand dollars, fifty-one cents"  # output
-    ```
     """
 
     text = re.sub(re.compile(r"([0-9][0-9\,]+[0-9])"), _remove_commas, text)
@@ -155,13 +150,6 @@ def normalize_numbers(text):
 def expand_abbreviations(text):
     """
     Expands the abbreviate words.
-
-    Example:
-
-    ```python
-    >>> print(expand_abbreviations("mrs."))
-    >>> "misess"  # output
-    ```
     """
 
     for regex, replacement in _abbreviations:
@@ -411,6 +399,8 @@ class CLVPTokenizer(PreTrainedTokenizer):
         return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
 
     def _tokenize(self, text):
+        requires_backends(self, ["inflect"])
+
         """Tokenize a string."""
         text = convert_to_ascii(text)
         text = text.lower()

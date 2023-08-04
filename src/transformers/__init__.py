@@ -30,6 +30,7 @@ from .utils import (
     is_bitsandbytes_available,
     is_essentia_available,
     is_flax_available,
+    is_inflect_available,
     is_keras_nlp_available,
     is_librosa_available,
     is_pretty_midi_available,
@@ -262,7 +263,6 @@ _import_structure = {
         "CLVPConfig",
         "CLVPSpeechConfig",
         "CLVPTextConfig",
-        "CLVPTokenizer",
     ],
     "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
     "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
@@ -909,6 +909,19 @@ else:
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
+
+
+try:
+    if not is_inflect_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_inflect_objects
+
+    _import_structure["utils.dummy_inflect_objects"] = [
+        name for name in dir(dummy_inflect_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["models.clvp"].append("CLVPTokenizer")
 
 
 try:
@@ -4469,7 +4482,6 @@ if TYPE_CHECKING:
         CLVPConfig,
         CLVPSpeechConfig,
         CLVPTextConfig,
-        CLVPTokenizer,
     )
     from .models.codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig, CodeGenTokenizer
     from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig
@@ -5008,6 +5020,14 @@ if TYPE_CHECKING:
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
         from .models.xlnet import XLNetTokenizer
+
+    try:
+        if not is_inflect_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_inflect_objects import *
+    else:
+        from .models.clvp import CLVPTokenizer
 
     try:
         if not is_tokenizers_available():

@@ -121,6 +121,7 @@ from .import_utils import (
     is_fsdp_available,
     is_ftfy_available,
     is_in_notebook,
+    is_inflect_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
