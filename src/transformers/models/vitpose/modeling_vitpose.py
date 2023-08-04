@@ -455,8 +455,6 @@ class ViTPoseModel(ViTPosePreTrainedModel):
     #    expected_output=_EXPECTED_OUTPUT_SHAPE,
     #)
 
-    def decode(self, output: numpy.array, **kwargs):
-        """Decode Keypoints from heatmap"""
 
 
     def forward(
@@ -518,6 +516,9 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
 
         ## classifier head or something
 
+    def decode(self, output: numpy.array, **kwargs):
+        """Decode Keypoints from heatmap"""
+
     def process_det(self, results):
         """0 defaults to humans"""
         bboxes = results[0]
@@ -529,10 +530,23 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
             person_results.append(person)
         return person_results
 
+    def _inference_pose_model(self, model, img, bboxes, return_heatmap=False):
+        
+
     def forward(self, img):
         # det pipeline
         person_results = process_det(img)
         bboxes = np.array([box['bbox'] for box in person_results])
+        #convert to i dunno maybe xywh
+
+        posses, heatmap = _inference_pose_model(
+            self.model: ViTPoseModel,
+            img: torch.Tensor,
+            bboxes: np.array,
+            return_heatmap = False,
+        )
+
+
 
 
         pass
