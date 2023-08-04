@@ -239,7 +239,7 @@ py.test -vv tests/models/brand_new_bert/test_modeling_tf_brand_new_bert.py
 
 ## 🤗 허브에 TensorFlow 가중치 추가하기 [[adding-tensorFlow-weights-to-🤗-hub]]
 
-가정하에 TensorFlow 모델 아키텍처가 🤗 Transformers에서 사용 가능하다고 가정하고, PyTorch 가중치를 TensorFlow 가중치로 변환하는 것은 쉽습니다!
+TensorFlow 모델 아키텍처가 🤗 Transformers에서 사용 가능하다고 가정하고, PyTorch 가중치를 TensorFlow 가중치로 변환하는 것은 쉽습니다!
 
 다음은 그 방법입니다:
 1. 터미널에서 Hugging Face 계정으로 로그인되어 있는지 확인하십시오. `huggingface-cli login` 명령어를 사용하여 로그인할 수 있습니다. (액세스 토큰은 [여기](https://huggingface.co/settings/tokens)에서 찾을 수 있습니다.)
