@@ -300,6 +300,52 @@ class EncoderRepetitionPenaltyLogitsProcessor(LogitsProcessor):
             The parameter for hallucination penalty. 1.0 means no penalty.
         encoder_input_ids (`torch.LongTensor`):
             The encoder_input_ids that should not be repeated within the decoder ids.
+    Examples:
+        Apply the Encoder Repetition Penalty Without Repeated Tokens:
+
+        ```python
+        import torch
+        from transformers import EncoderRepetitionPenaltyLogitsProcessor, GPT2Tokenizer, GPT2LMHeadModel
+
+        # Load pre-trained model and tokenizer
+        model = GPT2LMHeadModel.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
+        # Encode the input text
+        input_text = "This is a sample input sentence."
+        input_ids = tokenizer.encode(input_text, return_tensors="pt")
+
+        # Apply the encoder repetition penalty
+        encoder_repetition_penalty_processor = EncoderRepetitionPenaltyLogitsProcessor(penalty=2.0, encoder_input_ids=input_ids)
+        outputs = model.generate(input_ids, max_length=30, logits_processor=encoder_repetition_penalty_processor)
+
+        # Decode and print the generated text
+        generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        print(generated_text)
+        ```
+
+        Apply the Encoder Repetition Penalty With Repeated Tokens:
+
+        ```python
+        import torch
+        from transformers import EncoderRepetitionPenaltyLogitsProcessor, GPT2Tokenizer, GPT2LMHeadModel
+
+        # Load pre-trained model and tokenizer
+        model = GPT2LMHeadModel.from_pretrained("gpt2")
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
+        # Encode the input text
+        input_text = "This is a sample input sentence."
+        input_ids = tokenizer.encode(input_text, return_tensors="pt")
+
+        # Apply the encoder repetition penalty with repeated tokens in the original input
+        encoder_repetition_penalty_processor = EncoderRepetitionPenaltyLogitsProcessor(penalty=1.5, encoder_input_ids=input_ids)
+        outputs = model.generate(input_ids, max_length=30, logits_processor=encoder_repetition_penalty_processor)
+
+        # Decode and print the generated text
+        generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        print(generated_text)
+        ```
     """
 
     def __init__(self, penalty: float, encoder_input_ids: torch.LongTensor):
