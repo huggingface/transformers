@@ -14,7 +14,7 @@
 # limitations under the License.
 import os
 from shutil import copyfile
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from tokenizers import processors
 
@@ -110,7 +110,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         eos_token="</s>",
         add_bos_token=True,
         add_eos_token=False,
-        use_default_system_prompt=True,
         **kwargs,
     ):
         super().__init__(
@@ -120,13 +119,12 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
-            use_default_system_prompt=use_default_system_prompt,
             **kwargs,
         )
         self._add_bos_token = add_bos_token
         self._add_eos_token = add_eos_token
         self.update_post_processor()
-        self.use_default_system_prompt = use_default_system_prompt
+
         self.vocab_file = vocab_file
 
     @property
@@ -192,8 +190,8 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
 
         return (out_vocab_file,)
 
-    def _build_conversation_input_ids(self, conversation: "Conversation"):
-        """Builds the input ids for a conversation.
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
+        r"""Builds the input ids for a conversation.
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
         the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
         ```
@@ -208,7 +206,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
 
         >>> Conversation(
         ...     "<<SYS>>\n Only answer with emojis, and charades\n<</SYS>>\n\nHow can I build a house in 10 septs?"
-        ... )
+        ... )  # doctest: +IGNORE_RESULT
         ```
         Args:
             conversation (`Conversation`):
@@ -217,20 +215,32 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             `List[int]`:
                 Input ids for the conversation.
         """
-        if self.use_default_system_prompt:
-            if len(conversation.past_user_inputs) > 0:
-                if (
-                    not conversation.past_user_inputs[0].startswith(B_SYS)
-                    or E_SYS not in conversation.past_user_inputs[0]
-                ):
-                    conversation.past_user_inputs[0] = (
-                        B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
-                    )
-            elif conversation.new_user_input:
-                if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
-                    conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
-            else:
-                raise ValueError("Last message must be from user")
+        if len(conversation.past_user_inputs) > 0:
+            # If the first message is not a system message, add the default system prompt
+            if (
+                not conversation.past_user_inputs[0].startswith(self.system_message_start)
+                or self.system_message_end not in conversation.past_user_inputs[0]
+            ):
+                conversation.past_user_inputs[0] = (
+                    self.system_message_start
+                    + DEFAULT_SYSTEM_PROMPT
+                    + self.system_message_end
+                    + conversation.past_user_inputs[0]
+                )
+        elif conversation.new_user_input:
+            if (
+                not conversation.new_user_input.startswith(self.system_message_start)
+                or self.system_message_end not in conversation.new_user_input
+            ):
+                # If the user message is not a system message, add the default system prompt
+                conversation.new_user_input = (
+                    self.system_message_start
+                    + DEFAULT_SYSTEM_PROMPT
+                    + self.system_message_end
+                    + conversation.new_user_input
+                )
+        else:
+            raise ValueError("Last message must be from user")
 
         dialogue = list(conversation.iter_texts())
         if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
@@ -240,12 +250,22 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
                 "The model only supports 'user' and 'assistant' roles, starting with user and alternating (u/a/u/a/u...)"
             )
 
-        dialog_tokens = []
+        dialog_tokens: List[int] = []
         dialog_tokens += sum(
             [
                 [self.bos_token_id]
                 + self.encode(
-                    f"{B_INST} {(prompt[1]).strip()} {E_INST} {(answer[1]).strip()} ", add_special_tokens=False
+                    "".join(
+                        [
+                            self.user_message_start,
+                            prompt[1].strip(),
+                            self.user_message_end,
+                            self.assistant_message_start,
+                            answer[1].strip(),
+                            self.assistant_message_end,
+                        ]
+                    ),
+                    add_special_tokens=False,
                 )
                 + [self.eos_token_id]
                 for prompt, answer in zip(dialogue[::2], dialogue[1::2])
@@ -253,6 +273,13 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             [],
         )
         dialog_tokens += [self.bos_token_id] + self.encode(
-            f"{B_INST} {(dialogue[-1][1]).strip()} {E_INST}", add_special_tokens=False
+            "".join(
+                [
+                    self.user_message_start,
+                    dialogue[-1][1].strip(),
+                    self.user_message_end,
+                ]
+            ),
+            add_special_tokens=False,
         )
         return dialog_tokens
