@@ -533,6 +533,7 @@ class BarkModelTester:
 @unittest.skip("So far all tests will fail.")
 class BarkModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BarkModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"text-to-audio": BarkModel,} if is_torch_available() else {}
 
     def setUp(self):
         self.model_tester = BarkModelTester(self)

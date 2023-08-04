@@ -128,6 +128,17 @@
         ],
         "sha": "3106af0fd503970717c05f27218e5cacf19ba872"
     },
+    "BarkModel": {
+        "tokenizer_classes": [
+            "BartTokenizer",
+            "BartTokenizerFast"
+        ],
+        "processor_classes": [],
+        "model_classes": [
+            "BarkModel"
+        ],
+        "sha": "TODO"
+    },
     "BartForCausalLM": {
         "tokenizer_classes": [
             "BartTokenizer",
