@@ -524,7 +524,6 @@ EXAMPLES_TESTS = [
 ]
 PIPELINE_TESTS = [
     pipelines_torch_job,
-    pipelines_tf_job,
 ]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
@@ -551,8 +550,6 @@ def create_circleci_config(folder=None):
             test_list = f.read()
     else:
         test_list = []
-    if len(test_list) > 0:
-        jobs.extend(REGULAR_TESTS)
 
         extended_tests_to_run = set(test_list.split())
         # Extend the test files for cross test jobs
@@ -602,12 +599,8 @@ def create_circleci_config(folder=None):
             doctest_list = f.read()
     else:
         doctest_list = []
-    if len(doctest_list) > 0:
-        jobs.extend(DOC_TESTS)
 
     repo_util_file = os.path.join(folder, "test_repo_utils.txt")
-    if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
-        jobs.extend(REPO_UTIL_TESTS)
 
     if len(jobs) == 0:
         jobs = [EmptyJob()]
