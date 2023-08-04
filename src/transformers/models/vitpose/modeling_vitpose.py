@@ -24,6 +24,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torchvision.ops import box_convert
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -530,11 +531,66 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
             person_results.append(person)
         return person_results
 
+
+    def _box2cs(config, bbox):
+        x, y, w, h = box[:4]
+        input_size = config.img_size
+        aspect_ratio = input_size[0] / input_size[1]
+        center = np.array([x + w * 0.5, y + h * 0.5], dtype=np.float32)
+
+        if w > aspect_ratio * h:
+           h = w * 1.0 / aspect_ratio
+        elif w < aspect_ratio * h:
+           w = h * aspect_ratio
+
+        scale = np.array([w / 200.0, h / 200.0], dtype=np.float32)
+        scale = scale * 1.25
+
+        return center, scale
+
     def _inference_pose_model(self, model, img, bboxes, return_heatmap=False):
-        
+        device = next(model.parameters()).device
+        if device.type == 'cpu':
+            device = -1
+
+        # add whole body thing
+        flip_pairs = [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12],
+                     [13, 14], [15, 16]]
+
+        batch_date = []
+        for bbox in bboxes:
+            center, scale = _box2cs(self.config, bbox)
+
+            data = {
+                'center':center,
+                'scale':scale,
+                'bbox_scaore': bbox[4] if len(bbox) == 5 else 1,
+                'bbox_id':0,
+                'dataset':"TopDownCocoDataset",
+                'joints_3d':np.zeros((cfg.data_cfg.num_joints, 3), dtype=np.float32),
+                'joints_3d_visible':np.zeros((cfg.data_cfg.num_joints, 3), dtype=np.float32),
+                'rotation':0,
+                'ann_info': {
+                    'image_size': np.array(config.img_size),
+                    'num_joints': config.num_joints,
+                    'flip_pairs': flip_pairs
+                }
+            }
+
+            data['img'] = img
+
+            data = preprocess(data)
+            batch_data.append(data)
+
+
+            with torch.no_grad():
+                results = model(config, data)
+
+            return results['preds'], results['output_heatmap']
 
     def forward(self, img):
         # det pipeline
+        pose_results = []
         person_results = process_det(img)
         bboxes = np.array([box['bbox'] for box in person_results])
         #convert to i dunno maybe xywh
@@ -546,10 +602,13 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
             return_heatmap = False,
         )
 
+        for pose, person_results, bbox_xyxy in zip(poses, person_results, bboxes_xyxy):
+            pose_result = person_result.copy()
+            pose_result['keypoints'] = pose
+            pose_result['bbox'] = bbox_xyxy
+            pose_results.append(pose_result)
 
-
-
-        pass
+        return pose_results
 
 #class ViTForImageClassification(ViTPosePreTrainedModel):
 #    def __init__(self, config: ViTConfig) -> None:
