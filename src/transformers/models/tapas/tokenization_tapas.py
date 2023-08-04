@@ -35,6 +35,7 @@ from ...tokenization_utils_base import (
     EncodedInput,
     PreTokenizedInput,
     TextInput,
+    VERY_LARGE_INTEGER
 )
 from ...utils import ExplicitEnum, PaddingStrategy, TensorType, add_end_docstrings, is_pandas_available, logging
 
@@ -370,8 +371,8 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         # Additional properties
         self.cell_trim_length = cell_trim_length
-        self.max_column_id = max_column_id if max_column_id is not None else self.model_max_length
-        self.max_row_id = max_row_id if max_row_id is not None else self.model_max_length
+        self.max_column_id = max_column_id if max_column_id is not None else model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
+        self.max_row_id = max_row_id if max_row_id is not None else model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
         self.strip_column_names = strip_column_names
         self.update_answer_coordinates = update_answer_coordinates
         self.min_question_length = min_question_length

@@ -182,9 +182,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         **kwargs,
     ):
         requires_backends(self, "sacremoses")
-
-        if never_split is None:
-            never_split = self.all_special_tokens
         if special is None:
             special = []
         self.counter = Counter()
@@ -194,7 +191,6 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         self.lower_case = lower_case
         self.delimiter = delimiter
         self.vocab_file = vocab_file
-        self.never_split = never_split
         self.punctuation_symbols = '!"#$%&()*+,-./\\:;<=>?@[\\]^_`{|}~'
         self.punction_without_space_before_pattern = re.compile(rf"[^\s][{self.punctuation_symbols}]")
         self.punctuation_with_space_around_pattern = self._compile_space_around_punctuation_pattern()
@@ -240,6 +236,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
         if vocab_file is not None:
             self.build_vocab()
+            
         super().__init__(
             special=special,
             min_freq=min_freq,
@@ -255,6 +252,13 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             language=language,
             **kwargs,
         )
+        
+        # these are not required to initialize the parent class as only used when tokenizing.
+        if never_split is None:
+            never_split = self.all_special_tokens
+        self.never_split = never_split
+        
+        
 
     @property
     def do_lower_case(self):

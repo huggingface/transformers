@@ -539,7 +539,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         if (
             (is_split_into_words or add_prefix_space)
             and (len(text) > 0 and not text[0].isspace())
-            and sum([text.startswith(no_split_token) for no_split_token in self.unique_no_split_tokens]) == 0
+            and sum([text.startswith(no_split_token) for no_split_token in self.added_tokens_encoder]) == 0
         ):
             text = " " + text
         return (text, kwargs)

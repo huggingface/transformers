@@ -193,6 +193,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
             token = chr(index - self._num_special_tokens)
         return token
 
+    # TODO @ArthurZ refactor this as well....
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         bstring = b""
@@ -204,7 +205,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
             elif token in self.special_tokens_encoder:
                 tok_string = token.encode("utf-8")
             elif token in self.added_tokens_encoder:
-                tok_string = token.encode("utf-8")
+                tok_string = token.content.encode("utf-8")
             else:
                 tok_string = bytes([ord(token)])
             bstring += tok_string
