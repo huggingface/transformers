@@ -58,7 +58,7 @@ Hugging Face 팀은 항상 도움을 줄 준비가 되어 있으므로 혼자가
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers_overview.png"/>
 
-보다시피, 🤗 Transformers에서는 상속을 사용하지만 추상화 수준을 최소한으로 유지합니다. 라이브러리의 어떤 모델에서도 두 수준 이상의 추상화가 존재하지 않습니다. `BrandNewBertModel`은 `BrandNewBertPreTrainedModel`에서 상속받고, 이 클래스는 [`PreTrainedModel`]에서 상속받습니다. 이로써 새로운 모델은 [`PreTrainedModel`]에만 의존하도록 하려고 합니다. 모든 새로운 모델에 자동으로 제공되는 중요한 기능은 [`~PreTrainedModel.from_pretrained`] 및 [`~PreTrainedModel.save_pretrained`]입니다. 이러한 기능 외에도 `BrandNewBertModel.forward`와 같은 다른 중요한 기능은 새로운 `modeling_brand_new_bert.py` 스크립트에서 완전히 정의되어야 합니다. 또한 `BrandNewBertForMaskedLM`과 같은 특정 헤드 레이어를 가진 모델은 `BrandNewBertModel`을 상속받지 않고 forward pass에서 호출할 수 있는 `BrandNewBertModel`을 사용하여 추상화 수준을 낮게 유지합니다.. 모든 새로운 모델은 `BrandNewBertConfig`라는 구성 클래스를 필요로 합니다. 이 구성은 항상 [`PreTrainedModel`]의 속성으로 저장되며, 따라서 `BrandNewBertPreTrainedModel`을 상속받는 모든 클래스에서 `config` 속성을 통해 액세스할 수 있습니다:
+보다시피, 🤗 Transformers에서는 상속을 사용하지만 추상화 수준을 최소한으로 유지합니다. 라이브러리의 어떤 모델에서도 두 수준 이상의 추상화가 존재하지 않습니다. `BrandNewBertModel`은 `BrandNewBertPreTrainedModel`에서 상속받고, 이 클래스는 [`PreTrainedModel`]에서 상속받습니다. 이로써 새로운 모델은 [`PreTrainedModel`]에만 의존하도록 하려고 합니다. 모든 새로운 모델에 자동으로 제공되는 중요한 기능은 [`~PreTrainedModel.from_pretrained`] 및 [`~PreTrainedModel.save_pretrained`]입니다. 이러한 기능 외에도 `BrandNewBertModel.forward`와 같은 다른 중요한 기능은 새로운 `modeling_brand_new_bert.py` 스크립트에서 완전히 정의되어야 합니다. 또한 `BrandNewBertForMaskedLM`과 같은 특정 헤드 레이어를 가진 모델은 `BrandNewBertModel`을 상속받지 않고 forward pass에서 호출할 수 있는 `BrandNewBertModel`을 사용하여 추상화 수준을 낮게 유지합니다. 모든 새로운 모델은 `BrandNewBertConfig`라는 구성 클래스를 필요로 합니다. 이 구성은 항상 [`PreTrainedModel`]의 속성으로 저장되며, 따라서 `BrandNewBertPreTrainedModel`을 상속받는 모든 클래스에서 `config` 속성을 통해 액세스할 수 있습니다:
 
 ```python
 model = BrandNewBertModel.from_pretrained("brandy/brand_new_bert")
@@ -130,9 +130,9 @@ model.config  # model has access to its config
 
 ### 2. 개발 환경 설정 [[2-next-prepare-your-environment]]
 
-1. 리포지토리 페이지에서 "Fork" 버튼을 클릭하여 리포지토리의 사본을 GitHub 사용자 계정으로 만듭니다.
+1. 저장소 페이지에서 "Fork" 버튼을 클릭하여 저장소의 사본을 GitHub 사용자 계정으로 만듭니다.
 
-2. `transformers` fork를 로컬 디스크에 클론하고 기본 리포지토리를 원격 저장소로 추가합니다:
+2. `transformers` fork를 로컬 디스크에 클론하고 베이스 저장소를 원격 저장소로 추가합니다:
 
 ```bash
 git clone https://github.com/[your Github handle]/transformers.git
