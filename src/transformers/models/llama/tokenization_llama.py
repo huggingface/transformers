@@ -364,16 +364,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         return output
 
-    def _format_chat_message(self, message: str, role: str):
-        if role not in ("user", "assistant", "system"):
-            raise ValueError("Role must be one of 'user', 'assistant', or 'system'.")
-        if role == "system":
-            return f"{self.system_message_start}{message}{self.system_message_end}"
-        elif role == "user":
-            return f"{self.user_message_start}{message}{self.user_message_end}"
-        else:
-            return f"{self.assistant_message_start}{message}{self.assistant_message_end}"
-
     def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         r"""Builds the input ids for a conversation.
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
