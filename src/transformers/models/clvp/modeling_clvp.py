@@ -102,7 +102,7 @@ def rotate_half(state):
 
 def apply_rotary_pos_emb(state, freqs):
     """
-    Applies rotary position embeddings on each(query, key and value) states.
+    Applies rotary position embeddings on state.
     """
     pos_emb_len = freqs.shape[-1]
     state_l, state_r = state[..., :pos_emb_len], state[..., pos_emb_len:]
@@ -131,9 +131,9 @@ class CLVPRMSNorm(nn.Module):
         self.eps = eps
         self.gain = nn.Parameter(torch.ones(normalized_shape))
 
-    def forward(self, x):
-        norm = torch.norm(x, dim=-1, keepdim=True) * self.scale
-        return x / norm.clamp(min=self.eps) * self.gain
+    def forward(self, hidden_states):
+        norm = torch.norm(hidden_states, dim=-1, keepdim=True) * self.scale
+        return hidden_states / norm.clamp(min=self.eps) * self.gain
 
 
 @dataclass
