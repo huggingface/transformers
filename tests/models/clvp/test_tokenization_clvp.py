@@ -19,12 +19,10 @@ import os
 import unittest
 
 from transformers import CLVPTokenizer
-from transformers.testing_utils import require_inflect
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-@require_inflect
 class CLVPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = CLVPTokenizer
     test_rust_tokenizer = False

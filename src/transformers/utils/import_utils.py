@@ -94,7 +94,6 @@ except importlib.metadata.PackageNotFoundError:
     except importlib.metadata.PackageNotFoundError:
         _faiss_available = False
 _ftfy_available = _is_package_available("ftfy")
-_inflect_available = _is_package_available("inflect")
 _ipex_available, _ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
 _jieba_available = _is_package_available("jieba")
 _jinja_available = _is_package_available("jinja2")
@@ -809,10 +808,6 @@ def is_torchaudio_available():
     return _torchaudio_available
 
 
-def is_inflect_available():
-    return _inflect_available
-
-
 def is_speech_available():
     # For now this depends on torchaudio but the exact dependency might evolve in the future.
     return _torchaudio_available
@@ -942,12 +937,6 @@ TORCHVISION_IMPORT_ERROR = """
 {0} requires the Torchvision library but it was not found in your environment. Checkout the instructions on the
 installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
 Please note that you may need to restart your runtime after installation.
-"""
-
-# docstyle-ignore
-INFLECT_IMPORT_ERROR = """
-{0} requires the inflect library but it was not found in your environment. You can install it with pip:
-`pip install inflect`. Please note that you may need to restart your runtime after installation.
 """
 
 # docstyle-ignore
@@ -1217,7 +1206,6 @@ BACKENDS_MAPPING = OrderedDict(
         ("tokenizers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
         ("torchvision", (is_torchvision_available, TORCHVISION_IMPORT_ERROR)),
-        ("inflect", (is_inflect_available, INFLECT_IMPORT_ERROR)),
         ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
         ("scipy", (is_scipy_available, SCIPY_IMPORT_ERROR)),
         ("accelerate", (is_accelerate_available, ACCELERATE_IMPORT_ERROR)),

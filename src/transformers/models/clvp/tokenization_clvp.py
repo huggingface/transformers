@@ -19,7 +19,6 @@ import os
 from functools import lru_cache
 from typing import List, Optional, Tuple
 
-import inflect
 import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
@@ -73,6 +72,83 @@ _abbreviations = [
 ]
 
 
+def number_to_words(num: int) -> str:
+    """
+    Converts numbers(`int`) to words(`str`).
+
+    Please note that it only supports upto - "'nine hundred and ninety nine quadrillion nine hundred and ninety nine
+    trillion nine hundred and ninety nine billion nine hundred and ninety nine million nine hundred and ninety nine
+    thousand nine hundred and ninety nine'" or `number_to_words(999_999_999_999_999_999)`.
+
+    Example:
+
+    ```python
+    >>> print(number_to_words(1_101_000_000_000))
+    'one trillion one hundred and one billion'
+    ```
+    """
+
+    ones = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
+    teens = [
+        "ten",
+        "eleven",
+        "twelve",
+        "thirteen",
+        "fourteen",
+        "fifteen",
+        "sixteen",
+        "seventeen",
+        "eighteen",
+        "nineteen",
+    ]
+    tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+
+    if num == 0:
+        return "zero"
+    elif num < 0:
+        return "minus " + number_to_words(abs(num))
+    elif num < 10:
+        return ones[num]
+    elif num < 20:
+        return teens[num - 10]
+    elif num < 100:
+        return tens[num // 10] + (" " + number_to_words(num % 10) if num % 10 != 0 else "")
+    elif num < 1000:
+        return ones[num // 100] + " hundred" + (" " + number_to_words(num % 100) if num % 100 != 0 else "")
+    elif num < 1_000_000:
+        return (
+            number_to_words(num // 1000)
+            + " thousand, "
+            + (" " + number_to_words(num % 1000) if num % 1000 != 0 else "")
+        )
+    elif num < 1_000_000_000:
+        return (
+            number_to_words(num // 1_000_000)
+            + " million, "
+            + (" " + number_to_words(num % 1_000_000) if num % 1_000_000 != 0 else "")
+        )
+    elif num < 1_000_000_000_000:
+        return (
+            number_to_words(num // 1_000_000_000)
+            + " billion, "
+            + (" " + number_to_words(num % 1_000_000_000) if num % 1_000_000_000 != 0 else "")
+        )
+    elif num < 1_000_000_000_000_000:
+        return (
+            number_to_words(num // 1_000_000_000_000)
+            + " trillion, "
+            + (" " + number_to_words(num % 1_000_000_000_000) if num % 1_000_000_000_000 != 0 else "")
+        )
+    elif num < 1_000_000_000_000_000_000:
+        return (
+            number_to_words(num // 1_000_000_000_000_000)
+            + " quadrillion, "
+            + (" " + number_to_words(num % 1_000_000_000_000_000) if num % 1_000_000_000_000_000 != 0 else "")
+        )
+    else:
+        return "number out of range"
+
+
 def convert_to_ascii(text):
     """Converts unicode to ascii"""
     return text.encode("ascii", "ignore").decode("utf-8")
@@ -109,24 +185,22 @@ def _expand_decimal_point(m):
 
 
 def _expand_ordinal(m):
-    _inflect = inflect.engine()
-    return _inflect.number_to_words(m.group(0))
+    return number_to_words(int(m.group(0)))
 
 
 def _expand_number(m):
-    _inflect = inflect.engine()
     num = int(m.group(0))
     if num > 1000 and num < 3000:
         if num == 2000:
             return "two thousand"
         elif num > 2000 and num < 2010:
-            return "two thousand " + _inflect.number_to_words(num % 100)
+            return "two thousand " + number_to_words(num % 100)
         elif num % 100 == 0:
-            return _inflect.number_to_words(num // 100) + " hundred"
+            return number_to_words(num // 100) + " hundred"
         else:
-            return _inflect.number_to_words(num, andword="", zero="oh", group=2).replace(", ", " ")
+            return number_to_words(num)
     else:
-        return _inflect.number_to_words(num, andword="")
+        return number_to_words(num)
 
 
 def normalize_numbers(text):
@@ -223,10 +297,10 @@ class CLVPTokenizer(PreTrainedTokenizer):
 
     >>> tokenizer = CLVPTokenizer.from_pretrained("susnato/clvp_dev")
     >>> tokenizer("Hello world")["input_ids"]
-    [15496, 995]
+    [62, 84, 28, 2, 179, 79]
 
     >>> tokenizer(" Hello world")["input_ids"]
-    [18435, 995]
+    [2, 62, 84, 28, 2, 179, 79]
     ```
 
     You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you

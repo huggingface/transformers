@@ -67,7 +67,6 @@ from .utils import (
     is_flax_available,
     is_fsdp_available,
     is_ftfy_available,
-    is_inflect_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -526,13 +525,6 @@ def require_sentencepiece(test_case):
     Decorator marking a test that requires SentencePiece. These tests are skipped when SentencePiece isn't installed.
     """
     return unittest.skipUnless(is_sentencepiece_available(), "test requires SentencePiece")(test_case)
-
-
-def require_inflect(test_case):
-    """
-    Decorator marking a test that requires inflect. These tests are skipped when inflect isn't installed.
-    """
-    return unittest.skipUnless(is_inflect_available(), "test requires inflect")(test_case)
 
 
 def require_seqio(test_case):

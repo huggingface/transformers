@@ -53,6 +53,11 @@ The original code can be found [here](https://github.com/neonbjb/tortoise-tts).
 
 [[autodoc]] CLVPSpeechConfig
 
+## CLVPTokenizer
+
+[[autodoc]] CLVPTokenizer
+    - save_vocabulary
+
 ## CLVPModel
 
 [[autodoc]] CLVPModel
@@ -79,8 +84,3 @@ The original code can be found [here](https://github.com/neonbjb/tortoise-tts).
 
 [[autodoc]] CLVPSpeechModelWithProjection
     - forward
-
-## CLVPTokenizer
-
-[[autodoc]] CLVPTokenizer
-    - save_vocabulary

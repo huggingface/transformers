@@ -1039,20 +1039,14 @@ class CLVPModel(CLVPPreTrainedModel):
         Examples:
 
         ```python
-        >>> from PIL import Image
-        >>> import requests
         >>> from transformers import CLVPModel
 
         >>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
-        >>> processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> # TODO : after FeatureExtractor is implemented we need to change it to something lik FE.__call__(...)
         >>> inputs = {"speech_ids": torch.tensor([[56, 8, 48, 7, 11, 23]]).long()}
 
-        >>> image_features = model.get_speech_features(**inputs)
+        >>> speech_features = model.get_speech_features(**inputs)
         ```"""
 
         # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
