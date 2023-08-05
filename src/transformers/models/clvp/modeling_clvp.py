@@ -104,9 +104,13 @@ def apply_rotary_pos_emb(state, freqs):
     """
     Applies rotary position embeddings on each(query, key and value) states.
     """
-    seq_len = state.shape[-1]
-    freqs = freqs[:, :, -seq_len:]
-    return (state * freqs.cos()) + (rotate_half(state) * freqs.sin())
+    pos_emb_len = freqs.shape[-1]
+    state_l, state_r = state[..., :pos_emb_len], state[..., pos_emb_len:]
+
+    freqs = freqs[:, :, -state_l.shape[-1] :]
+    state_l = (state_l * freqs.cos()) + (rotate_half(state_l) * freqs.sin())
+
+    return torch.cat([state_l, state_r], dim=-1)
 
 
 class CLVPRMSNorm(nn.Module):
@@ -279,21 +283,9 @@ class CLVPAttention(nn.Module):
         value_states = value_states.view(*proj_shape)
 
         if rotary_pos_emb is not None:
-            l = rotary_pos_emb.shape[-1]
-            (query_states_l, query_states_r), (key_states_l, key_states_r), (value_states_l, value_states_r) = (
-                (t[..., :l], t[..., l:]) for t in (query_states, key_states, value_states)
-            )
-            query_states_l, key_states_l, value_states_l = (
-                apply_rotary_pos_emb(t, rotary_pos_emb) for t in (query_states_l, key_states_l, value_states_l)
-            )
-            query_states, key_states, value_states = (
-                torch.cat(t, dim=-1)
-                for t in (
-                    (query_states_l, query_states_r),
-                    (key_states_l, key_states_r),
-                    (value_states_l, value_states_r),
-                )
-            )
+            query_states = apply_rotary_pos_emb(query_states, rotary_pos_emb)
+            key_states = apply_rotary_pos_emb(key_states, rotary_pos_emb)
+            value_states = apply_rotary_pos_emb(value_states, rotary_pos_emb)
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
@@ -380,7 +372,7 @@ class CLVPMLP(nn.Module):
         return hidden_states
 
 
-class CLVPRotaryEmbedding(nn.Module):
+class CLVPRotaryPositionalEmbedding(nn.Module):
     """
     Rotary Position Embedding Class for CLVP. It was proposed in the paper 'ROFORMER: ENHANCED TRANSFORMER WITH ROTARY
     POSITION EMBEDDING', Please see https://arxiv.org/pdf/2104.09864v1.pdf .
@@ -390,13 +382,24 @@ class CLVPRotaryEmbedding(nn.Module):
         super().__init__()
         dim = max(config.projection_dim // (config.num_attention_heads * 2), 32)
         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2).float() / dim))
-        self.register_buffer("inv_freq", inv_freq)
 
-    def forward(self, max_seq_len):
-        t = torch.arange(max_seq_len).type_as(self.inv_freq)
-        freqs = torch.einsum("i , j -> i j", t, self.inv_freq)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        return emb[None, ...]
+        self.register_buffer("inv_freq", inv_freq)
+        self.cached_sequence_length = None
+        self.cached_rotary_positional_embedding = None
+
+    def forward(self, hidden_states):
+        sequence_length = hidden_states.shape[1]
+
+        if sequence_length == self.cached_sequence_length and self.cached_rotary_positional_embedding is not None:
+            return self.cached_rotary_positional_embedding
+
+        self.cached_sequence_length = sequence_length
+        time_stamps = torch.arange(sequence_length).type_as(self.inv_freq)
+        freqs = torch.einsum("i,j->ij", time_stamps, self.inv_freq)
+        embeddings = torch.cat((freqs, freqs), dim=-1)
+
+        self.cached_rotary_positional_embedding = embeddings.unsqueeze(0)
+        return self.cached_rotary_positional_embedding
 
 
 class CLVPEncoderLayer(nn.Module):
@@ -633,7 +636,7 @@ class CLVPEncoder(nn.Module):
     def __init__(self, config: CLVPConfig):
         super().__init__()
         self.config = config
-        self.rotary_pos_emb = CLVPRotaryEmbedding(config) if config.use_rotary_embedding else None
+        self.rotary_pos_emb = CLVPRotaryPositionalEmbedding(config) if config.use_rotary_embedding else None
         self.layers = nn.ModuleList([CLVPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
@@ -684,7 +687,7 @@ class CLVPEncoder(nn.Module):
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        rotary_pos_emb = self.rotary_pos_emb(inputs_embeds.shape[1]) if self.rotary_pos_emb is not None else None
+        rotary_pos_emb = self.rotary_pos_emb(inputs_embeds) if self.rotary_pos_emb is not None else None
 
         hidden_states = inputs_embeds
         for idx, encoder_layer in enumerate(self.layers):

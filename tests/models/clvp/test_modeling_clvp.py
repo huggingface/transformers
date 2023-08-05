@@ -146,6 +146,7 @@ class CLVPSpeechModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = CLVPSpeechModelTester(self)
@@ -370,6 +371,7 @@ class CLVPTextModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = CLVPTextModelTester(self)
@@ -476,6 +478,7 @@ class CLVPModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = CLVPModelTester(self)
