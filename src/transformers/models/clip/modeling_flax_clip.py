@@ -156,6 +156,36 @@ CLIP_INPUTS_DOCSTRING = r"""
 
 
 @flax.struct.dataclass
+class FlaxCLIPTextModelOutput(ModelOutput):
+    """
+    Base class for text model's outputs that also contains a pooling of the last hidden states.
+
+    Args:
+        text_embeds(`jnp.ndarray` of shape `(batch_size, output_dim`):
+            The text embeddings obtained by applying the projection layer to the pooled output of
+            [`FlaxCLIPTextModel`].
+        last_hidden_state (`jnp.ndarray` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(jnp.ndarray)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `jnp.ndarray` (one for the output of the embeddings + one for the output of each layer) of shape
+            `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(jnp.ndarray)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `jnp.ndarray` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    text_embeds: jnp.ndarray = None
+    last_hidden_state: jnp.ndarray = None
+    hidden_states: Optional[Tuple[jnp.ndarray]] = None
+    attentions: Optional[Tuple[jnp.ndarray]] = None
+
+
+@flax.struct.dataclass
 class FlaxCLIPOutput(ModelOutput):
     """
     Args:
@@ -1039,11 +1069,11 @@ class FlaxCLIPTextModuleWithProjection(nn.Module):
         text_embeds = self.text_projection(pooled_output)
 
         if not return_dict:
-            return (text_embeds, pooled_output) + text_outputs[2:]
+            return (text_embeds, text_outputs[0]) + text_outputs[2:]
 
-        return FlaxBaseModelOutputWithPooling(
-            last_hidden_state=text_embeds,
-            pooler_output=pooled_output,
+        return FlaxCLIPTextModelOutput(
+            text_embeds=text_embeds,
+            last_hidden_state=text_outputs.last_hidden_state,
             hidden_states=text_outputs.hidden_states,
             attentions=text_outputs.attentions,
         )
@@ -1067,7 +1097,7 @@ FLAX_CLIP_TEXT_MODEL_WITH_PROJECTION_DOCSTRING = """
     >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="np")
 
     >>> outputs = model(**inputs)
-    >>> text_embeds = outputs.last_hidden_state  # text embeddings: projection layer(pooler_output)
+    >>> text_embeds = outputs.text_embeds
     >>> pooler_output = outputs.pooler_output  # pooled (EOS token) states
     ```
 """
@@ -1076,7 +1106,7 @@ overwrite_call_docstring(
     FlaxCLIPTextModelWithProjection, CLIP_TEXT_INPUTS_DOCSTRING + FLAX_CLIP_TEXT_MODEL_WITH_PROJECTION_DOCSTRING
 )
 append_replace_return_docstrings(
-    FlaxCLIPTextModelWithProjection, output_type=FlaxBaseModelOutputWithPooling, config_class=CLIPTextConfig
+    FlaxCLIPTextModelWithProjection, output_type=FlaxCLIPTextModelOutput, config_class=CLIPTextConfig
 )
 
 
