@@ -19,7 +19,6 @@ import os
 import unittest
 
 from transformers import CLVPTokenizer
-from transformers.models.clvp.tokenization_clvp import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_inflect
 
 from ...test_tokenization_common import TokenizerTesterMixin
@@ -64,8 +63,8 @@ class CLVPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
         self.special_tokens_map = {"unk_token": "<unk>"}
 
-        self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        self.vocab_file = os.path.join(self.tmpdirname, "vocab.json")
+        self.merges_file = os.path.join(self.tmpdirname, "merges.txt")
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
         with open(self.merges_file, "w", encoding="utf-8") as fp:
