@@ -83,4 +83,3 @@ The original code can be found [here](https://github.com/neonbjb/tortoise-tts).
 ## CLVPTokenizer
 
 [[autodoc]] CLVPTokenizer
-    - save_vocabulary

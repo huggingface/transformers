@@ -20,7 +20,6 @@ from functools import lru_cache
 from typing import List, Optional, Tuple
 
 import regex as re
-from unidecode import unidecode
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import is_inflect_available, logging, requires_backends
@@ -78,8 +77,8 @@ _abbreviations = [
 
 
 def convert_to_ascii(text):
-    """Converts text to ascii"""
-    return unidecode(text)
+    """Converts unicode to ascii"""
+    return text.encode("ascii", 'ignore').decode("utf-8")
 
 
 def _expand_dollars(m):
