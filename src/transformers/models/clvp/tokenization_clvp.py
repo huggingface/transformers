@@ -78,7 +78,7 @@ _abbreviations = [
 
 def convert_to_ascii(text):
     """Converts unicode to ascii"""
-    return text.encode("ascii", 'ignore').decode("utf-8")
+    return text.encode("ascii", "ignore").decode("utf-8")
 
 
 def _expand_dollars(m):
