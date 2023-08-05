@@ -403,15 +403,15 @@ class TypicalLogitsWarper(LogitsWarper):
     
     Args:
         mass (`float`):
-             The proportion of probability mass to retain while warping the logits. The value should be between 0 and 1.
-                Higher values (close to 1.0) retain more probability mass, leading to more typical sampling, whereas lower
-                values (close to 0.0) retain less probability mass, leading to more diverse sampling. The default is 0.9.
+            The proportion of probability mass to retain while warping the logits. The value should be between 0 and 1.
+            Higher values (close to 1.0) retain more probability mass, leading to more typical sampling, whereas lower
+            values (close to 0.0) retain less probability mass, leading to more diverse sampling. The default is 0.9.
         filter_value (`float`, *optional*, defaults to `-float("Inf")`):
-             The value used to filter out logits that fall below this threshold. Any logits less than this value will be
-                set to -infinity before applying the softmax function. This helps in excluding unlikely tokens during sampling.
-                Default is -infinity.
+            The value used to filter out logits that fall below this threshold. Any logits less than this value will be
+            set to -infinity before applying the softmax function. This helps in excluding unlikely tokens during sampling.
+            Default is -infinity.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
-           The minimum number of tokens to always keep during sampling. The default is 1.
+            The minimum number of tokens to always keep during sampling.
            
     Example:
     
