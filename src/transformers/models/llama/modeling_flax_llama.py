@@ -322,8 +322,8 @@ class FlaxLlamaDecoderLayer(nn.Module):
     def __call__(
         self,
         hidden_states,
-        position_ids=None,
         attention_mask=None,
+        position_ids=None,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -424,8 +424,8 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
     def __call__(
         self,
         input_ids,
-        position_ids=None,
         attention_mask=None,
+        position_ids=None,
         params: dict = None,
         past_key_values: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
@@ -504,8 +504,8 @@ class FlaxLlamaBlockCollection(nn.Module):
     def __call__(
         self,
         hidden_states,
-        position_ids=None,
         attention_mask=None,
+        position_ids=None,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -555,8 +555,8 @@ class FlaxLlamaModule(nn.Module):
     def __call__(
         self,
         input_ids,
-        position_ids=None,
         attention_mask=None,
+        position_ids=None,
         deterministic=True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -622,8 +622,8 @@ class FlaxLlamaForCausalLMModule(nn.Module):
     def __call__(
         self,
         input_ids,
-        position_ids=None,
         attention_mask=None,
+        position_ids=None,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -691,7 +691,7 @@ class FlaxLlamaForCausalLM(FlaxLlamaPreTrainedModel):
 
 
 def main():
-    jax.config.update("jax_platform_name", "cpu")
+    # jax.config.update("jax_platform_name", "cpu")
     torch.set_printoptions(precision=8)
     jnp.set_printoptions(precision=8, floatmode="fixed")
 
@@ -710,13 +710,14 @@ def main():
         intermediate_size=256,
     )
     # model = FlaxLlamaForCausalLM(config)
-    # model = FlaxLlamaForCausalLM.from_pretrained("openlm-research/open_llama_3b", from_pt=True, dtype=jnp.bfloat16)
+    N = 1
+    model = FlaxLlamaForCausalLM.from_pretrained("decapoda-research/llama-7b-hf", from_pt=True, dtype=jnp.float16, input_shape=(N, 128))
     print(config)
+    exit()
 
     model = FlaxLlamaForCausalLM(config)
     pt_model = LlamaForCausalLM(config)
 
-    N = 1
     key, subkey = jax.random.split(key)
     x = jax.random.randint(subkey, (N, 128), 0, 64)
     mask = jnp.ones((N, 128), dtype=bool)

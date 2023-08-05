@@ -19,6 +19,7 @@ from ...utils import (
     is_sentencepiece_available,
     is_tokenizers_available,
     is_torch_available,
+    is_flax_available
 )
 
 
@@ -43,7 +44,7 @@ else:
     _import_structure["tokenization_llama_fast"] = ["LlamaTokenizerFast"]
 
 try:
-    if not is_torch_available():
+    if not is_flax_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -53,6 +54,17 @@ else:
         "LlamaModel",
         "LlamaPreTrainedModel",
         "LlamaForSequenceClassification",
+    ]
+
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_flax_llama"] = [
+        "FlaxLlamaForCausalLM",
+        "FlaxLlamaModel"
     ]
 
 
