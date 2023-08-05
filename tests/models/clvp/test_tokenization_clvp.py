@@ -20,10 +20,12 @@ import unittest
 
 from transformers import CLVPTokenizer
 from transformers.models.clvp.tokenization_clvp import VOCAB_FILES_NAMES
+from transformers.testing_utils import require_inflect
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
+@require_inflect
 class CLVPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = CLVPTokenizer
     test_rust_tokenizer = False

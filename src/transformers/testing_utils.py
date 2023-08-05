@@ -115,6 +115,7 @@ from .utils import (
     is_torchdynamo_available,
     is_torchvision_available,
     is_vision_available,
+    is_inflect_available,
     strtobool,
 )
 
@@ -525,6 +526,12 @@ def require_sentencepiece(test_case):
     Decorator marking a test that requires SentencePiece. These tests are skipped when SentencePiece isn't installed.
     """
     return unittest.skipUnless(is_sentencepiece_available(), "test requires SentencePiece")(test_case)
+
+def require_inflect(test_case):
+    """
+    Decorator marking a test that requires inflect. These tests are skipped when inflect isn't installed.
+    """
+    return unittest.skipUnless(is_inflect_available(), "test requires inflect")(test_case)
 
 
 def require_seqio(test_case):
