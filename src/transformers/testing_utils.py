@@ -90,6 +90,7 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_mps_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tensorrt_fx_available,
@@ -612,7 +613,14 @@ if is_torch_available():
     # Set env var CUDA_VISIBLE_DEVICES="" to force cpu-mode
     import torch
 
-    torch_device = "cuda" if torch.cuda.is_available() else "cpu"
+    if torch.cuda.is_available():
+        torch_device = "cuda"
+    elif is_torch_mps_available():
+        torch_device = "mps"
+    elif is_torch_npu_available():
+        torch_device = "npu"
+    else:
+        torch_device = "cpu"
 else:
     torch_device = None
 
