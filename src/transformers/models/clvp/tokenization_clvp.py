@@ -205,7 +205,8 @@ def _expand_number(m):
 
 def normalize_numbers(text):
     """
-    Converts the numerical values to spoken text.
+    This method is used to normalize numbers within a text such as converting the numbers to words, removing commas,
+    etc.
 
     Example:
 
@@ -247,6 +248,7 @@ def collapse_whitespace(text):
 
 
 @lru_cache()
+# Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
