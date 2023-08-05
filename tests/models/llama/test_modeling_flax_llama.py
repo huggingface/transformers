@@ -19,7 +19,7 @@ import unittest
 import numpy as np
 
 import transformers
-from transformers import LlamaTokenizer, LlamaConfig, is_flax_available, is_torch_available
+from transformers import LlamaConfig, is_flax_available, is_torch_available
 from transformers.testing_utils import is_pt_flax_cross_test, require_flax, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
@@ -27,14 +27,13 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, rando
 
 
 if is_flax_available():
-    import jax
     import jax.numpy as jnp
 
     from transformers.modeling_flax_pytorch_utils import (
         convert_pytorch_state_dict_to_flax,
         load_flax_weights_in_pytorch_model,
     )
-    from transformers.models.llama.modeling_flax_llama import FlaxLlamaModel, FlaxLlamaForCausalLM
+    from transformers.models.llama.modeling_flax_llama import FlaxLlamaForCausalLM, FlaxLlamaModel
 
 if is_torch_available():
     import torch
@@ -203,27 +202,27 @@ class FlaxLlamaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
 
     # @slow
     # def test_batch_generation(self):
-        # tokenizer = LlamaTokenizer.from_pretrained("llama", pad_token="<|endoftext|>", padding_side="left")
-        # inputs = tokenizer(["Hello this is a long string", "Hey"], return_tensors="np", padding=True, truncation=True)
+    # tokenizer = LlamaTokenizer.from_pretrained("llama", pad_token="<|endoftext|>", padding_side="left")
+    # inputs = tokenizer(["Hello this is a long string", "Hey"], return_tensors="np", padding=True, truncation=True)
 
-        # model = FlaxGPTNeoForCausalLM.from_pretrained("EleutherAI/gpt-neo-125M")
-        # model.do_sample = False
-        # model.config.pad_token_id = model.config.eos_token_id
+    # model = FlaxGPTNeoForCausalLM.from_pretrained("EleutherAI/gpt-neo-125M")
+    # model.do_sample = False
+    # model.config.pad_token_id = model.config.eos_token_id
 
-        # jit_generate = jax.jit(model.generate)
+    # jit_generate = jax.jit(model.generate)
 
-        # output_sequences = jit_generate(
-            # inputs["input_ids"], attention_mask=inputs["attention_mask"], pad_token_id=tokenizer.pad_token_id
-        # ).sequences
+    # output_sequences = jit_generate(
+    # inputs["input_ids"], attention_mask=inputs["attention_mask"], pad_token_id=tokenizer.pad_token_id
+    # ).sequences
 
-        # output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
+    # output_string = tokenizer.batch_decode(output_sequences, skip_special_tokens=True)
 
-        # expected_string = [
-            # "Hello this is a long string of text.\n\nI'm trying to get the text of the",
-            # "Hey, I'm a little late to the party. I'm going to",
-        # ]
+    # expected_string = [
+    # "Hello this is a long string of text.\n\nI'm trying to get the text of the",
+    # "Hey, I'm a little late to the party. I'm going to",
+    # ]
 
-        # self.assertListEqual(output_string, expected_string)
+    # self.assertListEqual(output_string, expected_string)
 
     # overwrite from common since `attention_mask` in combination
     # with `causal_mask` behaves slighly differently

@@ -16,10 +16,10 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_flax_available,
     is_sentencepiece_available,
     is_tokenizers_available,
     is_torch_available,
-    is_flax_available
 )
 
 
@@ -62,10 +62,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_flax_llama"] = [
-        "FlaxLlamaForCausalLM",
-        "FlaxLlamaModel"
-    ]
+    _import_structure["modeling_flax_llama"] = ["FlaxLlamaForCausalLM", "FlaxLlamaModel"]
 
 
 if TYPE_CHECKING:

@@ -711,7 +711,9 @@ def main():
     )
     # model = FlaxLlamaForCausalLM(config)
     N = 1
-    model = FlaxLlamaForCausalLM.from_pretrained("decapoda-research/llama-7b-hf", from_pt=True, dtype=jnp.float16, input_shape=(N, 128))
+    model = FlaxLlamaForCausalLM.from_pretrained(
+        "decapoda-research/llama-7b-hf", from_pt=True, dtype=jnp.float16, input_shape=(N, 128)
+    )
     print(config)
     exit()
 
