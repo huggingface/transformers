@@ -19,14 +19,11 @@ import os
 from functools import lru_cache
 from typing import List, Optional, Tuple
 
+import inflect
 import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import is_inflect_available, logging, requires_backends
-
-
-if is_inflect_available():
-    import inflect
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -412,8 +409,6 @@ class CLVPTokenizer(PreTrainedTokenizer):
         return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
 
     def _tokenize(self, text):
-        requires_backends(self, ["inflect"])
-
         """Tokenize a string."""
         text = convert_to_ascii(text)
         text = text.lower()
