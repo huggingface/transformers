@@ -367,7 +367,6 @@ class ViTPoseTopDownHeatMap(nn.Module):
 
         index = coords[..., 0] + 1 + (coords[..., 1] + 1) * (W + 2)
         index += (W + 2) * (H + 2) * torch.arange(0, B * K).reshape(-1, K)
-        print(index)
         index = index.type(torch.int32).reshape(-1, 1)
         i_ = batch_heatmaps_pad[index]
         ix1 = batch_heatmaps_pad[index + 1]
@@ -386,7 +385,6 @@ class ViTPoseTopDownHeatMap(nn.Module):
         dxy = 0.5 * (ix1y1 - ix1 - iy1 + i_ + i_ - ix1_ - iy1_ + ix1_y1_)
         hessian = torch.concatenate([dxx, dxy, dxy, dyy], axis=1)
         hessian = hessian.reshape(N, K, 2, 2)
-        print("hes",hessian)
         hessian = torch.linalg.inv((hessian + torch.finfo(torch.float32).eps) * torch.eye(2))
         coords -= torch.einsum('ijmn,ijnk->ijmk', hessian, derivative).squeeze()
         return coords
@@ -513,11 +511,23 @@ class ViTPosePreTrainedModel(PreTrainedModel):
             ).to(module.weight.dtype)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, ViTPoseBlock):
+            nn.init.zeros_(module.norm1.weight)
+            nn.init.zeros_(module.norm1.bias)
+            nn.init.zeros_(module.norm2.weight)
+            nn.init.zeros_(module.norm2.bias)
+        elif isinstance(module, ViTPoseAttention):
+            module.qkv.weight.data = nn.init.trunc_normal_(
+                module.qkv.weight.data.to(torch.float32), mean=0.0, std=1.0
+            ).to(module.qkv.weight.dtype)
+            if module.qkv.bias is not None:
+                module.qkv.bias.data.zero_()
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, ViTPosePatchEmbed):
-            pass
+            nn.init.uniform_(module.projection.weight)
+            nn.init.uniform_(module.projection.bias)
            # module.projection.data = nn.init.trunc_normal_(
            #     module.projection.data.to(torch.float32),
            #     mean=0.0,
@@ -689,8 +699,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         super().__init__(config)
         """Gets the architecture from ViTPoseModel above (just a pretty wrapper around the model)"""
         self.config = config
-        self.output = ViTPoseModel(config)
-        self.post_init()
+        self.vitpose = ViTPoseModel(config)
 
     def process_det(self, results):
         """results[0] defaults to humans"""
@@ -769,22 +778,21 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
     def forward(self, pixel_values, pred_boxes):
         """Detection and bounding box pipeling"""
         #det_out = self.yolo(pixel_values)
-        person_results = self.process_det(pred_boxes)
+        person_results = self.process_det([pred_boxes])
 
         pose_results = []
         bboxes = [box['bbox'] for box in person_results]
-        print("boxes",bboxes)
-        bboxes_xywh = []
+        bboxes_xyxy = []
         for bbox in bboxes:
-            bboxes_xywh.append(box_convert(bbox, 'xyxy', 'xywh'))
+            bboxes_xyxy.append(box_convert(bbox, 'xywh', 'xyxy'))
         #bboxes, bboxes_xyxy = bboxes.detach().numpy(), bboxes_xyxy.detach().numpy()
 
-        poses, heatmap = self._inference_pose_model(self.output,
+        poses, heatmap = self._inference_pose_model(self.vitpose,
             pixel_values,
-            bboxes_xywh,
+            bboxes,
             return_heatmap = False)
 
-        for pose, person_result, bbox_xyxy in zip(poses, person_results, bboxes_xywh):
+        for pose, person_result, bbox_xyxy in zip(poses, person_results, bboxes_xyxy):
             pose_result = person_result.copy()
             pose_result['keypoints'] = pose
             pose_result['bbox'] = bbox_xyxy
