@@ -14,7 +14,6 @@
 # limitations under the License.
 # source code from https://github.com/huggingface/transformers/pull/22950
 
-from functools import partial
 from typing import Optional, Tuple
 
 import flax.linen as nn
@@ -34,12 +33,6 @@ from transformers.modeling_flax_outputs import FlaxBaseModelOutput, FlaxCausalLM
 from transformers.modeling_flax_utils import ACT2FN, FlaxPreTrainedModel, append_call_sample_docstring
 from transformers.utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from transformers.models.gpt_neox.configuration_gpt_neox import GPTNeoXConfig
-
-
-from EasyLM.jax_utils import (
-    with_sharding_constraint, get_jax_mesh, get_gradient_checkpoint_policy
-)
-
 
 logger = logging.get_logger(__name__)
 
@@ -132,24 +125,22 @@ class RotaryEmbeddingNP(linen.Module):
         return cos_cached[:seq_len, ...], sin_cached[:seq_len, ...]
 
 
-def rotate_halfNP(x):
+def rotate_half(x):
     x1 = x[..., : x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2 :]
     return jnp.concatenate((-x2, x1), axis=-1)
-import numpy as np
-
 
 # q,k are of shape [bs, n_heads, seq_len, head_dim]
 # cos, sin are of shape #[1, 1, seq_len, dim]
 # position_ids is of shape [bs, seq_len]
-def apply_rotary_pos_embNP(q, k, cos, sin, position_ids):
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     gather_indices = position_ids[:, :, None, None]  # [bs, seq_len, 1, 1]
-    gather_indices = jnp.repeat(gather_indices, cos.shape[2], axis=2)
+    gather_indices = jnp.repeat(gather_indices, cos.shape[1], axis=1)
     gather_indices = jnp.repeat(gather_indices, cos.shape[3], axis=3)
-    cos = jnp.take_along_axis(cos.repeat(gather_indices.shape[0], axis=0), gather_indices, axis=1)
-    sin = jnp.take_along_axis(sin.repeat(gather_indices.shape[0], axis=0), gather_indices, axis=1)
-    q_embed = (q * cos)+(rotate_halfNP(q) * sin)
-    k_embed = (k * cos) + (rotate_halfNP(k) * sin)
+    cos = jnp.take_along_axis(cos.repeat(gather_indices.shape[0], axis=0), gather_indices, axis=2)
+    sin = jnp.take_along_axis(sin.repeat(gather_indices.shape[0], axis=0), gather_indices, axis=2)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
 
@@ -166,7 +157,6 @@ class FlaxGPTNeoXAttention(linen.Module):
         self.hidden_size = config.hidden_size
         self.head_size = self.hidden_size // self.num_attention_heads
         self.rotary_ndims = int(self.head_size * config.rotary_pct)
-        max_positions = config.max_position_embeddings
         self.rotary_emb = RotaryEmbeddingNP(
             dim=self.rotary_ndims, max_seq_len_cached=config.max_position_embeddings, base=config.rotary_emb_base
         )
@@ -177,10 +167,6 @@ class FlaxGPTNeoXAttention(linen.Module):
         kernel_init=jax.nn.initializers.normal(self.config.initializer_range),)
         
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
-        
-        x = np.arange(0, self.rotary_ndims, 2) / self.rotary_ndims
-        x = np.outer(np.arange(10000), 1.0 / 10000.0**x)
-        self.freqs_cis = jnp.asarray(np.cos(x) + 1j * np.sin(x), dtype=jnp.complex64)
 
     @linen.compact
     def _concatenate_to_cache(self, key, value, query, attention_mask):
@@ -212,10 +198,6 @@ class FlaxGPTNeoXAttention(linen.Module):
                 tuple(batch_dims) + (1, num_updated_cache_vectors, max_length),
             )
             attention_mask = combine_masks(pad_mask, attention_mask)
-            # jax.debug.print("cur_index={cur_index}, cache_index={cache_index}, num_updated_cache_vectors=" + str(num_updated_cache_vectors),
-            #                 cur_index=cur_index,
-            #                 cache_index=cache_index.value,
-            #                 )
         return key, value, attention_mask
 
     def _split_heads(self, hidden_states):
@@ -223,14 +205,6 @@ class FlaxGPTNeoXAttention(linen.Module):
 
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.hidden_size,))
-
-    def apply_rotary_embedding(self, x):
-        z = x.astype(jnp.float32).reshape(*x.shape[:-1], 2, -1)
-        z = jax.lax.complex(z[..., 0, :], z[..., 1, :])
-
-        z = z * self.freqs_cis[None, -x.shape[1] :, None, :]
-        z = jnp.stack((jnp.real(z), jnp.imag(z)), axis=-1)
-        return z.reshape(x.shape).astype(x.dtype)
     
     def __call__(
         self,
@@ -241,97 +215,50 @@ class FlaxGPTNeoXAttention(linen.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
     ):  
-        # Compute QKV
-        # Attention heads [batch, seq_len, hidden_size]
-        #   --> [batch, seq_len, (num_heads * 3 * head_size)]
         qkv = self.query_key_value(hidden_states)
         batch, seq_len, _ = qkv.shape
-        # [batch, seq_len, (num_heads * 3 * head_size)]
-        #   --> [batch, seq_len, num_heads, 3, head_size]
+
         qkv = qkv.reshape([batch, seq_len,self.num_attention_heads,3,self.head_size])
-        # [batch, seq_len, num_heads, 3, head_size]
-        #   --> [3,batch, seq_len, num_heads, head_size]
+
         qkv = jnp.moveaxis(qkv, source=-2, destination=0)
-        # [3, batch, seq_len, num_heads, head_size]
-        #   --> [3,batch, num_heads, seq_len, head_size]
-        # qkv = jnp.swapaxes(qkv, 3, 2)
-        # [3,batch, num_heads, seq_len, head_size]
-        #   --> 3 [batch, num_heads, seq_len, head_size]
         query, key, value = qkv
 
-        # from torch impl
-        # qkv = qkv.reshape(hidden_states.shape[:2] + (self.num_attention_heads, -1))
-        # head_size = qkv.shape[-1] // 3
-
-        # # [b, s, h, d]
-        # query = qkv[..., :head_size]
-        # key = qkv[..., head_size : 2 * head_size]
-        # value = qkv[..., 2 * head_size :]
-
-
-        # query = with_sharding_constraint(query, PS(("dp", "fsdp"), None, "mp"))
-        # key = with_sharding_constraint(key, PS(("dp", "fsdp"), None, "mp"))
-        # value = with_sharding_constraint(value, PS(("dp", "fsdp"), None, "mp"))
-        
         query_rot = query[..., : self.rotary_ndims]
         query_pass = query[..., self.rotary_ndims :]
         key_rot = key[..., : self.rotary_ndims]
         key_pass = key[..., self.rotary_ndims :]
 
         cos, sin = self.rotary_emb(value, seq_len=seq_len)
-        query, key = apply_rotary_pos_embNP(query_rot, key_rot, cos, sin, position_ids)
+        query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
         query = jnp.concatenate((query, query_pass), axis=-1)
         key = jnp.concatenate((key, key_pass), axis=-1)
 
-        # query, key, value = jnp.swapaxes(query, 1, 2), jnp.swapaxes(key, 1, 2), jnp.swapaxes(value, 1, 2)
         query_length, key_length = query.shape[1], key.shape[1]
 
         if self.has_variable("cache", "cached_key"):
             mask_shift = self.variables["cache"]["cache_index"]
             max_decoder_length = self.variables["cache"]["cached_key"].shape[1]
 
-            # print("before dynamic slice", jnp.asarray(causal_mask))
             causal_mask = lax.dynamic_slice(
                 self.causal_mask, (0, 0, mask_shift, 0), (1, 1, query_length, max_decoder_length)
             )
-            # jax.debug.print(
-            #     "causal_mask shift {shift}" + f", mask({causal_mask.shape})="+"{mask}", 
-            #     shift=mask_shift,
-            #     mask=causal_mask
-            #     )
         else:
             causal_mask = self.causal_mask[:, :, :query_length, :key_length]
 
         batch_size = hidden_states.shape[0]
         causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
-
-        # jax.debug.print(
-        #     f"before combine mask({attention_mask.shape})="+"{mask}", 
-        #     mask=attention_mask
-        #     )
         attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
         attention_mask = combine_masks(attention_mask, causal_mask)
 
-        # jax.debug.print(
-        #     f"after combine mask({attention_mask.shape})="+"{mask}", 
-        #     mask=attention_mask
-        #     )
-        # attention_bias -> [batch..., num_heads, q_length, kv_length]
+        dropout_rng = None
+        if not deterministic and self.config.attention_dropout > 0.0:
+            dropout_rng = self.make_rng("dropout")
 
         # During fast autoregressive decoding, we feed one position at a time,
         # and cache the keys and values step by step.
         if self.has_variable("cache", "cached_key") or init_cache:
-            # jax.debug.print(
-            #     f"before cache:\nq({query.shape}), k({key.shape}), v({value.shape})\nmask({attention_mask.shape})="+"{mask}", 
-            #     mask=attention_mask
-            #     )
             key, value, attention_mask = self._concatenate_to_cache(key, value, query, attention_mask)
-            # print("after cache")
-            # print(key.shape, value.shape)
-            # jax.debug.print(
-            #     f"after cache:\nq({query.shape}), k({key.shape}), v({value.shape})\nmask({attention_mask.shape})="+"{mask}", 
-            #     mask=attention_mask
-            #     )
+          
             
         # transform boolean mask into float mask
         attention_bias = lax.select(
@@ -340,34 +267,16 @@ class FlaxGPTNeoXAttention(linen.Module):
             jnp.full(attention_mask.shape, jnp.finfo(self.dtype).min).astype(self.dtype),
         )
         attn_weights = dot_product_attention_weights(
-            query, #jnp.moveaxis(query, source=-3, destination=-2),
-            key, #jnp.moveaxis(key, source=-3, destination=-2),
+            query,
+            key,
             bias=attention_bias,
-            dropout_rng=None,
-            # dropout_rate=self.config.attn_pdrop,
+            dropout_rng=dropout_rng,
+            dropout_rate=self.config.attention_dropout,
             deterministic=deterministic,
             dtype=jnp.promote_types(self.dtype, jnp.float32),
             precision=None,
         )
-        # jax.debug.print(
-        #     str(attn_weights.shape) + "attn_weights={mask}", 
-        #     mask=attention_bias
-        #     )
         
-        # attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value) #value should be [bs, k_len,n_head,head_dim]        
-
-        # attn_bias = jnp.repeat(attention_mask, attention_mask.shape[-1], axis=2)
-        # attn_bias = jnp.tril(attn_bias, k=attn_bias.shape[3] - attn_bias.shape[2])
-        # attn_bias = -1e9 * (1 - attn_bias.astype(jnp.bfloat16))
-        # jax.debug.print(
-        #     str(attn_weights.shape) + "attn_weights={mask}", 
-        #     mask=attn_weights
-        #     )
-        # q = 1, h, 1, d
-        # k = 1, h, s, d
-        # v = 1, k, h, d
-        # w = 1, h, 1, k
-        # attn_weights = jnp.einsum("bqhd,bkhd->bhqk", query, key) / key.shape[3] ** 0.5
         attn_output = jnp.einsum("bhqk,bkhd->bqhd", attn_weights, value)
         attn_output = self._merge_heads(attn_output)
         attn_output = self.dense(attn_output)
