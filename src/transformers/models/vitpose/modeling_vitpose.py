@@ -344,7 +344,7 @@ class ViTPoseTopDownHeatMap(nn.Module):
             scale_x = scale[0] / output_size[0]
             scale_y = scale[1] / output_size[1]
 
-        target_coords = np.ones_like(coords)
+        target_coords = torch.ones_like(coords)
         target_coords[:, 0] = coords[:, 0] * scale_x + center[0] - scale[0] * 0.5
         target_coords[:, 1] = coords[:, 1] * scale_y + center[1] - scale[1] * 0.5
 
@@ -355,19 +355,20 @@ class ViTPoseTopDownHeatMap(nn.Module):
         B, K, H, W = batch_heatmaps.shape
         N = coords.shape[0]
         assert (B == 1 or B == N)
-        for heatmaps in batch_heatmaps:
-            for heatmap in heatmaps:
-                cv2.GaussianBlur(heatmap, (kernel, kernel), 0, heatmap)
-        np.clip(batch_heatmaps, 0.001, 50, batch_heatmaps)
-        np.log(batch_heatmaps, batch_heatmaps)
+        #for heatmaps in batch_heatmaps:
+        #    for heatmap in heatmaps:
+        #        cv2.GaussianBlur(heatmap, (kernel, kernel), 0, heatmap)
+        torch.clamp(batch_heatmaps, min=0.001, max=50., out=batch_heatmaps)
+        torch.log(batch_heatmaps, out=batch_heatmaps)
 
-        batch_heatmaps_pad = np.pad(
-            batch_heatmaps, ((0, 0), (0, 0), (1, 1), (1, 1)),
-            mode='edge').flatten()
+        batch_heatmaps_pad = torch.nn.functional.pad(
+            batch_heatmaps, (1,1,1,1),
+            mode='replicate').flatten()
 
         index = coords[..., 0] + 1 + (coords[..., 1] + 1) * (W + 2)
-        index += (W + 2) * (H + 2) * np.arange(0, B * K).reshape(-1, K)
-        index = index.astype(int).reshape(-1, 1)
+        index += (W + 2) * (H + 2) * torch.arange(0, B * K).reshape(-1, K)
+        print(index)
+        index = index.type(torch.int32).reshape(-1, 1)
         i_ = batch_heatmaps_pad[index]
         ix1 = batch_heatmaps_pad[index + 1]
         iy1 = batch_heatmaps_pad[index + W + 2]
@@ -378,32 +379,33 @@ class ViTPoseTopDownHeatMap(nn.Module):
 
         dx = 0.5 * (ix1 - ix1_)
         dy = 0.5 * (iy1 - iy1_)
-        derivative = np.concatenate([dx, dy], axis=1)
+        derivative = torch.concatenate([dx, dy], axis=1)
         derivative = derivative.reshape(N, K, 2, 1)
         dxx = ix1 - 2 * i_ + ix1_
         dyy = iy1 - 2 * i_ + iy1_
         dxy = 0.5 * (ix1y1 - ix1 - iy1 + i_ + i_ - ix1_ - iy1_ + ix1_y1_)
-        hessian = np.concatenate([dxx, dxy, dxy, dyy], axis=1)
+        hessian = torch.concatenate([dxx, dxy, dxy, dyy], axis=1)
         hessian = hessian.reshape(N, K, 2, 2)
-        hessian = np.linalg.inv(hessian + np.finfo(np.float32).eps * np.eye(2))
-        coords -= np.einsum('ijmn,ijnk->ijmk', hessian, derivative).squeeze()
+        print("hes",hessian)
+        hessian = torch.linalg.inv((hessian + torch.finfo(torch.float32).eps) * torch.eye(2))
+        coords -= torch.einsum('ijmn,ijnk->ijmk', hessian, derivative).squeeze()
         return coords
 
     def keypoints_from_heatmap(self, heatmaps, center, scale, unbiased=False):
-        heatmaps = heatmaps.copy()
+        heatmaps = heatmaps.clone()
         use_udp = self.config.udp
         N, K, H, W = heatmaps.shape
         if use_udp:
             if self.config.target_type.lower() == "GaussianHeatMap".lower():
                 # GetMaxPreds
                 heatmaps_reshaped = heatmaps.reshape((N,K,-1))
-                idx = np.argmax(heatmaps_reshaped, 2).reshape((N,K,1))
-                maxvals = np.amax(heatmaps_reshaped, 2).reshape((N,K,1))
+                idx = torch.argmax(heatmaps_reshaped, 2).reshape((N,K,1))
+                maxvals = torch.amax(heatmaps_reshaped, 2).reshape((N,K,1))
 
-                preds = np.tile(idx, (1,1,2)).astype(np.float32)
+                preds = torch.tile(idx, (1,1,2)).type(torch.float32)
                 preds[:,:,0] = preds[:,:,0] % W
                 preds[:,:,1] = preds[:,:,1] // W
-                preds = np.where(np.tile(maxvals, (1,1,2)) > 0.0, preds, -1)
+                preds = torch.where(torch.tile(maxvals, (1,1,2)) > 0.0, preds, -1)
 
                 preds = self.post_dark_udp(preds, heatmaps, kernel=self.config.kernel)
 
@@ -420,17 +422,16 @@ class ViTPoseTopDownHeatMap(nn.Module):
     def decode(self, img_metas, img, img_size):
         img_metas = [img_metas]
         batch_size = len(img_metas)
-        print(batch_size)
 
         if 'bbox_id' in img_metas:
             bbox_ids = []
         else:
             bbox_ids = None
 
-        center = np.zeros((batch_size, 2), dtype=np.float32)
-        scale = np.zeros((batch_size, 2), dtype=np.float32)
+        center = torch.zeros((batch_size, 2), dtype=torch.float32)
+        scale = torch.zeros((batch_size, 2), dtype=torch.float32)
         img_paths = []
-        score = np.ones(batch_size)
+        score = torch.ones(batch_size)
 
         for i in range(batch_size):
             center[i, :] = img_metas[i]['center']
@@ -438,7 +439,7 @@ class ViTPoseTopDownHeatMap(nn.Module):
             img_paths.append(img_metas[i]['img'])
 
             if 'bbox_score' in img_metas[i]:
-                score[i] = np.array(img_metas[i]['bbox_score']).reshape(-1)
+                score[i] = torch.tensor(img_metas[i]['bbox_score']).reshape(-1)
             if bbox_ids is not None:
                 bbox_ids.append(img_metas[i]['bbox_id'])
 
@@ -446,13 +447,13 @@ class ViTPoseTopDownHeatMap(nn.Module):
             img, center, scale,
         )
 
-        all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
-        all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
+        all_preds = torch.zeros((batch_size, preds.shape[1], 3), dtype=torch.float32)
+        all_boxes = torch.zeros((batch_size, 6), dtype=torch.float32)
         all_preds[:, :, 0:2] = preds[:, :, 0:2]
         all_preds[:, :, 2:3] = maxvals
         all_boxes[:, 0:2] = center[:, 0:2]
         all_boxes[:, 2:4] = scale[:, 0:2]
-        all_boxes[:, 4] = np.prod(scale * 200.0, axis=1)
+        all_boxes[:, 4] = torch.prod(scale * 200.0, axis=1)
         all_boxes[:, 5] = score
 
 
@@ -500,9 +501,9 @@ class ViTPosePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = []
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm, nn.ConvTranspose2d, nn.BatchNorm2d]) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
             module.weight.data = nn.init.trunc_normal_(
@@ -510,44 +511,47 @@ class ViTPosePreTrainedModel(PreTrainedModel):
             ).to(module.weight.dtype)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, ViTPosePatchEmbed):
             pass
-        #    module.position_embeddings.data = nn.init.trunc_normal_(
-        #        module.position_embeddings.data.to(torch.float32),
-        #        mean=0.0,
-        #        std=self.config.initializer_range,
-        #    ).to(module.position_embeddings.dtype)
+           # module.projection.data = nn.init.trunc_normal_(
+           #     module.projection.data.to(torch.float32),
+           #     mean=0.0,
+           #     std=self.config.initializer_range,
+           # ).to(module.projection.dtype)
 
-        #    module.cls_token.data = nn.init.trunc_normal_(
-        #        module.cls_token.data.to(torch.float32),
-        #        mean=0.0,
-        #        std=self.config.initializer_range,
-        #    ).to(module.cls_token.dtype)
+           # module.cls_token.data = nn.init.trunc_normal_(
+           #     module.cls_token.data.to(torch.float32),
+           #     mean=0.0,
+           #     std=self.config.initializer_range,
+           # ).to(module.cls_token.dtype)
 
    # def _set_gradient_checkpointing(self, module: ViTEncoder, value: bool = False) -> None:
    #     if isinstance(module, ViTEncoder):
    #         module.gradient_checkpointing = value
 
 
-VIT_START_DOCSTRING = r"""
+VITPOSE_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config ([`ViTConfig`]): Model configuration class with all the parameters of the model.
+        config ([`ViTPoseConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-VIT_INPUTS_DOCSTRING = r"""
+VITPOSE_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`ViTImageProcessor.__call__`]
             for details.
+
+        bboxes (`torch.FloatTensor`):
+            bboxes can be obtained using external object detection pipelines such as DeTR or Yolo.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -569,8 +573,8 @@ VIT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare ViT Model transformer outputting raw hidden-states without any specific head on top.",
-    VIT_START_DOCSTRING,
+    "The bare ViTPose Model transformer outputting raw hidden-states without any specific head on top.",
+    VITPOSE_START_DOCSTRING,
 )
 
 
@@ -650,7 +654,7 @@ class ViTPoseModel(ViTPosePreTrainedModel):
             backbone_output,
         )
 
-        output_heatmap = keypoint_outputs.detach().cpu().numpy()
+        output_heatmap = keypoint_outputs
 
         if self.config.flip_test == True:
             imgs_flipped = [pixel_value.flip(2) for pixel_value in pixel_values]
@@ -684,6 +688,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         """Gets the architecture from ViTPoseModel above (just a pretty wrapper around the model)"""
         self.config = config
         self.output = ViTPoseModel(config)
+        self.post_init()
 
     def process_det(self, results):
         """results[0] defaults to humans"""
@@ -700,14 +705,14 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         x, y, w, h = bbox[:4]
         input_size = config.img_size
         aspect_ratio = input_size[0] / input_size[1]
-        center = np.array([x + w * 0.5, y + h * 0.5], dtype=np.float32)
+        center = torch.tensor([x + w * 0.5, y + h * 0.5], dtype=torch.float32, requires_grad=False)
 
         if w > aspect_ratio * h:
            h = w * 1.0 / aspect_ratio
         elif w < aspect_ratio * h:
            w = h * aspect_ratio
 
-        scale = np.array([w / 200.0, h / 200.0], dtype=np.float32)
+        scale = torch.tensor([w / 200.0, h / 200.0], dtype=torch.float32, requires_grad=False)
         scale = scale * 1.25
 
         return center, scale
@@ -723,7 +728,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
 
         batch_data = []
         for bbox in bboxes:
-            center, scale = self._box2cs(self.config, bbox.detach().numpy())
+            center, scale = self._box2cs(self.config, bbox)
 
             data = {
                 'center':center,
@@ -731,11 +736,11 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
                 'bbox_scaore': bbox[4] if len(bbox) == 5 else 1,
                 'bbox_id':0,
                 'dataset':"TopDownCocoDataset",
-                'joints_3d':np.zeros((self.config.num_joints, 3), dtype=np.float32),
-                'joints_3d_visible':np.zeros((self.config.num_joints, 3), dtype=np.float32),
+                'joints_3d':torch.zeros((self.config.num_joints, 3), dtype=torch.float),
+                'joints_3d_visible':torch.zeros((self.config.num_joints, 3), dtype=torch.float),
                 'rotation':0,
                 'ann_info': {
-                    'image_size': np.array(self.config.img_size),
+                    'image_size': torch.tensor(self.config.img_size),
                     'num_joints': self.config.num_joints,
                     'flip_pairs': flip_pairs
                 }
@@ -758,7 +763,6 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
 
         inputs = feature_extractor(images=pixel_values, return_tensor="pt")
         output = model(**inputs)
-        print(output)
 
         return output.pred_boxes
 
@@ -766,10 +770,10 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         """Detection and bounding box pipeling"""
         #det_out = self.yolo(pixel_values)
         person_results = self.process_det(pred_boxes)
-        print(pixel_values.shape)
 
         pose_results = []
         bboxes = [box['bbox'] for box in person_results]
+        print(bboxes)
         bboxes_xyxy = []
         for bbox in bboxes:
             bboxes_xyxy.append(box_convert(bbox, 'xywh', 'xyxy'))
