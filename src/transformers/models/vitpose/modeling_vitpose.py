@@ -420,8 +420,10 @@ class ViTPoseTopDownHeatMap(nn.Module):
         return preds, maxvals
 
     def decode(self, img_metas, img, img_size):
-        img_metas = [img_metas]
+        #img_metas = [img_metas]
+        print("img_metas",img_metas)
         batch_size = len(img_metas)
+        print(batch_size)
 
         if 'bbox_id' in img_metas:
             bbox_ids = []
@@ -693,7 +695,6 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
     def process_det(self, results):
         """results[0] defaults to humans"""
         bboxes = results[0]
-
         person_results = []
         for bbox in bboxes:
             person = {}
@@ -751,11 +752,10 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
             #data = preprocess(data)
             batch_data.append(data)
 
+        with torch.no_grad():
+            results = model(pixel_values = img, pixel_metas = batch_data)
 
-            with torch.no_grad():
-                results = model(pixel_values = img, pixel_metas = data)
-
-            return results['preds'], results['output_heatmap']
+        return results['preds'], results['output_heatmap']
 
     def yolo(self, pixel_values) -> torch.Tensor:
         feature_extractor = DetrImageProcessor.from_pretrained('facebook/detr-resnet-50')
@@ -773,18 +773,18 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
 
         pose_results = []
         bboxes = [box['bbox'] for box in person_results]
-        print(bboxes)
-        bboxes_xyxy = []
+        print("boxes",bboxes)
+        bboxes_xywh = []
         for bbox in bboxes:
-            bboxes_xyxy.append(box_convert(bbox, 'xywh', 'xyxy'))
+            bboxes_xywh.append(box_convert(bbox, 'xyxy', 'xywh'))
         #bboxes, bboxes_xyxy = bboxes.detach().numpy(), bboxes_xyxy.detach().numpy()
 
         poses, heatmap = self._inference_pose_model(self.output,
             pixel_values,
-            bboxes,
+            bboxes_xywh,
             return_heatmap = False)
 
-        for pose, person_result, bbox_xyxy in zip(poses, person_results, bboxes_xyxy):
+        for pose, person_result, bbox_xyxy in zip(poses, person_results, bboxes_xywh):
             pose_result = person_result.copy()
             pose_result['keypoints'] = pose
             pose_result['bbox'] = bbox_xyxy
