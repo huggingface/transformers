@@ -112,9 +112,9 @@ class RotaryEmbeddingNP(linen.Module):
     dim: int
     max_seq_len_cached: int
     base: int = 10000
-    
+
     def setup(self):
-        self.inv_freq = 1.0 / (self.base ** (jnp.arange(0, self.dim, 2).astype(jnp.float32) / self.dim)) #dim
+        self.inv_freq = 1.0 / (self.base ** (jnp.arange(0, self.dim, 2).astype(jnp.float32) / self.dim))  # dim
 
     def __call__(self, x=None, seq_len=None):
         t = jnp.arange(self.max_seq_len_cached, dtype=self.inv_freq.dtype)
@@ -130,6 +130,7 @@ def rotate_half(x):
     x2 = x[..., x.shape[-1] // 2 :]
     return jnp.concatenate((-x2, x1), axis=-1)
 
+
 # q,k are of shape [bs, n_heads, seq_len, head_dim]
 # cos, sin are of shape #[1, 1, seq_len, dim]
 # position_ids is of shape [bs, seq_len]
@@ -142,7 +143,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
-
 
 
 class FlaxGPTNeoXAttention(linen.Module):
@@ -161,11 +161,17 @@ class FlaxGPTNeoXAttention(linen.Module):
             dim=self.rotary_ndims, max_seq_len_cached=config.max_position_embeddings, base=config.rotary_emb_base
         )
         self.norm_factor = jnp.sqrt(self.head_size)
-        self.query_key_value = linen.Dense(3 * config.hidden_size,dtype=self.dtype,
-                                        kernel_init=jax.nn.initializers.normal(self.config.initializer_range),)
-        self.dense = linen.Dense(config.hidden_size,dtype=self.dtype,
-        kernel_init=jax.nn.initializers.normal(self.config.initializer_range),)
-        
+        self.query_key_value = linen.Dense(
+            3 * config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+        )
+        self.dense = linen.Dense(
+            config.hidden_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
+        )
+
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
 
     @linen.compact
@@ -205,7 +211,7 @@ class FlaxGPTNeoXAttention(linen.Module):
 
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.hidden_size,))
-    
+
     def __call__(
         self,
         hidden_states,
@@ -214,11 +220,11 @@ class FlaxGPTNeoXAttention(linen.Module):
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
-    ):  
+    ):
         qkv = self.query_key_value(hidden_states)
         batch, seq_len, _ = qkv.shape
 
-        qkv = qkv.reshape([batch, seq_len,self.num_attention_heads,3,self.head_size])
+        qkv = qkv.reshape([batch, seq_len, self.num_attention_heads, 3, self.head_size])
 
         qkv = jnp.moveaxis(qkv, source=-2, destination=0)
         query, key, value = qkv
@@ -258,8 +264,7 @@ class FlaxGPTNeoXAttention(linen.Module):
         # and cache the keys and values step by step.
         if self.has_variable("cache", "cached_key") or init_cache:
             key, value, attention_mask = self._concatenate_to_cache(key, value, query, attention_mask)
-          
-            
+
         # transform boolean mask into float mask
         attention_bias = lax.select(
             attention_mask > 0,
@@ -276,13 +281,14 @@ class FlaxGPTNeoXAttention(linen.Module):
             dtype=jnp.promote_types(self.dtype, jnp.float32),
             precision=None,
         )
-        
+
         attn_output = jnp.einsum("bhqk,bkhd->bqhd", attn_weights, value)
         attn_output = self._merge_heads(attn_output)
         attn_output = self.dense(attn_output)
 
         outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
         return outputs
+
 
 class FlaxGPTNeoXMLP(nn.Module):
     config: GPTNeoXConfig
@@ -648,8 +654,7 @@ class FlaxGPTNeoXForCausalLMModule(nn.Module):
 
         if position_ids is None:
             position_ids = jnp.broadcast_to(
-                jnp.clip(jnp.cumsum(attention_mask, axis=-1) - 1, a_min=0),
-                (batch_size, seq_length)
+                jnp.clip(jnp.cumsum(attention_mask, axis=-1) - 1, a_min=0), (batch_size, seq_length)
             )
 
         outputs = self.gpt_neox(
