@@ -15,7 +15,7 @@
 
 import inspect
 import math
-from typing import Callable, Dict, Iterable, List, Tuple, Union
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -1334,3 +1334,119 @@ class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
             scores[:, : self.semantic_vocab_size + self.codebook_size] = -float("inf")
 
         return scores
+
+
+class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
+    r"""Logits processor for Classifier-Free Guidance (CFG). The processors
+    computes a weighted average across scores from prompt conditional and prompt unconditional (or negative) logits,
+    parameterized by the `guidance_scale`. The unconditional scores are computed internally by prompting `model` with
+    the `unconditional_ids` branch.
+
+    See [the paper](https://arxiv.org/abs/2306.17806) for more information.
+
+    Args:
+        guidance_scale (`float`):
+            The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale > 1`.
+            Higher guidance scale encourages the model to generate samples that are more closely linked to the input
+            prompt, usually at the expense of poorer quality.
+        unconditional_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of input sequence tokens in the vocabulary for the unconditional branch. If unset, will default to
+            the last token of the prompt.
+        unconditional_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, **optional**):
+            Attention mask for unconditional_ids.
+        model (`PreTrainedModel`):
+            The model computing the unconditional scores. Supposedly the same as the one computing the conditional
+            scores. Both models must use the same tokenizer.
+        smooth_factor (`float`, **optional**):
+            The interpolation weight for CFG Rescale. 1 means no rescaling, 0 reduces to the conditional scores without
+            CFG. Turn it lower if the output degenerates.
+        use_cache (`bool`, **optional**):
+            Whether to cache key/values during the negative prompt forward pass.
+
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> inputs = tokenizer(["Today, a dragon flew over Paris, France,"], return_tensors="pt")
+    >>> out = model.generate(inputs["input_ids"], guidance_scale=1.5)
+    >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
+    The dragon flew over Paris, France, landing in Lyon, a city of a few million. Dragon-flying was a new form of
+    transport, and the dragon was the first in Europe.
+
+    >>> # with a negative prompt
+    >>> neg_inputs = tokenizer(["A very happy event happened,"], return_tensors="pt")
+    >>> out = model.generate(inputs["input_ids"], guidance_scale=2, negative_prompt_ids=neg_inputs["input_ids"])
+    >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
+    The dragon flew over Paris, France, crashing into Notre Dame Cathedral in the French capital killing at least 127
+    people and injuring more than 350.
+    ```
+    """
+
+    def __init__(
+        self,
+        guidance_scale: float,
+        model,
+        unconditional_ids: Optional[torch.LongTensor] = None,
+        unconditional_attention_mask: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = True,
+    ):
+        self.guidance_scale = guidance_scale
+        self.model = model
+        self.unconditional_context = {
+            "input_ids": unconditional_ids,
+            "attention_mask": unconditional_attention_mask,
+            "use_cache": use_cache,
+            "past_key_values": None,
+            "first_pass": True,
+        }
+
+    def get_unconditional_logits(self, input_ids):
+        if self.unconditional_context["first_pass"]:
+            if self.unconditional_context["input_ids"] is None:
+                self.unconditional_context["input_ids"] = input_ids[:, -1:]
+            if self.unconditional_context["attention_mask"] is None:
+                self.unconditional_context["attention_mask"] = torch.ones_like(
+                    self.unconditional_context["input_ids"], dtype=torch.long
+                )
+            input_ids = self.unconditional_context["input_ids"]
+            attention_mask = self.unconditional_context["attention_mask"]
+            self.unconditional_context["first_pass"] = False
+        else:
+            attention_mask = torch.cat(
+                [
+                    self.unconditional_context["attention_mask"],
+                    torch.ones_like(input_ids[:, -1:], dtype=torch.long),
+                ],
+                dim=1,
+            )
+            if not self.unconditional_context["use_cache"]:
+                input_ids = torch.cat([self.unconditional_context["input_ids"], input_ids[:, -1:]], dim=1)
+            else:
+                input_ids = input_ids[:, -1:]
+            self.unconditional_context["input_ids"] = input_ids
+            self.unconditional_context["attention_mask"] = attention_mask
+
+        out = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            use_cache=self.unconditional_context["use_cache"],
+            past_key_values=self.unconditional_context["past_key_values"],
+        )
+        self.unconditional_context["past_key_values"] = out.get("past_key_values", None)
+
+        return out.logits
+
+    def __call__(self, input_ids, scores):
+        scores = torch.nn.functional.log_softmax(scores, dim=-1)
+        if self.guidance_scale == 1:
+            return scores
+
+        logits = self.get_unconditional_logits(input_ids)
+
+        unconditional_logits = torch.nn.functional.log_softmax(logits[:, -1], dim=-1)
+        out = self.guidance_scale * (scores - unconditional_logits) + unconditional_logits
+        return out
