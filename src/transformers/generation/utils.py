@@ -904,7 +904,7 @@ class GenerationMixin:
         # instantiate processors list
         processors = LogitsProcessorList()
 
-        if generation_config.guidance_scale is not None and generation_config.guidance_scale > 1:
+        if generation_config.guidance_scale is not None and generation_config.guidance_scale != 1:
             processors.append(
                 UnbatchedClassifierFreeGuidanceLogitsProcessor(
                     generation_config.guidance_scale,

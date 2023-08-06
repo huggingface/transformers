@@ -1270,7 +1270,7 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
 
     Args:
         guidance_scale (float):
-            The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale > 1`.
+            The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale != 1`.
             Higher guidance scale encourages the model to generate samples that are more closely linked to the input
             prompt, usually at the expense of poorer quality.
     """
