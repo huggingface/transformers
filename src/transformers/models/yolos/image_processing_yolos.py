@@ -26,7 +26,6 @@ from ...image_transforms import (
     center_to_corners_format,
     corners_to_center_format,
     id_to_rgb,
-    normalize,
     pad,
     rescale,
     resize,
@@ -771,7 +770,7 @@ class YolosImageProcessor(BaseImageProcessor):
         return target
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare
-    def prepare(self, image, target, return_segmentation_masks=False, masks_path=None):
+    def prepare(self, image, target, return_segmentation_masks=None, masks_path=None):
         logger.warning_once(
             "The `prepare` method is deprecated and will be removed in a v4.33. "
             "Please use `prepare_annotation` instead. Note: the `prepare_annotation` method "
@@ -851,19 +850,6 @@ class YolosImageProcessor(BaseImageProcessor):
         Rescale the image by the given factor.
         """
         return rescale(image, rescale_factor, data_format=data_format)
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: Union[float, Iterable[float]],
-        std: Union[float, Iterable[float]],
-        data_format: Optional[ChannelDimension] = None,
-    ) -> np.ndarray:
-        """
-        Normalize the image with the given mean and standard deviation.
-        """
-        return normalize(image, mean=mean, std=std, data_format=data_format)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize_annotation
     def normalize_annotation(self, annotation: Dict, image_size: Tuple[int, int]) -> Dict:

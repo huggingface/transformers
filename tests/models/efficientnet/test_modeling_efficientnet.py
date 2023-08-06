@@ -49,7 +49,7 @@ class EfficientNetModelTester:
         num_channels=3,
         kernel_sizes=[3, 3, 5],
         in_channels=[32, 16, 24],
-        out_channels=[16, 24, 40],
+        out_channels=[16, 24, 20],
         strides=[1, 1, 2],
         num_block_repeats=[1, 1, 2],
         expand_ratios=[1, 6, 6],
@@ -222,10 +222,6 @@ class EfficientNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
-
-    @unittest.skip("Will be fixed soon by reducing the size of the model used for common tests.")
-    def test_model_is_small(self):
-        pass
 
     @slow
     def test_model_from_pretrained(self):

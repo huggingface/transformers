@@ -23,7 +23,6 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size
 from ...image_transforms import (
     center_crop,
     center_to_corners_format,
-    normalize,
     rescale,
     resize,
     to_channel_dimension_format,
@@ -48,7 +47,6 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.detr.modeling_detr._upcast
 def _upcast(t):
     # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
     if t.is_floating_point():
@@ -209,19 +207,6 @@ class OwlViTImageProcessor(BaseImageProcessor):
         Rescale an image by a certain factor.
         """
         return rescale(image, rescale_factor, data_format=data_format, **kwargs)
-
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: List[float],
-        std: List[float],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Normalize an image with a certain mean and standard deviation.
-        """
-        return normalize(image, mean, std, data_format=data_format, **kwargs)
 
     def preprocess(
         self,

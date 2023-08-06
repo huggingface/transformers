@@ -172,11 +172,58 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
 
 class TemperatureLogitsWarper(LogitsWarper):
     r"""
-    [`LogitsWarper`] for temperature (exponential scaling output probability distribution).
+    [`LogitsWarper`] for temperature (exponential scaling output probability distribution), which effectively means
+    that it can control the randomness of the predicted tokens.
+
+    <Tip>
+
+    Make sure that `do_sample=True` is included in the `generate` arguments otherwise the temperature value won't have
+    any effect.
+
+    </Tip>
 
     Args:
         temperature (`float`):
-            The value used to module the logits distribution.
+            Strictly positive float value used to modulate the logits distribution. A value smaller than `1` decreases
+            randomness (and vice versa), with `0` being equivalent to shifting all probability mass to the most likely
+            token.
+
+    Examples:
+
+    ```python
+    >>> import torch
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> model.config.pad_token_id = model.config.eos_token_id
+    >>> model.generation_config.pad_token_id = model.config.eos_token_id
+    >>> input_context = "Hugging Face Company is"
+    >>> input_ids = tokenizer.encode(input_context, return_tensors="pt")
+
+    >>> torch.manual_seed(0)
+
+    >>> # With temperature=1, the default, we consistently get random outputs due to random sampling.
+    >>> outputs = model.generate(input_ids=input_ids, max_new_tokens=10, temperature=1, do_sample=True)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is one of these companies that is going to take a
+
+    >>> outputs = model.generate(input_ids=input_ids, max_new_tokens=10, temperature=1, do_sample=True)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is one of these companies, you can make a very
+
+    >>> # However, with temperature close to 0 , the output remains invariant.
+    >>> outputs = model.generate(input_ids=input_ids, max_new_tokens=10, temperature=0.0001, do_sample=True)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is a company that has been around for over 20 years
+
+    >>> # even if we set a different seed.
+    >>> torch.manual_seed(42)
+    >>> outputs = model.generate(input_ids=input_ids, max_new_tokens=10, temperature=0.0001, do_sample=True)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is a company that has been around for over 20 years
+    ```
     """
 
     def __init__(self, temperature: float):
@@ -193,12 +240,38 @@ class TemperatureLogitsWarper(LogitsWarper):
 
 class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     r"""
-    [`LogitsProcessor`] enforcing an exponential penalty on repeated sequences.
+    [`LogitsProcessor`] that prevents the repetition of previous tokens through an exponential penalty. This technique
+    shares some similarities with coverage mechanisms and other aimed at reducing repetition. During the text
+    generation process, the probability distribution for the next token is determined using a formula that incorporates
+    token scores based on their occurrence in the generated sequence. Tokens with higher scores are less likely to be
+    selected. The formula can be seen in the original [paper](https://arxiv.org/pdf/1909.05858.pdf). According to the
+    paper a penalty of around 1.2 yields a good balance between truthful generation and lack of repetition.
 
     Args:
         repetition_penalty (`float`):
             The parameter for repetition penalty. 1.0 means no penalty. See [this
             paper](https://arxiv.org/pdf/1909.05858.pdf) for more details.
+
+    Examples:
+
+    ```py
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> # Initializing the model and tokenizer for it
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> inputs = tokenizer(["I'm not going to"], return_tensors="pt")
+
+    >>> # This shows a normal generate without any specific parameters
+    >>> summary_ids = model.generate(inputs["input_ids"], max_length=20)
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True)[0])
+    I'm not going to lie, I'm not going to lie. I'm not going to lie
+
+    >>> # This generates a penalty for repeated tokens
+    >>> penalized_ids = model.generate(inputs["input_ids"], max_length=20, repetition_penalty=1.2)
+    >>> print(tokenizer.batch_decode(biased_ids, skip_special_tokens=True)[0])
+    I'm not going to lie, I was really excited about this. It's a great game
+    ```
     """
 
     def __init__(self, penalty: float):
@@ -412,14 +485,65 @@ class EpsilonLogitsWarper(LogitsWarper):
 
 class EtaLogitsWarper(LogitsWarper):
     r"""
-    [`LogitsWarper`] that performs eta-sampling, i.e. calculates a dynamic cutoff `eta := min(epsilon, sqrt(epsilon,
-    e^-entropy(probabilities)))` and restricts to tokens with `prob >= eta`. Takes the largest min_tokens_to_keep
-    tokens if no tokens satisfy this constraint. See [Truncation Sampling as Language Model
-    Desmoothing](https://arxiv.org/abs/2210.15191) for more information.
+    [`LogitsWarper`] that performs eta-sampling, a technique to filter out tokens with probabilities below a dynamic
+    cutoff value, `eta`, which is calculated based on a combination of the hyperparameter `epsilon` and the entropy of
+    the token probabilities, i.e. `eta := min(epsilon, sqrt(epsilon, e^-entropy(probabilities)))`. Takes the largest
+    min_tokens_to_keep tokens if no tokens satisfy this constraint. It addresses the issue of poor quality in long
+    samples of text generated by neural language models leading to more coherent and fluent text. See [Truncation
+    Sampling as Language Model Desmoothing](https://arxiv.org/abs/2210.15191) for more information. Note: `do_sample`
+    must be set to `True` for this `LogitsWarper` to work.
+
 
     Args:
+        epsilon (`float`):
+            A float value in the range (0, 1). Hyperparameter used to calculate the dynamic cutoff value, `eta`. The
+            suggested values from the paper ranges from 3e-4 to 4e-3 depending on the size of the model.
+        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+            All values that are found to be below the dynamic cutoff value, `eta`, are set to this float value. This
+            parameter is useful when logits need to be modified for very low probability tokens that should be excluded
+            from generation entirely.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
-            Minimum number of tokens that cannot be filtered."""
+            Specifies the minimum number of tokens that must be kept for generation, regardless of their probabilities.
+            For example, if `min_tokens_to_keep` is set to 1, at least one token will always be kept for generation,
+            even if all tokens have probabilities below the cutoff `eta`.
+
+    Examples:
+    ```python
+    >>> # Import required libraries
+    >>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
+
+    >>> # Set the model name
+    >>> model_name = "gpt2"
+
+    >>> # Initialize the model and tokenizer
+    >>> model = AutoModelForCausalLM.from_pretrained(model_name)
+    >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+    >>> # Set the pad token to eos token
+    >>> model.config.pad_token_id = model.config.eos_token_id
+    >>> model.generation_config.pad_token_id = model.config.eos_token_id
+
+    >>> # The below sequence intentionally contains two subjects to show the difference between the two approaches
+    >>> sequence = "a quadcopter flight controller (RTFQ Flip MWC) that supports I2C sensors for adding things like a barometer, magnetometer, and GPS system. The officially supported sensor block (BMP180, HMC5883L on one board) is discontinued, as far as I know, everyone involved lived to sing another day. . . disorder and an extreme state of dysmetabolism characterized by extensive erythema and a significant reduction in uncovered"
+
+    >>> # Tokenize the sequence
+    >>> inputs = tokenizer(sequence, return_tensors="pt")
+
+    >>> set_seed(0)
+
+    >>> # We can see that the model is generating repeating text and also is not able to continue the sequence properly
+    >>> outputs = model.generate(inputs["input_ids"], max_length=128)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    a quadcopter flight controller (RTFQ Flip MWC) that supports I2C sensors for adding things like a barometer, magnetometer, and GPS system. The officially supported sensor block (BMP180, HMC5883L on one board) is discontinued, as far as I know, everyone involved lived to sing another day... disorder and an extreme state of dysmetabolism characterized by extensive erythema and a significant reduction in uncovered muscle mass. The patient was diagnosed with a severe erythema and a severe erythema-like condition. The patient was treated with a combination
+
+    >>> # The result is much better and coherent when we use the `eta_cutoff` parameter
+    >>> outputs = model.generate(
+    ...     inputs["input_ids"], max_length=128, do_sample=True, eta_cutoff=2e-2
+    ... )  # need to set do_sample=True for eta_cutoff to work
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    a quadcopter flight controller (RTFQ Flip MWC) that supports I2C sensors for adding things like a barometer, magnetometer, and GPS system. The officially supported sensor block (BMP180, HMC5883L on one board) is discontinued, as far as I know, everyone involved lived to sing another day... disorder and an extreme state of dysmetabolism characterized by extensive erythema and a significant reduction in uncovered fatty acids. A significant loss of brain development. The individual also experienced high levels of a common psychiatric condition called schizophrenia, with an important and life threatening consequence.
+    ```
+    """
 
     def __init__(self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         epsilon = float(epsilon)
@@ -624,9 +748,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
 
         # Bias variables that will be populated on the first call (for retrocompatibility purposes, the vocabulary size
         # is infered in the first usage, which inhibits initializing here)
-        self.sequences_length_greater_than_1 = []
         self.length_1_bias = None
-        self.length_greather_than_1_bias = None
         self.prepared_bias_variables = False
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
@@ -642,11 +764,9 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         bias += self.length_1_bias
 
         # 4 - include the bias from length > 1, after determining which biased sequences may be completed.
-        # `matching_mask` is a (batch_size, vocab_size) boolean mask that is True for all tokens whose corresponding
-        # bias should be applied. The bias is applied on the last token of the sequence, if (and only if) the sequence
-        # may become complete this iteration.
-        matching_mask = torch.zeros_like(scores, dtype=torch.bool)
-        for sequence_ids in self.sequences_length_greater_than_1:
+        for sequence_ids, sequence_bias in self.sequence_bias.items():
+            if len(sequence_ids) == 1:  # the sequence is of length 1, already applied
+                continue
             if len(sequence_ids) > input_ids.shape[1]:  # the sequence is longer than the context, ignore
                 continue
             prefix_length = len(sequence_ids) - 1
@@ -655,12 +775,11 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
                 input_ids[:, -prefix_length:],
                 torch.tensor(sequence_ids[:-1], dtype=input_ids.dtype, device=input_ids.device),
             ).prod(dim=1)
-            matching_mask[:, last_token] |= matching_rows.bool()
-        bias += torch.where(
-            matching_mask,
-            self.length_greather_than_1_bias,
-            torch.tensor(0.0, device=self.length_greather_than_1_bias.device),
-        )
+            bias[:, last_token] += torch.where(
+                matching_rows.bool(),
+                torch.tensor(sequence_bias, device=input_ids.device),
+                torch.tensor(0.0, device=input_ids.device),
+            )
 
         # 5 - apply the bias to the scores
         scores = scores + bias
@@ -668,12 +787,10 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
 
     def _prepare_bias_variables(self, scores: torch.FloatTensor):
         vocabulary_size = scores.shape[-1]
-        sequence_bias = self.sequence_bias
-        tokens_with_bias = []
 
         # Check biased tokens out of bounds
         invalid_biases = []
-        for sequence_ids in sequence_bias:
+        for sequence_ids in self.sequence_bias:
             for token_id in sequence_ids:
                 if token_id >= vocabulary_size:
                     invalid_biases.append(token_id)
@@ -686,20 +803,9 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
         # Precompute the bias tensors to be applied. Sequences of length 1 are kept separately, as they can be applied
         # with simpler logic.
         self.length_1_bias = torch.zeros((vocabulary_size,), dtype=torch.float).to(scores.device)
-        self.length_greather_than_1_bias = torch.zeros((vocabulary_size,), dtype=torch.float).to(scores.device)
-        for sequence_ids, bias in sequence_bias.items():
+        for sequence_ids, bias in self.sequence_bias.items():
             if len(sequence_ids) == 1:
                 self.length_1_bias[sequence_ids[-1]] = bias
-            else:
-                self.sequences_length_greater_than_1.append(sequence_ids)
-                if self.length_greather_than_1_bias[sequence_ids[-1]] != 0.0:
-                    raise ValueError(
-                        "Setting a bias on sequences that share a common token termination is not yet supported. "
-                        "Please open an issue if you see this error message (after checking that it doesn't already "
-                        "exist)."
-                    )
-                self.length_greather_than_1_bias[sequence_ids[-1]] = bias
-            tokens_with_bias.append(sequence_ids[-1])
 
         self.prepared_bias_variables = True
 
@@ -741,6 +847,50 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
             List of list of token ids that are not allowed to be generated.
         eos_token_id (`Union[int, List[int]]`):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> inputs = tokenizer(["In a word, the cake is a"], return_tensors="pt")
+
+    >>> summary_ids = model.generate(inputs["input_ids"], max_new_tokens=5, pad_token_id=tokenizer.eos_token_id)
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True)[0])
+    In a word, the cake is a bit of a mess.
+
+    >>> # Now let's control generation taking the bad words out. Please note that the tokenizer is initialized differently
+
+    >>> tokenizer_with_prefix_space = AutoTokenizer.from_pretrained("gpt2", add_prefix_space=True)
+
+
+    >>> def get_tokens_as_list(word_list):
+    ...     "Converts a sequence of words into a list of tokens"
+    ...     tokens_list = []
+    ...     for word in word_list.split(" "):
+    ...         tokenized_word = tokenizer_with_prefix_space([word], add_special_tokens=False).input_ids[0]
+    ...         tokens_list.append(tokenized_word)
+    ...     return tokens_list
+
+
+    >>> word_list = "mess"
+    >>> bad_words_ids = get_tokens_as_list(word_list=word_list)
+
+    >>> badwords_ids = model.generate(
+    ...     inputs["input_ids"],
+    ...     max_new_tokens=5,
+    ...     bad_words_ids=bad_words_ids,
+    ...     eos_token_id=tokenizer_with_prefix_space.eos_token_id,
+    ... )
+    >>> print(tokenizer.batch_decode(badwords_ids, skip_special_tokens=True)[0])
+    In a word, the cake is a bit of a surprise.
+
+    >>> badwords_ids = model.generate(inputs["input_ids"], max_new_tokens=4, num_beams=5, bad_words_ids=bad_words_ids)
+    >>> print(tokenizer.batch_decode(biased_ids, skip_special_tokens=True)[0])
+    In a word, the cake is a great way to start
+    ```
     """
 
     def __init__(self, bad_words_ids: List[List[int]], eos_token_id: Union[int, List[int]]):
@@ -1147,4 +1297,40 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
         unguided_bsz = scores.shape[0] // 2
         cond_logits, uncond_logits = scores.split(unguided_bsz, dim=0)
         scores = uncond_logits + (cond_logits - uncond_logits) * self.guidance_scale
+        return scores
+
+
+class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
+    r"""
+    [`LogitsProcessor`] enforcing alternated generation between the two codebooks of [`Bark`]'s fine submodel.
+
+    Args:
+        input_start_len (`int`):
+            The length of the initial input sequence.
+        semantic_vocab_size (`int`):
+            Vocabulary size of the semantic part, i.e number of tokens associated to the semantic vocabulary.
+        codebook_size (`int`):
+            Number of tokens associated to the codebook.
+    """
+
+    def __init__(self, input_start_len: int, semantic_vocab_size: int, codebook_size: int):
+        if not isinstance(input_start_len, int) or input_start_len < 0:
+            raise ValueError(f"`input_starting_length` has to be a non-negative integer, but is {input_start_len}")
+
+        self.input_start_len = input_start_len
+        self.semantic_vocab_size = semantic_vocab_size
+        self.codebook_size = codebook_size
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        curr_len = input_ids.shape[-1]
+
+        # even -> first codebook, odd -> second codebook
+        is_first_codebook = ((curr_len - self.input_start_len) % 2) == 0
+
+        if is_first_codebook:
+            scores[:, : self.semantic_vocab_size] = -float("inf")
+            scores[:, self.semantic_vocab_size + self.codebook_size :] = -float("inf")
+        else:
+            scores[:, : self.semantic_vocab_size + self.codebook_size] = -float("inf")
+
         return scores

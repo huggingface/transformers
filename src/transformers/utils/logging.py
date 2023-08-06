@@ -40,6 +40,7 @@ _lock = threading.Lock()
 _default_handler: Optional[logging.Handler] = None
 
 log_levels = {
+    "detail": logging.DEBUG,  # will also print filename and line number
     "debug": logging.DEBUG,
     "info": logging.INFO,
     "warning": logging.WARNING,
@@ -85,12 +86,21 @@ def _configure_library_root_logger() -> None:
             # This library has already configured the library root logger.
             return
         _default_handler = logging.StreamHandler()  # Set sys.stderr as stream.
+        # set defaults based on https://github.com/pyinstaller/pyinstaller/issues/7334#issuecomment-1357447176
+        if sys.stderr is None:
+            sys.stderr = open(os.devnull, "w")
+
         _default_handler.flush = sys.stderr.flush
 
         # Apply our default configuration to the library root logger.
         library_root_logger = _get_library_root_logger()
         library_root_logger.addHandler(_default_handler)
         library_root_logger.setLevel(_get_default_logging_level())
+        # if logging level is debug, we add pathname and lineno to formatter for easy debugging
+        if os.getenv("TRANSFORMERS_VERBOSITY", None) == "detail":
+            formatter = logging.Formatter("[%(levelname)s|%(pathname)s:%(lineno)s] %(asctime)s >> %(message)s")
+            _default_handler.setFormatter(formatter)
+
         library_root_logger.propagate = False
 
 
