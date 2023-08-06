@@ -17,8 +17,11 @@
 
 import copy
 import inspect
+import os
 import tempfile
 import unittest
+
+import numpy as np
 
 from transformers import (
     BarkCoarseConfig,
@@ -33,11 +36,11 @@ from transformers.models.bark.generation_configuration_bark import (
     BarkSemanticGenerationConfig,
 )
 from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
-from transformers.utils import cached_property
+from transformers.utils import CONFIG_NAME, GENERATION_CONFIG_NAME, cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
 from ..encodec.test_modeling_encodec import EncodecModelTester
 
 
@@ -466,6 +469,7 @@ class BarkFineModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
 
+@require_torch
 class BarkModelTester:
     def __init__(
         self,
@@ -474,14 +478,30 @@ class BarkModelTester:
         coarse_acoustics_kwargs=None,
         fine_acoustics_kwargs=None,
         codec_kwargs=None,
+        batch_size=2,
+        seq_length=4,
+        vocab_size=12,
         is_training=False,  # for now training is not supported
+        semantic_max_new_tokens=4,
+        hz=2,
+        max_input_length=2,
+        sliding_window_len=2,
     ):
         if semantic_kwargs is None:
-            semantic_kwargs = {}
+            semantic_kwargs = {
+                "vocab_size": vocab_size,
+                "output_vocab_size": vocab_size,
+            }
         if coarse_acoustics_kwargs is None:
-            coarse_acoustics_kwargs = {}
+            coarse_acoustics_kwargs = {
+                "vocab_size": vocab_size,
+                "output_vocab_size": vocab_size,
+            }
         if fine_acoustics_kwargs is None:
-            fine_acoustics_kwargs = {}
+            fine_acoustics_kwargs = {
+                "vocab_size": vocab_size,
+                "output_vocab_size": vocab_size,
+            }
         if codec_kwargs is None:
             codec_kwargs = {}
 
@@ -491,12 +511,25 @@ class BarkModelTester:
         self.fine_acoustics_model_tester = BarkFineModelTester(parent, **fine_acoustics_kwargs)
         self.codec_model_tester = EncodecModelTester(parent, **codec_kwargs)
 
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.semantic_max_new_tokens = semantic_max_new_tokens
+        self.hz = hz
+        self.max_input_length = max_input_length
+        self.sliding_window_len = sliding_window_len
+
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        # TODO: @Yoach: Preapre `inputs_dict`
         inputs_dict = {}
         config = self.get_config()
+
+        input_ids = ids_tensor(
+            [self.batch_size, self.seq_length, self.fine_acoustics_model_tester.n_codes_total],
+            self.semantic_model_tester.vocab_size,
+        )
+
+        inputs_dict["input_ids"] = input_ids
 
         return config, inputs_dict
 
@@ -507,6 +540,40 @@ class BarkModelTester:
             self.fine_acoustics_model_tester.get_config(),
             self.codec_model_tester.get_config(),
         )
+
+    def get_generation_config(self, config):
+        semantic_generation_config = {
+            "eos_token_id": config.semantic_config.eos_token_id,
+            "max_new_tokens": self.semantic_max_new_tokens,
+            "text_encoding_offset": config.semantic_config.eos_token_id,
+            "text_pad_token": config.semantic_config.eos_token_id,
+            "semantic_infer_token": config.semantic_config.eos_token_id,
+            "semantic_vocab_size": config.semantic_config.vocab_size,
+            "max_input_semantic_length": self.max_input_length,
+            "semantic_rate_hz": self.hz,
+        }
+
+        coarse_generation_config = {
+            "coarse_semantic_pad_token": config.coarse_acoustics_config.eos_token_id,
+            "coarse_rate_hz": self.hz,
+            "n_coarse_codebooks": config.fine_acoustics_config.n_codes_given,
+            "coarse_infer_token": config.coarse_acoustics_config.eos_token_id,
+            "max_coarse_input_length": self.max_input_length,
+            "max_coarse_history": self.max_input_length,
+            "sliding_window_len": self.sliding_window_len,
+        }
+
+        fine_generation_config = {
+            "max_fine_history_length": self.max_input_length,
+            "max_fine_input_length": self.max_input_length,
+            "n_fine_codebooks": config.fine_acoustics_config.n_codes_total,
+        }
+
+        semantic_generation_config = BarkSemanticGenerationConfig(**semantic_generation_config)
+        coarse_generation_config = BarkCoarseGenerationConfig(**coarse_generation_config)
+        fine_generation_config = BarkFineGenerationConfig(**fine_generation_config)
+
+        return semantic_generation_config, coarse_generation_config, fine_generation_config
 
     def get_pipeline_config(self):
         config = self.get_config()
@@ -523,20 +590,126 @@ class BarkModelTester:
         return config
 
     def prepare_config_and_inputs_for_common(self):
-        # TODO: @Yoach
-        pass
-        # return config, inputs_dict
+        config, inputs_dict = self.prepare_config_and_inputs()
+        return config, inputs_dict
 
 
 # Need this class in oder to create tiny model for `bark`
 # TODO (@Yoach) Implement actual test methods
-@unittest.skip("So far all tests will fail.")
 class BarkModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BarkModel,) if is_torch_available() else ()
+    all_generative_model_classes = (BarkModel,) if is_torch_available() else ()
+
+    test_head_masking = False
+    test_pruning = False
+    test_resize_embeddings = False
 
     def setUp(self):
         self.model_tester = BarkModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BarkConfig, n_embd=37)
+
+    # test_determinism, test_can_use_safetensors
+    @unittest.skip("The model doesn't implement a forward pass")
+    def test_attention_outputs(self):
+        pass
+
+    @unittest.skip("The model doesn't implement a forward pass")
+    def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip("The model doesn't implement a forward pass")
+    def test_forward_signature(self):
+        pass
+
+    @unittest.skip("The model doesn't implement a forward pass")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip("The model doesn't implement get_input_embeddings")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip("The model doesn't implement get_input_embeddings")
+    def test_model_common_attributes(self):
+        pass
+
+    @unittest.skip("The model doesn't implement a forward pass")
+    def test_model_main_input_name(self):
+        pass
+
+    @unittest.skip("The model doesn't implement a forward pass and doesn't return dict")
+    def test_model_outputs_equivalence(self):
+        pass
+
+    @unittest.skip("The model doesn't implement a forward pass")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    def test_save_load(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def check_save_load(out1, out2):
+            # make sure we don't have nans
+            out_2 = out2.cpu().numpy()
+            out_2[np.isnan(out_2)] = 0
+
+            out_1 = out1.cpu().numpy()
+            out_1[np.isnan(out_1)] = 0
+            max_diff = np.amax(np.abs(out_1 - out_2))
+            self.assertLessEqual(max_diff, 1e-5)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                first = model.generate(**self._prepare_for_class(inputs_dict, model_class))[0]
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # the config file (and the generation config file, if it can generate) should be saved
+                self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
+                self.assertEqual(
+                    model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
+                )
+
+                model = model_class.from_pretrained(tmpdirname)
+                model.to(torch_device)
+                with torch.no_grad():
+                    second = model.generate(**self._prepare_for_class(inputs_dict, model_class))[0]
+
+            if isinstance(first, tuple) and isinstance(second, tuple):
+                for tensor1, tensor2 in zip(first, second):
+                    check_save_load(tensor1, tensor2)
+            else:
+                check_save_load(first, second)
+
+    # TODO: it's the test_initialization of Encodec
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                uniform_init_parms = ["conv"]
+                ignore_init = ["lstm"]
+                if param.requires_grad:
+                    if any(x in name for x in uniform_init_parms):
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    elif not any(x in name for x in ignore_init):
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+
+    # test_from_pretrained_no_checkpoint test why don't work
+    # test_initialization
 
 
 @require_torch
