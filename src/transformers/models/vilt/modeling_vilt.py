@@ -177,8 +177,8 @@ class ViltEmbeddings(nn.Module):
         x = x[select[:, 0], select[:, 1]].view(batch_size, -1, num_channels)
         x_mask = x_mask.to(x.device)[select[:, 0], select[:, 1]].view(batch_size, -1)
         # `patch_index` should be on the same device as `select` (for torch>=1.13), which is ensured at definition time.
-        patch_index = patch_index[select[:, 0], select[:, 1]].view(batch_size, -1, 2)
-        pos_embed = pos_embed[select[:, 0], select[:, 1]].view(batch_size, -1, num_channels)
+        patch_index = patch_index.to(x.device)[select[:, 0], select[:, 1]].view(batch_size, -1, 2)
+        pos_embed = pos_embed.to(x.device)[select[:, 0], select[:, 1]].view(batch_size, -1, num_channels)
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         x = torch.cat((cls_tokens, x), dim=1)
