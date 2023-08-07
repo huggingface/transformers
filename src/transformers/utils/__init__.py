@@ -70,6 +70,7 @@ from .hub import (
     TRANSFORMERS_CACHE,
     TRANSFORMERS_DYNAMIC_MODULE_NAME,
     EntryNotFoundError,
+    PushInProgress,
     PushToHubMixin,
     RepositoryNotFoundError,
     RevisionNotFoundError,
