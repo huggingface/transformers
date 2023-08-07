@@ -2521,15 +2521,17 @@ class ModelTesterMixin:
             base_output = model(**inputs_dict_class)
 
             model_size = compute_module_sizes(model)[""]
-            max_size = int(self.model_split_percents[1] * model_size)
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 
-                max_memory = {0: max_size, "cpu": max_size}
                 with self.assertRaises(ValueError):
+                    max_size = int(self.model_split_percents[0] * model_size)
+                    max_memory = {0: max_size, "cpu": max_size}
                     # This errors out cause it's missing an offload folder
                     new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
 
+                max_size = int(self.model_split_percents[1] * model_size)
+                max_memory = {0: max_size, "cpu": max_size}
                 new_model = model_class.from_pretrained(
                     tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir
                 )
@@ -2559,7 +2561,7 @@ class ModelTesterMixin:
 
             model_size = compute_module_sizes(model)[""]
             # We test several splits of sizes to make sure it works.
-            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents]
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 

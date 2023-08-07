@@ -15,7 +15,7 @@
 
 import inspect
 import math
-from typing import Callable, Dict, Iterable, List, Tuple, Union
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -577,10 +577,28 @@ class EtaLogitsWarper(LogitsWarper):
 
 
 def _get_ngrams(ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int):
+    """
+    Assume ngram_size=2 and prev_input_ids=tensor([[40, 2883, 2712, 4346]]). The output of generated ngrams look like
+    this {(40,): [2883], (2883,): [2712], (2712,): [4346]}.
+
+    Args:
+        ngram_size (`int`):
+            The number sequential tokens taken as a group which may only occur once before being banned.
+        prev_input_ids (`torch.Tensor`):
+           Generated token ids for the current hypothesis.
+        num_hypos (`int`):
+            The number of hypotheses for which n-grams need to be generated.
+
+    Returns:
+        generated_ngrams (`dict`):
+            Dictionary of generated ngrams.
+    """
+    # Initialize an empty list of dictionaries, one for each hypothesis (index) in the range of num_hypos
     generated_ngrams = [{} for _ in range(num_hypos)]
     for idx in range(num_hypos):
         gen_tokens = prev_input_ids[idx].tolist()
         generated_ngram = generated_ngrams[idx]
+        # Loop through each n-gram of size ngram_size in the list of tokens (gen_tokens)
         for ngram in zip(*[gen_tokens[i:] for i in range(ngram_size)]):
             prev_ngram_tuple = tuple(ngram[:-1])
             generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
@@ -588,6 +606,22 @@ def _get_ngrams(ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int):
 
 
 def _get_generated_ngrams(banned_ngrams, prev_input_ids, ngram_size, cur_len):
+    """
+    Determines the banned tokens for the current hypothesis based on previously generated n-grams.
+
+    Args:
+        banned_ngrams (`dict`):
+            A dictionary containing previously generated n-grams for each hypothesis.
+        prev_input_ids (`torch.Tensor`):
+            Generated token ids for the current hypothesis.
+        ngram_size (`int`):
+            The number sequential tokens taken as a group which may only occur once before being banned.
+        cur_len (`int`):
+            The current length of the token sequences for which the n-grams are being checked.
+
+    Returns:
+        List of tokens that are banned.
+    """
     # Before decoding the next token, prevent decoding of ngrams that have already appeared
     start_idx = cur_len + 1 - ngram_size
     ngram_idx = tuple(prev_input_ids[start_idx:cur_len].tolist())
@@ -601,9 +635,7 @@ def _calc_banned_ngram_tokens(
     if cur_len + 1 < ngram_size:
         # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
         return [[] for _ in range(num_hypos)]
-
     generated_ngrams = _get_ngrams(ngram_size, prev_input_ids, num_hypos)
-
     banned_tokens = [
         _get_generated_ngrams(generated_ngrams[hypo_idx], prev_input_ids[hypo_idx], ngram_size, cur_len)
         for hypo_idx in range(num_hypos)
@@ -613,12 +645,43 @@ def _calc_banned_ngram_tokens(
 
 class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     r"""
-    [`LogitsProcessor`] that enforces no repetition of n-grams. See
+    N-grams are groups of "n" consecutive words, characters, or tokens taken from a sequence of text. Given the
+    sentence: "She runs fast", the bi-grams (n=2) would be ("she", "runs") and ("runs", "fast"). In text generation,
+    avoiding repetitions of word sequences provides a more diverse output. This [`LogitsProcessor`] enforces no
+    repetition of n-grams by setting the scores of banned tokens to negative infinity which eliminates those tokens
+    from consideration when further processing the scores.
     [Fairseq](https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345).
+
+    <Tip>
+
+    Use n-gram penalties with care. For instance, penalizing 2-grams (bigrams) in an article about the city of New York
+    might lead to undesirable outcomes where the city's name appears only once in the entire text.
+    [Reference](https://huggingface.co/blog/how-to-generate)
+
+    </Tip>
 
     Args:
         ngram_size (`int`):
             All ngrams of size `ngram_size` can only occur once.
+
+    Examples:
+
+    ```py
+    >>> from transformers import GPT2Tokenizer, AutoModelForCausalLM
+
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+    >>> inputs = tokenizer(["I enjoy watching football"], return_tensors="pt")
+
+    >>> output = model.generate(**inputs, max_length=50)
+    >>> print(tokenizer.decode(output[0], skip_special_tokens=True))
+    "I enjoy playing football on the weekends, but I'm not a big fan of the idea of playing in the middle of the night. I'm not a big fan of the idea of playing in the middle of the night. I'm not a big"
+
+    >>> # Now let's add ngram size using <no_repeat_ngram_size> in model.generate. This should stop the repetitions in the output.
+    >>> output = model.generate(**inputs, max_length=50, no_repeat_ngram_size=2)
+    >>> print(tokenizer.decode(output[0], skip_special_tokens=True))
+    I enjoy playing football on the weekends, but I'm not a big fan of the idea of playing in the middle of a game. I think it's a bit of an overreaction to the fact that we're playing a team that's playing"
+    ```
     """
 
     def __init__(self, ngram_size: int):
@@ -631,7 +694,6 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
         num_batch_hypotheses = scores.shape[0]
         cur_len = input_ids.shape[-1]
         banned_batch_tokens = _calc_banned_ngram_tokens(self.ngram_size, input_ids, num_batch_hypotheses, cur_len)
-
         for i, banned_tokens in enumerate(banned_batch_tokens):
             scores[i, banned_tokens] = -float("inf")
 
@@ -1334,3 +1396,126 @@ class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
             scores[:, : self.semantic_vocab_size + self.codebook_size] = -float("inf")
 
         return scores
+
+
+class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
+    r"""Logits processor for Classifier-Free Guidance (CFG). The processors
+    computes a weighted average across scores from prompt conditional and prompt unconditional (or negative) logits,
+    parameterized by the `guidance_scale`. The unconditional scores are computed internally by prompting `model` with
+    the `unconditional_ids` branch.
+
+    See [the paper](https://arxiv.org/abs/2306.17806) for more information.
+
+    Args:
+        guidance_scale (`float`):
+            The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale != 1`.
+            Higher guidance scale encourages the model to generate samples that are more closely linked to the input
+            prompt, usually at the expense of poorer quality. A value smaller than 1 has the opposite effect, while
+            making the negative prompt provided with negative_prompt_ids (if any) act as a positive prompt.
+        unconditional_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of input sequence tokens in the vocabulary for the unconditional branch. If unset, will default to
+            the last token of the prompt.
+        unconditional_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, **optional**):
+            Attention mask for unconditional_ids.
+        model (`PreTrainedModel`):
+            The model computing the unconditional scores. Supposedly the same as the one computing the conditional
+            scores. Both models must use the same tokenizer.
+        smooth_factor (`float`, **optional**):
+            The interpolation weight for CFG Rescale. 1 means no rescaling, 0 reduces to the conditional scores without
+            CFG. Turn it lower if the output degenerates.
+        use_cache (`bool`, **optional**):
+            Whether to cache key/values during the negative prompt forward pass.
+
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> inputs = tokenizer(["Today, a dragon flew over Paris, France,"], return_tensors="pt")
+    >>> out = model.generate(inputs["input_ids"], guidance_scale=1.5)
+    >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
+    The dragon flew over Paris, France, landing in Lyon, a city of a few million. Dragon-flying was a new form of
+    transport, and the dragon was the first in Europe.
+
+    >>> # with a negative prompt
+    >>> neg_inputs = tokenizer(["A very happy event happened,"], return_tensors="pt")
+    >>> out = model.generate(inputs["input_ids"], guidance_scale=2, negative_prompt_ids=neg_inputs["input_ids"])
+    >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
+    The dragon flew over Paris, France, crashing into Notre Dame Cathedral in the French capital killing at least 127
+    people and injuring more than 350.
+
+    >>> # with a positive prompt
+    >>> neg_inputs = tokenizer(["A very happy event happened,"], return_tensors="pt")
+    >>> out = model.generate(inputs["input_ids"], guidance_scale=0, negative_prompt_ids=neg_inputs["input_ids"])
+    >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
+    Today, a dragon flew over Paris, France, and I'm very happy to be here.
+    ```
+    """
+
+    def __init__(
+        self,
+        guidance_scale: float,
+        model,
+        unconditional_ids: Optional[torch.LongTensor] = None,
+        unconditional_attention_mask: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = True,
+    ):
+        self.guidance_scale = guidance_scale
+        self.model = model
+        self.unconditional_context = {
+            "input_ids": unconditional_ids,
+            "attention_mask": unconditional_attention_mask,
+            "use_cache": use_cache,
+            "past_key_values": None,
+            "first_pass": True,
+        }
+
+    def get_unconditional_logits(self, input_ids):
+        if self.unconditional_context["first_pass"]:
+            if self.unconditional_context["input_ids"] is None:
+                self.unconditional_context["input_ids"] = input_ids[:, -1:]
+            if self.unconditional_context["attention_mask"] is None:
+                self.unconditional_context["attention_mask"] = torch.ones_like(
+                    self.unconditional_context["input_ids"], dtype=torch.long
+                )
+            input_ids = self.unconditional_context["input_ids"]
+            attention_mask = self.unconditional_context["attention_mask"]
+            self.unconditional_context["first_pass"] = False
+        else:
+            attention_mask = torch.cat(
+                [
+                    self.unconditional_context["attention_mask"],
+                    torch.ones_like(input_ids[:, -1:], dtype=torch.long),
+                ],
+                dim=1,
+            )
+            if not self.unconditional_context["use_cache"]:
+                input_ids = torch.cat([self.unconditional_context["input_ids"], input_ids[:, -1:]], dim=1)
+            else:
+                input_ids = input_ids[:, -1:]
+            self.unconditional_context["input_ids"] = input_ids
+            self.unconditional_context["attention_mask"] = attention_mask
+
+        out = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            use_cache=self.unconditional_context["use_cache"],
+            past_key_values=self.unconditional_context["past_key_values"],
+        )
+        self.unconditional_context["past_key_values"] = out.get("past_key_values", None)
+
+        return out.logits
+
+    def __call__(self, input_ids, scores):
+        scores = torch.nn.functional.log_softmax(scores, dim=-1)
+        if self.guidance_scale == 1:
+            return scores
+
+        logits = self.get_unconditional_logits(input_ids)
+
+        unconditional_logits = torch.nn.functional.log_softmax(logits[:, -1], dim=-1)
+        out = self.guidance_scale * (scores - unconditional_logits) + unconditional_logits
+        return out
