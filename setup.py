@@ -149,6 +149,7 @@ _deps = [
     "pytest>=7.2.0",
     "pytest-timeout",
     "pytest-xdist",
+    "pytorch_quantization>=2.1.1",
     "python>=3.8.0",
     "ray[tune]",
     "regex!=2019.12.17",
