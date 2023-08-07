@@ -282,7 +282,7 @@ class TextEmbeddings(nn.Module):
             inputs_embeds = self.word_embeddings(input_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
-        embeddings = inputs_embeds + token_type_embeddings
+        embeddings = inputs_embeds + token_type_embeddings.to(inputs_embeds.device)
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings

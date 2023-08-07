@@ -131,7 +131,7 @@ class RobertaPreLayerNormEmbeddings(nn.Module):
         embeddings = inputs_embeds + token_type_embeddings
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
+            embeddings += position_embeddings.to(embeddings.device)
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
