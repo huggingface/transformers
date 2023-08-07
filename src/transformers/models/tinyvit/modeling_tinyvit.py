@@ -236,7 +236,7 @@ class TinyVitConvStage(nn.Module):
         else:
             self.downsample = None
 
-    def forward(self, hidden_state, input_dimensions, output_attentions=False, print_values=False):
+    def forward(self, hidden_state, input_dimensions, output_attentions=False):
         height, width = input_dimensions
         for layer in self.layers:
             # TODO support gradient checkpointing
@@ -324,8 +324,7 @@ class TinyVitAttention(torch.nn.Module):
         else:
             self.ab = self.attention_biases[:, self.attention_bias_idxs]
 
-    # TODO remove print_values
-    def forward(self, hidden_state, output_attentions, print_values=False):
+    def forward(self, hidden_state, output_attentions):
         batch_size, seq_length, _ = hidden_state.shape
 
         # Normalization
@@ -396,7 +395,7 @@ class TinyViTLayer(nn.Module):
         pad = local_conv_size // 2
         self.local_conv = TinyVitConv2dBatchNorm(dim, dim, ks=local_conv_size, stride=1, pad=pad, groups=dim)
 
-    def forward(self, x, output_attentions, print_values=False):
+    def forward(self, x, output_attentions):
         height, width = self.input_resolution
         batch_size, seq_length, num_channels = x.shape
         if seq_length != height * width:
@@ -423,7 +422,7 @@ class TinyViTLayer(nn.Module):
                 .transpose(2, 3)
                 .reshape(batch_size * nH * nW, self.window_size * self.window_size, num_channels)
             )
-            attention_outputs = self.attn(x, output_attentions, print_values=print_values)
+            attention_outputs = self.attn(x, output_attentions)
             x = attention_outputs[0]
             # window reverse
             x = (
@@ -510,14 +509,14 @@ class TinyVitStage(nn.Module):
         else:
             self.downsample = None
 
-    def forward(self, hidden_state, input_dimensions, output_attentions=False, print_values=False):
+    def forward(self, hidden_state, input_dimensions, output_attentions=False):
         height, width = input_dimensions
         for idx, layer in enumerate(self.layers):
             # TODO support gradient checkpointing
             # if self.gradient_checkpointing:
             #     hidden_state = torch.utils.checkpoint.checkpoint(layer, hidden_state)
             # else:
-            layer_outputs = layer(hidden_state, output_attentions, print_values=print_values)
+            layer_outputs = layer(hidden_state, output_attentions)
             hidden_state = layer_outputs[0]
 
         hidden_state_before_downsampling = hidden_state
@@ -603,11 +602,10 @@ class TinyVitEncoder(nn.Module):
                 )
             else:
                 # TODO support layer_head_mask similar to Swin
-                stage_outputs = stage_module(hidden_states, input_dimensions, output_attentions, print_values=False)
+                stage_outputs = stage_module(hidden_states, input_dimensions, output_attentions)
 
             hidden_states = stage_outputs[0]
             hidden_state_before_downsampling = stage_outputs[1]
-            print("Shape of hidden state before downsampling:", hidden_state_before_downsampling.shape)
             output_dimensions = stage_outputs[2]
 
             input_dimensions = (output_dimensions[-2], output_dimensions[-1])
@@ -918,6 +916,7 @@ class TinyVitBackbone(TinyVitPreTrainedModel, BackboneMixin):
         super().__init__(config)
         super()._init_backbone(config)
 
+        self.num_features = [config.hidden_sizes[0]] + config.hidden_sizes
         self.embeddings = TinyVitEmbeddings(config)
         self.encoder = TinyVitEncoder(config, self.embeddings.patches_resolution)
 

@@ -48,9 +48,9 @@ class TinyVitModelTester:
         batch_size=13,
         image_size=32,
         num_channels=3,
-        hidden_sizes=[96, 192, 384],
-        depths=[1, 2, 1],
-        num_heads=[2, 2, 4],
+        hidden_sizes=[48, 96, 192],
+        depths=[1, 1, 1],
+        num_heads=[2, 2, 2],
         window_sizes=[7, 7, 7],
         mlp_ratio=2.0,
         hidden_dropout_prob=0.0,
@@ -60,7 +60,9 @@ class TinyVitModelTester:
         is_training=True,
         scope=None,
         use_labels=True,
-        type_sequence_label_size=10,
+        num_labels=10,
+        out_features=["stage2", "stage3"],
+        out_indices=[2, 3],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -78,7 +80,9 @@ class TinyVitModelTester:
         self.is_training = is_training
         self.scope = scope
         self.use_labels = use_labels
-        self.type_sequence_label_size = type_sequence_label_size
+        self.num_labels = num_labels
+        self.out_features = out_features
+        self.out_indices = out_indices
 
         # set expected sequence length of final hidden states
         patches_resolution = self.image_size // 4
@@ -89,7 +93,7 @@ class TinyVitModelTester:
 
         labels = None
         if self.use_labels:
-            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            labels = ids_tensor([self.batch_size], self.num_labels)
 
         config = self.get_config()
 
@@ -108,6 +112,8 @@ class TinyVitModelTester:
             drop_path_rate=self.drop_path_rate,
             hidden_act=self.hidden_act,
             initializer_range=self.initializer_range,
+            out_features=self.out_features,
+            out_indices=self.out_indices,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -121,12 +127,12 @@ class TinyVitModelTester:
         )
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        config.num_labels = self.type_sequence_label_size
+        config.num_labels = self.num_labels
         model = TinyVitForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
         # test greyscale images
         config.num_channels = 1
@@ -136,7 +142,7 @@ class TinyVitModelTester:
 
         pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
