@@ -354,7 +354,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     " Make sure the token exists, whithout it, adding tokens to the model is not possible. Thus the initialization fails."
                 )
 
-        # 2. Add the additional special tokens amd the special tokens if they are not already thre.
+        # 2. Add the additional special tokens keeping the user defined order
+        additional_special_tokens = kwargs.pop("additional_special_tokens", [])
+        self._add_tokens(additional_special_tokens, special_tokens=True)
+        
+        # 3. If some of the special tokens are not part of the vocab, we add the, at the end.
         self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
 
         # 3. Make sure the Trie has everything in it
@@ -375,7 +379,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     def get_added_vocab(self) -> Dict[str, int]:
         """
         Returns the added tokens in the vocabulary as a dictionary of token to index.
-
+        Results might be different from the fast call because for now we always add the tokens
+        even if they are already in the vocabulary. This is something we should change. It was requested here @TODO
         Returns:
             `Dict[str, int]`: The added tokens.
         """
@@ -420,12 +425,17 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         model.resize_token_embeddings(len(tokenizer))
         ```"""
         added_tokens = 0
-        new_idx = len(self)  # only call this once
+        if new_tokens is None:
+            return added_tokens
+
+        new_idx = len(self) # only call this once, len gives the last index + 1
         for token in new_tokens:
             if not isinstance(token, (str, AddedToken)):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
+            if str(token) == "":
+                continue
             if isinstance(token, str):
-                token = AddedToken(token, normalized=special_tokens)
+                token = AddedToken(token, normalized=not special_tokens)
             if token.content == self.unk_token:
                 # unk_token and this token have the same pointer, let's update it
                 # even if it is already part of the vocab
@@ -950,7 +960,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
-
+        
+        # the default behaviour is actually rarely used
+        if not spaces_between_special_tokens:
+            logger.warning_once(
+                "spaces_between_special_tokens is deprecated and will be removed in transformers v5. It was adding spaces between `added_tokens`, not special tokens, and does not exist in our fast implementation"
+            )
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
         # To avoid mixing byte-level and unicode for byte-level BPT
@@ -958,10 +973,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # cf. https://github.com/huggingface/transformers/issues/1133
         sub_texts = []
         current_sub_text = []
+        # TODO @ArthurZ in version 5, special tokens should be handled in convert_tokens_to_string, while _convert_tokens_to_string 
         for token in filtered_tokens:
             if skip_special_tokens and token in self.all_special_ids:
                 continue
-            if token in self.added_tokens_encoder:
+            # set(self.added_tokens_encoder) - set(self.all_special_tokens) gives the added tokens from pervious versions.
+            if token in set(self.added_tokens_encoder) - set(self.all_special_tokens):
                 if current_sub_text:
                     sub_texts.append(self.convert_tokens_to_string(current_sub_text))
                     current_sub_text = []
