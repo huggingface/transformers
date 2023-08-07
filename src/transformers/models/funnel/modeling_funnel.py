@@ -967,6 +967,7 @@ class FunnelBaseModel(FunnelPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
@@ -1042,6 +1043,7 @@ class FunnelModel(FunnelPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
         else:
