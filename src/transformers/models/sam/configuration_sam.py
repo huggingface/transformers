@@ -14,7 +14,6 @@
 # limitations under the License.
 """ SAM model configuration"""
 
-import copy
 from typing import Dict, Optional
 
 from ...configuration_utils import PretrainedConfig

@@ -546,10 +546,6 @@ _import_structure = {
     "models.timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
     "models.tinyvit": ["TINYVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "TinyVitConfig"],
-    "models.trajectory_transformer": [
-        "TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "TrajectoryTransformerConfig",
-    ],
     "models.transfo_xl": [
         "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TransfoXLConfig",
@@ -2815,13 +2811,6 @@ else:
             "TinyVitPreTrainedModel",
         ]
     )
-    _import_structure["models.trajectory_transformer"].extend(
-        [
-            "TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TrajectoryTransformerModel",
-            "TrajectoryTransformerPreTrainedModel",
-        ]
-    )
     _import_structure["models.transfo_xl"].extend(
         [
             "TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4651,10 +4640,6 @@ if TYPE_CHECKING:
     from .models.timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimesformerConfig
     from .models.timm_backbone import TimmBackboneConfig
     from .models.tinyvit import TINYVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, TinyVitConfig
-    from .models.trajectory_transformer import (
-        TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        TrajectoryTransformerConfig,
-    )
     from .models.transfo_xl import (
         TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TransfoXLConfig,
@@ -6539,11 +6524,6 @@ if TYPE_CHECKING:
             TinyVitForImageClassification,
             TinyVitModel,
             TinyVitPreTrainedModel,
-        )
-        from .models.trajectory_transformer import (
-            TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TrajectoryTransformerModel,
-            TrajectoryTransformerPreTrainedModel,
         )
         from .models.transfo_xl import (
             TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
