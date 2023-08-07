@@ -482,7 +482,6 @@ def _get_generated_ngrams(banned_ngrams, prev_input_ids, ngram_size, cur_len):
 
     Returns:
         List of tokens that are banned.
-
     """
     # Before decoding the next token, prevent decoding of ngrams that have already appeared
     start_idx = cur_len + 1 - ngram_size
@@ -508,7 +507,7 @@ def _calc_banned_ngram_tokens(
 class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     r"""
     N-grams are groups of "n" consecutive words, characters, or tokens taken from a sequence of text. Given the
-    sentence: "She runs fast", the bi-grams (n = 2) would be ("she","runs") and ("runs","fast"). In text generation,
+    sentence: "She runs fast", the bi-grams (n=2) would be ("she", "runs") and ("runs", "fast"). In text generation,
     avoiding repetitions of word sequences provides a more diverse output. This [`LogitsProcessor`] enforces no
     repetition of n-grams by setting the scores of banned tokens to negative infinity which eliminates those tokens
     from consideration when further processing the scores.
