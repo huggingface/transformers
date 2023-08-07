@@ -354,11 +354,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     " Make sure the token exists, whithout it, adding tokens to the model is not possible. Thus the initialization fails."
                 )
 
-        # 2. Add the additional special tokens keeping the user defined order
-        additional_special_tokens = kwargs.pop("additional_special_tokens", [])
-        self._add_tokens(additional_special_tokens, special_tokens=True)
-
-        # 3. If some of the special tokens are not part of the vocab, we add the, at the end.
+        # 2. If some of the special tokens are not part of the vocab, we add the, at the end.
+        # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
         self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
 
         # 3. Make sure the Trie has everything in it

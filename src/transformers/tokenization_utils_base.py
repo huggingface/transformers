@@ -1302,7 +1302,7 @@ class SpecialTokensMixin:
         set_attr = self.special_tokens_map_extended
         for attr_value in set_attr.values():
             all_toks = all_toks + (list(attr_value) if isinstance(attr_value, (list, tuple)) else [attr_value])
-        return list(OrderedDict.fromkeys(all_toks))
+        return all_toks
 
     @property
     def all_special_tokens(self) -> List[str]:
@@ -2104,6 +2104,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             added_tokens_decoder_sorted = [
                 (k, int(v)) for v, k in sorted(added_tokens_decoder.items(), key=lambda x: int(x[0]))
             ]
+
             added_tokens = cls._check_and_add_added_tokens(tokenizer, added_tokens_decoder_sorted, has_tokenizer_file)
 
             # add the additional special tokens if they do not exist.
