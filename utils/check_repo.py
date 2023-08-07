@@ -273,8 +273,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SpeechT5ForSpeechToSpeech",
     "SpeechT5ForTextToSpeech",
     "SpeechT5HifiGan",
-    "MusicgenModel",
-    "MusicgenForConditionalGeneration",
     "VitMatteForImageMatting",
 ]
 
