@@ -1,6 +1,6 @@
 import torch
 
-from transformers import VitDetModel, VitDetConfig
+from transformers import VitDetConfig, VitDetModel
 
 
 config = VitDetConfig()

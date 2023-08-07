@@ -271,7 +271,7 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         outputs = model(**inputs)
 
         output = outputs[0]
-        
+
         # Encoder-/Decoder-only models
         hidden_states = outputs.hidden_states[0]
         hidden_states.retain_grad()

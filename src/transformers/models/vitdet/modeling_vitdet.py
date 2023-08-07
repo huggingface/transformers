@@ -525,9 +525,8 @@ class VitDetLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-       
         hidden_states = hidden_states.permute(0, 2, 3, 1)
-       
+
         shortcut = hidden_states
 
         hidden_states = self.norm1(hidden_states)
