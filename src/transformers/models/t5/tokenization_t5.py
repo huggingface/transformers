@@ -160,6 +160,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             additional_special_tokens = [
                 AddedToken(f"<extra_id_{i}>", single_word=True, lstrip=False, rstrip=False) for i in range(extra_ids)
             ]
+            additional_special_tokens.reverse()
         elif extra_ids > 0 and additional_special_tokens is not None:
             # Check that we have the right number of extra_id special tokens
             extra_tokens = len(set(filter(lambda x: bool("extra_id" in str(x)), additional_special_tokens)))
@@ -220,7 +221,7 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return self.sp_model.get_piece_size()  # + self._extra_ids legacy?
+        return self.sp_model.get_piece_size()
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
