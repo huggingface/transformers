@@ -58,9 +58,25 @@ def create_rename_keys(config):
     rename_keys.append(("pretrained.model.patch_embed.norm.weight", "backbone.embeddings.norm.weight"))
     rename_keys.append(("pretrained.model.patch_embed.norm.bias", "backbone.embeddings.norm.bias"))
 
+    # transformer encoder
     for i in range(len(config.backbone_config.depths)):
-        rename_keys.append((f"backbone.encoder.layers.{i}.blocks.0.attention.self.logit_scale", f"neck.fusion_stage.layers.{j}.projection.weight"))
-        pretrained.model.layers.0.blocks.0.mlp.fc1.bias
+        for j in range(config.backbone_config.depths[i]):
+            rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.attn.logit_scale", f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.logit_scale"))
+            rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.attn.cpb_mlp.0.weight", f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.continuous_position_bias_mlp.0.weight"))
+            rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.attn.cpb_mlp.0.bias", f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.continuous_position_bias_mlp.0.bias"))
+            rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.attn.cpb_mlp.2.weight", f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.continuous_position_bias_mlp.2.weight"))
+            rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.attn.q_bias", f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.query.bias"))
+            rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.attn.v_bias", f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.value.bias"))
+            rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.attn.proj.weight", f"backbone.encoder.layers.{i}.blocks.{j}.attention.output.dense.weight"))
+            rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.attn.proj.bias", f"backbone.encoder.layers.{i}.blocks.{j}.attention.output.dense.bias"))
+            rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.norm1.weight", f"backbone.encoder.layers.{i}.blocks.{j}.layernorm_before.weight"))
+            rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.norm1.bias", f"backbone.encoder.layers.{i}.blocks.{j}.layernorm_before.bias"))
+            rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.mlp.fc1.weight", f"backbone.encoder.layers.{i}.blocks.{j}.intermediate.dense.weight"))
+            rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.mlp.fc1.bias", f"backbone.encoder.layers.{i}.blocks.{j}.intermediate.dense.bias"))
+            rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.mlp.fc2.weight", f"backbone.encoder.layers.{i}.blocks.{j}.output.dense.weight"))
+            rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.mlp.fc2.bias", f"backbone.encoder.layers.{i}.blocks.{j}.output.dense.bias"))
+            rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.norm2.weight", f"backbone.encoder.layers.{i}.blocks.{j}.layernorm_after.weight"))
+            rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.norm2.bias", f"backbone.encoder.layers.{i}.blocks.{j}.layernorm_after.bias"))
 
     # refinenet (tricky here)
     mapping = {1:3, 2:2, 3:1, 4:0}
@@ -97,21 +113,19 @@ def remove_ignore_keys_(state_dict):
 
 
 # we split up the matrix of each encoder layer into queries, keys and values
-def read_in_q_k_v(state_dict, config):
-    hidden_size = config.backbone_config.hidden_size
-    for i in range(config.backbone_config.num_hidden_layers):
-        # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"pretrained.model.blocks.{i}.attn.qkv.weight")
-        q_bias = state_dict.pop(f"pretrained.model.blocks.{i}.attn.q_bias")
-        v_bias = state_dict.pop(f"pretrained.model.blocks.{i}.attn.v_bias")
-        # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[:hidden_size, :]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.query.bias"] = q_bias
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            hidden_size : hidden_size * 2, :
-        ]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-hidden_size:, :]
-        state_dict[f"backbone.encoder.layer.{i}.attention.attention.value.bias"] = v_bias
+# TODO biases??
+def read_in_q_k_v(state_dict, config, model):
+    for i in range(len(config.backbone_config.depths)):
+        for j in range(config.backbone_config.depths[i]):
+            dim = model.backbone.encoder.layers[i].blocks[j].attention.self.all_head_size
+            # read in weights + bias of input projection layer (in original implementation, this is a single matrix + bias)
+            in_proj_weight = state_dict.pop(f"pretrained.model.layers.{i}.blocks.{j}.attn.qkv.weight")
+            # next, add query, keys and values (in that order) to the state dict
+            state_dict[f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.query.weight"] = in_proj_weight[:dim, :]
+            state_dict[f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.key.weight"] = in_proj_weight[
+                dim : dim * 2, :
+            ]
+            state_dict[f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.value.weight"] = in_proj_weight[-dim:, :]
 
 
 def rename_key(dct, old, new):
@@ -145,6 +159,9 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     for k,v in state_dict.items():
         print(k,v.shape)
 
+    # load HuggingFace model
+    model = DPTForDepthEstimation(config)
+
     # remove certain keys
     remove_ignore_keys_(state_dict)
     # rename keys
@@ -152,10 +169,8 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
     # read in qkv matrices
-    # read_in_q_k_v(state_dict, config)
+    read_in_q_k_v(state_dict, config, model)
 
-    # load HuggingFace model
-    model = DPTForDepthEstimation(config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     print("Missing keys:", missing_keys)
     print("Unexpected keys:", unexpected_keys)
