@@ -2225,7 +2225,8 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                 output_dir=os.path.join(tmp_dir, "test-trainer-epoch"),
                 push_to_hub=True,
                 hub_token=self._token,
-                hub_push_all=True,
+                # To avoid any flakiness if the training goes faster than the uploads.
+                hub_always_push=True,
                 save_strategy="epoch",
             )
             trainer.train()
@@ -2246,7 +2247,8 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                 output_dir=os.path.join(tmp_dir, "test-trainer-step"),
                 push_to_hub=True,
                 hub_token=self._token,
-                hub_push_all=True,
+                # To avoid any flakiness if the training goes faster than the uploads.
+                hub_always_push=True,
                 save_strategy="steps",
                 save_steps=5,
             )
