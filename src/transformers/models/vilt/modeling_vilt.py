@@ -229,7 +229,7 @@ class ViltEmbeddings(nn.Module):
 
         # PART 4: concatenate
         embeddings = torch.cat([text_embeds, image_embeds], dim=1)
-        masks = torch.cat([attention_mask, image_masks], dim=1)
+        masks = torch.cat([attention_mask, image_masks.to(attention_mask.device)], dim=1)
 
         return embeddings, masks
 
