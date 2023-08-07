@@ -22,7 +22,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-
+from pytorch_quantization.nn.modules.tensor_quantizer import TensorQuantizer
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput, SemanticSegmenterOutput
 from ...modeling_utils import PreTrainedModel
@@ -35,6 +35,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_segformer import SegformerConfig
+from pytorch_quantization import nn as quant_nn
 
 
 logger = logging.get_logger(__name__)
@@ -84,8 +85,8 @@ class SegFormerImageClassifierOutput(ImageClassifierOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+# Copied from transformers.models.convnext.modeling_convnext.drop_path
+def drop_path(input, drop_prob: float = 0.0, training: bool = False, scale_by_keep=True):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -125,7 +126,7 @@ class SegformerOverlapPatchEmbeddings(nn.Module):
 
     def __init__(self, patch_size, stride, num_channels, hidden_size):
         super().__init__()
-        self.proj = nn.Conv2d(
+        self.proj = quant_nn.QuantConv2d(
             num_channels,
             hidden_size,
             kernel_size=patch_size,
@@ -133,6 +134,15 @@ class SegformerOverlapPatchEmbeddings(nn.Module):
             padding=patch_size // 2,
         )
 
+        '''
+        self.proj = nn.Conv2d(
+            num_channels,
+            hidden_size,
+            kernel_size=patch_size,
+            stride=stride,
+            padding=patch_size // 2,
+        )
+        '''
         self.layer_norm = nn.LayerNorm(hidden_size)
 
     def forward(self, pixel_values):
@@ -163,18 +173,21 @@ class SegformerEfficientSelfAttention(nn.Module):
         self.attention_head_size = int(self.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(self.hidden_size, self.all_head_size)
-        self.key = nn.Linear(self.hidden_size, self.all_head_size)
-        self.value = nn.Linear(self.hidden_size, self.all_head_size)
+        self.query = quant_nn.QuantLinear(self.hidden_size, self.all_head_size)
+        self.key = quant_nn.QuantLinear(self.hidden_size, self.all_head_size)
+        self.value = quant_nn.QuantLinear(self.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
         self.sr_ratio = sequence_reduction_ratio
         if sequence_reduction_ratio > 1:
-            self.sr = nn.Conv2d(
+            self.sr = quant_nn.QuantConv2d(
                 hidden_size, hidden_size, kernel_size=sequence_reduction_ratio, stride=sequence_reduction_ratio
             )
             self.layer_norm = nn.LayerNorm(hidden_size)
+        self.matmul_q_states_input_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
+        self.matmul_k_states_input_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
+        self.matmul_v_states_input_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
 
     def transpose_for_scores(self, hidden_states):
         new_shape = hidden_states.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -188,7 +201,8 @@ class SegformerEfficientSelfAttention(nn.Module):
         width,
         output_attentions=False,
     ):
-        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        ## query layer can be converted to 
+        query_layer = self.matmul_q_states_input_quantizer(self.transpose_for_scores(self.query(hidden_states)))
 
         if self.sr_ratio > 1:
             batch_size, seq_len, num_channels = hidden_states.shape
@@ -199,12 +213,11 @@ class SegformerEfficientSelfAttention(nn.Module):
             # Reshape back to (batch_size, seq_len, num_channels)
             hidden_states = hidden_states.reshape(batch_size, num_channels, -1).permute(0, 2, 1)
             hidden_states = self.layer_norm(hidden_states)
-
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        key_layer = self.transpose_for_scores(self.key((hidden_states)))
+        value_layer = self.matmul_v_states_input_quantizer(self.transpose_for_scores(self.value(hidden_states)))
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_scores = torch.matmul(query_layer, self.matmul_k_states_input_quantizer(key_layer.transpose(-1, -2)))
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
 
@@ -229,10 +242,12 @@ class SegformerEfficientSelfAttention(nn.Module):
 class SegformerSelfOutput(nn.Module):
     def __init__(self, config, hidden_size):
         super().__init__()
-        self.dense = nn.Linear(hidden_size, hidden_size)
+        self.dense = quant_nn.QuantLinear(hidden_size, hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.matmul_hidden_states_input_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
 
     def forward(self, hidden_states, input_tensor):
+        hidden_states = self.matmul_hidden_states_input_quantizer(hidden_states)
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
@@ -279,11 +294,13 @@ class SegformerAttention(nn.Module):
 class SegformerDWConv(nn.Module):
     def __init__(self, dim=768):
         super().__init__()
-        self.dwconv = nn.Conv2d(dim, dim, 3, 1, 1, bias=True, groups=dim)
+        self.dwconv = quant_nn.QuantConv2d(dim, dim, 3, 1, 1, bias=True, groups=dim)
+        self.matmul_hidden_states_input_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
 
     def forward(self, hidden_states, height, width):
         batch_size, seq_len, num_channels = hidden_states.shape
         hidden_states = hidden_states.transpose(1, 2).view(batch_size, num_channels, height, width)
+        hidden_states = self.matmul_hidden_states_input_quantizer(hidden_states)
         hidden_states = self.dwconv(hidden_states)
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
 
@@ -294,16 +311,18 @@ class SegformerMixFFN(nn.Module):
     def __init__(self, config, in_features, hidden_features=None, out_features=None):
         super().__init__()
         out_features = out_features or in_features
-        self.dense1 = nn.Linear(in_features, hidden_features)
+        self.dense1 = quant_nn.QuantLinear(in_features, hidden_features)
         self.dwconv = SegformerDWConv(hidden_features)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
-        self.dense2 = nn.Linear(hidden_features, out_features)
+        self.dense2 = quant_nn.QuantLinear(hidden_features, out_features)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.matmul_hidden_states_input_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
 
     def forward(self, hidden_states, height, width):
+        hidden_states = self.matmul_hidden_states_input_quantizer(hidden_states)
         hidden_states = self.dense1(hidden_states)
         hidden_states = self.dwconv(hidden_states, height, width)
         hidden_states = self.intermediate_act_fn(hidden_states)
@@ -329,6 +348,10 @@ class SegformerLayer(nn.Module):
         self.layer_norm_2 = nn.LayerNorm(hidden_size)
         mlp_hidden_size = int(hidden_size * mlp_ratio)
         self.mlp = SegformerMixFFN(config, in_features=hidden_size, hidden_features=mlp_hidden_size)
+        self.attn_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
+        self.mlp_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
+        self.hidden_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
+        self.hidden_quantizer1 = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
 
     def forward(self, hidden_states, height, width, output_attentions=False):
         self_attention_outputs = self.attention(
@@ -340,16 +363,14 @@ class SegformerLayer(nn.Module):
 
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-
         # first residual connection (with stochastic depth)
-        attention_output = self.drop_path(attention_output)
-        hidden_states = attention_output + hidden_states
+        attention_output = self.attn_quantizer(self.drop_path(attention_output))
+        hidden_states = attention_output + self.hidden_quantizer(hidden_states)
 
         mlp_output = self.mlp(self.layer_norm_2(hidden_states), height, width)
-
         # second residual connection (with stochastic depth)
-        mlp_output = self.drop_path(mlp_output)
-        layer_output = mlp_output + hidden_states
+        mlp_output = self.mlp_quantizer(self.drop_path(mlp_output))
+        layer_output = mlp_output + self.hidden_quantizer1(hidden_states)
 
         outputs = (layer_output,) + outputs
 
@@ -459,7 +480,7 @@ class SegformerPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        if isinstance(module, (quant_nn.QuantLinear, quant_nn.QuantConv2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -670,10 +691,10 @@ class SegformerMLP(nn.Module):
 
     def __init__(self, config: SegformerConfig, input_dim):
         super().__init__()
-        self.proj = nn.Linear(input_dim, config.decoder_hidden_size)
-
+        self.proj = quant_nn.QuantLinear(input_dim, config.decoder_hidden_size)
+        self.matmul_h_input_quantizer = TensorQuantizer(quant_nn.QuantLinear.default_quant_desc_input)
     def forward(self, hidden_states: torch.Tensor):
-        hidden_states = hidden_states.flatten(2).transpose(1, 2)
+        hidden_states =  self.matmul_h_input_quantizer(hidden_states.flatten(2).transpose(1, 2))
         hidden_states = self.proj(hidden_states)
         return hidden_states
 
