@@ -1000,9 +1000,9 @@ class DPTNeck(nn.Module):
             raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
 
         # postprocess hidden states
-        features = self.reassemble_stage(hidden_states)
+        hidden_states = self.reassemble_stage(hidden_states)
 
-        features = [self.convs[i](feature) for i, feature in enumerate(features)]
+        features = [self.convs[i](feature) for i, feature in enumerate(hidden_states)]
 
         # fusion blocks
         output = self.fusion_stage(features)

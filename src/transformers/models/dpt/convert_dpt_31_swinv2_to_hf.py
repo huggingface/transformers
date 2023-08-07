@@ -78,6 +78,14 @@ def create_rename_keys(config):
             rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.norm2.weight", f"backbone.encoder.layers.{i}.blocks.{j}.layernorm_after.weight"))
             rename_keys.append((f"pretrained.model.layers.{i}.blocks.{j}.norm2.bias", f"backbone.encoder.layers.{i}.blocks.{j}.layernorm_after.bias"))
 
+        # downsample parameters
+        if i in [0,1,2]:
+            rename_keys.append((f"pretrained.model.layers.{i}.downsample.reduction.weight", f"backbone.encoder.layers.{i}.downsample.reduction.weight"))
+            rename_keys.append((f"pretrained.model.layers.{i}.downsample.norm.weight", f"backbone.encoder.layers.{i}.downsample.norm.weight"))
+            rename_keys.append((f"pretrained.model.layers.{i}.downsample.norm.bias", f"backbone.encoder.layers.{i}.downsample.norm.bias"))
+
+    # TODO Swinv2 et al don't require activation postprocessing (readout projections + resize blocks)
+    
     # refinenet (tricky here)
     mapping = {1:3, 2:2, 3:1, 4:0}
 
