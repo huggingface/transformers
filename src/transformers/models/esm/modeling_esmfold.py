@@ -1549,7 +1549,7 @@ class EsmFoldInvariantPointAttention(nn.Module):
             )
 
         a *= math.sqrt(1.0 / (3 * self.hidden_dim))
-        a += math.sqrt(1.0 / 3) * permute_final_dims(b, (2, 0, 1))
+        a += math.sqrt(1.0 / 3) * permute_final_dims(b, (2, 0, 1)).to(a.device)
 
         # [*, N_res, N_res, H, P_q, 3]
         pt_att = q_pts.unsqueeze(-4) - k_pts.unsqueeze(-5)
