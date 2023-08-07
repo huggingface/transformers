@@ -1559,7 +1559,7 @@ class EsmFoldInvariantPointAttention(nn.Module):
         pt_att = sum(torch.unbind(pt_att, dim=-1))
         head_weights = self.softplus(self.head_weights).view(*((1,) * len(pt_att.shape[:-2]) + (-1, 1)))
         head_weights = head_weights * math.sqrt(1.0 / (3 * (self.num_qk_points * 9.0 / 2)))
-        pt_att = pt_att * head_weights
+        pt_att = pt_att * head_weights.to(pt_att.device)
 
         # [*, N_res, N_res, H]
         pt_att = torch.sum(pt_att, dim=-1) * (-0.5)
