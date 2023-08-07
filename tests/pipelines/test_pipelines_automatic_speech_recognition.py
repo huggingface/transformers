@@ -755,6 +755,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
         # fmt: on
 
+        # Whisper can only predict segment level timestamps or word level, not character level
         with self.assertRaisesRegex(
             ValueError,
             "^Whisper cannot return `char` timestamps, only word level or segment level timestamps. "
