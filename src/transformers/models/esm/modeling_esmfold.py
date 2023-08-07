@@ -1545,7 +1545,7 @@ class EsmFoldInvariantPointAttention(nn.Module):
         else:
             a = torch.matmul(
                 permute_final_dims(q, (1, 0, 2)),  # [*, H, N_res, C_hidden]
-                permute_final_dims(k, (1, 2, 0)),  # [*, H, C_hidden, N_res]
+                permute_final_dims(k, (1, 2, 0)).to(q.device),  # [*, H, C_hidden, N_res]
             )
 
         a *= math.sqrt(1.0 / (3 * self.hidden_dim))
