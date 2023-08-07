@@ -198,6 +198,16 @@ class ModelArguments:
             "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
         },
     )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+                "execute code present on the Hub on your local machine."
+            )
+        },
+    )
 
 
 @dataclass
@@ -489,17 +499,20 @@ def main():
         seed=training_args.seed,
         dtype=getattr(jnp, model_args.dtype),
         token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     image_processor = AutoImageProcessor.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer.pad_token = tokenizer.convert_ids_to_tokens(model.config.pad_token_id)
 

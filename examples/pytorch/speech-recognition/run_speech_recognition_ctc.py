@@ -244,6 +244,16 @@ class DataTrainingArguments:
             "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
         },
     )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+                "execute code present on the Hub on your local machine."
+            )
+        },
+    )
     unk_token: str = field(
         default="[UNK]",
         metadata={"help": "The unk token for the tokenizer"},
@@ -505,6 +515,7 @@ def main():
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         token=data_args.token,
+        trust_remote_code=data_args.trust_remote_code,
     )
 
     # 4. Next, if no tokenizer file is defined,
@@ -561,12 +572,14 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(
         tokenizer_name_or_path,
         token=data_args.token,
+        trust_remote_code=data_args.trust_remote_code,
         **tokenizer_kwargs,
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         token=data_args.token,
+        trust_remote_code=data_args.trust_remote_code,
     )
 
     # adapt config
@@ -595,6 +608,7 @@ def main():
         cache_dir=model_args.cache_dir,
         config=config,
         token=data_args.token,
+        trust_remote_code=data_args.trust_remote_code,
     )
 
     # freeze encoder
