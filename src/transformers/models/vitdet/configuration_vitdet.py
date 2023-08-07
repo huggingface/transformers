@@ -65,7 +65,7 @@ class VitDetConfig(BackboneConfigMixin, PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        drop_path_rate (`float`, *optional*, defaults to `0.0`):
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
             Stochastic depth rate.
         window_block_indices (`List[int]`, *optional*):
             List of indices of blocks that should have window attention instead of regular global self-attention.
