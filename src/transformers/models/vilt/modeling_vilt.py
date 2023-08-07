@@ -173,7 +173,7 @@ class ViltEmbeddings(nn.Module):
                 pad_choice = torch.multinomial(torch.ones(nv).float(), p, replacement=True)
                 select.append(torch.cat([valid_row_idx[i], non_valid_row_idx[i][pad_choice]], dim=0))
 
-        select = torch.cat(select, dim=0)
+        select = torch.cat(select, dim=0).to(x.device)
         x = x[select[:, 0], select[:, 1]].view(batch_size, -1, num_channels)
         x_mask = x_mask[select[:, 0], select[:, 1]].view(batch_size, -1)
         # `patch_index` should be on the same device as `select` (for torch>=1.13), which is ensured at definition time.
