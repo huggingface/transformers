@@ -126,7 +126,7 @@ class ViltEmbeddings(nn.Module):
                         align_corners=True,
                     ),
                     (0, width - w, 0, height - h),
-                )
+                ).to(x.device)
                 for h, w in zip(x_h, x_w)
             ],
             dim=0,
