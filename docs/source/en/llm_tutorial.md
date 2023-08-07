@@ -15,25 +15,19 @@ rendered properly in your Markdown viewer.
 -->
 
 
-# Autoregressive Generation
+# Generation with LLMs
 
 [[open-in-colab]]
 
-Autoregressive generation is the inference-time procedure of iteratively calling a model with its own generated outputs, given a few initial inputs. This procedure, well explained in [our blog post](https://huggingface.co/blog/how-to-generate), is used with several tasks in different modalities, including:
-* [Causal language modeling](tasks/language_modeling)
-* [Translation](tasks/translation)
-* [Summarization](tasks/summarization)
-* [Automatic speech recognition](tasks/asr)
-* [Text to speech](tasks/text-to-speech)
-* [Image captioning](tasks/image_captioning)
+LLMs, or Large Language Models, are the key component behind text generative AI. In a nutshell, they consist of large transformer models, trained to predict the next word (or, more precisely, token) given some input text. Since they are used to predict one token at a time, you need to do something more elaborate than simply invoking the model to obtain new sentences -- you need to do autoregressive generation.
 
-Despite the glaring task differences, autoregressive generation in 🤗 `transformers` shares the same core principles and interface across use cases.
+Autoregressive generation is the inference-time procedure of iteratively calling a model with its own generated outputs, given a few initial inputs. In 🤗 `transformers`, this procedure is encapsulated in the `generate` method, available to all models with generative capabilities.
 
-This guide will show you how to:
+This tutorial will show you how to:
 
-* Use your model with autoregressive generation
+* Use your LLM with `generate`
 * Avoid common pitfalls
-* Take the most of your generative model
+* Take the most of your LLM
 
 Before you begin, make sure you have all the necessary libraries installed:
 
@@ -42,9 +36,9 @@ pip install transformers bitsandbytes>=0.39.0 -q
 ```
 
 
-## Generation with LLMs
+## Using your LLM
 
-Let's start with the original and most popular use case of autoregressive generation with transformers: language models. A language model trained on the [causal language modeling task](tasks/language_modeling) will take a sequence of text tokens as input, and returns the probability distribution for the next token. Here's what your LLM forward pass looks like:
+A language model trained on the [causal language modeling task](tasks/language_modeling) will take a sequence of text tokens as input, and returns the probability distribution for the next token. Here's what your LLM forward pass looks like:
 
 <!-- [GIF 1 -- FWD PASS] -->
 <figure class="image table text-center m-0 w-full">
@@ -104,46 +98,7 @@ Finally, you can call the [`~generation.GenerationMixin.generate`] method. It re
 'A list of colors: red, blue, green, yellow, black, white, and brown'
 ```
 
-
-## Generation with other modalities
-
-Autoregressive generation with other modalities behave mostly as described above for LLMs. As such, let's focus on the differences that you may enconter when generating with other modalities:
-* Non-text model inputs rely on the [`AutoProcessor`](https://huggingface.co/docs/transformers/model_doc/auto#transformers.AutoProcessor) class for pre-processing;
-* If the output of your model's forward pass is not a discrete set (e.g. if they are embeddings), then your model has a custom `generate` function with a similar interface, and you should check your model's docs.
-
-And... that's it!
-
-For instance, let's take the image captioning problem.
-
-```py
->>> from PIL import Image
->>> import requests
-
->>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"
->>> image = Image.open(requests.get(url, stream=True).raw)
-```
-
-The variable `image` contains a lovely image of two cats.
-
-<div class="flex justify-center">
-    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png" alt="Test image"/>
-</div>
-
-You can now use the same workflow as above to caption it, replacing the `AutoTokenizer` by the `AutoProcessor` and importing the appropriate model class.
-
-```py
->>> from transformers import AutoProcessor, AutoModelForVision2Seq
-
->>> model = AutoModelForVision2Seq.from_pretrained(
-...     "Salesforce/blip2-opt-2.7b", device_map="auto", load_in_4bit=True
-... )
->>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
->>> model_inputs = processor(image, return_tensors="pt").to("cuda")
-
->>> generated_ids = model.generate(**model_inputs)
->>> processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-'two cats laying on a pink couch\n'
-```
+And that's it! In a few lines of code, you can harness the power of an LLM.
 
 
 ## Common pitfalls
@@ -224,7 +179,7 @@ Autoregressive generation can be controlled with great precision, as we explain 
 
 ## Further resources
 
-While the core principles of autoregressive generation are straightforward, taking the most out of your generative model can be a challenging endeavour, as there are many moving parts. This section is here to serve as a reference for next steps.
+While the core principles of autoregressive generation are straightforward, taking the most out of your LLM can be a challenging endeavour, as there are many moving parts. This section is here to serve as a reference for next steps.
 
 <!-- TODO: complete with new guides -->
 ### Advanced generate usage
