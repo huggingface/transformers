@@ -136,7 +136,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         else:
             # Non CTC models cannot use return_timestamps
             with self.assertRaisesRegex(
-                ValueError, "^We cannot return_timestamps yet on non-ctc models apart from Whisper !$"
+                ValueError, "^We cannot return_timestamps yet on non-CTC models apart from Whisper!$"
             ):
                 outputs = speech_recognizer(audio, return_timestamps="char")
 
