@@ -253,17 +253,15 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         instance, if you get `[{"text": "h", "timestamp": (0.5, 0.6)}, {"text": "i", "timestamp": (0.7,
                         0.9)}]`, then it means the model predicts that the letter "h" was spoken after `0.5` and before
                         `0.6` seconds.
-                    - `"word"` or `True`: the pipeline will return timestamps along the text for every word in the
-                      text.
-                        For instance, if you get `[{"text": "hi ", "timestamp": (0.5, 0.9)}, {"text": "there",
-                        "timestamp": (1.0, 1.5)}]`, then it means the model predicts that the word "hi" was spoken
-                        after `0.5` and before `0.9` seconds.
+                    - `"word"`: the pipeline will return timestamps along the text for every word in the text. For
+                        instance, if you get `[{"text": "hi ", "timestamp": (0.5, 0.9)}, {"text": "there", "timestamp":
+                        (1.0, 1.5)}]`, then it means the model predicts that the word "hi" was spoken after `0.5` and
+                        before `0.9` seconds.
 
                 For the Whisper model, timestamps can take one of two formats:
                     - `"word"`: same as above for word-level CTC timestamps. Word-level timestamps are predicted
-                      through
-                        the *dynamic-time warping (DTW)* algorithm, an approximation to word-level timestamps by
-                        inspecting the cross-attention weights.
+                        through the *dynamic-time warping (DTW)* algorithm, an approximation to word-level timestamps
+                        by inspecting the cross-attention weights.
                     - `True`: the pipeline will return timestamps along the text for *segments* of words in the text.
                         For instance, if you get `[{"text": " Hi there!", "timestamp": (0.5, 1.5)}]`, then it means the
                         model predicts that the segment "Hi there!" was spoken after `0.5` and before `1.5` seconds.
