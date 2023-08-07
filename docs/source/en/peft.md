@@ -89,17 +89,122 @@ peft_model_id = "ybelkada/opt-350m-lora"
 model = AutoModelForCausalLM.from_pretrained(peft_model_id, device_map="auto", load_in_8bit=True)
 ```
 
-## Adding a new PEFT adapter
+## Add a new adapter
 
-TODO.
+You can use [`~peft.PeftModel.add_adapter`] to add a new adapter to a model with an existing adapter as long as the new adapter is the same type as the current one. For example, if you have an existing LoRA adapter attached to a model:
 
-## Enable / disable adapters
+```py
+from transformers import AutoModelForCausalLM, OPTForCausalLM, AutoTokenizer
+from peft import PeftConfig
 
-TODO.
+model_id = "facebook/opt-350m"
+model = AutoModelForCausalLM.from_pretrained(model_id)
+
+lora_config = LoraConfig(
+    target_modules=["q_proj", "k_proj"],
+    init_lora_weights=False
+)
+
+model.add_adapter(lora_config, adapter_name="adapter_1")
+```
+
+To add a new adapter:
+
+```py
+# attach new adapter with same config
+model.add_adapter(lora_config, adapter_name="adapter_2")
+```
+
+Now you can use [`~peft.PeftModel.set_adapter`] to set which adapter to use:
+
+```py
+# use adapter_1
+model.set_adapter("adapter_1")
+output = model.generate(**inputs)
+print(tokenizer.decode(output_disabled[0], skip_special_tokens=True))
+
+# use adapter_2
+model.set_adapter("adapter_2")
+output_enabled = model.generate(**inputs)
+print(tokenizer.decode(output_enabled[0], skip_special_tokens=True))
+```
+
+## Enable and disable adapters
+
+Once you've added an adapter to a model, you can enable or disable the adapter module. To enable the adapter module:
+
+```py
+from transformers import AutoModelForCausalLM, OPTForCausalLM, AutoTokenizer
+from peft import PeftConfig
+
+model_id = "facebook/opt-350m"
+adapter_model_id = "ybelkada/opt-350m-lora"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+text = "Hello"
+inputs = tokenizer(text, return_tensors="pt")
+
+model = AutoModelForCausalLM.from_pretrained(model_id)
+peft_config = PeftConfig.from_pretrained(adapter_model_id)
+
+# to initiate with random weights
+peft_config.init_lora_weights = False
+
+model.add_adapter(peft_config)
+model.enable_adapters()
+output = model.generate(**inputs)
+```
+
+To disable the adapter module:
+
+```py
+model.disable_adapters()
+output = model.generate(**inputs)
+```
 
 ## Train a PEFT adapter
 
-TODO.
+PEFT adapters are supported by the [`Trainer`] class so that you can train an adapter for your specific use case. It only requires adding a few more lines of code. For example, to train a LoRA adapter:
+
+<Tip>
+
+If you aren't familiar with fine-tuning a model with [`Trainer`], take a look at the [Fine-tune a pretrained model](training) tutorial.
+
+</Tip>
+
+1. Define your adapter configuration with the task type and hyperparameters (see [`~peft.LoraConfig`] for more details about what the hyperparameters do).
+
+```py
+from peft import LoraConfig
+
+peft_config = LoraConfig(
+    lora_alpha=16,
+    lora_dropout=0.1,
+    r=64,
+    bias="none",
+    task_type="CAUSAL_LM",
+)
+```
+
+2. Add adapter to the model.
+
+```py
+model.add_adapter(peft_config)
+```
+
+3. Now you can pass the model to [`Trainer`]!
+
+```py
+trainer = Trainer(model=model, ...)
+trainer.train()
+```
+
+To save your trained adapter and load it back:
+
+```py
+model.save_pretrained(save_dir)
+model = AutoModelForCausalLM.from_pretrained(save_dir)
+```
+
 <!--
 TODO: (@younesbelkada @stevhliu)
 -   Link to PEFT docs for further details
