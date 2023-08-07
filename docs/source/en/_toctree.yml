@@ -86,35 +86,34 @@
       - local: generation_strategies
         title: Customize the generation strategy
     title: Generation
-    isExpanded: false
   title: Task Guides
 - sections:
-    - local: fast_tokenizers
-      title: Use fast tokenizers from 🤗 Tokenizers
-    - local: multilingual
-      title: Run inference with multilingual models
-    - local: create_a_model
-      title: Use model-specific APIs
-    - local: custom_models
-      title: Share a custom model
-    - local: sagemaker
-      title: Run training on Amazon SageMaker
-    - local: serialization
-      title: Export to ONNX
-    - local: tflite
-      title: Export to TFLite
-    - local: torchscript
-      title: Export to TorchScript
-    - local: benchmarks
-      title: Benchmarks
-    - local: notebooks
-      title: Notebooks with examples
-    - local: community
-      title: Community resources
-    - local: custom_tools
-      title: Custom Tools and Prompts
-    - local: troubleshooting
-      title: Troubleshoot
+  - local: fast_tokenizers
+    title: Use fast tokenizers from 🤗 Tokenizers
+  - local: multilingual
+    title: Run inference with multilingual models
+  - local: create_a_model
+    title: Use model-specific APIs
+  - local: custom_models
+    title: Share a custom model
+  - local: sagemaker
+    title: Run training on Amazon SageMaker
+  - local: serialization
+    title: Export to ONNX
+  - local: tflite
+    title: Export to TFLite
+  - local: torchscript
+    title: Export to TorchScript
+  - local: benchmarks
+    title: Benchmarks
+  - local: notebooks
+    title: Notebooks with examples
+  - local: community
+    title: Community resources
+  - local: custom_tools
+    title: Custom Tools and Prompts
+  - local: troubleshooting
+    title: Troubleshoot
   title: Developer guides
 - sections:
     - local: performance
@@ -559,6 +558,8 @@
         title: VitDet
       - local: model_doc/vit_mae
         title: ViTMAE
+      - local: model_doc/vitmatte
+        title: ViTMatte
       - local: model_doc/vit_msn
         title: ViTMSN
       - local: model_doc/vivit
@@ -687,8 +688,6 @@
         title: Vision Text Dual Encoder
       - local: model_doc/visual_bert
         title: VisualBERT
-      - local: model_doc/vitmatte
-        title: VitMatte
       - local: model_doc/xclip
         title: X-CLIP
       title: Multimodal models
