@@ -324,7 +324,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 raise ValueError("We cannot return_timestamps yet on non-CTC models apart from Whisper!")
             if self.type == "ctc_with_lm" and return_timestamps != "word":
                 raise ValueError("CTC with LM can only predict word level timestamps, set `return_timestamps='word'`")
-            if self.type == "ctc_with_lm" and return_timestamps not in ["char", "word"]:
+            if self.type == "ctc" and return_timestamps not in ["char", "word"]:
                 raise ValueError(
                     "CTC with LM can predict either character (char) level timestamps, or word level timestamps."
                     "Set `return_timestamps='char'` or `return_timestamps='word'` as required."
