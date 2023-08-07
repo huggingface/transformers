@@ -55,13 +55,13 @@ class VitMatteModelTester:
         is_training=True,
         use_labels=False,
         hidden_size=2,
-        num_hidden_layers=6,
+        num_hidden_layers=2,
         num_attention_heads=2,
         hidden_act="gelu",
         type_sequence_label_size=10,
         initializer_range=0.02,
         scope=None,
-        out_features=["stage5"],
+        out_features=["stage1"],
         fusion_out=[128, 64, 32, 16],
     ):
         self.parent = parent
