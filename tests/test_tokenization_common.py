@@ -398,7 +398,9 @@ class TokenizerTesterMixin:
 
                 # both method should add the token to `_additional_special_tokens` and `added_tokens_decoder`
                 tokenizer.add_tokens([SPECIAL_TOKEN_1], special_tokens=True)
-                tokenizer.add_special_tokens({"additional_special_tokens": [SPECIAL_TOKEN_2]}, replace_additional_special_tokens = False)
+                tokenizer.add_special_tokens(
+                    {"additional_special_tokens": [SPECIAL_TOKEN_2]}, replace_additional_special_tokens=False
+                )
 
                 token_1 = tokenizer.tokenize(SPECIAL_TOKEN_1)
                 token_2 = tokenizer.tokenize(SPECIAL_TOKEN_2)
@@ -2111,6 +2113,7 @@ class TokenizerTesterMixin:
                         encoded_sequences_batch_padded_1[key],
                         encoded_sequences_batch_padded_2[key],
                     )
+
     @unittest.skip("Skipping for now as spm models are not properly updated")
     def test_added_token_are_never_split(self):
         if not self.test_slow_tokenizer:

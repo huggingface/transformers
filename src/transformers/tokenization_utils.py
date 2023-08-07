@@ -357,7 +357,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # 2. Add the additional special tokens keeping the user defined order
         additional_special_tokens = kwargs.pop("additional_special_tokens", [])
         self._add_tokens(additional_special_tokens, special_tokens=True)
-        
+
         # 3. If some of the special tokens are not part of the vocab, we add the, at the end.
         self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
 
@@ -378,10 +378,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def get_added_vocab(self) -> Dict[str, int]:
         """
-        Returns the added tokens in the vocabulary as a dictionary of token to index.
-        Results might be different from the fast call because for now we always add the tokens
-        even if they are already in the vocabulary. This is something we should change. It was requested here @TODO
-        Returns:
+        Returns the added tokens in the vocabulary as a dictionary of token to index. Results might be different from
+        the fast call because for now we always add the tokens even if they are already in the vocabulary. This is
+        something we should change. It was requested here @TODO Returns:
             `Dict[str, int]`: The added tokens.
         """
         return self.added_tokens_encoder
@@ -428,7 +427,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         if new_tokens is None:
             return added_tokens
 
-        new_idx = len(self) # only call this once, len gives the last index + 1
+        new_idx = len(self)  # only call this once, len gives the last index + 1
         for token in new_tokens:
             if not isinstance(token, (str, AddedToken)):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
@@ -960,7 +959,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         **kwargs,
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
-        
+
         # the default behaviour is actually rarely used
         if not spaces_between_special_tokens:
             logger.warning_once(
@@ -973,7 +972,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # cf. https://github.com/huggingface/transformers/issues/1133
         sub_texts = []
         current_sub_text = []
-        # TODO @ArthurZ in version 5, special tokens should be handled in convert_tokens_to_string, while _convert_tokens_to_string 
+        # TODO @ArthurZ in version 5, special tokens should be handled in convert_tokens_to_string, while _convert_tokens_to_string
         for token in filtered_tokens:
             if skip_special_tokens and token in self.all_special_ids:
                 continue

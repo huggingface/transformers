@@ -142,13 +142,13 @@ class CamembertTokenizer(PreTrainedTokenizer):
 
         # HACK: These tokens were added by the author for an obscure reason as they were already part of the
         # sentencepiece vocabulary (this is the case for <s> and </s> and <unk>).
-        
+
         self.added_tokens_decoder = {
-            0 : AddedToken("<s>NOTUSED"),
-            1 : AddedToken(pad_token),
-            2 : AddedToken("</s>NOTUSED"),
-            3 : AddedToken(unk_token),
-            4 : AddedToken("<unk>NOTUSED"), 
+            0: AddedToken("<s>NOTUSED"),
+            1: AddedToken(pad_token),
+            2: AddedToken("</s>NOTUSED"),
+            3: AddedToken(unk_token),
+            4: AddedToken("<unk>NOTUSED"),
         }
 
         self.fairseq_offset = len(self._added_tokens_decoder) - 1
@@ -167,14 +167,13 @@ class CamembertTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-
     @property
     def vocab_size(self):
         # the length of the vocabulary without added tokens is len(self.sp_model) but the added tokens are added at the beginning.
         return len(self.sp_model)
 
     def get_vocab(self):
-        vocab = {self.convert_ids_to_tokens(i): i  for i in range(self.vocab_size + self.fairseq_offset)}
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size + self.fairseq_offset)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
@@ -243,8 +242,6 @@ class CamembertTokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
-
-
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
