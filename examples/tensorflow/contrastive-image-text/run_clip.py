@@ -108,16 +108,6 @@ class ModelArguments:
             "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
         },
     )
-    trust_remote_code: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
-                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
-                "execute code present on the Hub on your local machine."
-            )
-        },
-    )
     freeze_vision_model: bool = field(
         default=False, metadata={"help": "Whether to freeze the vision model parameters or not."}
     )
@@ -363,24 +353,15 @@ def main():
     # 5. Load pretrained model, tokenizer, and image processor
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.tokenizer_name,
-            cache_dir=model_args.cache_dir,
-            use_fast=model_args.use_fast_tokenizer,
-            trust_remote_code=model_args.trust_remote_code,
+            model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
     elif model_args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.model_name_or_path,
-            cache_dir=model_args.cache_dir,
-            use_fast=model_args.use_fast_tokenizer,
-            trust_remote_code=model_args.trust_remote_code,
+            model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
     elif model_args.text_model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.text_model_name_or_path,
-            cache_dir=model_args.cache_dir,
-            use_fast=model_args.use_fast_tokenizer,
-            trust_remote_code=model_args.trust_remote_code,
+            model_args.text_model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
         )
     else:
         raise ValueError(
@@ -395,7 +376,6 @@ def main():
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
             token=model_args.token,
-            trust_remote_code=model_args.trust_remote_code,
         )
         with training_args.strategy.scope():
             model = TFAutoModel.from_pretrained(
@@ -403,7 +383,6 @@ def main():
                 cache_dir=model_args.cache_dir,
                 revision=model_args.model_revision,
                 token=model_args.token,
-                trust_remote_code=model_args.trust_remote_code,
             )
     else:
         # Load image_processor, in this script we only use this to get the mean and std for normalization.
@@ -412,7 +391,6 @@ def main():
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
             token=model_args.token,
-            trust_remote_code=model_args.trust_remote_code,
         )
         with training_args.strategy.scope():
             model = TFVisionTextDualEncoderModel.from_vision_text_pretrained(
@@ -420,7 +398,6 @@ def main():
                 text_model_name_or_path=model_args.text_model_name_or_path,
                 cache_dir=model_args.cache_dir,
                 token=model_args.token,
-                trust_remote_code=model_args.trust_remote_code,
             )
     config = model.config
 
