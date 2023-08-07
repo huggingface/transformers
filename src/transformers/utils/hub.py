@@ -22,6 +22,7 @@ import sys
 import tempfile
 import traceback
 import warnings
+from concurrent import futures
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
@@ -1175,6 +1176,29 @@ def move_cache(cache_dir=None, new_cache_dir=None, token=None):
             etag=etag,
             commit_hash=commit_hash,
         )
+
+
+class PushInProgress:
+    """
+    Internal class to keep track of a push in progress (which might contain multiple `Future` jobs).
+    """
+
+    def __init__(self, jobs: Optional[futures.Future] = None) -> None:
+        self.jobs = [] if jobs is None else jobs
+
+    def is_done(self):
+        return all(job.done() for job in self.jobs)
+
+    def wait_until_done(self):
+        futures.wait(self.jobs)
+
+    def cancel(self) -> None:
+        self.jobs = [
+            job
+            for job in self.jobs
+            # Cancel the job if it wasn't started yet and remove cancelled/done jobs from the list
+            if not (job.cancel() or job.done())
+        ]
 
 
 cache_version_file = os.path.join(TRANSFORMERS_CACHE, "version.txt")
