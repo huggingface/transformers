@@ -1179,8 +1179,8 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         reference_points_list = []
         for lvl, (height, width) in enumerate(spatial_shapes):
             ref_y, ref_x = torch.meshgrid(
-                torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
-                torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
+                torch.linspace(0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device),
+                torch.linspace(0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device),
             )
             ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * height)
             ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * width)
@@ -1352,14 +1352,14 @@ class OneFormerPixelDecoder(nn.Module):
         self.lateral_convs = lateral_convs[::-1]
         self.output_convs = output_convs[::-1]
 
-    def get_valid_ratio(self, mask):
+    def get_valid_ratio(self, mask, dtype=torch.float32):
         """Get the valid ratio of all feature maps."""
 
         _, height, width = mask.shape
         valid_height = torch.sum(~mask[:, :, 0], 1)
         valid_width = torch.sum(~mask[:, 0, :], 1)
-        valid_ratio_heigth = valid_height.float() / height
-        valid_ratio_width = valid_width.float() / width
+        valid_ratio_heigth = valid_height.to(dtype) / height
+        valid_ratio_width = valid_width.to(dtype) / width
         valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)
         return valid_ratio
 
@@ -1380,9 +1380,8 @@ class OneFormerPixelDecoder(nn.Module):
         sources = []
         position_embeddings_list = []
         for level, source in enumerate(features[::-1][: self.num_feature_levels]):
-            feats = source.float()
-            sources.append(self.input_projections[level](feats))
-            position_embeddings_list.append(self.position_embedding(feats))
+            sources.append(self.input_projections[level](source))
+            position_embeddings_list.append(self.position_embedding(source))
 
         masks = [torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool) for x in sources]
 
@@ -1407,8 +1406,7 @@ class OneFormerPixelDecoder(nn.Module):
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
         spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-        valid_ratios = torch.stack([self.get_valid_ratio(m) for m in masks], 1)
-        valid_ratios = valid_ratios.float()
+        valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
 
         # Fourth, sent source_flatten + mask_flatten + lvl_pos_embed_flatten (backbone + proj layer output) through encoder
         # Also provide spatial_shapes, level_start_index and valid_ratios
@@ -1445,7 +1443,6 @@ class OneFormerPixelDecoder(nn.Module):
         # append `out` with extra FPN levels
         # Reverse feature maps into top-down order (from low to high resolution)
         for idx, feats in enumerate(features[: self.num_fpn_levels][::-1]):
-            feats = feats.float()
             lateral_conv = self.lateral_convs[idx]
             output_conv = self.output_convs[idx]
             cur_fpn = lateral_conv(feats)
@@ -2396,15 +2393,15 @@ class OneFormerSinePositionEmbedding(nn.Module):
     def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
         if mask is None:
             mask = torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool)
-        not_mask = ~mask
-        y_embed = not_mask.cumsum(1, dtype=torch.float32)
-        x_embed = not_mask.cumsum(2, dtype=torch.float32)
+        not_mask = (~mask).to(x.dtype)
+        y_embed = not_mask.cumsum(1)
+        x_embed = not_mask.cumsum(2)
         if self.normalize:
             eps = 1e-6
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
             x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
+        dim_t = torch.arange(self.num_pos_feats, dtype=x.dtype, device=x.device)
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
 
         pos_x = x_embed[:, :, :, None] / dim_t
@@ -2744,7 +2741,7 @@ class OneFormerTaskModel(nn.Module):
         )
 
     def forward(self, inputs: Tensor) -> Tensor:
-        task_tokens = self.task_mlp(inputs.float())
+        task_tokens = self.task_mlp(inputs)
         return task_tokens
 
 
@@ -2980,7 +2977,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         multi_scale_features = pixel_level_module_output.decoder_features
         mask_features = pixel_level_module_output.decoder_last_feature
 
-        task_token = self.task_encoder(task_inputs)
+        task_token = self.task_encoder(task_inputs.to(self.dtype))
 
         if self.is_training:
             text_queries = self.text_mapper(text_inputs)
