@@ -928,11 +928,11 @@ def delta2bbox(
 
     Args:
         rois (`torch.Tensor`):
-            Boxes to be transformed. Has shape (N, 4) with N = num_base_anchors * W * H, when rois is a grid of
-            anchors.
+            Boxes to be transformed. Has shape (N, 4) with N = num_base_anchors * width * height, when rois is a grid
+            of anchors.
         deltas (`torch.Tensor`):
-            Encoded offsets relative to each roi. Has shape (N, num_classes * 4) or (N, 4). Offset encoding follows
-            https://arxiv.org/abs/1311.2524.
+            Encoded offsets relative to each roi. Has shape (N, num_classes * 4) or (N, 4) with N = num_base_anchors *
+            width * height. Offset encoding follows https://arxiv.org/abs/1311.2524.
         means (`Sequence[float]`, *optional*, defaults to `(0., 0., 0., 0.)`):
             Denormalizing means for delta coordinates.
         stds (`Sequence[float]`, *optional*, defaults to `(1., 1., 1., 1.)`):
@@ -982,9 +982,9 @@ def delta2bbox(
 
     ground_truth_x_y = predicted_x_y + dxy_wh
     ground_truth_width_height = predicted_width_height * delta_width_height.exp()
-    x1y1 = ground_truth_x_y - (ground_truth_width_height * 0.5)
-    x2y2 = ground_truth_x_y + (ground_truth_width_height * 0.5)
-    bboxes = torch.cat([x1y1, x2y2], dim=-1)
+    top_left_x_y = ground_truth_x_y - (ground_truth_width_height * 0.5)
+    bottom_right_x_y = ground_truth_x_y + (ground_truth_width_height * 0.5)
+    bboxes = torch.cat([top_left_x_y, bottom_right_x_y], dim=-1)
     if clip_border and max_shape is not None:
         max_shape = max_shape[-2:]
         bboxes[..., 0::2].clamp_(min=0, max=max_shape[1])
@@ -1175,13 +1175,13 @@ class MaskRCNNAnchorGenerator(nn.Module):
         return base_anchors
 
     def _meshgrid(self, x, y, row_major=True):
-        """Generate mesh grid of x and y.
+        """Generate mesh grid of coordinates in the x and y dimensions.
 
         Args:
             x (`torch.Tensor`):
-                Grids of x dimension.
+                Grids of the x dimension.
             y (`torch.Tensor`):
-                Grids of y dimension.
+                Grids of the y dimension.
             row_major (`bool`, *optional*, defaults to `True`):
                 Whether to return y grids first.
 
@@ -1242,11 +1242,11 @@ class MaskRCNNAnchorGenerator(nn.Module):
 
         base_anchors = self.base_anchors[level_idx].to(device).to(dtype)
         feat_height, feat_width = featmap_size
-        stride_w, stride_h = self.strides[level_idx]
+        stride_width, stride_height = self.strides[level_idx]
         # First create Range with the default dtype, than convert to
         # target `dtype` for onnx exporting.
-        shift_x = torch.arange(0, feat_width, device=device).to(dtype) * stride_w
-        shift_y = torch.arange(0, feat_height, device=device).to(dtype) * stride_h
+        shift_x = torch.arange(0, feat_width, device=device).to(dtype) * stride_width
+        shift_y = torch.arange(0, feat_height, device=device).to(dtype) * stride_height
 
         shift_xx, shift_yy = self._meshgrid(shift_x, shift_y)
         shifts = torch.stack([shift_xx, shift_yy, shift_xx, shift_yy], dim=-1)
@@ -3648,10 +3648,10 @@ def batched_nms(
             Supports skipping the nms when *nms_cfg* is None, otherwise it should specify nms type and other parameters
             like *iou_thr*. Possible keys includes the following.
             - iou_threshold (float): IoU threshold used for NMS.
-            - split_thr (float): threshold number of boxes. In some cases the number of boxes is large (e.g., 200k). To
-              avoid OOM during training, the users could set *split_thr* to a small value. If the number of boxes is
-              greater than the threshold, it will perform NMS on each group of boxes separately and sequentially.
-              Defaults to 10000.
+            - split_threshold (float): threshold number of boxes. In some cases the number of boxes is large (e.g.,
+              200k). To avoid OOM during training, the users could set *split_threshold* to a small value. If the
+              number of boxes is greater than the threshold, it will perform NMS on each group of boxes separately and
+              sequentially. Defaults to 10000.
         class_agnostic (`bool`, *optional*, defaults to `False`):
             If `True`, NMS is class agnostic, i.e. IoU thresholding happens over all boxes, regardless of the predicted
             class.
@@ -3696,9 +3696,9 @@ def batched_nms(
     nms_type = nms_cfg_.pop("type", "nms")
     nms_op = eval(nms_type)
 
-    split_thr = nms_cfg_.pop("split_thr", 10000)
+    split_threshold = nms_cfg_.pop("split_threshold", 10000)
     # Won't split to multiple nms nodes when exporting to onnx
-    if boxes_for_nms.shape[0] < split_thr or torch.onnx.is_in_onnx_export():
+    if boxes_for_nms.shape[0] < split_threshold or torch.onnx.is_in_onnx_export():
         detections, keep = nms_op(boxes_for_nms, scores, **nms_cfg_)
         boxes = boxes[keep]
 

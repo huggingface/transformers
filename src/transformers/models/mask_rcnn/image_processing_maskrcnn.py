@@ -19,7 +19,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import PaddingMode, normalize, pad, rescale, resize, to_channel_dimension_format
+from ...image_transforms import PaddingMode, pad, rescale, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -458,19 +458,6 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         Rescale the image by the given factor.
         """
         return rescale(image, rescale_factor, data_format=data_format)
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: Union[float, Iterable[float]],
-        std: Union[float, Iterable[float]],
-        data_format: Optional[ChannelDimension] = None,
-    ) -> np.ndarray:
-        """
-        Normalize the image with the given mean and standard deviation.
-        """
-        return normalize(image, mean=mean, std=std, data_format=data_format)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.resize_annotation
     def resize_annotation(
