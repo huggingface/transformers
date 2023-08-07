@@ -1031,7 +1031,7 @@ class InstructBlipQFormerEmbeddings(nn.Module):
             embeddings = self.word_embeddings(input_ids)
             if self.position_embedding_type == "absolute":
                 position_embeddings = self.position_embeddings(position_ids.to(embeddings.device))
-                embeddings = embeddings + position_embeddings
+                embeddings = embeddings + position_embeddings.to(embeddings.device)
 
             if query_embeds is not None:
                 embeddings = torch.cat((query_embeds, embeddings), dim=1)

@@ -224,7 +224,7 @@ class EsmEmbeddings(nn.Module):
 
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
+            embeddings += position_embeddings.to(embeddings.device)
 
         if self.layer_norm is not None:
             embeddings = self.layer_norm(embeddings)
