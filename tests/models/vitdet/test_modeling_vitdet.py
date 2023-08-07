@@ -21,7 +21,6 @@ import unittest
 from transformers import VitDetConfig
 from transformers.testing_utils import (
     require_torch,
-    slow,
     torch_device,
 )
 from transformers.utils import is_torch_available, is_vision_available
@@ -36,7 +35,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import VitDetBackbone, VitDetModel
-    from transformers.models.vitdet.modeling_vitdet import VITDET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -287,8 +285,10 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if self.has_attentions:
             self.assertIsNotNone(attentions.grad)
 
-    @slow
+    @unittest.skip(reason="VitDet does not support feedforward chunking")
+    def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="VitDet does not have standalone checkpoints since it used as backbone in other models")
     def test_model_from_pretrained(self):
-        for model_name in VITDET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = VitDetModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        pass

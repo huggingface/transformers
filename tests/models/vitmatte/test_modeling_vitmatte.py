@@ -39,7 +39,9 @@ if is_torch_available():
 
 
 if is_vision_available():
-    pass
+    from PIL import Image
+
+    from transformers import VitMatteImageProcessor
 
 
 class VitMatteModelTester:
@@ -229,3 +231,34 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             print("Hello we're here")
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+
+@require_torch
+class VitMatteModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference(self):
+        # TODO update organization
+        processor = VitMatteImageProcessor.from_pretrained("nielsr/vitmatte-small-composition-1k")
+        model = VitMatteForImageMatting.from_pretrained("nielsr/vitmatte-small-composition-1k").to(torch_device)
+
+        import requests
+
+        # TODO add to hf-internal-testing
+        url = "https://github.com/hustvl/ViTMatte/blob/main/demo/bulb_rgb.png?raw=true"
+        image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        url = "https://github.com/hustvl/ViTMatte/blob/main/demo/bulb_trimap.png?raw=true"
+        trimap = Image.open(requests.get(url, stream=True).raw)
+
+        # prepare image + trimap for the model
+        inputs = processor(images=image, trimaps=trimap.convert("L"), return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            alphas = model(**inputs).alphas
+
+        expected_shape = torch.Size((1, 1, 640, 960))
+        self.assertEqual(alphas.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[0.9977, 0.9987, 0.9990], [0.9980, 0.9998, 0.9998], [0.9983, 0.9998, 0.9998]], device=torch_device
+        )
+        self.assertTrue(torch.allclose(alphas[0, 0, :3, :3], expected_slice, atol=1e-4))

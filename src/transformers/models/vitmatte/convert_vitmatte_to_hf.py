@@ -19,10 +19,12 @@ URL: https://github.com/hustvl/ViTMatte
 
 import argparse
 
+import requests
 import torch
 from huggingface_hub import hf_hub_download
+from PIL import Image
 
-from transformers import VitDetConfig, VitMatteConfig, VitMatteForImageMatting
+from transformers import VitDetConfig, VitMatteConfig, VitMatteForImageMatting, VitMatteImageProcessor
 
 
 def get_config(model_name):
@@ -91,46 +93,38 @@ def convert_vitmatte_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
         rename_key(state_dict, src, dest)
 
     # create model
+    processor = VitMatteImageProcessor()
     model = VitMatteForImageMatting(config)
     model.eval()
 
     # load state dict
     model.load_state_dict(state_dict)
 
-    # verify on dummy inputs
-    # TODO use processor
-    # pixel_values = processor(image, return_tensors="pt").pixel_values
-    filepath = hf_hub_download(repo_id="nielsr/vitmatte-dummy-data", filename="images.pt", repo_type="dataset")
-    images = torch.load(filepath, map_location="cpu")
+    # verify on dummy image + trimap
+    url = "https://github.com/hustvl/ViTMatte/blob/main/demo/bulb_rgb.png?raw=true"
+    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    url = "https://github.com/hustvl/ViTMatte/blob/main/demo/bulb_trimap.png?raw=true"
+    trimap = Image.open(requests.get(url, stream=True).raw)
 
-    print("Shape of images:", images.shape)
+    pixel_values = processor(images=image, trimaps=trimap.convert("L"), return_tensors="pt").pixel_values
+
     with torch.no_grad():
-        alphas = model(images).alphas
+        alphas = model(pixel_values).alphas
 
-    print(alphas.shape)
-    print(alphas[0, 0, :3, :3])
-
-    expected_slice = torch.tensor(
-        [
-            [4.4248e-04, 8.3591e-06, 2.3893e-06],
-            [8.2327e-06, 6.1929e-07, 2.4754e-07],
-            [1.3892e-06, 1.1131e-07, 2.8105e-08],
-        ]
-    )
+    expected_slice = torch.tensor([[0.9977, 0.9987, 0.9990], [0.9980, 0.9998, 0.9998], [0.9983, 0.9998, 0.9998]])
 
     assert torch.allclose(alphas[0, 0, :3, :3], expected_slice, atol=1e-4)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
-        print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
+        print(f"Saving model and processor of {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
-        # print(f"Saving processor to {pytorch_dump_folder_path}")
-        # processor.save_pretrained(pytorch_dump_folder_path)
+        processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         print(f"Pushing model and processor for {model_name} to hub")
         model.push_to_hub(f"nielsr/{model_name}")
-        # processor.push_to_hub(f"nielsr/{model_name}")
+        processor.push_to_hub(f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
