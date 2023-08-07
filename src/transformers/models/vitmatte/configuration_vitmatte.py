@@ -46,9 +46,9 @@ class VitMatteConfig(PretrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         convstream_out (`List[int]`, *optional*, defaults to `[48, 96, 192]`):
-            ...
+            The output channels of the ConvStream module.
         fusion_out (`List[int]`, *optional*, defaults to `[256, 128, 64, 32]`):
-            ...
+            The output channels of the Fusion blocks.
 
     Example:
 

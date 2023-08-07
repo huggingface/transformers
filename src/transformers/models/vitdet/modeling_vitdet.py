@@ -249,12 +249,6 @@ class VitDetAttention(nn.Module):
             self.rel_pos_h = nn.Parameter(torch.zeros(2 * input_size[0] - 1, head_dim))
             self.rel_pos_w = nn.Parameter(torch.zeros(2 * input_size[1] - 1, head_dim))
 
-            # TODO define this in init_weights
-            # rel_pos_zero_init=True,
-            # if not rel_pos_zero_init:
-            #     nn.init.trunc_normal_(self.rel_pos_h, std=0.02)
-            #     nn.init.trunc_normal_(self.rel_pos_w, std=0.02)
-
     def forward(self, hidden_state, output_attentions=False):
         batch_size, height, width, _ = hidden_state.shape
         # qkv with shape (3, batch_size, num_heads, height * width, num_channels)
@@ -390,16 +384,6 @@ class VitDetResBottleneckBlock(nn.Module):
 
         self.conv3 = nn.Conv2d(bottleneck_channels, out_channels, 1, bias=False)
         self.norm3 = VitDetLayerNorm(out_channels)
-
-        # TODO define this in init_weights
-        # for layer in [self.conv1, self.conv2, self.conv3]:
-        #     weight_init.c2_msra_fill(layer)
-        # for layer in [self.norm1, self.norm2]:
-        #     layer.weight.data.fill_(1.0)
-        #     layer.bias.data.zero_()
-        # zero init last norm layer.
-        # self.norm3.weight.data.zero_()
-        # self.norm3.bias.data.zero_()
 
     def forward(self, x):
         out = x
@@ -635,6 +619,20 @@ class VitDetEncoder(nn.Module):
         )
 
 
+def caffe2_msra_fill(module: nn.Module) -> None:
+    """
+    Initialize `module.weight` using the "MSRAFill" implemented in Caffe2. Also initializes `module.bias` to 0.
+
+    Source: https://detectron2.readthedocs.io/en/latest/_modules/fvcore/nn/weight_init.html.
+
+    Args:
+        module (torch.nn.Module): module to initialize.
+    """
+    nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+    if module.bias is not None:
+        nn.init.constant_(module.bias, 0)
+
+
 class VitDetPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -660,18 +658,35 @@ class VitDetPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        # elif isinstance(module, VitDetEmbeddings):
-        #     module.position_embeddings.data = nn.init.trunc_normal_(
-        #         module.position_embeddings.data.to(torch.float32),
-        #         mean=0.0,
-        #         std=self.config.initializer_range,
-        #     ).to(module.position_embeddings.dtype)
 
-        #     module.cls_token.data = nn.init.trunc_normal_(
-        #         module.cls_token.data.to(torch.float32),
-        #         mean=0.0,
-        #         std=self.config.initializer_range,
-        #     ).to(module.cls_token.dtype)
+        elif isinstance(module, VitDetEmbeddings):
+            module.position_embeddings.data = nn.init.trunc_normal_(
+                module.position_embeddings.data.to(torch.float32),
+                mean=0.0,
+                std=self.config.initializer_range,
+            ).to(module.position_embeddings.dtype)
+
+        elif isinstance(module, VitDetAttention) and self.config.use_relative_position_embeddings:
+            module.rel_pos_h.data = nn.init.trunc_normal_(
+                module.rel_pos_h.data.to(torch.float32),
+                mean=0.0,
+                std=self.config.initializer_range,
+            )
+            module.rel_pos_w.data = nn.init.trunc_normal_(
+                module.rel_pos_w.data.to(torch.float32),
+                mean=0.0,
+                std=self.config.initializer_range,
+            )
+
+        elif isinstance(module, VitDetResBottleneckBlock):
+            for layer in [module.conv1, module.conv2, module.conv3]:
+                caffe2_msra_fill(layer)
+            for layer in [module.norm1, module.norm2]:
+                layer.weight.data.fill_(1.0)
+                layer.bias.data.zero_()
+            # zero init last norm layer.
+            module.norm3.weight.data.zero_()
+            module.norm3.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module: VitDetEncoder, value: bool = False) -> None:
         if isinstance(module, VitDetEncoder):
