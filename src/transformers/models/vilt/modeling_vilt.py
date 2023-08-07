@@ -181,7 +181,7 @@ class ViltEmbeddings(nn.Module):
         pos_embed = pos_embed.to(x.device)[select[:, 0], select[:, 1]].view(batch_size, -1, num_channels)
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        x = torch.cat((cls_tokens, x), dim=1)
+        x = torch.cat((cls_tokens.to(x.device), x), dim=1)
         pos_embed = torch.cat(
             (self.position_embeddings[:, 0, :][:, None, :].expand(batch_size, -1, -1), pos_embed), dim=1
         )
