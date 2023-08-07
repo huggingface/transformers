@@ -175,7 +175,7 @@ the [`BertTokenizerFast`] to tokenize the text and create `input_ids`, `attentio
 As for images, the processor will leverage [`ViltImageProcessor`] to resize and normalize the image, and create `pixel_values` and `pixel_mask`.
 
 All these preprocessing steps are done under the hood, we only need to call the `processor`. However, we still need to 
-prepare the target labels. Labels are represented as a soft encoded vector where of shape (num_labels,) where the each 
+prepare the target labels. Labels are represented as a soft encoded vector of shape (num_labels,) where each 
 element represents a potential answer (label): for valid answers the element contains their score (weight), and the rest are zeroes.
 
 The following function applies the `processor` to the images and questions and formats the labels as described above:
