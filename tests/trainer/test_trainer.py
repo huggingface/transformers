@@ -23,14 +23,13 @@ import re
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from itertools import product
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import numpy as np
-from huggingface_hub import HfFolder, Repository, delete_repo
+from huggingface_hub import HfFolder, delete_repo, list_repo_commits
 from parameterized import parameterized
 from requests.exceptions import HTTPError
 
@@ -2226,21 +2225,17 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                 output_dir=os.path.join(tmp_dir, "test-trainer-epoch"),
                 push_to_hub=True,
                 hub_token=self._token,
+                # To avoid any flakiness if the training goes faster than the uploads.
+                hub_always_push=True,
                 save_strategy="epoch",
             )
             trainer.train()
 
-            # Wait for the async pushes to be finished
-            while trainer.push_in_progress is not None and not trainer.push_in_progress.is_done:
-                time.sleep(0.5)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-epoch", token=self._token)
-            commits = self.get_commit_history(tmp_dir)
-            self.assertIn("initial commit", commits)
-            # We can't test that epoch 2 and 3 are in the commits without being flaky as those might be skipped if
-            # the push for epoch 1 wasn't finished at the time.
-            self.assertIn("Training in progress, epoch 1", commits)
+        commits = list_repo_commits(f"{USER}/test-trainer-epoch", token=self._token)
+        commits = [c.title for c in commits]
+        self.assertIn("initial commit", commits)
+        for i in range(1, 4):
+            self.assertIn(f"Training in progress, epoch {i}", commits)
 
     def test_push_to_hub_with_saves_each_n_steps(self):
         num_gpus = max(1, get_gpu_count())
@@ -2252,22 +2247,21 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                 output_dir=os.path.join(tmp_dir, "test-trainer-step"),
                 push_to_hub=True,
                 hub_token=self._token,
+                # To avoid any flakiness if the training goes faster than the uploads.
+                hub_always_push=True,
                 save_strategy="steps",
                 save_steps=5,
             )
             trainer.train()
 
-            # Wait for the async pushes to be finished
-            while trainer.push_in_progress is not None and not trainer.push_in_progress.is_done:
-                time.sleep(0.5)
+        commits = list_repo_commits(f"{USER}/test-trainer-step", token=self._token)
+        commits = [c.title for c in commits]
+        self.assertIn("initial commit", commits)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-step", token=self._token)
-            commits = self.get_commit_history(tmp_dir)
-            self.assertIn("initial commit", commits)
-            # We can't test that epoch 2 and 3 are in the commits without being flaky as those might be skipped if
-            # the push for epoch 1 wasn't finished at the time.
-            self.assertIn("Training in progress, step 5", commits)
+        # max_steps depend on the number of available GPUs
+        max_steps = math.ceil(trainer.args.num_train_epochs * len(trainer.get_train_dataloader()))
+        for i in range(5, max_steps, 5):
+            self.assertIn(f"Training in progress, step {i}", commits)
 
 
 @require_torch

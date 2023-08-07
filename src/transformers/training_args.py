@@ -568,6 +568,8 @@ class TrainingArguments:
             `huggingface-cli login`.
         hub_private_repo (`bool`, *optional*, defaults to `False`):
             If True, the Hub repo will be set to private.
+        hub_always_push (`bool`, *optional*, defaults to `False`):
+            Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not finished.
         gradient_checkpointing (`bool`, *optional*, defaults to `False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
@@ -1110,6 +1112,10 @@ class TrainingArguments:
     )
     hub_token: Optional[str] = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
     hub_private_repo: bool = field(default=False, metadata={"help": "Whether the model repository is private or not."})
+    hub_always_push: bool = field(
+        default=False,
+        metadata={"help": "Unless `True`, the Trainer will skip pushes if the previous one wasn't finished yet."},
+    )
     gradient_checkpointing: bool = field(
         default=False,
         metadata={
@@ -2367,6 +2373,7 @@ class TrainingArguments:
         strategy: Union[str, HubStrategy] = "every_save",
         token: Optional[str] = None,
         private_repo: bool = False,
+        always_push: bool = False,
     ):
         """
         A method that regroups all arguments linked to synchronizing checkpoints with the Hub.
@@ -2407,6 +2414,9 @@ class TrainingArguments:
                 with `huggingface-cli login`.
             private_repo (`bool`, *optional*, defaults to `False`):
                 If True, the Hub repo will be set to private.
+            always_push (`bool`, *optional*, defaults to `False`):
+                Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not
+                finished.
 
         Example:
 
@@ -2424,6 +2434,7 @@ class TrainingArguments:
         self.hub_strategy = HubStrategy(strategy)
         self.hub_token = token
         self.hub_private_repo = private_repo
+        self.hub_always_push = always_push
         return self
 
     def set_optimizer(
