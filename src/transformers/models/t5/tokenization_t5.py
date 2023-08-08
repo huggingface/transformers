@@ -158,7 +158,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         # Add extra_ids to the special token list
         if extra_ids > 0 and additional_special_tokens is None:
             additional_special_tokens = [
-                AddedToken(f"<extra_id_{i}>", single_word=True, lstrip=False, rstrip=False) for i in range(extra_ids)
+                AddedToken(f"<extra_id_{i}>", single_word=True, lstrip=True, rstrip=True) for i in range(extra_ids)
             ]
             additional_special_tokens.reverse()
         elif extra_ids > 0 and additional_special_tokens is not None:

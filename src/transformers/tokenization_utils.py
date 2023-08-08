@@ -346,6 +346,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     def __init__(self, **kwargs):
         # 1. Init the parent class
         super().__init__(**kwargs)
+        if "added_tokens_decoder" in kwargs:
+            # overwriting the class's added_tokens_decoder
+            self.added_tokens_decoder = kwargs.get("added_tokens_decoder")
 
         if self.unk_token is not None and self.unk_token not in self._added_tokens_decoder:
             if self.convert_tokens_to_ids(self.unk_token) is None:

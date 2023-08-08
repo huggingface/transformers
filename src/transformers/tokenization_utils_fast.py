@@ -155,6 +155,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
 
+        self._add_tokens(self.all_special_tokens_extended)
+
     @property
     def is_fast(self) -> bool:
         return True
