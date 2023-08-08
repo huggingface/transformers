@@ -373,52 +373,32 @@ class TopPLogitsWarper(LogitsWarper):
 
     Examples:
     ```python
-    >>> # Import required modules
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 
-    >>> # Set the model
-    >>> model_name = "gpt2"
-
-    >>> # Initialize model and tokenizer
-    >>> model = AutoModelForCausalLM.from_pretrained(model_name)
-    >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-    >>> # Set the pad token to eos token
-    >>> model.config.pad_token_id = model.config.eos_token_id
-    >>> model.generation_config.pad_token_id = model.config.eos_token_id
-
-    >>> # Set seed for reproducibility
     >>> set_seed(0)
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
 
-    >>> # Define text
     >>> text = "It is probably one of the most important things for parents to teach children about patience and acceptance. In this way, we as a society can ensure"
-
-    >>> # Encode input
     >>> inputs = tokenizer(text, return_tensors="pt")
 
     >>> # Generate sequences without top_p sampling
+    >>> # We can see that the answer tends to have a lot of repeated tokens and phrases
     >>> outputs = model.generate(inputs["input_ids"], max_length=55)
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
     'It is probably one of the most important things for parents to teach children about patience and acceptance. In this way, we as a society can ensure that our children are not taught to be impatient or to be afraid of the future.\n\nThe first step is to teach them'
 
-    >>> # We can see that the answer tends to have a lot of repeated tokens and phrases
-
-
-    >>> # Generate sequences with top_p sampling
-    >>> # Set `do_sample=True` to use top_p sampling with `top_p` arugment
+    >>> # Generate sequences with top_p sampling: set `do_sample=True` to use top_p sampling with `top_p` arugment
+    >>> # We already see that the answer has less repetitive tokens and is more diverse
     >>> outputs = model.generate(inputs["input_ids"], max_length=55, do_sample=True, top_p=0.25)
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
     'It is probably one of the most important things for parents to teach children about patience and acceptance. In this way, we as a society can ensure that children are taught that they are not to be scared of anything, and that they are not to be afraid of anything.\n'
 
-    >>> # We already see that the answer has less repetitive tokens and is more diverse
-
-
     >>> # Generate sequences with top_p sampling with a larger top_p value
-    >>> outputs = model.generate(inputs["input_ids"], do_sample=True, max_length=55, top_p=0.95)
+    >>> # We see that as we increase the top_p value, less probable tokens also get selected during text generation, making the answer more diverse
+    >>> outputs = model.generate(inputs["input_ids"], max_length=55, do_sample=True, top_p=0.95)
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
     'It is probably one of the most important things for parents to teach children about patience and acceptance. In this way, we as a society can ensure that our children are taught what it means to respect their emotions in a positive way.\n\nParents can use this feeling of love'
-
-    >>> # We see that as we increase the top_p value, less probable tokens also get selected during text generation, making the answer more diverse
     ```
     """
 
