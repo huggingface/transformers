@@ -147,8 +147,8 @@
       title: (번역중) How to contribute to transformers?
     - local: in_translation
       title: (번역중) How to add a model to 🤗 Transformers?
-    - local: in_translation
-      title: (번역중) How to convert a 🤗 Transformers model to TensorFlow?
+    - local: add_tensorflow_model
+      title: 어떻게 🤗 Transformers 모델을 TensorFlow로 변환하나요?
     - local: in_translation
       title: (번역중) How to add a pipeline to 🤗 Transformers?
     - local: testing
