@@ -2045,7 +2045,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     added_tokens = tokenizer_file_handle.pop("added_tokens")
                 for serialized_tokens in added_tokens:
                     idx = int(serialized_tokens.pop("id"))
-                    serialized_tokens.pop("special")
+                    serialized_tokens.pop("special") # TODO arthur keeep thhis!
                     added_tokens_decoder[idx] = AddedToken(**serialized_tokens)
 
         # Load a slow from a slow
