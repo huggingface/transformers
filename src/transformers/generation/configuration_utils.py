@@ -332,8 +332,8 @@ class GenerationConfig(PushToHubMixin):
 
     def validate(self):
         """
-        Validates the values of the attributes of the GenerationConfig instance. Raises exceptions in the presence of
-        parameterization that can be detected as incorrect from the configuration instance alone.
+        Validates the values of the attributes of the [`GenerationConfig`] instance. Raises exceptions in the presence
+        of parameterization that can be detected as incorrect from the configuration instance alone.
 
         Note that some parameters are best validated at generate runtime, as they may depend on other inputs and/or the
         model, such as parameters related to the generation length.
