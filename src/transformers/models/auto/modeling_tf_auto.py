@@ -22,7 +22,6 @@ from ...utils import logging
 from .auto_factory import _BaseAutoModelClass, _LazyAutoMapping, auto_class_update
 from .configuration_auto import CONFIG_MAPPING_NAMES
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -81,7 +80,6 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("segformer", "TFSegformerModel"),
         ("speech_to_text", "TFSpeech2TextModel"),
         ("swin", "TFSwinModel"),
-        ("swin2sr", "Swin2SRModel"),
         ("t5", "TFT5Model"),
         ("tapas", "TFTapasModel"),
         ("transfo-xl", "TFTransfoXLModel"),
