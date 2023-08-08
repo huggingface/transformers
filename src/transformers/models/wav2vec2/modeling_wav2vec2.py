@@ -1513,9 +1513,8 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 min_masks=self.config.mask_time_min_masks,
             )
             mask_time_indices = mask_time_indices.to(device=hidden_states.device)
-            temp_hidden_states = hidden_states.clone()
-            temp_hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
-            hidden_states = temp_hidden_states
+            expanded_embed = self.masked_spec_embed.unsqueeze(0).unsqueeze(0)
+            hidden_states = torch.where(mask_time_indices.unsqueeze(-1), expanded_embed, hidden_states)
 
         if self.config.mask_feature_prob > 0 and self.training:
             # generate indices & apply SpecAugment along feature axis
