@@ -202,16 +202,20 @@ While the autoregressive generation process is relatively straightforward, makin
 
 <!-- TODO: complete with new guides -->
 ### Advanced generate usage
- - [Guide](generation_strategies) on how to control different generation methods, how to set up the generation configuration file, and how to stream the output;
- - API reference on [~generation.GenerationConfig], [~generation.GenerationMixin.generate], and [generate-related classes](internal/generation_utils).
+
+1. [Guide](generation_strategies) on how to control different generation methods, how to set up the generation configuration file, and how to stream the output;
+2. API reference on [~generation.GenerationConfig], [~generation.GenerationMixin.generate], and [generate-related classes](internal/generation_utils).
 
 ### LLMs
- - [Open LLM Leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard), which focuses on the quality of the open-source models;
- - [Open LLM-Perf Leaderboard](https://huggingface.co/spaces/optimum/llm-perf-leaderboard), which focuses on LLM throughput.
+
+1. [Open LLM Leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard), which focuses on the quality of the open-source models;
+2. [Open LLM-Perf Leaderboard](https://huggingface.co/spaces/optimum/llm-perf-leaderboard), which focuses on LLM throughput.
 
 ### Latency and Throughput
- - [Guide](main_classes/quantization) on dynamic quantization, which shows you how to drastically reduce your memory requirements.
+
+1. [Guide](main_classes/quantization) on dynamic quantization, which shows you how to drastically reduce your memory requirements.
 
 ### Related libraries
- - [`text-generation-inference`](https://github.com/huggingface/text-generation-inference), a production-ready server for LLMs;
- - [`optimum`](https://github.com/huggingface/optimum), an extension of 🤗 `transformers` that optimizes for specific hardware devices.
+
+1. [`text-generation-inference`](https://github.com/huggingface/text-generation-inference), a production-ready server for LLMs;
+2. [`optimum`](https://github.com/huggingface/optimum), an extension of 🤗 `transformers` that optimizes for specific hardware devices.
