@@ -2188,11 +2188,12 @@ class TokenizerTesterMixin:
 
     @require_tokenizers
     def test_added_token_serializable(self):
+        # TODO this is tested 10_000 times....
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 new_token = AddedToken("new_token", lstrip=True)
-                tokenizer.add_special_tokens({"additional_special_tokens": [new_token]})
+                tokenizer.add_tokens([new_token])
 
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
                     tokenizer.save_pretrained(tmp_dir_name)

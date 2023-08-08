@@ -1904,6 +1904,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # file or if `from_slow` is set to True.
         from_slow = kwargs.get("from_slow", False)
         has_tokenizer_file = resolved_vocab_files.get("tokenizer_file", None) is not None
+
         if (from_slow or not has_tokenizer_file) and cls.slow_tokenizer_class is not None:
             slow_tokenizer = (cls.slow_tokenizer_class)._from_pretrained(
                 copy.deepcopy(resolved_vocab_files),
@@ -1928,6 +1929,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # First attempt. We get tokenizer_class from tokenizer_config to check mismatch between tokenizers.
             config_tokenizer_class = init_kwargs.get("tokenizer_class")
             init_kwargs.pop("tokenizer_class", None)
+            if not has_tokenizer_file:
+                init_kwargs.pop("tokenizer_file", None)
             saved_init_inputs = init_kwargs.pop("init_inputs", ())
             if not init_inputs:
                 init_inputs = saved_init_inputs
@@ -2077,7 +2080,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Unable to load vocabulary from file. "
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
-
+        if tokenizer.is_fast:
+            # add the special tokens here. Fast does not expect them to be added otherwise.
+            tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens = True)
         if len(added_tokens_decoder) > 0:
             logger.warning_advice(
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
