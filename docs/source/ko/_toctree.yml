@@ -125,8 +125,8 @@
       title: (번역중) Training on Specialized Hardware
     - local: perf_infer_cpu
       title: CPU로 추론하기
-    - local: in_translation
-      title: (번역중) Inference on one GPU
+    - local: perf_infer_gpu_one
+      title: 하나의 GPU를 활용한 추론
     - local: perf_infer_gpu_many
       title: 여러 GPU에서 추론
     - local: in_translation

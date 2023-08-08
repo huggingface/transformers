@@ -33,12 +33,11 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
-from ..utils import ModelOutput, logging
+from ..utils import ExplicitEnum, ModelOutput, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .configuration_utils import GenerationConfig
 from .logits_process import (
-    ClassifierFreeGuidanceLogitsProcessor,
     EncoderNoRepeatNGramLogitsProcessor,
     EncoderRepetitionPenaltyLogitsProcessor,
     EpsilonLogitsWarper,
@@ -64,6 +63,7 @@ from .logits_process import (
     TopKLogitsWarper,
     TopPLogitsWarper,
     TypicalLogitsWarper,
+    UnbatchedClassifierFreeGuidanceLogitsProcessor,
 )
 from .stopping_criteria import (
     MaxLengthCriteria,
@@ -468,6 +468,23 @@ ContrastiveSearchOutput = Union[ContrastiveSearchEncoderDecoderOutput, Contrasti
 GenerateOutput = Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, ContrastiveSearchOutput]
 
 
+class GenerationMode(ExplicitEnum):
+    """
+    Possible generation modes, downstream of the [`~generation.GenerationMixin.generate`] method.
+    """
+
+    # Non-beam methods
+    CONTRASTIVE_SEARCH = "contrastive_search"
+    GREEDY_SEARCH = "greedy_search"
+    SAMPLE = "sample"
+    ASSISTED_GENERATION = "assisted_generation"
+    # Beam methods
+    BEAM_SEARCH = "beam_search"
+    BEAM_SAMPLE = "beam_sample"
+    CONSTRAINED_BEAM_SEARCH = "constrained_beam_search"
+    GROUP_BEAM_SEARCH = "group_beam_search"
+
+
 class GenerationMixin:
     """
     A class containing all functions for auto-regressive text generation, to be used as a mixin in [`PreTrainedModel`].
@@ -560,12 +577,6 @@ class GenerationMixin:
         # 4. if `inputs` is still None, try to create `input_ids` from BOS token
         inputs = self._maybe_initialize_input_ids_for_generation(inputs, bos_token_id, model_kwargs)
         return inputs, input_name, model_kwargs
-
-    def adjust_logits_during_generation(self, logits: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
-        """
-        Implement in subclasses of [`PreTrainedModel`] for custom behavior to adjust the logits in the generate method.
-        """
-        return logits
 
     def _maybe_initialize_input_ids_for_generation(
         self,
@@ -829,6 +840,46 @@ class GenerationMixin:
             warpers.append(LogitNormalization())
         return warpers
 
+    def _get_generation_mode(
+        self, generation_config: GenerationConfig, assistant_model: Optional["PreTrainedModel"]
+    ) -> GenerationMode:
+        """
+        Returns the generation mode triggered by a [`GenerationConfig`] instance.
+        """
+        if generation_config.constraints is not None or generation_config.force_words_ids is not None:
+            generation_mode = GenerationMode.CONSTRAINED_BEAM_SEARCH
+        elif generation_config.num_beams == 1:
+            if generation_config.do_sample is False:
+                if (
+                    generation_config.top_k is not None
+                    and generation_config.top_k > 1
+                    and generation_config.penalty_alpha is not None
+                    and generation_config.penalty_alpha > 0
+                ):
+                    generation_mode = GenerationMode.CONTRASTIVE_SEARCH
+                else:
+                    generation_mode = GenerationMode.GREEDY_SEARCH
+            else:
+                generation_mode = GenerationMode.SAMPLE
+        else:
+            if generation_config.num_beam_groups > 1:
+                generation_mode = GenerationMode.GROUP_BEAM_SEARCH
+            elif generation_config.do_sample is True:
+                generation_mode = GenerationMode.BEAM_SAMPLE
+            else:
+                generation_mode = GenerationMode.BEAM_SEARCH
+
+        # Assisted generation may extend some generation modes
+        if assistant_model is not None:
+            if generation_mode in ("greedy_search", "sample"):
+                generation_mode = GenerationMode.ASSISTED_GENERATION
+            else:
+                raise ValueError(
+                    "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
+                    "is only supported with Greedy Search and Sample."
+                )
+        return generation_mode
+
     def _get_logits_processor(
         self,
         generation_config: GenerationConfig,
@@ -836,6 +887,9 @@ class GenerationMixin:
         encoder_input_ids: torch.LongTensor,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
         logits_processor: Optional[LogitsProcessorList],
+        model_kwargs: Optional[Dict[str, Any]] = None,
+        negative_prompt_ids: Optional[torch.Tensor] = None,
+        negative_prompt_attention_mask: Optional[torch.Tensor] = None,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsProcessor`]
@@ -844,6 +898,16 @@ class GenerationMixin:
         # instantiate processors list
         processors = LogitsProcessorList()
 
+        if generation_config.guidance_scale is not None and generation_config.guidance_scale != 1:
+            processors.append(
+                UnbatchedClassifierFreeGuidanceLogitsProcessor(
+                    generation_config.guidance_scale,
+                    self,
+                    unconditional_ids=negative_prompt_ids,
+                    unconditional_attention_mask=negative_prompt_attention_mask,
+                    use_cache=model_kwargs["use_cache"],
+                )
+            )
         if generation_config.sequence_bias is not None:
             processors.append(SequenceBiasLogitsProcessor(sequence_bias=generation_config.sequence_bias))
 
@@ -941,8 +1005,6 @@ class GenerationMixin:
             )
         if generation_config.forced_decoder_ids is not None:
             processors.append(ForceTokensLogitsProcessor(generation_config.forced_decoder_ids))
-        if generation_config.guidance_scale is not None and generation_config.guidance_scale > 1:
-            processors.append(ClassifierFreeGuidanceLogitsProcessor(generation_config.guidance_scale))
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
@@ -1194,6 +1256,8 @@ class GenerationMixin:
         synced_gpus: Optional[bool] = None,
         assistant_model: Optional["PreTrainedModel"] = None,
         streamer: Optional["BaseStreamer"] = None,
+        negative_prompt_ids: Optional[torch.Tensor] = None,
+        negative_prompt_attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
         r"""
@@ -1251,6 +1315,11 @@ class GenerationMixin:
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
+            negative_prompt_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                The negative prompt needed for some processors such as CFG. The batch size must match the input batch
+                size. This is an experimental feature, subject to breaking API changes in future versions.
+            negative_prompt_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Attention_mask for `negative_prompt_ids`.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1422,65 +1491,11 @@ class GenerationMixin:
             )
 
         # 7. determine generation mode
-        is_constraint_gen_mode = (
-            generation_config.constraints is not None or generation_config.force_words_ids is not None
-        )
-
-        is_contrastive_search_gen_mode = (
-            (generation_config.num_beams == 1)
-            and generation_config.top_k is not None
-            and generation_config.top_k > 1
-            and generation_config.do_sample is False
-            and generation_config.penalty_alpha is not None
-            and generation_config.penalty_alpha > 0
-        )
-
-        is_greedy_gen_mode = (
-            (generation_config.num_beams == 1)
-            and (generation_config.num_beam_groups == 1)
-            and generation_config.do_sample is False
-            and not is_constraint_gen_mode
-            and not is_contrastive_search_gen_mode
-        )
-        is_sample_gen_mode = (
-            (generation_config.num_beams == 1)
-            and (generation_config.num_beam_groups == 1)
-            and generation_config.do_sample is True
-            and not is_constraint_gen_mode
-            and not is_contrastive_search_gen_mode
-        )
-        is_beam_gen_mode = (
-            (generation_config.num_beams > 1)
-            and (generation_config.num_beam_groups == 1)
-            and generation_config.do_sample is False
-            and not is_constraint_gen_mode
-            and not is_contrastive_search_gen_mode
-        )
-        is_beam_sample_gen_mode = (
-            (generation_config.num_beams > 1)
-            and (generation_config.num_beam_groups == 1)
-            and generation_config.do_sample is True
-            and not is_constraint_gen_mode
-            and not is_contrastive_search_gen_mode
-        )
-        is_group_beam_gen_mode = (
-            (generation_config.num_beams > 1)
-            and (generation_config.num_beam_groups > 1)
-            and not is_constraint_gen_mode
-            and not is_contrastive_search_gen_mode
-        )
-        is_assisted_gen_mode = False
-        if assistant_model is not None:
-            if not (is_greedy_gen_mode or is_sample_gen_mode):
-                raise ValueError(
-                    "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
-                    "is only supported with Greedy Search and Sample."
-                )
-            is_assisted_gen_mode = True
+        generation_mode = self._get_generation_mode(generation_config, assistant_model)
 
         if generation_config.num_beam_groups > generation_config.num_beams:
             raise ValueError("`num_beam_groups` has to be smaller or equal to `num_beams`")
-        if is_group_beam_gen_mode and generation_config.do_sample is True:
+        if generation_mode == GenerationMode.GROUP_BEAM_SEARCH and generation_config.do_sample is True:
             raise ValueError(
                 "Diverse beam search cannot be used in sampling mode. Make sure that `do_sample` is set to `False`."
             )
@@ -1508,6 +1523,9 @@ class GenerationMixin:
             encoder_input_ids=inputs_tensor,
             prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             logits_processor=logits_processor,
+            model_kwargs=model_kwargs,
+            negative_prompt_ids=negative_prompt_ids,
+            negative_prompt_attention_mask=negative_prompt_attention_mask,
         )
 
         # 9. prepare stopping criteria
@@ -1515,7 +1533,7 @@ class GenerationMixin:
             generation_config=generation_config, stopping_criteria=stopping_criteria
         )
         # 10. go into different generation modes
-        if is_assisted_gen_mode:
+        if generation_mode == GenerationMode.ASSISTED_GENERATION:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     "num_return_sequences has to be 1 when doing assisted generate, "
@@ -1553,7 +1571,7 @@ class GenerationMixin:
                 streamer=streamer,
                 **model_kwargs,
             )
-        if is_greedy_gen_mode:
+        if generation_mode == GenerationMode.GREEDY_SEARCH:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     "num_return_sequences has to be 1 when doing greedy search, "
@@ -1574,7 +1592,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_contrastive_search_gen_mode:
+        elif generation_mode == GenerationMode.CONTRASTIVE_SEARCH:
             if generation_config.num_return_sequences > 1:
                 raise ValueError(
                     "num_return_sequences has to be 1 when doing contrastive search, "
@@ -1599,7 +1617,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_sample_gen_mode:
+        elif generation_mode == GenerationMode.SAMPLE:
             # 11. prepare logits warper
             logits_warper = self._get_logits_warper(generation_config)
 
@@ -1626,7 +1644,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_beam_gen_mode:
+        elif generation_mode == GenerationMode.BEAM_SEARCH:
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
@@ -1664,7 +1682,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_beam_sample_gen_mode:
+        elif generation_mode == GenerationMode.BEAM_SAMPLE:
             # 11. prepare logits warper
             logits_warper = self._get_logits_warper(generation_config)
 
@@ -1703,7 +1721,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_group_beam_gen_mode:
+        elif generation_mode == GenerationMode.GROUP_BEAM_SEARCH:
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
@@ -1754,7 +1772,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_constraint_gen_mode:
+        elif generation_mode == GenerationMode.CONSTRAINED_BEAM_SEARCH:
             if generation_config.num_return_sequences > generation_config.num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
@@ -3036,9 +3054,6 @@ class GenerationMixin:
                 continue  # don't waste resources running the code we don't need
 
             next_token_logits = outputs.logits[:, -1, :]
-            # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
-            # cannot be generated both before and after the `nn.functional.log_softmax` operation.
-            next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
             next_token_scores = nn.functional.log_softmax(
                 next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)
@@ -3364,9 +3379,6 @@ class GenerationMixin:
 
             next_token_logits = outputs.logits[:, -1, :]
 
-            # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
-            # cannot be generated both before and after the `nn.functional.log_softmax` operation.
-            next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
             next_token_scores = nn.functional.log_softmax(
                 next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)
@@ -3727,9 +3739,6 @@ class GenerationMixin:
                 # select outputs of beams of current group only
                 next_token_logits = outputs.logits[batch_group_indices, -1, :]
 
-                # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
-                # cannot be generated both before and after the `nn.functional.log_softmax` operation.
-                next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
                 next_token_scores = nn.functional.log_softmax(
                     next_token_logits, dim=-1
                 )  # (batch_size * group_size, vocab_size)
@@ -4086,9 +4095,6 @@ class GenerationMixin:
                 continue  # don't waste resources running the code we don't need
 
             next_token_logits = outputs.logits[:, -1, :]
-            # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
-            # cannot be generated both before and after the `nn.functional.log_softmax` operation.
-            next_token_logits = self.adjust_logits_during_generation(next_token_logits, cur_len=cur_len)
             next_token_scores = nn.functional.log_softmax(
                 next_token_logits, dim=-1
             )  # (batch_size * num_beams, vocab_size)

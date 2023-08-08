@@ -196,6 +196,16 @@ def parse_args():
         ),
     )
     parser.add_argument(
+        "--trust_remote_code",
+        type=bool,
+        default=False,
+        help=(
+            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+            "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+            "execute code present on the Hub on your local machine."
+        ),
+    )
+    parser.add_argument(
         "--image_size",
         type=int,
         default=None,
@@ -448,6 +458,7 @@ def main():
         "cache_dir": args.cache_dir,
         "revision": args.model_revision,
         "use_auth_token": True if args.use_auth_token else None,
+        "trust_remote_code": args.trust_remote_code,
     }
     if args.config_name_or_path:
         config = AutoConfig.from_pretrained(args.config_name_or_path, **config_kwargs)
@@ -498,10 +509,14 @@ def main():
             cache_dir=args.cache_dir,
             revision=args.model_revision,
             token=True if args.use_auth_token else None,
+            trust_remote_code=args.trust_remote_code,
         )
     else:
         logger.info("Training new model from scratch")
-        model = AutoModelForMaskedImageModeling.from_config(config)
+        model = AutoModelForMaskedImageModeling.from_config(
+            config,
+            trust_remote_code=args.trust_remote_code,
+        )
 
     column_names = ds["train"].column_names
 
