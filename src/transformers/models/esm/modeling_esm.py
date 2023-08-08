@@ -690,7 +690,7 @@ class EsmPreTrainedModel(PreTrainedModel):
 
     config_class = EsmConfig
     base_model_prefix = "esm"
-    _no_split_modules = ["EsmLayer", "EsmFoldTriangularSelfAttentionBlock"]
+    _no_split_modules = ["EsmLayer", "EsmFoldTriangularSelfAttentionBlock", "EsmEmbeddings"]
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):

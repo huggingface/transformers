@@ -275,7 +275,12 @@ class InstructBlipPreTrainedModel(PreTrainedModel):
     config_class = InstructBlipConfig
     base_model_prefix = "blip"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["InstructBlipAttention", "InstructBlipQFormerMultiHeadAttention"]
+    _no_split_modules = [
+        "InstructBlipQFormerEmbeddings",
+        "InstructBlipAttention",
+        "InstructBlipQFormerMultiHeadAttention",
+        "InstructBlipQFormerSelfOutput",
+    ]
     _keep_in_fp32_modules = []
 
     # Copied from transformers.models.blip_2.modeling_blip_2.Blip2PreTrainedModel._init_weights with Blip2->InstructBlip

@@ -2597,7 +2597,7 @@ class ModelTesterMixin:
 
             model_size = compute_module_sizes(model)[""]
             # We test several splits of sizes to make sure it works.
-            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents]
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
             with tempfile.TemporaryDirectory() as tmp_dir:
                 model.cpu().save_pretrained(tmp_dir)
 

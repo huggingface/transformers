@@ -800,7 +800,7 @@ class CLIPSegTextTransformer(nn.Module):
 class CLIPSegTextModel(CLIPSegPreTrainedModel):
     config_class = CLIPSegTextConfig
 
-    _no_split_modules = ["CLIPSegEncoderLayer"]
+    _no_split_modules = ["CLIPSegTextEmbeddings", "CLIPSegEncoderLayer"]
 
     def __init__(self, config: CLIPSegTextConfig):
         super().__init__(config)
