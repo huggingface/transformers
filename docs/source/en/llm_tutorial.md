@@ -25,7 +25,7 @@ Autoregressive generation is the inference-time procedure of iteratively calling
 
 This tutorial will show you how to:
 
-* Generate text with a LLM
+* Generate text with an LLM
 * Avoid common pitfalls
 * Next steps to help you get the most out your LLM
 
@@ -47,7 +47,7 @@ A language model trained for [causal language modeling](tasks/language_modeling)
         autoplay loop muted playsinline
         src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/assisted-generation/gif_1_1080p.mov"
     ></video>
-    <figcaption>"Forward pass of a LLM"</figcaption>
+    <figcaption>"Forward pass of an LLM"</figcaption>
 </figure>
 
 A critical aspect of autoregressive generation with LLMs is how to select the next token from this probability distribution. Anything goes in this step as long as you end up with a token for the next iteration. This means it can be as simple as selecting the most likely token from the probability distribution or as complex as applying a dozen transformations before sampling from the resulting distribution.
@@ -66,7 +66,7 @@ The process depicted above is repeated iteratively until some stopping condition
 
 Properly setting up the token selection step and the stopping condition is essential to make your model behave as you'd expect on your task. That is why we have a [`~generation.GenerationConfig`] file associated with each model, which contains a good default generative parameterization and is loaded alongside your model.
 
-Let's talk code! 
+Let's talk code!
 
 <Tip>
 
@@ -89,7 +89,7 @@ You'll notice two flags in the `from_pretrained` call:
 
  - `device_map` ensures the model is moved to your GPU(s)
  - `load_in_4bit` applies [4-bit dynamic quantization](main_classes/quantization) to massively reduce the resource requirements
- 
+
 There are other ways to initialize a model, but this is a good baseline to begin with an LLM.
 
 Next, you need to preprocess your text input with a [tokenizer](tokenizer_summary).
