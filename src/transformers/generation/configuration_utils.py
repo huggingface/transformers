@@ -332,11 +332,120 @@ class GenerationConfig(PushToHubMixin):
 
     def validate(self):
         """
-        Validates the values of the attributes of the GenerationConfig instance, and raises a `ValueError` if any of
-        the values are invalid.
+        Validates the values of the attributes of the [`GenerationConfig`] instance. Raises exceptions in the presence
+        of parameterization that can be detected as incorrect from the configuration instance alone.
+
+        Note that some parameters are best validated at generate runtime, as they may depend on other inputs and/or the
+        model, such as parameters related to the generation length.
         """
+
+        # Validation of individual attributes
         if self.early_stopping not in {True, False, "never"}:
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
+
+        # Validation of attribute relations:
+        # 1. detect sampling-only parameterization when not in sampling mode
+        if self.do_sample is False:
+            greedy_wrong_parameter_msg = (
+                "`do_sample` is set to `False`. However, {flag_name} is set to {flag_value} -- this flag is only used "
+                "in sample-based generation modes. Set `do_sample=True` or unset {flag_name} to continue."
+            )
+            if self.temperature != 1.0:
+                raise ValueError(
+                    greedy_wrong_parameter_msg.format(flag_name="temperature", flag_value=self.temperature)
+                )
+            if self.top_p != 1.0:
+                raise ValueError(greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p))
+            if self.typical_p != 1.0:
+                raise ValueError(greedy_wrong_parameter_msg.format(flag_name="typical_p", flag_value=self.typical_p))
+            if self.top_k != 50 and self.penalty_alpha is None:  # contrastive search uses top_k
+                raise ValueError(greedy_wrong_parameter_msg.format(flag_name="top_k", flag_value=self.top_k))
+            if self.epsilon_cutoff != 0.0:
+                raise ValueError(
+                    greedy_wrong_parameter_msg.format(flag_name="epsilon_cutoff", flag_value=self.epsilon_cutoff)
+                )
+            if self.eta_cutoff != 0.0:
+                raise ValueError(greedy_wrong_parameter_msg.format(flag_name="eta_cutoff", flag_value=self.eta_cutoff))
+
+        # 2. detect beam-only parameterization when not in beam mode
+        if self.num_beams == 1:
+            single_beam_wrong_parameter_msg = (
+                "`num_beams` is set to 1. However, {flag_name} is set to {flag_value} -- this flag is only used in "
+                "beam-based generation modes. Set `num_beams>1` or unset {flag_name} to continue."
+            )
+            if self.early_stopping is not False:
+                raise ValueError(
+                    single_beam_wrong_parameter_msg.format(flag_name="early_stopping", flag_value=self.early_stopping)
+                )
+            if self.num_beam_groups != 1:
+                raise ValueError(
+                    single_beam_wrong_parameter_msg.format(
+                        flag_name="num_beam_groups", flag_value=self.num_beam_groups
+                    )
+                )
+            if self.diversity_penalty != 0.0:
+                raise ValueError(
+                    single_beam_wrong_parameter_msg.format(
+                        flag_name="diversity_penalty", flag_value=self.diversity_penalty
+                    )
+                )
+            if self.length_penalty != 1.0:
+                raise ValueError(
+                    single_beam_wrong_parameter_msg.format(flag_name="length_penalty", flag_value=self.length_penalty)
+                )
+            if self.constraints is not None:
+                raise ValueError(
+                    single_beam_wrong_parameter_msg.format(flag_name="constraints", flag_value=self.constraints)
+                )
+
+        # 3. detect incorrect paramaterization specific to advanced beam modes
+        else:
+            # constrained beam search
+            if self.constraints is not None:
+                constrained_wrong_parameter_msg = (
+                    "`constraints` is not `None`, triggering constrained beam search. However, {flag_name} is set to "
+                    "{flag_value}, which is incompatible with this generation mode. Set `constraints=None` or unset "
+                    "{flag_name} to continue."
+                )
+                if self.do_sample is True:
+                    raise ValueError(
+                        constrained_wrong_parameter_msg.format(flag_name="do_sample", flag_value=self.do_sample)
+                    )
+                if self.num_beam_groups != 1:
+                    raise ValueError(
+                        constrained_wrong_parameter_msg.format(
+                            flag_name="num_beam_groups", flag_value=self.num_beam_groups
+                        )
+                    )
+            # group beam search
+            if self.diversity_penalty != 0.0 or self.num_beam_groups != 1:
+                group_error_prefix = (
+                    "`diversity_penalty` is not 0.0 or `num_beam_groups` is not 1, triggering group beam search. In "
+                    "this generation mode, "
+                )
+                if self.do_sample is True:
+                    raise ValueError(group_error_prefix + "`do_sample` must be set to `False`")
+                if self.num_beams % self.num_beam_groups != 0:
+                    raise ValueError(group_error_prefix + "`num_beams` should be divisible by `num_beam_groups`")
+                if self.diversity_penalty == 0.0:
+                    raise ValueError(
+                        group_error_prefix
+                        + "`diversity_penalty` should be greater than `0.0`, otherwise your groups will be identical."
+                    )
+
+        # 4. check `num_return_sequences`
+        if self.num_return_sequences != 1:
+            if self.num_beams == 1:
+                if self.do_sample is False:
+                    raise ValueError(
+                        "Greedy methods without beam search do not support `num_return_sequences` different than 1 "
+                        f"(got {self.num_return_sequences})."
+                    )
+            elif self.num_return_sequences > self.num_beams:
+                raise ValueError(
+                    f"`num_return_sequences` ({self.num_return_sequences}) has to be smaller or equal to `num_beams` "
+                    f"({self.num_beams})."
+                )
 
     def save_pretrained(
         self,
