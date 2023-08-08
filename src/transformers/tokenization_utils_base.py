@@ -2075,7 +2075,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Load a slow from a slow
         if "added_tokens_decoder" in init_kwargs:
-            for idx, content in added_tokens_decoder.items():
+            for idx, content in init_kwargs["added_tokens_decoder"].items():
                 if isinstance(content, dict):
                     content = AddedToken(**content)
                 if isinstance(content, AddedToken):
