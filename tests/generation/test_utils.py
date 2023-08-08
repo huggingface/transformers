@@ -476,7 +476,7 @@ class GenerationTesterMixin:
             )
             kwargs["encoder_outputs"] = encoder_outputs
         elif attention_mask is not None:
-            attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0) 
+            attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
 
         # prevent flaky generation test failures
         logits_processor = LogitsProcessorList()
@@ -892,9 +892,7 @@ class GenerationTesterMixin:
 
             if model.config.is_encoder_decoder:
                 max_length = 4
-            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(
-                input_ids.shape[0], max_length
-            )
+            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
 
             output_generate, output_beam_search = self._beam_search_generate(
                 model=model,
@@ -1036,9 +1034,7 @@ class GenerationTesterMixin:
             # change `num_return_sequences = 2` but not for `beam_scorer`
             if model.config.is_encoder_decoder:
                 max_length = 4
-            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(
-                input_ids.shape[0], max_length
-            )
+            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
 
             output_generate, output_beam_sample = self._beam_sample_generate(
                 model=model,
@@ -1070,9 +1066,7 @@ class GenerationTesterMixin:
 
             if model.config.is_encoder_decoder:
                 max_length = 4
-            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(
-                input_ids.shape[0], max_length
-            )
+            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
 
             output_beam_sample, output_generate = self._beam_sample_generate(
                 model=model,
@@ -1104,9 +1098,7 @@ class GenerationTesterMixin:
             self.assertTrue((output_generate["sequences_scores"] < 0).all().item())
 
             for output in (output_beam_sample, output_generate):
-                self._check_outputs(
-                    output, input_ids, model.config, num_return_sequences=beam_scorer.num_beams
-                )
+                self._check_outputs(output, input_ids, model.config, num_return_sequences=beam_scorer.num_beams)
 
     def test_generate_without_input_ids(self):
         config, _, _, max_length = self._get_input_ids_and_config()
