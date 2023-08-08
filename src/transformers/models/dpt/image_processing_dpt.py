@@ -296,6 +296,7 @@ class DPTImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->DPT
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
         """
         Converts the output of [`DPTForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.

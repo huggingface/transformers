@@ -109,7 +109,7 @@ class ViTImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample:
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
@@ -123,9 +123,8 @@ class ViTImageProcessor(BaseImageProcessor):
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
             raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        return resize(
-            image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
-        )
+        output_size = (size["height"], size["width"])
+        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
     def preprocess(
         self,
