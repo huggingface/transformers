@@ -30,15 +30,15 @@ from transformers import (
     BarkSemanticConfig,
     is_torch_available,
 )
+from transformers.generation.configuration_utils import GenerationConfig
 from transformers.models.bark.generation_configuration_bark import (
-    BarkGenerationConfig,
     BarkCoarseGenerationConfig,
     BarkFineGenerationConfig,
+    BarkGenerationConfig,
     BarkSemanticGenerationConfig,
 )
 from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 from transformers.utils import CONFIG_NAME, GENERATION_CONFIG_NAME, cached_property
-from transformers.generation.configuration_utils import GenerationConfig
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -512,13 +512,6 @@ class BarkModelTester:
         if codec_kwargs is None:
             codec_kwargs = {
                 "num_channels": n_codes_total,
-                #"is_training": ,
-                #"intermediate_size": ,
-                #"hidden_size": ,
-                #"num_filters": ,
-                #"num_residual_layers": ,
-                #"upsampling_ratios": ,
-                #"num_lstm_layers": ,
                 "codebook_size": vocab_size - 1,
             }
 
@@ -536,7 +529,7 @@ class BarkModelTester:
         self.sliding_window_len = sliding_window_len
         self.text_encoding_offset = text_encoding_offset
         self.semantic_vocab_size = semantic_vocab_size
-        
+
         self.codebook_size = vocab_size - 1
 
         self.is_training = is_training
@@ -593,15 +586,14 @@ class BarkModelTester:
         semantic_generation_config = BarkSemanticGenerationConfig(**semantic_generation_config)
         coarse_generation_config = BarkCoarseGenerationConfig(**coarse_generation_config)
         fine_generation_config = BarkFineGenerationConfig(**fine_generation_config)
-        
-        
+
         generation_config = BarkGenerationConfig.from_sub_model_configs(
             semantic_generation_config,
             coarse_generation_config,
             fine_generation_config,
-            codebook_size = self.codebook_size,
+            codebook_size=self.codebook_size,
         )
-        
+
         # BarkGenerationConfig uses a nested generation config which can't be used properly for now
         # meaning that the nested configuration of a sub-model (e.g generation_config["semantic_config"])
         # can't be a GenerationConfig for now but needs to be a dict
@@ -631,20 +623,18 @@ class BarkModelTester:
 
 # Need this class in oder to create tiny model for `bark`
 class BarkModelTest(unittest.TestCase):
-    
     @cached_property
     def model(self):
         self.setUp()
-        
+
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        
+
         model = BarkModel(config)
-        
-        
+
         model.generation_config = self.model_tester.get_generation_config(config)
-        
+
         model.to(torch_device)
-        
+
         return model
 
     def setUp(self):
@@ -662,20 +652,16 @@ class BarkModelTest(unittest.TestCase):
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
 
-        
-            
         self.model.eval()
         with torch.no_grad():
             first = self.model.generate(**inputs_dict)
             second = self.model.generate(**inputs_dict)
-            
+
         if isinstance(first, tuple) and isinstance(second, tuple):
             for tensor1, tensor2 in zip(first, second):
                 check_determinism(tensor1, tensor2)
         else:
-                check_determinism(first, second)
-                
-
+            check_determinism(first, second)
 
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
