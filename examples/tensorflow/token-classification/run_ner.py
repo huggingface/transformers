@@ -429,7 +429,7 @@ def main():
         else:
             logger.info("Training new model from scratch")
             model = TFAutoModelForTokenClassification.from_config(
-                config, trust_remote_code=model_args.trust_remote_code
+                config, token=model_args.token, trust_remote_code=model_args.trust_remote_code
             )
 
         # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch

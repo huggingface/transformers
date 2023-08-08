@@ -528,6 +528,7 @@ def main():
         logger.info("Training new model from scratch")
         model = AutoModelForMaskedImageModeling.from_config(
             config,
+            token=args.token,
             trust_remote_code=args.trust_remote_code,
         )
 
