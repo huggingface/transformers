@@ -1509,7 +1509,7 @@ class GenerationMixin:
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
-        self._validate_length(generation_config, input_ids_length, has_default_max_length)
+        self._validate_generation_length(generation_config, input_ids_length, has_default_max_length)
 
         # 7. determine generation mode
         generation_mode = self._get_generation_mode(generation_config, assistant_model)
