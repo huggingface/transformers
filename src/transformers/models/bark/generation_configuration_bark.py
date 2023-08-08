@@ -218,7 +218,7 @@ class BarkFineGenerationConfig(GenerationConfig):
             n_fine_codebooks (`int`, *optional*, defaults to 8):
                 Number of codebooks used.
         """
-        super().__init__(temperature=temperature)
+        super().__init__(temperature=temperature, do_sample=True)
 
         self.max_fine_history_length = max_fine_history_length
         self.max_fine_input_length = max_fine_input_length
