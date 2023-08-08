@@ -19,15 +19,15 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-LLMs, or Large Language Models, are the key component behind text generative AI. In a nutshell, they consist of large transformer models, trained to predict the next word (or, more precisely, token) given some input text. Since they are used to predict one token at a time, you need to do something more elaborate than simply invoking the model to obtain new sentences -- you need to do autoregressive generation.
+LLMs, or Large Language Models, are the key component behind text generation. In a nutshell, they consist of large transformer models trained to predict the next word (or, more precisely, token) given some input text. Since they predict one token at a time, you need to do something more elaborate to generate new sentences other than just calling the model -- you need to do autoregressive generation.
 
-Autoregressive generation is the inference-time procedure of iteratively calling a model with its own generated outputs, given a few initial inputs. In 🤗 `transformers`, this procedure is encapsulated in the `generate` method, available to all models with generative capabilities.
+Autoregressive generation is the inference-time procedure of iteratively calling a model with its own generated outputs, given a few initial inputs. In 🤗 Transformers, this is handled by the [`~transformers.ModelMixin.generate`] method, which is available to all models with generative capabilities.
 
 This tutorial will show you how to:
 
-* Use your LLM with `generate`
+* Generate text with a LLM
 * Avoid common pitfalls
-* Take the most of your LLM
+* Next steps to help you get the most out your LLM
 
 Before you begin, make sure you have all the necessary libraries installed:
 
@@ -36,9 +36,9 @@ pip install transformers bitsandbytes>=0.39.0 -q
 ```
 
 
-## Using your LLM
+## Generate text
 
-A language model trained on the [causal language modeling task](tasks/language_modeling) will take a sequence of text tokens as input, and returns the probability distribution for the next token. Here's what your LLM forward pass looks like:
+A language model trained for [causal language modeling](tasks/language_modeling) takes a sequence of text tokens as input and returns the probability distribution for the next token.
 
 <!-- [GIF 1 -- FWD PASS] -->
 <figure class="image table text-center m-0 w-full">
@@ -47,9 +47,10 @@ A language model trained on the [causal language modeling task](tasks/language_m
         autoplay loop muted playsinline
         src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/assisted-generation/gif_1_1080p.mov"
     ></video>
+    <figcaption>"Forward pass of a LLM"</figcaption>
 </figure>
 
-A critical ingredient of autoregressive generation with LLMs is selecting the next token from this probability distribution. Anything goes in this step, as long as you end up with a token selected for the next iteration. This means it can be as simple as selecting the most likely token from the probability distribution, or as complex as applying a dozen transformations before sampling from the resulting distribution. Visually, it looks like this:
+A critical aspect of autoregressive generation with LLMs is how to select the next token from this probability distribution. Anything goes in this step as long as you end up with a token for the next iteration. This means it can be as simple as selecting the most likely token from the probability distribution or as complex as applying a dozen transformations before sampling from the resulting distribution.
 
 <!-- [GIF 2 -- TEXT GENERATION] -->
 <figure class="image table text-center m-0 w-full">
@@ -58,13 +59,20 @@ A critical ingredient of autoregressive generation with LLMs is selecting the ne
         autoplay loop muted playsinline
         src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/assisted-generation/gif_2_1080p.mov"
     ></video>
+    <figcaption>"Autoregressive generation iteratively selects the next token from a probability distribution to generate text"</figcaption>
 </figure>
 
-The process depicted above is repeated iteratively until some stopping condition is reached. Ideally, this stopping condition is dictated by the model, which should learn when to output an end-of-sequence (EOS) token. When this doesn't happen, generation stops when some pre-defined maximum length is reached.
+The process depicted above is repeated iteratively until some stopping condition is reached. Ideally, the stopping condition is dictated by the model, which should learn when to output an end-of-sequence (`EOS`) token. If this is not the case, generation stops when some predefined maximum length is reached.
 
 Properly setting up the token selection step and the stopping condition is essential to make your model behave as you'd expect on your task. That is why we have a [`~generation.GenerationConfig`] file associated with each model, which contains a good default generative parameterization and is loaded alongside your model.
 
-Let's talk code! If you're interested in basic usage of an LLM, using our high-level [pipeline](pipeline_tutorial) interface is a candidate starting point. However, LLMs often require advanced features like quantization and fine control of the token selection step, which is best done through our [`~generation.GenerationMixin.generate`]. Autoregressive generation with LLMs is also resource-intensive, and should be executed in a GPU for adequate throughput.
+Let's talk code! 
+
+<Tip>
+
+If you're interested in basic LLM usage, our high-level [`Pipeline`](pipeline_tutorial) interface is a great starting point. However, LLMs often require advanced features like quantization and fine control of the token selection step, which is best done through [`~generation.GenerationMixin.generate`]. Autoregressive generation with LLMs is also resource-intensive and should be executed on a GPU for adequate throughput.
+
+</Tip>
 
 <!-- TODO: update example to llama 2 (or a newer popular baseline) when it becomes ungated -->
 First, you need to load the model.
@@ -77,7 +85,12 @@ First, you need to load the model.
 ... )
 ```
 
-Note the two flags in the `from_pretrained` call, `device_map` and `load_in_4bit`. The former ensures the model is moved to your GPU(s), while the later applies [4-bit dynamic quantization](main_classes/quantization) to massively reduce the resource requirements. There are other ways to initialize the model (more on that later), but this a good baseline to experiment with an LLM.
+You'll notice two flags in the `from_pretrained` call:
+
+ - `device_map` ensures the model is moved to your GPU(s)
+ - `load_in_4bit` applies [4-bit dynamic quantization](main_classes/quantization) to massively reduce the resource requirements
+ 
+There are other ways to initialize a model, but this is a good baseline to begin with an LLM.
 
 Next, you need to preprocess your text input with a [tokenizer](tokenizer_summary).
 
@@ -88,9 +101,9 @@ Next, you need to preprocess your text input with a [tokenizer](tokenizer_summar
 >>> model_inputs = tokenizer(["A list of colors: red, blue"], return_tensors="pt").to("cuda")
 ```
 
-The `model_inputs` variable holds the tokenized text input, as well as the attention mask. While [`~generation.GenerationMixin.generate`] does its best effort to infer the attention mask when it is not passed, we recommend to pass it whenever possible for optimal results.
+The `model_inputs` variable holds the tokenized text input, as well as the attention mask. While [`~generation.GenerationMixin.generate`] does its best effort to infer the attention mask when it is not passed, we recommend passing it whenever possible for optimal results.
 
-Finally, you can call the [`~generation.GenerationMixin.generate`] method. It returns the generated tokens, which should be converted to text before printing.
+Finally, call the [`~generation.GenerationMixin.generate`] method to returns the generated tokens, which should be converted to text before printing.
 
 ```py
 >>> generated_ids = model.generate(**model_inputs)
@@ -103,7 +116,7 @@ And that's it! In a few lines of code, you can harness the power of an LLM.
 
 ## Common pitfalls
 
-Autoregressive generation can be controlled with great precision, as we explain in our [generation strategies guide](generation_strategies). However, before you read our advanced docs, let's go through the most common pitfalls, using an LLM as an example.
+There are many [generation strategies](generation_strategies), and sometimes the default values may not be appropriate for your use case. If your outputs aren't aligned with what you're expecting, we've created a list of the most common pitfalls and how to avoid them.
 
 ```py
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -115,7 +128,9 @@ Autoregressive generation can be controlled with great precision, as we explain 
 ... )
 ```
 
-1. Not controlling the maximum length. If not specified in the [`~generation.GenerationConfig`] file, a `generate` call will return up to `20` tokens (our default value). We highly recommend you manually setting `max_new_tokens` in your generate call -- this flag controls the maximum number of new tokens it can return. Please note that LLMs (more precisely, [decoder-only models](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)) also return the input prompt as part of the output.
+### Generated output is too short/long
+
+If not specified in the [`~generation.GenerationConfig`] file, `generate` returns up to 20 tokens by default. We highly recommend manually setting `max_new_tokens` in your `generate` call to control the maximum number of new tokens it can return. Keep in mind LLMs (more precisely, [decoder-only models](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)) also return the input prompt as part of the output.
 
 
 ```py
@@ -132,7 +147,9 @@ Autoregressive generation can be controlled with great precision, as we explain 
 'A sequence of numbers: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,'
 ```
 
-2. Selecting whether the output is sampled or not. By default, and unless specified in the [`~generation.GenerationConfig`] file, `generate` simply selects the most likely token at each iteration (greedy decoding). Depending on your task, this may be undesirable: creative tasks like being a chatbot or writing an essay benefit from sampling. On the other hand, input-grounded tasks like audio transcription or translation benefit from greedy decoding. You can enable sampling with `do_sample=True`, and we further elaborate on this topic on our [blog post](https://huggingface.co/blog/how-to-generate).
+### Repetitive outputs
+
+By default, and unless specified in the [`~generation.GenerationConfig`] file, `generate` selects the most likely token at each iteration (greedy decoding). Depending on your task, this may be undesirable; creative tasks like chatbots or writing an essay benefit from sampling. On the other hand, input-grounded tasks like audio transcription or translation benefit from greedy decoding. Enable sampling with `do_sample=True`, and you can learn more about this topic in this [blog post](https://huggingface.co/blog/how-to-generate).
 
 ```py
 >>> # Set seed or reproducibility -- you don't need this unless you want full reproducibility
@@ -152,7 +169,9 @@ Autoregressive generation can be controlled with great precision, as we explain 
 'I am a cat.\nI just need to be. I am always.\nEvery time'
 ```
 
-3. Batched LLM inference without left-padding. LLMs are [decoder-only](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt) architectures, which means that they continue your input prompt. If your inputs do not have the same length, they will have to be padded. Since LLMs are not trained to continue from pad tokens, your input needs to be left-padded. Make sure you also don't forget to pass the attention mask to generate!
+### Wrong padding side
+
+LLMs are [decoder-only](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt) architectures, meaning they continue to iterate on your input prompt. If your inputs do not have the same length, they need to be padded. Since LLMs are not trained to continue from pad tokens, your input needs to be left-padded. Make sure you also don't forget to pass the attention mask to generate!
 
 ```py
 >>> # The tokenizer initialized above has right-padding active by default: the 1st sequence,
@@ -179,7 +198,7 @@ Autoregressive generation can be controlled with great precision, as we explain 
 
 ## Further resources
 
-While the core principles of autoregressive generation are straightforward, taking the most out of your LLM can be a challenging endeavour, as there are many moving parts. This section is here to serve as a reference for next steps.
+While the autoregressive generation process is relatively straightforward, making the most out of your LLM can be a challenging endeavor because there are many moving parts. For your next steps to help you dive deeper into LLM usage and understanding:
 
 <!-- TODO: complete with new guides -->
 ### Advanced generate usage
