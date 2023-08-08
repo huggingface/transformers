@@ -2082,7 +2082,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
         if tokenizer.is_fast:
             # add the special tokens here. Fast does not expect them to be added otherwise.
-            tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens = True)
+            tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
         if len(added_tokens_decoder) > 0:
             logger.warning_advice(
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"

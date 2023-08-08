@@ -155,7 +155,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         pad_token = AddedToken(pad_token, rstrip=True, lstrip=True)
         unk_token = AddedToken(unk_token, rstrip=True, lstrip=True)
         eos_token = AddedToken(eos_token, rstrip=True, lstrip=True)
-        
+
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         self.vocab_file = vocab_file
@@ -163,7 +163,7 @@ class T5Tokenizer(PreTrainedTokenizer):
 
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
-        
+
         # Add extra_ids to the special token list
         if extra_ids > 0 and additional_special_tokens is None:
             additional_special_tokens = [
@@ -172,7 +172,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             # for legacy purpose, we keep this. Will be removed and tests updated. (when `added_tokens_decoder` is not passed as kwargs)
             self._added_tokens_decoder = {}
             for i in range(extra_ids):
-                self._added_tokens_decoder[len(self.sp_model) - 1 + extra_ids-i] = additional_special_tokens[i]
+                self._added_tokens_decoder[len(self.sp_model) - 1 + extra_ids - i] = additional_special_tokens[i]
 
         elif extra_ids > 0 and additional_special_tokens is not None:
             # Check that we have the right number of extra_id special tokens
@@ -191,7 +191,6 @@ class T5Tokenizer(PreTrainedTokenizer):
             legacy = True
 
         self.legacy = legacy
-
 
         super().__init__(
             eos_token=eos_token,
