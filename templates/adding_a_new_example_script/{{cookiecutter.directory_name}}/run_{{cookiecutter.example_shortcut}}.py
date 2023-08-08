@@ -115,11 +115,13 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    token: bool = field(
-        default=False,
+    token: str = field(
+        default=None,
         metadata={
-            "help": "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-            "with private models)."
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
         },
     )
     trust_remote_code: bool = field(
@@ -299,7 +301,7 @@ def main():
     config_kwargs = {
         "cache_dir": model_args.cache_dir,
         "revision": model_args.model_revision,
-        "token": True if model_args.token else None,
+        "token": model_args.token,
         "trust_remote_code": model_args.trust_remote_code,
     }
     if model_args.config_name:
@@ -314,7 +316,7 @@ def main():
         "cache_dir": model_args.cache_dir,
         "use_fast": model_args.use_fast_tokenizer,
         "revision": model_args.model_revision,
-        "token": True if model_args.token else None,
+        "token": model_args.token,
         "trust_remote_code": model_args.trust_remote_code,
     }
     if model_args.tokenizer_name:
@@ -334,7 +336,7 @@ def main():
             config=config,
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
-            token=True if model_args.token else None,
+            token=model_args.token,
             trust_remote_code=model_args.trust_remote_code,
         )
     else:
@@ -349,7 +351,7 @@ def main():
         finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        token=True if model_args.token else None,
+        token=model_args.token,
         trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
@@ -357,7 +359,7 @@ def main():
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
-        token=True if model_args.token else None,
+        token=model_args.token,
         trust_remote_code=model_args.trust_remote_code,
     )
     model = AutoModelForSequenceClassification.from_pretrained(
@@ -366,7 +368,7 @@ def main():
         config=config,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
-        token=True if model_args.token else None,
+        token=model_args.token,
         trust_remote_code=model_args.trust_remote_code,
     )
 {% endif %}
