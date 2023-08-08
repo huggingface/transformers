@@ -447,7 +447,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         # here t5x does not eat with lstrip, so there is and extra ▁He in the original one
         # TODO @arthurzucker we should probably not srip right since it is done by default
         # for certain models...
-        self.assertEqual(input_ids, [156, 46, 44, 1001, 0, 2])
+        self.assertEqual(input_ids, [156, 46, 44, 1001, 156, 2])
         tokens = self.tokenizer.tokenize("▁He is not<extra_id_0>              ▁He")
         self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<extra_id_0>", "He"])  # spaces are eaten by spm + our strip
         # make sure that the output after the extra id is the same as if
