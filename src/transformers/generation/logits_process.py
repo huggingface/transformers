@@ -395,7 +395,7 @@ class TypicalLogitsWarper(LogitsWarper):
     [`LogitsWarper`] This warping technique aims to produce more coherent and fluent text by selecting words that have information content close to the expected information content,
     i.e., the conditional entropy of the model. See [Typical Decoding for Natural Language Generation](https://arxiv.org/abs/2202.00666) for more information.
 
-     <Tip>
+    <Tip>
 
       When using probabilistic language models for text generation, pass do_sample=True to enable locally typical sampling with reduced repetitions and improved coherence.
 
