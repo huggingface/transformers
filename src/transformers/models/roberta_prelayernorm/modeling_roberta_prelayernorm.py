@@ -596,7 +596,7 @@ class RobertaPreLayerNormPreTrainedModel(PreTrainedModel):
     config_class = RobertaPreLayerNormConfig
     base_model_prefix = "roberta_prelayernorm"
     supports_gradient_checkpointing = True
-    _no_split_modules = []
+    _no_split_modules = ["RobertaPreLayerNormEmbeddings", "RobertaPreLayerNormSelfAttention"]
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
