@@ -614,7 +614,7 @@ if is_torch_available():
 
     if torch.cuda.is_available():
         torch_device = "cuda"
-    elif is_torch_npu_available():
+    elif is_torch_npu_available() and bool(os.environ.get("TEST_ON_THIRD_PARTY_DEVICE", False)):
         torch_device = "npu"
     else:
         torch_device = "cpu"
