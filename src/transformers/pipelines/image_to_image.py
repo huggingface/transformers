@@ -18,9 +18,6 @@ if is_vision_available():
 
     from ..image_utils import load_image
 
-if is_tf_available():
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES
-
 if is_torch_available():
     from ..modeling_outputs import ImageSuperResolutionOutput
     from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES
@@ -33,11 +30,7 @@ class ImageToImagePipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
-        self.check_model_type(
-            TF_MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES
-            if self.framework == "tf"
-            else MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES
-        )
+        self.check_model_type(MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES)
 
     def _sanitize_parameters(self, **kwargs):
         preprocess_params = {}
@@ -62,7 +55,7 @@ class ImageToImagePipeline(Pipeline):
 
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout=timeout)
-        inputs = self.image_processor(images=[image], return_tensors=self.framework)
+        inputs = self.image_processor(images=[image], return_tensors="pt")
         return inputs
 
     def postprocess(self, model_outputs):
