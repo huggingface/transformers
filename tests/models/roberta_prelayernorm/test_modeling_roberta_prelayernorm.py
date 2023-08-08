@@ -395,6 +395,7 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
         else {}
     )
     fx_compatible = False
+    model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
         self.model_tester = RobertaPreLayerNormModelTester(self)

@@ -573,7 +573,7 @@ class ViltPreTrainedModel(PreTrainedModel):
     config_class = ViltConfig
     base_model_prefix = "vilt"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["ViltSelfAttention"]
+    _no_split_modules = ["ViltEmbeddings", "ViltSelfAttention"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
