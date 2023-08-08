@@ -77,20 +77,17 @@ class PerceiverTokenizer(PreTrainedTokenizer):
 
         self._utf_vocab_size = 2**8  # utf is 8 bits
 
-        # TODO get rid of this. These are all added tokens and you just want the correct order of addition
-        # to the vocab.
-        # define special tokens dict
-        self.special_tokens_encoder: Dict[str, int] = {
-            pad_token: 0,
-            bos_token: 1,
-            eos_token: 2,
-            mask_token: 3,
-            cls_token: 4,
-            sep_token: 5,
-        }
-        self._num_special_tokens = len(self.special_tokens_encoder)
-        self.special_tokens_decoder: Dict[int, str] = {v: k for k, v in self.special_tokens_encoder.items()}
+        # Since these tokens are not part of the vocabulary, we manually add them
+        self._added_tokens_decoder: Dict[str, int] = {
+            0: pad_token,
+            1: bos_token,
+            2: eos_token,
+            3: mask_token,
+            4: cls_token,
+            5: sep_token,
 
+        }
+        self._num_special_tokens = len(self._added_tokens_decoder)
         super().__init__(
             pad_token=pad_token,
             bos_token=bos_token,
@@ -103,16 +100,16 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         )
 
     def get_vocab(self) -> Dict[str, int]:
-        vocab = self.special_tokens_encoder.copy()
-        vocab.update(self.added_tokens_encoder)
+        vocab = {}
         for i in range(self._utf_vocab_size):
             token = chr(i)
-            vocab[token] = i + len(self.special_tokens_encoder)
+            vocab[token] = i + self._num_special_tokens
+        vocab.update(self.added_tokens_encoder)
         return vocab
 
     @property
     def vocab_size(self):
-        return self._utf_vocab_size + self._num_special_tokens
+        return self._utf_vocab_size
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -173,11 +170,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
-        if token in self.special_tokens_encoder:
-            token_id = self.special_tokens_encoder[token]
-        elif token in self.added_tokens_encoder:
-            token_id = self.added_tokens_encoder[token]
-        elif len(token) != 1:
+        if len(token) != 1:
             token_id = self.unk_token_id
         else:
             token_id = ord(token) + self._num_special_tokens
@@ -185,12 +178,7 @@ class PerceiverTokenizer(PreTrainedTokenizer):
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        if index in self.special_tokens_decoder:
-            token = self.special_tokens_decoder[index]
-        elif index in self.added_tokens_decoder:
-            token = self.added_tokens_decoder[index]
-        else:
-            token = chr(index - self._num_special_tokens)
+        token = chr(index - self._num_special_tokens)
         return token
 
     # TODO @ArthurZ refactor this as well....
@@ -198,11 +186,8 @@ class PerceiverTokenizer(PreTrainedTokenizer):
         """Converts a sequence of tokens (string) in a single string."""
         bstring = b""
         for token in tokens:
-            if token in self.special_tokens_decoder:
-                tok_string = self.special_tokens_decoder[token].encode("utf-8")
-            elif token in self.added_tokens_decoder:
-                tok_string = self.special_tokens_decoder[token].encode("utf-8")
-            elif token in self.special_tokens_encoder:
+            if token in self.added_tokens_decoder:
+                token = self.added_tokens_decoder[token]
                 tok_string = str(token).encode("utf-8")
             elif token in self.added_tokens_encoder:
                 tok_string = str(token).encode("utf-8")
