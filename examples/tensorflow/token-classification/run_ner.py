@@ -317,12 +317,14 @@ def main():
         config = AutoConfig.from_pretrained(
             model_args.config_name,
             num_labels=num_labels,
+            token=model_args.token,
             trust_remote_code=model_args.trust_remote_code,
         )
     elif model_args.model_name_or_path:
         config = AutoConfig.from_pretrained(
             model_args.model_name_or_path,
             num_labels=num_labels,
+            token=model_args.token,
             trust_remote_code=model_args.trust_remote_code,
         )
     else:
@@ -341,12 +343,14 @@ def main():
             tokenizer_name_or_path,
             use_fast=True,
             add_prefix_space=True,
+            token=model_args.token,
             trust_remote_code=model_args.trust_remote_code,
         )
     else:
         tokenizer = AutoTokenizer.from_pretrained(
             tokenizer_name_or_path,
             use_fast=True,
+            token=model_args.token,
             trust_remote_code=model_args.trust_remote_code,
         )
     # endregion
@@ -419,12 +423,13 @@ def main():
             model = TFAutoModelForTokenClassification.from_pretrained(
                 model_args.model_name_or_path,
                 config=config,
+                token=model_args.token,
                 trust_remote_code=model_args.trust_remote_code,
             )
         else:
             logger.info("Training new model from scratch")
             model = TFAutoModelForTokenClassification.from_config(
-                config, trust_remote_code=model_args.trust_remote_code
+                config, token=model_args.token, trust_remote_code=model_args.trust_remote_code
             )
 
         # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
