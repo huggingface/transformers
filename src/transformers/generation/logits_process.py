@@ -521,6 +521,45 @@ class EpsilonLogitsWarper(LogitsWarper):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
+
+    Examples:
+    ```python
+    >>> # Import required libraries
+    >>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
+
+    >>> # Set the model name
+    >>> model_name = "gpt2"
+
+    >>> # Initialize the model and tokenizer
+    >>> model = AutoModelForCausalLM.from_pretrained(model_name)
+    >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+    >>> # Set the pad token to eos token
+    >>> model.config.pad_token_id = model.config.eos_token_id
+    >>> model.generation_config.pad_token_id = model.config.eos_token_id
+
+    >>> # The below sentence is used since the probability of generating `J. Trump` as the next tokens is very high.
+    >>> sentence = "The full name of Donald is Donald"
+
+    >>> # Tokenize the sentence
+    >>> inputs = tokenizer(sentence, return_tensors="pt")
+
+    >>> set_seed(100)
+
+    >>> # We can see that the model generates `J. Trump` as the next token
+    >>> outputs = model.generate(inputs["input_ids"], max_new_tokens=4)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    The full name of Donald is Donald J. Trump Jr
+
+    >>> # The use of the `epsilon_cutoff` parameter(best performing values between 3e-4 and 9e-4 from the paper mentioned above) generates tokens
+    >>> # by sampling from a variety of tokens with probabilities greater than or equal to epsilon value. The disadvantage of this sampling is that
+    >>> # if there are many possible tokens to sample from, the epsilon value has to be very small for sampling to occur from all the possible tokens.
+    >>> outputs = model.generate(
+    ...     inputs["input_ids"], max_new_tokens=4, do_sample=True, epsilon_cutoff=6e-4
+    ... )  # need to set do_sample=True for epsilon_cutoff to work
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    The full name of Donald is Donald Rumsfeld,
+    ```
     """
 
     def __init__(self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
