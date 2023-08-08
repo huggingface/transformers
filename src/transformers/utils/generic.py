@@ -338,6 +338,21 @@ class ModelOutput(OrderedDict):
         return tuple(self[k] for k in self.keys())
 
 
+if is_torch_available():
+    """
+    By registering ModelOutput with pytorch's pytree implementation,
+    we ensure that code intending to loop over the elements (e.g. tensors) within arbitrarily
+    structured model outputs can do so without having to understand the structures.
+    """
+    import torch.utils._pytree
+
+    torch.utils._pytree._register_pytree_node(
+        ModelOutput,
+        torch.utils._pytree._dict_flatten,
+        lambda values, context: ModelOutput(torch.utils._pytree._dict_unflatten(values, context)),
+    )
+
+
 class ExplicitEnum(str, Enum):
     """
     Enum with more explicit error message for missing values.

@@ -1879,6 +1879,13 @@ class ModelTesterMixin:
                 tf_outputs.to_tuple(), pt_outputs.to_tuple(), model_class, tol=tol, name=name, attributes=attributes
             )
 
+            # ensure torch pytree flatten works with ModelOutput class (by default, without user having to register it)
+            flat_outs, _ = torch.utils._pytree.tree_flatten(pt_outputs)
+            self.check_pt_pytree_outputs(
+                pt_outputs.to_tuple(), flat_outs, model_class, tol=tol, name=name, attributes=attributes
+            )
+
+
         # Allow `list` (e.g. `TransfoXLModelOutput.mems` is a list of tensors.)
         elif type(tf_outputs) in [tuple, list]:
             self.assertEqual(type(tf_outputs), type(pt_outputs), f"{name}: Output types differ between TF and PyTorch")
