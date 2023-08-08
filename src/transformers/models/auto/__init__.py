@@ -209,12 +209,7 @@ else:
 
 if TYPE_CHECKING:
     from .auto_factory import get_values
-    from .configuration_auto import (
-        ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        CONFIG_MAPPING,
-        MODEL_NAMES_MAPPING,
-        AutoConfig,
-    )
+    from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, MODEL_NAMES_MAPPING, AutoConfig
     from .feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
     from .image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
     from .processing_auto import PROCESSOR_MAPPING, AutoProcessor

@@ -18,12 +18,7 @@ import warnings
 from collections import OrderedDict
 
 from ...utils import logging
-from .auto_factory import (
-    _BaseAutoBackboneClass,
-    _BaseAutoModelClass,
-    _LazyAutoMapping,
-    auto_class_update,
-)
+from .auto_factory import _BaseAutoBackboneClass, _BaseAutoModelClass, _LazyAutoMapping, auto_class_update
 from .configuration_auto import CONFIG_MAPPING_NAMES
 
 
