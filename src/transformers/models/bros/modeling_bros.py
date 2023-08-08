@@ -42,6 +42,7 @@ from ...utils import (
     logging,
 )
 from .configuration_bros import BrosConfig
+from transformers.modeling_outputs import BrosSpadeOutput
 
 
 logger = logging.get_logger(__name__)
@@ -1050,36 +1051,6 @@ class RelationExtractor(nn.Module):
         return relation_score
 
 
-@dataclass
-class BrosSpadeOutput(ModelOutput):
-    """
-    Base class for outputs of token classification models.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided) :
-            Classification loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
-            Classification scores (before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    itc_logits: torch.FloatTensor = None
-    stc_logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
 @add_start_docstrings(
     """
     Bert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
@@ -1117,20 +1088,6 @@ class BrosForTokenClassificationWithSpade(BrosPreTrainedModel):
             head_hidden_size=config.hidden_size,
             head_p_dropout=classifier_dropout,
         )
-
-        def _init_weight(module):
-            init_std = 0.02
-            if isinstance(module, nn.Linear):
-                nn.init.normal_(module.weight, 0.0, init_std)
-                if module.bias is not None:
-                    nn.init.constant_(module.bias, 0.0)
-            elif isinstance(module, nn.LayerNorm):
-                nn.init.normal_(module.weight, 1.0, init_std)
-                if module.bias is not None:
-                    nn.init.constant_(module.bias, 0.0)
-
-        self.itc_layer.apply(_init_weight)
-        self.stc_layer.apply(_init_weight)
 
     @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

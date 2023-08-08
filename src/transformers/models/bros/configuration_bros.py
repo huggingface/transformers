@@ -110,6 +110,7 @@ class BrosConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         pad_token_id=0,
         bbox_scale=100.0,
+        n_relations=1,
         **kwargs,
     ):
         super().__init__(
@@ -130,3 +131,4 @@ class BrosConfig(PretrainedConfig):
         )
 
         self.bbox_scale = bbox_scale
+        self.n_relations = n_relations
