@@ -430,16 +430,55 @@ class TopKLogitsWarper(LogitsWarper):
 
 class TypicalLogitsWarper(LogitsWarper):
     r"""
-    [`LogitsWarper`] that performs typical decoding. See [Typical Decoding for Natural Language
-    Generation](https://arxiv.org/abs/2202.00666) for more information.
+    [`LogitsWarper`] This warping technique aims to produce more coherent and fluent text by selecting words that have information content close to the expected information content,
+    i.e., the conditional entropy of the model. See [Typical Decoding for Natural Language Generation](https://arxiv.org/abs/2202.00666) for more information.
 
+     <Tip>
+      
+      When using probabilistic language models for text generation, pass do_sample=True to enable locally typical sampling with reduced repetitions and improved coherence.
+    
+    </Tip>
+    
     Args:
         mass (`float`):
-            Value of typical_p between 0 and 1 inclusive, defaults to 0.9.
+            The proportion of probability mass to retain while warping the logits. The value should be between 0 and 1.
+            Higher values (close to 1.0) retain more probability mass, leading to more typical sampling, whereas lower
+            values (close to 0.0) retain less probability mass, leading to more diverse sampling. The default is 0.9.
         filter_value (`float`, *optional*, defaults to `-float("Inf")`):
-            All filtered values will be set to this float value.
+            The value used to filter out logits that fall below this threshold. Any logits less than this value will be
+            set to -infinity before applying the softmax function. This helps in excluding unlikely tokens during sampling.
+            Default is -infinity.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
-            Minimum number of tokens that cannot be filtered.
+            The minimum number of tokens to always keep during sampling.
+           
+    Example:
+    
+    ```python    
+    >>> from transformers import GPT2Tokenizer, GPT2LMHeadModel, TypicalLogitsWarper, set_seed
+
+    >>> # Load pre-trained model and tokenizer
+    >>> model_name = "gpt2"
+    >>> tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+    >>> model = GPT2LMHeadModel.from_pretrained(model_name)
+
+     >>> # Set a seed for reproducibility
+    >>> set_seed(0)
+
+    >>> # prompt
+    >>> input_prompt = "In today's meeting, the CEO discussed the company's future plans to"
+
+    >>> # Tokenize the sequence
+    >>> input_ids = tokenizer.encode(input_prompt, return_tensors="pt")
+
+    >>> # Generate text using the model and warper
+    >>> typical_p = 0.9  
+    >>> output = model.generate(input_ids, do_sample=True, max_length=50, typical_p=typical_p)
+
+    >>> # Decode and print the generated text
+    >>> generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
+    >>> print("Generated Text:", generated_text)
+    In today's meeting, the CEO discussed the company's future plans to expand its market presence in new regions and explore innovative product offerings. The team was excited about the opportunities ahead and is committed to driving growth and success.
+    ```
     """
 
     def __init__(self, mass: float = 0.9, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
