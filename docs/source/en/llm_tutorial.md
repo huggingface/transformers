@@ -19,9 +19,9 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-LLMs, or Large Language Models, are the key component behind text generation. In a nutshell, they consist of large transformer models trained to predict the next word (or, more precisely, token) given some input text. Since they predict one token at a time, you need to do something more elaborate to generate new sentences other than just calling the model -- you need to do autoregressive generation.
+LLMs, or Large Language Models, are the key component behind text generation. In a nutshell, they consist of large pretrained transformer models trained to predict the next word (or, more precisely, token) given some input text. Since they predict one token at a time, you need to do something more elaborate to generate new sentences other than just calling the model -- you need to do autoregressive generation.
 
-Autoregressive generation is the inference-time procedure of iteratively calling a model with its own generated outputs, given a few initial inputs. In 🤗 Transformers, this is handled by the [`~transformers.ModelMixin.generate`] method, which is available to all models with generative capabilities.
+Autoregressive generation is the inference-time procedure of iteratively calling a model with its own generated outputs, given a few initial inputs. In 🤗 Transformers, this is handled by the [`~generation.GenerationMixin.generate`] method, which is available to all models with generative capabilities.
 
 This tutorial will show you how to:
 
@@ -147,7 +147,7 @@ If not specified in the [`~generation.GenerationConfig`] file, `generate` return
 'A sequence of numbers: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,'
 ```
 
-### Repetitive outputs
+### Incorrect generation mode
 
 By default, and unless specified in the [`~generation.GenerationConfig`] file, `generate` selects the most likely token at each iteration (greedy decoding). Depending on your task, this may be undesirable; creative tasks like chatbots or writing an essay benefit from sampling. On the other hand, input-grounded tasks like audio transcription or translation benefit from greedy decoding. Enable sampling with `do_sample=True`, and you can learn more about this topic in this [blog post](https://huggingface.co/blog/how-to-generate).
 
@@ -202,16 +202,16 @@ While the autoregressive generation process is relatively straightforward, makin
 
 <!-- TODO: complete with new guides -->
 ### Advanced generate usage
-1. [Guide](generation_strategies) on how to control different generation methods, how to set up the generation configuration file, and how to stream the output;
-2. API reference on [~generation.GenerationConfig], [~generation.GenerationMixin.generate], and [generate-related classes](internal/generation_utils).
+ - [Guide](generation_strategies) on how to control different generation methods, how to set up the generation configuration file, and how to stream the output;
+ - API reference on [~generation.GenerationConfig], [~generation.GenerationMixin.generate], and [generate-related classes](internal/generation_utils).
 
 ### LLMs
-1. [Open LLM Leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard), which focuses on the quality of the open-source models;
-2. [Open LLM-Perf Leaderboard](https://huggingface.co/spaces/optimum/llm-perf-leaderboard), which focuses on LLM throughput.
+ - [Open LLM Leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard), which focuses on the quality of the open-source models;
+ - [Open LLM-Perf Leaderboard](https://huggingface.co/spaces/optimum/llm-perf-leaderboard), which focuses on LLM throughput.
 
 ### Latency and Throughput
-1. [Guide](main_classes/quantization) on dynamic quantization, which shows you how to drastically reduce your memory requirements.
+ - [Guide](main_classes/quantization) on dynamic quantization, which shows you how to drastically reduce your memory requirements.
 
 ### Related libraries
-1. [`text-generation-inference`](https://github.com/huggingface/text-generation-inference), a production-ready server for LLMs;
-2. [`optimum`](https://github.com/huggingface/optimum), an extension of 🤗 `transformers` that optimizes for specific hardware devices.
+ - [`text-generation-inference`](https://github.com/huggingface/text-generation-inference), a production-ready server for LLMs;
+ - [`optimum`](https://github.com/huggingface/optimum), an extension of 🤗 `transformers` that optimizes for specific hardware devices.
