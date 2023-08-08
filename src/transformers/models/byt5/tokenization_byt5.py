@@ -97,7 +97,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
             unk_token=unk_token,
             pad_token=pad_token,
             extra_ids=0,
-            additional_special_tokens=None,
+            additional_special_tokens=None, # TODO extra ids are not used :sweatywmile:
             **kwargs,
         )
 
