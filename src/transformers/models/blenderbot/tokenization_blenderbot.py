@@ -197,15 +197,13 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
         cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
 
         # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        mask_token = (
+            AddedToken(mask_token, lstrip=True, rstrip=False, normalized=False)
+            if isinstance(mask_token, str)
+            else mask_token
+        )
 
         # these special tokens are not part of the vocab.json, let's add them in the correct order
-
-        # self._added_tokens_decoder = {
-        #     0 : bos_token,
-        #     1 : pad_token,
-        #     2 : eos_token,
-        # }
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
