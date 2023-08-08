@@ -134,8 +134,8 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] enforcing a min-length of new tokens by setting EOS (End-Of-Sequence) token probability to 0.
     Note that for decoder-only models, such as Llama2, `min_length` will compute the length of `prompt + newly
-    generated tokens` whereas for other models it will behave as `min_new_tokens`, that is, taking only into account the
-    newly generated ones.
+    generated tokens` whereas for other models it will behave as `min_new_tokens`, that is, taking only into account
+    the newly generated ones.
 
     Args:
         prompt_length_to_skip (`int`):
