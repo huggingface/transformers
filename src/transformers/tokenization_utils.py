@@ -360,7 +360,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # 2. If some of the special tokens are not part of the vocab, we add the, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
         self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
-        
+
         # 3. Make sure the Trie has everything in it
         self._create_trie()
         self._decode_use_source_tokenizer = False

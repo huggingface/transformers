@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ...tokenization_utils import PreTrainedTokenizer
-from ...tokenization_utils_base import BatchEncoding, AddedToken
+from ...tokenization_utils_base import AddedToken, BatchEncoding
 from ...utils import (
     ModelOutput,
     PaddingStrategy,
@@ -219,7 +219,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         unique_no_split_tokens = []
         for token in self.encoder.keys():
             if len(token) > 1:
-                unique_no_split_tokens.append(AddedToken(token, rstrip = True, lstrip = True, normalized = False))
+                unique_no_split_tokens.append(AddedToken(token, rstrip=True, lstrip=True, normalized=False))
 
         # TODO are these tokens special?
         self.add_tokens(unique_no_split_tokens)
@@ -287,7 +287,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         to_add = []
         for token in new_tokens:
             if isinstance(token, str):
-                to_add.append(AddedToken(token,rstrip=False, lstrip=False, normalize = False))
+                to_add.append(AddedToken(token, rstrip=False, lstrip=False, normalize=False))
             else:
                 to_add.append(token)
 

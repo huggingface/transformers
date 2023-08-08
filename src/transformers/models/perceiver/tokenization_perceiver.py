@@ -85,7 +85,6 @@ class PerceiverTokenizer(PreTrainedTokenizer):
             3: mask_token,
             4: cls_token,
             5: sep_token,
-
         }
         self._num_special_tokens = len(self._added_tokens_decoder)
         super().__init__(
