@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Jukebox configuration"""
 
-import copy
 import os
 from typing import List, Union
 
@@ -369,18 +368,6 @@ class JukeboxPriorConfig(PretrainedConfig):
 
         return cls.from_dict(config_dict, **kwargs)
 
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["encoder_config"] = self.encoder_config.to_dict() if self.encoder_config is not None else None
-        output["model_type"] = self.__class__.model_type
-        return output
-
 
 class JukeboxVQVAEConfig(PretrainedConfig):
     """
@@ -561,7 +548,6 @@ class JukeboxConfig(PretrainedConfig):
     """
 
     model_type = "jukebox"
-    is_composition = True
 
     def __init__(
         self,
@@ -620,18 +606,3 @@ class JukeboxConfig(PretrainedConfig):
         """
         prior_config_list = [config.to_dict() for config in prior_configs]
         return cls(prior_config_list=prior_config_list, vqvae_config_dict=vqvae_config.to_dict(), **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        for i, config in enumerate(output.pop("prior_configs")):
-            output[f"prior_{i}"] = config.to_dict()
-
-        output["vqvae_config"] = self.vqvae_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

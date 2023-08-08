@@ -190,6 +190,16 @@ class ModelArguments:
             "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
         },
     )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+                "execute code present on the Hub on your local machine."
+            )
+        },
+    )
 
 
 @dataclass
@@ -509,12 +519,14 @@ def main():
             model_args.config_name,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     elif model_args.model_name_or_path:
         config = AutoConfig.from_pretrained(
             model_args.model_name_or_path,
             cache_dir=model_args.cache_dir,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
@@ -526,6 +538,7 @@ def main():
             cache_dir=model_args.cache_dir,
             use_fast=model_args.use_fast_tokenizer,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     elif model_args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(
@@ -533,6 +546,7 @@ def main():
             cache_dir=model_args.cache_dir,
             use_fast=model_args.use_fast_tokenizer,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         raise ValueError(
@@ -652,12 +666,14 @@ def main():
             seed=training_args.seed,
             dtype=getattr(jnp, model_args.dtype),
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         model = FlaxAutoModelForMaskedLM.from_config(
             config,
             seed=training_args.seed,
             dtype=getattr(jnp, model_args.dtype),
+            trust_remote_code=model_args.trust_remote_code,
         )
 
     if training_args.gradient_checkpointing:

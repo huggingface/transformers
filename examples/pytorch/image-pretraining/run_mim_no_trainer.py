@@ -196,6 +196,16 @@ def parse_args():
         ),
     )
     parser.add_argument(
+        "--trust_remote_code",
+        type=bool,
+        default=False,
+        help=(
+            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+            "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+            "execute code present on the Hub on your local machine."
+        ),
+    )
+    parser.add_argument(
         "--image_size",
         type=int,
         default=None,
@@ -448,6 +458,7 @@ def main():
         "cache_dir": args.cache_dir,
         "revision": args.model_revision,
         "use_auth_token": True if args.use_auth_token else None,
+        "trust_remote_code": args.trust_remote_code,
     }
     if args.config_name_or_path:
         config = AutoConfig.from_pretrained(args.config_name_or_path, **config_kwargs)
@@ -498,10 +509,14 @@ def main():
             cache_dir=args.cache_dir,
             revision=args.model_revision,
             token=True if args.use_auth_token else None,
+            trust_remote_code=args.trust_remote_code,
         )
     else:
         logger.info("Training new model from scratch")
-        model = AutoModelForMaskedImageModeling.from_config(config)
+        model = AutoModelForMaskedImageModeling.from_config(
+            config,
+            trust_remote_code=args.trust_remote_code,
+        )
 
     column_names = ds["train"].column_names
 
@@ -649,14 +664,18 @@ def main():
     # Potentially load in the weights and states from a previous save
     if args.resume_from_checkpoint:
         if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
-            accelerator.print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
-            accelerator.load_state(args.resume_from_checkpoint)
+            checkpoint_path = args.resume_from_checkpoint
             path = os.path.basename(args.resume_from_checkpoint)
         else:
             # Get the most recent checkpoint
             dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
             dirs.sort(key=os.path.getctime)
             path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
+            checkpoint_path = path
+            path = os.path.basename(checkpoint_path)
+
+        accelerator.print(f"Resumed from checkpoint: {checkpoint_path}")
+        accelerator.load_state(path)
         # Extract `epoch_{i}` or `step_{i}`
         training_difference = os.path.splitext(path)[0]
 
