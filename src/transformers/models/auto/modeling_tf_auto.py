@@ -81,6 +81,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("segformer", "TFSegformerModel"),
         ("speech_to_text", "TFSpeech2TextModel"),
         ("swin", "TFSwinModel"),
+        ("swin2sr", "Swin2SRModel"),
         ("t5", "TFT5Model"),
         ("tapas", "TFTapasModel"),
         ("transfo-xl", "TFTransfoXLModel"),
