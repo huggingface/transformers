@@ -388,7 +388,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         return self.added_tokens_encoder
 
-    # TODO no tokenizer should overload this?
     def __len__(self):
         """
         Size of the full vocabulary with the added tokens. This should be the maximum index ? Or the actual length?

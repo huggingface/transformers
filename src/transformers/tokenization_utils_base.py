@@ -2070,11 +2070,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     added_tokens = tokenizer_file_handle.pop("added_tokens")
                 for serialized_tokens in added_tokens:
                     idx = int(serialized_tokens.pop("id"))
+                    serialized_tokens.pop("special")
                     token = AddedToken(**serialized_tokens)
-                    # sometimes the information on which token is special and which is not is only available here!
-                    init_kwargs["additional_special_tokens"] = []
-                    if serialized_tokens.pop("special"):
-                        init_kwargs["additional_special_tokens"].append(str(token))
                     added_tokens_decoder[idx] = token
 
         # Load a slow from a slow
