@@ -401,7 +401,7 @@ class TopPLogitsWarper(LogitsWarper):
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
     'It is probably one of the most important things for parents to teach children about patience and acceptance. In this way, we as a society can ensure that our children are not taught to be impatient or to be afraid of the future.\n\nThe first step is to teach them'
 
-    >>> # We can see that the answer is tends to have a lot of repeated tokens and phrases
+    >>> # We can see that the answer tends to have a lot of repeated tokens and phrases
 
 
     >>> # Generate sequences with top_p sampling
