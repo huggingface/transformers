@@ -953,7 +953,7 @@ class SpecialTokensMixin:
                     raise ValueError(f"Token {value} for key {key} should be a str or an AddedToken instance")
                 if isinstance(value, (str)):
                     # for legacy purpose we default to stripping. test_add_tokens_tokenizer depends on this
-                    value = AddedToken(value, normalized=False, rtrip = True, lstrip = True)
+                    value = AddedToken(value, normalized=False, rtrip=True, lstrip=True)
                 if isinstance(value, AddedToken):
                     setattr(self, key, value)
                 added_tokens.append(value)
@@ -1108,31 +1108,57 @@ class SpecialTokensMixin:
 
     @bos_token.setter
     def bos_token(self, value):
-        self._bos_token = AddedToken(value, normalized=False, rstrip = True, lstrip = True) if isinstance(value, str) and value != "" else value
+        self._bos_token = (
+            AddedToken(value, normalized=False, rstrip=True, lstrip=True)
+            if isinstance(value, str) and value != ""
+            else value
+        )
 
     @eos_token.setter
     def eos_token(self, value):
-        self._eos_token = AddedToken(value, normalized=False, rstrip = True, lstrip = True) if isinstance(value, str) and value != "" else value
+        self._eos_token = (
+            AddedToken(value, normalized=False, rstrip=True, lstrip=True)
+            if isinstance(value, str) and value != ""
+            else value
+        )
 
     @unk_token.setter
     def unk_token(self, value):
-        self._unk_token = AddedToken(value, normalized=False, rstrip = True, lstrip = True) if isinstance(value, str) and value != "" else value
+        self._unk_token = (
+            AddedToken(value, normalized=False, rstrip=True, lstrip=True)
+            if isinstance(value, str) and value != ""
+            else value
+        )
 
     @sep_token.setter
     def sep_token(self, value):
-        self._sep_token = AddedToken(value, normalized=False, rstrip = True, lstrip = True) if isinstance(value, str) and value != "" else value
+        self._sep_token = (
+            AddedToken(value, normalized=False, rstrip=True, lstrip=True)
+            if isinstance(value, str) and value != ""
+            else value
+        )
 
     @pad_token.setter
     def pad_token(self, value):
-        self._pad_token = AddedToken(value, normalized=False, rstrip = True, lstrip = True) if isinstance(value, str) and value != "" else value
+        self._pad_token = (
+            AddedToken(value, normalized=False, rstrip=True, lstrip=True)
+            if isinstance(value, str) and value != ""
+            else value
+        )
 
     @cls_token.setter
     def cls_token(self, value):
-        self._cls_token = AddedToken(value, normalized=False, rstrip = True, lstrip = True) if isinstance(value, str) and value != "" else value
+        self._cls_token = (
+            AddedToken(value, normalized=False, rstrip=True, lstrip=True)
+            if isinstance(value, str) and value != ""
+            else value
+        )
 
     @mask_token.setter
     def mask_token(self, value):
-        self._mask_token = AddedToken(value, normalized=False, rstrip = True, lstrip = True) if isinstance(value, str) else value
+        self._mask_token = (
+            AddedToken(value, normalized=False, rstrip=True, lstrip=True) if isinstance(value, str) else value
+        )
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
@@ -2045,7 +2071,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     added_tokens = tokenizer_file_handle.pop("added_tokens")
                 for serialized_tokens in added_tokens:
                     idx = int(serialized_tokens.pop("id"))
-                    serialized_tokens.pop("special") # TODO arthur keeep thhis!
+                    serialized_tokens.pop("special")  # TODO arthur keeep thhis!
                     added_tokens_decoder[idx] = AddedToken(**serialized_tokens)
 
         # Load a slow from a slow
@@ -2085,7 +2111,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
         if tokenizer.is_fast:
             # add the special tokens here. Fast does not expect them to be added otherwise.
-            tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens = True)
+            tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
         if len(added_tokens_decoder) > 0:
             logger.warning_advice(
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"

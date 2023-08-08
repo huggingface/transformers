@@ -97,7 +97,7 @@ class ByT5Tokenizer(PreTrainedTokenizer):
             unk_token=unk_token,
             pad_token=pad_token,
             extra_ids=0,
-            additional_special_tokens=None, # TODO extra ids are not used :sweatywmile:
+            additional_special_tokens=None,  # TODO extra ids are not used :sweatywmile:
             **kwargs,
         )
 
@@ -106,10 +106,10 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         return self._utf_vocab_size
 
     def get_vocab(self):
-        vocab = {i:str(i) for i in range(self.vocab_size) }
+        vocab = {i: str(i) for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
-    
+
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:

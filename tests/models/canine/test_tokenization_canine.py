@@ -122,7 +122,9 @@ class CanineTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # We can add a new special token for Canine as follows:
                 new_additional_special_token = chr(0xE007)
                 additional_special_tokens.append(new_additional_special_token)
-                tokenizer.add_special_tokens({"additional_special_tokens": additional_special_tokens},replace_additional_special_tokens=False) 
+                tokenizer.add_special_tokens(
+                    {"additional_special_tokens": additional_special_tokens}, replace_additional_special_tokens=False
+                )
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 tokenizer.save_pretrained(tmpdirname)
 

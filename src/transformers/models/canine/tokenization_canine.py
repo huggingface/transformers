@@ -127,11 +127,11 @@ class CanineTokenizer(PreTrainedTokenizer):
         return self._unicode_vocab_size
 
     def get_vocab(self):
-        vocab = {i:str(i) for i in range(self.vocab_size) }
+        vocab = {i: str(i) for i in range(self.vocab_size)}
         vocab.update(self._special_codepoint_strings)
         vocab.update(self.added_tokens_encoder)
         return vocab
-    
+
     def _tokenize(self, text: str) -> List[str]:
         """Tokenize a string (i.e. perform character splitting)."""
         return list(text)

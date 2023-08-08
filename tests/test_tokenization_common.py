@@ -728,7 +728,9 @@ class TokenizerTesterMixin:
                 tokenizer.add_tokens(["bim", "bambam"])
                 additional_special_tokens = tokenizer.additional_special_tokens
                 additional_special_tokens.append("new_additional_special_token")
-                tokenizer.add_special_tokens({"additional_special_tokens": additional_special_tokens},replace_additional_special_tokens=False) 
+                tokenizer.add_special_tokens(
+                    {"additional_special_tokens": additional_special_tokens}, replace_additional_special_tokens=False
+                )
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 before_vocab = tokenizer.get_vocab()
                 tokenizer.save_pretrained(tmpdirname)
@@ -762,7 +764,9 @@ class TokenizerTesterMixin:
                 tokenizer.add_tokens(["bim", "bambam"])
                 additional_special_tokens = tokenizer.additional_special_tokens
                 additional_special_tokens.append("new_additional_special_token")
-                tokenizer.add_special_tokens({"additional_special_tokens": additional_special_tokens},replace_additional_special_tokens=False) 
+                tokenizer.add_special_tokens(
+                    {"additional_special_tokens": additional_special_tokens}, replace_additional_special_tokens=False
+                )
                 before_tokens = tokenizer.encode(sample_text, add_special_tokens=False)
                 before_vocab = tokenizer.get_vocab()
                 tokenizer.save_pretrained(tmpdirname)
