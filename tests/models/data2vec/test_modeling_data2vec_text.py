@@ -388,6 +388,7 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         if is_torch_available()
         else {}
     )
+    model_split_percents = [0.5, 0.9]
 
     def setUp(self):
         self.model_tester = Data2VecTextModelTester(self)

@@ -22,7 +22,14 @@ import numpy as np
 
 from tests.test_modeling_common import floats_tensor
 from transformers import DetrConfig, MaskFormerConfig, SwinConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_gpu,
+    require_torch_multi_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -508,6 +515,20 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
             [[4.7188, -3.2585, -2.8857], [6.6871, -2.9181, -1.2487], [7.2449, -2.2764, -2.1874]]
         ).to(torch_device)
         self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_slice, atol=TOLERANCE))
+
+    @require_torch_gpu
+    def test_inference_fp16(self):
+        model = (
+            MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-resnet101-coco-stuff")
+            .to(torch_device, dtype=torch.float16)
+            .eval()
+        )
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(image, return_tensors="pt").to(torch_device, dtype=torch.float16)
+
+        with torch.no_grad():
+            _ = model(**inputs)
 
     def test_with_segmentation_maps_and_loss(self):
         model = (

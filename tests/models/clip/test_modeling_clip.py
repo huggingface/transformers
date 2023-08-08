@@ -353,6 +353,7 @@ class CLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = True
     test_pruning = False
     test_head_masking = False
+    model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
         self.model_tester = CLIPTextModelTester(self)
