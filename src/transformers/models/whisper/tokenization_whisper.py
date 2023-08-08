@@ -406,11 +406,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     @property
     def prefix_tokens(self) -> List[int]:
-        all_special_ids = self.all_special_ids
-        bos_token_id = all_special_ids[-106]
-        translate_token_id = all_special_ids[-6]
-        transcribe_token_id = all_special_ids[-5]
-        notimestamps_token_id = all_special_ids[-1]
+        all_special_ids = self.added_tokens_encoder
+        bos_token_id = all_special_ids.get("<|startoftranscript|>")
+        translate_token_id = all_special_ids.get("<|translate|>")
+        transcribe_token_id = all_special_ids.get("<|transcribe|>")
+        notimestamps_token_id = all_special_ids.get("<|notimestamps|>")
         langs = tuple(LANGUAGES.keys())
 
         if self.language is not None:

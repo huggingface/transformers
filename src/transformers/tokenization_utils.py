@@ -434,7 +434,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if str(token) == "":
                 continue
             if isinstance(token, str):
-                token = AddedToken(token, normalized=not special_tokens)
+                # for legacy we strip left and right by default TODO @ArthurZ lots of tests rely on this
+                token = AddedToken(token, normalized=not special_tokens, rstrip = True, lstrip = True)
             if token.content == self.unk_token:
                 # unk_token and this token have the same pointer, let's update it
                 # even if it is already part of the vocab

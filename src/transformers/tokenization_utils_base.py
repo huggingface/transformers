@@ -944,13 +944,16 @@ class SpecialTokensMixin:
                 # additional special tokens don't need to be added tokens as they are only used for decoding
                 if replace_additional_special_tokens:
                     setattr(self, key, [str(i) for i in to_add])
+                else:
+                    self._additional_special_tokens.extend(to_add)
                 added_tokens.extend(to_add)
 
             else:
                 if not isinstance(value, (str, AddedToken)):
                     raise ValueError(f"Token {value} for key {key} should be a str or an AddedToken instance")
                 if isinstance(value, (str)):
-                    value = AddedToken(value, normalized=False)
+                    # for legacy purpose we default to stripping. test_add_tokens_tokenizer depends on this
+                    value = AddedToken(value, normalized=False, rtrip = True, lstrip = True)
                 if isinstance(value, AddedToken):
                     setattr(self, key, value)
                 added_tokens.append(value)
@@ -1105,31 +1108,31 @@ class SpecialTokensMixin:
 
     @bos_token.setter
     def bos_token(self, value):
-        self._bos_token = AddedToken(value, normalized=False) if isinstance(value, str) and value != "" else value
+        self._bos_token = AddedToken(value, normalized=False, rstrip = True, lstrip = True) if isinstance(value, str) and value != "" else value
 
     @eos_token.setter
     def eos_token(self, value):
-        self._eos_token = AddedToken(value, normalized=False) if isinstance(value, str) and value != "" else value
+        self._eos_token = AddedToken(value, normalized=False, rstrip = True, lstrip = True) if isinstance(value, str) and value != "" else value
 
     @unk_token.setter
     def unk_token(self, value):
-        self._unk_token = AddedToken(value, normalized=False) if isinstance(value, str) and value != "" else value
+        self._unk_token = AddedToken(value, normalized=False, rstrip = True, lstrip = True) if isinstance(value, str) and value != "" else value
 
     @sep_token.setter
     def sep_token(self, value):
-        self._sep_token = AddedToken(value, normalized=False) if isinstance(value, str) and value != "" else value
+        self._sep_token = AddedToken(value, normalized=False, rstrip = True, lstrip = True) if isinstance(value, str) and value != "" else value
 
     @pad_token.setter
     def pad_token(self, value):
-        self._pad_token = AddedToken(value, normalized=False) if isinstance(value, str) and value != "" else value
+        self._pad_token = AddedToken(value, normalized=False, rstrip = True, lstrip = True) if isinstance(value, str) and value != "" else value
 
     @cls_token.setter
     def cls_token(self, value):
-        self._cls_token = AddedToken(value, normalized=False) if isinstance(value, str) and value != "" else value
+        self._cls_token = AddedToken(value, normalized=False, rstrip = True, lstrip = True) if isinstance(value, str) and value != "" else value
 
     @mask_token.setter
     def mask_token(self, value):
-        self._mask_token = AddedToken(value, normalized=False) if isinstance(value, str) else value
+        self._mask_token = AddedToken(value, normalized=False, rstrip = True, lstrip = True) if isinstance(value, str) else value
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
@@ -2082,7 +2085,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             )
         if tokenizer.is_fast:
             # add the special tokens here. Fast does not expect them to be added otherwise.
-            tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
+            tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens = True)
         if len(added_tokens_decoder) > 0:
             logger.warning_advice(
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
@@ -2255,9 +2258,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         )
         added_tokens_file = save_files[-1] + " and " if self.get_added_vocab() else None
 
-        warnings.warn(
-            f"Saving {added_tokens_file}{special_tokens_map_file} will be removed in `transformers 5`, it is kept for forward compatibility, but it is recommended to update your tokenizer file",
-            FutureWarning,
+        logger.warning_once(
+            f"Saving {added_tokens_file}{special_tokens_map_file} will be removed in `transformers 5`, it is kept for forward compatibility, but it is recommended to update your tokenizer file"
         )
 
         if push_to_hub:
