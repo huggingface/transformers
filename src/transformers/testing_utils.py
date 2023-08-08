@@ -90,7 +90,6 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
-    is_torch_mps_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tensorrt_fx_available,
@@ -615,8 +614,6 @@ if is_torch_available():
 
     if torch.cuda.is_available():
         torch_device = "cuda"
-    elif is_torch_mps_available():
-        torch_device = "mps"
     elif is_torch_npu_available():
         torch_device = "npu"
     else:
