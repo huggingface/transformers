@@ -31,12 +31,14 @@ from transformers import (
     is_torch_available,
 )
 from transformers.models.bark.generation_configuration_bark import (
+    BarkGenerationConfig,
     BarkCoarseGenerationConfig,
     BarkFineGenerationConfig,
     BarkSemanticGenerationConfig,
 )
 from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 from transformers.utils import CONFIG_NAME, GENERATION_CONFIG_NAME, cached_property
+from transformers.generation.configuration_utils import GenerationConfig
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -409,6 +411,7 @@ class BarkFineModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
             window_size=self.window_size,
+            n_codes_total=self.n_codes_total,
         )
 
     def get_pipeline_config(self):
@@ -480,12 +483,15 @@ class BarkModelTester:
         codec_kwargs=None,
         batch_size=2,
         seq_length=4,
-        vocab_size=12,
+        vocab_size=9,
         is_training=False,  # for now training is not supported
         semantic_max_new_tokens=4,
         hz=2,
         max_input_length=2,
         sliding_window_len=2,
+        text_encoding_offset=0,
+        semantic_vocab_size=0,
+        n_codes_total=3,
     ):
         if semantic_kwargs is None:
             semantic_kwargs = {
@@ -501,9 +507,20 @@ class BarkModelTester:
             fine_acoustics_kwargs = {
                 "vocab_size": vocab_size,
                 "output_vocab_size": vocab_size,
+                "n_codes_total": n_codes_total,
             }
         if codec_kwargs is None:
-            codec_kwargs = {}
+            codec_kwargs = {
+                "num_channels": n_codes_total,
+                #"is_training": ,
+                #"intermediate_size": ,
+                #"hidden_size": ,
+                #"num_filters": ,
+                #"num_residual_layers": ,
+                #"upsampling_ratios": ,
+                #"num_lstm_layers": ,
+                "codebook_size": vocab_size - 1,
+            }
 
         self.parent = parent
         self.semantic_model_tester = BarkSemanticModelTester(parent, **semantic_kwargs)
@@ -517,6 +534,10 @@ class BarkModelTester:
         self.hz = hz
         self.max_input_length = max_input_length
         self.sliding_window_len = sliding_window_len
+        self.text_encoding_offset = text_encoding_offset
+        self.semantic_vocab_size = semantic_vocab_size
+        
+        self.codebook_size = vocab_size - 1
 
         self.is_training = is_training
 
@@ -525,7 +546,7 @@ class BarkModelTester:
         config = self.get_config()
 
         input_ids = ids_tensor(
-            [self.batch_size, self.seq_length, self.fine_acoustics_model_tester.n_codes_total],
+            [self.batch_size, self.seq_length],
             self.semantic_model_tester.vocab_size,
         )
 
@@ -545,10 +566,10 @@ class BarkModelTester:
         semantic_generation_config = {
             "eos_token_id": config.semantic_config.eos_token_id,
             "max_new_tokens": self.semantic_max_new_tokens,
-            "text_encoding_offset": config.semantic_config.eos_token_id,
+            "text_encoding_offset": self.text_encoding_offset,
             "text_pad_token": config.semantic_config.eos_token_id,
             "semantic_infer_token": config.semantic_config.eos_token_id,
-            "semantic_vocab_size": config.semantic_config.vocab_size,
+            "semantic_vocab_size": self.semantic_vocab_size,
             "max_input_semantic_length": self.max_input_length,
             "semantic_rate_hz": self.hz,
         }
@@ -572,8 +593,22 @@ class BarkModelTester:
         semantic_generation_config = BarkSemanticGenerationConfig(**semantic_generation_config)
         coarse_generation_config = BarkCoarseGenerationConfig(**coarse_generation_config)
         fine_generation_config = BarkFineGenerationConfig(**fine_generation_config)
+        
+        
+        generation_config = BarkGenerationConfig.from_sub_model_configs(
+            semantic_generation_config,
+            coarse_generation_config,
+            fine_generation_config,
+            codebook_size = self.codebook_size,
+        )
+        
+        # BarkGenerationConfig uses a nested generation config which can't be used properly for now
+        # meaning that the nested configuration of a sub-model (e.g generation_config["semantic_config"])
+        # can't be a GenerationConfig for now but needs to be a dict
+        # the following line allows that
+        generation_config = GenerationConfig.from_dict(generation_config.to_dict())
 
-        return semantic_generation_config, coarse_generation_config, fine_generation_config
+        return generation_config
 
     def get_pipeline_config(self):
         config = self.get_config()
@@ -595,55 +630,52 @@ class BarkModelTester:
 
 
 # Need this class in oder to create tiny model for `bark`
-# TODO (@Yoach) Implement actual test methods
-class BarkModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (BarkModel,) if is_torch_available() else ()
-    all_generative_model_classes = (BarkModel,) if is_torch_available() else ()
-
-    test_head_masking = False
-    test_pruning = False
-    test_resize_embeddings = False
+class BarkModelTest(unittest.TestCase):
+    
+    @cached_property
+    def model(self):
+        self.setUp()
+        
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        
+        model = BarkModel(config)
+        
+        
+        model.generation_config = self.model_tester.get_generation_config(config)
+        
+        model.to(torch_device)
+        
+        return model
 
     def setUp(self):
         self.model_tester = BarkModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BarkConfig, n_embd=37)
 
-    # test_determinism, test_can_use_safetensors
-    @unittest.skip("The model doesn't implement a forward pass")
-    def test_attention_outputs(self):
-        pass
+    def test_determinism(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-    @unittest.skip("The model doesn't implement a forward pass")
-    def test_feed_forward_chunking(self):
-        pass
+        def check_determinism(first, second):
+            out_1 = first.cpu().numpy()
+            out_2 = second.cpu().numpy()
+            out_1 = out_1[~np.isnan(out_1)]
+            out_2 = out_2[~np.isnan(out_2)]
+            max_diff = np.amax(np.abs(out_1 - out_2))
+            self.assertLessEqual(max_diff, 1e-5)
 
-    @unittest.skip("The model doesn't implement a forward pass")
-    def test_forward_signature(self):
-        pass
+        
+            
+        self.model.eval()
+        with torch.no_grad():
+            first = self.model.generate(**inputs_dict)
+            second = self.model.generate(**inputs_dict)
+            
+        if isinstance(first, tuple) and isinstance(second, tuple):
+            for tensor1, tensor2 in zip(first, second):
+                check_determinism(tensor1, tensor2)
+        else:
+                check_determinism(first, second)
+                
 
-    @unittest.skip("The model doesn't implement a forward pass")
-    def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip("The model doesn't implement get_input_embeddings")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip("The model doesn't implement get_input_embeddings")
-    def test_model_common_attributes(self):
-        pass
-
-    @unittest.skip("The model doesn't implement a forward pass")
-    def test_model_main_input_name(self):
-        pass
-
-    @unittest.skip("The model doesn't implement a forward pass and doesn't return dict")
-    def test_model_outputs_equivalence(self):
-        pass
-
-    @unittest.skip("The model doesn't implement a forward pass")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
 
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -658,58 +690,106 @@ class BarkModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             max_diff = np.amax(np.abs(out_1 - out_2))
             self.assertLessEqual(max_diff, 1e-5)
 
-        for model_class in self.all_model_classes:
-            model = model_class(config)
+        self.model.eval()
+        with torch.no_grad():
+            first = self.model.generate(**inputs_dict)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.model.save_pretrained(tmpdirname)
+
+            # the config file (and the generation config file, if it can generate) should be saved
+            self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
+            self.assertEqual(
+                self.model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
+            )
+
+            model = BarkModel.from_pretrained(tmpdirname)
             model.to(torch_device)
-            model.eval()
             with torch.no_grad():
-                first = model.generate(**self._prepare_for_class(inputs_dict, model_class))[0]
+                second = model.generate(**inputs_dict)
 
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
+        if isinstance(first, tuple) and isinstance(second, tuple):
+            for tensor1, tensor2 in zip(first, second):
+                check_save_load(tensor1, tensor2)
+        else:
+            check_save_load(first, second)
 
-                # the config file (and the generation config file, if it can generate) should be saved
-                self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
-                self.assertEqual(
-                    model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
-                )
-
-                model = model_class.from_pretrained(tmpdirname)
-                model.to(torch_device)
-                with torch.no_grad():
-                    second = model.generate(**self._prepare_for_class(inputs_dict, model_class))[0]
-
-            if isinstance(first, tuple) and isinstance(second, tuple):
-                for tensor1, tensor2 in zip(first, second):
-                    check_save_load(tensor1, tensor2)
-            else:
-                check_save_load(first, second)
-
-    # TODO: it's the test_initialization of Encodec
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = ["conv"]
-                ignore_init = ["lstm"]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    elif not any(x in name for x in ignore_init):
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
+        model = BarkModel(config=configs_no_init)
+        for name, param in model.named_parameters():
+            uniform_init_parms = ["conv"]
+            ignore_init = ["lstm"]
+            if param.requires_grad:
+                if any(x in name for x in uniform_init_parms):
+                    self.assertTrue(
+                        -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                        msg=f"Parameter {name} of model {BarkModel} seems not properly initialized",
+                    )
+                elif not any(x in name for x in ignore_init):
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {BarkModel} seems not properly initialized",
+                    )
 
-    # test_from_pretrained_no_checkpoint test why don't work
-    # test_initialization
+    def test_generate_end_to_end_with_sub_models_args(self):
+        _, input_ids = self.model_tester.prepare_config_and_inputs_for_common()
+
+        with torch.no_grad():
+            self.model.generate(**input_ids, do_sample=False, coarse_do_sample=True, coarse_temperature=0.7)
+            self.model.generate(
+                **input_ids, do_sample=False, coarse_do_sample=True, coarse_temperature=0.7, fine_temperature=0.3
+            )
+            self.model.generate(
+                **input_ids,
+                do_sample=True,
+                temperature=0.6,
+                penalty_alpha=0.6,
+                semantic_temperature=0.9,
+                coarse_temperature=0.2,
+                fine_temperature=0.1,
+            )
+
+    @require_torch_gpu
+    def test_generate_end_to_end_with_offload(self):
+        _, input_ids = self.model_tester.prepare_config_and_inputs_for_common()
+
+        with torch.no_grad():
+            # standard generation
+            output_with_no_offload = self.model.generate(**input_ids, do_sample=False, fine_temperature=None)
+
+            torch.cuda.empty_cache()
+
+            memory_before_offload = torch.cuda.memory_allocated()
+            model_memory_footprint = self.model.get_memory_footprint()
+
+            # activate cpu offload
+            self.model.enable_cpu_offload()
+
+            memory_after_offload = torch.cuda.memory_allocated()
+
+            # checks if the model have been offloaded
+
+            # CUDA memory usage after offload should be near 0, leaving room to small differences
+            room_for_difference = 1.1
+            self.assertGreater(
+                (memory_before_offload - model_memory_footprint) * room_for_difference, memory_after_offload
+            )
+
+            # checks if device is the correct one
+            self.assertEqual(self.model.device.type, torch_device)
+
+            # checks if hooks exist
+            self.assertTrue(hasattr(self.model.semantic, "_hf_hook"))
+
+            # output with cpu offload
+            output_with_offload = self.model.generate(**input_ids, do_sample=False, fine_temperature=None)
+
+        # checks if same output
+        self.assertListEqual(output_with_no_offload.tolist(), output_with_offload.tolist())
 
 
 @require_torch
