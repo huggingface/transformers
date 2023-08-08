@@ -2031,7 +2031,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Load a slow tokenizer form a fast file only:
         added_tokens_decoder = {}
-        if "Fast" not in config_tokenizer_class and has_tokenizer_file:
+        if config_tokenizer_class is not None and "Fast" not in config_tokenizer_class and has_tokenizer_file:
             tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
             if tokenizer_file is not None:
                 with open(tokenizer_file, encoding="utf-8") as tokenizer_file_handle:
