@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 # coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team
 #
@@ -398,26 +396,26 @@ class TypicalLogitsWarper(LogitsWarper):
     i.e., the conditional entropy of the model. See [Typical Decoding for Natural Language Generation](https://arxiv.org/abs/2202.00666) for more information.
 
      <Tip>
-      
+
       When using probabilistic language models for text generation, pass do_sample=True to enable locally typical sampling with reduced repetitions and improved coherence.
-    
+
     </Tip>
-    
+
     Args:
         mass (`float`):
              The proportion of probability mass to retain while warping the logits. The value should be between 0 and 1.
-                Higher values (close to 1.0) retain more probability mass, leading to more typical sampling, whereas lower
-                values (close to 0.0) retain less probability mass, leading to more diverse sampling. The default is 0.9.
+             Higher values (close to 1.0) retain more probability mass, leading to more typical sampling, whereas lower
+             values (close to 0.0) retain less probability mass, leading to more diverse sampling. The default is 0.9.
         filter_value (`float`, *optional*, defaults to `-float("Inf")`):
              The value used to filter out logits that fall below this threshold. Any logits less than this value will be
-                set to -infinity before applying the softmax function. This helps in excluding unlikely tokens during sampling.
-                Default is -infinity.
+             set to -infinity before applying the softmax function. This helps in excluding unlikely tokens during sampling.
+             Default is -infinity.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
-           The minimum number of tokens to always keep during sampling. The default is 1.
-           
+             The minimum number of tokens to always keep during sampling. The default is 1.
+
     Example:
-    
-    ```python    
+
+    ```python
     >>> from transformers import GPT2Tokenizer, GPT2LMHeadModel, TypicalLogitsWarper, set_seed
 
     >>> # Load pre-trained model and tokenizer
@@ -425,20 +423,14 @@ class TypicalLogitsWarper(LogitsWarper):
     >>> tokenizer = GPT2Tokenizer.from_pretrained(model_name)
     >>> model = GPT2LMHeadModel.from_pretrained(model_name)
 
-    >>> # Set up the warper with desired parameters
-    >>> warper = TypicalLogitsWarper(tikohn_n=3, pi=0.95)
-
-    >>> # Set a seed for reproducibility
-    >>> set_seed(0)
-
-    >>> # prompt
+    >>> # input prompt
     >>> input_prompt = "In today's meeting, the CEO discussed the company's future plans to"
 
     >>> # Tokenize the sequence
     >>> input_ids = tokenizer.encode(input_prompt, return_tensors="pt")
 
     >>> # Generate text using the model and warper
-    >>> typical_p = 0.9  
+    >>> typical_p = 0.9
     >>> output = model.generate(input_ids, do_sample=True, max_length=50, typical_p=typical_p)
 
     >>> # Decode and print the generated text
@@ -1327,4 +1319,3 @@ class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
             scores[:, : self.semantic_vocab_size + self.codebook_size] = -float("inf")
 
         return scores
->>>>>>> 67e39258e64e3c4a19c4df9004d95ee007cd3fdd
