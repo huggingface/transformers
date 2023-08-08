@@ -853,7 +853,7 @@ class SpecialTokensMixin:
                     raise TypeError(f"Special token {key} has to be either str or AddedToken but got: {type(value)}")
 
     def sanitize_special_tokens(self) -> int:
-        """
+        """additional_special_tokens
         The `sanitize_special_tokens` is now deprectaed and does not do anything. It iss only kept for backward
         compatibility. It will be removed in transformers v5
         """

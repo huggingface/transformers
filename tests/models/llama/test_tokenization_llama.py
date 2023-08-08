@@ -68,7 +68,7 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.save_pretrained(self.tmpdirname)
 
     def get_tokenizers(self, **kwargs):
-        kwargs.update({"pad_token" : "<PAD>"})
+        kwargs.update({"pad_token": "<PAD>"})
         return super().get_tokenizers(**kwargs)
 
     def test_full_tokenizer(self):

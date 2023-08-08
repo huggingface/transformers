@@ -349,23 +349,16 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     def __init__(self, **kwargs):
         # 1. Init the parent class
         super().__init__(**kwargs)
+        self.tokens_trie = Trie()
+
         if "added_tokens_decoder" in kwargs:
             # overwriting the class's added_tokens_decoder
             self.added_tokens_decoder = kwargs.get("added_tokens_decoder")
-
-        # if self.unk_token is not None and self.unk_token not in self._added_tokens_decoder:
-        #     if self.convert_tokens_to_ids(self.unk_token) is None:
-        #         raise ValueError(
-        #             "An `unk_token` was set but it is neither part of the `additional_special_tokens` nor is it recognized by the tokenizer."
-        #             " Make sure the token exists, whithout it, adding tokens to the model is not possible. Thus the initialization fails."
-        #         )
 
         # 2. If some of the special tokens are not part of the vocab, we add the, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
         self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
 
-        # 3. Make sure the Trie has everything in it
-        self._create_trie()
         self._decode_use_source_tokenizer = False
 
     @property
@@ -478,15 +471,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 logger.info(f"Adding {token} to the vocabulary")
 
         # TODO we should only have to update the trie, if a key is already in no need to re create the idx. O(1) storing a set of previously added tokens
-        self._create_trie()
+        self._update_trie()
         return added_tokens
 
-    def _create_trie(self):
-        trie = Trie()
+    def _update_trie(self):
         for token in self.added_tokens_decoder.values():
-            if token not in trie._tokens:
-                trie.add(token.content)
-        self.tokens_trie = trie
+            if token not in self.tokens_trie._tokens:
+                self.tokens_trie.add(token.content)
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         """

@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils_base import AddedToken
 from ...utils import (
     ModelOutput,
     is_flax_available,
@@ -172,7 +173,20 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         return len(self.decoder)
 
     def get_vocab(self) -> Dict:
-        return dict(self.encoder, **self.added_tokens_encoder)
+        vocab = dict(self.encoder)
+        vocab.update(self.added_tokens_encoder)
+        return vocab
+
+    def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
+        # Overwritten to never strip!
+        to_add = []
+        for token in new_tokens:
+            if isinstance(token, str):
+                to_add.append(AddedToken(token, rstrip=False, lstrip=False, normalize=True))
+            else:
+                to_add.append(token)
+
+        return super()._add_tokens(to_add, special_tokens)
 
     def init_backend(self, phonemizer_lang: str):
         """
