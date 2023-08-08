@@ -3864,6 +3864,7 @@ class TokenizerTesterMixin:
 
             else:
                 # The special token must appear in the list of the new tokenizer as an object of type string.
+                # TODO @ArthurZucker no longer true
                 self.assertTrue(special_tokens_map[special_token] in new_tokenizer.all_special_tokens_extended)
 
         # Test we can use the new tokenizer with something not seen during training

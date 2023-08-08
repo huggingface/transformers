@@ -395,11 +395,10 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
     @property
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.prefix_tokens
     def prefix_tokens(self) -> List[int]:
-        all_special_ids = self.added_tokens_encoder
-        bos_token_id = all_special_ids.get("<|startoftranscript|>")
-        translate_token_id = all_special_ids.get("<|translate|>")
-        transcribe_token_id = all_special_ids.get("<|transcribe|>")
-        notimestamps_token_id = all_special_ids.get("<|notimestamps|>")
+        bos_token_id = self.convert_tokens_to_ids("<|startoftranscript|>")
+        translate_token_id = self.convert_tokens_to_ids("<|translate|>")
+        transcribe_token_id = self.convert_tokens_to_ids("<|transcribe|>")
+        notimestamps_token_id = self.convert_tokens_to_ids("<|notimestamps|>")
         langs = tuple(LANGUAGES.keys())
 
         if self.language is not None:
