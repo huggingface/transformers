@@ -143,15 +143,15 @@ class CamembertTokenizer(PreTrainedTokenizer):
         # HACK: These tokens were added by the author for an obscure reason as they were already part of the
         # sentencepiece vocabulary (this is the case for <s> and </s> and <unk>).
         # In this case it is recommended to properly set the tokens by hand.
-        self.added_tokens_decoder = {
-            0: "<s>NOTUSED",
-            1: pad_token,
-            2: "</s>NOTUSED",
-            3: unk_token,
-            4: "<unk>NOTUSED",
+        self._added_tokens_decoder = {
+            0: AddedToken("<s>NOTUSED"),
+            1: AddedToken(pad_token),
+            2: AddedToken("</s>NOTUSED"),
+            3: AddedToken(unk_token),
+            4: AddedToken("<unk>NOTUSED"),
         }
 
-        self.fairseq_offset = len(self._added_tokens_decoder) - 1
+        self.fairseq_offset = len(self.added_tokens_decoder) - 1
         # mask should be added at the end of the vocab.
 
         super().__init__(
