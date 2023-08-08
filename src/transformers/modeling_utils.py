@@ -1468,12 +1468,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         n = min(old_num_tokens, new_num_tokens)
         if is_deepspeed_zero3_enabled():
             import deepspeed
+
             with deepspeed.zero.Init(config_dict_or_path=deepspeed_config()):
                 new_embeddings = nn.Embedding(
-                    new_num_tokens, 
-                    old_embedding_dim, 
-                    device=old_embeddings.weight.device, 
-                    dtype=old_embeddings.weight.dtype
+                    new_num_tokens,
+                    old_embedding_dim,
+                    device=old_embeddings.weight.device,
+                    dtype=old_embeddings.weight.dtype,
                 )
 
             params = [old_embeddings.weight, new_embeddings.weight]
@@ -1483,10 +1484,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             # Build new embeddings
             new_embeddings = nn.Embedding(
-                new_num_tokens, 
-                old_embedding_dim, 
-                device=old_embeddings.weight.device, 
-                dtype=old_embeddings.weight.dtype
+                new_num_tokens,
+                old_embedding_dim,
+                device=old_embeddings.weight.device,
+                dtype=old_embeddings.weight.dtype,
             )
 
             # initialize all new embeddings (in particular added tokens)
@@ -1552,35 +1553,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # XXX: put the long block of code in a wrapper
         if is_deepspeed_zero3_enabled():
             import deepspeed
+
             with deepspeed.zero.Init(config_dict_or_path=deepspeed_config()):
                 new_lm_head = nn.Linear(
-                    *new_lm_head_shape, 
-                    bias=has_new_lm_head_bias, 
-                    device=old_lm_head.weight.device,  
-                    dtype=old_lm_head.weight.dtype
+                    *new_lm_head_shape,
+                    bias=has_new_lm_head_bias,
+                    device=old_lm_head.weight.device,
+                    dtype=old_lm_head.weight.dtype,
                 )
             params = [old_lm_head.weight, old_lm_head.bias, new_lm_head.weight, new_lm_head.bias]
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
                 self._init_weights(new_lm_head)
                 # Copy old lm head weights to new lm head
                 if not transposed:
-                    new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[
-                        :num_tokens_to_copy, :
-                    ]
+                    new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[:num_tokens_to_copy, :]
                 else:
-                    new_lm_head.weight.data[:, :num_tokens_to_copy] = old_lm_head.weight.data[
-                        :, :num_tokens_to_copy
-                    ]
+                    new_lm_head.weight.data[:, :num_tokens_to_copy] = old_lm_head.weight.data[:, :num_tokens_to_copy]
 
                 # Copy bias weights to new lm head
                 if has_new_lm_head_bias:
                     new_lm_head.bias.data[:num_tokens_to_copy] = old_lm_head.bias.data[:num_tokens_to_copy]
         else:
             new_lm_head = nn.Linear(
-                *new_lm_head_shape, 
-                bias=has_new_lm_head_bias, 
-                device=old_lm_head.weight.device,  
-                dtype=old_lm_head.weight.dtype
+                *new_lm_head_shape,
+                bias=has_new_lm_head_bias,
+                device=old_lm_head.weight.device,
+                dtype=old_lm_head.weight.dtype,
             )
             self._init_weights(new_lm_head)
             # Copy old lm head weights to new lm head
