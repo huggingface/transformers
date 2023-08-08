@@ -74,7 +74,7 @@ from .utils import (
     replace_return_docstrings,
 )
 from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
-from .utils.import_utils import ENV_VARS_TRUE_VALUES, is_sagemaker_mp_enabled
+from .utils.import_utils import ENV_VARS_TRUE_VALUES, is_sagemaker_mp_enabled, is_torch_fx_proxy
 from .utils.quantization_config import BitsAndBytesConfig
 from .utils.versions import require_version_core
 
@@ -3527,6 +3527,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Shows a one-time warning if the input_ids appear to contain padding and no attention mask was given.
         """
+
+        # Skip the check during tracing.
+        if is_torch_fx_proxy(input_ids) or torch.jit.is_tracing():
+            return
+
         if (attention_mask is not None) or (self.config.pad_token_id is None):
             return
 
