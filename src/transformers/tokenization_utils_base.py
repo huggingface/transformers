@@ -2085,7 +2085,24 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary."
                     )
 
-        # legacy: read the added_tokens_file
+        # legacy: read the added_tokens_file and update kwargs with special_tokens_map
+        
+        special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
+        if special_tokens_map_file is not None:
+            with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
+                special_tokens_map = json.load(special_tokens_map_handle)
+                for key, value in special_tokens_map.items():
+                    if key in kwargs and kwargs[key]:
+                        # This value has already been redefined by the kwargs
+                        # We keep this new value and ignore the one stored in the special_tokens_map_file
+
+                        continue
+
+                    if isinstance(value, dict):
+                        value = AddedToken(**value)
+                    elif isinstance(value, list):
+                        value = [AddedToken(**token) if isinstance(token, dict) else token for token in value]
+                    init_kwargs[key] = value
         if added_tokens_file is not None:
             # kept for backward comp. Make sure this updates the encoder and decoder added vocab
             with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
@@ -2093,6 +2110,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # Sort added tokens by index
             added_tok_encoder_sorted = sorted(added_tok_encoder.items(), key=lambda x: x[1])
             added_tokens_decoder = {index: AddedToken(token) for token, index in added_tok_encoder_sorted}
+        # end of legacy!
 
         init_kwargs["added_tokens_decoder"] = added_tokens_decoder
 

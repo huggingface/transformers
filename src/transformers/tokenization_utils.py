@@ -350,17 +350,17 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             # overwriting the class's added_tokens_decoder
             self.added_tokens_decoder = kwargs.get("added_tokens_decoder")
 
-        if self.unk_token is not None and self.unk_token not in self._added_tokens_decoder:
-            if self.convert_tokens_to_ids(self.unk_token) is None:
-                raise ValueError(
-                    "An `unk_token` was set but it is neither part of the `additional_special_tokens` nor is it recognized by the tokenizer."
-                    " Make sure the token exists, whithout it, adding tokens to the model is not possible. Thus the initialization fails."
-                )
+        # if self.unk_token is not None and self.unk_token not in self._added_tokens_decoder:
+        #     if self.convert_tokens_to_ids(self.unk_token) is None:
+        #         raise ValueError(
+        #             "An `unk_token` was set but it is neither part of the `additional_special_tokens` nor is it recognized by the tokenizer."
+        #             " Make sure the token exists, whithout it, adding tokens to the model is not possible. Thus the initialization fails."
+        #         )
 
         # 2. If some of the special tokens are not part of the vocab, we add the, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
         self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
-
+        
         # 3. Make sure the Trie has everything in it
         self._create_trie()
         self._decode_use_source_tokenizer = False
@@ -439,7 +439,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if token.content == self.unk_token:
                 # unk_token and this token have the same pointer, let's update it
                 # even if it is already part of the vocab
-                self._added_tokens_decoder[self.convert_tokens_to_ids(token.content)] = token
+                if self.convert_tokens_to_ids(token.content) is None:
+                    # TODO should we warn that unk is being added?
+                    self._added_tokens_decoder[new_idx + added_tokens] = token
+                else:
+                    self._added_tokens_decoder[self.convert_tokens_to_ids(token.content)] = token
             # if unk_token is not part of the vocab, but we are adding tokens
             elif self.unk_token_id is not None and self.convert_tokens_to_ids(token.content) == self.unk_token_id:
                 # if some tokens were added at the beginning ignore them HACK
