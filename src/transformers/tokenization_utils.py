@@ -57,6 +57,7 @@ class Trie:
 
     def __init__(self):
         self.data = {}
+        self._tokens = set()
 
     def add(self, word: str):
         """
@@ -81,6 +82,8 @@ class Trie:
         if not word:
             # Prevent empty string
             return
+
+        self._tokens.add(word)
         ref = self.data
         for char in word:
             ref[char] = char in ref and ref[char] or {}
@@ -475,19 +478,15 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if self.verbose:
                 logger.info(f"Adding {token} to the vocabulary")
 
-        self._create_trie()  # TODO we should only have to update the trie. If we add tokens after, why re-create it?
+        # TODO we should only have to update the trie, if a key is already in no need to re create the idx. O(1) storing a set of previously added tokens
+        self._create_trie()
         return added_tokens
 
     def _create_trie(self):
         trie = Trie()
-        # _unique_no_split_tokens is the actual tokens that are never split! Maybe we can extend it with user defined tokens?
-        # for example words that are already in the vocab, but we wannat make sure they are not split because the tokenizer is
-        # strange?
         for token in self.added_tokens_decoder.values():
-            # special tokens should not be normalized?
-            # TODO a bit unclear what the correct approach is here, special should both be added no?
-            # normalized and non normalized version?
-            trie.add(token.content)
+            if token not in trie._tokens:
+                trie.add(token.content)
         self.tokens_trie = trie
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:

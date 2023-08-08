@@ -881,6 +881,7 @@ class TokenizerTesterMixin:
                     len(toks_before_adding) > len(toks_after_adding),  # toks_before_adding should be longer
                 )
 
+    # TODO @ArthurZ Nuke this
     def test_add_tokens_tokenizer(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
@@ -927,6 +928,7 @@ class TokenizerTesterMixin:
                 self.assertGreaterEqual(len(tokens), 6)
                 self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
                 self.assertGreater(tokens[0], tokens[1])
+                # seems like the added token has lstrip=False, failing this shitty test
                 self.assertGreater(tokens[-2], tokenizer.vocab_size - 1)
                 self.assertGreater(tokens[-2], tokens[-3])
                 self.assertEqual(tokens[0], tokenizer.eos_token_id)
