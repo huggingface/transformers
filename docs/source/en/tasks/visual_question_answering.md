@@ -30,13 +30,19 @@ Some noteworthy use case examples for VQA include:
 
 In this guide you'll learn how to:
 
-- Fine-tune a VQA model, specifically [ViLT](../model_doc/vilt), on the [`Graphcore/vqa` dataset](https://huggingface.co/datasets/Graphcore/vqa).
-- Use your fine-tuned model for inference.
+- Fine-tune a classification VQA model, specifically [ViLT](../model_doc/vilt), on the [`Graphcore/vqa` dataset](https://huggingface.co/datasets/Graphcore/vqa).
+- Use your fine-tuned ViLT for inference.
+- Run zero-shot VQA inference with a generative model, like BLIP-2.
+
+## Fine-tuning ViLT
 
 ViLT model incorporates text embeddings into a Vision Transformer (ViT), allowing it to have a minimal design for 
 Vision-and-Language Pre-training (VLP). This model can be used for several downstream tasks. For the VQA task, a classifier 
 head is placed on top (a linear layer on top of the final hidden state of the `[CLS]` token) and randomly initialized. 
-Visual Question Answering is thus treated as a classification problem.
+Visual Question Answering is thus treated as a **classification problem**.
+
+More recent models, such as BLIP, BLIP-2, and InstructBLIP, treat VQA as a generative task. Later in this guide we 
+illustrate how to use them for zero-shot VQA inference. 
 
 Before you begin, make sure you have all the necessary libraries installed. 
 
@@ -63,6 +69,11 @@ Let's define the model checkpoint as a global variable.
 
 For illustration purposes, in this guide we use a very small sample of the annotated visual question answering `Graphcore/vqa` dataset. 
 You can find the full dataset on [🤗 Hub](https://huggingface.co/datasets/Graphcore/vqa).
+
+As an alternative to the [`Graphcore/vqa` dataset](https://huggingface.co/datasets/Graphcore/vqa), you can download the 
+same data manually from the official [VQA dataset page](https://visualqa.org/download.html). If you prefer to follow the 
+tutorial with your custom data, check out how to [Create an image dataset](https://huggingface.co/docs/datasets/image_dataset#loading-script)
+guide in the 🤗 Datasets documentation.  
 
 Let's load the first 200 examples from the validation split and explore the dataset's features:  
 
@@ -175,8 +186,8 @@ the [`BertTokenizerFast`] to tokenize the text and create `input_ids`, `attentio
 As for images, the processor will leverage [`ViltImageProcessor`] to resize and normalize the image, and create `pixel_values` and `pixel_mask`.
 
 All these preprocessing steps are done under the hood, we only need to call the `processor`. However, we still need to 
-prepare the target labels. Labels are represented as a soft encoded vector of shape (num_labels,) where each 
-element represents a potential answer (label): for valid answers the element contains their score (weight), and the rest are zeroes.
+prepare the target labels. In this representation, each element corresponds to a possible answer (label). For correct answers, the element holds 
+their respective score (weight), while the remaining elements are set to zero.
 
 The following function applies the `processor` to the images and questions and formats the labels as described above:
 
@@ -339,3 +350,51 @@ You can also manually replicate the results of the pipeline if you'd like:
 Predicted answer: down
 ```
 
+## Zero-shot VQA
+
+The previous model treated VQA as a classification task. Some recent models, such as BLIP, BLIP-2, and InstructBLIP approach 
+VQA as a generative task. Let's take [BLIP-2](../model_doc/blip-2) as an example. It introduced a new visual-language pre-training 
+paradigm in which any combination of pre-trained vision encoder and LLM can be used (learn more in the [BLIP-2 blog post](https://huggingface.co/blog/blip-2)). 
+This enables achieving state-of-the-art results on multiple visual-language tasks including visual question answering. 
+
+Let's illustrate how you can use this model for VQA. First, let's load the model and leverage a GPU: 
+
+```py
+>>> from transformers import AutoProcessor, Blip2ForConditionalGeneration
+>>> import torch
+
+>>> processor = AutoProcessor.from_pretrained("Salesforce/blip2-opt-2.7b")
+>>> model = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16)
+>>> device = "cuda" if torch.cuda.is_available() else "cpu"
+>>> model.to(device)
+```
+
+The model takes image and text as input, so let's use the exact same image/question pair from the first example in the VQA dataset: 
+
+```py 
+>>> example = dataset[0]
+>>> image = Image.open(example['image_id'])
+>>> question = example['question']
+```
+
+To use BLIP-2 for visual question answering task, the textual prompt has to follow a specific format: `Question: {} Answer:`.
+
+```py
+>>> prompt = f"Question: {question} Answer:" 
+```
+
+Now we need to preprocess the image/prompt with the model's processor, pass the processed input through the model, and decode the output:
+
+```py
+>>> inputs = processor(image, text=prompt, return_tensors="pt").to(device, torch.float16)
+
+>>> generated_ids = model.generate(**inputs, max_new_tokens=10)
+>>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
+>>> print(generated_text)
+"He is looking at the crowd" 
+```
+
+As you can see, the model recognized the crowd, and the direction of the face (looking down), however, it seems to miss 
+the fact the crowd is behind the skater. Still, in cases where acquiring human-annotated datasets is not feasible, this 
+approach can quickly produce useful results.
+ 
