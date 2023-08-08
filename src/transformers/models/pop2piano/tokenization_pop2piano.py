@@ -70,15 +70,14 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
     """
     Constructs a Pop2Piano tokenizer. This tokenizer does not require training.
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer
-    to: this superclass for more information regarding those methods. However the code does not allow that and only
-    supports composing from various genres.
+    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
+    this superclass for more information regarding those methods.
 
     Args:
         vocab (`str`):
             Path to the vocab file which contains the vocabulary.
         default_velocity (`int`, *optional*, defaults to 77):
-            Determines the default velocity to use used while creating midi Notes.
+            Determines the default velocity to be used while creating midi Notes.
         num_bars (`int`, *optional*, defaults to 2):
             Determines cutoff_time_idx in for each token.
     """
