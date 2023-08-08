@@ -1087,13 +1087,15 @@ class BrosSpadeOutput(ModelOutput):
     """,
     BROS_START_DOCSTRING,
 )
-class BrosSpadeForTokenClassification(BrosPreTrainedModel):
+class BrosForTokenClassificationWithSpade(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
         super().__init__(config)
+        self.config = config
         self.num_labels = config.num_labels
         self.n_relations = config.n_relations
+        self.backbone_hidden_size = config.hidden_size
 
         self.bros = BrosModel(config)
         classifier_dropout = (
@@ -1116,7 +1118,19 @@ class BrosSpadeForTokenClassification(BrosPreTrainedModel):
             head_p_dropout=classifier_dropout,
         )
 
-        self.init_weights()
+        def _init_weight(module):
+            init_std = 0.02
+            if isinstance(module, nn.Linear):
+                nn.init.normal_(module.weight, 0.0, init_std)
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0.0)
+            elif isinstance(module, nn.LayerNorm):
+                nn.init.normal_(module.weight, 1.0, init_std)
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0.0)
+
+        self.itc_layer.apply(_init_weight)
+        self.stc_layer.apply(_init_weight)
 
     @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1134,7 +1148,6 @@ class BrosSpadeForTokenClassification(BrosPreTrainedModel):
         position_ids=None,
         head_mask=None,
         itc_mask=None,
-        stc_mask=None,
         inputs_embeds=None,
         itc_labels=None,
         stc_labels=None,
@@ -1172,20 +1185,35 @@ class BrosSpadeForTokenClassification(BrosPreTrainedModel):
             loss_fct = CrossEntropyLoss()
 
             # get itc loss
+            itc_logits = itc_outputs.view(-1, self.num_labels)
+            itc_labels = itc_labels.view(-1)
             if itc_mask is not None:
-                itc_loss = loss_fct(
-                    itc_outputs.view(-1, self.model_cfg.n_classes + 1)[itc_mask], itc_labels.view(-1)[itc_mask]
-                )
+                itc_mask = itc_mask.view(-1)
+                itc_loss = loss_fct(itc_logits[itc_mask], itc_labels[itc_mask])
             else:
-                itc_loss = loss_fct(itc_outputs.view(-1, self.model_cfg.n_classes + 1), itc_labels.view(-1))
+                itc_loss = loss_fct(itc_logits, itc_labels)
 
             # get stc loss
-            if stc_mask is not None:
-                stc_loss = loss_fct(
-                    stc_outputs.view(-1, stc_outputs.shape[-1])[stc_mask], stc_labels.view(-1)[stc_mask]
-                )
-            else:
-                stc_loss = loss_fct(stc_outputs.view(-1, stc_outputs.shape[-1]), stc_labels.view(-1))
+            inv_attention_mask = 1 - attention_mask
+
+            bsz, max_seq_length = inv_attention_mask.shape
+            device = inv_attention_mask.device
+
+            invalid_token_mask = torch.cat([inv_attention_mask, torch.zeros([bsz, 1]).to(device)], axis=1).bool()
+            stc_outputs.masked_fill_(invalid_token_mask[:, None, :], -10000.0)
+
+            self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device).bool()
+            stc_outputs.masked_fill_(self_token_mask[None, :, :], -10000.0)
+
+            stc_mask = attention_mask.view(-1).bool()
+
+            stc_logits = stc_outputs.view(-1, max_seq_length + 1)
+            stc_logits = stc_logits[stc_mask]
+
+            stc_labels = stc_labels.view(-1)
+            stc_labels = stc_labels[stc_mask]
+
+            stc_loss = loss_fct(stc_logits, stc_labels)
 
             loss = itc_loss + stc_loss
 
@@ -1197,6 +1225,6 @@ class BrosSpadeForTokenClassification(BrosPreTrainedModel):
             loss=loss,
             itc_logits=itc_logits,
             stc_logits=stc_logits,
-            hidden_states=outputs.last_hidden_states,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
