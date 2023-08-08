@@ -164,7 +164,8 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     Hugging Face Company is a company that has been working on a new product for the past year.
 
     >>> # If `eos_token_id` is set to ` company` it will take into account how many `min_new_tokens` have been generated
-    >>> # before stopping.
+    >>> # before stopping. Note that ` Company` (5834) and ` company` (1664) are not actually the same token, and even
+    >>> # if they were ` Company` would be ignored by `min_new_tokens` as it excludes the prompt.
     >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=1, eos_token_id=1664)
     >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
     Hugging Face Company is a company
