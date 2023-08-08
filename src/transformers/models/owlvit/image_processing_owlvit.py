@@ -47,7 +47,6 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.detr.modeling_detr._upcast
 def _upcast(t):
     # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
     if t.is_floating_point():

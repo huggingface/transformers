@@ -285,7 +285,7 @@ torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     parallelism=1,
-    pytest_num_workers=3,
+    pytest_num_workers=8,
 )
 
 
@@ -298,7 +298,6 @@ tf_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager tensorflow_probability",
     ],
     parallelism=1,
-    pytest_num_workers=6,
 )
 
 

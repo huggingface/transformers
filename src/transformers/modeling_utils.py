@@ -75,7 +75,7 @@ from .utils import (
     replace_return_docstrings,
 )
 from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
-from .utils.import_utils import ENV_VARS_TRUE_VALUES, is_sagemaker_mp_enabled
+from .utils.import_utils import ENV_VARS_TRUE_VALUES, is_sagemaker_mp_enabled, is_torch_fx_proxy
 from .utils.quantization_config import BitsAndBytesConfig, GPTQConfig, QuantizationMethod
 from .utils.versions import require_version_core
 
@@ -2920,7 +2920,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if "special_dtypes" in inspect.signature(infer_auto_device_map).parameters:
                 kwargs["special_dtypes"] = special_dtypes
             elif len(special_dtypes) > 0:
-                logger.warn(
+                logger.warning(
                     "This model has some weights that should be kept in higher precision, you need to upgrade "
                     "`accelerate` to properly deal with them (`pip install --upgrade accelerate`)."
                 )
@@ -3434,7 +3434,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if len(unexpected_keys) > 0:
             archs = [] if model.config.architectures is None else model.config.architectures
-            warner = logger.warn if model.__class__.__name__ in archs else logger.info
+            warner = logger.warning if model.__class__.__name__ in archs else logger.info
             warner(
                 f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when"
                 f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
@@ -3602,6 +3602,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
         Shows a one-time warning if the input_ids appear to contain padding and no attention mask was given.
         """
+
+        # Skip the check during tracing.
+        if is_torch_fx_proxy(input_ids) or torch.jit.is_tracing():
+            return
+
         if (attention_mask is not None) or (self.config.pad_token_id is None):
             return
 

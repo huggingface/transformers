@@ -31,7 +31,7 @@ RUN echo torch=$VERSION
 # TODO: We might need to specify proper versions that work with a specific torch version (especially for past CI).
 RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA || python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
 
-RUN python3 -m pip install --no-cache-dir -U tensorflow==2.12 protobuf==3.20.3 tensorflow_text tensorflow_probability
+RUN python3 -m pip install --no-cache-dir -U tensorflow==2.13 protobuf==3.20.3 tensorflow_text tensorflow_probability
 
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime]
 

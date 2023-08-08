@@ -126,6 +126,16 @@ class ModelArguments:
             "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
         },
     )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+                "execute code present on the Hub on your local machine."
+            )
+        },
+    )
 
     def __post_init__(self):
         if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
@@ -348,19 +358,29 @@ def main():
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     if checkpoint is not None:
-        config = AutoConfig.from_pretrained(checkpoint)
+        config = AutoConfig.from_pretrained(
+            checkpoint, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+        )
     elif model_args.config_name:
-        config = AutoConfig.from_pretrained(model_args.config_name)
+        config = AutoConfig.from_pretrained(
+            model_args.config_name, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+        )
     elif model_args.model_name_or_path:
-        config = AutoConfig.from_pretrained(model_args.model_name_or_path)
+        config = AutoConfig.from_pretrained(
+            model_args.model_name_or_path, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+        )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
 
     if model_args.tokenizer_name:
-        tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name)
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.tokenizer_name, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+        )
     elif model_args.model_name_or_path:
-        tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path)
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.model_name_or_path, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+        )
     else:
         raise ValueError(
             "You are instantiating a new tokenizer from scratch. This is not supported by this script."
@@ -495,12 +515,21 @@ def main():
     with training_args.strategy.scope():
         # region Prepare model
         if checkpoint is not None:
-            model = TFAutoModelForMaskedLM.from_pretrained(checkpoint, config=config)
+            model = TFAutoModelForMaskedLM.from_pretrained(
+                checkpoint, config=config, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+            )
         elif model_args.model_name_or_path:
-            model = TFAutoModelForMaskedLM.from_pretrained(model_args.model_name_or_path, config=config)
+            model = TFAutoModelForMaskedLM.from_pretrained(
+                model_args.model_name_or_path,
+                config=config,
+                token=model_args.token,
+                trust_remote_code=model_args.trust_remote_code,
+            )
         else:
             logger.info("Training new model from scratch")
-            model = TFAutoModelForMaskedLM.from_config(config)
+            model = TFAutoModelForMaskedLM.from_config(
+                config, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+            )
 
         # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
         # on a small vocab and want a smaller embedding size, remove this test.
