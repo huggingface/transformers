@@ -218,4 +218,4 @@ While the autoregressive generation process is relatively straightforward, makin
 ### Related libraries
 
 1. [`text-generation-inference`](https://github.com/huggingface/text-generation-inference), a production-ready server for LLMs;
-2. [`optimum`](https://github.com/huggingface/optimum), an extension of 🤗 `transformers` that optimizes for specific hardware devices.
+2. [`optimum`](https://github.com/huggingface/optimum), an extension of 🤗 Transformers that optimizes for specific hardware devices.
