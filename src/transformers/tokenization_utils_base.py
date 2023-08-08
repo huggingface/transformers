@@ -857,9 +857,8 @@ class SpecialTokensMixin:
         The `sanitize_special_tokens` is now deprectaed and does not do anything. It iss only kept for backward
         compatibility. It will be removed in transformers v5
         """
-        warnings.warn(
-            "The `sanitize_special_tokens` does not do anything and is only kept for backward compatibility. It will be removed in transformers v5",
-            FutureWarning,
+        logger.warning_once(
+            "The `sanitize_special_tokens` does not do anything and is only kept for backward compatibility. It will be removed in transformers v5"
         )
         return 0
 
