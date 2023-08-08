@@ -203,9 +203,9 @@ class PerceiverTokenizer(PreTrainedTokenizer):
             elif token in self.added_tokens_decoder:
                 tok_string = self.special_tokens_decoder[token].encode("utf-8")
             elif token in self.special_tokens_encoder:
-                tok_string = token.encode("utf-8")
+                tok_string = str(token).encode("utf-8")
             elif token in self.added_tokens_encoder:
-                tok_string = token.content.encode("utf-8")
+                tok_string = str(token).encode("utf-8")
             else:
                 tok_string = bytes([ord(token)])
             bstring += tok_string
