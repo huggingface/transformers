@@ -234,20 +234,21 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> np.ndarray:
         """
-        Center crop an image to (size["height"], size["width"]). If the input size is smaller than `size` along any
-        edge, the image is padded with 0's and then center cropped.
+        Center crop an image to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
+        any edge, the image is padded with 0's and then center cropped.
 
         Args:
             image (`np.ndarray`):
                 Image to center crop.
             size (`Dict[str, int]`):
-                Size of the output image.
+                Size of the output image in the form `{"height": h, "width": w}`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         output_size = size["shortest_edge"]
         return center_crop(image, size=(output_size, output_size), data_format=data_format, **kwargs)
 
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_image
     def _pad_image(
         self,
         image: np.ndarray,
@@ -269,22 +270,26 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         )
         return padded_image
 
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
     def pad(
         self,
         images: List[np.ndarray],
+        constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
     ) -> BatchFeature:
         """
-        Pads a batch of images with zeros to the size of largest height and width in the batch and optionally returns
-        their corresponding pixel mask.
+        Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
+        in the batch and optionally returns their corresponding pixel mask.
 
         Args:
-            images (`List[np.ndarray]`):
-                Batch of images to pad.
-            return_pixel_mask (`bool`, *optional*, defaults to `False`):
-                Whether to return the pixel mask.
+            image (`np.ndarray`):
+                Image to pad.
+            constant_values (`float` or `Iterable[float]`, *optional*):
+                The value to use for the padding if `mode` is `"constant"`.
+            return_pixel_mask (`bool`, *optional*, defaults to `True`):
+                Whether to return a pixel mask.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -296,10 +301,13 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         pad_size = get_max_height_width(images)
+
         padded_images = [
-            self._pad_image(image=image, output_size=pad_size, data_format=data_format) for image in images
+            self._pad_image(image, pad_size, constant_values=constant_values, data_format=data_format)
+            for image in images
         ]
         data = {"pixel_values": padded_images}
+
         if return_pixel_mask:
             masks = [make_pixel_mask(image=image, output_size=pad_size) for image in images]
             data["pixel_mask"] = masks
