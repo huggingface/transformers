@@ -30,25 +30,15 @@ if is_pretty_midi_available():
 
 logger = logging.get_logger(__name__)
 
+## TODO : changing checkpoints from `susnato/pop2piano_dev` to `sweetcocoa/pop2piano` after the PR is approved
+
 VOCAB_FILES_NAMES = {
-    "vocab_time_file": "vocab_time.json",
-    "vocab_note_file": "vocab_note.json",
-    "vocab_velocity_file": "vocab_velocity.json",
-    "vocab_special_file": "vocab_special.json",
+    "vocab": "vocab.json",
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_time_file": {
-        "sweetcocoa/pop2piano": "https://huggingface.co/sweetcocoa/pop2piano/blob/main/vocab_time.json",
-    },
-    "vocab_note_file": {
-        "sweetcocoa/pop2piano": "https://huggingface.co/sweetcocoa/pop2piano/blob/main/vocab_note.json",
-    },
-    "vocab_velocity_file": {
-        "sweetcocoa/pop2piano": "https://huggingface.co/sweetcocoa/pop2piano/blob/main/vocab_velocity.json",
-    },
-    "vocab_special_file": {
-        "sweetcocoa/pop2piano": "https://huggingface.co/sweetcocoa/pop2piano/blob/main/vocab_special.json",
+    "vocab": {
+        "susnato/pop2piano_dev": "https://huggingface.co/susnato/pop2piano_dev/blob/main/vocab.json",
     },
 }
 
@@ -85,23 +75,8 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
     supports composing from various genres.
 
     Args:
-        vocab_time_file (`str`):
-            Path to the tokenizer file which contains vocabulary for "TIME" tokens.
-        vocab_note_file (`str`):
-            Path to the tokenizer file which contains vocabulary for "NOTE" tokens.
-        vocab_velocity_file (`str`):
-            Path to the tokenizer file which contains vocabulary for "VELOCITY" notes.
-        vocab_special_file (`str`):
-            Path to the tokenizer file which contains vocabulary for "SPECIAL" tokens.
-        vocab_size_special (`int`, *optional*, defaults to 4):
-            Number of special values.
-        vocab_size_note (`int`, *optional*, defaults to 128):
-            Number of MIDI note tokens. Only the 88 pitches corresponding to piano keys are actually used.
-        vocab_size_velocity (`int`, *optional*, defaults to 2):
-            Number of velocity tokens.
-        vocab_size_time (`int`, *optional*, defaults to 100):
-            Number of beat shift tokens. Beat shifts indicate the relative time shift within the segment quantized into
-            8th-notes (half-beats).
+        vocab (`str`):
+            Path to the vocab file which contains the vocabulary.
         default_velocity (`int`, *optional*, defaults to 77):
             Determines the default velocity to use used while creating midi Notes.
         num_bars (`int`, *optional*, defaults to 2):
@@ -114,14 +89,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     def __init__(
         self,
-        vocab_time_file,
-        vocab_note_file,
-        vocab_velocity_file,
-        vocab_special_file,
-        vocab_size_time=100,
-        vocab_size_note=128,
-        vocab_size_special=4,
-        vocab_size_velocity=2,
+        vocab,
         default_velocity=77,
         num_bars=2,
         unk_token="-1",
@@ -143,50 +111,25 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        self.vocab_size_time = vocab_size_time
-        self.vocab_size_note = vocab_size_note
-        self.vocab_size_special = vocab_size_special
-        self.vocab_size_velocity = vocab_size_velocity
         self.default_velocity = default_velocity
         self.num_bars = num_bars
 
-        # Load all vocab files
-        with open(vocab_time_file, "rb") as file:
-            self.token_time_encoder = json.load(file)
-        with open(vocab_note_file, "rb") as file:
-            self.token_note_encoder = json.load(file)
-        with open(vocab_velocity_file, "rb") as file:
-            self.token_velocity_encoder = json.load(file)
-        with open(vocab_special_file, "rb") as file:
-            self.token_special_encoder = json.load(file)
+        # Load the vocab
+        with open(vocab, "rb") as file:
+            self.encoder = json.load(file)
 
-        # create mappings for token_ids to note
-        self.token_time_decoder = {v: k for k, v in self.token_time_encoder.items()}
-        self.token_note_decoder = {v: k for k, v in self.token_note_encoder.items()}
-        self.token_velocity_decoder = {v: k for k, v in self.token_velocity_encoder.items()}
-        self.token_special_decoder = {v: k for k, v in self.token_special_encoder.items()}
+        # create mappings for encoder
+        self.decoder = {v: k for k, v in self.encoder.items()}
 
     @property
     def vocab_size(self):
         """Returns the vocabulary size of the tokenizer."""
-        return (
-            len(self.token_time_encoder)
-            + len(self.token_note_encoder)
-            + len(self.token_velocity_encoder)
-            + len(self.token_special_encoder)
-        )
+        return len(self.encoder)
 
     def get_vocab(self):
         """Returns the vocabulary of the tokenizer."""
-        return {
-            "token_time_vocab": self.token_time_encoder,
-            "token_note_vocab": self.token_note_encoder,
-            "token_velocity_vocab": self.token_velocity_encoder,
-            "token_special_vocab": self.token_special_encoder,
-        }
+        return self.encoder
 
-    # the logic is mostly copied from the official pop2piano implementation with little modification(addition of vocab)
-    # Please see https://github.com/sweetcocoa/pop2piano/blob/fac11e8dcfc73487513f4588e8d0c22a22f2fdc5/midi_tokenizer.py#L48
     def _convert_id_to_token(self, token_id: int) -> list:
         """
         Decodes the token ids generated by the transformer into notes.
@@ -199,28 +142,13 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             `List`: A list consists of token_type (`str`) and value (`int`).
         """
 
-        # since there are overlaps between all of the vocabs we need to find which type the token belongs to
-        if token_id >= (self.vocab_size_special + self.vocab_size_note + self.vocab_size_velocity):
-            token_type = "TIME"
-            value = int(self.token_time_decoder.get(token_id, self.unk_token))
-
-        elif token_id >= (self.vocab_size_special + self.vocab_size_note):
-            token_type = "VELOCITY"
-            value = int(self.token_velocity_decoder.get(token_id, self.unk_token))
-
-        elif token_id >= self.vocab_size_special:
-            token_type = "NOTE"
-            value = int(self.token_note_decoder.get(token_id, self.unk_token))
-
-        else:
-            token_type = "SPECIAL"
-            value = int(token_id)
+        token_type_value = self.decoder.get(token_id, f"{self.unk_token}_TOKEN_TIME")
+        token_type_value = token_type_value.split("_")
+        token_type, value = "_".join(token_type_value[1:]), int(token_type_value[0])
 
         return [token_type, value]
 
-    # the logic is mostly copied from the official pop2piano implementation with little modification(addition of vocab)
-    # Please see https://github.com/sweetcocoa/pop2piano/blob/fac11e8dcfc73487513f4588e8d0c22a22f2fdc5/midi_tokenizer.py#L34
-    def _convert_token_to_id(self, token, token_type="TIME") -> int:
+    def _convert_token_to_id(self, token, token_type="TOKEN_TIME") -> int:
         """
         Encodes the Midi tokens to transformer generated token ids.
 
@@ -228,28 +156,13 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             token (`int`):
                 This denotes the token value.
             token_type (`str`):
-                This denotes the type of the token. There are four types of midi tokens such as "TIME", "VELOCITY",
-                "NOTE", "SPECIAL".
+                This denotes the type of the token. There are four types of midi tokens such as "TOKEN_TIME",
+                "TOKEN_VELOCITY", "TOKEN_NOTE" and "TOKEN_SPECIAL".
 
         Returns:
             `int`: returns the id of the token.
         """
-
-        # check the token types and then return the ids.
-        if token_type == "TIME":
-            return int(self.token_time_encoder.get(token, self.unk_token))
-
-        elif token_type == "VELOCITY":
-            return int(self.token_velocity_encoder.get(token, self.unk_token))
-
-        elif token_type == "NOTE":
-            return int(self.token_note_encoder.get(token, self.unk_token))
-
-        elif token_type == "SPECIAL":
-            return int(self.token_special_encoder.get(token, self.unk_token))
-
-        else:
-            return int(self.unk_token)
+        return self.encoder.get(f"{token}_{token_type}", int(self.unk_token))
 
     def relative_batch_tokens_ids_to_notes(
         self,
@@ -347,20 +260,20 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
         current_idx = start_idx
         current_velocity = 0
-        note_onsets_ready = [None for i in range(self.vocab_size_note + 1)]
+        note_onsets_ready = [None for i in range(sum([k.endswith("NOTE") for k in self.encoder.keys()]) + 1)]
         notes = []
         for token_type, number in words:
-            if token_type == "SPECIAL":
+            if token_type == "TOKEN_SPECIAL":
                 if number == 1:
                     break
-            elif token_type == "TIME":
+            elif token_type == "TOKEN_TIME":
                 current_idx = token_time_to_note(
                     number=number, cutoff_time_idx=cutoff_time_idx, current_idx=current_idx
                 )
-            elif token_type == "VELOCITY":
+            elif token_type == "TOKEN_VELOCITY":
                 current_velocity = number
 
-            elif token_type == "NOTE":
+            elif token_type == "TOKEN_NOTE":
                 notes = token_note_to_note(
                     number=number,
                     current_velocity=current_velocity,
@@ -437,29 +350,14 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
 
-        # Save all vocab related files.
-        vocab_files = ()
-        for file_type, file_name in VOCAB_FILES_NAMES.items():
-            vocab_file = os.path.join(save_directory, (filename_prefix + "-" if filename_prefix else "") + file_name)
-            if file_type == "vocab_time_file":
-                with open(vocab_file, "w", encoding="utf-8") as file:
-                    file.write(json.dumps(self.token_time_encoder))
+        # Save the encoder.
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab"]
+        )
+        with open(out_vocab_file, "w") as file:
+            file.write(json.dumps(self.encoder))
 
-            elif file_type == "vocab_note_file":
-                with open(vocab_file, "w", encoding="utf-8") as file:
-                    file.write(json.dumps(self.token_note_encoder))
-
-            elif file_type == "vocab_velocity_file":
-                with open(vocab_file, "w", encoding="utf-8") as file:
-                    file.write(json.dumps(self.token_velocity_encoder))
-
-            elif file_type == "vocab_special_file":
-                with open(vocab_file, "w", encoding="utf-8") as file:
-                    file.write(json.dumps(self.token_special_encoder))
-
-            vocab_files = vocab_files + (vocab_file,)
-
-        return vocab_files
+        return (out_vocab_file,)
 
     def encode_plus(
         self,
@@ -511,13 +409,13 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         for i, time in enumerate(times):
             if len(time) == 0:
                 continue
-            tokens.append(self._convert_token_to_id(i, "TIME"))
+            tokens.append(self._convert_token_to_id(i, "TOKEN_TIME"))
             for pitch, velocity in time:
                 velocity = int(velocity > 0)
                 if current_velocity != velocity:
                     current_velocity = velocity
-                    tokens.append(self._convert_token_to_id(velocity, "VELOCITY"))
-                tokens.append(self._convert_token_to_id(pitch, "NOTE"))
+                    tokens.append(self._convert_token_to_id(velocity, "TOKEN_VELOCITY"))
+                tokens.append(self._convert_token_to_id(pitch, "TOKEN_NOTE"))
 
         total_len = len(tokens)
 
