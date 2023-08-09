@@ -120,7 +120,6 @@ class MBartTokenizerFast(PreTrainedTokenizerFast):
                 [t for t in additional_special_tokens if t not in _additional_special_tokens]
             )
 
-
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,

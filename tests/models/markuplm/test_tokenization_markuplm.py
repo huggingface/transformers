@@ -136,7 +136,11 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # smaller than the original vocabs - let's not assert this
                 # self.assertEqual(vocab_size, all_size)
 
-                new_toks = [AddedToken("aaaaa", rstrip = True, lstrip = True), AddedToken("bbbbbb", rstrip = True, lstrip = True), AddedToken("cccccccccdddddddd", rstrip = True, lstrip = True)]
+                new_toks = [
+                    AddedToken("aaaaa", rstrip=True, lstrip=True),
+                    AddedToken("bbbbbb", rstrip=True, lstrip=True),
+                    AddedToken("cccccccccdddddddd", rstrip=True, lstrip=True),
+                ]
                 added_toks = tokenizer.add_tokens(new_toks)
                 vocab_size_2 = tokenizer.vocab_size
                 all_size_2 = len(tokenizer)
