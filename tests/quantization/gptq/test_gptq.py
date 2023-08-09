@@ -16,6 +16,8 @@
 import tempfile
 import unittest
 
+import pytest
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, GPTQConfig
 from transformers.testing_utils import (
     is_torch_available,
@@ -24,7 +26,6 @@ from transformers.testing_utils import (
     require_optimum,
     require_torch_gpu,
     require_torch_multi_gpu,
-    skip,
     slow,
 )
 
@@ -233,7 +234,8 @@ class GPTQTestDeviceMapExllama(GPTQTest):
     disable_exllama = False
 
 
-@skip("fail when run all together")
+# fail when run all together
+@pytest.mark.skip
 @require_accelerate
 @require_torch_multi_gpu
 class GPTQTestDeviceMapCPUOffload(GPTQTest):
