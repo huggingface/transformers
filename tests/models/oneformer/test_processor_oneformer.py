@@ -174,6 +174,10 @@ class OneFormerProcessorTester(unittest.TestCase):
             masks_queries_logits=torch.randn((self.batch_size, self.num_queries, self.height, self.width)),
         )
 
+    def expected_output_image_shape(self, images):
+        height, width = self.get_expected_values(images, batched=True)
+        return self.num_channels, height, width
+
 
 @require_torch
 @require_vision
