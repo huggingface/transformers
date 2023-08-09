@@ -155,8 +155,9 @@ class CamembertTokenizer(PreTrainedTokenizer):
         # mask should be added at the end of the vocab.
         if "added_tokens_decoder" in kwargs:
             # this is the only class that requires this unfortunately.....
+            # the reason is that the fast version has a whole.
             kwargs["added_tokens_decoder"].update(self._added_tokens_decoder)
-            
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,

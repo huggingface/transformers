@@ -360,7 +360,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # 3. If some of the special tokens are not part of the vocab, we add them, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
         self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
-        
+
         self._decode_use_source_tokenizer = False
 
     @property
@@ -485,7 +485,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # not really sure we should keep this? unique_no_split_tokens for esm mostly
         for token in unique_no_split_tokens:
             if token not in self.tokens_trie._tokens:
-                self.tokens_trie.add(token)   
+                self.tokens_trie.add(token)
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         """
