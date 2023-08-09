@@ -2391,11 +2391,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         if quantization_method_from_config == QuantizationMethod.GPTQ and quantization_method_from_args is not None:
+            loading_attr_dict = quantization_config.get_loading_attributes()
+            for attr, val in loading_attr_dict.items():
+                config.quantization_config[attr] = val
             quantization_method_from_args = None
             logger.warning(
-                "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a"
-                " `quantization_config` attribute and has already quantized weights. We will not perform quantization"
-                "with the given `quantization config` that you have passed."
+                "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a "
+                "`quantization_config` attribute and has already quantized weights. However, loading attributes"
+                " (e.g. disable_exllama, use_cuda_fp16) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
             )
         if (
             quantization_method_from_args == QuantizationMethod.GPTQ
@@ -3069,6 +3072,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             quantizer.quantize_model(model, quantization_config.tokenizer)
             model.config.quantization_config = GPTQConfig.from_dict(quantizer.to_dict())
             model._is_quantized_training_enabled = True
+        if quantization_method_from_config == QuantizationMethod.GPTQ:
+            model = quantizer.post_init_model(model)
 
         if output_loading_info:
             if loading_info is None:

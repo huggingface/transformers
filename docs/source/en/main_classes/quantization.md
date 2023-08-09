@@ -123,6 +123,18 @@ from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto")
 ```
 
+### Exllama kernels for faster inference
+
+For 4-bit model, you can use the exllama kernels in order to a faster inference speed. You just need to pass `disable_exllama=False` in [`GPTQConfig`]. This will overwrite the quantization config stored in the config. Note that you will only be able to overwrite the attributes related to the kernel. Furthermore, you need to have the entire model on gpus. 
+
+```py
+import torch
+gptq_config = GPTQConfig(bits=4, disable_exllama=False)
+model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config = gptq_config)
+```
+
+Note that only 4-bit models are supported for now
+
 ### GPTQConfig
 [[autodoc]] GPTQConfig
 

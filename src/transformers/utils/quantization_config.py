@@ -341,6 +341,8 @@ class GPTQConfig(QuantizationConfigMixin):
             The batch size used when processing the dataset
         pad_token_id (`int`, *optional*, defaults to `None`):
             The pad token id. Needed to prepare the dataset when `batch_size` > 1.
+        disable_exllama (`bool`, defaults to `False`):
+            Whether to use exllama backend. Only works with `bits` = 4.
     """
 
     def __init__(
@@ -359,6 +361,7 @@ class GPTQConfig(QuantizationConfigMixin):
         module_name_preceding_first_block: Optional[List[str]] = None,
         batch_size: int = 1,
         pad_token_id: Optional[int] = None,
+        disable_exllama: bool = False,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.GPTQ
@@ -376,7 +379,14 @@ class GPTQConfig(QuantizationConfigMixin):
         self.module_name_preceding_first_block = module_name_preceding_first_block
         self.batch_size = batch_size
         self.pad_token_id = pad_token_id
+        self.disable_exllama = disable_exllama
         self.post_init()
+
+    def get_loading_attributes(self):
+        attibutes_dict = copy.deepcopy(self.__dict__)
+        loading_attibutes = ["disable_exllama", "use_cuda_fp16"]
+        loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
+        return loading_attibutes_dict
 
     def post_init(self):
         r"""

@@ -92,6 +92,7 @@ class GPTQTest(unittest.TestCase):
     bits = 4
     group_size = 128
     desc_act = False
+    disable_exllama = True
 
     dataset = [
         "auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."
@@ -118,6 +119,7 @@ class GPTQTest(unittest.TestCase):
             tokenizer=cls.tokenizer,
             group_size=cls.group_size,
             desc_act=cls.desc_act,
+            disable_exllama=cls.disable_exllama,
         )
 
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
@@ -145,7 +147,11 @@ class GPTQTest(unittest.TestCase):
         from auto_gptq.utils.import_utils import dynamically_import_QuantLinear
 
         QuantLinear = dynamically_import_QuantLinear(
-            use_triton=False, desc_act=self.desc_act, group_size=self.group_size
+            use_triton=False,
+            desc_act=self.desc_act,
+            group_size=self.group_size,
+            bits=self.bits,
+            disable_exllama=self.disable_exllama,
         )
         self.assertTrue(self.quantized_model.transformer.h[0].mlp.dense_4h_to_h.__class__ == QuantLinear)
 
@@ -178,8 +184,12 @@ class GPTQTest(unittest.TestCase):
         Test the serialization of the model and the loading of the quantized weights works
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
-            self.quantized_model.to("cpu").save_pretrained(tmpdirname)
-            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname).to(0)
+            self.quantized_model.save_pretrained(tmpdirname)
+            if self.disable_exllama:
+                quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname).to(0)
+            else:
+                # we need to put it directly to the gpu. Otherwise, we won't be able to initialize the exllama kernel
+                quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map={"": 0})
             self.check_inference_correctness(quantized_model_from_saved)
 
     @require_accelerate
@@ -188,15 +198,38 @@ class GPTQTest(unittest.TestCase):
         Test the serialization of the model and the loading of the quantized weights with big model inference
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
-            self.quantized_model.to("cpu").save_pretrained(tmpdirname)
+            self.quantized_model.save_pretrained(tmpdirname)
             quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map="auto")
             self.check_inference_correctness(quantized_model_from_saved)
+
+    def test_change_loading_attributes(self):
+        """
+        Test the serialization of the model and the loading of the quantized weights works with another config file
+        """
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.quantized_model.save_pretrained(tmpdirname)
+            if self.disable_exllama:
+                self.assertEqual(self.quantized_model.config.quantization_config.disable_exllama, True)
+                # we need to put it directly to the gpu. Otherwise, we won't be able to initialize the exllama kernel
+                quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
+                    tmpdirname, quantization_config=GPTQConfig(disable_exllama=False, bits=6), device_map={"": 0}
+                )
+                self.assertEqual(quantized_model_from_saved.config.quantization_config.disable_exllama, False)
+                self.assertEqual(quantized_model_from_saved.config.quantization_config.bits, self.bits)
+                self.check_inference_correctness(quantized_model_from_saved)
 
 
 @require_accelerate
 @require_torch_multi_gpu
 class GPTQTestDeviceMap(GPTQTest):
     device_map = "auto"
+
+
+@require_accelerate
+@require_torch_multi_gpu
+class GPTQTestDeviceMapExllama(GPTQTest):
+    device_map = "auto"
+    disable_exllama = False
 
 
 @require_accelerate
@@ -216,19 +249,19 @@ class GPTQTestDeviceMapCPUOffload(GPTQTest):
         "transformer.h.7": 0,
         "transformer.h.8": 0,
         "transformer.h.9": 0,
-        "transformer.h.10": 1,
-        "transformer.h.11": 1,
-        "transformer.h.12": 1,
-        "transformer.h.13": 1,
-        "transformer.h.14": 1,
-        "transformer.h.15": 1,
-        "transformer.h.16": 1,
+        "transformer.h.10": 0,
+        "transformer.h.11": 0,
+        "transformer.h.12": 0,
+        "transformer.h.13": 0,
+        "transformer.h.14": 0,
+        "transformer.h.15": 0,
+        "transformer.h.16": 0,
         "transformer.h.17": 0,
         "transformer.h.18": "cpu",
         "transformer.h.19": "cpu",
         "transformer.h.20": "cpu",
         "transformer.h.21": "cpu",
         "transformer.h.22": "cpu",
-        "transformer.h.23": 1,
+        "transformer.h.23": 0,
         "transformer.ln_f": 0,
     }
