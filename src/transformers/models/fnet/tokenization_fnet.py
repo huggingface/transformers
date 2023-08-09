@@ -15,7 +15,6 @@
 """ Tokenization classes for FNet model."""
 
 import os
-import re
 import unicodedata
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple
@@ -237,7 +236,9 @@ class FNetTokenizer(PreTrainedTokenizer):
         spaces_between_special_tokens: bool = False,
         **kwargs,
     ) -> str:
-        return super()._decode(token_ids, skip_special_tokens, clean_up_tokenization_spaces, spaces_between_special_tokens, **kwargs)
+        return super()._decode(
+            token_ids, skip_special_tokens, clean_up_tokenization_spaces, spaces_between_special_tokens, **kwargs
+        )
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None

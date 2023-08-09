@@ -236,7 +236,6 @@ class PLBartTokenizer(PreTrainedTokenizer):
                 [t for t in additional_special_tokens if t not in _additional_special_tokens]
             )
 
-
         if self.language_codes == "base":
             self._src_lang = src_lang
             self.cur_lang_code_id = (
