@@ -346,9 +346,6 @@ class Trainer:
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
         self._memory_tracker.start()
 
-        # Fillers for storing the original eval_ratio for when we use the batch size finder
-        self._step_ratios = {}
-
         # set the correct log level depending on the node
         log_level = args.get_process_log_level()
         logging.set_verbosity(log_level)
@@ -1618,22 +1615,18 @@ class Trainer:
         self.state.is_hyper_param_search = trial is not None
 
         # Compute absolute values for logging, eval, and save if given as ratio
-        # Also stores the ratios in `self._step_ratio` on the first pass
         if args.logging_steps is not None:
+            self.state.logging_steps = args.logging_steps
             if args.logging_steps < 1:
-                self._step_ratios["logging_steps"] = float(args.logging_steps)
-            if "logging_steps" in self._step_ratios:
-                self.state.logging_steps = math.ceil(max_steps * self._step_ratios["logging_steps"])
+                self.state.logging_steps = math.ceil(max_steps * self.state.logging_steps)
         if args.eval_steps is not None:
+            self.state.eval_steps = args.eval_steps
             if args.eval_steps < 1:
-                self._step_ratios["eval_steps"] = float(args.eval_steps)
-            if "eval_steps" in self._step_ratios:
-                self.state.eval_steps = math.ceil(max_steps * self._step_ratios["eval_steps"])
+                self.state.eval_steps = math.ceil(max_steps * self.state.eval_steps)
         if args.save_steps is not None:
-            if args.save_steps < 1:
-                self._step_ratios["save_steps"] = float(args.save_steps)
-            if "save_steps" in self._step_ratios:
-                self.state.save_steps = math.ceil(max_steps * self._step_ratios["save_steps"])
+            self.state.save_steps = args.save_steps
+            if args.eval_steps < 1:
+                self.state.save_steps = math.ceil(max_steps * self.state.save_steps)
 
         # Activate gradient checkpointing if needed
         if args.gradient_checkpointing:
