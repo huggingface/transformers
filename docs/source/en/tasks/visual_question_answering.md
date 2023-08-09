@@ -132,7 +132,7 @@ Take a look at the image and consider which answer would you give:
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/vqa-example.png" alt="VQA Image Example"/>
 </div>
 
-Due to the questions and answers ambiguity, datasets like this are treated as a multi-label classification problem (as 
+Due to the questions' and answers' ambiguity, datasets like this are treated as a multi-label classification problem (as 
 multiple answers are possibly valid). Moreover, rather than just creating a one-hot encoded vector, one creates a 
 soft encoding, based on the number of times a certain answer appeared in the annotations.
 
@@ -201,18 +201,18 @@ The following function applies the `processor` to the images and questions and f
 
 ...     encoding = processor(images, texts, padding="max_length", truncation=True, return_tensors="pt")
 
-...     for k,v in encoding.items():
+...     for k, v in encoding.items():
 ...           encoding[k] = v.squeeze()
     
 ...     targets = []
 
 ...     for labels, scores in zip(examples['label.ids'], examples['label.weights']):
-...       target = torch.zeros(len(id2label))
+...         target = torch.zeros(len(id2label))
 
-...       for label, score in zip(labels, scores):
-...         target[label] = score
+...         for label, score in zip(labels, scores):
+...             target[label] = score
       
-...       targets.append(target)
+...         targets.append(target)
 
 ...     encoding["labels"] = targets
     
@@ -223,7 +223,7 @@ To apply the preprocessing function over the entire dataset, use 🤗 Datasets [
 setting `batched=True` to process multiple elements of the dataset at once. At this point, feel free to remove the columns you don't need.
 
 ```py
->>> processed_dataset = flat_dataset.map(preprocess_data, batched=True, remove_columns=['question','question_type', 'question_id', 'image_id', 'answer_type', 'label.ids', 'label.weights'])
+>>> processed_dataset = flat_dataset.map(preprocess_data, batched=True, remove_columns=['question','question_type',  'question_id', 'image_id', 'answer_type', 'label.ids', 'label.weights'])
 >>> processed_dataset
 Dataset({
     features: ['input_ids', 'token_type_ids', 'attention_mask', 'pixel_values', 'pixel_mask', 'labels'],
@@ -309,7 +309,7 @@ way to try out your fine-tuned model for inference is to use it in a [`Pipeline`
 >>> pipe = pipeline("visual-question-answering", model="MariaK/vilt_finetuned_200")
 ```
 
-The model in this guide has only been trained on 200 examples, so don't expect a lot of it. Let's see if it at least 
+The model in this guide has only been trained on 200 examples, so don't expect a lot from it. Let's see if it at least 
 learned something from the data and take the first example from the dataset to illustrate inference:
 
 ```py
