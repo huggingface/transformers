@@ -182,7 +182,7 @@ class NllbTokenizer(PreTrainedTokenizer):
         if additional_special_tokens is not None:
             # Only add those special tokens if they are not already there.
             _additional_special_tokens.extend(
-                [t for t in additional_special_tokens if t not in _additional_special_tokens]
+                [t for t in additional_special_tokens if t not in additional_special_tokens]
             )
 
         super().__init__(

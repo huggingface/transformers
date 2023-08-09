@@ -228,7 +228,14 @@ class PLBartTokenizer(PreTrainedTokenizer):
 
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
-        self._additional_special_tokens = list(self.lang_code_to_id.keys())
+        _additional_special_tokens = list(self.lang_code_to_id.keys())
+
+        if additional_special_tokens is not None:
+            # Only add those special tokens if they are not already there.
+            _additional_special_tokens.extend(
+                [t for t in additional_special_tokens if t not in self.additional_special_tokens]
+            )
+
 
         if self.language_codes == "base":
             self._src_lang = src_lang
@@ -251,16 +258,10 @@ class PLBartTokenizer(PreTrainedTokenizer):
             tokenizer_file=tokenizer_file,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
-            additional_special_tokens=additional_special_tokens,
+            additional_special_tokens=_additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-
-        if additional_special_tokens is not None:
-            # Only add those special tokens if they are not already there.
-            self._additional_special_tokens.extend(
-                [t for t in additional_special_tokens if t not in self._additional_special_tokens]
-            )
 
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)

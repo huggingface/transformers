@@ -194,7 +194,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self) -> int:
-        return len(self.encoder) + len(self.sp_model)
+        return len(self.encoder)
 
     def get_vocab(self) -> Dict:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
