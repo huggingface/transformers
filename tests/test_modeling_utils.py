@@ -1038,7 +1038,7 @@ class ModelUtilsTest(TestCasePlus):
 
     def test_generation_config_is_loaded_with_model(self):
         # Note: `joaogante/tiny-random-gpt2-with-generation-config` has a `generation_config.json` containing a dummy
-        # `transformers_version` field set to `foo`
+        # `transformers_version` field set to `foo`. If loading the file fails, this test also fails.
 
         # 1. Load without further parameters
         model = AutoModelForCausalLM.from_pretrained("joaogante/tiny-random-gpt2-with-generation-config")
