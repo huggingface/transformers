@@ -351,14 +351,16 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         super().__init__(**kwargs)
         self.tokens_trie = Trie()
 
-        # 2. If some of the special tokens are not part of the vocab, we add the, at the end.
-        # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
-        self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
+        # 2. if a `added_tokens_decoder` is passed, we are loading from a saved tokenizer
 
         if "added_tokens_decoder" in kwargs:
             # overwriting the class's added_tokens_decoder. This is the source of truth!
             self.added_tokens_decoder.update(kwargs.get("added_tokens_decoder"))
 
+        # 3. If some of the special tokens are not part of the vocab, we add them, at the end.
+        # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
+        self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
+        
         self._decode_use_source_tokenizer = False
 
     @property
@@ -424,6 +426,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         new_idx = len(self)  # only call this once, len gives the last index + 1
         for token in new_tokens:
+            if token in self._added_tokens_decoder:
+                continue
             if not isinstance(token, (str, AddedToken)):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
             if str(token) == "":
@@ -474,10 +478,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self._update_trie()
         return added_tokens
 
-    def _update_trie(self):
+    def _update_trie(self, unique_no_split_tokens: Optional[str] = []):
         for token in self.added_tokens_decoder.values():
             if token not in self.tokens_trie._tokens:
                 self.tokens_trie.add(token.content)
+        # not really sure we should keep this? unique_no_split_tokens for esm mostly
+        for token in unique_no_split_tokens:
+            if token not in self.tokens_trie._tokens:
+                self.tokens_trie.add(token)   
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         """

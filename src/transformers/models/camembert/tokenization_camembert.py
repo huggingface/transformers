@@ -153,7 +153,10 @@ class CamembertTokenizer(PreTrainedTokenizer):
 
         self.fairseq_offset = len(self.added_tokens_decoder) - 1
         # mask should be added at the end of the vocab.
-
+        if "added_tokens_decoder" in kwargs:
+            # this is the only class that requires this unfortunately.....
+            kwargs["added_tokens_decoder"].update(self._added_tokens_decoder)
+            
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
