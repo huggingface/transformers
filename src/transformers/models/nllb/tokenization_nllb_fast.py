@@ -186,10 +186,6 @@ class NllbTokenizerFast(PreTrainedTokenizerFast):
         self.vocab_file = vocab_file
         self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
-        # TODO remove soon
-        self.add_special_tokens(
-            {"additional_special_tokens": _additional_special_tokens}, replace_additional_special_tokens=False
-        )
         self.lang_code_to_id = {
             lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
         }
