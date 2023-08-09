@@ -1037,8 +1037,8 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(model.__class__.__name__, model_ref.__class__.__name__)
 
     def test_generation_config_is_loaded_with_model(self):
-        # Note: `hf-internal-testing/tiny-random-gpt2` has a dummy `transformers_version` field set to `foo`,
-        # which is harmless and impossible to replicate unless it is loaded properly
+        # Note: `hf-internal-testing/tiny-random-gpt2` has a `generation_config.json` containing a dummy
+        # `transformers_version` field set to `foo`
 
         # 1. Load without further parameters
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
