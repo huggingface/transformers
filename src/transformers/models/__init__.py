@@ -182,6 +182,7 @@ from . import (
     squeezebert,
     swiftformer,
     swin,
+    groundingdino,
     swin2sr,
     swinv2,
     switch_transformers,

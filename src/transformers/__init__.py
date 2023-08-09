@@ -518,6 +518,7 @@ _import_structure = {
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
     "models.swiftformer": ["SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwiftFormerConfig"],
     "models.swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
+    "models.groundingdino": ["GROUNDINGDINO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GroundingDINOConfig"],
     "models.swin2sr": ["SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swin2SRConfig"],
     "models.swinv2": ["SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swinv2Config"],
     "models.switch_transformers": ["SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwitchTransformersConfig"],
@@ -2667,6 +2668,16 @@ else:
             "SwinPreTrainedModel",
         ]
     )
+    _import_structure["models.groundingdino"].extend(
+        [
+            "GROUNDINGDINO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GroundingDINOBackbone",
+            "GroundingDINOForImageClassification",
+            "GroundingDINOForMaskedImageModeling",
+            "GroundingDINOModel",
+            "GroundingDINOPreTrainedModel",
+        ]
+    )
     _import_structure["models.swin2sr"].extend(
         [
             "SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3646,6 +3657,15 @@ else:
             "TFSwinPreTrainedModel",
         ]
     )
+    _import_structure["models.groundingdino"].extend(
+        [
+            "TF_GROUNDINGDINO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFGroundingDINOForImageClassification",
+            "TFGroundingDINOForMaskedImageModeling",
+            "TFGroundingDINOModel",
+            "TFGroundingDINOPreTrainedModel",
+        ]
+    )
     _import_structure["models.t5"].extend(
         [
             "TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4504,6 +4524,7 @@ if TYPE_CHECKING:
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.swiftformer import SWIFTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SwiftFormerConfig
     from .models.swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
+    from .models.groundingdino import GROUNDINGDINO_PRETRAINED_CONFIG_ARCHIVE_MAP, GroundingDINOConfig
     from .models.swin2sr import SWIN2SR_PRETRAINED_CONFIG_ARCHIVE_MAP, Swin2SRConfig
     from .models.swinv2 import SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Swinv2Config
     from .models.switch_transformers import SWITCH_TRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP, SwitchTransformersConfig
@@ -6293,6 +6314,14 @@ if TYPE_CHECKING:
             SwinModel,
             SwinPreTrainedModel,
         )
+        from .models.groundingdino import (
+            GROUNDINGDINO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GroundingDINOBackbone,
+            GroundingDINOForImageClassification,
+            GroundingDINOForMaskedImageModeling,
+            GroundingDINOModel,
+            GroundingDINOPreTrainedModel,
+        )
         from .models.swin2sr import (
             SWIN2SR_PRETRAINED_MODEL_ARCHIVE_LIST,
             Swin2SRForImageSuperResolution,
@@ -7084,6 +7113,13 @@ if TYPE_CHECKING:
             TFSwinForMaskedImageModeling,
             TFSwinModel,
             TFSwinPreTrainedModel,
+        )
+        from .models.groundingdino import (
+            TF_GROUNDINGDINO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFGroundingDINOForImageClassification,
+            TFGroundingDINOForMaskedImageModeling,
+            TFGroundingDINOModel,
+            TFGroundingDINOPreTrainedModel,
         )
         from .models.t5 import (
             TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
