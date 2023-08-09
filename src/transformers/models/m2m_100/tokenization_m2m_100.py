@@ -194,7 +194,12 @@ class M2M100Tokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self) -> int:
-        return len(self.encoder) + len(self.lang_token_to_id)
+        return len(self.encoder) + len(self.lang_token_to_id) + len(self.sp_model)
+
+    def get_vocab(self) -> Dict:
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     @property
     def src_lang(self) -> str:
@@ -289,11 +294,6 @@ class M2M100Tokenizer(PreTrainedTokenizer):
             return self.prefix_tokens + token_ids_0 + self.suffix_tokens
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
-
-    def get_vocab(self) -> Dict:
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
-        return vocab
 
     def __getstate__(self) -> Dict:
         state = self.__dict__.copy()

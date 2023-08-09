@@ -72,7 +72,7 @@ class EsmTokenizer(PreTrainedTokenizer):
         self.pad_token = pad_token
         self.mask_token = mask_token
         self.eos_token = eos_token
-        super().__init__(**kwargs)
+        super().__init__(unk_token=unk_token, cls_token=cls_token, pad_token=pad_token, mask_token=mask_token, eos_token=eos_token, **kwargs)
 
         # TODO, all the tokens are added? But they are also part of the vocab... bit strange.
         # none of them are special, but they all need special splitting.

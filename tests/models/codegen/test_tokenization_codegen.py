@@ -244,8 +244,8 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         decode_s = tokenizer.decode(out_s.input_ids)
         decode_s2 = tokenizer.batch_decode(out_s2.input_ids)
 
-        self.assertEqual(decode_s.split()[0], bos_token)
-        self.assertTrue(all(d.split()[0] == bos_token for d in decode_s2))
+        self.assertTrue(decode_s.startswith(bos_token))
+        self.assertTrue(all(d.startswith(bos_token) for d in decode_s2))
 
     @slow
     def test_truncation(self):
