@@ -1245,7 +1245,7 @@ class GenerationMixin:
                 " generate arguments will also show up in this list)"
             )
 
-    def _validate_generation_length(self, generation_config, input_ids_length, has_default_max_length):
+    def _validate_generated_length(self, generation_config, input_ids_length, has_default_max_length):
         """Performs validation related to the resulting generated length"""
 
         # 1. Max length warnings related to poor parameterization
@@ -1259,30 +1259,36 @@ class GenerationMixin:
             )
         if input_ids_length >= generation_config.max_length:
             input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
-            logger.warning(
+            warnings.warn(
                 f"Input length of {input_ids_string} is {input_ids_length}, but `max_length` is set to"
                 f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
-                " increasing `max_new_tokens`."
+                " increasing `max_new_tokens`.",
+                UserWarning,
             )
 
-        # 2. Min length exceptions due to unfeasible parameter combinations
-        min_length_error_suffix = " To continue, decrease the minimum length and/or increase the maximum length."
+        # 2. Min length warnings due to unfeasible parameter combinations
+        min_length_error_suffix = (
+            " Generation will stop at the defined maximum length. You should decrease the minimum length and/or "
+            "increase the maximum length."
+        )
         if has_default_max_length:
             min_length_error_suffix += (
                 f" Note that `max_length` is set to {generation_config.max_length}, its default value."
             )
         if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
-            raise ValueError(
+            warnings.warn(
                 f"Unfeasible length constraints: `min_length` ({generation_config.min_length}) is larger than"
-                f" the maximum possible length ({generation_config.max_length})." + min_length_error_suffix
+                f" the maximum possible length ({generation_config.max_length})." + min_length_error_suffix,
+                UserWarning,
             )
         if generation_config.min_new_tokens is not None:
             min_length = generation_config.min_new_tokens + input_ids_length
             if min_length > generation_config.max_length:
-                raise ValueError(
+                warnings.warn(
                     f"Unfeasible length constraints: `min_new_tokens` ({generation_config.min_new_tokens}), when "
                     f"added to the prompt length ({input_ids_length}), is larger than"
-                    f" the maximum possible length ({generation_config.max_length})." + min_length_error_suffix
+                    f" the maximum possible length ({generation_config.max_length})." + min_length_error_suffix,
+                    UserWarning,
                 )
 
     @torch.no_grad()
@@ -1509,7 +1515,7 @@ class GenerationMixin:
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
-        self._validate_generation_length(generation_config, input_ids_length, has_default_max_length)
+        self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
 
         # 7. determine generation mode
         generation_mode = self._get_generation_mode(generation_config, assistant_model)
