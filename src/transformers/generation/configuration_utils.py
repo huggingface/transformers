@@ -507,7 +507,8 @@ class GenerationConfig(PushToHubMixin):
         except ValueError as exc:
             warnings.warn(
                 "The generation config instance is invalid -- `.validate()` throws warnings and/or exceptions. "
-                "Fix these issues to save the configuration.\n\nThrown during validation:\n" + str(exc),
+                "Fix these issues to save the configuration. This warning will be raised to an exception in v4.34."
+                "\n\nThrown during validation:\n" + str(exc),
                 UserWarning,
             )
             return
