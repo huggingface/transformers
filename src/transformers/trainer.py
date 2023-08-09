@@ -44,10 +44,11 @@ from .integrations import (
 
 # isort: on
 
+import huggingface_hub.utils as hf_hub_utils
 import numpy as np
 import torch
 import torch.distributed as dist
-from huggingface_hub import Repository, create_repo
+from huggingface_hub import Repository, create_repo, upload_folder
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
@@ -127,9 +128,9 @@ from .utils import (
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    PushInProgress,
     can_return_loss,
     find_labels,
-    get_full_repo_name,
     is_accelerate_available,
     is_apex_available,
     is_datasets_available,
@@ -379,14 +380,17 @@ class Trainer:
             devices = [device for device in set(model.hf_device_map.values()) if device not in ["cpu", "disk"]]
             if len(devices) > 1:
                 self.is_model_parallel = True
-            else:
+            elif len(devices) == 1:
                 self.is_model_parallel = self.args.device != torch.device(devices[0])
+            else:
+                self.is_model_parallel = False
 
             # warn users
-            logger.info(
-                "You have loaded a model on multiple GPUs. `is_model_parallel` attribute will be force-set"
-                " to `True` to avoid any unexpected behavior such as device placement mismatching."
-            )
+            if self.is_model_parallel:
+                logger.info(
+                    "You have loaded a model on multiple GPUs. `is_model_parallel` attribute will be force-set"
+                    " to `True` to avoid any unexpected behavior such as device placement mismatching."
+                )
 
         # At this stage the model is already loaded
         if getattr(model, "is_quantized", False):
@@ -400,7 +404,7 @@ class Trainer:
             else:
                 raise ValueError(
                     "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit"
-                    " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
+                    " model, please make sure that you have installed `bitsandbytes>=0.41.1`. "
                 )
 
         # Setup Sharded DDP training
@@ -546,15 +550,10 @@ class Trainer:
         # Will be set to True by `self._setup_loggers()` on first call to `self.log()`.
         self._loggers_initialized = False
 
-        # Create clone of distant repo and output directory if needed
+        # Create distant repo and output directory if needed
+        self.hub_model_id = None
         if self.args.push_to_hub:
-            self.init_git_repo(at_init=True)
-            # In case of pull, we need to make sure every process has the latest.
-            if is_torch_tpu_available():
-                xm.rendezvous("init git repo")
-            elif args.parallel_mode == ParallelMode.DISTRIBUTED:
-                dist.barrier()
-
+            self.init_hf_repo()
         if self.args.should_save:
             os.makedirs(self.args.output_dir, exist_ok=True)
 
@@ -1377,18 +1376,24 @@ class Trainer:
                 raise ImportError("Missing XLA FSDP related module; please make sure to use torch-xla >= 2.0.")
             auto_wrap_policy = None
             auto_wrapper_callable = None
+            default_transformer_cls_names_to_wrap = getattr(model, "_no_split_modules", None)
+            fsdp_transformer_layer_cls_to_wrap = self.args.fsdp_config.get(
+                "fsdp_transformer_layer_cls_to_wrap", default_transformer_cls_names_to_wrap
+            )
+
             if self.args.fsdp_config["fsdp_min_num_params"] > 0:
                 auto_wrap_policy = functools.partial(
                     size_based_auto_wrap_policy, min_num_params=self.args.fsdp_config["fsdp_min_num_params"]
                 )
-            elif self.args.fsdp_config.get("fsdp_transformer_layer_cls_to_wrap", None) is not None:
+            elif fsdp_transformer_layer_cls_to_wrap is not None:
                 transformer_cls_to_wrap = set()
-                for layer_class in self.args.fsdp_config["fsdp_transformer_layer_cls_to_wrap"]:
+                for layer_class in fsdp_transformer_layer_cls_to_wrap:
                     transformer_cls = get_module_class_from_name(model, layer_class)
                     if transformer_cls is None:
                         raise Exception("Could not find the transformer layer class to wrap in the model.")
                     else:
                         transformer_cls_to_wrap.add(transformer_cls)
+
                 auto_wrap_policy = functools.partial(
                     transformer_auto_wrap_policy,
                     # Transformer layer class to wrap
@@ -1523,12 +1528,25 @@ class Trainer:
         inner_training_loop = find_executable_batch_size(
             self._inner_training_loop, self._train_batch_size, args.auto_find_batch_size
         )
-        return inner_training_loop(
-            args=args,
-            resume_from_checkpoint=resume_from_checkpoint,
-            trial=trial,
-            ignore_keys_for_eval=ignore_keys_for_eval,
-        )
+        if args.push_to_hub:
+            try:
+                # Disable progress bars when uploading models during checkpoints to avoid polluting stdout
+                hf_hub_utils.disable_progress_bars()
+                return inner_training_loop(
+                    args=args,
+                    resume_from_checkpoint=resume_from_checkpoint,
+                    trial=trial,
+                    ignore_keys_for_eval=ignore_keys_for_eval,
+                )
+            finally:
+                hf_hub_utils.enable_progress_bars()
+        else:
+            return inner_training_loop(
+                args=args,
+                resume_from_checkpoint=resume_from_checkpoint,
+                trial=trial,
+                ignore_keys_for_eval=ignore_keys_for_eval,
+            )
 
     def _inner_training_loop(
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
@@ -1600,6 +1618,7 @@ class Trainer:
             and self.sharded_ddp != ShardedDDPOption.SIMPLE
             or is_sagemaker_mp_enabled()
             or self.fsdp is not None
+            or self.is_fsdp_enabled
         )
 
         # We need to reset the scheduler, as its parameters may be different on subsequent calls
@@ -1631,6 +1650,8 @@ class Trainer:
         use_accelerator_prepare = True if model is self.model else False
 
         if delay_optimizer_creation:
+            if use_accelerator_prepare:
+                self.model = self.accelerator.prepare(self.model)
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
         # prepare using `accelerator` prepare
@@ -1951,11 +1972,14 @@ class Trainer:
         # Delete the last checkpoint when save_total_limit=1 if it's different from the best checkpoint and process allowed to save.
         if self.args.should_save and self.state.best_model_checkpoint is not None and self.args.save_total_limit == 1:
             for checkpoint in checkpoints_sorted:
-                if checkpoint != self.state.best_model_checkpoint:
+                if not os.path.samefile(checkpoint, self.state.best_model_checkpoint):
                     logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
                     shutil.rmtree(checkpoint)
 
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
+
+        # Wait for the checkpoint to be uploaded.
+        self._finish_current_push()
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
@@ -2084,71 +2108,70 @@ class Trainer:
         best_safe_adapter_model_path = os.path.join(self.state.best_model_checkpoint, ADAPTER_SAFE_WEIGHTS_NAME)
 
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
-        if (
+        if self.is_deepspeed_enabled:
+            deepspeed_load_checkpoint(self.model_wrapped, self.state.best_model_checkpoint)
+        elif (
             os.path.exists(best_model_path)
             or os.path.exists(best_safe_model_path)
             or os.path.exists(best_adapter_model_path)
             or os.path.exists(best_safe_adapter_model_path)
         ):
-            if self.is_deepspeed_enabled:
-                deepspeed_load_checkpoint(self.model_wrapped, self.state.best_model_checkpoint)
-            else:
-                has_been_loaded = True
-                if is_sagemaker_mp_enabled():
-                    if os.path.isfile(os.path.join(self.state.best_model_checkpoint, "user_content.pt")):
-                        # If the 'user_content.pt' file exists, load with the new smp api.
-                        # Checkpoint must have been saved with the new smp api.
-                        smp.resume_from_checkpoint(
-                            path=self.state.best_model_checkpoint,
-                            tag=WEIGHTS_NAME,
-                            partial=False,
-                            load_optimizer=False,
-                        )
-                    else:
-                        # If the 'user_content.pt' file does NOT exist, load with the old smp api.
-                        # Checkpoint must have been saved with the old smp api.
-                        if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
-                            state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
-                        else:
-                            state_dict = torch.load(best_model_path, map_location="cpu")
-
-                        state_dict["_smp_is_partial"] = False
-                        load_result = model.load_state_dict(state_dict, strict=True)
-                elif self.is_fsdp_enabled:
-                    load_fsdp_model(
-                        self.accelerator.state.fsdp_plugin, self.accelerator, model, self.state.best_model_checkpoint
+            has_been_loaded = True
+            if is_sagemaker_mp_enabled():
+                if os.path.isfile(os.path.join(self.state.best_model_checkpoint, "user_content.pt")):
+                    # If the 'user_content.pt' file exists, load with the new smp api.
+                    # Checkpoint must have been saved with the new smp api.
+                    smp.resume_from_checkpoint(
+                        path=self.state.best_model_checkpoint,
+                        tag=WEIGHTS_NAME,
+                        partial=False,
+                        load_optimizer=False,
                     )
                 else:
-                    if is_peft_available() and isinstance(model, PeftModel):
-                        # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
-                        if hasattr(model, "active_adapter") and hasattr(model, "load_adapter"):
-                            if os.path.exists(best_adapter_model_path) or os.path.exists(best_safe_adapter_model_path):
-                                model.load_adapter(self.state.best_model_checkpoint, model.active_adapter)
-                                # Load_adapter has no return value present, modify it when appropriate.
-                                from torch.nn.modules.module import _IncompatibleKeys
+                    # If the 'user_content.pt' file does NOT exist, load with the old smp api.
+                    # Checkpoint must have been saved with the old smp api.
+                    if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
+                        state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
+                    else:
+                        state_dict = torch.load(best_model_path, map_location="cpu")
 
-                                load_result = _IncompatibleKeys([], [])
-                            else:
-                                logger.warning(
-                                    "The intermediate checkpoints of PEFT may not be saved correctly, "
-                                    f"consider using a custom callback to save {ADAPTER_WEIGHTS_NAME} in corresponding saving folders. "
-                                    "Check some examples here: https://github.com/huggingface/peft/issues/96"
-                                )
-                                has_been_loaded = False
+                    state_dict["_smp_is_partial"] = False
+                    load_result = model.load_state_dict(state_dict, strict=True)
+            elif self.is_fsdp_enabled:
+                load_result = load_fsdp_model(
+                    self.accelerator.state.fsdp_plugin, self.accelerator, model, self.state.best_model_checkpoint
+                )
+            else:
+                if is_peft_available() and isinstance(model, PeftModel):
+                    # If train a model using PEFT & LoRA, assume that adapter have been saved properly.
+                    if hasattr(model, "active_adapter") and hasattr(model, "load_adapter"):
+                        if os.path.exists(best_adapter_model_path) or os.path.exists(best_safe_adapter_model_path):
+                            model.load_adapter(self.state.best_model_checkpoint, model.active_adapter)
+                            # Load_adapter has no return value present, modify it when appropriate.
+                            from torch.nn.modules.module import _IncompatibleKeys
+
+                            load_result = _IncompatibleKeys([], [])
                         else:
-                            logger.warning("Could not load adapter model, make sure to have `peft>=0.3.0` installed")
+                            logger.warning(
+                                "The intermediate checkpoints of PEFT may not be saved correctly, "
+                                f"consider using a custom callback to save {ADAPTER_WEIGHTS_NAME} in corresponding saving folders. "
+                                "Check some examples here: https://github.com/huggingface/peft/issues/96"
+                            )
                             has_been_loaded = False
                     else:
-                        # We load the model state dict on the CPU to avoid an OOM error.
-                        if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
-                            state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
-                        else:
-                            state_dict = torch.load(best_model_path, map_location="cpu")
+                        logger.warning("Could not load adapter model, make sure to have `peft>=0.3.0` installed")
+                        has_been_loaded = False
+                else:
+                    # We load the model state dict on the CPU to avoid an OOM error.
+                    if self.args.save_safetensors and os.path.isfile(best_safe_model_path):
+                        state_dict = safetensors.torch.load_file(best_safe_model_path, device="cpu")
+                    else:
+                        state_dict = torch.load(best_model_path, map_location="cpu")
 
-                        # If the model is on the GPU, it still works!
-                        # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
-                        # which takes *args instead of **kwargs
-                        load_result = model.load_state_dict(state_dict, False)
+                    # If the model is on the GPU, it still works!
+                    # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
+                    # which takes *args instead of **kwargs
+                    load_result = model.load_state_dict(state_dict, False)
                 if not is_sagemaker_mp_enabled() and has_been_loaded:
                     self._issue_warnings_after_load(load_result)
         elif os.path.exists(os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
@@ -2298,6 +2321,7 @@ class Trainer:
                 # Needs to be called on all ranks to gather all states.
                 # full_optim_state_dict will be deprecated after Pytorch 2.2!
                 full_osd = self.model.__class__.full_optim_state_dict(self.model, self.optimizer)
+                torch.save(full_osd, os.path.join(output_dir, OPTIMIZER_NAME))
 
         if is_torch_tpu_available():
             xm.rendezvous("saving_optimizer_states")
@@ -2321,12 +2345,9 @@ class Trainer:
                 reissue_pt_warnings(caught_warnings)
                 if self.do_grad_scaling:
                     torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
-        elif self.args.should_save and not self.is_deepspeed_enabled:
+        elif self.args.should_save and not self.is_deepspeed_enabled and not (self.fsdp or self.is_fsdp_enabled):
             # deepspeed.save_checkpoint above saves model/optim/sched
-            if self.fsdp and not self.is_fsdp_enabled:
-                torch.save(full_osd, os.path.join(output_dir, OPTIMIZER_NAME))
-            else:
-                torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
+            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
 
             with warnings.catch_warnings(record=True) as caught_warnings:
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
@@ -2670,7 +2691,11 @@ class Trainer:
             self._past = outputs[self.args.past_index]
 
         if labels is not None:
-            if unwrap_model(model)._get_name() in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
+            if is_peft_available() and isinstance(model, PeftModel):
+                model_name = unwrap_model(model.base_model)._get_name()
+            else:
+                model_name = unwrap_model(model)._get_name()
+            if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
                 loss = self.label_smoother(outputs, labels, shift_labels=True)
             else:
                 loss = self.label_smoother(outputs, labels)
@@ -2731,10 +2756,16 @@ class Trainer:
             or self.fsdp is not None
             or self.is_fsdp_enabled
         ):
-            state_dict = self.model.state_dict()
+            state_dict = self.model.state_dict() if not self.is_fsdp_enabled else {}
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
             if self.is_fsdp_enabled:
+                # remove the dummy state_dict saved above
+                if self.args.should_save:
+                    for filename in [WEIGHTS_NAME, SAFE_WEIGHTS_NAME]:
+                        file = os.path.join(output_dir, filename)
+                        if os.path.isfile(file):
+                            os.remove(file)
                 save_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir)
 
         elif self.is_deepspeed_enabled:
@@ -3108,7 +3139,8 @@ class Trainer:
 
             # Prediction step
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
-            inputs_decode = self._prepare_input(inputs["input_ids"]) if args.include_inputs_for_metrics else None
+            main_input_name = getattr(self.model, "main_input_name", "input_ids")
+            inputs_decode = self._prepare_input(inputs[main_input_name]) if args.include_inputs_for_metrics else None
 
             if is_torch_tpu_available():
                 xm.mark_step()
@@ -3367,9 +3399,32 @@ class Trainer:
         else:
             return 0
 
+    def init_hf_repo(self):
+        """
+        Initializes a git repo in `self.args.hub_model_id`.
+        """
+        # Only on process zero
+        if not self.is_world_process_zero():
+            return
+
+        if self.args.hub_model_id is None:
+            repo_name = Path(self.args.output_dir).absolute().name
+        else:
+            repo_name = self.args.hub_model_id
+
+        repo_url = create_repo(repo_name, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True)
+        self.hub_model_id = repo_url.repo_id
+        self.push_in_progress = None
+
     def init_git_repo(self, at_init: bool = False):
         """
         Initializes a git repo in `self.args.hub_model_id`.
+
+        <Tip warning={true}>
+
+        This function is deprecated and will be removed in v4.34.0 of Transformers.
+
+        </Tip>
 
         Args:
             at_init (`bool`, *optional*, defaults to `False`):
@@ -3377,24 +3432,28 @@ class Trainer:
                 `True` and `at_init` is `True`, the path to the repo (which is `self.args.output_dir`) might be wiped
                 out.
         """
+        warnings.warn(
+            "`Trainer.init_git_repo` is deprecated and will be removed in v4.34.0 of Transformers. Use "
+            "`Trainer.init_hf_repo` instead."
+        )
         if not self.is_world_process_zero():
             return
-        if self.args.hub_model_id is None:
-            repo_name = Path(self.args.output_dir).absolute().name
-        else:
-            repo_name = self.args.hub_model_id
-        if "/" not in repo_name:
-            repo_name = get_full_repo_name(repo_name, token=self.args.hub_token)
 
-        # Make sure the repo exists.
-        create_repo(repo_name, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True)
+        # Make sure the repo exists + retrieve "real" repo_id
+        repo_name = self.args.hub_model_id
+        if repo_name is None:
+            repo_name = Path(self.args.output_dir).absolute().name
+        repo_id = create_repo(
+            repo_id=repo_name, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True
+        ).repo_id
+
         try:
-            self.repo = Repository(self.args.output_dir, clone_from=repo_name, token=self.args.hub_token)
+            self.repo = Repository(self.args.output_dir, clone_from=repo_id, token=self.args.hub_token)
         except EnvironmentError:
             if self.args.overwrite_output_dir and at_init:
                 # Try again after wiping output_dir
                 shutil.rmtree(self.args.output_dir)
-                self.repo = Repository(self.args.output_dir, clone_from=repo_name, token=self.args.hub_token)
+                self.repo = Repository(self.args.output_dir, clone_from=repo_id, token=self.args.hub_token)
             else:
                 raise
 
@@ -3474,8 +3533,8 @@ class Trainer:
         # Only push from one node.
         if not self.is_world_process_zero() or self.args.hub_strategy == HubStrategy.END:
             return
-        # If we haven't finished the last push, we don't do this one.
-        if self.push_in_progress is not None and not self.push_in_progress.is_done:
+        # If we haven't finished the last push, we don't do this one unless args.hub_always_push=True.
+        if not self.args.hub_always_push and self.push_in_progress is not None and not self.push_in_progress.is_done():
             return
 
         output_dir = self.args.output_dir
@@ -3492,34 +3551,51 @@ class Trainer:
         # Same for the training arguments
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
 
-        try:
-            if self.args.hub_strategy == HubStrategy.CHECKPOINT:
-                # Temporarily move the checkpoint just saved for the push
-                tmp_checkpoint = os.path.join(output_dir, "last-checkpoint")
-                # We have to remove the "last-checkpoint" dir if it exists, otherwise the checkpoint is moved as a
-                # subfolder.
-                if os.path.isdir(tmp_checkpoint):
-                    shutil.rmtree(tmp_checkpoint)
-                shutil.move(checkpoint_folder, tmp_checkpoint)
+        if self.args.save_strategy == IntervalStrategy.STEPS:
+            commit_message = f"Training in progress, step {self.state.global_step}"
+        else:
+            commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
 
-            if self.args.save_strategy == IntervalStrategy.STEPS:
-                commit_message = f"Training in progress, step {self.state.global_step}"
-            else:
-                commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
-            push_work = self.repo.push_to_hub(commit_message=commit_message, blocking=False, auto_lfs_prune=True)
-            # Return type of `Repository.push_to_hub` is either None or a tuple.
-            if push_work is not None:
-                self.push_in_progress = push_work[1]
-        except Exception as e:
-            logger.error(f"Error when pushing to hub: {e}")
-        finally:
-            if self.args.hub_strategy == HubStrategy.CHECKPOINT:
-                # Move back the checkpoint to its place
-                shutil.move(tmp_checkpoint, checkpoint_folder)
+        model_push_job = upload_folder(
+            repo_id=self.hub_model_id,
+            folder_path=output_dir,
+            commit_message=commit_message,
+            token=self.args.hub_token,
+            run_as_future=True,
+            ignore_patterns=["_*", "**/*"],
+        )
+
+        push_jobs = [model_push_job]
+
+        if self.args.hub_strategy in [HubStrategy.CHECKPOINT, HubStrategy.ALL_CHECKPOINTS]:
+            path_in_repo = (
+                "last-checkpoint" if self.args.hub_strategy == HubStrategy.CHECKPOINT else Path(checkpoint_folder).name
+            )
+            checkpoint_push = upload_folder(
+                repo_id=self.hub_model_id,
+                folder_path=checkpoint_folder,
+                path_in_repo=path_in_repo,
+                commit_message=commit_message + ", checkpoint",
+                token=self.args.hub_token,
+                run_as_future=True,
+            )
+            push_jobs.append(checkpoint_push)
+
+        if self.push_in_progress is None or self.push_in_progress.is_done():
+            self.push_in_progress = PushInProgress(push_jobs)
+        else:
+            self.push_in_progress.jobs.extend(push_jobs)
+
+    def _finish_current_push(self):
+        if not hasattr(self, "push_in_progress"):
+            return
+        if self.push_in_progress is not None and not self.push_in_progress.is_done():
+            logger.info("Waiting for the current checkpoint push to be finished, this might take a couple of minutes.")
+            self.push_in_progress.wait_until_done()
 
     def push_to_hub(self, commit_message: Optional[str] = "End of training", blocking: bool = True, **kwargs) -> str:
         """
-        Upload *self.model* and *self.tokenizer* to the 🤗 model hub on the repo *self.args.hub_model_id*.
+        Upload `self.model` and `self.tokenizer` to the 🤗 model hub on the repo `self.args.hub_model_id`.
 
         Parameters:
             commit_message (`str`, *optional*, defaults to `"End of training"`):
@@ -3530,20 +3606,19 @@ class Trainer:
                 Additional keyword arguments passed along to [`~Trainer.create_model_card`].
 
         Returns:
-            The url of the commit of your model in the given repository if `blocking=False`, a tuple with the url of
-            the commit and an object to track the progress of the commit if `blocking=True`
+            The URL of the repository where the model was pushed if `blocking=False`, or a `Future` object tracking the
+            progress of the commit if `blocking=True`.
         """
-        # If a user calls manually `push_to_hub` with `self.args.push_to_hub = False`, we try to create the repo but
-        # it might fail.
-        if not hasattr(self, "repo"):
-            self.init_git_repo()
-
         model_name = kwargs.pop("model_name", None)
         if model_name is None and self.args.should_save:
             if self.args.hub_model_id is None:
                 model_name = Path(self.args.output_dir).name
             else:
                 model_name = self.args.hub_model_id.split("/")[-1]
+
+        # In case the user calls this method with args.push_to_hub = False
+        if self.hub_model_id is None:
+            self.init_hf_repo()
 
         # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
         # self.args.should_save.
@@ -3553,25 +3628,19 @@ class Trainer:
         if not self.is_world_process_zero():
             return
 
-        # Cancel any async push in progress if blocking=True. The commits will all be pushed together.
-        if blocking and self.push_in_progress is not None and not self.push_in_progress.is_done:
-            self.push_in_progress._process.kill()
-            self.push_in_progress = None
+        self.create_model_card(model_name=model_name, **kwargs)
 
-        git_head_commit_url = self.repo.push_to_hub(
-            commit_message=commit_message, blocking=blocking, auto_lfs_prune=True
+        # Wait for the current upload to be finished.
+        self._finish_current_push()
+
+        return upload_folder(
+            repo_id=self.hub_model_id,
+            folder_path=self.args.output_dir,
+            commit_message=commit_message,
+            token=self.args.hub_token,
+            run_as_future=not blocking,
+            ignore_patterns=["_*", "**/*"],
         )
-        # push separately the model card to be independant from the rest of the model
-        if self.args.should_save:
-            self.create_model_card(model_name=model_name, **kwargs)
-            try:
-                self.repo.push_to_hub(
-                    commit_message="update model card README.md", blocking=blocking, auto_lfs_prune=True
-                )
-            except EnvironmentError as exc:
-                logger.error(f"Error pushing update to the model card. Please read logs and retry.\n${exc}")
-
-        return git_head_commit_url
 
     #
     # Deprecated code
@@ -3661,7 +3730,8 @@ class Trainer:
 
         for step, inputs in enumerate(dataloader):
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
-            inputs_decode = self._prepare_input(inputs["input_ids"]) if args.include_inputs_for_metrics else None
+            main_input_name = getattr(self.model, "main_input_name", "input_ids")
+            inputs_decode = self._prepare_input(inputs[main_input_name]) if args.include_inputs_for_metrics else None
 
             if loss is not None:
                 losses = loss.repeat(batch_size)
@@ -3791,7 +3861,9 @@ class Trainer:
 
         # create accelerator object
         self.accelerator = Accelerator(
-            deepspeed_plugin=self.args.deepspeed_plugin, gradient_accumulation_plugin=gradient_accumulation_plugin
+            dispatch_batches=self.args.dispatch_batches,
+            deepspeed_plugin=self.args.deepspeed_plugin,
+            gradient_accumulation_plugin=gradient_accumulation_plugin,
         )
 
         # deepspeed and accelerate flags covering both trainer args and accelerate launcher

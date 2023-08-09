@@ -30,7 +30,8 @@ from ...utils import logging
 
 
 if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
+    from ...pipelines.conversational import Conversation
+    from ...tokenization_utils_base import TextInput
 
 logger = logging.get_logger(__name__)
 
@@ -53,11 +54,11 @@ B_INST, E_INST = "[INST]", "[/INST]"
 B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
 
 # fmt: off
-DEFAULT_SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your\
+DEFAULT_SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your \
 answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure\
-that your responses are socially unbiased and positive in nature.
+ that your responses are socially unbiased and positive in nature.
 
-If a question does not make any sense, or is not factually coherent, explain why instead of answering something not\
+If a question does not make any sense, or is not factually coherent, explain why instead of answering something not \
 correct. If you don't know the answer to a question, please don't share false information."""
 # fmt: on
 
@@ -111,7 +112,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
-        legacy=True,
+        legacy=None,
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -131,11 +132,13 @@ class LlamaTokenizer(PreTrainedTokenizer):
             legacy=legacy,
             **kwargs,
         )
-        if legacy:
+        if legacy is None:
             logger.warning_once(
-                f"You are using the legacy behaviour of the {self.__class__}. This means that tokens that come after special tokens will not be properly handled. We recommend you to"
-                " read the related pull request available at https://github.com/huggingface/transformers/pull/24565"
+                f"You are using the default legacy behaviour of the {self.__class__}. This means that tokens that come after special tokens will not be properly handled. We recommend you to"
+                " read the related pull request available at https://github.com/huggingface/transformers/pull/24565, and set the legacy attribute accordingly."
             )
+            legacy = True
+
         self.legacy = legacy
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
@@ -166,7 +169,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         return vocab
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
-    def tokenize(self, text, **kwargs) -> List[str]:
+    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         # Replace the SPIECE_UNDERLINE with a space to make sure SPIECE_UNDERLINE is only used at
         # the beginning of the text
         if not self.legacy:
@@ -174,7 +177,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         return super().tokenize(text, **kwargs)
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
-    def _tokenize(self, text):
+    def _tokenize(self, text, **kwargs):
         """
         Returns a tokenized string.
 
@@ -332,7 +335,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         return output
 
     def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        """Builds the input ids for a conversation.
+        r"""Builds the input ids for a conversation.
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
         the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
         ```
@@ -347,7 +350,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         >>> Conversation(
         ...     "<<SYS>>\n Only answer with emojis, and charades\n<</SYS>>\n\nHow can I build a house in 10 septs?"
-        ... )
+        ... )  # doctest: +IGNORE_RESULT
         ```
         Args:
             conversation (`Conversation`):
@@ -356,6 +359,17 @@ class LlamaTokenizer(PreTrainedTokenizer):
             `List[int]`:
                 Input ids for the conversation.
         """
+        if len(conversation.past_user_inputs) > 0:
+            if not conversation.past_user_inputs[0].startswith(B_SYS) or E_SYS not in conversation.past_user_inputs[0]:
+                conversation.past_user_inputs[0] = (
+                    B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
+                )
+        elif conversation.new_user_input:
+            if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
+                conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
+        else:
+            raise ValueError("Last message must be from user")
+
         dialogue = list(conversation.iter_texts())
         if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
             [not is_user for is_user, msg in dialogue[1::2]]
@@ -365,14 +379,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
             )
 
         dialog_tokens: List[int] = []
-        if len(conversation.past_user_inputs) > 0:
-            if not conversation.past_user_inputs[0].startswith(B_SYS) or E_SYS not in conversation.past_user_inputs[0]:
-                conversation.past_user_inputs[0] = (
-                    B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
-                )
-        elif not dialogue[0][1].startswith(B_SYS) or E_SYS not in dialogue[0][1]:
-            dialogue[0] = (dialogue[0][0], B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + dialogue[0][1])
-
         dialog_tokens += sum(
             [
                 [self.bos_token_id]
@@ -384,8 +390,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
             ],
             [],
         )
-        if not (dialogue[-1][0]):
-            raise ValueError(f"Last message must be from user, got {dialogue[-1]['role']}")
         dialog_tokens += [self.bos_token_id] + self.encode(
             f"{B_INST} {(dialogue[-1][1]).strip()} {E_INST}", add_special_tokens=False
         )

@@ -193,3 +193,17 @@ class EfficientNetImageProcessorTest(ImageProcessingSavingTestMixin, unittest.Te
                 self.image_processor_tester.size["width"],
             ),
         )
+
+    def test_rescale(self):
+        # EfficientNet optionally rescales between -1 and 1 instead of the usual 0 and 1
+        image = np.arange(0, 256, 1, dtype=np.uint8).reshape(1, 8, 32)
+
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+
+        rescaled_image = image_processor.rescale(image, scale=1 / 127.5)
+        expected_image = (image * (1 / 127.5)).astype(np.float32) - 1
+        self.assertTrue(np.allclose(rescaled_image, expected_image))
+
+        rescaled_image = image_processor.rescale(image, scale=1 / 255, offset=False)
+        expected_image = (image / 255.0).astype(np.float32)
+        self.assertTrue(np.allclose(rescaled_image, expected_image))

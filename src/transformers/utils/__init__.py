@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub import get_full_repo_name  # for backward compatibility
 from packaging import version
 
 from .. import __version__
@@ -69,6 +70,7 @@ from .hub import (
     TRANSFORMERS_CACHE,
     TRANSFORMERS_DYNAMIC_MODULE_NAME,
     EntryNotFoundError,
+    PushInProgress,
     PushToHubMixin,
     RepositoryNotFoundError,
     RevisionNotFoundError,
@@ -79,7 +81,6 @@ from .hub import (
     extract_commit_hash,
     get_cached_models,
     get_file_from_repo,
-    get_full_repo_name,
     has_file,
     http_user_agent,
     is_offline_mode,
