@@ -1625,7 +1625,7 @@ class Trainer:
                 self.state.eval_steps = math.ceil(max_steps * self.state.eval_steps)
         if args.save_steps is not None:
             self.state.save_steps = args.save_steps
-            if args.eval_steps < 1:
+            if args.save_steps < 1:
                 self.state.save_steps = math.ceil(max_steps * self.state.save_steps)
 
         # Activate gradient checkpointing if needed
