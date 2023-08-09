@@ -149,7 +149,6 @@ else:
         "TFAutoModelForAudioClassification",
         "TFAutoModelForCausalLM",
         "TFAutoModelForImageClassification",
-        "TFAutoModelForImageToImage",
         "TFAutoModelForMaskedImageModeling",
         "TFAutoModelForMaskedLM",
         "TFAutoModelForMaskGeneration",
