@@ -36,8 +36,8 @@ class BarkSemanticGenerationConfig(GenerationConfig):
         return_dict_in_generate=False,
         output_hidden_states=False,
         output_attentions=False,
-        temperature=0.7,
-        do_sample=True,
+        temperature=1.0,
+        do_sample=False,
         text_encoding_offset=10_048,
         text_pad_token=129_595,
         semantic_infer_token=129_599,
@@ -70,9 +70,9 @@ class BarkSemanticGenerationConfig(GenerationConfig):
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
-            temperature (`float`, *optional*, defaults to 0.7):
+            temperature (`float`, *optional*, defaults to 1.0):
                 The value used to modulate the next token probabilities.
-            do_sample (`bool`, *optional*, defaults to `True`):
+            do_sample (`bool`, *optional*, defaults to `False`):
                 Whether or not to use sampling ; use greedy decoding otherwise.
             text_encoding_offset (`int`, *optional*, defaults to 10_048):
                 Text encoding offset.
@@ -119,8 +119,8 @@ class BarkCoarseGenerationConfig(GenerationConfig):
         return_dict_in_generate=False,
         output_hidden_states=False,
         output_attentions=False,
-        temperature=0.7,
-        do_sample=True,
+        temperature=1.0,
+        do_sample=False,
         coarse_semantic_pad_token=12_048,
         coarse_rate_hz=75,
         n_coarse_codebooks=2,
@@ -150,9 +150,9 @@ class BarkCoarseGenerationConfig(GenerationConfig):
             output_attentions (`bool`, *optional*, defaults to `False`):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more details.
-            temperature (`float`, *optional*, defaults to 0.7):
+            temperature (`float`, *optional*, defaults to 1.0):
                 The value used to modulate the next token probabilities.
-            do_sample (`bool`, *optional*, defaults to `True`):
+            do_sample (`bool`, *optional*, defaults to `False`):
                 Whether or not to use sampling ; use greedy decoding otherwise.
             coarse_semantic_pad_token (`int`, *optional*, defaults to 12_048):
                 Coarse semantic pad token.
@@ -194,7 +194,7 @@ class BarkFineGenerationConfig(GenerationConfig):
 
     def __init__(
         self,
-        temperature=0.5,
+        temperature=1.0,
         max_fine_history_length=512,
         max_fine_input_length=1024,
         n_fine_codebooks=8,
@@ -209,7 +209,7 @@ class BarkFineGenerationConfig(GenerationConfig):
         documentation from [`GenerationConfig`] for more information.
 
         Args:
-            temperature (`float`, *optional*, defaults to 0.5):
+            temperature (`float`, *optional*):
                 The value used to modulate the next token probabilities.
             max_fine_history_length (`int`, *optional*, defaults to 512):
                 Max length of the fine history vector.
@@ -223,6 +223,13 @@ class BarkFineGenerationConfig(GenerationConfig):
         self.max_fine_history_length = max_fine_history_length
         self.max_fine_input_length = max_fine_input_length
         self.n_fine_codebooks = n_fine_codebooks
+
+    def validate(self):
+        """
+        Overrides GenerationConfig.validate because BarkFineGenerationConfig don't use any parameters outside
+        temperature.
+        """
+        pass
 
 
 class BarkGenerationConfig(GenerationConfig):
