@@ -207,15 +207,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         # make sure that tokens made of several
         # characters are not split at tokenization
 
-        # TODO @ArthurZ they should be part of the added tokens encoder then ?
-        # since we remove the `unique_no_split_tokens` logic in favor of AddedTokens
-        # unique no split tokens is only used in 3 files...
-        # this is more reliable as :
-        # 1. unique_no_split_tokens is hidden, vs added_tokens_encoder that will be printed with the tokenizer
-        # 2. tokens can be added to the list more than once no?
-        # 3. we could actually create the trie with a set of added_tokens_encoder and the unique_no_split_tokens.
-        # this would allow for better backard comp, but I don't really like the fact that it gives more freedom, and is one
-        # more private attribute to save. (IT IS CURRENTLY NOT SAVED, so initializing and doing a from pretrained will produce different results)
+        # TODO @ArthurZ add them or just update the trie?
         unique_no_split_tokens = []
         for token in self.encoder.keys():
             if len(token) > 1:
