@@ -184,7 +184,7 @@ class NllbTokenizer(PreTrainedTokenizer):
             _additional_special_tokens.extend(
                 [t for t in additional_special_tokens if t not in self._additional_special_tokens]
             )
-            
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -204,7 +204,6 @@ class NllbTokenizer(PreTrainedTokenizer):
 
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
-
 
     def __getstate__(self):
         state = self.__dict__.copy()

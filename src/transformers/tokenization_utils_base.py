@@ -1165,7 +1165,12 @@ class SpecialTokensMixin:
     def additional_special_tokens(self, value):
         # We store the actual tokens to allow adding tokens via `tokenizer.add_special_tokens`
         if value is not None:
-            self._additional_special_tokens = [ AddedToken(token, normalized=False, rstrip=True, lstrip=True) if isinstance(token,str) and token != "" else token for token in value ]
+            self._additional_special_tokens = [
+                AddedToken(token, normalized=False, rstrip=True, lstrip=True)
+                if isinstance(token, str) and token != ""
+                else token
+                for token in value
+            ]
         else:
             self._additional_special_tokens = value
 

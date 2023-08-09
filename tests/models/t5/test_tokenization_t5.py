@@ -473,7 +473,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(input_ids, [1001, 7, 3, 2])
         tokens = self.tokenizer.tokenize(" <extra_id_0> ,")
         # spaces are not longer eaten by rstrip and lstrip
-        self.assertEqual(tokens, ['<extra_id_0>', '▁', ','])
+        self.assertEqual(tokens, ["<extra_id_0>", "▁", ","])
 
         # test with a begin of word like `▁He`
         input_ids = self.tokenizer.encode("No <extra_id_0> He")

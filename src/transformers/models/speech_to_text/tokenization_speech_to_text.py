@@ -144,7 +144,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
             if additional_special_tokens is not None:
                 additional_special_tokens = self.lang_tokens + additional_special_tokens
             else:
-               additional_special_tokens = self.lang_tokens
+                additional_special_tokens = self.lang_tokens
             self._tgt_lang = tgt_lang if tgt_lang is not None else self.langs[0]
 
             self.set_tgt_lang_special_tokens(self._tgt_lang)
@@ -164,7 +164,6 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-
 
     @property
     def vocab_size(self) -> int:

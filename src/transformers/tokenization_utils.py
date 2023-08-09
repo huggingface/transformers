@@ -378,16 +378,15 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         Returns the added tokens in the vocabulary as a dictionary of token to index. Results might be different from
         the fast call because for now we always add the tokens even if they are already in the vocabulary. This is
-        something we should change.
-        Returns:
+        something we should change. Returns:
             `Dict[str, int]`: The added tokens.
         """
         return self.added_tokens_encoder
 
     def __len__(self):
         """
-        Size of the full vocabulary with the added tokens. Counts the `keys` and not the `values` because otherwise if there
-        is a hole in the vocab, we will add tokenizers at a wrong index.
+        Size of the full vocabulary with the added tokens. Counts the `keys` and not the `values` because otherwise if
+        there is a hole in the vocab, we will add tokenizers at a wrong index.
         """
         return len(set(self.get_vocab().keys()))
 
@@ -399,10 +398,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         Args:
             new_tokens (`List[str]`or `List[tokenizers.AddedToken]`):
-                Token(s) to add in vocabulary. A token is counted as added if it's not already in the vocabulary (tested by
-                checking if the tokenizer assign the index of the `unk_token` to them). If a token is part of the vocabulary
-                then we simply mark this token as an `AddedToken` which allows to control the stripping and normalization of
-                this token. This is NOT possible in `tokenizers`.
+                Token(s) to add in vocabulary. A token is counted as added if it's not already in the vocabulary
+                (tested by checking if the tokenizer assign the index of the `unk_token` to them). If a token is part
+                of the vocabulary then we simply mark this token as an `AddedToken` which allows to control the
+                stripping and normalization of this token. This is NOT possible in `tokenizers`.
             special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the tokens should be added as special tokens.
 
@@ -447,7 +446,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 if not special_tokens and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
                     # Normalize if requested
                     content = token.content.lower()
-                    token = AddedToken(content,single_word=token.single_word,lstrip=token.lstrip,rstrip=token.rstrip)
+                    token = AddedToken(
+                        content, single_word=token.single_word, lstrip=token.lstrip, rstrip=token.rstrip
+                    )
                 self._added_tokens_decoder[new_idx + added_tokens] = token
                 added_tokens += 1
             elif self.convert_tokens_to_ids(token.content) is not None:
@@ -546,11 +547,11 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     if tok_extended.lstrip and left:
                         tokens[i - 1] = left.rstrip()  # Opposite here
                     if tok_extended.single_word and left and left[-1] != " ":
-                            tokens[i - 1] += token
-                            tokens[i] = ""
+                        tokens[i - 1] += token
+                        tokens[i] = ""
                     elif tok_extended.single_word and right and right[0] != " ":
-                            tokens[i + 1] = token + tokens[i + 1]
-                            tokens[i] = ""
+                        tokens[i + 1] = token + tokens[i + 1]
+                        tokens[i] = ""
 
                 else:
                     raise ValueError(

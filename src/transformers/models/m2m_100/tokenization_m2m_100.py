@@ -153,7 +153,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         additional_special_tokens = kwargs.pop("additional_special_tokens", [])
         for lang_code in fairseq_language_code:
             token = self.get_lang_token(lang_code)
-            if  token not in additional_special_tokens and lang_code not in str(token) not in self.added_tokens_encoder:
+            if token not in additional_special_tokens and lang_code not in str(token) not in self.added_tokens_encoder:
                 additional_special_tokens.append(token)
 
         self.vocab_file = vocab_file
@@ -193,7 +193,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         self.set_src_lang_special_tokens(self._src_lang)
 
     @property
-    def vocab_size(self) -> int:        
+    def vocab_size(self) -> int:
         return len(self.encoder) + len(self.sp_model)
 
     def get_vocab(self) -> Dict:

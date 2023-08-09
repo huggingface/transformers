@@ -59,7 +59,6 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = Speech2TextTokenizer.from_pretrained(self.tmpdirname)
         tokenizer.save_pretrained(self.tmpdirname)
 
-
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
         token = "<pad>"
