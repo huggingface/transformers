@@ -223,12 +223,14 @@ class BarkFineGenerationConfig(GenerationConfig):
         self.max_fine_history_length = max_fine_history_length
         self.max_fine_input_length = max_fine_input_length
         self.n_fine_codebooks = n_fine_codebooks
-        
+
     def validate(self):
         """
-        Overrides GenerationConfig.validate because BarkFineGenerationConfig don't use any parameters outside temperature.
+        Overrides GenerationConfig.validate because BarkFineGenerationConfig don't use any parameters outside
+        temperature.
         """
         pass
+
 
 class BarkGenerationConfig(GenerationConfig):
     model_type = "bark"
