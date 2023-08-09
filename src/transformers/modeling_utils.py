@@ -2416,11 +2416,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if quantization_method_from_config == QuantizationMethod.GPTQ:
                 quantization_config = GPTQConfig.from_dict(config.quantization_config)
                 config.quantization_config = quantization_config
-                logger.info(
-                    f"Overriding torch_dtype={torch_dtype} with `torch_dtype=torch.float16` due to "
-                    "requirements of `auto-gptq` to enable model quantization "
-                )
-                torch_dtype = torch.float16
+            logger.info(
+                f"Overriding torch_dtype={torch_dtype} with `torch_dtype=torch.float16` due to "
+                "requirements of `auto-gptq` to enable model quantization "
+            )
+            torch_dtype = torch.float16
             quantizer = GPTQQuantizer.from_dict(quantization_config.to_dict())
 
         if (
