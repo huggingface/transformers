@@ -1163,14 +1163,10 @@ class BrosForTokenClassificationWithSpade(BrosPreTrainedModel):
             stc_outputs.masked_fill_(self_token_mask[None, :, :], -10000.0)
 
             stc_mask = attention_mask.view(-1).bool()
-
             stc_logits = stc_outputs.view(-1, max_seq_length + 1)
-            stc_logits = stc_logits[stc_mask]
-
             stc_labels = stc_labels.view(-1)
-            stc_labels = stc_labels[stc_mask]
 
-            stc_loss = loss_fct(stc_logits, stc_labels)
+            stc_loss = loss_fct(stc_logits[stc_mask], stc_labels[stc_mask])
 
             loss = itc_loss + stc_loss
 
