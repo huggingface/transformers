@@ -18,7 +18,6 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    from ..modeling_outputs import ImageSuperResolutionOutput
     from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
@@ -27,7 +26,8 @@ logger = logging.get_logger(__name__)
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class ImageToImagePipeline(Pipeline):
     """
-    Image to Image pipeline using any `AutoModelForImageToImage`. This pipeline generates an image based on a previous image.
+    Image to Image pipeline using any `AutoModelForImageToImage`. This pipeline generates an image based on a previous
+    image.
 
     Example:
 
@@ -37,8 +37,10 @@ class ImageToImagePipeline(Pipeline):
 
     >>> from transformers import pipeline
 
-    >>> upscaler = pipeline('image-to-image', model="caidas/swin2SR-classical-sr-x2-64")
-    >>> parrots = Image.open(requests.get("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png", stream=True).raw)
+    >>> upscaler = pipeline("image-to-image", model="caidas/swin2SR-classical-sr-x2-64")
+    >>> parrots = Image.open(
+    ...     requests.get("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png", stream=True).raw
+    ... )
     >>> upscaled_parrots = upscaler(parrots)
     >>> parrots.size
     (768, 512)
@@ -51,8 +53,7 @@ class ImageToImagePipeline(Pipeline):
     This image to image pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"image-to-image"`.
 
-    See the list of available models on
-    [huggingface.co/models](https://huggingface.co/models?filter=image-to-image).
+    See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=image-to-image).
     """
 
     def __init__(self, *args, **kwargs):
@@ -94,9 +95,9 @@ class ImageToImagePipeline(Pipeline):
                 the call may block forever.
 
         Return:
-            An image (Image.Image) or a list of images (List["Image.Image"]) containing result(s). If the input is a single image,
-            the return will be also a single image, if the input is a list of several images, will return a list of transformed
-            images.
+            An image (Image.Image) or a list of images (List["Image.Image"]) containing result(s). If the input is a
+            single image, the return will be also a single image, if the input is a list of several images, will return
+            a list of transformed images.
         """
         return super().__call__(images, **kwargs)
 
