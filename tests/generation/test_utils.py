@@ -1031,7 +1031,6 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device).eval()
 
             # check `generate()` and `beam_search()` are equal
-            # change `num_return_sequences = 2` but not for `beam_scorer`
             if model.config.is_encoder_decoder:
                 max_length = 4
             beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
