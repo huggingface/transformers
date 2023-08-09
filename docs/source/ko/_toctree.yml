@@ -166,8 +166,8 @@
     title: 🤗 Transformers로 할 수 있는 작업
   - local: tasks_explained
     title: 🤗 Transformers로 작업을 해결하는 방법
-  - local: in_translation
-    title: (번역중) The Transformer model family
+  - local: model_summary
+    title: Transformer 모델군
   - local: in_translation
     title: (번역중) Summary of the tokenizers
   - local: attention
