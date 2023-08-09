@@ -115,8 +115,8 @@
       title: (번역중) Training on many GPUs
     - local: perf_train_cpu
       title: CPU에서 훈련
-    - local: in_translation
-      title: (번역중) Training on many CPUs
+    - local: perf_train_cpu_many
+      title: 다중 CPU에서 훈련하기
     - local: in_translation
       title: (번역중) Training on TPUs
     - local: in_translation
