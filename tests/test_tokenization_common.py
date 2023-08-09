@@ -392,10 +392,6 @@ class TokenizerTesterMixin:
                 SPECIAL_TOKEN_1 = "[SPECIAL_TOKEN_1]"
                 SPECIAL_TOKEN_2 = "[SPECIAL_TOKEN_2]"
 
-                # TODO:
-                # Can we combine `unique_no_split_tokens` and `all_special_tokens`(and properties related to it)
-                # with one variable(property) for a better maintainability?
-
                 # both method should add the token to `_additional_special_tokens` and `added_tokens_decoder`
                 tokenizer.add_tokens([SPECIAL_TOKEN_1], special_tokens=True)
                 tokenizer.add_special_tokens(

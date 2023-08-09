@@ -385,10 +385,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
     def __len__(self):
         """
-        Size of the full vocabulary with the added tokens. This should be the maximum index ? Or the actual length?
-        Imagine if there is a hole in the vocab? What is computed in fast?
+        Size of the full vocabulary with the added tokens. Counts the `keys` and not the `values` because otherwise if there
+        is a hole in the vocab, we will add tokenizers at a wrong index.
         """
-        return len(set(self.get_vocab().values()))
+        return len(set(self.get_vocab().keys()))
 
     def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
         """

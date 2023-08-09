@@ -937,12 +937,13 @@ class SpecialTokensMixin:
 
                 to_add = []
                 for token in value:
-                    to_add.append(token)
-                    if str(token) not in self._additional_special_tokens and str(token) not in to_add:
+                    if isinstance(token, (str)):
+                        # for legacy purpose we default to stripping. test_add_tokens_tokenizer depends on this
+                        token = AddedToken(token, normalized=False, rtrip=True, lstrip=True)
+                    if str(token) not in self.additional_special_tokens and str(token) not in to_add:
                         to_add.append(token)
-                # additional special tokens don't need to be added tokens as they are only used for decoding
                 if replace_additional_special_tokens:
-                    setattr(self, key, [str(i) for i in to_add])
+                    setattr(self, key, to_add)
                 else:
                     self._additional_special_tokens.extend(to_add)
                 added_tokens.extend(to_add)
@@ -955,7 +956,8 @@ class SpecialTokensMixin:
                     value = AddedToken(value, normalized=False, rtrip=True, lstrip=True)
                 if isinstance(value, AddedToken):
                     setattr(self, key, value)
-                added_tokens.append(value)
+                if value not in added_tokens:
+                    added_tokens.append(value)
 
         # if we are adding tokens that were not part of the vocab, we ought to add them
         added_tokens = self.add_tokens(added_tokens, special_tokens=True)
@@ -1161,8 +1163,11 @@ class SpecialTokensMixin:
 
     @additional_special_tokens.setter
     def additional_special_tokens(self, value):
-        # should only store the str. As the actual token value should not be duplicated
-        self._additional_special_tokens = value
+        # We store the actual tokens to allow adding tokens via `tokenizer.add_special_tokens`
+        if value is not None:
+            self._additional_special_tokens = [ AddedToken(token, normalized=False, rstrip=True, lstrip=True) if isinstance(token,str) and token != "" else token for token in value ]
+        else:
+            self._additional_special_tokens = value
 
     @property
     def bos_token_id(self) -> Optional[int]:
@@ -1591,7 +1596,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     @property
     def added_tokens_encoder(self) -> Dict[str, int]:
-        # FIXME might not be very efficient, since not stored? Is len usually computed?
         return {k.content: v for v, k in self._added_tokens_decoder.items()}
 
     @property
@@ -1666,8 +1670,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def get_vocab(self) -> Dict[str, int]:
         """
-        Returns the vocabulary as a dictionary of token to index. #TODO we have no way to isolate the size of the
-        actual vocab and the vocab with the added tokens
+        Returns the vocabulary as a dictionary of token to index.
 
         `tokenizer.get_vocab()[token]` is equivalent to `tokenizer.convert_tokens_to_ids(token)` when `token` is in the
         vocab.
@@ -1815,7 +1818,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         else:
             # At this point pretrained_model_name_or_path is either a directory or a model identifier name
             additional_files_names = {
-                "added_tokens_file": ADDED_TOKENS_FILE,  # TODO kept only for legacy
+                "added_tokens_file": ADDED_TOKENS_FILE,  # kept only for legacy
                 "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,  # kept only for legacy
                 "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
                 "tokenizer_file": FULL_TOKENIZER_FILE,  # used to initialize a slow from a fast. Properly copyu the `addedTokens` instead of adding in random orders
@@ -1932,7 +1935,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # file or if `from_slow` is set to True.
         from_slow = kwargs.get("from_slow", False)
         has_tokenizer_file = resolved_vocab_files.get("tokenizer_file", None) is not None
-
         if (from_slow or not has_tokenizer_file) and cls.slow_tokenizer_class is not None:
             slow_tokenizer = (cls.slow_tokenizer_class)._from_pretrained(
                 copy.deepcopy(resolved_vocab_files),
@@ -2056,11 +2058,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         init_kwargs["name_or_path"] = pretrained_model_name_or_path
 
-        # Slow from slow uses the kwargs
-
-        # Fast from fast uses the `added_tokens` field and should not look at the `added_tokens.json`
-
-        # Load a slow tokenizer form a fast file only:
+        # Load a slow tokenizer form a fast file only, convert the added_tokens to added_tokens_encoder
         added_tokens_decoder = {}
         if config_tokenizer_class is not None and "Fast" not in config_tokenizer_class and has_tokenizer_file:
             tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
@@ -2074,7 +2072,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     token = AddedToken(**serialized_tokens)
                     added_tokens_decoder[idx] = token
 
-        # Load a slow from a slow
+        # Load a slow from a slow, deserialize the added_tokens_decoder
         if "added_tokens_decoder" in init_kwargs:
             for idx, content in init_kwargs["added_tokens_decoder"].items():
                 if isinstance(content, dict):
@@ -2087,7 +2085,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     )
 
         # legacy: read the added_tokens_file and update kwargs with special_tokens_map
-        # I REALLY want to remove this, but some people will be affected :(
+        # I REALLY want to remove this, but some models will be affected :(
         else:
             special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
             if special_tokens_map_file is not None:
@@ -2116,7 +2114,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         additional_special_tokens = init_kwargs.get("additional_special_tokens", None)
         if additional_special_tokens and additional_special_tokens == []:
             init_kwargs["additional_special_tokens"] = None
-        # Instantiate tokenizer.
+
+        # Instantiate the tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
         except OSError:

@@ -119,6 +119,7 @@ class FNetTokenizer(PreTrainedTokenizer):
         # is included in the raw text, there should be a match in a non-normalized sentence.
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
         cls_token = AddedToken(cls_token, lstrip=True, rstrip=True) if isinstance(cls_token, str) else cls_token
+        sep_token = AddedToken(sep_token, lstrip=True, rstrip=True) if isinstance(cls_token, str) else cls_token
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         self.do_lower_case = do_lower_case

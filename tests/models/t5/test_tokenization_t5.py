@@ -445,7 +445,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
         input_ids = self.tokenizer.encode("▁He is not<extra_id_0>             ▁He")
         # here t5x does not eat with lstrip, so there is and extra ▁He in the original one
-        self.assertEqual(input_ids, [156, 46, 44, 1001, 0, 2])
+        self.assertEqual(input_ids, [156, 46, 44, 1001, 156, 2])
         tokens = self.tokenizer.tokenize("▁He is not<extra_id_0>              ▁He")
         self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<extra_id_0>", "He"])  # spaces are eaten by spm + our strip
         # make sure that the output after the extra id is the same as if
@@ -470,7 +470,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
     def test_special_tokens_strip(self):
         input_ids = self.tokenizer.encode(" <extra_id_0> ,")
-        self.assertEqual(input_ids, [1001, 3, 2])
+        self.assertEqual(input_ids, [1001, 7, 3, 2])
         tokens = self.tokenizer.tokenize(" <extra_id_0> ,")
         # spaces are eaten by rstrip / lstrip
         self.assertEqual(tokens, ["<extra_id_0>", ","])

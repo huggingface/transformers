@@ -150,12 +150,11 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         fairseq_language_code = FAIRSEQ_LANGUAGE_CODES[language_codes]
         self.lang_code_to_token = {lang_code: f"__{lang_code}__" for lang_code in fairseq_language_code}
 
-        kwargs["additional_special_tokens"] = kwargs.get("additional_special_tokens", [])
-        kwargs["additional_special_tokens"] += [
-            self.get_lang_token(lang_code)
-            for lang_code in fairseq_language_code
-            if self.get_lang_token(lang_code) not in kwargs["additional_special_tokens"]
-        ]
+        additional_special_tokens = kwargs.get("additional_special_tokens", [])
+        for lang_code in fairseq_language_code:
+            token = self.get_lang_token(lang_code)
+            if  token not in additional_special_tokens and lang_code not in str(token) not in self.added_tokens_encoder:
+                additional_special_tokens.append(token)
 
         self.vocab_file = vocab_file
         self.encoder = load_json(vocab_file)
@@ -187,14 +186,15 @@ class M2M100Tokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             language_codes=language_codes,
             sp_model_kwargs=self.sp_model_kwargs,
+            additional_special_tokens=additional_special_tokens,
             num_madeup_words=num_madeup_words,
             **kwargs,
         )
         self.set_src_lang_special_tokens(self._src_lang)
 
     @property
-    def vocab_size(self) -> int:
-        return len(self.encoder) + len(self.lang_token_to_id) + len(self.sp_model)
+    def vocab_size(self) -> int:        
+        return len(self.encoder) + len(self.sp_model)
 
     def get_vocab(self) -> Dict:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
