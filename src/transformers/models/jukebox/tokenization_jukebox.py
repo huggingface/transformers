@@ -163,7 +163,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         return len(self.artists_encoder) + len(self.genres_encoder) + len(self.lyrics_encoder)
 
     def get_vocab(self):
-        return dict(**self.artists_encoder, **self.genres_encoder, **self.lyrics_encoder)
+        return dict(artists_encoder= self.artists_encoder, genres_encoder = self.genres_encoder, lyrics_encoder=self.lyrics_encoder)
 
     def _convert_token_to_id(self, list_artists, list_genres, list_lyrics):
         """Converts the artist, genre and lyrics tokens to their index using the vocabulary.
