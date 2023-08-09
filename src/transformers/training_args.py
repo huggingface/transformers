@@ -193,9 +193,9 @@ class TrainingArguments:
         prediction_loss_only (`bool`, *optional*, defaults to `False`):
             When performing evaluation and generating predictions, only returns the loss.
         per_device_train_batch_size (`int`, *optional*, defaults to 8):
-            The batch size per GPU/TPU core/CPU for training.
+            The batch size per GPU/TPU/MPS/NPU core/CPU for training.
         per_device_eval_batch_size (`int`, *optional*, defaults to 8):
-            The batch size per GPU/TPU core/CPU for evaluation.
+            The batch size per GPU/TPU/MPS/NPU core/CPU for evaluation.
         gradient_accumulation_steps (`int`, *optional*, defaults to 1):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
@@ -648,10 +648,10 @@ class TrainingArguments:
     )
 
     per_device_train_batch_size: int = field(
-        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for training."}
+        default=8, metadata={"help": "Batch size per GPU/TPU/MPS/NPU core/CPU for training."}
     )
     per_device_eval_batch_size: int = field(
-        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
+        default=8, metadata={"help": "Batch size per GPU/TPU/MPS/NPU core/CPU for evaluation."}
     )
 
     per_gpu_train_batch_size: Optional[int] = field(
@@ -804,7 +804,9 @@ class TrainingArguments:
     )
     use_cpu: bool = field(
         default=False,
-        metadata={"help": " Whether or not to use cpu. If set to False, we will use cuda or mps device if available."},
+        metadata={
+            "help": " Whether or not to use cpu. If set to False, we will use cuda/tpu/mps/npu device if available."
+        },
     )
     use_mps_device: bool = field(
         default=False,
