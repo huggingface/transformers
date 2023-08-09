@@ -231,7 +231,7 @@ Dataset({
 })
 ```
 
-As a final preprocessing step, create a batch of examples using [`DefaultDataCollator`]:
+As a final step, create a batch of examples using [`DefaultDataCollator`]:
 
 ```py
 >>> from transformers import DefaultDataCollator
@@ -357,7 +357,8 @@ VQA as a generative task. Let's take [BLIP-2](../model_doc/blip-2) as an example
 paradigm in which any combination of pre-trained vision encoder and LLM can be used (learn more in the [BLIP-2 blog post](https://huggingface.co/blog/blip-2)). 
 This enables achieving state-of-the-art results on multiple visual-language tasks including visual question answering. 
 
-Let's illustrate how you can use this model for VQA. First, let's load the model and leverage a GPU: 
+Let's illustrate how you can use this model for VQA. First, let's load the model. Here we'll explicitly send the model to a 
+GPU, if available, which we didn't need to do earlier when training, as [`Trainer`] handles this automatically: 
 
 ```py
 >>> from transformers import AutoProcessor, Blip2ForConditionalGeneration
