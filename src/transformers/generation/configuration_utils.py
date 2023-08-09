@@ -597,7 +597,7 @@ class GenerationConfig(PushToHubMixin):
         >>> # If you'd like to try a minor variation to an existing configuration, you can also pass generation
         >>> # arguments to `.from_pretrained()`. Be mindful that typos and unused arguments will be ignored
         >>> generation_config, unused_kwargs = GenerationConfig.from_pretrained(
-        ...     "gpt2", top_k=1, foo=False, return_unused_kwargs=True
+        ...     "gpt2", top_k=1, foo=False, do_sample=True, return_unused_kwargs=True
         ... )
         >>> generation_config.top_k
         1
