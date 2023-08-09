@@ -1086,14 +1086,6 @@ class Trainer:
                 optimizer_kwargs.update(bnb_kwargs)
             except ImportError:
                 raise ValueError("Trainer tried to instantiate bnb optimizer but bnb is not installed!")
-        elif args.optim == OptimizerNames.ADAMW_BNB:
-            try:
-                from bitsandbytes.optim import Adam8bit
-
-                optimizer_cls = Adam8bit
-                optimizer_kwargs.update(adam_kwargs)
-            except ImportError:
-                raise ValueError("Trainer tried to instantiate bnb Adam8bit but bnb is not installed!")
         elif args.optim == OptimizerNames.ADAMW_ANYPRECISION:
             try:
                 from torchdistx.optimizers import AnyPrecisionAdamW
