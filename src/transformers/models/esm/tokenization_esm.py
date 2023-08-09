@@ -78,7 +78,7 @@ class EsmTokenizer(PreTrainedTokenizer):
         # none of them are special, but they all need special splitting.
 
         self.unique_no_split_tokens = self.all_tokens
-        self._create_trie(self.unique_no_split_tokens)
+        self._update_trie(self.unique_no_split_tokens)
 
     def _convert_id_to_token(self, index: int) -> str:
         return self._id_to_token.get(index, self.unk_token)

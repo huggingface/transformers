@@ -517,8 +517,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         tokenizer = LlamaTokenizer(SAMPLE_VOCAB, extra_ids=0, add_bos_token=False, legacy=False)
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<s>"]})
-        tokenizer._create_trie()
+        tokenizer.add_special_tokens({"additional_special_tokens": [AddedToken("<s>", rstrip=False, lstrip=False)]})
         cls.tokenizer = tokenizer
         return cls
 
@@ -552,13 +551,13 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(tokens, ["▁He", "▁is", "▁not"])  # no extra space added
 
         input_ids = self.tokenizer.encode("▁He is not<s>             ▁He")
-        self.assertEqual(input_ids, [156, 46, 44, 1, 0])
+        self.assertEqual(input_ids, [156, 46, 44, 1, 156])
         tokens = self.tokenizer.tokenize("▁He is not<s>              ▁He")
         self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<s>", "▁He"])  # spaces are eaten by spm + our strip
         # make sure that the output after the extra id is the same as if
         # extra_id was not there
         input_ids = self.tokenizer.encode("▁He is not             ▁He")
-        self.assertEqual(input_ids, [156, 46, 44, 0])
+        self.assertEqual(input_ids, [156, 46, 44, 156])
         tokens = self.tokenizer.tokenize("▁He is not              ▁He")
         self.assertEqual(tokens, ["▁He", "▁is", "▁not", "▁He"])  # spaces are eaten by spm even if not start
 

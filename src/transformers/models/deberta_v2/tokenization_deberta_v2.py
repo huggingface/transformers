@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as sp
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 
 
 PRETRAINED_VOCAB_FILES_MAP = {
@@ -135,6 +135,7 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
         self._tokenizer = SPMTokenizer(
             vocab_file, None, split_by_punct=split_by_punct, sp_model_kwargs=self.sp_model_kwargs
         )
+        unk_token = AddedToken(unk_token, normalized=True, lstrip=False, rstrip=False)
         super().__init__(
             do_lower_case=do_lower_case,
             bos_token=bos_token,
@@ -342,7 +343,6 @@ class SPMTokenizer:
             tokens.append(self.ids_to_tokens[i])
         return tokens
 
-    # TODO is this ever used???????????
     def decode(self, tokens, start=-1, end=-1, raw_text=None):
         if raw_text is None:
             current_sub_tokens = []
