@@ -32,7 +32,7 @@ class ImageToImagePipeline(Pipeline):
     Example:
 
     ```python
-    >>> from PIL import Images
+    >>> from PIL import Image
     >>> import requests
 
     >>> from transformers import pipeline
@@ -45,7 +45,7 @@ class ImageToImagePipeline(Pipeline):
     >>> parrots.size
     (768, 512)
 
-    >>> upscaled_parrots[0].size
+    >>> upscaled_parrots.size
     (1552, 1040)
     ```
 
