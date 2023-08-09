@@ -2991,7 +2991,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Dispatch model with hooks on all devices if necessary
         if device_map is not None:
             device_map_kwargs = {
-                "device_map": device_map, "offload_dir": offload_folder, "offload_index": offload_index
+                "device_map": device_map,
+                "offload_dir": offload_folder,
+                "offload_index": offload_index,
             }
             if "skip_keys" in inspect.signature(dispatch_model).parameters:
                 device_map_kwargs["skip_keys"] = model._skip_keys_device_placement
