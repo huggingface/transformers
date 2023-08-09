@@ -447,7 +447,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         # here t5x does not eat with lstrip, so there is and extra ▁He in the original one
         self.assertEqual(input_ids, [156, 46, 44, 1001, 156, 2])
         tokens = self.tokenizer.tokenize("▁He is not<extra_id_0>              ▁He")
-        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<extra_id_0>", "He"])  # spaces are eaten by spm + our strip
+        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<extra_id_0>", "▁He"])  # spaces are eaten by spm
         # make sure that the output after the extra id is the same as if
         # extra_id was not there
         input_ids = self.tokenizer.encode("▁He is not             ▁He")
@@ -472,15 +472,15 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode(" <extra_id_0> ,")
         self.assertEqual(input_ids, [1001, 7, 3, 2])
         tokens = self.tokenizer.tokenize(" <extra_id_0> ,")
-        # spaces are eaten by rstrip / lstrip
-        self.assertEqual(tokens, ["<extra_id_0>", ","])
+        # spaces are not longer eaten by rstrip and lstrip
+        self.assertEqual(tokens, ['<extra_id_0>', '▁', ','])
 
         # test with a begin of word like `▁He`
         input_ids = self.tokenizer.encode("No <extra_id_0> He")
-        self.assertEqual(input_ids, [284, 1001, 0, 2])
+        self.assertEqual(input_ids, [284, 1001, 156, 2])
         # spaces are eaten by rstrip / lstrip, so this is expected. Don't strip otherwise you break
         tokens = self.tokenizer.tokenize("No <extra_id_0> He")
-        self.assertEqual(tokens, ["▁No", "<extra_id_0>", "He"])
+        self.assertEqual(tokens, ["▁No", "<extra_id_0>", "▁He"])
 
         # Make sure this does not happen if we don't strip
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=0)
