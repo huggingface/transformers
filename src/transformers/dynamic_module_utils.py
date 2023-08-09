@@ -59,7 +59,7 @@ def create_dynamic_module(name: Union[str, os.PathLike]):
     Creates a dynamic module in the cache directory for modules.
     """
     init_hf_modules()
-    dynamic_module_path = Path(HF_MODULES_CACHE) / name
+    dynamic_module_path = (Path(HF_MODULES_CACHE) / name).resolve()
     # If the parent module does not exist yet, recursively create it.
     if not dynamic_module_path.parent.exists():
         create_dynamic_module(dynamic_module_path.parent)
