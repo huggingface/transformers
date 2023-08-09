@@ -1336,7 +1336,7 @@ class BarkFineModel(BarkPreTrainedModel):
             input_buffer = fine_input[:, start_idx : start_idx + max_fine_input_length, :]
             for n_inner in range(n_coarse, fine_generation_config.n_fine_codebooks):
                 logits = self.forward(n_inner, input_buffer).logits
-                if temperature is None:
+                if temperature is None or temperature == 1.0:
                     relevant_logits = logits[:, rel_start_fill_idx:, :codebook_size]
                     codebook_preds = torch.argmax(relevant_logits, -1)
                 else:
