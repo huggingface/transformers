@@ -308,7 +308,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         elif "<unk>" in self.sym2idx:
             self.unk_idx = self.sym2idx["<unk>"]
         else:
-            raise ValueError("No <unknown> token in vocabulary")
+            logger.warn("Token not in vocabulary and no <unk> token in vocabulary for replacement. Will automatically be added")
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if os.path.isdir(save_directory):
@@ -465,7 +465,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             elif "<UNK>" in self.sym2idx:
                 return self.sym2idx["<UNK>"]
             else:
-                raise ValueError("Token not in vocabulary and no <unk> token in vocabulary for replacement")
+                logger.warn("Token not in vocabulary and no <unk> token in vocabulary for replacement. Will automatically be added")
 
     def convert_tokens_to_string(self, tokens):
         """

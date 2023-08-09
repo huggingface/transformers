@@ -118,8 +118,8 @@ class FNetTokenizer(PreTrainedTokenizer):
         # Mask token behave like a normal word, i.e. include the space before it and
         # is included in the raw text, there should be a match in a non-normalized sentence.
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-        cls_token = AddedToken(cls_token, lstrip=True, rstrip=True) if isinstance(cls_token, str) else cls_token
-        sep_token = AddedToken(sep_token, lstrip=True, rstrip=True) if isinstance(cls_token, str) else cls_token
+        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
+        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         self.do_lower_case = do_lower_case
@@ -234,48 +234,10 @@ class FNetTokenizer(PreTrainedTokenizer):
         token_ids: List[int],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = None,
-        spaces_between_special_tokens: bool = True,
+        spaces_between_special_tokens: bool = False,
         **kwargs,
     ) -> str:
-        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
-
-        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
-
-        # To avoid mixing byte-level and unicode for byte-level BPT
-        # we need to build string separately for added tokens and byte-level tokens
-        # cf. https://github.com/huggingface/transformers/issues/1133
-        sub_texts = []
-        current_sub_text = []
-        for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_ids:
-                continue
-            if token in self.added_tokens_encoder:
-                if current_sub_text:
-                    sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-                    current_sub_text = []
-                sub_texts.append(token)
-            else:
-                current_sub_text.append(token)
-        if current_sub_text:
-            sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-
-        # Mimic the behavior of the Rust tokenizer:
-        # No space after <unk>
-        if spaces_between_special_tokens:
-            text = re.sub(r"(<unk>) ", r"\1", " ".join(sub_texts))
-        else:
-            text = "".join(sub_texts)
-
-        clean_up_tokenization_spaces = (
-            clean_up_tokenization_spaces
-            if clean_up_tokenization_spaces is not None
-            else self.clean_up_tokenization_spaces
-        )
-        if clean_up_tokenization_spaces:
-            clean_text = self.clean_up_tokenization(text)
-            return clean_text
-        else:
-            return text
+        return super()._decode(token_ids, skip_special_tokens, clean_up_tokenization_spaces, spaces_between_special_tokens, **kwargs)
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
