@@ -538,12 +538,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 left = tokens[i - 1] if i > 0 else None
                 right = tokens[i + 1] if i < len(tokens) - 1 else None
                 if isinstance(tok_extended, AddedToken):
-                    if tok_extended.single_word and left and left[-1] != " ":
-                            tokens[i - 1] += token
-                            tokens[i] = ""
-                    if tok_extended.single_word and right and right[0] != " ":
-                            tokens[i + 1] = token + tokens[i + 1]
-                            tokens[i] = ""
                     if tok_extended.rstrip and right:
                         # A bit counter-intuitive but we strip the left of the string
                         # since tok_extended.rstrip means the special token is eating all white spaces on its right
@@ -551,6 +545,13 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     # Strip white spaces on the left
                     if tok_extended.lstrip and left:
                         tokens[i - 1] = left.rstrip()  # Opposite here
+                    if tok_extended.single_word and left and left[-1] != " ":
+                            tokens[i - 1] += token
+                            tokens[i] = ""
+                    elif tok_extended.single_word and right and right[0] != " ":
+                            tokens[i + 1] = token + tokens[i + 1]
+                            tokens[i] = ""
+
                 else:
                     raise ValueError(
                         f"{tok_extended} cannot be tokenized because it was not properly added"

@@ -177,6 +177,14 @@ class NllbTokenizer(PreTrainedTokenizer):
         self._src_lang = src_lang if src_lang is not None else "eng_Latn"
         self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
 
+        _additional_special_tokens = list(self.lang_code_to_id.keys())
+
+        if additional_special_tokens is not None:
+            # Only add those special tokens if they are not already there.
+            _additional_special_tokens.extend(
+                [t for t in additional_special_tokens if t not in self._additional_special_tokens]
+            )
+            
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -188,7 +196,7 @@ class NllbTokenizer(PreTrainedTokenizer):
             tokenizer_file=tokenizer_file,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
-            additional_special_tokens=additional_special_tokens,
+            additional_special_tokens=_additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
             legacy_behaviour=legacy_behaviour,
             **kwargs,
@@ -197,14 +205,6 @@ class NllbTokenizer(PreTrainedTokenizer):
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
 
-        # TODO ArthurZ maybe pass the argument to super properly no?
-        self._additional_special_tokens = list(self.lang_code_to_id.keys())
-
-        if additional_special_tokens is not None:
-            # Only add those special tokens if they are not already there.
-            self._additional_special_tokens.extend(
-                [t for t in additional_special_tokens if t not in self._additional_special_tokens]
-            )
 
     def __getstate__(self):
         state = self.__dict__.copy()
