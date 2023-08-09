@@ -316,7 +316,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 
 
 # Copied from transformers.models.beit.modeling_beit.BeitDropPath
-class Dinov2DropPath:
+class Dinov2DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
