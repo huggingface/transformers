@@ -37,8 +37,10 @@ _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
 CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
     "DecisionTransformerConfig",
     "EncoderDecoderConfig",
+    "MusicgenConfig",
     "RagConfig",
     "SpeechEncoderDecoderConfig",
+    "TimmBackboneConfig",
     "VisionEncoderDecoderConfig",
     "VisionTextDualEncoderConfig",
     "LlamaConfig",
@@ -72,6 +74,9 @@ def check_config_docstrings_have_checkpoints():
     configs_without_checkpoint = []
 
     for config_class in list(CONFIG_MAPPING.values()):
+        # Skip deprecated models
+        if "models.deprecated" in config_class.__module__:
+            continue
         checkpoint = get_checkpoint_from_config_class(config_class)
 
         name = config_class.__name__
@@ -80,7 +85,12 @@ def check_config_docstrings_have_checkpoints():
 
     if len(configs_without_checkpoint) > 0:
         message = "\n".join(sorted(configs_without_checkpoint))
-        raise ValueError(f"The following configurations don't contain any valid checkpoint:\n{message}")
+        raise ValueError(
+            f"The following configurations don't contain any valid checkpoint:\n{message}\n\n"
+            "The requirement is to include a link pointing to one of the models of this architecture in the "
+            "docstring of the config classes listed above. The link should have be a markdown format like "
+            "[myorg/mymodel](https://huggingface.co/myorg/mymodel)."
+        )
 
 
 if __name__ == "__main__":

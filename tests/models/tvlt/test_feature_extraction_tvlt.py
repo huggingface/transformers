@@ -22,7 +22,7 @@ import unittest
 
 import numpy as np
 
-from transformers import is_datasets_available, is_speech_available
+from transformers import TvltFeatureExtractor, is_datasets_available
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
 from transformers.utils.import_utils import is_torch_available
 
@@ -34,9 +34,6 @@ if is_torch_available():
 
 if is_datasets_available():
     from datasets import load_dataset
-
-if is_speech_available():
-    from transformers import TvltFeatureExtractor
 
 global_rng = random.Random()
 
@@ -111,7 +108,7 @@ class TvltFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_torchaudio
 class TvltFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-    feature_extraction_class = TvltFeatureExtractor if is_speech_available() else None
+    feature_extraction_class = TvltFeatureExtractor
 
     def setUp(self):
         self.feat_extract_tester = TvltFeatureExtractionTester(self)
@@ -184,6 +181,15 @@ class TvltFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
             np_speech_inputs, return_tensors="np", sampling_rate=44100, mask_audio=True
         ).audio_values
 
+        self.assertTrue(encoded_audios.ndim == 4)
+        self.assertTrue(encoded_audios.shape[-1] == feature_extractor.feature_size)
+        self.assertTrue(encoded_audios.shape[-2] <= feature_extractor.spectrogram_length)
+        self.assertTrue(encoded_audios.shape[-3] == feature_extractor.num_channels)
+
+        # Test 2-D numpy arrays are batched.
+        speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
+        np_speech_inputs = np.asarray(speech_inputs)
+        encoded_audios = feature_extractor(np_speech_inputs, return_tensors="np", sampling_rate=44100).audio_values
         self.assertTrue(encoded_audios.ndim == 4)
         self.assertTrue(encoded_audios.shape[-1] == feature_extractor.feature_size)
         self.assertTrue(encoded_audios.shape[-2] <= feature_extractor.spectrogram_length)

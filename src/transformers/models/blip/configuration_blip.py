@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Blip model configuration"""
 
-import copy
 import os
 from typing import Union
 
@@ -161,6 +160,8 @@ class BlipTextConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from BlipConfig
@@ -234,7 +235,6 @@ class BlipVisionConfig(PretrainedConfig):
         projection_dim=512,
         num_hidden_layers=12,
         num_attention_heads=12,
-        num_channels=3,
         image_size=384,
         patch_size=16,
         hidden_act="gelu",
@@ -250,7 +250,6 @@ class BlipVisionConfig(PretrainedConfig):
         self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
         self.patch_size = patch_size
         self.image_size = image_size
         self.initializer_range = initializer_range
@@ -260,6 +259,8 @@ class BlipVisionConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from BlipConfig
@@ -323,7 +324,6 @@ class BlipConfig(PretrainedConfig):
     ```"""
 
     model_type = "blip"
-    is_composition = True
 
     def __init__(
         self,
@@ -366,16 +366,3 @@ class BlipConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["text_config"] = self.text_config.to_dict()
-        output["vision_config"] = self.vision_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

@@ -18,9 +18,8 @@ import warnings
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
-import torch
 
-from ...audio_utils import mel_filter_bank, optimal_fft_length, spectrogram
+from ...audio_utils import mel_filter_bank, optimal_fft_length, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
@@ -113,8 +112,7 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         self.n_fft = optimal_fft_length(self.sample_size)
         self.n_freqs = (self.n_fft // 2) + 1
 
-        window = getattr(torch, self.win_function)(window_length=self.sample_size, periodic=True)
-        self.window = window.numpy().astype(np.float64)
+        self.window = window_function(window_length=self.sample_size, name=self.win_function, periodic=True)
 
         self.mel_filters = mel_filter_bank(
             num_frequency_bins=self.n_freqs,
@@ -201,7 +199,8 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         Args:
             audio (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, *optional*):
                 The sequence or batch of sequences to be processed. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values. This outputs waveform features.
+                values, a list of numpy arrays or a list of list of float values. This outputs waveform features. Must
+                be mono channel audio, not stereo, i.e. single float per timestep.
             audio_target (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, *optional*):
                 The sequence or batch of sequences to be processed as targets. Each sequence can be a numpy array, a
                 list of float values, a list of numpy arrays or a list of list of float values. This outputs log-mel
@@ -307,9 +306,11 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
-        is_batched = bool(
-            isinstance(speech, (list, tuple))
-            and (isinstance(speech[0], np.ndarray) or isinstance(speech[0], (tuple, list)))
+        is_batched_numpy = isinstance(speech, np.ndarray) and len(speech.shape) > 1
+        if is_batched_numpy and len(speech.shape) > 2:
+            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+        is_batched = is_batched_numpy or (
+            isinstance(speech, (list, tuple)) and (isinstance(speech[0], (np.ndarray, tuple, list)))
         )
 
         if is_batched:

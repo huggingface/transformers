@@ -1522,7 +1522,7 @@ class Seq2SeqTSModelOutput(ModelOutput):
         scale (`torch.FloatTensor` of shape `(batch_size,)` or `(batch_size, input_size)`, *optional*):
             Scaling values of each time series' context window which is used to give the model inputs of the same
             magnitude and then used to rescale back to the original magnitude.
-        static_features: (`torch.FloatTensor` of shape `(batch_size, feature size)`, *optional*):
+        static_features (`torch.FloatTensor` of shape `(batch_size, feature size)`, *optional*):
             Static features of each time series' in a batch which are copied to the covariates at inference time.
     """
 
@@ -1593,7 +1593,7 @@ class Seq2SeqTSPredictionOutput(ModelOutput):
         scale (`torch.FloatTensor` of shape `(batch_size,)` or `(batch_size, input_size)`, *optional*):
             Scaling values of each time series' context window which is used to give the model inputs of the same
             magnitude and then used to rescale back to the original magnitude.
-        static_features: (`torch.FloatTensor` of shape `(batch_size, feature size)`, *optional*):
+        static_features (`torch.FloatTensor` of shape `(batch_size, feature size)`, *optional*):
             Static features of each time series' in a batch which are copied to the covariates at inference time.
     """
 

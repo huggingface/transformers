@@ -117,9 +117,9 @@ def create_optimizer(
             The beta2 to use in Adam.
         adam_epsilon (`float`, *optional*, defaults to 1e-8):
             The epsilon to use in Adam.
-        adam_clipnorm: (`float`, *optional*, defaults to `None`):
+        adam_clipnorm (`float`, *optional*, defaults to `None`):
             If not `None`, clip the gradient norm for each weight tensor to this value.
-        adam_global_clipnorm: (`float`, *optional*, defaults to `None`)
+        adam_global_clipnorm (`float`, *optional*, defaults to `None`)
             If not `None`, clip gradient norm to this value. When using this argument, the norm is computed over all
             weight tensors, as if they were concatenated into a single vector.
         weight_decay_rate (`float`, *optional*, defaults to 0):
@@ -201,7 +201,7 @@ class AdamWeightDecay(Adam):
             `include_in_weight_decay` is passed, the names in it will supersede this list.
         name (`str`, *optional*, defaults to 'AdamWeightDecay'):
             Optional name for the operations created when applying gradients.
-        kwargs:
+        kwargs (`Dict[str, Any]`, *optional*):
             Keyword arguments. Allowed to be {`clipnorm`, `clipvalue`, `lr`, `decay`}. `clipnorm` is clip gradients by
             norm; `clipvalue` is clip gradients by value, `decay` is included for backward compatibility to allow time
             inverse decay of learning rate. `lr` is included for backward compatibility, recommended to use

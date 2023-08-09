@@ -25,12 +25,10 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size
 from ...image_transforms import (
     PaddingMode,
     get_resize_output_image_size,
-    normalize,
     pad,
     rescale,
     resize,
     to_channel_dimension_format,
-    to_numpy_array,
 )
 from ...image_utils import (
     ChannelDimension,
@@ -39,6 +37,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     make_list_of_images,
+    to_numpy_array,
     valid_images,
 )
 from ...utils import (
@@ -478,27 +477,25 @@ class OneFormerImageProcessor(BaseImageProcessor):
         image = resize(image, size=size, resample=resample, data_format=data_format)
         return image
 
-    # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.rescale
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.rescale
     def rescale(
-        self, image: np.ndarray, rescale_factor: float, data_format: Optional[ChannelDimension] = None
+        self, image: np.ndarray, rescale_factor: float, data_format: Optional[Union[str, ChannelDimension]] = None
     ) -> np.ndarray:
         """
-        Rescale the image by the given factor.
+        Rescale the image by the given factor. image = image * rescale_factor.
+
+        Args:
+            image (`np.ndarray`):
+                Image to rescale.
+            rescale_factor (`float`):
+                The value to use for rescaling.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
         return rescale(image, rescale_factor, data_format=data_format)
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: Union[float, Iterable[float]],
-        std: Union[float, Iterable[float]],
-        data_format: Optional[ChannelDimension] = None,
-    ) -> np.ndarray:
-        """
-        Normalize the image with the given mean and standard deviation.
-        """
-        return normalize(image, mean=mean, std=std, data_format=data_format)
 
     # Copied from transformers.models.maskformer.image_processing_maskformer.MaskFormerImageProcessor.convert_segmentation_map_to_binary_masks
     def convert_segmentation_map_to_binary_masks(
@@ -507,7 +504,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
         ignore_index: Optional[int] = None,
         reduce_labels: bool = False,
-        **kwargs,
     ):
         reduce_labels = reduce_labels if reduce_labels is not None else self.reduce_labels
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
@@ -744,7 +740,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
-    ) -> np.ndarray:
+    ) -> BatchFeature:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
         in the batch and optionally returns their corresponding pixel mask.
@@ -756,8 +752,13 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 The value to use for the padding if `mode` is `"constant"`.
             return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return a pixel mask.
-            input_channel_dimension (`ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be inferred from the input image.
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return. Can be one of:
+                    - Unset: Return a list of `np.ndarray`.
+                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
+                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
@@ -881,7 +882,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         ignore_index: Optional[int] = None,
         reduce_labels: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs,
     ):
         """
         Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
@@ -935,11 +935,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
             - **text_inputs** -- Optional list of text string entries to be fed to a model (when `annotations` are
               provided). They identify the binary masks present in the image.
         """
-        if "pad_and_return_pixel_mask" in kwargs:
-            warnings.warn(
-                "The `pad_and_return_pixel_mask` argument has no effect and will be removed in v4.27", FutureWarning
-            )
-
         ignore_index = self.ignore_index if ignore_index is None else ignore_index
         reduce_labels = self.do_reduce_labels if reduce_labels is None else reduce_labels
         pixel_values_list = [to_numpy_array(pixel_values) for pixel_values in pixel_values_list]

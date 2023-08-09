@@ -18,7 +18,12 @@ from typing import Dict
 
 import numpy as np
 
-from transformers import MODEL_FOR_MASK_GENERATION_MAPPING, is_vision_available, pipeline
+from transformers import (
+    MODEL_FOR_MASK_GENERATION_MAPPING,
+    TF_MODEL_FOR_MASK_GENERATION_MAPPING,
+    is_vision_available,
+    pipeline,
+)
 from transformers.pipelines import MaskGenerationPipeline
 from transformers.testing_utils import (
     is_pipeline_test,
@@ -58,6 +63,9 @@ class MaskGenerationPipelineTests(unittest.TestCase):
     model_mapping = dict(
         (list(MODEL_FOR_MASK_GENERATION_MAPPING.items()) if MODEL_FOR_MASK_GENERATION_MAPPING else [])
     )
+    tf_model_mapping = dict(
+        (list(TF_MODEL_FOR_MASK_GENERATION_MAPPING.items()) if TF_MODEL_FOR_MASK_GENERATION_MAPPING else [])
+    )
 
     def get_test_pipeline(self, model, tokenizer, processor):
         image_segmenter = MaskGenerationPipeline(model=model, image_processor=processor)
@@ -66,7 +74,7 @@ class MaskGenerationPipelineTests(unittest.TestCase):
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
         ]
 
-    # TODO: Fix me @Arthur
+    # TODO: Implement me @Arthur
     def run_pipeline_test(self, mask_generator, examples):
         pass
 

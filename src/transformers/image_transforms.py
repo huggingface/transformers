@@ -24,7 +24,6 @@ from .image_utils import (
     get_channel_dimension_axis,
     get_image_size,
     infer_channel_dimension_format,
-    to_numpy_array,
 )
 from .utils import ExplicitEnum, TensorType, is_jax_tensor, is_tf_tensor, is_torch_tensor
 from .utils.import_utils import (
@@ -114,7 +113,9 @@ def rescale(
     rescaled_image = image * scale
     if data_format is not None:
         rescaled_image = to_channel_dimension_format(rescaled_image, data_format)
+
     rescaled_image = rescaled_image.astype(dtype)
+
     return rescaled_image
 
 
@@ -345,18 +346,6 @@ def normalize(
         data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the output image. If unset, will use the inferred format from the input.
     """
-    requires_backends(normalize, ["vision"])
-
-    if isinstance(image, PIL.Image.Image):
-        warnings.warn(
-            "PIL.Image.Image inputs are deprecated and will be removed in v4.26.0. Please use numpy arrays instead.",
-            FutureWarning,
-        )
-        # Convert PIL image to numpy array with the same logic as in the previous feature extractor normalize -
-        # casting to numpy array and dividing by 255.
-        image = to_numpy_array(image)
-        image = rescale(image, scale=1 / 255)
-
     if not isinstance(image, np.ndarray):
         raise ValueError("image must be a numpy array")
 
@@ -418,15 +407,10 @@ def center_crop(
     """
     requires_backends(center_crop, ["vision"])
 
-    if isinstance(image, PIL.Image.Image):
-        warnings.warn(
-            "PIL.Image.Image inputs are deprecated and will be removed in v4.26.0. Please use numpy arrays instead.",
-            FutureWarning,
-        )
-        image = to_numpy_array(image)
-        return_numpy = False if return_numpy is None else return_numpy
-    else:
-        return_numpy = True if return_numpy is None else return_numpy
+    if return_numpy is not None:
+        warnings.warn("return_numpy is deprecated and will be removed in v.4.33", FutureWarning)
+
+    return_numpy = True if return_numpy is None else return_numpy
 
     if not isinstance(image, np.ndarray):
         raise ValueError(f"Input image must be of type np.ndarray, got {type(image)}")
@@ -741,4 +725,33 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
         return image
 
     image = image.convert("RGB")
+    return image
+
+
+def flip_channel_order(image: np.ndarray, data_format: Optional[ChannelDimension] = None) -> np.ndarray:
+    """
+    Flips the channel order of the image.
+
+    If the image is in RGB format, it will be converted to BGR and vice versa.
+
+    Args:
+        image (`np.ndarray`):
+            The image to flip.
+        data_format (`ChannelDimension`, *optional*):
+            The channel dimension format for the output image. Can be one of:
+                - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            If unset, will use same as the input image.
+    """
+
+    input_data_format = infer_channel_dimension_format(image)
+    if input_data_format == ChannelDimension.LAST:
+        image = image[..., ::-1]
+    elif input_data_format == ChannelDimension.FIRST:
+        image = image[::-1, ...]
+    else:
+        raise ValueError(f"Unsupported channel dimension: {input_data_format}")
+
+    if data_format is not None:
+        image = to_channel_dimension_format(image, data_format)
     return image

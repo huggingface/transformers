@@ -19,12 +19,16 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import center_crop, get_resize_output_image_size, rescale, resize, to_channel_dimension_format
+from ...image_transforms import (
+    flip_channel_order,
+    get_resize_output_image_size,
+    resize,
+    to_channel_dimension_format,
+)
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    infer_channel_dimension_format,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -40,34 +44,6 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-def flip_channel_order(image: np.ndarray, data_format: Optional[ChannelDimension]) -> np.ndarray:
-    """
-    Flip the color channels from RGB to BGR or vice versa.
-
-    Args:
-        image (`np.ndarray`):
-            The image, represented as a numpy array.
-        data_format (`ChannelDimension`, *`optional`*):
-            The channel dimension format of the image. If not provided, it will be the same as the input image.
-
-    Returns:
-        `np.ndarray`: The image with the flipped color channels.
-    """
-    input_data_format = infer_channel_dimension_format(image)
-
-    if input_data_format == ChannelDimension.LAST:
-        image = image[..., ::-1]
-    elif input_data_format == ChannelDimension.FIRST:
-        image = image[:, ::-1, ...]
-    else:
-        raise ValueError(f"Invalid input channel dimension format: {input_data_format}")
-
-    if data_format is not None:
-        image = to_channel_dimension_format(image, data_format)
-
-    return image
 
 
 class MobileViTImageProcessor(BaseImageProcessor):
@@ -131,23 +107,24 @@ class MobileViTImageProcessor(BaseImageProcessor):
         self.crop_size = crop_size
         self.do_flip_channel_order = do_flip_channel_order
 
+    # Copied from transformers.models.mobilenet_v1.image_processing_mobilenet_v1.MobileNetV1ImageProcessor.resize with PILImageResampling.BICUBIC->PILImageResampling.BILINEAR
     def resize(
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        resample: PILImageResampling = PIL.Image.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
-        Resize an image.
+        Resize an image. The shortest edge of the image is resized to size["shortest_edge"], with the longest edge
+        resized to keep the input aspect ratio.
 
         Args:
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
-                Controls the size of the output image. The shortest edge of the image will be resized to
-                `size["shortest_edge"]` while maintaining the aspect ratio.
+                Size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
@@ -155,53 +132,9 @@ class MobileViTImageProcessor(BaseImageProcessor):
         """
         size = get_size_dict(size, default_to_square=False)
         if "shortest_edge" not in size:
-            raise ValueError(f"The `size` dictionary must contain the key `shortest_edge`. Got {size.keys()}")
+            raise ValueError(f"The `size` parameter must contain the key `shortest_edge`. Got {size.keys()}")
         output_size = get_resize_output_image_size(image, size=size["shortest_edge"], default_to_square=False)
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
-
-    def center_crop(
-        self,
-        image: np.ndarray,
-        size: Dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Center crop an image to size `(size["height], size["width"])`. If the input size is smaller than `size` along
-        any edge, the image is padded with 0's and then center cropped.
-
-        Args:
-            image (`np.ndarray`):
-                Image to center crop.
-            size (`Dict[str, int]`):
-                Size of the output image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        return center_crop(image, size=(size["height"], size["width"]), data_format=data_format, **kwargs)
-
-    def rescale(
-        self,
-        image: np.ndarray,
-        scale: Union[int, float],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ):
-        """
-        Rescale an image by a scale factor. image = image * scale.
-
-        Args:
-            image (`np.ndarray`):
-                Image to rescale.
-            scale (`int` or `float`):
-                Scale to apply to the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        return rescale(image, scale=scale, data_format=data_format, **kwargs)
 
     def flip_channel_order(
         self, image: np.ndarray, data_format: Optional[Union[str, ChannelDimension]] = None
@@ -319,6 +252,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->MobileViT
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
         """
         Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps. Only supports
@@ -327,15 +261,14 @@ class MobileViTImageProcessor(BaseImageProcessor):
         Args:
             outputs ([`MobileViTForSemanticSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`List[Tuple]`, *optional*):
-                A list of length `batch_size`, where each item is a `Tuple[int, int]` corresponding to the requested
-                final size (height, width) of each prediction. If left to None, predictions will not be resized.
+            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
+                predictions will not be resized.
 
         Returns:
-            `List[torch.Tensor]`:
-                A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
-                corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
-                `torch.Tensor` correspond to a semantic class id.
+            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
+            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
         # TODO: add support for other frameworks
         logits = outputs.logits

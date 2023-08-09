@@ -19,12 +19,11 @@ from typing import Dict, Optional, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import resize, to_channel_dimension_format, to_pil_image
+from ...image_transforms import flip_channel_order, resize, to_channel_dimension_format, to_pil_image
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    infer_channel_dimension_format,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -85,20 +84,6 @@ def apply_tesseract(image: np.ndarray, lang: Optional[str], tesseract_config: Op
     return words, normalized_boxes
 
 
-def flip_channel_order(image: np.ndarray, data_format: Optional[ChannelDimension] = None) -> np.ndarray:
-    input_data_format = infer_channel_dimension_format(image)
-    if input_data_format == ChannelDimension.LAST:
-        image = image[..., ::-1]
-    elif input_data_format == ChannelDimension.FIRST:
-        image = image[:, ::-1, ...]
-    else:
-        raise ValueError(f"Unsupported channel dimension: {input_data_format}")
-
-    if data_format is not None:
-        image = to_channel_dimension_format(image, data_format)
-    return image
-
-
 class LayoutLMv2ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a LayoutLMv2 image processor.
@@ -146,6 +131,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         self.ocr_lang = ocr_lang
         self.tesseract_config = tesseract_config
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
@@ -161,15 +147,21 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
-                Size of the output image.
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-                Resampling filter to use when resizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
+            data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The resized image.
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"The size dictionary must contain the keys 'height' and 'width'. Got {size.keys()}")
+            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
         output_size = (size["height"], size["width"])
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 

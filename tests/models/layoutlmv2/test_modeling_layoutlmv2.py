@@ -55,7 +55,7 @@ class LayoutLMv2ModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=36,
-        num_hidden_layers=3,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -270,10 +270,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         else ()
     )
     pipeline_model_mapping = (
-        {
-            "document-question-answering": LayoutLMv2ForQuestionAnswering,
-            "feature-extraction": LayoutLMv2Model,
-        }
+        {"document-question-answering": LayoutLMv2ForQuestionAnswering, "feature-extraction": LayoutLMv2Model}
         if is_torch_available()
         else {}
     )
@@ -417,6 +414,10 @@ class LayoutLMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    @unittest.skip("We cannot configure detectron2 to output a smaller backbone")
+    def test_model_is_small(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):

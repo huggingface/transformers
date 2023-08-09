@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import DebertaV2Config, is_tf_available
@@ -48,7 +50,7 @@ class TFDebertaV2ModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",

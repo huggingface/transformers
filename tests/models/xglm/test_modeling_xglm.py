@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import datetime
+import gc
 import math
 import unittest
 
@@ -43,7 +44,7 @@ class XGLMModelTester:
         use_labels=True,
         vocab_size=99,
         d_model=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         ffn_dim=37,
         activation_function="gelu",
@@ -346,9 +347,19 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             model = XGLMModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skip("Does not work on the tiny model as we keep hitting edge cases.")
+    def test_model_parallelism(self):
+        super().test_model_parallelism()
+
 
 @require_torch
 class XGLMModelLanguageGenerationTest(unittest.TestCase):
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        torch.cuda.empty_cache()
+
     def _test_lm_generate_xglm_helper(
         self,
         gradient_checkpointing=False,

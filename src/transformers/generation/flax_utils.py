@@ -296,7 +296,7 @@ class FlaxGenerationMixin:
                 Custom logits processors that complement the default logits processors built from arguments and
                 generation config. If a logit processor is passed that is already created with the arguments or a
                 generation config an error is thrown. This feature is intended for advanced users.
-            kwargs:
+            kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
@@ -319,7 +319,7 @@ class FlaxGenerationMixin:
                         "You have modified the pretrained model configuration to control generation. This is a"
                         " deprecated strategy to control generation and will be removed soon, in a future version."
                         " Please use a generation configuration file (see"
-                        " https://huggingface.co/docs/transformers/main_classes/text_generation)"
+                        " https://huggingface.co/docs/transformers/main_classes/text_generation )"
                     )
                     self.generation_config = new_generation_config
             generation_config = self.generation_config
@@ -377,11 +377,11 @@ class FlaxGenerationMixin:
         # Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        if has_default_max_length and generation_config.max_new_tokens is None:
+        if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length != 20:
+            # 20 is the default max_length of the generation config
             warnings.warn(
-                f"Using `max_length`'s default ({generation_config.max_length}) to control the generation length. "
-                "This behaviour is deprecated and will be removed from the config in v5 of Transformers -- we"
-                " recommend using `max_new_tokens` to control the maximum length of the generation.",
+                f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
+                "to control the generation length.  recommend setting `max_new_tokens` to control the maximum length of the generation.",
                 UserWarning,
             )
         elif generation_config.max_new_tokens is not None:

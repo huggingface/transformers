@@ -210,7 +210,7 @@ class Pix2StructVisionAttention(nn.Module):
                 attention_mask = torch.ones((batch_size, seq_length), device=scores.device, dtype=scores.dtype)
 
             if attention_mask.dim() == 2:
-                position_bias = position_bias + attention_mask[:, None, :, None].to(position_bias.device)
+                position_bias = position_bias + attention_mask[:, None, None, :].to(position_bias.device)
             else:
                 # (batch_size, n_heads, seq_length, key_length)
                 position_bias = position_bias + attention_mask.to(position_bias.device)
@@ -1317,6 +1317,7 @@ PIX2STRUCT_INPUTS_DOCSTRING = r"""
 class Pix2StructTextModel(Pix2StructPreTrainedModel):
     config_class = Pix2StructTextConfig
     _no_split_modules = ["Pix2StructTextBlock"]
+    _tied_weights_keys = ["lm_head.weight"]
     supports_gradient_checkpointing = True
 
     def _set_gradient_checkpointing(self, module, value=False):
@@ -1546,8 +1547,9 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
                 present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[2],)
-                all_cross_attentions = all_cross_attentions + (layer_outputs[3],)
+                all_attentions = all_attentions + (layer_outputs[3],)
+                if encoder_hidden_states is not None:
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -1596,14 +1598,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
 class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
     config_class = Pix2StructConfig
     main_input_name = "flattened_patches"
-
-    _keys_to_ignore_on_load_missing = [
-        r"encoder.embed_tokens.weight",
-        r"decoder.embed_tokens.weight",
-    ]
-    _keys_to_ignore_on_load_unexpected = [
-        r"decoder.layer.0.layer.1.EncDecAttention.relative_attention_bias.weight",
-    ]
+    _tied_weights_keys = ["decoder.lm_head.weight"]
 
     def __init__(self, config: Pix2StructConfig):
         super().__init__(config)
@@ -1695,7 +1690,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         >>> generated_ids = model.generate(**inputs, max_new_tokens=50)
         >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> print(generated_text)
-        A picture of a stop sign with a red stop sign on it.
+        A picture of a stop sign with a red stop sign
         ```
 
         Training:
@@ -1719,7 +1714,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
         >>> outputs = model(**inputs, labels=labels)
         >>> loss = outputs.loss
         >>> print(f"{loss.item():.5f}")
-        5.95566
+        5.94282
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.text_config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1733,6 +1728,12 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+            )
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
         hidden_states = encoder_outputs[0]

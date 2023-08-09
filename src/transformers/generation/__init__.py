@@ -56,6 +56,7 @@ else:
         "NoRepeatNGramLogitsProcessor",
         "PrefixConstrainedLogitsProcessor",
         "RepetitionPenaltyLogitsProcessor",
+        "SequenceBiasLogitsProcessor",
         "EncoderRepetitionPenaltyLogitsProcessor",
         "TemperatureLogitsWarper",
         "TopKLogitsWarper",
@@ -64,6 +65,7 @@ else:
         "EncoderNoRepeatNGramLogitsProcessor",
         "ExponentialDecayLengthPenalty",
         "LogitNormalization",
+        "UnbatchedClassifierFreeGuidanceLogitsProcessor",
     ]
     _import_structure["stopping_criteria"] = [
         "MaxNewTokensCriteria",
@@ -182,10 +184,12 @@ if TYPE_CHECKING:
             NoRepeatNGramLogitsProcessor,
             PrefixConstrainedLogitsProcessor,
             RepetitionPenaltyLogitsProcessor,
+            SequenceBiasLogitsProcessor,
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
             TypicalLogitsWarper,
+            UnbatchedClassifierFreeGuidanceLogitsProcessor,
         )
         from .stopping_criteria import (
             MaxLengthCriteria,

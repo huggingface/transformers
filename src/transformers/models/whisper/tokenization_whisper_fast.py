@@ -15,7 +15,7 @@
 """Tokenization classes for Whisper."""
 import json
 import os
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import numpy as np
 from tokenizers import pre_tokenizers, processors
@@ -25,6 +25,10 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .english_normalizer import EnglishTextNormalizer
 from .tokenization_whisper import LANGUAGES, TASK_IDS, TO_LANGUAGE_CODE, WhisperTokenizer, _decode_asr
+
+
+if TYPE_CHECKING:
+    from ...pipelines.conversational import Conversation
 
 
 logger = logging.get_logger(__name__)
@@ -105,8 +109,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str`, *optional*, defaults to `<|startoftranscript|>`):
-            The beginning of sequence token.
+        bos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+            The beginning of sequence token. The `decoder_start_token_id` is used to set the first token as
+            `"<|startoftranscript|>"` when generating.
         eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The end of sequence token.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
@@ -138,7 +143,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         normalizer_file=None,
         tokenizer_file=None,
         unk_token="<|endoftext|>",
-        bos_token="<|startoftranscript|>",
+        bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
         add_prefix_space=False,
         language=None,
@@ -199,7 +204,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return super()._encode_plus(*args, **kwargs)
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._decode_with_timestamps
-    def _decode_with_timestamps(self, token_ids, time_precision=0.02) -> str:
+    def _decode_with_timestamps(self, token_ids, skip_special_tokens=False, time_precision=0.02) -> str:
         """
         Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
         given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
@@ -213,7 +218,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 outputs.append([])
             else:
                 outputs[-1].append(token)
-        outputs = [s if isinstance(s, str) else self.decode(s) for s in outputs]
+        outputs = [
+            s if isinstance(s, str) else self.decode(s, skip_special_tokens=skip_special_tokens) for s in outputs
+        ]
         return "".join(outputs)
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._compute_offsets
@@ -292,7 +299,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 Whether or not to output the offsets of the tokens. This should only be set if the model predicted
                 timestamps.
             decode_with_timestamps (`bool`, *optional*, defaults to `False`):
-                WHether or not to decode with timestamps included in the raw text.
+                Whether or not to decode with timestamps included in the raw text.
         Returns:
             `str`: The decoded sentence.
         """
@@ -303,7 +310,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
         if decode_with_timestamps:
-            text = self._decode_with_timestamps(token_ids, time_precision=time_precision)
+            text = self._decode_with_timestamps(
+                token_ids, time_precision=time_precision, skip_special_tokens=skip_special_tokens
+            )
         # retrieve offsets
         if output_offsets:
             offsets = None
@@ -463,7 +472,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._build_conversation_input_ids
-    def _build_conversation_input_ids(self, conversation) -> List[int]:
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         input_ids = []
         for is_user, text in conversation.iter_texts():
             input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
@@ -494,7 +503,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.get_prompt_ids
     def get_prompt_ids(self, text: str, return_tensors="np"):
         """Converts prompt text to IDs that can be passed to [`~WhisperForConditionalGeneration.generate`]."""
-        batch_encoding = self("<|startofprev|>", text.strip(), add_prefix_space=True, add_special_tokens=False)
+        batch_encoding = self("<|startofprev|>", " " + text.strip(), add_special_tokens=False)
 
         # Check for special tokens
         prompt_text_ids = batch_encoding["input_ids"][1:]

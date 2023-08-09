@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch Informer model."""
 
-import random
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -142,7 +141,9 @@ class InformerMeanScaler(nn.Module):
         self.default_scale = default_scale
 
     @torch.no_grad()
-    def forward(self, data: torch.Tensor, observed_indicator: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(
+        self, data: torch.Tensor, observed_indicator: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # shape: (N, [C], T=1)
         ts_sum = (data * observed_indicator).abs().sum(self.dim, keepdim=True)
         num_observed = observed_indicator.sum(self.dim, keepdim=True)
@@ -237,7 +238,7 @@ def _make_causal_mask(
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min, device=device), device=device)
+    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
     mask_cond = torch.arange(mask.size(-1), device=device)
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
@@ -737,7 +738,7 @@ class InformerEncoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -1203,8 +1204,13 @@ class InformerEncoder(InformerPreTrainedModel):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
+            to_drop = False
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    to_drop = True
+
+            if to_drop:
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
@@ -1423,9 +1429,10 @@ class InformerDecoder(InformerPreTrainedModel):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
@@ -1502,7 +1509,7 @@ class InformerModel(InformerPreTrainedModel):
     def __init__(self, config: InformerConfig):
         super().__init__(config)
 
-        if config.scaling == "mean" or config.scaling:
+        if config.scaling == "mean" or config.scaling is True:
             self.scaler = InformerMeanScaler(dim=1, keepdim=True)
         elif config.scaling == "std":
             self.scaler = InformerStdScaler(dim=1, keepdim=True)
@@ -1669,7 +1676,7 @@ class InformerModel(InformerPreTrainedModel):
         >>> from transformers import InformerModel
 
         >>> file = hf_hub_download(
-        ...     repo_id="kashif/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
+        ...     repo_id="hf-internal-testing/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
         ... )
         >>> batch = torch.load(file)
 
@@ -1834,7 +1841,7 @@ class InformerForPrediction(InformerPreTrainedModel):
         >>> from transformers import InformerForPrediction
 
         >>> file = hf_hub_download(
-        ...     repo_id="kashif/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
+        ...     repo_id="hf-internal-testing/tourism-monthly-batch", filename="train-batch.pt", repo_type="dataset"
         ... )
         >>> batch = torch.load(file)
 

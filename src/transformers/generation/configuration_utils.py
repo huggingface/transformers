@@ -17,6 +17,7 @@
 import copy
 import json
 import os
+import warnings
 from typing import Any, Dict, Optional, Union
 
 from .. import __version__
@@ -142,9 +143,8 @@ class GenerationConfig(PushToHubMixin):
         no_repeat_ngram_size (`int`, *optional*, defaults to 0):
             If set to int > 0, all ngrams of that size can only occur once.
         bad_words_ids(`List[List[int]]`, *optional*):
-            List of token ids that are not allowed to be generated. In order to get the token ids of the words that
-            should not appear in the generated text, use `tokenizer(bad_words, add_prefix_space=True,
-            add_special_tokens=False).input_ids`.
+            List of list of token ids that are not allowed to be generated. Check
+            [`~generation.NoBadWordsLogitsProcessor`] for further documentation and examples.
         force_words_ids(`List[List[int]]` or `List[List[List[int]]]`, *optional*):
             List of token ids that must be generated. If given a `List[List[int]]`, this is treated as a simple list of
             words that must be included, the opposite to `bad_words_ids`. If given `List[List[List[int]]]`, this
@@ -181,6 +181,17 @@ class GenerationConfig(PushToHubMixin):
             A list of pairs of integers which indicates a mapping from generation indices to token indices that will be
             forced before sampling. For example, `[[1, 123]]` means the second generated token will always be a token
             of index 123.
+        sequence_bias (`Dict[Tuple[int], float]`, *optional*)):
+            Dictionary that maps a sequence of tokens to its bias term. Positive biases increase the odds of the
+            sequence being selected, while negative biases do the opposite. Check
+            [`~generation.SequenceBiasLogitsProcessor`] for further documentation and examples.
+        guidance_scale (`float`, *optional*):
+            The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale > 1`.
+            Higher guidance scale encourages the model to generate samples that are more closely linked to the input
+            prompt, usually at the expense of poorer quality.
+        low_memory (`bool`, *optional*):
+            Switch to sequential topk for contrastive search to reduce peak memory. Used with contrastive search.
+
 
         > Parameters that define the output variables of `generate`
 
@@ -223,6 +234,7 @@ class GenerationConfig(PushToHubMixin):
 
     def __init__(self, **kwargs):
         # Parameters that control the length of the output
+        # if the default `max_length` is updated here, make sure to update the `generate` tests following https://github.com/huggingface/transformers/pull/25030
         self.max_length = kwargs.pop("max_length", 20)
         self.max_new_tokens = kwargs.pop("max_new_tokens", None)
         self.min_length = kwargs.pop("min_length", 0)
@@ -260,6 +272,9 @@ class GenerationConfig(PushToHubMixin):
         self.suppress_tokens = kwargs.pop("suppress_tokens", None)
         self.begin_suppress_tokens = kwargs.pop("begin_suppress_tokens", None)
         self.forced_decoder_ids = kwargs.pop("forced_decoder_ids", None)
+        self.sequence_bias = kwargs.pop("sequence_bias", None)
+        self.guidance_scale = kwargs.pop("guidance_scale", None)
+        self.low_memory = kwargs.pop("low_memory", None)
 
         # Parameters that define the output variables of `generate`
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
@@ -288,7 +303,8 @@ class GenerationConfig(PushToHubMixin):
 
         # Additional attributes without default values
         if not self._from_model_config:
-            # we don't want to copy values from the model config if we're initializing a `GenerationConfig` from a model's default configuration file
+            # we don't want to copy values from the model config if we're initializing a `GenerationConfig` from a
+            # model's default configuration file
             for key, value in kwargs.items():
                 try:
                     setattr(self, key, value)
@@ -316,11 +332,120 @@ class GenerationConfig(PushToHubMixin):
 
     def validate(self):
         """
-        Validates the values of the attributes of the GenerationConfig instance, and raises a `ValueError` if any of
-        the values are invalid.
+        Validates the values of the attributes of the [`GenerationConfig`] instance. Raises exceptions in the presence
+        of parameterization that can be detected as incorrect from the configuration instance alone.
+
+        Note that some parameters are best validated at generate runtime, as they may depend on other inputs and/or the
+        model, such as parameters related to the generation length.
         """
+
+        # Validation of individual attributes
         if self.early_stopping not in {True, False, "never"}:
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
+
+        # Validation of attribute relations:
+        # 1. detect sampling-only parameterization when not in sampling mode
+        if self.do_sample is False:
+            greedy_wrong_parameter_msg = (
+                "`do_sample` is set to `False`. However, {flag_name} is set to {flag_value} -- this flag is only used "
+                "in sample-based generation modes. Set `do_sample=True` or unset {flag_name} to continue."
+            )
+            if self.temperature != 1.0:
+                raise ValueError(
+                    greedy_wrong_parameter_msg.format(flag_name="temperature", flag_value=self.temperature)
+                )
+            if self.top_p != 1.0:
+                raise ValueError(greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p))
+            if self.typical_p != 1.0:
+                raise ValueError(greedy_wrong_parameter_msg.format(flag_name="typical_p", flag_value=self.typical_p))
+            if self.top_k != 50 and self.penalty_alpha is None:  # contrastive search uses top_k
+                raise ValueError(greedy_wrong_parameter_msg.format(flag_name="top_k", flag_value=self.top_k))
+            if self.epsilon_cutoff != 0.0:
+                raise ValueError(
+                    greedy_wrong_parameter_msg.format(flag_name="epsilon_cutoff", flag_value=self.epsilon_cutoff)
+                )
+            if self.eta_cutoff != 0.0:
+                raise ValueError(greedy_wrong_parameter_msg.format(flag_name="eta_cutoff", flag_value=self.eta_cutoff))
+
+        # 2. detect beam-only parameterization when not in beam mode
+        if self.num_beams == 1:
+            single_beam_wrong_parameter_msg = (
+                "`num_beams` is set to 1. However, {flag_name} is set to {flag_value} -- this flag is only used in "
+                "beam-based generation modes. Set `num_beams>1` or unset {flag_name} to continue."
+            )
+            if self.early_stopping is not False:
+                raise ValueError(
+                    single_beam_wrong_parameter_msg.format(flag_name="early_stopping", flag_value=self.early_stopping)
+                )
+            if self.num_beam_groups != 1:
+                raise ValueError(
+                    single_beam_wrong_parameter_msg.format(
+                        flag_name="num_beam_groups", flag_value=self.num_beam_groups
+                    )
+                )
+            if self.diversity_penalty != 0.0:
+                raise ValueError(
+                    single_beam_wrong_parameter_msg.format(
+                        flag_name="diversity_penalty", flag_value=self.diversity_penalty
+                    )
+                )
+            if self.length_penalty != 1.0:
+                raise ValueError(
+                    single_beam_wrong_parameter_msg.format(flag_name="length_penalty", flag_value=self.length_penalty)
+                )
+            if self.constraints is not None:
+                raise ValueError(
+                    single_beam_wrong_parameter_msg.format(flag_name="constraints", flag_value=self.constraints)
+                )
+
+        # 3. detect incorrect paramaterization specific to advanced beam modes
+        else:
+            # constrained beam search
+            if self.constraints is not None:
+                constrained_wrong_parameter_msg = (
+                    "`constraints` is not `None`, triggering constrained beam search. However, {flag_name} is set to "
+                    "{flag_value}, which is incompatible with this generation mode. Set `constraints=None` or unset "
+                    "{flag_name} to continue."
+                )
+                if self.do_sample is True:
+                    raise ValueError(
+                        constrained_wrong_parameter_msg.format(flag_name="do_sample", flag_value=self.do_sample)
+                    )
+                if self.num_beam_groups != 1:
+                    raise ValueError(
+                        constrained_wrong_parameter_msg.format(
+                            flag_name="num_beam_groups", flag_value=self.num_beam_groups
+                        )
+                    )
+            # group beam search
+            if self.diversity_penalty != 0.0 or self.num_beam_groups != 1:
+                group_error_prefix = (
+                    "`diversity_penalty` is not 0.0 or `num_beam_groups` is not 1, triggering group beam search. In "
+                    "this generation mode, "
+                )
+                if self.do_sample is True:
+                    raise ValueError(group_error_prefix + "`do_sample` must be set to `False`")
+                if self.num_beams % self.num_beam_groups != 0:
+                    raise ValueError(group_error_prefix + "`num_beams` should be divisible by `num_beam_groups`")
+                if self.diversity_penalty == 0.0:
+                    raise ValueError(
+                        group_error_prefix
+                        + "`diversity_penalty` should be greater than `0.0`, otherwise your groups will be identical."
+                    )
+
+        # 4. check `num_return_sequences`
+        if self.num_return_sequences != 1:
+            if self.num_beams == 1:
+                if self.do_sample is False:
+                    raise ValueError(
+                        "Greedy methods without beam search do not support `num_return_sequences` different than 1 "
+                        f"(got {self.num_return_sequences})."
+                    )
+            elif self.num_return_sequences > self.num_beams:
+                raise ValueError(
+                    f"`num_return_sequences` ({self.num_return_sequences}) has to be smaller or equal to `num_beams` "
+                    f"({self.num_beams})."
+                )
 
     def save_pretrained(
         self,
@@ -342,9 +467,21 @@ class GenerationConfig(PushToHubMixin):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
-            kwargs:
+            kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        use_auth_token = kwargs.pop("use_auth_token", None)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if kwargs.get("token", None) is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            kwargs["token"] = use_auth_token
+
         config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
 
         if os.path.isfile(save_directory):
@@ -369,7 +506,7 @@ class GenerationConfig(PushToHubMixin):
                 repo_id,
                 files_timestamps,
                 commit_message=commit_message,
-                token=kwargs.get("use_auth_token"),
+                token=kwargs.get("token"),
             )
 
     @classmethod
@@ -377,6 +514,11 @@ class GenerationConfig(PushToHubMixin):
         cls,
         pretrained_model_name: Union[str, os.PathLike],
         config_file_name: Optional[Union[str, os.PathLike]] = None,
+        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: Optional[Union[str, bool]] = None,
+        revision: str = "main",
         **kwargs,
     ) -> "GenerationConfig":
         r"""
@@ -405,7 +547,7 @@ class GenerationConfig(PushToHubMixin):
             proxies (`Dict[str, str]`, *optional*):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-            use_auth_token (`str` or `bool`, *optional*):
+            token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
                 the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
@@ -465,17 +607,23 @@ class GenerationConfig(PushToHubMixin):
         ```"""
         config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
 
-        cache_dir = kwargs.pop("cache_dir", None)
-        force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         use_auth_token = kwargs.pop("use_auth_token", None)
-        local_files_only = kwargs.pop("local_files_only", False)
-        revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         commit_hash = kwargs.pop("_commit_hash", None)
+
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
 
         user_agent = {"file_type": "config", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -504,7 +652,7 @@ class GenerationConfig(PushToHubMixin):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
-                    use_auth_token=use_auth_token,
+                    use_auth_token=token,
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
@@ -569,9 +717,9 @@ class GenerationConfig(PushToHubMixin):
         if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
             kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
-        # remove all the arguments that are in the config_dict
-
-        config = cls(**config_dict, **kwargs)
+        # The line below allows model-specific config to be loaded as well through kwargs, with safety checks.
+        # See https://github.com/huggingface/transformers/pull/21269
+        config = cls(**{**config_dict, **kwargs})
         unused_kwargs = config.update(**kwargs)
 
         logger.info(f"Generate config {config}")

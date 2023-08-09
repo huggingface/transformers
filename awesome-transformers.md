@@ -29,7 +29,7 @@ Keywords: inpainting, SD, Stable Diffusion
 
 ## [flair](https://github.com/flairNLP/flair)
 
-FLAIR is a powerful PyTorch NLP framework, convering several important tasks: NER, sentiment-analysis, part-of-speech tagging, text and ducoment embeddings, among other things.
+FLAIR is a powerful PyTorch NLP framework, convering several important tasks: NER, sentiment-analysis, part-of-speech tagging, text and document embeddings, among other things.
 
 Keywords: NLP, text embedding, document embedding, biomedical, NER, PoS, sentiment-analysis
 
@@ -44,6 +44,12 @@ Keywords: Database, low-code, AI table
 [langchain](https://github.com/hwchase17/langchain) is aimed at assisting in the development of apps merging both LLMs and other sources of knowledge. The library allows chaining calls to applications, creating a sequence across many tools.
 
 Keywords: LLMs, Large Language Models, Agents, Chains
+
+## [LlamaIndex](https://github.com/jerryjliu/llama_index)
+
+[LlamaIndex](https://github.com/jerryjliu/llama_index) is a project that provides a central interface to connect your LLM's with external data. It provides various kinds of indices and retreival mechanisms to perform different LLM tasks and obtain knowledge-augmented results.
+
+Keywords: LLMs, Large Language Models, Data Retrieval, Indices, Knowledge Augmentation 
 
 ## [ParlAI](https://github.com/facebookresearch/ParlAI)
 
@@ -360,7 +366,7 @@ Keywords: Model inspection, Model interpretation, Black-box, White-box
 
 ## [tortoise-tts](https://github.com/neonbjb/tortoise-tts)
 
-Tortoise is a text-to-speech program built with the following priorities: strong multi-voice capabilities., and highly realistic prosody and intonation.
+Tortoise is a text-to-speech program built with the following priorities: strong multi-voice capabilities, and highly realistic prosody and intonation.
 
 Keywords: Text-to-speech
 
@@ -405,7 +411,7 @@ Keywords: Training, Generation
 
 Diffgram aims to integrate human supervision into platforms. We support your team programmatically changing the UI (Schema, layout, etc.) like in Streamlit. This means that you can collect and annotate timely data from users. In other words, we are the platform behind your platform, an integrated part of your application, to ship new & better AI products faster.
 
-Keywords: Human supervision, Platfor,
+Keywords: Human supervision, Platform
 
 ## [ecco](https://github.com/jalammar/ecco)
 
@@ -431,11 +437,11 @@ Keywords: DALL-E, Russian
 
 Keywords: Knowledge Extraction, Knowledge Graphs
 
-## [nebullvm](https://github.com/nebuly-ai/nebullvm)
+## [Nebuly](https://github.com/nebuly-ai/nebuly)
 
-Nebullvm is an ecosystem of plug and play modules to optimize the performances of your AI systems. The optimization modules are stack-agnostic and work with any library. They are designed to be easily integrated into your system, providing a quick and seamless boost to its performance. Simply plug and play to start realizing the benefits of optimized performance right away.
+Nebuly is the next-generation platform to monitor and optimize your AI costs in one place. The platform connects to all your AI cost sources (compute, API providers, AI software licenses, etc) and centralizes them in one place to give you full visibility on a model basis. The platform also provides optimization recommendations and a co-pilot model that can guide during the optimization process. The platform builds on top of the open-source tools allowing you to optimize the different steps of your AI stack to squeeze out the best possible cost performances.
 
-Keywords: Optimization, Performance
+Keywords: Optimization, Performance, Monitoring
 
 ## [imaginAIry](https://github.com/brycedrennan/imaginAIry)
 
@@ -587,4 +593,11 @@ Keywords: Active Learning, Research, Labeling
 [cleanlab](https://github.com/cleanlab/cleanlab) is the standard data-centric AI package for data quality and machine learning with messy, real-world data and labels. For text, image, tabular, audio (among others) datasets, you can use cleanlab to automatically: detect data issues (outliers, label errors, near duplicates, etc), train robust ML models, infer consensus + annotator-quality for multi-annotator data, suggest data to (re)label next (active learning).
 
 Keywords: Data-Centric AI, Data Quality, Noisy Labels, Outlier Detection, Active Learning  
+
+## [BentoML](https://github.com/bentoml/BentoML)
+
+[BentoML](https://github.com/bentoml) is the unified framework for for building, shipping, and scaling production-ready AI applications incorporating traditional ML, pre-trained AI models, Generative and Large Language Models. 
+All Hugging Face models and pipelines can be seamlessly integrated into BentoML applications, enabling the running of models on the most suitable hardware and independent scaling based on usage.
+
+Keywords: BentoML, Framework, Deployment, AI Applications
 

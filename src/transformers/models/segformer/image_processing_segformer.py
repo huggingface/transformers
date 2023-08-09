@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
+from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -116,15 +116,6 @@ class SegformerImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_reduce_labels = do_reduce_labels
 
-    @property
-    def reduce_labels(self):
-        warnings.warn(
-            "The `reduce_labels` property is deprecated and will be removed in a v4.27. Please use "
-            "`do_reduce_labels` instead.",
-            FutureWarning,
-        )
-        return self.do_reduce_labels
-
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
@@ -137,6 +128,7 @@ class SegformerImageProcessor(BaseImageProcessor):
             image_processor_dict["reduce_labels"] = kwargs.pop("reduce_labels")
         return super().from_dict(image_processor_dict, **kwargs)
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
@@ -152,62 +144,25 @@ class SegformerImageProcessor(BaseImageProcessor):
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
-                Size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PIL.Image.BILINEAR`):
-                Resampling filter to use when resiizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
+            data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The resized image.
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
             raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        return resize(
-            image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
-        )
+        output_size = (size["height"], size["width"])
+        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
-    def rescale(
-        self,
-        image: np.ndarray,
-        scale: Union[int, float],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ):
-        """
-        Rescale an image by a scale factor. image = image * scale.
-
-        Args:
-            image (`np.ndarray`):
-                Image to rescale.
-            scale (`int` or `float`):
-                Scale to apply to the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        return rescale(image, scale=scale, data_format=data_format, **kwargs)
-
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: Union[float, List[float]],
-        std: Union[float, List[float]],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Normalize an image. image = (image - image_mean) / image_std.
-
-        Args:
-            image (`np.ndarray`):
-                Image to normalize.
-            image_mean (`float` or `List[float]`):
-                Image mean.
-            image_std (`float` or `List[float]`):
-                Image standard deviation.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
-
+    # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.reduce_label
     def reduce_label(self, label: ImageInput) -> np.ndarray:
         label = to_numpy_array(label)
         # Avoid using underflow conversion
@@ -439,6 +394,7 @@ class SegformerImageProcessor(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->Segformer
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
         """
         Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps. Only supports
@@ -448,8 +404,9 @@ class SegformerImageProcessor(BaseImageProcessor):
             outputs ([`SegformerForSemanticSegmentation`]):
                 Raw outputs of the model.
             target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
-                List of tuples corresponding to the requested final size (height, width) of each prediction. If left to
-                None, predictions will not be resized.
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
+                predictions will not be resized.
+
         Returns:
             semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is

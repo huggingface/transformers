@@ -193,8 +193,9 @@ class Message:
             "text": {
                 "type": "plain_text",
                 "text": (
-                    f"There were {self.n_failures} failures, out of {self.n_tests} tests.\nThe suite ran in"
-                    f" {self.time}."
+                    f"There were {self.n_failures} failures, out of {self.n_tests} tests.\n"
+                    f"Number of model failures: {self.n_model_failures}.\n"
+                    f"The suite ran in {self.time}."
                 ),
                 "emoji": True,
             },

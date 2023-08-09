@@ -15,6 +15,8 @@
 """ TF 2.0 ConvBERT model."""
 
 
+from __future__ import annotations
+
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -44,7 +46,6 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softmax
 from ...utils import (
-    MULTIPLE_CHOICE_DUMMY_INPUTS,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -345,7 +346,7 @@ class GroupedLinearLayer(tf.keras.layers.Layer):
         self.group_in_dim = self.input_size // self.num_groups
         self.group_out_dim = self.output_size // self.num_groups
 
-    def build(self, input_shape):
+    def build(self, input_shape=None):
         self.kernel = self.add_weight(
             "kernel",
             shape=[self.group_out_dim, self.group_in_dim, self.num_groups],
@@ -356,6 +357,7 @@ class GroupedLinearLayer(tf.keras.layers.Layer):
         self.bias = self.add_weight(
             "bias", shape=[self.output_size], initializer=self.kernel_initializer, dtype=self.dtype, trainable=True
         )
+        super().build(input_shape)
 
     def call(self, hidden_states):
         batch_size = shape_list(hidden_states)[0]
@@ -742,12 +744,12 @@ class TFConvBertModel(TFConvBertPreTrainedModel):
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: Optional[Union[np.array, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.array, tf.Tensor]] = None,
         position_ids: Optional[Union[np.array, tf.Tensor]] = None,
         head_mask: Optional[Union[np.array, tf.Tensor]] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -767,12 +769,6 @@ class TFConvBertModel(TFConvBertPreTrainedModel):
         )
 
         return outputs
-
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
 
 
 class TFConvBertMaskedLMHead(tf.keras.layers.Layer):
@@ -858,16 +854,16 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[tf.Tensor] = None,
+        labels: tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFMaskedLMOutput]:
         r"""
@@ -904,13 +900,6 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
             hidden_states=generator_hidden_states.hidden_states,
             attentions=generator_hidden_states.attentions,
         )
-
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 class TFConvBertClassificationHead(tf.keras.layers.Layer):
@@ -965,16 +954,16 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[tf.Tensor] = None,
+        labels: tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFSequenceClassifierOutput]:
         r"""
@@ -1010,12 +999,6 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
             attentions=outputs.attentions,
         )
 
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
-
 
 @add_start_docstrings(
     """
@@ -1036,16 +1019,6 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @property
-    def dummy_inputs(self):
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            tf.Tensor with dummy inputs
-        """
-        return {"input_ids": tf.convert_to_tensor(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int32)}
-
     @unpack_inputs
     @add_start_docstrings_to_model_forward(
         CONVBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
@@ -1057,16 +1030,16 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[tf.Tensor] = None,
+        labels: tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFMultipleChoiceModelOutput]:
         r"""
@@ -1119,26 +1092,6 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
             attentions=outputs.attentions,
         )
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
-
 
 @add_start_docstrings(
     """
@@ -1170,16 +1123,16 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[tf.Tensor] = None,
+        labels: tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFTokenClassifierOutput]:
         r"""
@@ -1214,12 +1167,6 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
             attentions=outputs.attentions,
         )
 
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
-
 
 @add_start_docstrings(
     """
@@ -1247,17 +1194,17 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
     )
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        token_type_ids: np.ndarray | tf.Tensor | None = None,
+        position_ids: np.ndarray | tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
+        inputs_embeds: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        start_positions: Optional[tf.Tensor] = None,
-        end_positions: Optional[tf.Tensor] = None,
+        start_positions: tf.Tensor | None = None,
+        end_positions: tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFQuestionAnsweringModelOutput]:
         r"""
@@ -1304,12 +1251,4 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
             end_logits=end_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-        )
-
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFQuestionAnsweringModelOutput(
-            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
         )

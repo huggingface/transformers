@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 import unittest
 
 from transformers import MODEL_FOR_MASKED_LM_MAPPING, TF_MODEL_FOR_MASKED_LM_MAPPING, FillMaskPipeline, pipeline
 from transformers.pipelines import PipelineException
 from transformers.testing_utils import (
     is_pipeline_test,
+    is_torch_available,
     nested_simplify,
     require_tf,
     require_torch,
@@ -32,6 +34,15 @@ from .test_pipelines_common import ANY
 class FillMaskPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_MASKED_LM_MAPPING
     tf_model_mapping = TF_MODEL_FOR_MASKED_LM_MAPPING
+
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        if is_torch_available():
+            import torch
+
+            torch.cuda.empty_cache()
 
     @require_tf
     def test_small_model_tf(self):

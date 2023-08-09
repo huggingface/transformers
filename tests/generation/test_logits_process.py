@@ -46,10 +46,12 @@ if is_torch_available():
         NoRepeatNGramLogitsProcessor,
         PrefixConstrainedLogitsProcessor,
         RepetitionPenaltyLogitsProcessor,
+        SequenceBiasLogitsProcessor,
         TemperatureLogitsWarper,
         TopKLogitsWarper,
         TopPLogitsWarper,
         TypicalLogitsWarper,
+        UnbatchedClassifierFreeGuidanceLogitsProcessor,
     )
 
 
@@ -512,6 +514,30 @@ class LogitsProcessorTest(unittest.TestCase):
         filtered_scores = no_bad_words_dist_proc(input_ids, scores.clone())
         self.assertTrue(torch.allclose(scores, filtered_scores, atol=1e-3))
 
+    def test_bias_dist_processor(self):
+        vocab_size = 5
+        batch_size = 2
+
+        input_ids = torch.tensor([[0, 1, 3, 1], [0, 1, 0, 1]], device=torch_device, dtype=torch.long)
+        positive_bias = {(1,): 100.0, (4,): 100.0}
+        negative_bias = {(1, 0): -100.0, (0, 1, 2): -100.0, (1, 3, 1, 3): -100.0}
+        # biases the same termination twice, to ensure we can handle overlapping terminations (it won't have an effect
+        # on the test cases, though)
+        negative_bias.update({(1, 3, 1, 3, 1, 3): -100.0})
+        sequence_bias = {**positive_bias, **negative_bias}
+
+        # scores = 0 to facilitate checks
+        scores = torch.zeros((batch_size, vocab_size), dtype=torch.float, device=torch_device)
+
+        bias_dist_proc = SequenceBiasLogitsProcessor(sequence_bias=sequence_bias)
+        filtered_scores = bias_dist_proc(input_ids, scores.clone())
+
+        # batch 1: positive bias: tokens (1, 4); negative bias: tokens (0, 3); neutral: tokens (2)
+        # batch 2: positive bias: tokens (1, 4); negative bias: tokens (0, 2); neutral: tokens (3)
+        self.assertListEqual(
+            filtered_scores.tolist(), [[-100.0, 100.0, 0.0, -100.0, 100.0], [-100.0, 100.0, -100.0, 0.0, 100.0]]
+        )
+
     def test_processor_list(self):
         batch_size = 4
         sequence_length = 10
@@ -718,3 +744,54 @@ class LogitsProcessorTest(unittest.TestCase):
         self.assertTrue(normalized_scores.sum(dim=-1).allclose(ones))
 
         self.assertTrue(normalized_scores.allclose(scores.softmax(dim=-1)))
+
+    def test_classifier_free_guidance(self):
+        class Namespace(dict):
+            pass
+
+        logits_uncond = torch.tensor([[[1.0, 0, 1.5]]])
+        logits_cond = torch.tensor([[[1.0, 1.0, 1.0]]])
+
+        def dummy_model(input_ids, attention_mask, use_cache=True, past_key_values=None):
+            out = Namespace()
+            out.logits = logits_uncond
+            out.past_key_values = None
+            return out
+
+        def lsm(x):
+            return torch.nn.functional.log_softmax(x, dim=-1)
+
+        # explicit unconditional prompt + attention mask
+        input_ids = torch.LongTensor([[0]])
+        cfg = UnbatchedClassifierFreeGuidanceLogitsProcessor(
+            1.5, dummy_model, input_ids, torch.ones_like(input_ids, dtype=torch.long)
+        )
+        out = cfg(input_ids, logits_cond)[0, -1]
+
+        res = (lsm(logits_uncond) + 1.5 * (lsm(logits_cond) - lsm(logits_uncond)))[0, -1]
+
+        self.assertAlmostEqual(out[0].item(), res[0].item())
+        self.assertAlmostEqual(out[1].item(), res[1].item())
+        self.assertAlmostEqual(out[2].item(), res[2].item())
+
+        # explicit unconditional prompt
+        input_ids = torch.LongTensor([[0]])
+        cfg = UnbatchedClassifierFreeGuidanceLogitsProcessor(1.5, dummy_model, input_ids)
+        out = cfg(input_ids, logits_cond)[0, -1]
+
+        res = (lsm(logits_uncond) + 1.5 * (lsm(logits_cond) - lsm(logits_uncond)))[0, -1]
+
+        self.assertAlmostEqual(out[0].item(), res[0].item())
+        self.assertAlmostEqual(out[1].item(), res[1].item())
+        self.assertAlmostEqual(out[2].item(), res[2].item())
+
+        # all implicit
+        input_ids = torch.LongTensor([[0]])
+        cfg = UnbatchedClassifierFreeGuidanceLogitsProcessor(1.5, dummy_model)
+        out = cfg(input_ids, logits_cond)[0, -1]
+
+        res = (lsm(logits_uncond) + 1.5 * (lsm(logits_cond) - lsm(logits_uncond)))[0, -1]
+
+        self.assertAlmostEqual(out[0].item(), res[0].item())
+        self.assertAlmostEqual(out[1].item(), res[1].item())
+        self.assertAlmostEqual(out[2].item(), res[2].item())

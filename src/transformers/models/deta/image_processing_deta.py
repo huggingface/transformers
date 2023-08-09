@@ -25,7 +25,6 @@ from ...image_transforms import (
     PaddingMode,
     center_to_corners_format,
     corners_to_center_format,
-    normalize,
     pad,
     rescale,
     resize,
@@ -544,7 +543,7 @@ class DetaImageProcessor(BaseImageProcessor):
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare
     def prepare(self, image, target, return_segmentation_masks=None, masks_path=None):
         logger.warning_once(
-            "The `prepare` method is deprecated and will be removed in a future version. "
+            "The `prepare` method is deprecated and will be removed in a v4.33. "
             "Please use `prepare_annotation` instead. Note: the `prepare_annotation` method "
             "does not return the image anymore.",
         )
@@ -553,23 +552,17 @@ class DetaImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.convert_coco_poly_to_mask
     def convert_coco_poly_to_mask(self, *args, **kwargs):
-        logger.warning_once(
-            "The `convert_coco_poly_to_mask` method is deprecated and will be removed in a future version. "
-        )
+        logger.warning_once("The `convert_coco_poly_to_mask` method is deprecated and will be removed in v4.33. ")
         return convert_coco_poly_to_mask(*args, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_detection
     def prepare_coco_detection(self, *args, **kwargs):
-        logger.warning_once(
-            "The `prepare_coco_detection` method is deprecated and will be removed in a future version. "
-        )
+        logger.warning_once("The `prepare_coco_detection` method is deprecated and will be removed in v4.33. ")
         return prepare_coco_detection_annotation(*args, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_panoptic
     def prepare_coco_panoptic(self, *args, **kwargs):
-        logger.warning_once(
-            "The `prepare_coco_panoptic` method is deprecated and will be removed in a future version. "
-        )
+        logger.warning_once("The `prepare_coco_panoptic` method is deprecated and will be removed in v4.33. ")
         return prepare_coco_panoptic_annotation(*args, **kwargs)
 
     def resize(
@@ -613,25 +606,23 @@ class DetaImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.rescale
     def rescale(
-        self, image: np.ndarray, rescale_factor: Union[float, int], data_format: Optional[ChannelDimension] = None
+        self, image: np.ndarray, rescale_factor: float, data_format: Optional[Union[str, ChannelDimension]] = None
     ) -> np.ndarray:
         """
-        Rescale the image by the given factor.
+        Rescale the image by the given factor. image = image * rescale_factor.
+
+        Args:
+            image (`np.ndarray`):
+                Image to rescale.
+            rescale_factor (`float`):
+                The value to use for rescaling.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
         return rescale(image, rescale_factor, data_format=data_format)
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: Union[float, Iterable[float]],
-        std: Union[float, Iterable[float]],
-        data_format: Optional[ChannelDimension] = None,
-    ) -> np.ndarray:
-        """
-        Normalize the image with the given mean and standard deviation.
-        """
-        return normalize(image, mean=mean, std=std, data_format=data_format)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize_annotation
     def normalize_annotation(self, annotation: Dict, image_size: Tuple[int, int]) -> Dict:
@@ -640,40 +631,6 @@ class DetaImageProcessor(BaseImageProcessor):
         `[center_x, center_y, width, height]` format.
         """
         return normalize_annotation(annotation, image_size=image_size)
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad_and_create_pixel_mask
-    def pad_and_create_pixel_mask(
-        self,
-        pixel_values_list: List[ImageInput],
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = None,
-    ) -> BatchFeature:
-        """
-        Pads a batch of images with zeros to the size of largest height and width in the batch and returns their
-        corresponding pixel mask.
-
-        Args:
-            images (`List[np.ndarray]`):
-                Batch of images to pad.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Can be one of:
-                    - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        logger.warning_once("This method is deprecated and will be removed in v4.27.0. Please use pad instead.")
-        # pad expects a list of np.ndarray, but the previous feature extractors expected torch tensors
-        images = [to_numpy_array(image) for image in pixel_values_list]
-        return self.pad(
-            images=images,
-            return_pixel_mask=True,
-            return_tensors=return_tensors,
-            data_format=data_format,
-        )
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_image
     def _pad_image(
@@ -705,7 +662,7 @@ class DetaImageProcessor(BaseImageProcessor):
         return_pixel_mask: bool = True,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
-    ) -> np.ndarray:
+    ) -> BatchFeature:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
         in the batch and optionally returns their corresponding pixel mask.
@@ -717,8 +674,13 @@ class DetaImageProcessor(BaseImageProcessor):
                 The value to use for the padding if `mode` is `"constant"`.
             return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return a pixel mask.
-            input_channel_dimension (`ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be inferred from the input image.
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return. Can be one of:
+                    - Unset: Return a list of `np.ndarray`.
+                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
+                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """

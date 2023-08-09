@@ -16,7 +16,6 @@
 
 
 import math
-import random
 import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -80,7 +79,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min))
+    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min)
     mask_cond = torch.arange(mask.size(-1))
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
@@ -963,7 +962,7 @@ class LEDEncoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            hidden_states (`torch.FloatTensor`): input to the layer of shape *(batch, seq_len, embed_dim)*
             attention_mask (`torch.FloatTensor`): attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -1041,11 +1040,11 @@ class LEDDecoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
+            hidden_states (`torch.FloatTensor`): input to the layer of shape *(batch, seq_len, embed_dim)*
             attention_mask (`torch.FloatTensor`): attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
             encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape *(seq_len, batch, embed_dim)*
+                cross attention input to the layer of shape *(batch, seq_len, embed_dim)*
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -1871,7 +1870,7 @@ class LEDEncoder(LEDPreTrainedModel):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
+            dropout_probability = torch.rand([])
 
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None, None)
@@ -2135,9 +2134,10 @@ class LEDDecoder(LEDPreTrainedModel):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
@@ -2209,7 +2209,7 @@ class LEDDecoder(LEDPreTrainedModel):
     LED_START_DOCSTRING,
 )
 class LEDModel(LEDPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
 
     def __init__(self, config: LEDConfig):
         super().__init__(config)
@@ -2334,14 +2334,8 @@ class LEDModel(LEDPreTrainedModel):
 )
 class LEDForConditionalGeneration(LEDPreTrainedModel):
     base_model_prefix = "led"
-    _keys_to_ignore_on_load_missing = [
-        r"final_logits_bias",
-        r"encoder.version",
-        r"decoder.version",
-        r"lm_head.weight",
-        "decoder.embed_tokens.weight",
-        "encoder.embed_tokens.weight",
-    ]
+    _keys_to_ignore_on_load_missing = ["final_logits_bias"]
+    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight", "lm_head.weight"]
 
     def __init__(self, config: LEDConfig):
         super().__init__(config)
@@ -2528,7 +2522,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
     LED_START_DOCSTRING,
 )
 class LEDForSequenceClassification(LEDPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
 
     def __init__(self, config: LEDConfig, **kwargs):
         warnings.warn(
@@ -2664,7 +2658,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
     LED_START_DOCSTRING,
 )
 class LEDForQuestionAnswering(LEDPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
+    _tied_weights_keys = ["decoder.embed_tokens.weight", "encoder.embed_tokens.weight"]
 
     def __init__(self, config):
         super().__init__(config)

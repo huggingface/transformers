@@ -20,15 +20,12 @@ import unittest
 
 import numpy as np
 
-from transformers import BatchFeature, is_speech_available
+from transformers import BatchFeature, SpeechT5FeatureExtractor
 from transformers.testing_utils import require_torch
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
-
-if is_speech_available():
-    from transformers import SpeechT5FeatureExtractor
 
 if is_torch_available():
     import torch
@@ -142,7 +139,7 @@ class SpeechT5FeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-    feature_extraction_class = SpeechT5FeatureExtractor if is_speech_available() else None
+    feature_extraction_class = SpeechT5FeatureExtractor
 
     def setUp(self):
         self.feat_extract_tester = SpeechT5FeatureExtractionTester(self)
@@ -270,6 +267,14 @@ class SpeechT5FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest
         self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
 
         # Test batched
+        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_values
+        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_values
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
+        # Test 2-D numpy arrays are batched.
+        speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
+        np_speech_inputs = np.asarray(speech_inputs)
         encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_values
         encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):

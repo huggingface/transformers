@@ -15,7 +15,6 @@
 """ PyTorch BART model."""
 import copy
 import math
-import random
 import warnings
 from typing import List, Optional, Tuple, Union
 
@@ -94,7 +93,7 @@ def _make_causal_mask(
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min, device=device), device=device)
+    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
     mask_cond = torch.arange(mask.size(-1), device=device)
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
@@ -320,7 +319,7 @@ class BartEncoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -503,12 +502,13 @@ class BartClassificationHead(nn.Module):
         return hidden_states
 
 
-class BartPretrainedModel(PreTrainedModel):
+class BartPreTrainedModel(PreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_unexpected = [r"encoder.version", r"decoder.version"]
+    _keys_to_ignore_on_load_unexpected = ["encoder.version", "decoder.version"]
     _no_split_modules = [r"BartEncoderLayer", r"BartDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -536,10 +536,18 @@ class BartPretrainedModel(PreTrainedModel):
         return dummy_inputs
 
 
-class PretrainedBartModel(BartPretrainedModel):
+class PretrainedBartModel(BartPreTrainedModel):
     def __init_subclass__(self):
         warnings.warn(
-            "The class `PretrainedBartModel` has been depreciated, please use `BartPretrainedModel` instead.",
+            "The class `PretrainedBartModel` has been depreciated, please use `BartPreTrainedModel` instead.",
+            FutureWarning,
+        )
+
+
+class BartPretrainedModel(BartPreTrainedModel):
+    def __init_subclass__(self):
+        warnings.warn(
+            "The class `PretrainedBartModel` has been depreciated, please use `BartPreTrainedModel` instead.",
             FutureWarning,
         )
 
@@ -700,7 +708,7 @@ BART_INPUTS_DOCSTRING = r"""
 """
 
 
-class BartEncoder(BartPretrainedModel):
+class BartEncoder(BartPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
     [`BartEncoderLayer`].
@@ -836,8 +844,13 @@ class BartEncoder(BartPretrainedModel):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
+            to_drop = False
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:  # skip the layer
+                    to_drop = True
+
+            if to_drop:
                 layer_outputs = (None, None)
             else:
                 if self.gradient_checkpointing and self.training:
@@ -877,7 +890,7 @@ class BartEncoder(BartPretrainedModel):
         )
 
 
-class BartDecoder(BartPretrainedModel):
+class BartDecoder(BartPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`BartDecoderLayer`]
 
@@ -1089,9 +1102,10 @@ class BartDecoder(BartPretrainedModel):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
-                continue
+            if self.training:
+                dropout_probability = torch.rand([])
+                if dropout_probability < self.layerdrop:
+                    continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
@@ -1163,8 +1177,8 @@ class BartDecoder(BartPretrainedModel):
     "The bare BART Model outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
 )
-class BartModel(BartPretrainedModel):
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+class BartModel(BartPreTrainedModel):
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: BartConfig):
         super().__init__(config)
@@ -1290,14 +1304,10 @@ class BartModel(BartPretrainedModel):
 @add_start_docstrings(
     "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING
 )
-class BartForConditionalGeneration(BartPretrainedModel):
+class BartForConditionalGeneration(BartPreTrainedModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [
-        r"final_logits_bias",
-        r"lm_head.weight",
-        "encoder.embed_tokens.weight",
-        "decoder.embed_tokens.weight",
-    ]
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _keys_to_ignore_on_load_missing = ["final_logits_bias"]
 
     def __init__(self, config: BartConfig):
         super().__init__(config)
@@ -1469,8 +1479,8 @@ class BartForConditionalGeneration(BartPretrainedModel):
     """,
     BART_START_DOCSTRING,
 )
-class BartForSequenceClassification(BartPretrainedModel):
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+class BartForSequenceClassification(BartPreTrainedModel):
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(config, **kwargs)
@@ -1599,8 +1609,8 @@ class BartForSequenceClassification(BartPretrainedModel):
     """,
     BART_START_DOCSTRING,
 )
-class BartForQuestionAnswering(BartPretrainedModel):
-    _keys_to_ignore_on_load_missing = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+class BartForQuestionAnswering(BartPreTrainedModel):
+    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1717,7 +1727,7 @@ class BartForQuestionAnswering(BartPretrainedModel):
         )
 
 
-class BartDecoderWrapper(BartPretrainedModel):
+class BartDecoderWrapper(BartPreTrainedModel):
     """
     This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
     used in combination with the [`EncoderDecoderModel`] framework.
@@ -1737,8 +1747,8 @@ class BartDecoderWrapper(BartPretrainedModel):
     """,
     BART_START_DOCSTRING,
 )
-class BartForCausalLM(BartPretrainedModel):
-    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+class BartForCausalLM(BartPreTrainedModel):
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
         config = copy.deepcopy(config)

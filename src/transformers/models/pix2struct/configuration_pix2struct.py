@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Pix2Struct model configuration"""
 
-import copy
 import os
 from typing import Union
 
@@ -153,6 +152,8 @@ class Pix2StructTextConfig(PretrainedConfig):
     def from_pretrained(
         cls, pretrainehidden_size_name_or_path: Union[str, os.PathLike], **kwargs
     ) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
         config_dict, kwargs = cls.get_config_dict(pretrainehidden_size_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from Pix2StructConfig
@@ -187,16 +188,10 @@ class Pix2StructVisionConfig(PretrainedConfig):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         d_kv (`int`, *optional*, defaults to 64):
             Dimensionality of the key, query, value projections per attention head.
-        projection_dim (`int`, *optional*, defaults to 768):
-            Dimensionality of the projection layer in the Transformer encoder.
         num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels of the input images.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
         dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu_new"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` ``"gelu"` are supported.
@@ -213,8 +208,6 @@ class Pix2StructVisionConfig(PretrainedConfig):
             testing).
         seq_len (`int`, *optional*, defaults to 4096):
             Maximum sequence length (here number of patches) supported by the model.
-        layer_norm_bias (`bool`, *optional*, defaults to `False`):
-            Whether or not to add a bias to the layer normalization layers.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
             The number of buckets to use for each attention layer.
         relative_attention_max_distance (`int`, *optional*, defaults to 128):
@@ -243,11 +236,8 @@ class Pix2StructVisionConfig(PretrainedConfig):
         patch_embed_hidden_size=768,
         d_ff=2048,
         d_kv=64,
-        projection_dim=768,
         num_hidden_layers=12,
         num_attention_heads=12,
-        num_channels=3,
-        patch_size=16,
         dense_act_fn="gelu_new",
         layer_norm_eps=1e-6,
         dropout_rate=0.0,
@@ -255,7 +245,6 @@ class Pix2StructVisionConfig(PretrainedConfig):
         initializer_range=1e-10,
         initializer_factor=1.0,
         seq_len=4096,
-        layer_norm_bias=False,
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
         **kwargs,
@@ -265,19 +254,15 @@ class Pix2StructVisionConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.patch_embed_hidden_size = patch_embed_hidden_size
         self.d_ff = d_ff
-        self.projection_dim = projection_dim
         self.dropout_rate = dropout_rate
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.patch_size = patch_size
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.dense_act_fn = dense_act_fn
         self.seq_len = seq_len
-        self.layer_norm_bias = layer_norm_bias
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.relative_attention_max_distance = relative_attention_max_distance
         self.d_kv = d_kv
@@ -286,6 +271,8 @@ class Pix2StructVisionConfig(PretrainedConfig):
     def from_pretrained(
         cls, pretrainehidden_size_name_or_path: Union[str, os.PathLike], **kwargs
     ) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
         config_dict, kwargs = cls.get_config_dict(pretrainehidden_size_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from Pix2StructConfig
@@ -350,7 +337,6 @@ class Pix2StructConfig(PretrainedConfig):
     ```"""
 
     model_type = "pix2struct"
-    is_composition = True
 
     def __init__(
         self,
@@ -401,16 +387,3 @@ class Pix2StructConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["text_config"] = self.text_config.to_dict()
-        output["vision_config"] = self.vision_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

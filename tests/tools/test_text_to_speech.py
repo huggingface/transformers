@@ -37,9 +37,11 @@ class TextToSpeechToolTester(unittest.TestCase, ToolTesterMixin):
         # SpeechT5 isn't deterministic
         torch.manual_seed(0)
         result = self.tool("hey")
+        resulting_tensor = result.to_raw()
         self.assertTrue(
             torch.allclose(
-                result[:3], torch.tensor([-0.00040140701457858086, -0.0002551682700868696, -0.00010294507956132293])
+                resulting_tensor[:3],
+                torch.tensor([-0.0005966668832115829, -0.0003657640190795064, -0.00013439502799883485]),
             )
         )
 
@@ -47,8 +49,10 @@ class TextToSpeechToolTester(unittest.TestCase, ToolTesterMixin):
         # SpeechT5 isn't deterministic
         torch.manual_seed(0)
         result = self.tool("hey")
+        resulting_tensor = result.to_raw()
         self.assertTrue(
             torch.allclose(
-                result[:3], torch.tensor([-0.00040140701457858086, -0.0002551682700868696, -0.00010294507956132293])
+                resulting_tensor[:3],
+                torch.tensor([-0.0005966668832115829, -0.0003657640190795064, -0.00013439502799883485]),
             )
         )

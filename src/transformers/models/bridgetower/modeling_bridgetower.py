@@ -33,18 +33,12 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
-from ...pytorch_utils import find_pruneable_heads_and_indices, is_torch_greater_or_equal_than_1_10, prune_linear_layer
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
 
 
 logger = logging.get_logger(__name__)
-
-if not is_torch_greater_or_equal_than_1_10:
-    logger.warning(
-        f"You are using torch=={torch.__version__}, but torch>=1.10.0 is required to use "
-        "BridgeTowerModel. Please upgrade torch."
-    )
 
 _CONFIG_FOR_DOC = "BridgeTowerConfig"
 _CHECKPOINT_FOR_DOC = "BridgeTower/bridgetower-base"
@@ -71,7 +65,7 @@ BRIDGETOWER_START_DOCSTRING = r"""
 BRIDGETOWER_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`BertTokenizer`]. See
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
 
@@ -286,11 +280,12 @@ class BridgeTowerVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
-        patch_embeds = self.patch_embedding(pixel_values)  # shape = [*, width, grid, grid]
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
@@ -886,7 +881,9 @@ class BridgeTowerTextEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
         self.register_buffer(
             "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
         )
@@ -982,6 +979,7 @@ class BridgeTowerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "bridgetower"
     supports_gradient_checkpointing = False
     _no_split_modules = ["BridgeTowerSelfAttention", "BridgeTowerResidualAttention"]
+    _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
         if isinstance(module, BridgeTowerVisionModel):
@@ -1042,8 +1040,6 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
     """
 
     config_class = BridgeTowerTextConfig
-
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -1122,6 +1118,7 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -1263,6 +1260,12 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             )
 
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.text_model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.text_model.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward(BRIDGETOWER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BridgeTowerModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1547,6 +1550,8 @@ class BridgeTowerITMHead(nn.Module):
     BRIDGETOWER_START_DOCSTRING,
 )
 class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
+    _tied_weights_keys = ["mlm_score.decoder.weight"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1774,7 +1779,7 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         self.itc_image_head = BridgeTowerContrastiveHead(config.hidden_size, config.contrastive_hidden_size)
         self.itc_cross_modal_head = BridgeTowerContrastiveHead(config.hidden_size * 2, config.contrastive_hidden_size)
 
-        self.logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
+        self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
         # Initialize weights and apply final processing
         self.post_init()
 

@@ -14,7 +14,6 @@
 # limitations under the License.
 """ OWL-ViT model configuration"""
 
-import copy
 import os
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Union
@@ -127,6 +126,8 @@ class OwlViTTextConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from OwlViTConfig
@@ -230,6 +231,8 @@ class OwlViTVisionConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from OwlViTConfig
@@ -270,7 +273,6 @@ class OwlViTConfig(PretrainedConfig):
     """
 
     model_type = "owlvit"
-    is_composition = True
 
     def __init__(
         self,
@@ -301,6 +303,8 @@ class OwlViTConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
@@ -325,19 +329,6 @@ class OwlViTConfig(PretrainedConfig):
         config_dict["vision_config"] = vision_config
 
         return cls.from_dict(config_dict, **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["text_config"] = self.text_config.to_dict()
-        output["vision_config"] = self.vision_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
 
 
 class OwlViTOnnxConfig(OnnxConfig):
@@ -377,7 +368,7 @@ class OwlViTOnnxConfig(OnnxConfig):
             processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
         )
         image_input_dict = super().generate_dummy_inputs(
-            processor.feature_extractor, batch_size=batch_size, framework=framework
+            processor.image_processor, batch_size=batch_size, framework=framework
         )
         return {**text_input_dict, **image_input_dict}
 

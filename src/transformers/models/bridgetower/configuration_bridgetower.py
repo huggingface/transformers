@@ -14,7 +14,6 @@
 # limitations under the License.
 """ BridgeTower model configuration"""
 
-import copy
 import os
 from typing import Union
 
@@ -155,8 +154,6 @@ class BridgeTowerTextConfig(PretrainedConfig):
         initializer_factor (`float``, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
@@ -170,8 +167,6 @@ class BridgeTowerTextConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        classifier_dropout (`float`, *optional*):
-            The dropout ratio for the classification head.
 
     Example:
 
@@ -199,14 +194,12 @@ class BridgeTowerTextConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=514,
         type_vocab_size=1,
-        initializer_range=0.02,
         layer_norm_eps=1e-05,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
         position_embedding_type="absolute",
         use_cache=True,
-        classifier_dropout=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -222,11 +215,9 @@ class BridgeTowerTextConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
-        self.classifier_dropout = classifier_dropout
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
@@ -357,16 +348,3 @@ class BridgeTowerConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["text_config"] = self.text_config.to_dict()
-        output["vision_config"] = self.vision_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format
+from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -56,7 +56,7 @@ class ViTImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
             `preprocess` method.
-        do_normalize:
+        do_normalize (`bool`, *optional*, defaults to `True`):
             Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
             method.
         image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
@@ -109,7 +109,7 @@ class ViTImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample:
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
@@ -123,60 +123,8 @@ class ViTImageProcessor(BaseImageProcessor):
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
             raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        return resize(
-            image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
-        )
-
-    def rescale(
-        self, image: np.ndarray, scale: float, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
-    ) -> np.ndarray:
-        """
-        Rescale an image by a scale factor. image = image * scale.
-
-        Args:
-            image (`np.ndarray`):
-                Image to rescale.
-            scale (`float`):
-                The scaling factor to rescale pixel values by.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-
-        Returns:
-            `np.ndarray`: The rescaled image.
-        """
-        return rescale(image, scale=scale, data_format=data_format, **kwargs)
-
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: Union[float, List[float]],
-        std: Union[float, List[float]],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Normalize an image. image = (image - image_mean) / image_std.
-
-        Args:
-            image (`np.ndarray`):
-                Image to normalize.
-            mean (`float` or `List[float]`):
-                Image mean to use for normalization.
-            std (`float` or `List[float]`):
-                Image standard deviation to use for normalization.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-
-        Returns:
-            `np.ndarray`: The normalized image.
-        """
-        return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
+        output_size = (size["height"], size["width"])
+        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
     def preprocess(
         self,

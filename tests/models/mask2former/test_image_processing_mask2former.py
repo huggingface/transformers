@@ -147,7 +147,6 @@ class Mask2FormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Te
         self.assertTrue(hasattr(image_processing, "do_normalize"))
         self.assertTrue(hasattr(image_processing, "do_resize"))
         self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "max_size"))
         self.assertTrue(hasattr(image_processing, "ignore_index"))
         self.assertTrue(hasattr(image_processing, "num_labels"))
 
@@ -261,28 +260,6 @@ class Mask2FormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Te
                 expected_height,
                 expected_width,
             ),
-        )
-
-    def test_equivalence_pad_and_create_pixel_mask(self):
-        # Initialize image_processings
-        image_processing_1 = self.image_processing_class(**self.image_processor_dict)
-        image_processing_2 = self.image_processing_class(
-            do_resize=False, do_normalize=False, do_rescale=False, num_labels=self.image_processor_tester.num_classes
-        )
-        # create random PyTorch tensors
-        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False, torchify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, torch.Tensor)
-
-        # Test whether the method "pad_and_return_pixel_mask" and calling the image processor return the same tensors
-        encoded_images_with_method = image_processing_1.encode_inputs(image_inputs, return_tensors="pt")
-        encoded_images = image_processing_2(image_inputs, return_tensors="pt")
-
-        self.assertTrue(
-            torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4)
-        )
-        self.assertTrue(
-            torch.allclose(encoded_images_with_method["pixel_mask"], encoded_images["pixel_mask"], atol=1e-4)
         )
 
     def comm_get_image_processing_inputs(
@@ -545,9 +522,9 @@ class Mask2FormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Te
         self.assertEqual(segmentation[0].shape, target_sizes[0])
 
     def test_post_process_instance_segmentation(self):
-        feature_extractor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
+        image_processor = self.image_processing_class(num_labels=self.image_processor_tester.num_classes)
         outputs = self.image_processor_tester.get_fake_mask2former_outputs()
-        segmentation = feature_extractor.post_process_instance_segmentation(outputs, threshold=0)
+        segmentation = image_processor.post_process_instance_segmentation(outputs, threshold=0)
 
         self.assertTrue(len(segmentation) == self.image_processor_tester.batch_size)
         for el in segmentation:
@@ -556,7 +533,7 @@ class Mask2FormerImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Te
             self.assertEqual(type(el["segments_info"]), list)
             self.assertEqual(el["segmentation"].shape, (384, 384))
 
-        segmentation = feature_extractor.post_process_instance_segmentation(
+        segmentation = image_processor.post_process_instance_segmentation(
             outputs, threshold=0, return_binary_maps=True
         )
 

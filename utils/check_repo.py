@@ -16,6 +16,7 @@
 import inspect
 import os
 import re
+import sys
 import warnings
 from collections import OrderedDict
 from difflib import get_close_matches
@@ -45,6 +46,7 @@ PRIVATE_MODELS = [
     "RealmBertModel",
     "T5Stack",
     "MT5Stack",
+    "UMT5Stack",
     "SwitchTransformersStack",
     "TFDPRSpanPredictor",
     "MaskFormerSwinModel",
@@ -57,8 +59,10 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "InstructBlipQFormerModel",  # Building part of bigger (tested) model.
     "NllbMoeDecoder",
     "NllbMoeEncoder",
+    "UMT5EncoderModel",  # Building part of bigger (tested) model.
     "LlamaDecoder",  # Building part of bigger (tested) model.
     "Blip2QFormerModel",  # Building part of bigger (tested) model.
     "DetaEncoder",  # Building part of bigger (tested) model.
@@ -73,6 +77,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TimeSeriesTransformerDecoder",  # Building part of bigger (tested) model.
     "InformerEncoder",  # Building part of bigger (tested) model.
     "InformerDecoder",  # Building part of bigger (tested) model.
+    "AutoformerEncoder",  # Building part of bigger (tested) model.
+    "AutoformerDecoder",  # Building part of bigger (tested) model.
     "JukeboxVQVAE",  # Building part of bigger (tested) model.
     "JukeboxPrior",  # Building part of bigger (tested) model.
     "DeformableDetrEncoder",  # Building part of bigger (tested) model.
@@ -116,6 +122,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "MegatronBertEncoder",  # Building part of bigger (tested) model.
     "MegatronBertDecoder",  # Building part of bigger (tested) model.
     "MegatronBertDecoderWrapper",  # Building part of bigger (tested) model.
+    "MusicgenDecoder",  # Building part of bigger (tested) model.
     "MvpDecoderWrapper",  # Building part of bigger (tested) model.
     "MvpEncoder",  # Building part of bigger (tested) model.
     "PegasusEncoder",  # Building part of bigger (tested) model.
@@ -160,6 +167,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "SpeechT5SpeechEncoder",  # Building part of bigger (tested) model.
     "SpeechT5TextDecoder",  # Building part of bigger (tested) model.
     "SpeechT5TextEncoder",  # Building part of bigger (tested) model.
+    "BarkCausalModel",  # Building part of bigger (tested) model.
+    "BarkModel",  # Does not have a forward signature - generation tested with integration tests
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -181,6 +190,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/vision_text_dual_encoder/test_modeling_tf_vision_text_dual_encoder.py",
     "models/vision_text_dual_encoder/test_modeling_flax_vision_text_dual_encoder.py",
     "models/decision_transformer/test_modeling_decision_transformer.py",
+    "models/bark/test_modeling_bark.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
@@ -223,6 +233,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "GPTSanJapaneseModel",
     "TimeSeriesTransformerForPrediction",
     "InformerForPrediction",
+    "AutoformerForPrediction",
     "JukeboxVQVAE",
     "JukeboxPrior",
     "PegasusXEncoder",
@@ -279,6 +290,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "FlavaMultimodalModel",
     "GPT2DoubleHeadsModel",
     "GPTSw3DoubleHeadsModel",
+    "InstructBlipVisionModel",
+    "InstructBlipQFormerModel",
     "LayoutLMForQuestionAnswering",
     "LukeForMaskedLM",
     "LukeForEntityClassification",
@@ -322,9 +335,30 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "AltCLIPVisionModel",
     "AltRobertaModel",
     "TvltForAudioVisualClassification",
+    "BarkCausalModel",
+    "BarkCoarseModel",
+    "BarkFineModel",
+    "BarkSemanticModel",
+    "MusicgenModel",
+    "MusicgenForConditionalGeneration",
     "SpeechT5ForSpeechToSpeech",
     "SpeechT5ForTextToSpeech",
     "SpeechT5HifiGan",
+]
+
+# DO NOT edit this list!
+# (The corresponding pytorch objects should never be in the main `__init__`, but it's too late to remove)
+OBJECT_TO_SKIP_IN_MAIN_INIT_CHECK = [
+    "FlaxBertLayer",
+    "FlaxBigBirdLayer",
+    "FlaxRoFormerLayer",
+    "TFBertLayer",
+    "TFLxmertEncoder",
+    "TFLxmertXLayer",
+    "TFMPNetLayer",
+    "TFMobileBertLayer",
+    "TFSegformerLayer",
+    "TFViTMAELayer",
 ]
 
 # Update this list for models that have multiple model types for the same
@@ -373,6 +407,8 @@ def check_model_list():
     models_dir = os.path.join(PATH_TO_TRANSFORMERS, "models")
     _models = []
     for model in os.listdir(models_dir):
+        if model == "deprecated":
+            continue
         model_dir = os.path.join(models_dir, model)
         if os.path.isdir(model_dir) and "__init__.py" in os.listdir(model_dir):
             _models.append(model)
@@ -405,6 +441,7 @@ def get_model_modules():
         "modeling_speech_encoder_decoder",
         "modeling_flax_speech_encoder_decoder",
         "modeling_flax_vision_encoder_decoder",
+        "modeling_timm_backbone",
         "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
         "modeling_tf_encoder_decoder",
@@ -417,6 +454,8 @@ def get_model_modules():
     ]
     modules = []
     for model in dir(transformers.models):
+        if model == "deprecated":
+            continue
         # There are some magic dunder attributes in the dir, we ignore them
         if not model.startswith("__"):
             model_module = getattr(transformers.models, model)
@@ -707,6 +746,72 @@ def check_all_auto_mapping_names_in_config_mapping_names():
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
 
+def check_all_auto_mappings_importable():
+    """Check all auto mappings could be imported."""
+    check_missing_backends()
+
+    failures = []
+    mappings_to_check = {}
+    # Each auto modeling files contains multiple mappings. Let's get them in a dynamic way.
+    for module_name in ["modeling_auto", "modeling_tf_auto", "modeling_flax_auto"]:
+        module = getattr(transformers.models.auto, module_name, None)
+        if module is None:
+            continue
+        # all mappings in a single auto modeling file
+        mapping_names = [x for x in dir(module) if x.endswith("_MAPPING_NAMES")]
+        mappings_to_check.update({name: getattr(module, name) for name in mapping_names})
+
+    for name, _ in mappings_to_check.items():
+        name = name.replace("_MAPPING_NAMES", "_MAPPING")
+        if not hasattr(transformers, name):
+            failures.append(f"`{name}`")
+    if len(failures) > 0:
+        raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
+
+
+def check_objects_being_equally_in_main_init():
+    """Check if an object is in the main __init__ if its counterpart in PyTorch is."""
+    attrs = dir(transformers)
+
+    failures = []
+    for attr in attrs:
+        obj = getattr(transformers, attr)
+        if hasattr(obj, "__module__"):
+            module_path = obj.__module__
+            if "models.deprecated" in module_path:
+                continue
+            module_name = module_path.split(".")[-1]
+            module_dir = ".".join(module_path.split(".")[:-1])
+            if (
+                module_name.startswith("modeling_")
+                and not module_name.startswith("modeling_tf_")
+                and not module_name.startswith("modeling_flax_")
+            ):
+                parent_module = sys.modules[module_dir]
+
+                frameworks = []
+                if is_tf_available():
+                    frameworks.append("TF")
+                if is_flax_available():
+                    frameworks.append("Flax")
+
+                for framework in frameworks:
+                    other_module_path = module_path.replace("modeling_", f"modeling_{framework.lower()}_")
+                    if os.path.isfile("src/" + other_module_path.replace(".", "/") + ".py"):
+                        other_module_name = module_name.replace("modeling_", f"modeling_{framework.lower()}_")
+                        other_module = getattr(parent_module, other_module_name)
+                        if hasattr(other_module, f"{framework}{attr}"):
+                            if not hasattr(transformers, f"{framework}{attr}"):
+                                if f"{framework}{attr}" not in OBJECT_TO_SKIP_IN_MAIN_INIT_CHECK:
+                                    failures.append(f"{framework}{attr}")
+                        if hasattr(other_module, f"{framework}_{attr}"):
+                            if not hasattr(transformers, f"{framework}_{attr}"):
+                                if f"{framework}_{attr}" not in OBJECT_TO_SKIP_IN_MAIN_INIT_CHECK:
+                                    failures.append(f"{framework}_{attr}")
+    if len(failures) > 0:
+        raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
+
+
 _re_decorator = re.compile(r"^\s*@(\S+)\s+$")
 
 
@@ -752,7 +857,7 @@ def find_all_documented_objects():
             content = f.read()
         raw_doc_objs = re.findall(r"(?:autoclass|autofunction):: transformers.(\S+)\s+", content)
         documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
-    for doc_file in Path(PATH_TO_DOC).glob("**/*.mdx"):
+    for doc_file in Path(PATH_TO_DOC).glob("**/*.md"):
         with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
             content = f.read()
         raw_doc_objs = re.findall(r"\[\[autodoc\]\]\s+(\S+)\s+", content)
@@ -822,6 +927,12 @@ UNDOCUMENTED_OBJECTS = [
     "logging",  # External module
     "requires_backends",  # Internal function
     "AltRobertaModel",  # Internal module
+    "FalconConfig",  # TODO Matt Remove this and re-add the docs once TGI is ready
+    "FalconForCausalLM",
+    "FalconForQuestionAnswering",
+    "FalconForSequenceClassification",
+    "FalconForTokenClassification",
+    "FalconModel",
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
@@ -843,6 +954,8 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "NatBackbone",
     "ResNetBackbone",
     "SwinBackbone",
+    "TimmBackbone",
+    "TimmBackboneConfig",
 ]
 
 
@@ -902,7 +1015,7 @@ def check_all_objects_are_documented():
 def check_model_type_doc_match():
     """Check all doc pages have a corresponding model type."""
     model_doc_folder = Path(PATH_TO_DOC) / "model_doc"
-    model_docs = [m.stem for m in model_doc_folder.glob("*.mdx")]
+    model_docs = [m.stem for m in model_doc_folder.glob("*.md")]
 
     model_types = list(transformers.models.auto.configuration_auto.MODEL_NAMES_MAPPING.keys())
     model_types = [MODEL_TYPE_TO_DOC_MAPPING[m] if m in MODEL_TYPE_TO_DOC_MAPPING else m for m in model_types]
@@ -970,6 +1083,32 @@ def check_docstrings_are_in_md():
         )
 
 
+def check_deprecated_constant_is_up_to_date():
+    deprecated_folder = os.path.join(PATH_TO_TRANSFORMERS, "models", "deprecated")
+    deprecated_models = [m for m in os.listdir(deprecated_folder) if not m.startswith("_")]
+
+    constant_to_check = transformers.models.auto.configuration_auto.DEPRECATED_MODELS
+    message = []
+    missing_models = sorted(set(deprecated_models) - set(constant_to_check))
+    if len(missing_models) != 0:
+        missing_models = ", ".join(missing_models)
+        message.append(
+            "The following models are in the deprecated folder, make sure to add them to `DEPRECATED_MODELS` in "
+            f"`models/auto/configuration_auto.py`: {missing_models}."
+        )
+
+    extra_models = sorted(set(constant_to_check) - set(deprecated_models))
+    if len(extra_models) != 0:
+        extra_models = ", ".join(extra_models)
+        message.append(
+            "The following models are in the `DEPRECATED_MODELS` constant but not in the deprecated folder. Either "
+            f"remove them from the constant or move to the deprecated folder: {extra_models}."
+        )
+
+    if len(message) > 0:
+        raise Exception("\n".join(message))
+
+
 def check_repo_quality():
     """Check all models are properly tested and documented."""
     print("Checking all models are included.")
@@ -987,6 +1126,12 @@ def check_repo_quality():
     check_all_auto_object_names_being_defined()
     print("Checking all keys in auto name mappings are defined in `CONFIG_MAPPING_NAMES`.")
     check_all_auto_mapping_names_in_config_mapping_names()
+    print("Checking all auto mappings could be imported.")
+    check_all_auto_mappings_importable()
+    print("Checking all objects are equally (across frameworks) in the main __init__.")
+    check_objects_being_equally_in_main_init()
+    print("Checking the DEPRECATED_MODELS constant is up to date.")
+    check_deprecated_constant_is_up_to_date()
 
 
 if __name__ == "__main__":

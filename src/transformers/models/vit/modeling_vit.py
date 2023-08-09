@@ -439,7 +439,7 @@ class ViTPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = []
+    _no_split_modules = ["ViTEmbeddings", "ViTLayer"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -694,6 +694,13 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
         [1, 3, 224, 224]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if bool_masked_pos is not None and (self.config.patch_size != self.config.encoder_stride):
+            raise ValueError(
+                "When `bool_masked_pos` is provided, `patch_size` must be equal to `encoder_stride` to ensure that "
+                "the reconstructed image has the same dimensions as the input."
+                f"Got `patch_size` = {self.config.patch_size} and `encoder_stride` = {self.config.encoder_stride}."
+            )
 
         outputs = self.vit(
             pixel_values,

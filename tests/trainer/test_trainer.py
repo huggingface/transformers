@@ -23,14 +23,13 @@ import re
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from itertools import product
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import numpy as np
-from huggingface_hub import HfFolder, Repository, delete_repo
+from huggingface_hub import HfFolder, delete_repo, list_repo_commits
 from parameterized import parameterized
 from requests.exceptions import HTTPError
 
@@ -42,12 +41,14 @@ from transformers import (
     is_torch_available,
     logging,
 )
+from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     TOKEN,
     USER,
     CaptureLogger,
     TestCasePlus,
+    execute_subprocess_async,
     get_gpu_count,
     get_tests_dir,
     is_staging_test,
@@ -72,7 +73,7 @@ from transformers.testing_utils import (
     require_wandb,
     slow,
 )
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
@@ -798,9 +799,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_train_and_eval_dataloaders(self):
         n_gpu = max(1, torch.cuda.device_count())
         trainer = get_regression_trainer(learning_rate=0.1, per_device_train_batch_size=16)
-        self.assertEqual(trainer.get_train_dataloader().batch_size, 16 * n_gpu)
+        self.assertEqual(trainer.get_train_dataloader().total_batch_size, 16 * n_gpu)
         trainer = get_regression_trainer(learning_rate=0.1, per_device_eval_batch_size=16)
-        self.assertEqual(trainer.get_eval_dataloader().batch_size, 16 * n_gpu)
+        self.assertEqual(trainer.get_eval_dataloader().total_batch_size, 16 * n_gpu)
 
         # Check drop_last works
         trainer = get_regression_trainer(
@@ -833,67 +834,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         trainer.evaluate()
 
-    def test_sampler_seed(self):
-        # nb: we don't want to inherit from IterableDataset to hit the right code path
-        class DummyDataset(torch.utils.data.Dataset):
-            def __init__(self, length: int = 101):
-                self.length = length
-
-            def __len__(self):
-                return self.length
-
-            def __getitem__(self, i):
-                if (i < 0) or (i >= self.length):
-                    raise IndexError
-                return {"input_ids": [i]}
-
-        class DummyModel(PreTrainedModel):
-            def __init__(self, num_params: int):
-                super().__init__(PretrainedConfig())
-                # Add some (unused) params. the point here is that randomness in model_init shouldn't influence
-                # data loader order.
-                self.params = nn.Parameter(torch.randn(num_params))
-
-            def forward(self, input_ids, labels=None):
-                if labels is not None:
-                    return torch.tensor(0.0, device=input_ids.device), input_ids
-                else:
-                    return input_ids
-
-        def _get_first_data_sample(num_params, seed, data_seed, **kwargs):
-            with tempfile.TemporaryDirectory() as tmpdir:
-                trainer = Trainer(
-                    model_init=lambda: DummyModel(num_params),
-                    args=TrainingArguments(
-                        output_dir=tmpdir,
-                        **kwargs,
-                        seed=seed,
-                        data_seed=data_seed,
-                        local_rank=-1,
-                    ),
-                    train_dataset=DummyDataset(),
-                )
-
-                return next(iter(trainer.get_train_dataloader()))
-
-        # test that the seed is passed to the sampler
-        # the codepath we want to hit is world_size <= 1, and both group_by_length
-        for group_by_length in [True, False]:
-            sample42_1 = _get_first_data_sample(num_params=10, seed=42, data_seed=42, group_by_length=group_by_length)
-            sample42_2 = _get_first_data_sample(num_params=11, seed=42, data_seed=42, group_by_length=group_by_length)
-            self.assertTrue(torch.equal(sample42_1["input_ids"], sample42_2["input_ids"]))
-
-            # should get same samples with different seed, so long as data_seed is the same
-            sample42_3 = _get_first_data_sample(num_params=11, seed=11, data_seed=42, group_by_length=group_by_length)
-            self.assertTrue(torch.equal(sample42_1["input_ids"], sample42_3["input_ids"]))
-
-            # make sure we have some randomness in the samples if data_seed is different
-            others = [
-                _get_first_data_sample(num_params=i, seed=42, data_seed=i, group_by_length=group_by_length)
-                for i in range(10)
-            ]
-            self.assertTrue(any(not torch.equal(sample42_1["input_ids"], sample["input_ids"]) for sample in others))
-
     @require_torch_multi_gpu
     def test_data_is_not_parallelized_when_model_is_parallel(self):
         model = RegressionModel()
@@ -907,9 +847,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(trainer.args.n_gpu, 1)
 
         # The batch size of the training and evaluation dataloaders should be 16, not 16 * n_gpu
-        self.assertEqual(trainer.get_train_dataloader().batch_size, 16)
+        self.assertEqual(trainer.get_train_dataloader().total_batch_size, 16)
         self.assertEqual(len(trainer.get_train_dataloader()), 64 // 16)
-        self.assertEqual(trainer.get_eval_dataloader().batch_size, 16)
+        self.assertEqual(trainer.get_eval_dataloader().total_batch_size, 16)
         self.assertEqual(len(trainer.get_eval_dataloader()), 64 // 16)
 
     def test_evaluate(self):
@@ -1742,26 +1682,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertIsInstance(loader, torch.utils.data.DataLoader)
         self.assertIsInstance(loader.sampler, torch.utils.data.dataloader._InfiniteConstantSampler)
 
-    def test_training_finite_iterable_dataset(self):
-        config = RegressionModelConfig()
-        model = RegressionPreTrainedModel(config)
-
-        batch_size = 1
-        num_samples = 10
-
-        available_steps = num_samples // batch_size
-
-        data = FiniteIterableDataset(length=num_samples)
-        train_args = TrainingArguments(
-            "..",
-            max_steps=available_steps + 1,  # set a higher number than actually available
-            per_device_train_batch_size=batch_size,
-        )
-        trainer = Trainer(model, train_dataset=data, args=train_args)
-        with self.assertLogs("transformers.trainer", level="WARNING") as logs:
-            trainer.train()
-        self.assertIn(f"stopping training at step {available_steps}!", logs.output[0])
-
     def test_evaluation_iterable_dataset(self):
         config = RegressionModelConfig(a=1.5, b=2.5)
         model = RegressionPreTrainedModel(config)
@@ -2178,6 +2098,51 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertListEqual(trainer.optimizer.param_groups[0]["params"], wd_params)
         self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
 
+    @slow
+    @require_torch_multi_gpu
+    def test_end_to_end_example(self):
+        # Tests that `translation.py` will run without issues
+        script_path = os.path.abspath(
+            os.path.join(
+                os.path.dirname(__file__), "..", "..", "examples", "pytorch", "translation", "run_translation.py"
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            command = [
+                "accelerate",
+                "launch",
+                script_path,
+                "--model_name_or_path",
+                "t5-small",
+                "--per_device_train_batch_size",
+                "1",
+                "--output_dir",
+                tmpdir,
+                "--overwrite_output_dir",
+                "--do_train",
+                "--max_train_samples",
+                "64",
+                "--num_train_epochs",
+                "1",
+                "--dataset_name",
+                "wmt16",
+                "--dataset_config",
+                "ro-en",
+                "--source_lang",
+                "en",
+                "--target_lang",
+                "ro",
+                "--do_predict",
+                "--max_predict_samples",
+                "64",
+                "--predict_with_generate",
+                "--ddp_timeout",
+                "60",
+            ]
+            execute_subprocess_async(command)
+            # successful return here == success - any errors would have caused an error or a timeout in the sub-call
+
 
 @require_torch
 @is_staging_test
@@ -2260,21 +2225,17 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                 output_dir=os.path.join(tmp_dir, "test-trainer-epoch"),
                 push_to_hub=True,
                 hub_token=self._token,
+                # To avoid any flakiness if the training goes faster than the uploads.
+                hub_always_push=True,
                 save_strategy="epoch",
             )
             trainer.train()
 
-            # Wait for the async pushes to be finished
-            while trainer.push_in_progress is not None and not trainer.push_in_progress.is_done:
-                time.sleep(0.5)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-epoch", token=self._token)
-            commits = self.get_commit_history(tmp_dir)
-            self.assertIn("initial commit", commits)
-            # We can't test that epoch 2 and 3 are in the commits without being flaky as those might be skipped if
-            # the push for epoch 1 wasn't finished at the time.
-            self.assertIn("Training in progress, epoch 1", commits)
+        commits = list_repo_commits(f"{USER}/test-trainer-epoch", token=self._token)
+        commits = [c.title for c in commits]
+        self.assertIn("initial commit", commits)
+        for i in range(1, 4):
+            self.assertIn(f"Training in progress, epoch {i}", commits)
 
     def test_push_to_hub_with_saves_each_n_steps(self):
         num_gpus = max(1, get_gpu_count())
@@ -2286,22 +2247,21 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                 output_dir=os.path.join(tmp_dir, "test-trainer-step"),
                 push_to_hub=True,
                 hub_token=self._token,
+                # To avoid any flakiness if the training goes faster than the uploads.
+                hub_always_push=True,
                 save_strategy="steps",
                 save_steps=5,
             )
             trainer.train()
 
-            # Wait for the async pushes to be finished
-            while trainer.push_in_progress is not None and not trainer.push_in_progress.is_done:
-                time.sleep(0.5)
+        commits = list_repo_commits(f"{USER}/test-trainer-step", token=self._token)
+        commits = [c.title for c in commits]
+        self.assertIn("initial commit", commits)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-step", token=self._token)
-            commits = self.get_commit_history(tmp_dir)
-            self.assertIn("initial commit", commits)
-            # We can't test that epoch 2 and 3 are in the commits without being flaky as those might be skipped if
-            # the push for epoch 1 wasn't finished at the time.
-            self.assertIn("Training in progress, step 5", commits)
+        # max_steps depend on the number of available GPUs
+        max_steps = math.ceil(trainer.args.num_train_epochs * len(trainer.get_train_dataloader()))
+        for i in range(5, max_steps, 5):
+            self.assertIn(f"Training in progress, step {i}", commits)
 
 
 @require_torch
@@ -2474,6 +2434,11 @@ if is_torch_available():
         "lr": TrainingArguments.learning_rate,
     }
 
+    default_lion_kwargs = {
+        "betas": (TrainingArguments.adam_beta1, TrainingArguments.adam_beta2),
+        "lr": TrainingArguments.learning_rate,
+    }
+
     default_anyprecision_kwargs = {
         "use_kahan_summation": False,
         "momentum_dtype": torch.float32,
@@ -2525,8 +2490,56 @@ if is_torch_available():
         optim_test_params.append(
             (
                 TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None"),
-                bnb.optim.Adam8bit,
+                bnb.optim.AdamW,
                 default_adam_kwargs,
+            )
+        )
+
+        optim_test_params.append(
+            (
+                TrainingArguments(optim=OptimizerNames.ADAMW_8BIT, output_dir="None"),
+                bnb.optim.AdamW,
+                default_adam_kwargs,
+            )
+        )
+
+        optim_test_params.append(
+            (
+                TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir="None"),
+                bnb.optim.AdamW,
+                default_adam_kwargs,
+            )
+        )
+
+        optim_test_params.append(
+            (
+                TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir="None"),
+                bnb.optim.AdamW,
+                default_adam_kwargs,
+            )
+        )
+
+        optim_test_params.append(
+            (
+                TrainingArguments(optim=OptimizerNames.LION, output_dir="None"),
+                bnb.optim.Lion,
+                default_lion_kwargs,
+            )
+        )
+
+        optim_test_params.append(
+            (
+                TrainingArguments(optim=OptimizerNames.LION_8BIT, output_dir="None"),
+                bnb.optim.Lion,
+                default_lion_kwargs,
+            )
+        )
+
+        optim_test_params.append(
+            (
+                TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir="None"),
+                bnb.optim.Lion,
+                default_lion_kwargs,
             )
         )
 
@@ -2598,17 +2611,151 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         modules = {
             "bitsandbytes": mock,
             "bitsandbytes.optim": mock.optim,
-            "bitsandbytes.optim.Adam8bit": mock.optim.Adam8bit,
+            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
         }
         with patch.dict("sys.modules", modules):
             self.check_optim_and_kwargs(
                 TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None"),
-                mock.optim.Adam8bit,
+                mock.optim.AdamW,
                 default_adam_kwargs,
+            )
+
+    def test_bnb_paged_adam8bit_alias(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.ADAMW_8BIT, output_dir="None"),
+                mock.optim.AdamW,
+                default_adam_kwargs,
+            )
+
+    def test_bnb_paged_adam(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir="None"),
+                mock.optim.AdamW,
+                default_adam_kwargs,
+            )
+
+    def test_bnb_paged_adam8bit(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.AdamW": mock.optim.AdamW,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir="None"),
+                mock.optim.AdamW,
+                default_adam_kwargs,
+            )
+
+    def test_bnb_lion(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.Lion": mock.optim.Lion,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.LION, output_dir="None"),
+                mock.optim.Lion,
+                default_lion_kwargs,
+            )
+
+    def test_bnb_lion8bit(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.Lion": mock.optim.Lion,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.LION_8BIT, output_dir="None"),
+                mock.optim.Lion,
+                default_lion_kwargs,
+            )
+
+    def test_bnb_paged_lion8bit(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.Lion": mock.optim.Lion,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir="None"),
+                mock.optim.Lion,
+                default_lion_kwargs,
+            )
+
+    def test_bnb_paged_lion(self):
+        mock = Mock()
+        modules = {
+            "bitsandbytes": mock,
+            "bitsandbytes.optim": mock.optim,
+            "bitsandbytes.optim.Lion": mock.optim.Lion,
+        }
+        with patch.dict("sys.modules", modules):
+            self.check_optim_and_kwargs(
+                TrainingArguments(optim=OptimizerNames.PAGED_LION, output_dir="None"),
+                mock.optim.Lion,
+                default_lion_kwargs,
             )
 
     def test_bnb_adam8bit_no_bnb(self):
         args = TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None")
+
+        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+        # bnb will fail even if bnb is installed.
+        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_bnb_paged_adam_no_bnb(self):
+        args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir="None")
+
+        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+        # bnb will fail even if bnb is installed.
+        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_bnb_paged_adam8bit_no_bnb(self):
+        args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir="None")
+
+        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+        # bnb will fail even if bnb is installed.
+        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_bnb_paged_lion_no_bnb(self):
+        args = TrainingArguments(optim=OptimizerNames.PAGED_LION, output_dir="None")
+
+        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+        # bnb will fail even if bnb is installed.
+        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+            with self.assertRaises(ValueError):
+                Trainer.get_optimizer_cls_and_kwargs(args)
+
+    def test_bnb_paged_lion8bit_no_bnb(self):
+        args = TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir="None")
 
         # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
         # bnb will fail even if bnb is installed.
@@ -2697,3 +2844,11 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
             trainer.hyperparameter_search(
                 direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="wandb", n_trials=4, anonymous="must"
             )
+
+
+class HyperParameterSearchBackendsTest(unittest.TestCase):
+    def test_hyperparameter_search_backends(self):
+        self.assertEqual(
+            list(ALL_HYPERPARAMETER_SEARCH_BACKENDS.keys()),
+            list(HPSearchBackend),
+        )

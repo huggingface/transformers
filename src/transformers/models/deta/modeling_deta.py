@@ -295,19 +295,27 @@ class DetaFrozenBatchNorm2d(nn.Module):
 
 
 # Copied from transformers.models.detr.modeling_detr.replace_batch_norm with Detr->Deta
-def replace_batch_norm(m, name=""):
-    for attr_str in dir(m):
-        target_attr = getattr(m, attr_str)
-        if isinstance(target_attr, nn.BatchNorm2d):
-            frozen = DetaFrozenBatchNorm2d(target_attr.num_features)
-            bn = getattr(m, attr_str)
-            frozen.weight.data.copy_(bn.weight)
-            frozen.bias.data.copy_(bn.bias)
-            frozen.running_mean.data.copy_(bn.running_mean)
-            frozen.running_var.data.copy_(bn.running_var)
-            setattr(m, attr_str, frozen)
-    for n, ch in m.named_children():
-        replace_batch_norm(ch, n)
+def replace_batch_norm(model):
+    r"""
+    Recursively replace all `torch.nn.BatchNorm2d` with `DetaFrozenBatchNorm2d`.
+
+    Args:
+        model (torch.nn.Module):
+            input model
+    """
+    for name, module in model.named_children():
+        if isinstance(module, nn.BatchNorm2d):
+            new_module = DetaFrozenBatchNorm2d(module.num_features)
+
+            new_module.weight.data.copy_(module.weight)
+            new_module.bias.data.copy_(module.bias)
+            new_module.running_mean.data.copy_(module.running_mean)
+            new_module.running_var.data.copy_(module.running_var)
+
+            model._modules[name] = new_module
+
+        if len(list(module.children())) > 0:
+            replace_batch_norm(module)
 
 
 class DetaBackboneWithPositionalEncodings(nn.Module):
@@ -851,7 +859,7 @@ class DetaDecoderLayer(nn.Module):
         """
         Args:
             hidden_states (`torch.FloatTensor`):
-                Input to the layer of shape `(seq_len, batch, embed_dim)`.
+                Input to the layer of shape `(batch, seq_len, embed_dim)`.
             position_embeddings (`torch.FloatTensor`, *optional*):
                 Position embeddings that are added to the queries and keys in the self-attention layer.
             reference_points (`torch.FloatTensor`, *optional*):
@@ -861,7 +869,7 @@ class DetaDecoderLayer(nn.Module):
             level_start_index (`torch.LongTensor`, *optional*):
                 Level start index.
             encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
+                cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
@@ -1455,7 +1463,7 @@ class DetaModel(DetaPreTrainedModel):
     def get_proposal_pos_embed(self, proposals):
         """Get the position embedding of the proposals."""
 
-        num_pos_feats = 128
+        num_pos_feats = self.config.d_model // 2
         temperature = 10000
         scale = 2 * math.pi
 
@@ -1775,7 +1783,7 @@ class DetaModel(DetaPreTrainedModel):
 )
 class DetaForObjectDetection(DetaPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    _keys_to_ignore_on_load_missing = [r"bbox_embed\.[1-9]\d*", r"class_embed\.[1-9]\d*"]
+    _tied_weights_keys = [r"bbox_embed\.\d+"]
 
     # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrForObjectDetection.__init__ with DeformableDetr->Deta
     def __init__(self, config: DetaConfig):
@@ -2484,9 +2492,9 @@ class DetaMatcher(object):
         thresholds.insert(0, -float("inf"))
         thresholds.append(float("inf"))
         # Currently torchscript does not support all + generator
-        if not all([low <= high for (low, high) in zip(thresholds[:-1], thresholds[1:])]):
+        if not all(low <= high for (low, high) in zip(thresholds[:-1], thresholds[1:])):
             raise ValueError("Thresholds should be sorted.")
-        if not all([l in [-1, 0, 1] for l in labels]):
+        if not all(l in [-1, 0, 1] for l in labels):
             raise ValueError("All labels should be either -1, 0 or 1")
         if len(labels) != len(thresholds) - 1:
             raise ValueError("Number of labels should be equal to number of thresholds - 1")

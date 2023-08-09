@@ -36,12 +36,23 @@ COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "dist": "loadfile", "s": None}
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
 
+class EmptyJob:
+    job_name = "empty"
+
+    def to_dict(self):
+        return {
+            "working_directory": "~/transformers",
+            "docker": copy.deepcopy(DEFAULT_DOCKER_IMAGE),
+            "steps":["checkout"],
+        }
+
+
 @dataclass
 class CircleCIJob:
     name: str
     additional_env: Dict[str, Any] = None
     cache_name: str = None
-    cache_version: str = "0.6"
+    cache_version: str = "0.7"
     docker_image: List[Dict[str, str]] = None
     install_steps: List[str] = None
     marker: Optional[str] = None
@@ -75,6 +86,11 @@ class CircleCIJob:
     def to_dict(self):
         env = COMMON_ENV_VARIABLES.copy()
         env.update(self.additional_env)
+
+        cache_branch_prefix = os.environ.get("CIRCLE_BRANCH", "pull")
+        if cache_branch_prefix != "main":
+            cache_branch_prefix = "pull"
+
         job = {
             "working_directory": self.working_directory,
             "docker": self.docker_image,
@@ -90,8 +106,21 @@ class CircleCIJob:
             {
                 "restore_cache": {
                     "keys": [
-                        f"v{self.cache_version}-{self.cache_name}-" + '{{ checksum "setup.py" }}',
-                        f"v{self.cache_version}-{self.cache_name}-",
+                        # check the fully-matched cache first
+                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
+                        # try the partially-matched cache from `main`
+                        f"v{self.cache_version}-{self.cache_name}-main-pip-",
+                        # try the general partially-matched cache
+                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-",
+                    ]
+                }
+            },
+            {
+                "restore_cache": {
+                    "keys": [
+                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
+                        f"v{self.cache_version}-{self.cache_name}-main-site-packages-",
+                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-",
                     ]
                 }
             },
@@ -100,8 +129,16 @@ class CircleCIJob:
         steps.append(
             {
                 "save_cache": {
-                    "key": f"v{self.cache_version}-{self.cache_name}-" + '{{ checksum "setup.py" }}',
+                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
                     "paths": ["~/.cache/pip"],
+                }
+            }
+        )
+        steps.append(
+            {
+                "save_cache": {
+                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
+                    "paths": ["~/.pyenv/versions/"],
                 }
             }
         )
@@ -117,7 +154,7 @@ class CircleCIJob:
         if self.command_timeout:
             test_command = f"timeout {self.command_timeout} "
         test_command += f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
-        
+
         if self.parallelism == 1:
             if self.tests_to_run is None:
                 test_command += " << pipeline.parameters.tests_to_run >>"
@@ -215,10 +252,10 @@ torch_and_tf_job = CircleCIJob(
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng git-lfs cmake",
         "git lfs install",
-        "pip install --upgrade pip",
-        "pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
-        "pip install tensorflow_probability",
-        "pip install git+https://github.com/huggingface/accelerate",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]",
+        "pip install -U --upgrade-strategy eager tensorflow_probability",
+        "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     marker="is_pt_tf_cross_test",
     pytest_options={"rA": None, "durations": 0},
@@ -230,9 +267,9 @@ torch_and_flax_job = CircleCIJob(
     additional_env={"RUN_PT_FLAX_CROSS_TESTS": True},
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
-        "pip install --upgrade pip",
-        "pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]",
-        "pip install git+https://github.com/huggingface/accelerate",
+        "pip install -U --upgrade-strategy eager --upgrade pip",
+        "pip install -U --upgrade-strategy eager .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]",
+        "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     marker="is_pt_flax_cross_test",
     pytest_options={"rA": None, "durations": 0},
@@ -243,12 +280,12 @@ torch_job = CircleCIJob(
     "torch",
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
-        "pip install --upgrade pip",
-        "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
-        "pip install git+https://github.com/huggingface/accelerate",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]",
+        "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     parallelism=1,
-    pytest_num_workers=3,
+    pytest_num_workers=8,
 )
 
 
@@ -256,12 +293,11 @@ tf_job = CircleCIJob(
     "tf",
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng cmake",
-        "pip install --upgrade pip",
-        "pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
-        "pip install tensorflow_probability",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]",
+        "pip install -U --upgrade-strategy eager tensorflow_probability",
     ],
     parallelism=1,
-    pytest_options={"rA": None},
 )
 
 
@@ -269,11 +305,10 @@ flax_job = CircleCIJob(
     "flax",
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
-        "pip install --upgrade pip",
-        "pip install .[flax,testing,sentencepiece,flax-speech,vision]",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager .[flax,testing,sentencepiece,flax-speech,vision]",
     ],
     parallelism=1,
-    pytest_options={"rA": None},
 )
 
 
@@ -282,10 +317,9 @@ pipelines_torch_job = CircleCIJob(
     additional_env={"RUN_PIPELINE_TESTS": True},
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
-        "pip install --upgrade pip",
-        "pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
     ],
-    pytest_options={"rA": None},
     marker="is_pipeline_test",
 )
 
@@ -295,11 +329,10 @@ pipelines_tf_job = CircleCIJob(
     additional_env={"RUN_PIPELINE_TESTS": True},
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y cmake",
-        "pip install --upgrade pip",
-        "pip install .[sklearn,tf-cpu,testing,sentencepiece,vision]",
-        "pip install tensorflow_probability",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,testing,sentencepiece,vision]",
+        "pip install -U --upgrade-strategy eager tensorflow_probability",
     ],
-    pytest_options={"rA": None},
     marker="is_pipeline_test",
 )
 
@@ -319,8 +352,8 @@ custom_tokenizers_job = CircleCIJob(
                 "sudo cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local\n"
                 "sudo make install\n",
         },
-        "pip install --upgrade pip",
-        "pip install .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]",
         "python -m unidic download",
     ],
     parallelism=None,
@@ -338,11 +371,10 @@ examples_torch_job = CircleCIJob(
     cache_name="torch_examples",
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
-        "pip install --upgrade pip",
-        "pip install .[sklearn,torch,sentencepiece,testing,torch-speech]",
-        "pip install -r examples/pytorch/_tests_requirements.txt",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager .[sklearn,torch,sentencepiece,testing,torch-speech]",
+        "pip install -U --upgrade-strategy eager -r examples/pytorch/_tests_requirements.txt",
     ],
-    tests_to_run="./examples/pytorch/",
 )
 
 
@@ -351,11 +383,10 @@ examples_tensorflow_job = CircleCIJob(
     cache_name="tensorflow_examples",
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y cmake",
-        "pip install --upgrade pip",
-        "pip install .[sklearn,tensorflow,sentencepiece,testing]",
-        "pip install -r examples/tensorflow/_tests_requirements.txt",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager .[sklearn,tensorflow,sentencepiece,testing]",
+        "pip install -U --upgrade-strategy eager -r examples/tensorflow/_tests_requirements.txt",
     ],
-    tests_to_run="./examples/tensorflow/",
 )
 
 
@@ -363,22 +394,22 @@ examples_flax_job = CircleCIJob(
     "examples_flax",
     cache_name="flax_examples",
     install_steps=[
-        "pip install --upgrade pip",
-        "pip install .[flax,testing,sentencepiece]",
-        "pip install -r examples/flax/_tests_requirements.txt",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager .[flax,testing,sentencepiece]",
+        "pip install -U --upgrade-strategy eager -r examples/flax/_tests_requirements.txt",
     ],
-    tests_to_run="./examples/flax/",
 )
 
 
 hub_job = CircleCIJob(
     "hub",
+    additional_env={"HUGGINGFACE_CO_STAGING": True},
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install git-lfs",
         'git config --global user.email "ci@dummy.com"',
         'git config --global user.name "ci"',
-        "pip install --upgrade pip",
-        "pip install .[torch,sentencepiece,testing]",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager .[torch,sentencepiece,testing,vision]",
     ],
     marker="is_staging_test",
     pytest_num_workers=1,
@@ -389,8 +420,8 @@ onnx_job = CircleCIJob(
     "onnx",
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y cmake",
-        "pip install --upgrade pip",
-        "pip install .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]",
     ],
     pytest_options={"k onnx": None},
     pytest_num_workers=1,
@@ -401,14 +432,16 @@ exotic_models_job = CircleCIJob(
     "exotic_models",
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev",
-        "pip install --upgrade pip",
-        "pip install .[torch,testing,vision]",
-        "pip install torchvision",
-        "pip install scipy",
-        "pip install 'git+https://github.com/facebookresearch/detectron2.git'",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager .[torch,testing,vision]",
+        "pip install -U --upgrade-strategy eager torchvision",
+        "pip install -U --upgrade-strategy eager scipy",
+        "pip install -U --upgrade-strategy eager 'git+https://github.com/facebookresearch/detectron2.git'",
         "sudo apt install tesseract-ocr",
-        "pip install pytesseract",
-        "pip install natten",
+        "pip install -U --upgrade-strategy eager pytesseract",
+        "pip install -U --upgrade-strategy eager natten",
+        # TODO (ydshieh): Remove this line once `https://github.com/facebookresearch/detectron2/issues/5010` is resolved
+        'pip install -U --upgrade-strategy eager "Pillow<10.0.0"',
     ],
     tests_to_run=[
         "tests/models/*layoutlmv*",
@@ -423,8 +456,8 @@ exotic_models_job = CircleCIJob(
 repo_utils_job = CircleCIJob(
     "repo_utils",
     install_steps=[
-        "pip install --upgrade pip",
-        "pip install .[quality,testing,torch]",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager .[quality,testing,torch]",
     ],
     parallelism=None,
     pytest_num_workers=1,
@@ -443,11 +476,12 @@ doc_test_job = CircleCIJob(
     "pr_documentation_tests",
     additional_env={"TRANSFORMERS_VERBOSITY": "error", "DATASETS_VERBOSITY": "error", "SKIP_CUDA_DOCTEST": "1"},
     install_steps=[
-        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time",
-        "pip install --upgrade pip",
-        "pip install -e .[dev]",
-        "pip install git+https://github.com/huggingface/accelerate",
-        "pip install --upgrade pytest pytest-sugar",
+        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time ffmpeg",
+        "pip install --upgrade --upgrade-strategy eager pip",
+        "pip install -U --upgrade-strategy eager -e .[dev]",
+        "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
+        "pip install --upgrade --upgrade-strategy eager pytest pytest-sugar",
+        "pip install -U --upgrade-strategy eager natten",
         "find -name __pycache__ -delete",
         "find . -name \*.pyc -delete",
         # Add an empty file to keep the test step running correctly even no file is selected to be tested.
@@ -468,7 +502,7 @@ doc_test_job = CircleCIJob(
         },
     ],
     tests_to_run="$(cat pr_documentation_tests.txt)",  # noqa
-    pytest_options={"-doctest-modules": None, "doctest-glob": "*.mdx", "dist": "loadfile", "rvsA": None},
+    pytest_options={"-doctest-modules": None, "doctest-glob": "*.md", "dist": "loadfile", "rvsA": None},
     command_timeout=1200,  # test cannot run longer than 1200 seconds
     pytest_num_workers=1,
 )
@@ -551,7 +585,17 @@ def create_circleci_config(folder=None):
 
     example_file = os.path.join(folder, "examples_test_list.txt")
     if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
-        jobs.extend(EXAMPLES_TESTS)
+        with open(example_file, "r", encoding="utf-8") as f:
+            example_tests = f.read()
+        for job in EXAMPLES_TESTS:
+            framework = job.name.replace("examples_", "").replace("torch", "pytorch")
+            if example_tests == "all":
+                job.tests_to_run = [f"examples/{framework}"]
+            else:
+                job.tests_to_run = [f for f in example_tests.split(" ") if f.startswith(f"examples/{framework}")]
+            
+            if len(job.tests_to_run) > 0:
+                jobs.append(job)
 
     doctest_file = os.path.join(folder, "doctest_list.txt")
     if os.path.exists(doctest_file):
@@ -566,17 +610,18 @@ def create_circleci_config(folder=None):
     if os.path.exists(repo_util_file) and os.path.getsize(repo_util_file) > 0:
         jobs.extend(REPO_UTIL_TESTS)
 
-    if len(jobs) > 0:
-        config = {"version": "2.1"}
-        config["parameters"] = {
-            # Only used to accept the parameters from the trigger
-            "nightly": {"type": "boolean", "default": False},
-            "tests_to_run": {"type": "string", "default": test_list},
-        }
-        config["jobs"] = {j.job_name: j.to_dict() for j in jobs}
-        config["workflows"] = {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
-        with open(os.path.join(folder, "generated_config.yml"), "w") as f:
-            f.write(yaml.dump(config, indent=2, width=1000000, sort_keys=False))
+    if len(jobs) == 0:
+        jobs = [EmptyJob()]
+    config = {"version": "2.1"}
+    config["parameters"] = {
+        # Only used to accept the parameters from the trigger
+        "nightly": {"type": "boolean", "default": False},
+        "tests_to_run": {"type": "string", "default": test_list},
+    }
+    config["jobs"] = {j.job_name: j.to_dict() for j in jobs}
+    config["workflows"] = {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
+    with open(os.path.join(folder, "generated_config.yml"), "w") as f:
+        f.write(yaml.dump(config, indent=2, width=1000000, sort_keys=False))
 
 
 if __name__ == "__main__":
