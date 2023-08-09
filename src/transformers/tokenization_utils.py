@@ -378,7 +378,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         Returns the added tokens in the vocabulary as a dictionary of token to index. Results might be different from
         the fast call because for now we always add the tokens even if they are already in the vocabulary. This is
-        something we should change. It was requested here @TODO Returns:
+        something we should change.
+        Returns:
             `Dict[str, int]`: The added tokens.
         """
         return self.added_tokens_encoder
@@ -394,14 +395,14 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
         it with indices starting from length of the current vocabulary. Special tokens are sometimes already in the
-        vocab which is why they have to be handled specifically. If the unknown token.
-
-        This is the only exposed way to modify `self.added_tokens_encoder` and `self.added_tokens_decoder`.
+        vocab which is why they have to be handled specifically.
 
         Args:
             new_tokens (`List[str]`or `List[tokenizers.AddedToken]`):
-                Token(s) to add in vocabulary. A token is only added if it's not already in the vocabulary (tested by
-                checking if the tokenizer assign the index of the `unk_token` to them).
+                Token(s) to add in vocabulary. A token is counted as added if it's not already in the vocabulary (tested by
+                checking if the tokenizer assign the index of the `unk_token` to them). If a token is part of the vocabulary
+                then we simply mark this token as an `AddedToken` which allows to control the stripping and normalization of
+                this token. This is NOT possible in `tokenizers`.
             special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the tokens should be added as special tokens.
 
@@ -426,8 +427,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         new_idx = len(self)  # only call this once, len gives the last index + 1
         for token in new_tokens:
-            if token in self._added_tokens_decoder:
-                continue
             if not isinstance(token, (str, AddedToken)):
                 raise TypeError(f"Token {token} is not a string but a {type(token)}.")
             if str(token) == "":
@@ -435,32 +434,23 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if isinstance(token, str):
                 # for legacy we strip left and right by default TODO @ArthurZ lots of tests rely on this
                 token = AddedToken(token, normalized=not special_tokens, rstrip=True, lstrip=True)
+            if token in self._added_tokens_decoder:
+                continue
             if token.content == self.unk_token:
-                # unk_token and this token have the same pointer, let's update it
-                # even if it is already part of the vocab
+                # unk_token and this token have the same pointer, let's update it even if it is already part of the vocab
                 if self.convert_tokens_to_ids(token.content) is None:
-                    # TODO should we warn that unk is being added?
                     self._added_tokens_decoder[new_idx + added_tokens] = token
+                    added_tokens += 1
                 else:
                     self._added_tokens_decoder[self.convert_tokens_to_ids(token.content)] = token
-            # if unk_token is not part of the vocab, but we are adding tokens
             elif self.unk_token_id is not None and self.convert_tokens_to_ids(token.content) == self.unk_token_id:
-                # if some tokens were added at the beginning ignore them HACK
                 if not special_tokens and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
-                    # Since we are adding a token to the vocab, let's be consistent: the vocab probably does not contain any upper-case words
-                    # so we lower the AddedToken, this way both encoder and decoder can properly handle the token.
+                    # Normalize if requested
                     content = token.content.lower()
-                    token = AddedToken(
-                        content,
-                        single_word=token.single_word,
-                        lstrip=token.lstrip,
-                        rstrip=token.rstrip,
-                    )
-
+                    token = AddedToken(content,single_word=token.single_word,lstrip=token.lstrip,rstrip=token.rstrip)
                 self._added_tokens_decoder[new_idx + added_tokens] = token
                 added_tokens += 1
             elif self.convert_tokens_to_ids(token.content) is not None:
-                # token cotent exists, let's update the lstrip etc
                 self._added_tokens_decoder[self.convert_tokens_to_ids(token.content)] = token
             else:
                 # TODO get vocab might not be the best way to get the current length with the added tokens
@@ -474,7 +464,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if self.verbose:
                 logger.info(f"Adding {token} to the vocabulary")
 
-        # TODO we should only have to update the trie, if a key is already in no need to re create the idx. O(1) storing a set of previously added tokens
         self._update_trie()
         return added_tokens
 
@@ -482,7 +471,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         for token in self.added_tokens_decoder.values():
             if token not in self.tokens_trie._tokens:
                 self.tokens_trie.add(token.content)
-        # not really sure we should keep this? unique_no_split_tokens for esm mostly
+        # TODO unique_no_split_tokens for esm mostly
         for token in unique_no_split_tokens:
             if token not in self.tokens_trie._tokens:
                 self.tokens_trie.add(token)
@@ -538,7 +527,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             pattern = r"(" + r"|".join(escaped_special_toks) + r")|" + r"(.+?)"
             text = re.sub(pattern, lambda m: m.groups()[0] or m.groups()[1].lower(), text)
 
-        no_split_token = set(self.added_tokens_encoder.keys())  # don't split on added tokens
+        no_split_token = set(self.added_tokens_encoder.keys())  # don't split on any of the added tokens
+        # "This is something<special_token_1>  else"
         tokens = self.tokens_trie.split(text)
         # ["This is something", "<special_token_1>", "  else"]
         for i, token in enumerate(tokens):
@@ -548,14 +538,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 left = tokens[i - 1] if i > 0 else None
                 right = tokens[i + 1] if i < len(tokens) - 1 else None
                 if isinstance(tok_extended, AddedToken):
-                    if tok_extended.single_word:
-                        if right and not right[0] == " " and right not in self.all_special_tokens:
-                            tokens[i] = ""
-                            tokens[i + 1] += token
-                        elif left and not left[0] == " " and right not in self.all_special_tokens:
-                            tokens[i] = ""
+                    if tok_extended.single_word and left and left[-1] != " ":
                             tokens[i - 1] += token
-
+                            tokens[i] = ""
+                    if tok_extended.single_word and right and right[0] != " ":
+                            tokens[i + 1] = token + tokens[i + 1]
+                            tokens[i] = ""
                     if tok_extended.rstrip and right:
                         # A bit counter-intuitive but we strip the left of the string
                         # since tok_extended.rstrip means the special token is eating all white spaces on its right
@@ -563,7 +551,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     # Strip white spaces on the left
                     if tok_extended.lstrip and left:
                         tokens[i - 1] = left.rstrip()  # Opposite here
-                    # else is only if rstrip and lstrip strip are set to `False``.
                 else:
                     raise ValueError(
                         f"{tok_extended} cannot be tokenized because it was not properly added"
