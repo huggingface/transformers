@@ -7,7 +7,6 @@
       title: Installation
   title: Get started
 - sections:
-<<<<<<< HEAD
     - local: pipeline_tutorial
       title: Run inference with pipelines
     - local: autoclass_tutorial
@@ -24,10 +23,11 @@
       title: Share your model
     - local: transformers_agents
       title: Agents
+    - local: llm_tutorial
+      title: Generation with LLMs
   title: Tutorials
 - sections:
-    - isExpanded: false
-      sections:
+    - sections:
         - local: tasks/sequence_classification
           title: Text classification
         - local: tasks/token_classification
@@ -45,15 +45,15 @@
         - local: tasks/multiple_choice
           title: Multiple choice
       title: Natural Language Processing
-    - isExpanded: false
-      sections:
+      isExpanded: false
+    - sections:
         - local: tasks/audio_classification
           title: Audio classification
         - local: tasks/asr
           title: Automatic speech recognition
       title: Audio
-    - isExpanded: false
-      sections:
+      isExpanded: false
+    - sections:
         - local: tasks/image_classification
           title: Image classification
         - local: tasks/semantic_segmentation
@@ -69,101 +69,23 @@
         - local: tasks/monocular_depth_estimation
           title: Depth estimation
       title: Computer Vision
-    - isExpanded: false
-      sections:
+      isExpanded: false
+    - sections:
         - local: tasks/image_captioning
           title: Image captioning
         - local: tasks/document_question_answering
           title: Document Question Answering
+        - local: tasks/visual_question_answering
+          title: Visual Question Answering
         - local: tasks/text-to-speech
           title: Text to speech
       title: Multimodal
-    - isExpanded: false
-      sections:
+      isExpanded: false
+    - sections:
         - local: generation_strategies
-          title: Customize text generation strategy
+          title: Customize the generation strategy
       title: Generation
-=======
-  - local: pipeline_tutorial
-    title: Run inference with pipelines
-  - local: autoclass_tutorial
-    title: Write portable code with AutoClass
-  - local: preprocessing
-    title: Preprocess data
-  - local: training
-    title: Fine-tune a pretrained model
-  - local: run_scripts
-    title: Train with a script
-  - local: accelerate
-    title: Set up distributed training with 🤗 Accelerate
-  - local: model_sharing
-    title: Share your model
-  - local: transformers_agents
-    title: Agents
-  - local: llm_tutorial
-    title: Generation with LLMs
-  title: Tutorials
-- sections:
-  - sections:
-      - local: tasks/sequence_classification
-        title: Text classification
-      - local: tasks/token_classification
-        title: Token classification
-      - local: tasks/question_answering
-        title: Question answering
-      - local: tasks/language_modeling
-        title: Causal language modeling
-      - local: tasks/masked_language_modeling
-        title: Masked language modeling
-      - local: tasks/translation
-        title: Translation
-      - local: tasks/summarization
-        title: Summarization
-      - local: tasks/multiple_choice
-        title: Multiple choice
-    title: Natural Language Processing
-    isExpanded: false
-  - sections:
-      - local: tasks/audio_classification
-        title: Audio classification
-      - local: tasks/asr
-        title: Automatic speech recognition
-    title: Audio
-    isExpanded: false
-  - sections:
-      - local: tasks/image_classification
-        title: Image classification
-      - local: tasks/semantic_segmentation
-        title: Semantic segmentation
-      - local: tasks/video_classification
-        title: Video classification
-      - local: tasks/object_detection
-        title: Object detection
-      - local: tasks/zero_shot_object_detection
-        title: Zero-shot object detection
-      - local: tasks/zero_shot_image_classification
-        title: Zero-shot image classification
-      - local: tasks/monocular_depth_estimation
-        title: Depth estimation
-    title: Computer Vision
-    isExpanded: false
-  - sections:
-      - local: tasks/image_captioning
-        title: Image captioning
-      - local: tasks/document_question_answering
-        title: Document Question Answering
-      - local: tasks/visual_question_answering
-        title: Visual Question Answering
-      - local: tasks/text-to-speech
-        title: Text to speech
-    title: Multimodal
-    isExpanded: false
-  - sections:
-      - local: generation_strategies
-        title: Customize the generation strategy
-    title: Generation
-    isExpanded: false
->>>>>>> d59b872c9 (Docs: introduction to generation with LLMs (#25240))
+      isExpanded: false
   title: Task Guides
 - sections:
     - local: fast_tokenizers
@@ -232,6 +154,8 @@
       title: Troubleshooting
     - local: tf_xla
       title: XLA Integration for TensorFlow Models
+    - local: perf_torch_compile
+      title: Optimize inference using `torch.compile()`
   title: Performance and scalability
 - sections:
     - local: contributing
@@ -247,6 +171,7 @@
     - local: pr_checks
       title: Checks on a Pull Request
   title: Contribute
+
 - sections:
     - local: philosophy
       title: Philosophy
@@ -580,8 +505,6 @@
               title: FocalNet
             - local: model_doc/glpn
               title: GLPN
-            - local: model_doc/groundingdino
-              title: GroundingDINO
             - local: model_doc/imagegpt
               title: ImageGPT
             - local: model_doc/levit
