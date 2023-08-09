@@ -894,11 +894,11 @@ class BarkFineModelTest(ModelTesterMixin, unittest.TestCase):
 class BarkModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
-        return BarkModel.from_pretrained("ylacombe/bark-large").to(torch_device)
+        return BarkModel.from_pretrained("suno/bark").to(torch_device)
 
     @cached_property
     def processor(self):
-        return BarkProcessor.from_pretrained("ylacombe/bark-large")
+        return BarkProcessor.from_pretrained("suno/bark")
 
     @cached_property
     def inputs(self):
