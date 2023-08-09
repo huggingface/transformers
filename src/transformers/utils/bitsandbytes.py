@@ -1,16 +1,19 @@
+import importlib.metadata
 import warnings
 from copy import deepcopy
 
 from packaging import version
 
 from ..utils import logging
-from .import_utils import importlib_metadata, is_accelerate_available, is_bitsandbytes_available
+from .import_utils import is_accelerate_available, is_bitsandbytes_available
 
 
 if is_bitsandbytes_available():
     import bitsandbytes as bnb
     import torch
     import torch.nn as nn
+
+    from ..pytorch_utils import Conv1D
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
@@ -73,7 +76,7 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
             elif isinstance(value, torch.Tensor):
                 new_value = value.to("cpu")
                 if value.dtype == torch.int8:
-                    is_8bit_serializable = version.parse(importlib_metadata.version("bitsandbytes")) > version.parse(
+                    is_8bit_serializable = version.parse(importlib.metadata.version("bitsandbytes")) > version.parse(
                         "0.37.2"
                     )
                     if not is_8bit_serializable:
@@ -83,6 +86,11 @@ def set_module_quantized_tensor_to_device(module, tensor_name, device, value=Non
                         )
             else:
                 new_value = torch.tensor(value, device="cpu")
+
+            # Support models using `Conv1D` in place of `nn.Linear` (e.g. gpt2) by transposing the weight matrix prior to quantization.
+            # Since weights are saved in the correct "orientation", we skip transposing when loading.
+            if issubclass(module.source_cls, Conv1D) and fp16_statistics is None:
+                new_value = new_value.T
 
             kwargs = old_value.__dict__
             if is_8bit:
@@ -122,14 +130,20 @@ def _replace_with_bnb_linear(
             current_key_name = []
         current_key_name.append(name)
 
-        if isinstance(module, nn.Linear) and name not in modules_to_not_convert:
+        if (isinstance(module, nn.Linear) or isinstance(module, Conv1D)) and name not in modules_to_not_convert:
             # Check if the current key is not in the `modules_to_not_convert`
             if not any(key in ".".join(current_key_name) for key in modules_to_not_convert):
                 with init_empty_weights():
+                    if isinstance(module, Conv1D):
+                        in_features, out_features = module.weight.shape
+                    else:
+                        in_features = module.in_features
+                        out_features = module.out_features
+
                     if quantization_config.quantization_method() == "llm_int8":
                         model._modules[name] = bnb.nn.Linear8bitLt(
-                            module.in_features,
-                            module.out_features,
+                            in_features,
+                            out_features,
                             module.bias is not None,
                             has_fp16_weights=quantization_config.llm_int8_has_fp16_weight,
                             threshold=quantization_config.llm_int8_threshold,
@@ -143,14 +157,16 @@ def _replace_with_bnb_linear(
                             pass
                         else:
                             model._modules[name] = bnb.nn.Linear4bit(
-                                module.in_features,
-                                module.out_features,
+                                in_features,
+                                out_features,
                                 module.bias is not None,
                                 quantization_config.bnb_4bit_compute_dtype,
                                 compress_statistics=quantization_config.bnb_4bit_use_double_quant,
                                 quant_type=quantization_config.bnb_4bit_quant_type,
                             )
                             has_been_replaced = True
+                    # Store the module class in case we need to transpose the weight later
+                    model._modules[name].source_cls = type(module)
                     # Force requires grad to False to avoid unexpected errors
                     model._modules[name].requires_grad_(False)
         if len(list(module.children())) > 0:
@@ -200,7 +216,6 @@ def replace_with_bnb_linear(model, modules_to_not_convert=None, current_key_name
     if not has_been_replaced:
         logger.warning(
             "You are loading your model in 8bit or 4bit but no linear modules were found in your model."
-            " this can happen for some architectures such as gpt2 that uses Conv1D instead of Linear layers."
             " Please double check your model architecture, or submit an issue on github if you think this is"
             " a bug."
         )
@@ -250,17 +265,16 @@ def get_keys_to_not_convert(model):
         tied_keys = sum(tied_params, [])
     has_tied_params = len(tied_keys) > 0
 
-    # Check if it is a base model
-    is_base_model = not hasattr(model, model.base_model_prefix)
+    # If there is not tied weights, we want to keep the lm_head（output_embedding) in full precision
+    if not has_tied_params:
+        output_emb = model.get_output_embeddings()
+        if output_emb is not None:
+            list_last_module = [name for name, module in model.named_modules() if id(module) == id(output_emb)]
+            return list_last_module
 
-    # Ignore this for base models (BertModel, GPT2Model, etc.)
-    if (not has_tied_params) and is_base_model:
-        return []
-
-    # otherwise they have an attached head
-    list_modules = list(model.named_children())
+    # otherwise, no tied weights, no output embedding defined, simply keep the last module in full precision
+    list_modules = list(model.named_parameters())
     list_last_module = [list_modules[-1][0]]
-
     # add last module together with tied weights
     intersection = set(list_last_module) - set(tied_keys)
     list_untouched = list(set(tied_keys)) + list(intersection)

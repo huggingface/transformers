@@ -164,7 +164,7 @@ class GPTBigCodeAttention(nn.Module):
             # This is needed because of a bug in pytorch https://github.com/pytorch/pytorch/issues/80588.
             # The bug was fixed in https://github.com/pytorch/pytorch/pull/96086,
             # but the fix has not been released as of pytorch version 2.0.0.
-            attn_weights.zero_()
+            attn_weights = torch.zeros_like(attn_weights)
             beta = 1
         else:
             beta = 0
@@ -272,7 +272,7 @@ class GPTBigCodeMLP(nn.Module):
         self.dropout = nn.Dropout(config.resid_pdrop)
 
     # Copied from transformers.models.gpt2.modeling_gpt2.GPT2MLP.forward
-    def forward(self, hidden_states: Optional[Tuple[torch.Tensor]]) -> torch.Tensor:
+    def forward(self, hidden_states: Optional[Tuple[torch.FloatTensor]]) -> torch.FloatTensor:
         hidden_states = self.c_fc(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.c_proj(hidden_states)
@@ -500,8 +500,6 @@ GPT_BIGCODE_INPUTS_DOCSTRING = r"""
     GPT_BIGCODE_START_DOCSTRING,
 )
 class GPTBigCodeModel(GPTBigCodePreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["attn.masked_bias"]
-
     def __init__(self, config):
         super().__init__(config)
         self.multi_query = config.multi_query
@@ -562,6 +560,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
             batch_size = input_ids.shape[0]
@@ -722,7 +721,6 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
     GPT_BIGCODE_START_DOCSTRING,
 )
 class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"attn.masked_bias", r"attn.bias", r"lm_head.weight"]
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
@@ -876,8 +874,6 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel):
     GPT_BIGCODE_START_DOCSTRING,
 )
 class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head.weight"]
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -939,7 +935,9 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1).to(logits.device)
+                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).long().argmax(-1) - 1).to(
+                    logits.device
+                )
             else:
                 sequence_lengths = -1
                 logger.warning(

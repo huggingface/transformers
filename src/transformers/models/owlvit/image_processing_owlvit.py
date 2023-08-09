@@ -23,11 +23,9 @@ from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size
 from ...image_transforms import (
     center_crop,
     center_to_corners_format,
-    normalize,
     rescale,
     resize,
     to_channel_dimension_format,
-    to_numpy_array,
 )
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
@@ -36,6 +34,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     make_list_of_images,
+    to_numpy_array,
     valid_images,
 )
 from ...utils import TensorType, is_torch_available, logging
@@ -48,7 +47,6 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.detr.modeling_detr._upcast
 def _upcast(t):
     # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
     if t.is_floating_point():
@@ -198,30 +196,25 @@ class OwlViTImageProcessor(BaseImageProcessor):
 
         return center_crop(image, (crop_size["height"], crop_size["width"]), data_format=data_format, **kwargs)
 
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.rescale
     def rescale(
-        self,
-        image: np.ndarray,
-        rescale_factor: float,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
+        self, image: np.ndarray, rescale_factor: float, data_format: Optional[Union[str, ChannelDimension]] = None
     ) -> np.ndarray:
         """
-        Rescale an image by a certain factor.
-        """
-        return rescale(image, rescale_factor, data_format=data_format, **kwargs)
+        Rescale the image by the given factor. image = image * rescale_factor.
 
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: List[float],
-        std: List[float],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> np.ndarray:
+        Args:
+            image (`np.ndarray`):
+                Image to rescale.
+            rescale_factor (`float`):
+                The value to use for rescaling.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
-        Normalize an image with a certain mean and standard deviation.
-        """
-        return normalize(image, mean, std, data_format=data_format, **kwargs)
+        return rescale(image, rescale_factor, data_format=data_format)
 
     def preprocess(
         self,
@@ -354,7 +347,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         # TODO: (amy) add support for other frameworks
         warnings.warn(
             "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_object_detection`",
+            " `post_process_object_detection` instead, with `threshold=0.` for equivalent results.",
             FutureWarning,
         )
 

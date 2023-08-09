@@ -21,13 +21,17 @@
 """Tokenization classes for LLaMA."""
 import os
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
+
+if TYPE_CHECKING:
+    from ...pipelines.conversational import Conversation
+    from ...tokenization_utils_base import TextInput
 
 logger = logging.get_logger(__name__)
 
@@ -44,15 +48,52 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "hf-internal-testing/llama-tokenizer": 2048,
 }
+SPIECE_UNDERLINE = "▁"
+
+B_INST, E_INST = "[INST]", "[/INST]"
+B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
+
+# fmt: off
+DEFAULT_SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your \
+answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure\
+ that your responses are socially unbiased and positive in nature.
+
+If a question does not make any sense, or is not factually coherent, explain why instead of answering something not \
+correct. If you don't know the answer to a question, please don't share false information."""
+# fmt: on
 
 
 class LlamaTokenizer(PreTrainedTokenizer):
     """
-    Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding.
+    Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as there is
+    no padding token in the original model.
 
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
+        legacy (`bool`, *optional*, defaults to `True`):
+            Whether or not the `legacy` behaviour of the tokenizer should be used. Legacy is before the merge of #24622
+            which includes fixes to properly handle tokens that appear after special tokens. A simple example:
+
+            - `legacy=True`:
+            ```python
+            >>> from transformers import T5Tokenizer
+
+            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=True)
+            >>> tokenizer.encode("Hello <extra_id_0>.")
+            [8774, 32099, 3, 5, 1]
+            ```
+            - `legacy=False`:
+            ```python
+            >>> from transformers import T5Tokenizer
+
+            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
+            >>> tokenizer.encode("Hello <extra_id_0>.")  # the extra space `[3]` is no longer here
+            [8774, 32099, 5, 1]
+            ```
+            Checkout the pull request and the issue [here](https://github.com/huggingface/transformers/pull/24565) for
+            more details.
+
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -71,6 +112,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
+        legacy=None,
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -87,8 +129,17 @@ class LlamaTokenizer(PreTrainedTokenizer):
             add_eos_token=add_eos_token,
             sp_model_kwargs=self.sp_model_kwargs,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            legacy=legacy,
             **kwargs,
         )
+        if legacy is None:
+            logger.warning_once(
+                f"You are using the default legacy behaviour of the {self.__class__}. This means that tokens that come after special tokens will not be properly handled. We recommend you to"
+                " read the related pull request available at https://github.com/huggingface/transformers/pull/24565, and set the legacy attribute accordingly."
+            )
+            legacy = True
+
+        self.legacy = legacy
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
@@ -98,12 +149,13 @@ class LlamaTokenizer(PreTrainedTokenizer):
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None
+        state["sp_model_proto"] = self.sp_model.serialized_model_proto()
         return state
 
     def __setstate__(self, d):
         self.__dict__ = d
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(self.vocab_file)
+        self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
 
     @property
     def vocab_size(self):
@@ -116,9 +168,35 @@ class LlamaTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def _tokenize(self, text):
-        """Returns a tokenized string."""
-        return self.sp_model.encode(text, out_type=str)
+    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
+    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
+        # Replace the SPIECE_UNDERLINE with a space to make sure SPIECE_UNDERLINE is only used at
+        # the beginning of the text
+        if not self.legacy:
+            text = SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " ")
+        return super().tokenize(text, **kwargs)
+
+    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
+    def _tokenize(self, text, **kwargs):
+        """
+        Returns a tokenized string.
+
+        Since the sentencepiece internal model always adds a SPIECE_UNDERLINE, at the beginning of the provided text,
+        we need to remove it by hand when the current text is a subsequence. This happens whenever the `self.tokenize`
+        function is called with specials tokens: the input is split on the special tokens, and each subsequence is
+        passed to `_tokenize`. Thus if a subsequence did not start with a `" "` or SPIECE_UNDERLINE, we have to remove
+        the extra `SPIECE_UNDERLINE` prepended.
+        """
+        if not self.legacy:
+            is_first = text.startswith(SPIECE_UNDERLINE)
+            if is_first:
+                text = text[1:]
+
+        tokens = self.sp_model.encode(text, out_type=str)
+
+        if not self.legacy and not is_first and not text.startswith(" ") and tokens[0].startswith(SPIECE_UNDERLINE):
+            tokens = ([tokens[0][1:]] if len(tokens[0]) > 1 else []) + tokens[1:]
+        return tokens
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
@@ -255,3 +333,64 @@ class LlamaTokenizer(PreTrainedTokenizer):
             output += [1] * len(bos_token_id + token_ids_1 + eos_token_id)
 
         return output
+
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
+        r"""Builds the input ids for a conversation.
+        This is the format used in the provided examples. System prompts should be manually added at the beginning of
+        the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
+        ```
+        <bos>[INST] B_SYS SytemPrompt E_SYS Prompt [/INST] Answer <eos>
+        <bos>[INST] Prompt [/INST] Answer <eos>
+        <bos>[INST] Prompt [/INST]
+        ```
+
+        If you want to use your own system prompt, make sure to use both `B_SYS` and `E_SYS` use the following:
+        ```python
+        >>> from transformers import Conversation
+
+        >>> Conversation(
+        ...     "<<SYS>>\n Only answer with emojis, and charades\n<</SYS>>\n\nHow can I build a house in 10 septs?"
+        ... )  # doctest: +IGNORE_RESULT
+        ```
+        Args:
+            conversation (`Conversation`):
+                Conversation to build input ids for.
+        Returns:
+            `List[int]`:
+                Input ids for the conversation.
+        """
+        if len(conversation.past_user_inputs) > 0:
+            if not conversation.past_user_inputs[0].startswith(B_SYS) or E_SYS not in conversation.past_user_inputs[0]:
+                conversation.past_user_inputs[0] = (
+                    B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
+                )
+        elif conversation.new_user_input:
+            if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
+                conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
+        else:
+            raise ValueError("Last message must be from user")
+
+        dialogue = list(conversation.iter_texts())
+        if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
+            [not is_user for is_user, msg in dialogue[1::2]]
+        ):
+            raise ValueError(
+                "The model only supports 'user' and 'assistant' roles, starting with user and alternating (u/a/u/a/u...)"
+            )
+
+        dialog_tokens: List[int] = []
+        dialog_tokens += sum(
+            [
+                [self.bos_token_id]
+                + self.encode(
+                    f"{B_INST} {(prompt[1]).strip()} {E_INST} {(answer[1]).strip()} ", add_special_tokens=False
+                )
+                + [self.eos_token_id]
+                for prompt, answer in zip(dialogue[::2], dialogue[1::2])
+            ],
+            [],
+        )
+        dialog_tokens += [self.bos_token_id] + self.encode(
+            f"{B_INST} {(dialogue[-1][1]).strip()} {E_INST}", add_special_tokens=False
+        )
+        return dialog_tokens

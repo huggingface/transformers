@@ -168,6 +168,8 @@ If after trying everything suggested you still encounter build issues, please, p
 
 To deploy the DeepSpeed integration adjust the [`Trainer`] command line arguments to include a new argument `--deepspeed ds_config.json`, where `ds_config.json` is the DeepSpeed configuration file as
    documented [here](https://www.deepspeed.ai/docs/config-json/). The file naming is up to you.
+   It's recommended to use DeepSpeed's `add_config_arguments` utility to add the necessary command line arguments to your code.
+   For more information please see [DeepSpeed's Argument Parsing](https://deepspeed.readthedocs.io/en/latest/initialize.html#argument-parsing) doc.
 
 You can use a launcher of your choice here. You can continue using the pytorch launcher:
 

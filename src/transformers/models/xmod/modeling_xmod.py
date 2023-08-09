@@ -74,7 +74,9 @@ class XmodEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
         self.register_buffer(
             "token_type_ids", torch.zeros(self.position_ids.size(), dtype=torch.long), persistent=False
         )
@@ -682,16 +684,6 @@ class XmodPreTrainedModel(PreTrainedModel):
         if isinstance(module, XmodEncoder):
             module.gradient_checkpointing = value
 
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaPreTrainedModel.update_keys_to_ignore
-    def update_keys_to_ignore(self, config, del_keys_to_ignore):
-        """Remove some keys from ignore list"""
-        if not config.tie_word_embeddings:
-            # must make a new list, or the class variable gets modified!
-            self._keys_to_ignore_on_save = [k for k in self._keys_to_ignore_on_save if k not in del_keys_to_ignore]
-            self._keys_to_ignore_on_load_missing = [
-                k for k in self._keys_to_ignore_on_load_missing if k not in del_keys_to_ignore
-            ]
-
     def set_default_language(self, language: str):
         """
         Set the default language code for the model. This is used when the language is not specified in the input.
@@ -811,8 +803,6 @@ class XmodModel(XmodPreTrainedModel):
 
     """
 
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Xmod
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -896,6 +886,7 @@ class XmodModel(XmodPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -989,9 +980,6 @@ class XmodModel(XmodPreTrainedModel):
     XMOD_START_DOCSTRING,
 )
 class XmodForCausalLM(XmodPreTrainedModel):
-    _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM.__init__ with Roberta->Xmod
@@ -1003,9 +991,6 @@ class XmodForCausalLM(XmodPreTrainedModel):
 
         self.roberta = XmodModel(config, add_pooling_layer=False)
         self.lm_head = XmodLMHead(config)
-
-        # The LM head weights require special treatment only when they are tied with the word embeddings
-        self.update_keys_to_ignore(config, ["lm_head.decoder.weight"])
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1152,9 +1137,6 @@ class XmodForCausalLM(XmodPreTrainedModel):
     XMOD_START_DOCSTRING,
 )
 class XmodForMaskedLM(XmodPreTrainedModel):
-    _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM.__init__ with Roberta->Xmod
@@ -1169,9 +1151,6 @@ class XmodForMaskedLM(XmodPreTrainedModel):
 
         self.roberta = XmodModel(config, add_pooling_layer=False)
         self.lm_head = XmodLMHead(config)
-
-        # The LM head weights require special treatment only when they are tied with the word embeddings
-        self.update_keys_to_ignore(config, ["lm_head.decoder.weight"])
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1285,8 +1264,6 @@ class XmodLMHead(nn.Module):
     XMOD_START_DOCSTRING,
 )
 class XmodForSequenceClassification(XmodPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification.__init__ with Roberta->Xmod
     def __init__(self, config):
         super().__init__(config)
@@ -1380,8 +1357,6 @@ class XmodForSequenceClassification(XmodPreTrainedModel):
     XMOD_START_DOCSTRING,
 )
 class XmodForMultipleChoice(XmodPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice.__init__ with Roberta->Xmod
     def __init__(self, config):
         super().__init__(config)
@@ -1471,9 +1446,6 @@ class XmodForMultipleChoice(XmodPreTrainedModel):
     XMOD_START_DOCSTRING,
 )
 class XmodForTokenClassification(XmodPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification.__init__ with Roberta->Xmod
     def __init__(self, config):
         super().__init__(config)
@@ -1576,9 +1548,6 @@ class XmodClassificationHead(nn.Module):
     XMOD_START_DOCSTRING,
 )
 class XmodForQuestionAnswering(XmodPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
-
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering.__init__ with Roberta->Xmod
     def __init__(self, config):
         super().__init__(config)

@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
+import importlib.metadata
 import tempfile
 import unittest
 
@@ -36,7 +37,12 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
-from transformers.utils.versions import importlib_metadata
+
+
+def get_some_linear_layer(model):
+    if model.config.model_type == "gpt2":
+        return model.transformer.h[0].mlp.c_fc
+    return model.transformer.h[0].mlp.dense_4h_to_h
 
 
 if is_torch_available():
@@ -83,6 +89,7 @@ class Base4bitTest(unittest.TestCase):
     EXPECTED_OUTPUTS = set()
     EXPECTED_OUTPUTS.add("Hello my name is John and I am a professional photographer. I")
     EXPECTED_OUTPUTS.add("Hello my name is John.\nI am a friend of your father.\n")
+    EXPECTED_OUTPUTS.add("Hello my name is John Doe, I am a student at the University")
     MAX_NEW_TOKENS = 10
 
     def setUp(self):
@@ -135,7 +142,8 @@ class Bnb4BitTest(Base4bitTest):
         mem_4bit = self.model_4bit.get_memory_footprint()
 
         self.assertAlmostEqual(mem_fp16 / mem_4bit, self.EXPECTED_RELATIVE_DIFFERENCE)
-        self.assertTrue(self.model_4bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Params4bit)
+        linear = get_some_linear_layer(self.model_4bit)
+        self.assertTrue(linear.weight.__class__ == Params4bit)
 
     def test_linear_are_4bit(self):
         r"""
@@ -438,7 +446,7 @@ class Bnb4BitTestTraining(Base4bitTest):
         super().setUp()
 
     def test_training(self):
-        if version.parse(importlib_metadata.version("bitsandbytes")) < version.parse("0.37.0"):
+        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.37.0"):
             return
 
         # Step 1: freeze all parameters
@@ -473,3 +481,8 @@ class Bnb4BitTestTraining(Base4bitTest):
                 self.assertTrue(module.adapter[1].weight.grad.norm().item() > 0)
             elif isinstance(module, nn.Embedding):
                 self.assertTrue(module.weight.grad is None)
+
+
+class Bnb4BitGPT2Test(Bnb4BitTest):
+    model_name = "gpt2-xl"
+    EXPECTED_RELATIVE_DIFFERENCE = 3.3191854854152187

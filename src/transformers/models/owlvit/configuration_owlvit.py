@@ -14,7 +14,6 @@
 # limitations under the License.
 """ OWL-ViT model configuration"""
 
-import copy
 import os
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Union
@@ -274,7 +273,6 @@ class OwlViTConfig(PretrainedConfig):
     """
 
     model_type = "owlvit"
-    is_composition = True
 
     def __init__(
         self,
@@ -332,19 +330,6 @@ class OwlViTConfig(PretrainedConfig):
 
         return cls.from_dict(config_dict, **kwargs)
 
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["text_config"] = self.text_config.to_dict()
-        output["vision_config"] = self.vision_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
-
 
 class OwlViTOnnxConfig(OnnxConfig):
     @property
@@ -383,7 +368,7 @@ class OwlViTOnnxConfig(OnnxConfig):
             processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
         )
         image_input_dict = super().generate_dummy_inputs(
-            processor.feature_extractor, batch_size=batch_size, framework=framework
+            processor.image_processor, batch_size=batch_size, framework=framework
         )
         return {**text_input_dict, **image_input_dict}
 

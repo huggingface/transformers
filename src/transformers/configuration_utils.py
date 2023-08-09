@@ -432,9 +432,11 @@ class PretrainedConfig(PushToHubMixin):
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
-            kwargs:
+            kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+        self._set_token_in_kwargs(kwargs)
+
         if os.path.isfile(save_directory):
             raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
 
@@ -463,11 +465,11 @@ class PretrainedConfig(PushToHubMixin):
                 repo_id,
                 files_timestamps,
                 commit_message=commit_message,
-                token=kwargs.get("use_auth_token"),
+                token=kwargs.get("token"),
             )
 
-    @classmethod
-    def _set_token_in_kwargs(self, kwargs, token=None):
+    @staticmethod
+    def _set_token_in_kwargs(kwargs, token=None):
         """Temporary method to deal with `token` and `use_auth_token`.
 
         This method is to avoid apply the same changes in all model config classes that overwrite `from_pretrained`.
@@ -490,8 +492,7 @@ class PretrainedConfig(PushToHubMixin):
             token = use_auth_token
 
         if token is not None:
-            # change to `token` in a follow-up PR
-            kwargs["use_auth_token"] = token
+            kwargs["token"] = token
 
     @classmethod
     def from_pretrained(
@@ -612,6 +613,8 @@ class PretrainedConfig(PushToHubMixin):
             `Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the configuration object.
 
         """
+        cls._set_token_in_kwargs(kwargs)
+
         original_kwargs = copy.deepcopy(kwargs)
         # Get config dict associated with the base config file
         config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
@@ -635,7 +638,7 @@ class PretrainedConfig(PushToHubMixin):
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
-        use_auth_token = kwargs.pop("use_auth_token", None)
+        token = kwargs.pop("token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
@@ -677,7 +680,7 @@ class PretrainedConfig(PushToHubMixin):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
-                    use_auth_token=use_auth_token,
+                    token=token,
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
@@ -759,6 +762,10 @@ class PretrainedConfig(PushToHubMixin):
         to_remove = []
         for key, value in kwargs.items():
             if hasattr(config, key):
+                current_attr = getattr(config, key)
+                # To authorize passing a custom subconfig as kwarg in models that have nested configs.
+                if isinstance(current_attr, PretrainedConfig) and isinstance(value, dict):
+                    value = current_attr.__class__(**value)
                 setattr(config, key, value)
                 if key != "torch_dtype":
                     to_remove.append(key)
@@ -820,6 +827,18 @@ class PretrainedConfig(PushToHubMixin):
         # only serialize values that differ from the default config
         for key, value in config_dict.items():
             if (
+                isinstance(getattr(self, key, None), PretrainedConfig)
+                and key in class_config_dict
+                and isinstance(class_config_dict[key], dict)
+            ):
+                # For nested configs we need to clean the diff recursively
+                diff = recursive_diff_dict(value, class_config_dict[key], config_obj=getattr(self, key, None))
+                if "model_type" in value:
+                    # Needs to be set even if it's not in the diff
+                    diff["model_type"] = value["model_type"]
+                if len(diff) > 0:
+                    serializable_config_dict[key] = diff
+            elif (
                 key not in default_config_dict
                 or key == "transformers_version"
                 or value != default_config_dict[key]
@@ -855,6 +874,14 @@ class PretrainedConfig(PushToHubMixin):
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
+
+        for key, value in output.items():
+            # Deal with nested configs like CLIP
+            if isinstance(value, PretrainedConfig):
+                value = value.to_dict()
+                del value["transformers_version"]
+
+            output[key] = value
 
         if hasattr(self, "quantization_config"):
             output["quantization_config"] = (
@@ -1015,6 +1042,24 @@ def get_configuration_file(configuration_files: List[str]) -> str:
             break
 
     return configuration_file
+
+
+def recursive_diff_dict(dict_a, dict_b, config_obj=None):
+    """
+    Helper function to recursively take the diff between two nested dictionaries. The resulting diff only contains the
+    values from `dict_a` that are different from values in `dict_b`.
+    """
+    diff = {}
+    default = config_obj.__class__().to_dict() if config_obj is not None else {}
+    for key, value in dict_a.items():
+        obj_value = getattr(config_obj, str(key), None)
+        if isinstance(obj_value, PretrainedConfig) and key in dict_b and isinstance(dict_b[key], dict):
+            diff_value = recursive_diff_dict(value, dict_b[key], config_obj=obj_value)
+            if len(diff_value) > 0:
+                diff[key] = diff_value
+        elif key not in dict_b or value != dict_b[key] or key not in default or value != default[key]:
+            diff[key] = value
+    return diff
 
 
 PretrainedConfig.push_to_hub = copy_func(PretrainedConfig.push_to_hub)

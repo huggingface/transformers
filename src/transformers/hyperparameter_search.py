@@ -40,7 +40,8 @@ class HyperParamSearchBackendBase:
     name: str
     pip_package: str = None
 
-    def is_available(self):
+    @staticmethod
+    def is_available():
         raise NotImplementedError
 
     def run(self, trainer, n_trials: int, direction: str, **kwargs):
@@ -63,7 +64,8 @@ class HyperParamSearchBackendBase:
 class OptunaBackend(HyperParamSearchBackendBase):
     name = "optuna"
 
-    def is_available(self):
+    @staticmethod
+    def is_available():
         return is_optuna_available()
 
     def run(self, trainer, n_trials: int, direction: str, **kwargs):
@@ -77,7 +79,8 @@ class RayTuneBackend(HyperParamSearchBackendBase):
     name = "ray"
     pip_package = "'ray[tune]'"
 
-    def is_available(self):
+    @staticmethod
+    def is_available():
         return is_ray_available()
 
     def run(self, trainer, n_trials: int, direction: str, **kwargs):
@@ -90,7 +93,8 @@ class RayTuneBackend(HyperParamSearchBackendBase):
 class SigOptBackend(HyperParamSearchBackendBase):
     name = "sigopt"
 
-    def is_available(self):
+    @staticmethod
+    def is_available():
         return is_sigopt_available()
 
     def run(self, trainer, n_trials: int, direction: str, **kwargs):
@@ -103,7 +107,8 @@ class SigOptBackend(HyperParamSearchBackendBase):
 class WandbBackend(HyperParamSearchBackendBase):
     name = "wandb"
 
-    def is_available(self):
+    @staticmethod
+    def is_available():
         return is_wandb_available()
 
     def run(self, trainer, n_trials: int, direction: str, **kwargs):

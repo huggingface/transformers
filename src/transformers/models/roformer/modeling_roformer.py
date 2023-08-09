@@ -696,11 +696,6 @@ class RoFormerPreTrainedModel(PreTrainedModel):
     load_tf_weights = load_tf_weights_in_roformer
     base_model_prefix = "roformer"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = []
-    _keys_to_ignore_on_load_unexpected = [
-        r"roformer.embeddings_project.weight",
-        r"roformer.embeddings_project.bias",
-    ]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -879,6 +874,7 @@ class RoFormerModel(RoFormerPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -952,7 +948,6 @@ class RoFormerModel(RoFormerPreTrainedModel):
 
 @add_start_docstrings("""RoFormer Model with a `language modeling` head on top.""", ROFORMER_START_DOCSTRING)
 class RoFormerForMaskedLM(RoFormerPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     def __init__(self, config):
@@ -1055,7 +1050,6 @@ class RoFormerForMaskedLM(RoFormerPreTrainedModel):
     """RoFormer Model with a `language modeling` head on top for CLM fine-tuning.""", ROFORMER_START_DOCSTRING
 )
 class RoFormerForCausalLM(RoFormerPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
     _tied_weights_keys = ["cls.predictions.decoder.bias", "cls.predictions.decoder.weight"]
 
     def __init__(self, config):

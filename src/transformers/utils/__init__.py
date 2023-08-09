@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub import get_full_repo_name  # for backward compatibility
 from packaging import version
 
 from .. import __version__
@@ -69,6 +70,7 @@ from .hub import (
     TRANSFORMERS_CACHE,
     TRANSFORMERS_DYNAMIC_MODULE_NAME,
     EntryNotFoundError,
+    PushInProgress,
     PushToHubMixin,
     RepositoryNotFoundError,
     RevisionNotFoundError,
@@ -79,7 +81,6 @@ from .hub import (
     extract_commit_hash,
     get_cached_models,
     get_file_from_repo,
-    get_full_repo_name,
     has_file,
     http_user_agent,
     is_offline_mode,
@@ -142,6 +143,7 @@ from .import_utils import (
     is_sagemaker_mp_enabled,
     is_scipy_available,
     is_sentencepiece_available,
+    is_seqio_available,
     is_sklearn_available,
     is_soundfile_availble,
     is_spacy_available,
@@ -161,7 +163,9 @@ from .import_utils import (
     is_torch_cuda_available,
     is_torch_fx_available,
     is_torch_fx_proxy,
+    is_torch_mps_available,
     is_torch_neuroncore_available,
+    is_torch_npu_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
@@ -178,6 +182,7 @@ from .import_utils import (
 
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
+ADAPTER_CONFIG_NAME = "adapter_config.json"
 ADAPTER_WEIGHTS_NAME = "adapter_model.bin"
 ADAPTER_SAFE_WEIGHTS_NAME = "adapter_model.safetensors"
 TF2_WEIGHTS_NAME = "tf_model.h5"
@@ -215,6 +220,6 @@ def check_min_version(min_version):
         error_message += f" but the version found is {__version__}.\n"
         raise ImportError(
             error_message
-            + "Check out https://huggingface.co/transformers/examples.html for the examples corresponding to other "
+            + "Check out https://github.com/huggingface/transformers/tree/main/examples#important-note for the examples corresponding to other "
             "versions of HuggingFace Transformers."
         )

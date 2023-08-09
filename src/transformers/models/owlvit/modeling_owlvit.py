@@ -22,7 +22,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from torch import nn
+from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -120,7 +120,7 @@ class OwlViTOutput(ModelOutput):
 
 
 # Copied from transformers.models.detr.modeling_detr._upcast
-def _upcast(t: torch.Tensor) -> torch.Tensor:
+def _upcast(t: Tensor) -> Tensor:
     # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
     if t.is_floating_point():
         return t if t.dtype in (torch.float32, torch.float64) else t.float()
@@ -129,7 +129,7 @@ def _upcast(t: torch.Tensor) -> torch.Tensor:
 
 
 # Copied from transformers.models.detr.modeling_detr.box_area
-def box_area(boxes: torch.Tensor) -> torch.Tensor:
+def box_area(boxes: Tensor) -> Tensor:
     """
     Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
 
@@ -146,7 +146,7 @@ def box_area(boxes: torch.Tensor) -> torch.Tensor:
 
 
 # Copied from transformers.models.detr.modeling_detr.box_iou
-def box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
+def box_iou(boxes1, boxes2):
     area1 = box_area(boxes1)
     area2 = box_area(boxes2)
 
@@ -304,7 +304,7 @@ class OwlViTVisionEmbeddings(nn.Module):
         self.num_patches = (config.image_size // config.patch_size) ** 2
         self.num_positions = self.num_patches + 1
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
@@ -325,7 +325,9 @@ class OwlViTTextEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(config.max_position_embeddings, config.hidden_size)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
 
     def forward(
         self,
@@ -530,7 +532,6 @@ class OwlViTPreTrainedModel(PreTrainedModel):
     config_class = OwlViTConfig
     base_model_prefix = "owlvit"
     supports_gradient_checkpointing = True
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
     _no_split_modules = ["OwlViTEncoderLayer"]
 
     def _init_weights(self, module):
@@ -791,7 +792,7 @@ def _make_causal_mask(
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = torch.full((tgt_len, tgt_len), torch.tensor(torch.finfo(dtype).min, device=device), device=device)
+    mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
     mask_cond = torch.arange(mask.size(-1), device=device)
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
@@ -1064,7 +1065,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
-        self.logit_scale = nn.Parameter(torch.ones([]) * config.logit_scale_init_value)
+        self.logit_scale = nn.Parameter(torch.tensor(config.logit_scale_init_value))
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1293,8 +1294,8 @@ class OwlViTClassPredictionHead(nn.Module):
             return (pred_logits, image_class_embeds)
 
         # Normalize image and text features
-        image_class_embeds /= torch.linalg.norm(image_class_embeds, dim=-1, keepdim=True) + 1e-6
-        query_embeds /= torch.linalg.norm(query_embeds, dim=-1, keepdim=True) + 1e-6
+        image_class_embeds = image_class_embeds / (torch.linalg.norm(image_class_embeds, dim=-1, keepdim=True) + 1e-6)
+        query_embeds = query_embeds / (torch.linalg.norm(query_embeds, dim=-1, keepdim=True) + 1e-6)
 
         # Get class predictions
         pred_logits = torch.einsum("...pd,...qd->...pq", image_class_embeds, query_embeds)

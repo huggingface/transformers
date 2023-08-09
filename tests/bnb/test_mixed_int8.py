@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import gc
+import importlib.metadata
 import tempfile
 import unittest
 
@@ -38,7 +39,12 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
-from transformers.utils.versions import importlib_metadata
+
+
+def get_some_linear_layer(model):
+    if model.config.model_type == "gpt2":
+        return model.transformer.h[0].mlp.c_fc
+    return model.transformer.h[0].mlp.dense_4h_to_h
 
 
 if is_accelerate_available():
@@ -118,6 +124,53 @@ class MixedInt8Test(BaseMixedInt8Test):
         gc.collect()
         torch.cuda.empty_cache()
 
+    def test_get_keys_to_not_convert(self):
+        r"""
+        Test the `get_keys_to_not_convert` function.
+        """
+        from accelerate import init_empty_weights
+
+        from transformers import AutoModelForMaskedLM, Blip2ForConditionalGeneration, MptForCausalLM, OPTForCausalLM
+        from transformers.utils.bitsandbytes import get_keys_to_not_convert
+
+        model_id = "mosaicml/mpt-7b"
+        config = AutoConfig.from_pretrained(
+            model_id, trust_remote_code=True, revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7"
+        )
+        with init_empty_weights():
+            model = AutoModelForCausalLM.from_config(config, trust_remote_code=True)
+        self.assertEqual(get_keys_to_not_convert(model), ["transformer.wte"])
+        # without trust_remote_code
+        config = AutoConfig.from_pretrained(model_id, revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7")
+        with init_empty_weights():
+            model = MptForCausalLM(config)
+        # The order of the keys does not matter, so we sort them before comparing, same for the other tests.
+        self.assertEqual(get_keys_to_not_convert(model).sort(), ["lm_head", "transformer.wte"].sort())
+
+        model_id = "Salesforce/blip2-opt-2.7b"
+        config = AutoConfig.from_pretrained(model_id, revision="1ef7f63a8f0a144c13fdca8103eb7b4691c74cec")
+        with init_empty_weights():
+            model = Blip2ForConditionalGeneration(config)
+        self.assertEqual(
+            get_keys_to_not_convert(model).sort(),
+            ["language_model.lm_head", "language_model.model.decoder.embed_tokens"].sort(),
+        )
+
+        model_id = "facebook/opt-350m"
+        config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
+        with init_empty_weights():
+            model = OPTForCausalLM(config)
+        self.assertEqual(get_keys_to_not_convert(model).sort(), ["lm_head", "model.decoder.embed_tokens"].sort())
+
+        model_id = "roberta-large"
+        config = AutoConfig.from_pretrained(model_id, revision="716877d372b884cad6d419d828bac6c85b3b18d9")
+        with init_empty_weights():
+            model = AutoModelForMaskedLM.from_config(config)
+        self.assertEqual(
+            get_keys_to_not_convert(model).sort(),
+            ["'roberta.embeddings.word_embeddings', 'lm_head', 'lm_head.decoder"].sort(),
+        )
+
     def test_quantization_config_json_serialization(self):
         r"""
         A simple test to check if the quantization config is correctly serialized and deserialized
@@ -142,7 +195,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         mem_8bit = self.model_8bit.get_memory_footprint()
 
         self.assertAlmostEqual(mem_fp16 / mem_8bit, self.EXPECTED_RELATIVE_DIFFERENCE)
-        self.assertTrue(self.model_8bit.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+        self.assertTrue(get_some_linear_layer(self.model_8bit).weight.__class__ == Int8Params)
 
     def test_linear_are_8bit(self):
         r"""
@@ -292,8 +345,9 @@ class MixedInt8Test(BaseMixedInt8Test):
 
             model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, load_in_8bit=True, device_map="auto")
 
-            self.assertTrue(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
-            self.assertTrue(hasattr(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
+            linear = get_some_linear_layer(model_from_saved)
+            self.assertTrue(linear.weight.__class__ == Int8Params)
+            self.assertTrue(hasattr(linear.weight, "SCB"))
 
             # generate
             encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
@@ -318,8 +372,9 @@ class MixedInt8Test(BaseMixedInt8Test):
 
             model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname)
 
-            self.assertTrue(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
-            self.assertTrue(hasattr(model_from_saved.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
+            linear = get_some_linear_layer(model_from_saved)
+            self.assertTrue(linear.weight.__class__ == Int8Params)
+            self.assertTrue(hasattr(linear.weight, "SCB"))
 
             # generate
             encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
@@ -339,8 +394,9 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         model = AutoModelForCausalLM.from_pretrained(model_id)
 
-        self.assertTrue(model.transformer.h[0].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
-        self.assertTrue(hasattr(model.transformer.h[0].mlp.dense_4h_to_h.weight, "SCB"))
+        linear = get_some_linear_layer(model)
+        self.assertTrue(linear.weight.__class__ == Int8Params)
+        self.assertTrue(hasattr(linear.weight, "SCB"))
 
         # generate
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
@@ -713,7 +769,7 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
         super().setUp()
 
     def test_training(self):
-        if version.parse(importlib_metadata.version("bitsandbytes")) < version.parse("0.37.0"):
+        if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.37.0"):
             return
 
         # Step 1: freeze all parameters
@@ -748,3 +804,29 @@ class MixedInt8TestTraining(BaseMixedInt8Test):
                 self.assertTrue(module.adapter[1].weight.grad.norm().item() > 0)
             elif isinstance(module, nn.Embedding):
                 self.assertTrue(module.weight.grad is None)
+
+
+class MixedInt8GPT2Test(MixedInt8Test):
+    model_name = "gpt2-xl"
+    EXPECTED_RELATIVE_DIFFERENCE = 1.8720077507258357
+    EXPECTED_OUTPUT = "Hello my name is John Doe, and I'm a big fan of"
+
+    def test_int8_from_pretrained(self):
+        r"""
+        Test whether loading a 8bit model from the Hub works as expected
+        """
+        from bitsandbytes.nn import Int8Params
+
+        model_id = "ybelkada/gpt2-xl-8bit"
+
+        model = AutoModelForCausalLM.from_pretrained(model_id)
+
+        linear = get_some_linear_layer(model)
+        self.assertTrue(linear.weight.__class__ == Int8Params)
+        self.assertTrue(hasattr(linear.weight, "SCB"))
+
+        # generate
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
+        output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
+
+        self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)

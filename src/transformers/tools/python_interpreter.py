@@ -110,6 +110,9 @@ def evaluate_ast(expression: ast.AST, state: Dict[str, Any], tools: Dict[str, Ca
     elif isinstance(expression, ast.Expr):
         # Expression -> evaluate the content
         return evaluate_ast(expression.value, state, tools)
+    elif isinstance(expression, ast.For):
+        # For loop -> execute the loop
+        return evaluate_for(expression, state, tools)
     elif isinstance(expression, ast.FormattedValue):
         # Formatted value (part of f-string) -> evaluate the content and return
         return evaluate_ast(expression.value, state, tools)
@@ -233,6 +236,18 @@ def evaluate_if(if_statement, state, tools):
     else:
         for line in if_statement.orelse:
             line_result = evaluate_ast(line, state, tools)
+            if line_result is not None:
+                result = line_result
+    return result
+
+
+def evaluate_for(for_loop, state, tools):
+    result = None
+    iterator = evaluate_ast(for_loop.iter, state, tools)
+    for counter in iterator:
+        state[for_loop.target.id] = counter
+        for expression in for_loop.body:
+            line_result = evaluate_ast(expression, state, tools)
             if line_result is not None:
                 result = line_result
     return result

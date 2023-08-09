@@ -17,6 +17,7 @@ import unittest
 from dataclasses import dataclass
 from typing import Optional
 
+from transformers.testing_utils import require_torch
 from transformers.utils import ModelOutput
 
 
@@ -120,3 +121,25 @@ class ModelOutputTester(unittest.TestCase):
         x = ModelOutputTest(a=(30, 30))
         self.assertEqual(list(x.keys()), ["a"])
         self.assertEqual(x.a, (30, 30))
+
+    @require_torch
+    def test_torch_pytree(self):
+        # ensure torch.utils._pytree treats ModelOutput subclasses as nodes (and not leaves)
+        # this is important for DistributedDataParallel gradient synchronization with static_graph=True
+        import torch
+        import torch.utils._pytree
+
+        x = ModelOutputTest(a=1.0, c=2.0)
+        self.assertFalse(torch.utils._pytree._is_leaf(x))
+
+        expected_flat_outs = [1.0, 2.0]
+        expected_tree_spec = torch.utils._pytree.TreeSpec(
+            ModelOutputTest, ["a", "c"], [torch.utils._pytree.LeafSpec(), torch.utils._pytree.LeafSpec()]
+        )
+
+        actual_flat_outs, actual_tree_spec = torch.utils._pytree.tree_flatten(x)
+        self.assertEqual(expected_flat_outs, actual_flat_outs)
+        self.assertEqual(expected_tree_spec, actual_tree_spec)
+
+        unflattened_x = torch.utils._pytree.tree_unflatten(actual_flat_outs, actual_tree_spec)
+        self.assertEqual(x, unflattened_x)

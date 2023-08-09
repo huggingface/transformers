@@ -19,7 +19,7 @@ import inspect
 import math
 import unittest
 
-from transformers import DetrConfig, is_timm_available, is_vision_available
+from transformers import DetrConfig, ResNetConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import require_timm, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
@@ -29,16 +29,16 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
-if is_timm_available():
+if is_torch_available():
     import torch
 
-    from transformers import DetrForObjectDetection, DetrForSegmentation, DetrModel, ResNetConfig
+    from transformers import DetrForObjectDetection, DetrForSegmentation, DetrModel
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DetrFeatureExtractor
+    from transformers import DetrImageProcessor
 
 
 class DetrModelTester:
@@ -48,7 +48,7 @@ class DetrModelTester:
         batch_size=8,
         is_training=True,
         use_labels=True,
-        hidden_size=256,
+        hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=8,
         intermediate_size=4,
@@ -106,6 +106,16 @@ class DetrModelTester:
         return config, pixel_values, pixel_mask, labels
 
     def get_config(self):
+        resnet_config = ResNetConfig(
+            num_channels=3,
+            embeddings_size=10,
+            hidden_sizes=[10, 20, 30, 40],
+            depths=[1, 1, 2, 1],
+            hidden_act="relu",
+            num_labels=3,
+            out_features=["stage2", "stage3", "stage4"],
+            out_indices=[2, 3, 4],
+        )
         return DetrConfig(
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -118,6 +128,8 @@ class DetrModelTester:
             attention_dropout=self.attention_probs_dropout_prob,
             num_queries=self.num_queries,
             num_labels=self.num_labels,
+            use_timm_backbone=False,
+            backbone_config=resnet_config,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -154,27 +166,8 @@ class DetrModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
-    def create_and_check_no_timm_backbone(self, config, pixel_values, pixel_mask, labels):
-        config.use_timm_backbone = False
-        config.backbone_config = ResNetConfig()
-        model = DetrForObjectDetection(config=config)
-        model.to(torch_device)
-        model.eval()
 
-        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
-        result = model(pixel_values)
-
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
-
-        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
-
-        self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
-
-
-@require_timm
+@require_torch
 class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
@@ -182,7 +175,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             DetrForObjectDetection,
             DetrForSegmentation,
         )
-        if is_timm_available()
+        if is_torch_available()
         else ()
     )
     pipeline_model_mapping = (
@@ -191,7 +184,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             "image-segmentation": DetrForSegmentation,
             "object-detection": DetrForObjectDetection,
         }
-        if is_timm_available()
+        if is_torch_available()
         else {}
     )
     is_encoder_decoder = True
@@ -241,10 +234,6 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_detr_object_detection_head_model(*config_and_inputs)
-
-    def test_detr_no_timm_backbone(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_no_timm_backbone(*config_and_inputs)
 
     # TODO: check if this works again for PyTorch 2.x.y
     @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
@@ -464,6 +453,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
         # let's set num_channels to 1
         config.num_channels = 1
+        config.backbone_config.num_channels = 1
 
         for model_class in self.all_model_classes:
             model = model_class(config)
@@ -512,15 +502,15 @@ def prepare_img():
 @slow
 class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
+    def default_image_processor(self):
+        return DetrImageProcessor.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
 
     def test_inference_no_head(self):
         model = DetrModel.from_pretrained("facebook/detr-resnet-50").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model(**encoding)
@@ -535,9 +525,9 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
     def test_inference_object_detection_head(self):
         model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
         pixel_values = encoding["pixel_values"].to(torch_device)
         pixel_mask = encoding["pixel_mask"].to(torch_device)
 
@@ -560,7 +550,7 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
         # verify postprocessing
-        results = feature_extractor.post_process_object_detection(
+        results = image_processor.post_process_object_detection(
             outputs, threshold=0.3, target_sizes=[image.size[::-1]]
         )[0]
         expected_scores = torch.tensor([0.9982, 0.9960, 0.9955, 0.9988, 0.9987]).to(torch_device)
@@ -575,9 +565,9 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
     def test_inference_panoptic_segmentation_head(self):
         model = DetrForSegmentation.from_pretrained("facebook/detr-resnet-50-panoptic").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
         pixel_values = encoding["pixel_values"].to(torch_device)
         pixel_mask = encoding["pixel_mask"].to(torch_device)
 
@@ -607,7 +597,7 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.pred_masks[0, 0, :3, :3], expected_slice_masks, atol=1e-3))
 
         # verify postprocessing
-        results = feature_extractor.post_process_panoptic_segmentation(
+        results = image_processor.post_process_panoptic_segmentation(
             outputs, threshold=0.3, target_sizes=[image.size[::-1]]
         )[0]
 
@@ -633,9 +623,9 @@ class DetrModelIntegrationTestsTimmBackbone(unittest.TestCase):
 @slow
 class DetrModelIntegrationTests(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
-            DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50", revision="no_timm")
+            DetrImageProcessor.from_pretrained("facebook/detr-resnet-50", revision="no_timm")
             if is_vision_available()
             else None
         )
@@ -643,9 +633,9 @@ class DetrModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
         model = DetrModel.from_pretrained("facebook/detr-resnet-50", revision="no_timm").to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model(**encoding)

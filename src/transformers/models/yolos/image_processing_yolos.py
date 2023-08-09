@@ -26,7 +26,6 @@ from ...image_transforms import (
     center_to_corners_format,
     corners_to_center_format,
     id_to_rgb,
-    normalize,
     pad,
     rescale,
     resize,
@@ -729,15 +728,6 @@ class YolosImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
 
-    @property
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.max_size
-    def max_size(self):
-        logger.warning(
-            "The `max_size` parameter is deprecated and will be removed in v4.27. "
-            "Please specify in `size['longest_edge'] instead`.",
-        )
-        return self.size["longest_edge"]
-
     @classmethod
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.from_dict with Detr->Yolos
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -780,9 +770,9 @@ class YolosImageProcessor(BaseImageProcessor):
         return target
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare
-    def prepare(self, image, target, return_segmentation_masks=False, masks_path=None):
+    def prepare(self, image, target, return_segmentation_masks=None, masks_path=None):
         logger.warning_once(
-            "The `prepare` method is deprecated and will be removed in a future version. "
+            "The `prepare` method is deprecated and will be removed in a v4.33. "
             "Please use `prepare_annotation` instead. Note: the `prepare_annotation` method "
             "does not return the image anymore.",
         )
@@ -791,23 +781,17 @@ class YolosImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.convert_coco_poly_to_mask
     def convert_coco_poly_to_mask(self, *args, **kwargs):
-        logger.warning_once(
-            "The `convert_coco_poly_to_mask` method is deprecated and will be removed in a future version. "
-        )
+        logger.warning_once("The `convert_coco_poly_to_mask` method is deprecated and will be removed in v4.33. ")
         return convert_coco_poly_to_mask(*args, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_detection with DETR->Yolos
     def prepare_coco_detection(self, *args, **kwargs):
-        logger.warning_once(
-            "The `prepare_coco_detection` method is deprecated and will be removed in a future version. "
-        )
+        logger.warning_once("The `prepare_coco_detection` method is deprecated and will be removed in v4.33. ")
         return prepare_coco_detection_annotation(*args, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.prepare_coco_panoptic
     def prepare_coco_panoptic(self, *args, **kwargs):
-        logger.warning_once(
-            "The `prepare_coco_panoptic` method is deprecated and will be removed in a future version. "
-        )
+        logger.warning_once("The `prepare_coco_panoptic` method is deprecated and will be removed in v4.33. ")
         return prepare_coco_panoptic_annotation(*args, **kwargs)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.resize
@@ -860,25 +844,23 @@ class YolosImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.rescale
     def rescale(
-        self, image: np.ndarray, rescale_factor: Union[float, int], data_format: Optional[ChannelDimension] = None
+        self, image: np.ndarray, rescale_factor: float, data_format: Optional[Union[str, ChannelDimension]] = None
     ) -> np.ndarray:
         """
-        Rescale the image by the given factor.
+        Rescale the image by the given factor. image = image * rescale_factor.
+
+        Args:
+            image (`np.ndarray`):
+                Image to rescale.
+            rescale_factor (`float`):
+                The value to use for rescaling.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
         return rescale(image, rescale_factor, data_format=data_format)
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: Union[float, Iterable[float]],
-        std: Union[float, Iterable[float]],
-        data_format: Optional[ChannelDimension] = None,
-    ) -> np.ndarray:
-        """
-        Normalize the image with the given mean and standard deviation.
-        """
-        return normalize(image, mean=mean, std=std, data_format=data_format)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.normalize_annotation
     def normalize_annotation(self, annotation: Dict, image_size: Tuple[int, int]) -> Dict:
@@ -913,10 +895,11 @@ class YolosImageProcessor(BaseImageProcessor):
     def pad(
         self,
         images: List[np.ndarray],
+        constant_values: Union[float, Iterable[float]] = 0,
         return_pixel_mask: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
-    ) -> np.ndarray:
+    ) -> BatchFeature:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
         in the batch and optionally returns their corresponding pixel mask.
@@ -924,16 +907,26 @@ class YolosImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to pad.
+            constant_values (`float` or `Iterable[float]`, *optional*):
+                The value to use for the padding if `mode` is `"constant"`.
             return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether to return a pixel mask.
-            input_channel_dimension (`ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be inferred from the input image.
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return. Can be one of:
+                    - Unset: Return a list of `np.ndarray`.
+                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
+                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+                    - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
         pad_size = get_max_height_width(images)
 
-        padded_images = [self._pad_image(image, pad_size, data_format=data_format) for image in images]
+        padded_images = [
+            self._pad_image(image, pad_size, constant_values=constant_values, data_format=data_format)
+            for image in images
+        ]
         data = {"pixel_values": padded_images}
 
         if return_pixel_mask:
@@ -1010,7 +1003,7 @@ class YolosImageProcessor(BaseImageProcessor):
         """
         if "pad_and_return_pixel_mask" in kwargs:
             logger.warning_once(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
+                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in v4.33, "
                 "use `do_pad` instead.",
             )
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
@@ -1018,7 +1011,7 @@ class YolosImageProcessor(BaseImageProcessor):
         max_size = None
         if "max_size" in kwargs:
             logger.warning_once(
-                "The `max_size` argument is deprecated and will be removed in a future version, use"
+                "The `max_size` argument is deprecated and will be removed in v4.33, use"
                 " `size['longest_edge']` instead.",
             )
             size = kwargs.pop("max_size")
@@ -1166,7 +1159,7 @@ class YolosImageProcessor(BaseImageProcessor):
         """
         logger.warning_once(
             "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_object_detection`",
+            " `post_process_object_detection` instead, with `threshold=0.` for equivalent results.",
         )
 
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes

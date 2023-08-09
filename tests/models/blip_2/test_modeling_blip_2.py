@@ -62,7 +62,7 @@ class Blip2VisionModelTester:
         is_training=True,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -215,7 +215,7 @@ class Blip2QFormerModelTester:
         vocab_size=99,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=6,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -289,7 +289,7 @@ class Blip2TextModelDecoderOnlyTester:
         use_labels=False,
         vocab_size=99,
         hidden_size=16,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=4,
         hidden_act="gelu",
@@ -330,9 +330,7 @@ class Blip2TextModelDecoderOnlyTester:
     def prepare_config_and_inputs(self):
         config = self.get_config()
 
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
-            3,
-        )
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(3)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
 
         attention_mask = input_ids.ne(self.pad_token_id)
@@ -505,7 +503,7 @@ class Blip2TextModelTester:
         use_attention_mask=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         d_ff=37,
         relative_attention_num_buckets=8,

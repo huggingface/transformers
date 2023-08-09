@@ -83,6 +83,7 @@ class CodeGenAttention(nn.Module):
             torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
                 1, 1, max_positions, max_positions
             ),
+            persistent=False,
         )
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
@@ -459,6 +460,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
             batch_size = input_ids.shape[0]
@@ -600,7 +602,6 @@ class CodeGenModel(CodeGenPreTrainedModel):
     CODEGEN_START_DOCSTRING,
 )
 class CodeGenForCausalLM(CodeGenPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.causal_mask"]
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
