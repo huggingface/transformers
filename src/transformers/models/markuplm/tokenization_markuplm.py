@@ -313,7 +313,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         return len(self.encoder)
 
     def get_vocab(self):
-        vocab = self.encoder
+        vocab = self.encoder.copy()
         vocab.update(self.added_tokens_encoder)
         return vocab
 
