@@ -26,13 +26,13 @@ from tokenizers import pre_tokenizers, processors
 from ...file_utils import PaddingStrategy, TensorType, add_end_docstrings
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
+    AddedToken,
     BatchEncoding,
     EncodedInput,
     PreTokenizedInput,
     TextInput,
     TextInputPair,
     TruncationStrategy,
-    AddedToken
 )
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
@@ -183,8 +183,6 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         trim_offsets=False,
         **kwargs,
     ):
-        
-        
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
