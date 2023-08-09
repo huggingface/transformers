@@ -347,7 +347,8 @@ class GenerationConfig(PushToHubMixin):
         fix_location = ""
         if is_init:
             fix_location = (
-                " This was detected when initializing the generation config file, so it should be fixed there."
+                " This was detected when initializing the generation config instance, which means the corresponding "
+                "file may hold incorrect parameterization and should be fixed."
             )
 
         # 1. detect sampling-only parameterization when not in sampling mode
