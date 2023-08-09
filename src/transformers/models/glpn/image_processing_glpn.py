@@ -70,7 +70,12 @@ class GLPNImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
 
     def resize(
-        self, image: np.ndarray, size_divisor: int, resample, data_format: Optional[ChannelDimension] = None, **kwargs
+        self,
+        image: np.ndarray,
+        size_divisor: int,
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        data_format: Optional[ChannelDimension] = None,
+        **kwargs,
     ) -> np.ndarray:
         """
         Resize the image, rounding the (height, width) dimensions down to the closest multiple of size_divisor.

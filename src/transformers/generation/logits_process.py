@@ -133,14 +133,53 @@ class MinLengthLogitsProcessor(LogitsProcessor):
 class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] enforcing a min-length of new tokens by setting EOS (End-Of-Sequence) token probability to 0.
+    Note that for decoder-only models, such as Llama2, `min_length` will compute the length of `prompt + newly
+    generated tokens` whereas for other models it will behave as `min_new_tokens`, that is, taking only into account
+    the newly generated ones.
 
     Args:
         prompt_length_to_skip (`int`):
-            The input tokens length.
+            The input tokens length. Not a valid argument when used with `generate` as it will automatically assign the
+            input length.
         min_new_tokens (`int`):
             The minimum *new* tokens length below which the score of `eos_token_id` is set to `-float("Inf")`.
         eos_token_id (`Union[int, List[int]]`):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+    >>> model.config.pad_token_id = model.config.eos_token_id
+    >>> model.generation_config.pad_token_id = model.config.eos_token_id
+    >>> input_context = "Hugging Face Company is"
+    >>> input_ids = tokenizer.encode(input_context, return_tensors="pt")
+
+    >>> # Without `eos_token_id`, it will generate the default length, 20, ignoring `min_new_tokens`
+    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=30)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is a company that has been working on a new product for the past year.
+
+    >>> # If `eos_token_id` is set to ` company` it will take into account how many `min_new_tokens` have been generated
+    >>> # before stopping. Note that ` Company` (5834) and ` company` (1664) are not actually the same token, and even
+    >>> # if they were ` Company` would be ignored by `min_new_tokens` as it excludes the prompt.
+    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=1, eos_token_id=1664)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is a company
+
+    >>> # Increasing `min_new_tokens` will bury the first occurrence of ` company` generating a different sequence.
+    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=2, eos_token_id=1664)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is a new company
+
+    >>> # If no more occurrences of the `eos_token` happen after `min_new_tokens` it returns to the 20 default tokens.
+    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=10, eos_token_id=1664)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is a new and innovative brand of facial recognition technology that is designed to help you
+    ```
     """
 
     def __init__(self, prompt_length_to_skip: int, min_new_tokens: int, eos_token_id: Union[int, List[int]]):
@@ -193,7 +232,6 @@ class TemperatureLogitsWarper(LogitsWarper):
     ```python
     >>> import torch
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM
-
 
     >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
     >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
@@ -332,6 +370,37 @@ class TopPLogitsWarper(LogitsWarper):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
+
+    Examples:
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
+
+    >>> set_seed(0)
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+    >>> text = "It is probably one of the most important things for parents to teach children about patience and acceptance. In this way, we as a society can ensure"
+    >>> inputs = tokenizer(text, return_tensors="pt")
+
+    >>> # Generate sequences without top_p sampling
+    >>> # We see that the answer tends to have a lot of repeated tokens and phrases
+    >>> outputs = model.generate(**inputs, max_length=55)
+    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
+    'It is probably one of the most important things for parents to teach children about patience and acceptance. In this way, we as a society can ensure that our children are not taught to be impatient or to be afraid of the future.\n\nThe first step is to teach them'
+
+    >>> # Generate sequences with top_p sampling: set `do_sample=True` to use top_p sampling with `top_p` arugment
+    >>> # We already see that the answer has less repetitive tokens and is more diverse
+    >>> outputs = model.generate(**inputs, max_length=55, do_sample=True, top_p=0.25)
+    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
+    'It is probably one of the most important things for parents to teach children about patience and acceptance. In this way, we as a society can ensure that children learn to be more accepting of others and to be more tolerant of others.\n\nWe can also teach children to be'
+
+    >>> # Generate sequences with top_p sampling with a larger top_p value
+    >>> # We see that as we increase the top_p value, less probable tokens also get selected during text generation, making the answer more diverse
+    >>> # Pro Tip: In practice, we tend to use top_p values between 0.9 and 1.0!
+    >>> outputs = model.generate(**inputs, max_length=55, do_sample=True, top_p=0.95)
+    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
+    'It is probably one of the most important things for parents to teach children about patience and acceptance. In this way, we as a society can ensure we have the best learning environment, so that we can teach to learn and not just take advantage of the environment.\n\nThe'
+    ```
     """
 
     def __init__(self, top_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
