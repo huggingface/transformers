@@ -26,6 +26,35 @@ logger = logging.get_logger(__name__)
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class ImageToImagePipeline(Pipeline):
+    """
+    Image to Image pipeline using any `AutoModelForImageToImage`. This pipeline generates an image based on a previous image.
+
+    Example:
+
+    ```python
+    >>> from PIL import Images
+    >>> import requests
+
+    >>> from transformers import pipeline
+
+    >>> upscaler = pipeline('image-to-image', model="caidas/swin2SR-classical-sr-x2-64")
+    >>> parrots = Image.open(requests.get("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png", stream=True).raw)
+    >>> upscaled_parrots = upscaler(parrots)
+    >>> parrots.size
+    (768, 512)
+
+    >>> upscaled_parrots[0].size
+    (1552, 1040)
+    ```
+
+
+    This image to image pipeline can currently be loaded from [`pipeline`] using the following task identifier:
+    `"image-to-image"`.
+
+    See the list of available models on
+    [huggingface.co/models](https://huggingface.co/models?filter=image-to-image).
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
@@ -46,6 +75,29 @@ class ImageToImagePipeline(Pipeline):
     def __call__(
         self, images: Union[str, List[str], "Image.Image", List["Image.Image"]], **kwargs
     ) -> Union[Image.Image, List[Image.Image]]:
+        """
+        Transform the image(s) passed as inputs.
+
+        Args:
+            images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
+                The pipeline handles three types of images:
+
+                - A string containing a http link pointing to an image
+                - A string containing a local path to an image
+                - An image loaded in PIL directly
+
+                The pipeline accepts either a single image or a batch of images, which must then be passed as a string.
+                Images in a batch must all be in the same format: all as http links, all as local paths, or all as PIL
+                images.
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
+
+        Return:
+            An image (Image.Image) or a list of images (List["Image.Image"]) containing result(s). If the input is a single image,
+            the return will be also a single image, if the input is a list of several images, will return a list of transformed
+            images.
+        """
         return super().__call__(images, **kwargs)
 
     def _forward(self, model_inputs):
@@ -59,15 +111,15 @@ class ImageToImagePipeline(Pipeline):
 
     def postprocess(self, model_outputs):
         images = []
-        for output in model_outputs:
+        if "reconstruction" in model_outputs.keys():
+            outputs = model_outputs.reconstruction
+        for output in outputs:
             if hasattr(self.image_processor, "post_process"):
                 images.append(self.image_processor.post_process(output))
-            elif isinstance(output, ImageSuperResolutionOutput):
-                output = output.reconstruction.data.squeeze().float().cpu().clamp_(0, 1).numpy()
             else:
-                raise ValueError(f"Output {type(output)} is not yet supported.")
-            output = np.moveaxis(output, source=0, destination=-1)
-            output = (output * 255.0).round().astype(np.uint8)  # float32 to uint8
-            images.append(Image.fromarray(output))
+                output = output.data.squeeze().float().cpu().clamp_(0, 1).numpy()
+                output = np.moveaxis(output, source=0, destination=-1)
+                output = (output * 255.0).round().astype(np.uint8)  # float32 to uint8
+                images.append(Image.fromarray(output))
 
-        return images
+        return images if len(images) > 1 else images[0]
