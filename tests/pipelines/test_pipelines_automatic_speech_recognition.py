@@ -344,6 +344,56 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         # fmt: on
 
     @require_torch
+    def test_return_timestamps_in_init(self):
+        # segment-level timestamps are accepted
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        tokenizer = AutoTokenizer.from_pretrained("openai/whisper-tiny")
+        feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-tiny")
+
+        pipe = pipeline(
+            task="automatic-speech-recognition",
+            model=model,
+            feature_extractor=feature_extractor,
+            tokenizer=tokenizer,
+            chunk_length_s=8,
+            stride_length_s=1,
+            return_timestamps=True,
+        )
+
+        _ = pipe(np.ones(1000))
+
+        # word-level timestamps are accepted
+        pipe = pipeline(
+            task="automatic-speech-recognition",
+            model=model,
+            feature_extractor=feature_extractor,
+            tokenizer=tokenizer,
+            chunk_length_s=8,
+            stride_length_s=1,
+            return_timestamps="word",
+        )
+
+        _ = pipe(np.ones(1000))
+
+        # char-level timestamps are not accepted
+        with self.assertRaisesRegex(
+            ValueError,
+            "^Whisper cannot return `char` timestamps, only word level or segment level timestamps. "
+            "Use `return_timestamps='word'` or `return_timestamps=True` respectively.$",
+        ):
+            pipe = pipeline(
+                task="automatic-speech-recognition",
+                model=model,
+                feature_extractor=feature_extractor,
+                tokenizer=tokenizer,
+                chunk_length_s=8,
+                stride_length_s=1,
+                return_timestamps="char",
+            )
+
+            _ = pipe(np.ones(1000))
+
+    @require_torch
     @slow
     def test_torch_whisper(self):
         speech_recognizer = pipeline(
