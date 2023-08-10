@@ -439,25 +439,26 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
 
-    def _forward(self, model_inputs, return_timestamps=None, generate_kwargs=None):
+    def _forward(self, model_inputs, return_timestamps=False, generate_kwargs=None):
         if generate_kwargs is None:
             generate_kwargs = {}
 
-        # Check whether we have a valid setting for return_timestamps and throw an error before we perform a forward pass
-        if self.type == "seq2seq" and return_timestamps:
-            raise ValueError("We cannot return_timestamps yet on non-CTC models apart from Whisper!")
-        if self.type == "ctc_with_lm" and return_timestamps != "word":
-            raise ValueError("CTC with LM can only predict word level timestamps, set `return_timestamps='word'`")
-        if self.type == "ctc" and return_timestamps not in ["char", "word"]:
-            raise ValueError(
-                "CTC can either predict character (char) level timestamps, or word level timestamps."
-                "Set `return_timestamps='char'` or `return_timestamps='word'` as required."
-            )
-        if self.type == "seq2seq_whisper" and return_timestamps == "char":
-            raise ValueError(
-                "Whisper cannot return `char` timestamps, only word level or segment level timestamps. "
-                "Use `return_timestamps='word'` or `return_timestamps=True` respectively."
-            )
+        if return_timestamps:
+            # Check whether we have a valid setting for return_timestamps and throw an error before we perform a forward pass
+            if self.type == "seq2seq" and return_timestamps:
+                raise ValueError("We cannot return_timestamps yet on non-CTC models apart from Whisper!")
+            if self.type == "ctc_with_lm" and return_timestamps != "word":
+                raise ValueError("CTC with LM can only predict word level timestamps, set `return_timestamps='word'`")
+            if self.type == "ctc" and return_timestamps not in ["char", "word"]:
+                raise ValueError(
+                    "CTC can either predict character (char) level timestamps, or word level timestamps."
+                    "Set `return_timestamps='char'` or `return_timestamps='word'` as required."
+                )
+            if self.type == "seq2seq_whisper" and return_timestamps == "char":
+                raise ValueError(
+                    "Whisper cannot return `char` timestamps, only word level or segment level timestamps. "
+                    "Use `return_timestamps='word'` or `return_timestamps=True` respectively."
+                )
 
         if return_timestamps and self.type == "seq2seq_whisper":
             generate_kwargs["return_timestamps"] = return_timestamps
