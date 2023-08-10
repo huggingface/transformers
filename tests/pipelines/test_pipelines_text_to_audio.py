@@ -110,10 +110,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
             "semantic_num_return_sequences": 2,
         }
 
-        outputs = speech_generator(
-            "This is a test",
-            forward_params=forward_params,
-        )
+        outputs = speech_generator("This is a test", forward_params=forward_params)
 
         audio = outputs["audio"]
 
@@ -133,13 +130,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
 
         audio = [output["audio"] for output in outputs]
 
-        self.assertEqual(
-            [
-                ANY(np.ndarray),
-                ANY(np.ndarray),
-            ],
-            audio,
-        )
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
 
     @slow
     @require_torch_gpu
