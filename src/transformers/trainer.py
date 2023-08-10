@@ -146,6 +146,7 @@ from .utils import (
     logging,
     strtobool,
 )
+from .utils.quantization_config import QuantizationMethod
 
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
@@ -396,10 +397,9 @@ class Trainer:
         if getattr(model, "is_quantized", False):
             if getattr(model, "_is_quantized_training_enabled", False):
                 logger.info(
-                    "The model is loaded in 8-bit precision. To train this model you need to add additional modules"
+                    "The model is quantized. To train this model you need to add additional modules"
                     " inside the model such as adapters using `peft` library and freeze the model weights. Please"
-                    " check "
-                    " the examples in https://github.com/huggingface/peft for more details."
+                    " check the examples in https://github.com/huggingface/peft for more details."
                 )
             else:
                 raise ValueError(
@@ -498,8 +498,11 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
 
-        # Quantized models doesn't support `.to` operation.
-        if self.place_model_on_device and not getattr(model, "is_quantized", False):
+        # Bnb Quantized models doesn't support `.to` operation.
+        if (
+            self.place_model_on_device
+            and not getattr(model, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES
+        ):
             self._move_model_to_device(model, args.device)
 
         # Force n_gpu to 1 to avoid DataParallel as MP will manage the GPUs
