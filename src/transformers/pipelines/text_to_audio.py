@@ -22,7 +22,10 @@ class TextToAudioPipeline(Pipeline):
     >>> from transformers import pipeline
 
     >>> classifier = pipeline(model="suno/bark")
-    >>> audio = pipeline("Hey it's HuggingFace on the phone!", speaker_embeddings="v2/en_speaker_1")
+    >>> output = pipeline("Hey it's HuggingFace on the phone!")
+
+    >>> audio = output["audio"]
+    >>> sampling_rate = output["sampling_rate"]
     ```
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
