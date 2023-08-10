@@ -205,7 +205,7 @@ if __name__ == "__main__":
             logger.error(p.metrics)
             exit(1)
 
-        trainer.args.eval_accumulation_steps = 2
+        trainer.args._set_value("eval_accumulation_steps", 2)
 
         metrics = trainer.evaluate()
         logger.info(metrics)
@@ -219,15 +219,15 @@ if __name__ == "__main__":
             logger.error(p.metrics)
             exit(1)
 
-        trainer.args.eval_accumulation_steps = None
+        trainer.args._set_value("eval_accumulation_steps", None)
 
     # Check that `dispatch_batches=False` will work on a finite iterable dataset
 
     train_dataset = FiniteIterableDataset(label_names=["labels", "extra"], length=1)
 
     model = RegressionModel()
-    training_args.per_device_train_batch_size = 1
-    training_args.max_steps = 1
-    training_args.dispatch_batches = False
+    trainer.args._set_value("per_device_train_batch_size", 1)
+    trainer.args._set_value("max_steps", 1)
+    trainer.args._set_value("dispatch_batches", False)
     trainer = Trainer(model, training_args, train_dataset=train_dataset)
     trainer.train()
