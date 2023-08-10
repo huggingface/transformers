@@ -56,33 +56,22 @@ class TextToAudioPipelineTests(unittest.TestCase):
 
         audio = outputs["audio"]
 
-        self.assertEqual(
-            ANY(np.ndarray),
-            audio,
-        )
+        self.assertEqual(ANY(np.ndarray), audio)
 
         # test two examples side-by-side
         outputs = speech_generator(["This is a test", "This is a second test"], forward_params=forward_params)
 
         audio = [output["audio"] for output in outputs]
 
-        self.assertEqual(
-            [
-                ANY(np.ndarray),
-                ANY(np.ndarray),
-            ],
-            audio,
-        )
+        self.assertEqual([ANY(np.ndarray),ANY(np.ndarray)],audio
+                         )
 
         # test batching
         outputs = speech_generator(
             ["This is a test", "This is a second test"], forward_params=forward_params, batch_size=2
         )
 
-        self.assertEqual(
-            ANY(np.ndarray),
-            outputs[0]["audio"],
-        )
+        self.assertEqual(ANY(np.ndarray),outputs[0]["audio"])
 
     @slow
     @require_torch
@@ -112,13 +101,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
 
         audio = [output["audio"] for output in outputs]
 
-        self.assertEqual(
-            [
-                ANY(np.ndarray),
-                ANY(np.ndarray),
-            ],
-            audio,
-        )
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)],audio)
 
         # test other generation strategy
 
@@ -128,26 +111,16 @@ class TextToAudioPipelineTests(unittest.TestCase):
             "semantic_num_return_sequences": 2,
         }
 
-        outputs = speech_generator(
-            "This is a test",
-            forward_params=forward_params,
-        )
+        outputs = speech_generator("This is a test",forward_params=forward_params,)
 
         audio = outputs["audio"]
 
-        self.assertEqual(
-            ANY(np.ndarray),
-            audio,
-        )
+        self.assertEqual(ANY(np.ndarray),audio)
 
         # test using a speaker embedding
-
         processor = AutoProcessor.from_pretrained("suno/bark-small")
-
         temp_inp = processor("hey, how are you?", voice_preset="v2/en_speaker_5")
-
         history_prompt = temp_inp["history_prompt"]
-
         forward_params["history_prompt"] = history_prompt
 
         outputs = speech_generator(
@@ -158,13 +131,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
 
         audio = [output["audio"] for output in outputs]
 
-        self.assertEqual(
-            [
-                ANY(np.ndarray),
-                ANY(np.ndarray),
-            ],
-            audio,
-        )
+        self.assertEqual([ANY(np.ndarray),ANY(np.ndarray),],audio)
 
     @slow
     @require_torch_gpu
@@ -214,23 +181,11 @@ class TextToAudioPipelineTests(unittest.TestCase):
     def run_pipeline_test(self, speech_generator, _):
         outputs = speech_generator("This is a test")
 
-        self.assertEqual(
-            ANY(np.ndarray),
-            outputs["audio"],
-        )
+        self.assertEqual(ANY(np.ndarray),outputs["audio"])
 
-        forward_params = {
-            "num_return_sequences": 2,
-            "do_sample": True,
-        }
+        forward_params = {"num_return_sequences": 2,"do_sample": True}
 
         outputs = speech_generator(["This is great !", "Something else"], forward_params=forward_params)
         audio = [output["audio"] for output in outputs]
 
-        self.assertEqual(
-            [
-                ANY(np.ndarray),
-                ANY(np.ndarray),
-            ],
-            audio,
-        )
+        self.assertEqual([ANY(np.ndarray),ANY(np.ndarray)],audio)
