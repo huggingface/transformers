@@ -40,7 +40,8 @@ else:
         "BrosPreTrainedModel",
         "BrosModel",
         "BrosForTokenClassification",
-        "BrosForTokenClassificationWithSpade",
+        "BrosSpadeForTokenClassification",
+        "BrosSpadeForTokenLinking",
     ]
 
 
@@ -67,7 +68,8 @@ if TYPE_CHECKING:
             BrosForTokenClassification,
             BrosModel,
             BrosPreTrainedModel,
-            BrosForTokenClassificationWithSpade,
+            BrosSpadeForTokenClassification,
+            BrosSpadeForTokenLinking,
         )
 
 

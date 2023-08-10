@@ -922,7 +922,7 @@ class BrosModel(BrosPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Bert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Bros Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
     Named-Entity-Recognition (NER) tasks.
     """,
     BROS_START_DOCSTRING,
@@ -1053,12 +1053,12 @@ class RelationExtractor(nn.Module):
 
 @add_start_docstrings(
     """
-    Bert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Bros Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
     Named-Entity-Recognition (NER) tasks.
     """,
     BROS_START_DOCSTRING,
 )
-class BrosForTokenClassificationWithSpade(BrosPreTrainedModel):
+class BrosSpadeForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
@@ -1073,7 +1073,7 @@ class BrosForTokenClassificationWithSpade(BrosPreTrainedModel):
             config.classifier_dropout if hasattr(config, "classifier_dropout") else config.hidden_dropout_prob
         )
 
-        # (1) Initial token classification
+        # Initial token classification for Entity Extraction (NER)
         self.itc_layer = nn.Sequential(
             nn.Dropout(classifier_dropout),
             nn.Linear(config.hidden_size, config.hidden_size),
@@ -1081,7 +1081,7 @@ class BrosForTokenClassificationWithSpade(BrosPreTrainedModel):
             nn.Linear(config.hidden_size, config.num_labels),
         )
 
-        # (2) Subsequent token classification
+        # Subsequent token classification for Entity Extraction (NER)
         self.stc_layer = RelationExtractor(
             n_relations=config.n_relations,
             backbone_hidden_size=config.hidden_size,
@@ -1169,6 +1169,117 @@ class BrosForTokenClassificationWithSpade(BrosPreTrainedModel):
             stc_loss = loss_fct(stc_logits[stc_mask], stc_labels[stc_mask])
 
             loss = itc_loss + stc_loss
+
+        if not return_dict:
+            output = (itc_logits, stc_logits) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return BrosSpadeOutput(
+            loss=loss,
+            itc_logits=itc_logits,
+            stc_logits=stc_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    Bros Model with a Spade head on top (a linear layer on top of the hidden-states output) e.g. for
+    Entity-Linking.
+    """,
+    BROS_START_DOCSTRING,
+)
+class BrosSpadeForTokenLinking(BrosPreTrainedModel):
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.config = config
+        self.num_labels = config.num_labels
+        self.n_relations = config.n_relations
+        self.backbone_hidden_size = config.hidden_size
+
+        self.bros = BrosModel(config)
+        classifier_dropout = (
+            config.classifier_dropout if hasattr(config, "classifier_dropout") else config.hidden_dropout_prob
+        )
+
+        self.relation_net = RelationExtractor(
+            n_relations=config.n_relations,
+            backbone_hidden_size=config.hidden_size,
+            head_hidden_size=config.hidden_size,
+            head_p_dropout=classifier_dropout,
+        )
+
+    @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids=None,
+        bbox=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        box_first_token_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.bros(
+            input_ids=input_ids,
+            bbox=bbox,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        last_hidden_states = outputs.last_hidden_state
+        last_hidden_states = last_hidden_states.transpose(0, 1).contiguous()
+
+        el_outputs = self.relation_net(last_hidden_states, last_hidden_states).squeeze(0)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+
+            bsz, max_seq_length = batch["attention_mask"].shape
+            device = batch["attention_mask"].device
+
+            self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device).bool()
+
+            box_first_token_mask = torch.cat(
+                [
+                    (batch["are_box_first_tokens"] == False),
+                    torch.zeros([bsz, 1], dtype=torch.bool).to(device),
+                ],
+                axis=1,
+            )
+            el_outputs.masked_fill_(box_first_token_mask[:, None, :], -10000.0)
+            el_outputs.masked_fill_(self_token_mask[None, :, :], -10000.0)
+
+            mask = batch["are_box_first_tokens"].view(-1)
+            loss = loss_func(logits.view(-1, max_seq_lenght + 1)[mask], labels.view(-1)[mask])
 
         if not return_dict:
             output = (itc_logits, stc_logits) + outputs[2:]
