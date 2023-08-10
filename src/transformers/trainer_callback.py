@@ -84,7 +84,7 @@ class TrainerState:
     global_step: int = 0
     max_steps: int = 0
     logging_steps: int = 500
-    eval_steps: int = None
+    eval_steps: int = 500
     save_steps: int = 500
     num_train_epochs: int = 0
     total_flos: float = 0
