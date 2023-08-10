@@ -86,7 +86,7 @@ GPTQ quantization only works for text model for now. Futhermore, the quantizatio
 
 ### Push quantized model to 🤗 Hub
 
-You can push the quantized model like any 🤗 model to Hub with `push_to_hub`:
+You can push the quantized model like any 🤗 model to Hub with `push_to_hub`. The quantization config will be saved and pushed along the model. 
 
 ```python
 quantized_model.push_to_hub("opt-125m-gptq")
@@ -114,8 +114,6 @@ Make sure that the pushed weights are quantized, by checking that the attribute 
 from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq")
 ```
-Note that in this case, you don't need to specify the `quantization_config`. It will look for the `quantization_config` and prepare the model 
-before loading the quantized weights. However, you need to make sure that `optimum` and `auto-gptq` are installed.
 
 If you want to load a model faster and without allocating more memory than needed, the `device_map` argument also works with quantized model. Make sure that you have `accelerate` library installed.
 ```python
@@ -136,7 +134,9 @@ model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", de
 Note that only 4-bit models are supported for now
 
 ### GPTQConfig
+
 [[autodoc]] GPTQConfig
+
 
 ## `bitsandbytes` Integration
 
@@ -419,7 +419,10 @@ This enables fine-tuning large models such as `flan-t5-large` or `facebook/opt-6
 Note that you don't need to pass `device_map` when loading the model for training. It will automatically load your model on your GPU. You can also set the device map to a specific device if needed (e.g. `cuda:0`, `0`, `torch.device('cuda:0')`). Please note that `device_map=auto` should be used for inference only. 
 
 ### BitsAndBytesConfig
+
 [[autodoc]] BitsAndBytesConfig
+
+
 ## Quantization with 🤗 `optimum` 
 
 Please have a look at [Optimum documentation](https://huggingface.co/docs/optimum/index) to learn more about quantization methods that are supported by `optimum` and see if these are applicable for your use case.
