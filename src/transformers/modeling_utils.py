@@ -2223,6 +2223,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
+        init_include_buffers = kwargs.pop("init_include_buffers", False)
 
         if use_auth_token is not None:
             warnings.warn(
@@ -2729,7 +2730,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
         elif load_in_8bit or load_in_4bit or low_cpu_mem_usage:
-            init_contexts.append(init_empty_weights())
+            init_contexts.append(init_empty_weights(include_buffers=init_include_buffers))
 
         with ContextManagers(init_contexts):
             model = cls(config, *model_args, **model_kwargs)
