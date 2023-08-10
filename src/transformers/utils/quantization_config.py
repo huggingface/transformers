@@ -304,7 +304,7 @@ class GPTQConfig(QuantizationConfigMixin):
     Args:
         bits (`int`):
             The number of bits to quantize to, supported numbers are (2, 3, 4, 8).
-        tokenizer(`Any`):
+        tokenizer (`str` or `PreTrainedTokenizerBase`):
             The tokenizer used to process the dataset. You can pass either:
                 - A custom tokenizer object.
                 - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
@@ -312,12 +312,12 @@ class GPTQConfig(QuantizationConfigMixin):
                     user or organization name, like `dbmdz/bert-base-german-cased`.
                 - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
                     using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
-        dataset (`Union[List[str]]`, *optional*, defaults to `None`):
+        dataset (`Union[List[str]]`, *optional*):
             "The dataset used for quantization. You can provide your own dataset in a list of string" "or just use the
             original datasets used in GPTQ paper ['wikitext2','c4','c4-new','ptb','ptb-new']"
-        group_size (`int`, *optional*, defaults to `128`):
+        group_size (`int`, *optional*, defaults to 128):
             "The group size to use for quantization. Recommended value is 128 and -1 uses per-column quantization.
-        damp_percent (`float`, *optional*, defaults to `0.01`):
+        damp_percent (`float`, *optional*, defaults to 0.01):
             The percent of the average Hessian diagonal to use for dampening. Recommended value is 0.01.
         desc_act (`bool`, *optional*, defaults to `True`):
              "Whether to quantize columns in order of decreasing activation size."
@@ -330,18 +330,18 @@ class GPTQConfig(QuantizationConfigMixin):
             the entire block at once, we perform layer-wise quantization." "As a result, each layer undergoes
             quantization using inputs that have passed through the previously quantized layers."
         use_cuda_fp16 (`bool`, *optional*, defaults to `False`):
-            "Whether or not to use optimized cuda kernel for fp16 model. Need to have model in fp16.
+            Whether or not to use optimized cuda kernel for fp16 model. Need to have model in fp16.
         model_seqlen (`int`, *optional*, defaults to `None`):
             The maximum sequence length that the model can take.
-        block_name_to_quantize (`Optional[str]`, *optional*, defaults to `None`):
+        block_name_to_quantize (`Optional[str]`, *optional*):
             The transformers block name to quantize.
-        module_name_preceding_first_block (`List[str]`, *optional*, defaults to `None`):
+        module_name_preceding_first_block (`List[str]`, *optional*):
             The layers that are preceding the first Transformer block.
-        batch_size (`int`, *optional*, defaults to `1`):
+        batch_size (`int`, *optional*, defaults to 1):
             The batch size used when processing the dataset
-        pad_token_id (`int`, *optional*, defaults to `None`):
+        pad_token_id (`int`, *optional*):
             The pad token id. Needed to prepare the dataset when `batch_size` > 1.
-        disable_exllama (`bool`, defaults to `False`):
+        disable_exllama (`bool`, *optional*, defaults to `False`):
             Whether to use exllama backend. Only works with `bits` = 4.
     """
 
