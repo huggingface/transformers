@@ -690,7 +690,7 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filter_models=T
 
     # Grab the corresponding test files:
     if "setup.py" in modified_files:
-        test_files_to_run = ["tests"]
+        test_files_to_run = ["tests", "examples"]
         repo_utils_launch = True
     else:
         # All modified tests need to be run.
