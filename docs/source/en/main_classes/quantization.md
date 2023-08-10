@@ -123,7 +123,7 @@ model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", de
 
 ### Exllama kernels for faster inference
 
-For 4-bit model, you can use the exllama kernels in order to a faster inference speed. You just need to pass `disable_exllama=False` in [`GPTQConfig`]. This will overwrite the quantization config stored in the config. Note that you will only be able to overwrite the attributes related to the kernel. Furthermore, you need to have the entire model on gpus. 
+For 4-bit model, you can use the exllama kernels in order to a faster inference speed. It is activated by default. You can change that behavior by passing `disable_exllama` in [`GPTQConfig`]. This will overwrite the quantization config stored in the config. Note that you will only be able to overwrite the attributes related to the kernels. Furthermore, you need to have the entire model on gpus if you want to use exllama kernels. 
 
 ```py
 import torch
@@ -131,7 +131,16 @@ gptq_config = GPTQConfig(bits=4, disable_exllama=False)
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config = gptq_config)
 ```
 
-Note that only 4-bit models are supported for now
+Note that only 4-bit models are supported for now. Furthermore, it is recommended to deactivate the exllama kernels if you are finetuning a quantized model with peft. 
+
+#### Fine-tune a quantized model 
+
+With the official support of adapters in the Hugging Face ecosystem, you can fine-tune models that have been quantized with GPTQ. 
+Please have a look at [`peft`](https://github.com/huggingface/peft) library for more details.
+
+### Example demo
+
+Check out the Google Colab [notebook](https://colab.research.google.com/drive/1_TIrmuKOFhuRRiTWN94iLKUFu6ZX4ceb?usp=sharing) to learn how to quantize your model with GPTQ and how finetune the quantized model with peft. 
 
 ### GPTQConfig
 
