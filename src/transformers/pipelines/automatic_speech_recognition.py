@@ -439,7 +439,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
 
-    def _forward(self, model_inputs, return_timestamps=False, generate_kwargs=None):
+    def _forward(self, model_inputs, return_timestamps=None, generate_kwargs=None):
         if generate_kwargs is None:
             generate_kwargs = {}
 
