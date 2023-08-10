@@ -13,9 +13,9 @@
 # limitations under the License.from typing import List, Union
 from typing import List, Union
 
-from .base import Pipeline
 from ..models.speecht5.modeling_speecht5 import SpeechT5HifiGan
 from ..utils import is_torch_available
+from .base import Pipeline
 
 
 if is_torch_available():
