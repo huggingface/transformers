@@ -1364,7 +1364,9 @@ class SpecialTokensMixin:
 
 ENCODE_KWARGS_DOCSTRING = r"""
             add_special_tokens (`bool`, *optional*, defaults to `True`):
-                Whether or not to encode the sequences with the special tokens relative to their model.
+                Whether or not to add special tokens when encoding the sequences. This will use the underlying 
+                `PretrainedTokenizerBase.build_inputs_with_special_tokens` function, which defines which tokens
+                are automatically added to the input ids.
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
                 Activates and controls padding. Accepts the following values:
 
