@@ -53,15 +53,12 @@ class TrainerState:
             During training, represents the number of update steps completed.
         max_steps (`int`, *optional*, defaults to 0):
             The number of update steps to do during the current training.
-        logging_steps (`float`, *optional*, defaults to 500):
-            Log every X updates steps. Should be an integer or a float in range `[0,1)`. If smaller than 1, will be
-            interpreted as ratio of total training steps.
-        eval_steps (`float`, *optional*):
-            Run an evaluation every X steps. Should be an integer or a float in range `[0,1)`. If smaller than 1, will
-            be interpreted as ratio of total training steps.
-        save_steps (`float`, *optional*, defaults to 500):
-            Save checkpoint every X updates steps. Should be an integer or a float in range `[0,1)`. If smaller than 1,
-            will be interpreted as ratio of total training steps.
+        logging_steps (`int`, *optional*, defaults to 500):
+            Log every X updates steps
+        eval_steps (`int`, *optional*):
+            Run an evaluation every X steps.
+        save_steps (`int`, *optional*, defaults to 500):
+            Save checkpoint every X updates steps.
         total_flos (`float`, *optional*, defaults to 0):
             The total number of floating operations done by the model since the beginning of training (stored as floats
             to avoid overflow).
@@ -87,7 +84,7 @@ class TrainerState:
     global_step: int = 0
     max_steps: int = 0
     logging_steps: int = 500
-    eval_steps: float = None
+    eval_steps: int = None
     save_steps: int = 500
     num_train_epochs: int = 0
     total_flos: float = 0
