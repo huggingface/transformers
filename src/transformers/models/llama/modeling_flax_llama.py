@@ -701,26 +701,25 @@ def main():
     torch.manual_seed(0)
 
     config = LlamaConfig(
-        num_hidden_layers=16,
-        vocab_size=64,
-        hidden_size=64,
-        num_attention_heads=8,
+        num_hidden_layers=4,
+        vocab_size=16,
+        hidden_size=16,
+        num_attention_heads=2,
         max_position_embeddings=128,
-        intermediate_size=256,
+        intermediate_size=64,
     )
-    # model = FlaxLlamaForCausalLM(config)
     N = 1
-    model = FlaxLlamaForCausalLM.from_pretrained(
-        "decapoda-research/llama-7b-hf", from_pt=True, dtype=jnp.float16, input_shape=(N, 128)
-    )
-    print(config)
-    exit()
+    # model = FlaxLlamaForCausalLM.from_pretrained(
+    #     "decapoda-research/llama-7b-hf", from_pt=True, dtype=jnp.float16, input_shape=(N, 128)
+    # )
+    # print(config)
+    # exit()
 
     model = FlaxLlamaForCausalLM(config)
     pt_model = LlamaForCausalLM(config)
 
     key, subkey = jax.random.split(key)
-    x = jax.random.randint(subkey, (N, 128), 0, 64)
+    x = jax.random.randint(subkey, (N, 128), 0, 16)
     mask = jnp.ones((N, 128), dtype=bool)
     position_ids = jnp.arange(128)[jnp.newaxis, :].repeat(N, axis=0)
 
