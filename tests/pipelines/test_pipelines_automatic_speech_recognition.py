@@ -350,6 +350,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("openai/whisper-tiny")
         feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-tiny")
 
+        dummy_speech = np.ones(100)
+
         pipe = pipeline(
             task="automatic-speech-recognition",
             model=model,
@@ -360,7 +362,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             return_timestamps=True,
         )
 
-        _ = pipe(np.ones(1000))
+        _ = pipe(dummy_speech)
 
         # word-level timestamps are accepted
         pipe = pipeline(
@@ -373,7 +375,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             return_timestamps="word",
         )
 
-        _ = pipe(np.ones(1000))
+        _ = pipe(dummy_speech)
 
         # char-level timestamps are not accepted
         with self.assertRaisesRegex(
@@ -391,7 +393,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 return_timestamps="char",
             )
 
-            _ = pipe(np.ones(1000))
+            _ = pipe(dummy_speech)
 
     @require_torch
     @slow
