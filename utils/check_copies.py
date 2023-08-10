@@ -134,13 +134,13 @@ def _should_continue(line: str, indent: str) -> bool:
 
 def find_code_in_transformers(object_name: str) -> str:
     """
-    Find and return the code source code of an object.
+    Find and return the source code of an object.
 
     Args:
         object_name (`str`): The name of the object we want the source code of.
 
     Returns:
-        `str`: The source code if the object.
+        `str`: The source code of the object.
     """
     parts = object_name.split(".")
     i = 0

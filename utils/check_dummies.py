@@ -77,10 +77,10 @@ def find_backend(line: str) -> Optional[str]:
     Find one (or multiple) backend in a code line of the init.
 
     Args:
-        line (`str`): A code line of the main init.
+        line (`str`): A code line in an init file.
 
     Returns:
-        Optional[`str`]: If one (or several) backend is found, returns it. In the case of multiple backs (the line
+        Optional[`str`]: If one (or several) backend is found, returns it. In the case of multiple backends (the line
         contains `if is_xxx_available() and `is_yyy_available()`) returns all backends joined on `_and_` (so
         `xxx_and_yyy` for instance).
     """
@@ -93,7 +93,7 @@ def find_backend(line: str) -> Optional[str]:
 
 def read_init() -> Dict[str, List[str]]:
     """
-    Read the init and extracts backend-specific objects.
+    Read the init and extract backend-specific objects.
 
     Returns:
         Dict[str, List[str]]: A dictionary mapping backend name to the list of object names requiring that backend.

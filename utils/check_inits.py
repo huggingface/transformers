@@ -13,7 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Utility that checks the custom inits of Transformers are well-defined: the objects defined in both halves are the same.
+Utility that checks the custom inits of Transformers are well-defined: Transformers uses init files that delay the
+import of an object to when it's actually needed. This is to avoid the main init importing all models, which would
+make the line `import transformers` very slow when the user has all optional dependencies installed. The inits with
+delayed imports have two halves: one definining a dictionary `_import_structure` which maps modules to the name of the
+objects in each module, and one in `TYPE_CHECKING` which looks like a normal init for type-checkers. The goal of this
+script is to check the objects defined in both halves are the same.
 
 This also checks the main init properly references all submodules, even if it doesn't import anything from them: every
 submodule should be defined as a key of `_import_structure`, with an empty list as value potentially, or the submodule
@@ -73,7 +78,7 @@ def find_backend(line: str) -> Optional[str]:
         line (`str`): A code line of the main init.
 
     Returns:
-        Optional[`str`]: If one (or several) backend is found, returns it. In the case of multiple backs (the line
+        Optional[`str`]: If one (or several) backend is found, returns it. In the case of multiple backends (the line
         contains `if is_xxx_available() and `is_yyy_available()`) returns all backends joined on `_and_` (so
         `xxx_and_yyy` for instance).
     """
