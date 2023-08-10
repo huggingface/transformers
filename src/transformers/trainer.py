@@ -1616,17 +1616,20 @@ class Trainer:
 
         # Compute absolute values for logging, eval, and save if given as ratio
         if args.logging_steps is not None:
-            self.state.logging_steps = args.logging_steps
-            if self.state.logging_steps < 1:
-                self.state.logging_steps = math.ceil(max_steps * self.state.logging_steps)
+            if args.logging_steps < 1:
+                self.state.logging_steps = math.ceil(max_steps * args.logging_steps)
+            else:
+                self.state.logging_steps = args.logging_steps
         if args.eval_steps is not None:
-            self.state.eval_steps = args.eval_steps
-            if self.state.eval_steps < 1:
-                self.state.eval_steps = math.ceil(max_steps * self.state.eval_steps)
+            if args.eval_steps < 1:
+                self.state.eval_steps = math.ceil(max_steps * args.eval_steps)
+            else:
+                self.state.eval_steps = args.eval_steps
         if args.save_steps is not None:
-            self.state.save_steps = args.save_steps
-            if self.state.save_steps < 1:
-                self.state.save_steps = math.ceil(max_steps * self.state.save_steps)
+            if args.save_steps < 1:
+                self.state.save_steps = math.ceil(max_steps * args.save_steps)
+            else:
+                self.state.save_steps = args.save_steps
 
         # Activate gradient checkpointing if needed
         if args.gradient_checkpointing:
