@@ -59,7 +59,6 @@ class TextToAudioPipeline(Pipeline):
 
         if self.sampling_rate is None:
             # get sampling_rate from config and generation config
-            self.sampling_rate = None
 
             config = self.model.config.to_dict()
             gen_config = self.model.__dict__.get("generation_config", None)
@@ -128,7 +127,7 @@ class TextToAudioPipeline(Pipeline):
     def postprocess(self, waveform):
         output_dict = {}
 
-        output_dict["audio"] = waveform.detach().cpu().numpy().squeeze().astype(np.float32)
+        output_dict["audio"] = waveform.cpu().float().numpy()
         output_dict["sampling_rate"] = self.sampling_rate
 
         return output_dict
