@@ -73,6 +73,22 @@ class TextToAudioPipeline(Pipeline):
     def preprocess(self, text, **kwargs):
         if isinstance(text, str):
             text = [text]
+            
+        if self.model.config.model_type == "bark":
+            
+            # bark Tokenizer is called with BarkProcessor which uses those kwargs 
+            new_kwargs = {
+            "max_length": self.model.generation_config.semantic_config.get("max_input_semantic_length", 256),
+            "add_special_tokens": False,
+            "return_attention_mask": True,
+            "return_token_type_ids": False,
+            "padding": "max_length",
+            }
+            
+            # priority is given to kwargs
+            new_kwargs.update(kwargs)
+            
+            kwargs = new_kwargs
 
         output = self.tokenizer(text, **kwargs, return_tensors="pt")
 

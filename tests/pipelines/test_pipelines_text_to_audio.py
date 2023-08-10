@@ -97,17 +97,8 @@ class TextToAudioPipelineTests(unittest.TestCase):
             "semantic_max_new_tokens": 100,
         }
 
-        # atm, must do to stay coherent with BarkProcessor
-        preprocess_params = {
-            "max_length": 256,
-            "add_special_tokens": False,
-            "return_attention_mask": True,
-            "return_token_type_ids": False,
-            "padding": "max_length",
-        }
-
         outputs = speech_generator(
-            "This is a test", forward_params=forward_params, preprocess_params=preprocess_params
+            "This is a test", forward_params=forward_params
         )
 
         self.assertEqual(
@@ -119,7 +110,6 @@ class TextToAudioPipelineTests(unittest.TestCase):
         outputs = speech_generator(
             ["This is a test", "This is a second test"],
             forward_params=forward_params,
-            preprocess_params=preprocess_params,
         )
 
         audio = [output["audio"] for output in outputs]
@@ -143,7 +133,6 @@ class TextToAudioPipelineTests(unittest.TestCase):
         outputs = speech_generator(
             "This is a test",
             forward_params=forward_params,
-            preprocess_params=preprocess_params,
         )
 
         audio = outputs["audio"]
@@ -166,7 +155,6 @@ class TextToAudioPipelineTests(unittest.TestCase):
         outputs = speech_generator(
             ["This is a test", "This is a second test"],
             forward_params=forward_params,
-            preprocess_params=preprocess_params,
             batch_size=2,
         )
 
