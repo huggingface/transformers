@@ -71,10 +71,17 @@ def expand_inputs_for_generation(
 
     if attention_mask is not None:
         model_kwargs["attention_mask"] = attention_mask.index_select(0, expanded_return_idx)
+    
+    if model_kwargs["image_attention_mask"] is not None:
         model_kwargs["image_attention_mask"] = model_kwargs["image_attention_mask"].index_select(
             0, expanded_return_idx
         )
+        
+    if model_kwargs["pixel_values"] is not None:
         model_kwargs["pixel_values"] = model_kwargs["pixel_values"].index_select(0, expanded_return_idx)
+
+    elif model_kwargs["image_embeddings"] is not None:
+        model_kwargs["image_embeddings"] = model_kwargs["image_embeddings"].index_select(0, expanded_return_idx)
 
     if is_encoder_decoder:
         if encoder_outputs is None:
@@ -139,6 +146,7 @@ def prepare_inputs_for_generation(input_ids, past=None, **kwargs):
             position_ids = position_ids[:, -1].unsqueeze(-1)
 
     pixel_values = kwargs.get("pixel_values", None)
+    image_embeddings = kwargs.get("image_embeddings", None)
     image_attention_mask = kwargs.get("image_attention_mask", None)
     # if pixel_values is None or image_attention_mask is None:
     #     raise ValueError("pixel values and image attention mask cannot be None")
@@ -151,6 +159,7 @@ def prepare_inputs_for_generation(input_ids, past=None, **kwargs):
         "attention_mask": attention_mask,
         "token_type_ids": token_type_ids,
         "pixel_values": pixel_values,
+        "image_embeddings": image_embeddings,
         "image_attention_mask": image_attention_mask,
     }
 
