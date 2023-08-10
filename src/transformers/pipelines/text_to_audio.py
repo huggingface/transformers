@@ -93,14 +93,14 @@ class TextToAudioPipeline(Pipeline):
 
     def __call__(
         self,
-        input_texts: Union[str, List[str]],
+        text_inputs: Union[str, List[str]],
         **forward_params,
     ):
         """
         Generates speech/audio from the inputs. See the [`TextToAudioPipeline`] documentation for more information.
 
         Args:
-            input_texts (`str` or `List[str]`):
+            text_inputs (`str` or `List[str]`):
                 The text(s) to generate.
             forward_params (*optional*):
                 Parameters passed to the model generation/forward method.
@@ -109,7 +109,7 @@ class TextToAudioPipeline(Pipeline):
             A `torch.Tensor` or a list of `torch.Tensor`: Each result comes as a `torch.Tensor` corresponding to the
             generated audio.
         """
-        return super().__call__(input_texts, **forward_params)
+        return super().__call__(text_inputs, **forward_params)
 
     def _sanitize_parameters(
         self,
