@@ -106,8 +106,10 @@ class TextToAudioPipeline(Pipeline):
                 Parameters passed to the model generation/forward method.
 
         Return:
-            A `torch.Tensor` or a list of `torch.Tensor`: Each result comes as a `torch.Tensor` corresponding to the
-            generated audio.
+            A `dict` or a list of `dict`: The dictionaries have two keys:
+
+            - **audio** (`np.ndarray`) -- The generated audio waveform.
+            - **sampling_rate** (`int`) -- The sampling rate of the generated audio waveform.
         """
         return super().__call__(text_inputs, **forward_params)
 
