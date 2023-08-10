@@ -71,12 +71,12 @@ def expand_inputs_for_generation(
 
     if attention_mask is not None:
         model_kwargs["attention_mask"] = attention_mask.index_select(0, expanded_return_idx)
-    
+
     if model_kwargs["image_attention_mask"] is not None:
         model_kwargs["image_attention_mask"] = model_kwargs["image_attention_mask"].index_select(
             0, expanded_return_idx
         )
-        
+
     if model_kwargs["pixel_values"] is not None:
         model_kwargs["pixel_values"] = model_kwargs["pixel_values"].index_select(0, expanded_return_idx)
 
