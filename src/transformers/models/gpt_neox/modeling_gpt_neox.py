@@ -114,7 +114,7 @@ class GPTNeoXAttention(nn.Module):
         self._init_bias(config.max_position_embeddings)
 
         self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
-        self.rotary_emb = RotaryEmbedding(
+        self.rotary_emb = GPTNeoXRotaryEmbedding(
             self.rotary_ndims, config.max_position_embeddings, base=config.rotary_emb_base, device = 'cuda:0'
         )
         self.register_buffer(
