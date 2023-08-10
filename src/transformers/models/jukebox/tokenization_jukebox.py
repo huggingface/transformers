@@ -131,6 +131,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         self.version = version
         self.max_n_lyric_tokens = max_n_lyric_tokens
         self.n_genres = n_genres
+        self._added_tokens_decoder = {0: unk_token}
 
         with open(artists_file, encoding="utf-8") as vocab_handle:
             self.artists_encoder = json.load(vocab_handle)

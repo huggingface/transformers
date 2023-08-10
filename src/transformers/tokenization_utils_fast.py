@@ -97,6 +97,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         slow_tokenizer = kwargs.pop("__slow_tokenizer", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         from_slow = kwargs.pop("from_slow", False)
+        slow_to_fast = kwargs.pop("slow_to_fast", False)
 
         if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
             raise ValueError(
@@ -156,7 +157,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         super().__init__(**kwargs)
 
         # We add the additional tokens that are not part of the vocab
-        self._add_tokens(self.all_special_tokens_extended)
+        if not slow_to_fast:
+            self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
 
     @property
     def is_fast(self) -> bool:
