@@ -108,7 +108,7 @@ class TextToAudioPipeline(Pipeline):
         Return:
             A `dict` or a list of `dict`: The dictionaries have two keys:
 
-            - **audio** (`np.ndarray`) -- The generated audio waveform.
+            - **audio** (`np.ndarray` of shape `(audio_length,)`) -- The generated audio waveform.
             - **sampling_rate** (`int`) -- The sampling rate of the generated audio waveform.
         """
         return super().__call__(text_inputs, **forward_params)
@@ -129,7 +129,7 @@ class TextToAudioPipeline(Pipeline):
     def postprocess(self, waveform):
         output_dict = {}
 
-        output_dict["audio"] = waveform.cpu().float().numpy()
+        output_dict["audio"] = waveform.cpu().squeeze().float().numpy()
         output_dict["sampling_rate"] = self.sampling_rate
 
         return output_dict
