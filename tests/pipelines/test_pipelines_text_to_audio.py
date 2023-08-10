@@ -215,16 +215,25 @@ class TextToAudioPipelineTests(unittest.TestCase):
 
     def run_pipeline_test(self, speech_generator, _):
         outputs = speech_generator("This is a test")
+        
         self.assertEqual(
-            outputs,
             ANY(np.ndarray),
+            outputs["audio"],
         )
 
-        outputs = speech_generator(["This is great !", "Something else"], num_return_sequences=2, do_sample=True)
+        forward_params = {
+            "num_return_sequences":2, 
+            "do_sample":True,
+        }
+        
+        outputs = speech_generator(["This is great !", "Something else"], forward_params=forward_params)
+        audio = [output["audio"] for output in outputs]
+
         self.assertEqual(
-            outputs,
             [
                 ANY(np.ndarray),
                 ANY(np.ndarray),
             ],
+            audio,
         )
+
