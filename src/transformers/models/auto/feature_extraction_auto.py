@@ -82,6 +82,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("speecht5", "SpeechT5FeatureExtractor"),
         ("swiftformer", "ViTFeatureExtractor"),
         ("swin", "ViTFeatureExtractor"),
+        ("grounding-dino", "ViTFeatureExtractor"),
         ("swinv2", "ViTFeatureExtractor"),
         ("table-transformer", "DetrFeatureExtractor"),
         ("timesformer", "VideoMAEFeatureExtractor"),

@@ -2495,6 +2495,37 @@ class TFSwinPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+TF_GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFGroundingDINOForImageClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFGroundingDINOForMaskedImageModeling(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFGroundingDINOModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFGroundingDINOPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
