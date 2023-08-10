@@ -97,9 +97,7 @@ class TextToAudioPipelineTests(unittest.TestCase):
             "semantic_max_new_tokens": 100,
         }
 
-        outputs = speech_generator(
-            "This is a test", forward_params=forward_params
-        )
+        outputs = speech_generator("This is a test", forward_params=forward_params)
 
         self.assertEqual(
             {"audio": ANY(np.ndarray), "sampling_rate": 24000},
@@ -215,17 +213,17 @@ class TextToAudioPipelineTests(unittest.TestCase):
 
     def run_pipeline_test(self, speech_generator, _):
         outputs = speech_generator("This is a test")
-        
+
         self.assertEqual(
             ANY(np.ndarray),
             outputs["audio"],
         )
 
         forward_params = {
-            "num_return_sequences":2, 
-            "do_sample":True,
+            "num_return_sequences": 2,
+            "do_sample": True,
         }
-        
+
         outputs = speech_generator(["This is great !", "Something else"], forward_params=forward_params)
         audio = [output["audio"] for output in outputs]
 
@@ -236,4 +234,3 @@ class TextToAudioPipelineTests(unittest.TestCase):
             ],
             audio,
         )
-
