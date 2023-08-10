@@ -64,6 +64,7 @@ from .utils import (
     download_url,
     has_file,
     is_accelerate_available,
+    is_auto_gptq_available,
     is_bitsandbytes_available,
     is_offline_mode,
     is_optimum_available,
@@ -75,7 +76,7 @@ from .utils import (
 )
 from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 from .utils.import_utils import ENV_VARS_TRUE_VALUES, is_sagemaker_mp_enabled, is_torch_fx_proxy
-from .utils.quantization_config import BitsAndBytesConfig
+from .utils.quantization_config import BitsAndBytesConfig, GPTQConfig, QuantizationMethod
 from .utils.versions import require_version_core
 
 
@@ -1915,7 +1916,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @wraps(torch.nn.Module.cuda)
     def cuda(self, *args, **kwargs):
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_quantized", False):
+        if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
             raise ValueError(
                 "Calling `cuda()` is not supported for `4-bit` or `8-bit` quantized models. Please use the model as it is, since the"
                 " model has already been set to the correct devices and casted to the correct `dtype`."
@@ -1926,29 +1927,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @wraps(torch.nn.Module.to)
     def to(self, *args, **kwargs):
         # Checks if the model has been loaded in 8-bit
-        if getattr(self, "is_quantized", False):
+        if getattr(self, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
             raise ValueError(
-                "`.to` is not supported for `4-bit` or `8-bit` models. Please use the model as it is, since the"
+                "`.to` is not supported for `4-bit` or `8-bit` bitsandbytes models. Please use the model as it is, since the"
                 " model has already been set to the correct devices and casted to the correct `dtype`."
             )
         else:
             return super().to(*args, **kwargs)
 
     def half(self, *args):
-        # Checks if the model has been loaded in 8-bit
+        # Checks if the model is quantized
         if getattr(self, "is_quantized", False):
             raise ValueError(
-                "`.half()` is not supported for `4-bit` or `8-bit` models. Please use the model as it is, since the"
+                "`.half()` is not supported for quantized model. Please use the model as it is, since the"
                 " model has already been casted to the correct `dtype`."
             )
         else:
             return super().half(*args)
 
     def float(self, *args):
-        # Checks if the model has been loaded in 8-bit
+        # Checks if the model is quantized
         if getattr(self, "is_quantized", False):
             raise ValueError(
-                "`.float()` is not supported for `4-bit` or `8-bit` models. Please use the model as it is, since the"
+                "`.float()` is not supported for quantized model. Please use the model as it is, since the"
                 " model has already been casted to the correct `dtype`."
             )
         else:
@@ -2130,9 +2131,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             load_in_4bit (`bool`, *optional*, defaults to `False`):
                 If `True`, will convert the loaded model into 4bit precision quantized model. To use this feature
                 install the latest version of `bitsandbytes` (`pip install -U bitsandbytes`).
-            quantization_config (`Dict`, *optional*):
-                A dictionary of configuration parameters for the `bitsandbytes` library and loading the model using
-                advanced features such as offloading in fp32 on CPU or on disk.
+            quantization_config (`Union[QuantizationConfigMixin,Dict]`, *optional*):
+                A dictionary of configuration parameters or a QuantizationConfigMixin object for quantization (e.g
+                bitsandbytes, gptq)
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
@@ -2287,13 +2288,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install accelerate`"
                 )
 
-        if quantization_config is None:
+        quantization_method_from_args = None
+        if quantization_config is not None:
+            quantization_method_from_args = getattr(
+                quantization_config, "quant_method", QuantizationMethod.BITS_AND_BYTES
+            )
+
+        if quantization_config is None and (load_in_8bit or load_in_4bit):
+            quantization_method_from_args = QuantizationMethod.BITS_AND_BYTES
             quantization_config, kwargs = BitsAndBytesConfig.from_dict(
                 config_dict={"load_in_8bit": load_in_8bit, "load_in_4bit": load_in_4bit},
                 return_unused_kwargs=True,
                 **kwargs,
             )
-        elif quantization_config is not None:
+        elif quantization_method_from_args == QuantizationMethod.BITS_AND_BYTES:
             load_in_8bit = quantization_config.load_in_8bit
             load_in_4bit = quantization_config.load_in_4bit
 
@@ -2375,15 +2383,63 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             model_kwargs = kwargs
 
-        if is_8bit_serializable and quantization_config is not None and load_in_8bit:
-            if hasattr(config, "quantization_config"):
+        quantizer = None
+        quantization_method_from_config = None
+        if hasattr(config, "quantization_config"):
+            quantization_method_from_config = config.quantization_config.get(
+                "quant_method", QuantizationMethod.BITS_AND_BYTES
+            )
+
+        if quantization_method_from_config == QuantizationMethod.GPTQ and quantization_method_from_args is not None:
+            loading_attr_dict = quantization_config.get_loading_attributes()
+            for attr, val in loading_attr_dict.items():
+                config.quantization_config[attr] = val
+            quantization_method_from_args = None
+            logger.warning(
+                "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a "
+                "`quantization_config` attribute and has already quantized weights. However, loading attributes"
+                " (e.g. disable_exllama, use_cuda_fp16) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
+            )
+        if (
+            quantization_method_from_args == QuantizationMethod.GPTQ
+            or quantization_method_from_config == QuantizationMethod.GPTQ
+        ):
+            if not torch.cuda.is_available():
+                raise RuntimeError("GPU is required to quantize or run quantize model.")
+            elif not (is_optimum_available() and is_auto_gptq_available()):
+                raise ImportError(
+                    "Loading GPTQ quantized model requires optimum library : `pip install optimum` and auto-gptq library 'pip install auto-gptq'"
+                )
+            else:
+                # Need to protect the import
+                from optimum.gptq import GPTQQuantizer
+            if quantization_method_from_config == QuantizationMethod.GPTQ:
+                quantization_config = GPTQConfig.from_dict(config.quantization_config)
+                config.quantization_config = quantization_config
+            logger.info(
+                f"Overriding torch_dtype={torch_dtype} with `torch_dtype=torch.float16` due to "
+                "requirements of `auto-gptq` to enable model quantization "
+            )
+            torch_dtype = torch.float16
+            quantizer = GPTQQuantizer.from_dict(quantization_config.to_dict())
+
+        if (
+            is_8bit_serializable
+            and quantization_method_from_args == QuantizationMethod.BITS_AND_BYTES
+            and load_in_8bit
+        ):
+            if quantization_method_from_config == QuantizationMethod.BITS_AND_BYTES:
                 logger.warning(
                     "You passed `quantization_config` to `from_pretrained` but the model you're loading already has a"
                     " `quantization_config` attribute. The `quantization_config` attribute will be overwritten with the"
                     " one you passed to `from_pretrained`."
                 )
             config.quantization_config = quantization_config
-        elif is_8bit_serializable and not load_in_8bit and hasattr(config, "quantization_config"):
+        elif (
+            is_8bit_serializable
+            and not load_in_8bit
+            and quantization_method_from_config == QuantizationMethod.BITS_AND_BYTES
+        ):
             quantization_config = config.quantization_config
             if isinstance(quantization_config, dict):
                 quantization_config = BitsAndBytesConfig.from_dict(quantization_config, return_unused_kwargs=False)
@@ -2413,7 +2469,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     if low_cpu_mem_usage is None:
                         low_cpu_mem_usage = True
 
-        elif not is_8bit_serializable and not load_in_8bit and hasattr(config, "quantization_config"):
+        elif (
+            not is_8bit_serializable
+            and not load_in_8bit
+            and quantization_method_from_config == QuantizationMethod.BITS_AND_BYTES
+        ):
             logger.warning(
                 "Detected the presence of a `quantization_config` attribute in the model's configuration but you don't have the correct"
                 " `bitsandbytes` version to support int8 serialization. Please install the latest version of `bitsandbytes` with "
@@ -2800,6 +2860,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "All non-linear modules will be loaded in full precision."
                 " If you want to load the other modules in other precision, please specify a `torch_dtype` attribute."
             )
+        if quantization_method_from_config == QuantizationMethod.GPTQ:
+            model = quantizer.convert_model(model)
+            model._is_quantized_training_enabled = True
+
+        if quantization_method_from_config is not None:
+            model.quantization_method = quantization_method_from_config
+        elif quantization_method_from_args is not None:
+            model.quantization_method = quantization_method_from_args
+        if hasattr(model, "quantization_method"):
+            model.is_quantized = True
 
         if isinstance(device_map, str):
             special_dtypes = {}
@@ -2951,13 +3021,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 offload_folder=offload_folder,
                 offload_state_dict=offload_state_dict,
                 dtype=torch_dtype,
-                is_quantized=(load_in_8bit or load_in_4bit),
+                is_quantized=(getattr(model, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES),
                 keep_in_fp32_modules=keep_in_fp32_modules,
             )
 
         model.is_loaded_in_4bit = load_in_4bit
         model.is_loaded_in_8bit = load_in_8bit
-        model.is_quantized = load_in_8bit or load_in_4bit
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
@@ -2998,6 +3067,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if "skip_keys" in inspect.signature(dispatch_model).parameters:
                 device_map_kwargs["skip_keys"] = model._skip_keys_device_placement
             dispatch_model(model, **device_map_kwargs)
+
+        if quantization_method_from_args == QuantizationMethod.GPTQ:
+            if quantization_config.tokenizer is None:
+                quantization_config.tokenizer = pretrained_model_name_or_path
+            if cls.main_input_name != "input_ids":
+                raise RuntimeError("We can only quantize pure text model.")
+            quantizer.quantize_model(model, quantization_config.tokenizer)
+            model.config.quantization_config = GPTQConfig.from_dict(quantizer.to_dict())
+            model._is_quantized_training_enabled = True
+        if quantization_method_from_config == QuantizationMethod.GPTQ:
+            model = quantizer.post_init_model(model)
 
         if output_loading_info:
             if loading_info is None:
