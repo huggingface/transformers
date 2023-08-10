@@ -1165,11 +1165,15 @@ class SpecialTokensMixin:
     def additional_special_tokens(self, value):
         # We store the actual tokens to allow adding tokens via `tokenizer.add_special_tokens`
         if value is not None:
-             for token in value:
+            for token in value:
                 if str(token) not in self.all_special_tokens:
-                    token = AddedToken(token, normalized=False, rstrip=True, lstrip=True) if isinstance(token, str) and token != "" else token
+                    token = (
+                        AddedToken(token, normalized=False, rstrip=True, lstrip=True)
+                        if isinstance(token, str) and token != ""
+                        else token
+                    )
                     self._additional_special_tokens.append(token)
-                
+
         else:
             self._additional_special_tokens = value
 
@@ -2064,7 +2068,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if "added_tokens_decoder" not in init_kwargs:
             init_kwargs = cls.convert_added_tokens(init_kwargs, False)
 
-        additional_special_tokens = init_kwargs.pop("additional_special_tokens", [])
+        additional_special_tokens = init_kwargs.pop("additional_special_tokens", None) or []
         added_tokens_decoder = {}
         # fast -> slow, non-legacy: convert the `added_tokens` to `added_tokens_decoder`. Special tokens stored in `token.special`
         if "Fast" not in cls.__name__ and has_tokenizer_file:
@@ -2106,7 +2110,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             continue
                         if isinstance(value, dict):
                             value = AddedToken(**value)
-                        if key == "additional_special_tokens" and isinstance(value, list):
+                        elif key == "additional_special_tokens" and isinstance(value, list):
                             for token in value:
                                 token = AddedToken(**token) if isinstance(token, dict) else token
                                 if token not in additional_special_tokens:
@@ -2126,7 +2130,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens!
         slow_to_fast = from_slow and added_tokens_file is not None and "Fast" in cls.__name__
         init_kwargs["slow_to_fast"] = slow_to_fast
-        init_kwargs["additional_special_tokens"] = additional_special_tokens
+        init_kwargs["additional_special_tokens"] = additional_special_tokens if len(additional_special_tokens) > 0 else None
         init_kwargs["added_tokens_decoder"] = added_tokens_decoder
         # Instantiate the tokenizer.
         try:
@@ -2171,7 +2175,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             if tokens:
                 tokenizer.add_tokens(tokens, special_tokens=is_last_special)
-            tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens = True)
+            tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
             # end legacy
 
         if len(added_tokens_decoder) > 0:
