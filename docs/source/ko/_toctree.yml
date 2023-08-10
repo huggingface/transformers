@@ -158,8 +158,8 @@
   title: (번역중) 기여하기
 
 - sections:
-  - local: in_translation
-    title: (번역중) Philosophy
+  - local: philosophy
+    title: 이념과 목표
   - local: in_translation
     title: (번역중) Glossary
   - local: task_summary
