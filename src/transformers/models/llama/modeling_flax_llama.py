@@ -35,7 +35,7 @@ from .configuration_llama import LlamaConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlamaConfig"
-_CHECKPOINT_FOR_DOC = "meta-llama/Llama-2-7b" # TODO: is this an appropriate checkpoint?
+_CHECKPOINT_FOR_DOC = "meta-llama/Llama-2-7b"  # TODO: is this an appropriate checkpoint?
 
 LLAMA_START_DOCSTRING = r"""
 
@@ -332,8 +332,8 @@ class FlaxLlamaDecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
         outputs = self.self_attn(
             hidden_states,
-            position_ids=position_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
@@ -467,8 +467,8 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         outputs = self.module.apply(
             inputs,
             jnp.array(input_ids, dtype="i4"),
-            jnp.array(position_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
+            jnp.array(position_ids, dtype="i4"),
             not train,
             False,
             output_attentions,
