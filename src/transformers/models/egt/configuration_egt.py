@@ -1,5 +1,7 @@
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+# from ...configuration_utils import PretrainedConfig
+# from ...utils import logging
+from transformers.configuration_utils import PretrainedConfig
+from transformers.utils import logging
 from typing import List
 import torch.nn as nn
 
@@ -132,7 +134,6 @@ class EGTConfig(PretrainedConfig):
         num_virtual_nodes: int = 4,
         svd_encodings: int = 8,
         output_dim: int = 1,
-        num_classes: int = 1,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -152,7 +153,6 @@ class EGTConfig(PretrainedConfig):
         self.num_virtual_nodes = num_virtual_nodes
         self.svd_encodings = svd_encodings
         self.output_dim = output_dim
-        self.num_classes = num_classes
 
         super().__init__(
             pad_token_id=pad_token_id,
