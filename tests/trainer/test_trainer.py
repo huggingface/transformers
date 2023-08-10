@@ -139,9 +139,9 @@ class RegressionTrainingArguments(TrainingArguments):
     b: float = 0.0
 
     def __post_init__(self):
-        # save resources not dealing with reporting (also avoids the warning when it's not set)
-        self.report_to = []
         super().__post_init__()
+        # save resources not dealing with reporting (also avoids the warning when it's not set)
+        self._set_value("report_to", [])
 
 
 class RepeatDataset:
