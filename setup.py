@@ -460,3 +460,4 @@ setup(
     ],
     cmdclass={"deps_table_update": DepsTableUpdateCommand},
 )
+a = 3
