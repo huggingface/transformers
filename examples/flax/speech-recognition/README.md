@@ -63,5 +63,6 @@ python run_flax_speech_recognition_seq2seq.py \
 	--use_auth_token
 ```
 
-On a TPU v3-8, training should take approximately 1 hour, with a final cross-entropy loss of **1e-4** and word error 
-rate of **32.0%**.
+On a TPU v4-8, training should take approximately 25 minutes, with a final cross-entropy loss of 0.02 and word error 
+rate of **34%**. See the checkpoint [sanchit-gandhi/whisper-small-hi-flax](https://huggingface.co/sanchit-gandhi/whisper-small-hi-flax)
+for an example training run.
