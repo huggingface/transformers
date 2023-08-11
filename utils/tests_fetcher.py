@@ -735,6 +735,9 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filter_models=T
 
     print(f"\n### EXAMPLES TEST TO RUN ###\n{_print_list(examples_tests_to_run)}")
     if len(examples_tests_to_run) > 0:
+        # We use `all` in the case `commit_flags["test_all"]` as well as in `create_circleci_config.py` for processing
+        if examples_tests_to_run == ["examples"]:
+            examples_tests_to_run = ["all"]
         example_file = Path(output_file).parent / "examples_test_list.txt"
         with open(example_file, "w", encoding="utf-8") as f:
             f.write(" ".join(examples_tests_to_run))
