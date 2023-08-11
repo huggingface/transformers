@@ -29,9 +29,6 @@ from transformers.testing_utils import (
     slow,
 )
 
-from .test_pipelines_common import ANY
-
-
 if is_vision_available():
     from PIL import Image
 
@@ -55,9 +52,10 @@ class ImageToImagePipelineTests(unittest.TestCase):
 
     @require_torch
     @require_vision
+    @slow
     def test_pipeline(self):
         model_id = "caidas/swin2SR-classical-sr-x2-64"
-        upscaler = pipeline("image-to-image", model=model_id, device=0)
+        upscaler = pipeline("image-to-image", model=model_id)
         upscaled_list = upscaler(self.examples)
 
         target_size = (1296, 976)
@@ -74,6 +72,7 @@ class ImageToImagePipelineTests(unittest.TestCase):
 
     @require_torch
     @require_vision
+    @slow
     def test_pipeline_model_processor(self):
         model_id = "caidas/swin2SR-classical-sr-x2-64"
         model = AutoModelForImageToImage.from_pretrained(model_id)
