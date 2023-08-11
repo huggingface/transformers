@@ -93,6 +93,7 @@ class PvtImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
@@ -109,7 +110,7 @@ class PvtImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample:
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
@@ -123,9 +124,8 @@ class PvtImageProcessor(BaseImageProcessor):
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
             raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        return resize(
-            image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
-        )
+        output_size = (size["height"], size["width"])
+        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
     def preprocess(
         self,

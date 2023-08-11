@@ -22,7 +22,7 @@ from typing import Any, Dict, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from torch import nn
+from torch import Tensor, nn
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
@@ -120,7 +120,7 @@ class OwlViTOutput(ModelOutput):
 
 
 # Copied from transformers.models.detr.modeling_detr._upcast
-def _upcast(t: torch.Tensor) -> torch.Tensor:
+def _upcast(t: Tensor) -> Tensor:
     # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
     if t.is_floating_point():
         return t if t.dtype in (torch.float32, torch.float64) else t.float()
@@ -129,7 +129,7 @@ def _upcast(t: torch.Tensor) -> torch.Tensor:
 
 
 # Copied from transformers.models.detr.modeling_detr.box_area
-def box_area(boxes: torch.Tensor) -> torch.Tensor:
+def box_area(boxes: Tensor) -> Tensor:
     """
     Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
 
@@ -146,7 +146,7 @@ def box_area(boxes: torch.Tensor) -> torch.Tensor:
 
 
 # Copied from transformers.models.detr.modeling_detr.box_iou
-def box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
+def box_iou(boxes1, boxes2):
     area1 = box_area(boxes1)
     area2 = box_area(boxes2)
 

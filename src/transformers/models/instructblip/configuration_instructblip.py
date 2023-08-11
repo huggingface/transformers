@@ -14,7 +14,6 @@
 # limitations under the License.
 """ InstructBLIP model configuration"""
 
-import copy
 import os
 from typing import Union
 
@@ -305,7 +304,6 @@ class InstructBlipConfig(PretrainedConfig):
     ```"""
 
     model_type = "instructblip"
-    is_composition = True
 
     def __init__(self, vision_config=None, qformer_config=None, text_config=None, num_query_tokens=32, **kwargs):
         super().__init__(**kwargs)
@@ -358,17 +356,3 @@ class InstructBlipConfig(PretrainedConfig):
             text_config=text_config.to_dict(),
             **kwargs,
         )
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["vision_config"] = self.vision_config.to_dict()
-        output["qformer_config"] = self.qformer_config.to_dict()
-        output["text_config"] = self.text_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

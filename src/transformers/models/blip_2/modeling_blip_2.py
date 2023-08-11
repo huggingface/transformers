@@ -940,7 +940,7 @@ class Blip2QFormerEncoder(nn.Module):
 
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
                 if use_cache:
-                    logger.warn(
+                    logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                     )
                     use_cache = False

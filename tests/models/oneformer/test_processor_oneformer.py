@@ -174,6 +174,17 @@ class OneFormerProcessorTester(unittest.TestCase):
             masks_queries_logits=torch.randn((self.batch_size, self.num_queries, self.height, self.width)),
         )
 
+    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+        return prepare_image_inputs(
+            batch_size=self.batch_size,
+            num_channels=self.num_channels,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
+            equal_resolution=equal_resolution,
+            numpify=numpify,
+            torchify=torchify,
+        )
+
 
 @require_torch
 @require_vision
@@ -203,7 +214,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         # Initialize processor
         processor = self.processing_class(**self.processor_dict)
         # create random PIL images
-        image_inputs = prepare_image_inputs(self.processing_tester, equal_resolution=False)
+        image_inputs = self.processing_tester.prepare_image_inputs(equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
@@ -255,7 +266,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         # Initialize processor
         processor = self.processing_class(**self.processor_dict)
         # create random numpy tensors
-        image_inputs = prepare_image_inputs(self.processing_tester, equal_resolution=False, numpify=True)
+        image_inputs = self.processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
@@ -307,7 +318,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         # Initialize processor
         processor = self.processing_class(**self.processor_dict)
         # create random PyTorch tensors
-        image_inputs = prepare_image_inputs(self.processing_tester, equal_resolution=False, torchify=True)
+        image_inputs = self.processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
@@ -361,7 +372,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         num_labels = self.processing_tester.num_labels
         annotations = None
         instance_id_to_semantic_id = None
-        image_inputs = prepare_image_inputs(self.processing_tester, equal_resolution=False)
+        image_inputs = self.processing_tester.prepare_image_inputs(equal_resolution=False)
         if with_segmentation_maps:
             high = num_labels
             if is_instance_map:

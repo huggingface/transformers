@@ -731,7 +731,7 @@ _import_structure = {
         "logging",
     ],
     "utils.bitsandbytes": [],
-    "utils.quantization_config": ["BitsAndBytesConfig"],
+    "utils.quantization_config": ["BitsAndBytesConfig", "GPTQConfig"],
 }
 
 # sentencepiece-backed objects
@@ -1168,6 +1168,7 @@ else:
             "BartForSequenceClassification",
             "BartModel",
             "BartPretrainedModel",
+            "BartPreTrainedModel",
             "PretrainedBartModel",
         ]
     )
@@ -4702,7 +4703,7 @@ if TYPE_CHECKING:
     )
 
     # bitsandbytes config
-    from .utils.quantization_config import BitsAndBytesConfig
+    from .utils.quantization_config import BitsAndBytesConfig, GPTQConfig
 
     try:
         if not is_sentencepiece_available():
@@ -5072,6 +5073,7 @@ if TYPE_CHECKING:
             BartForQuestionAnswering,
             BartForSequenceClassification,
             BartModel,
+            BartPreTrainedModel,
             BartPretrainedModel,
             PretrainedBartModel,
         )

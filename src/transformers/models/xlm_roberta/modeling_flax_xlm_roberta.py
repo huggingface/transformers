@@ -1469,7 +1469,7 @@ class FlaxXLMRobertaForCausalLMModule(nn.Module):
 class FlaxXLMRobertaForCausalLM(FlaxXLMRobertaPreTrainedModel):
     module_class = FlaxXLMRobertaForCausalLMModule
 
-    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jnp.DeviceArray] = None):
+    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jax.Array] = None):
         # initializing the cache
         batch_size, seq_length = input_ids.shape
 

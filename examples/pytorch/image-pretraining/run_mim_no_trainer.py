@@ -17,6 +17,7 @@ import argparse
 import logging
 import math
 import os
+import warnings
 from pathlib import Path
 
 import datasets
@@ -187,12 +188,28 @@ def parse_args():
         help="Name or path of preprocessor config.",
     )
     parser.add_argument(
+        "--token",
+        type=str,
+        default=None,
+        help=(
+            "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+            "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+        ),
+    )
+    parser.add_argument(
         "--use_auth_token",
+        type=bool,
+        default=None,
+        help="The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`.",
+    )
+    parser.add_argument(
+        "--trust_remote_code",
         type=bool,
         default=False,
         help=(
-            "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-            "with private models)."
+            "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+            "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+            "execute code present on the Hub on your local machine."
         ),
     )
     parser.add_argument(
@@ -367,6 +384,12 @@ def collate_fn(examples):
 def main():
     args = parse_args()
 
+    if args.use_auth_token is not None:
+        warnings.warn("The `use_auth_token` argument is deprecated and will be removed in v4.34.", FutureWarning)
+        if args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        args.token = args.use_auth_token
+
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_mim_no_trainer", args)
@@ -430,7 +453,7 @@ def main():
         args.dataset_config_name,
         data_files=args.data_files,
         cache_dir=args.cache_dir,
-        use_auth_token=True if args.use_auth_token else None,
+        token=args.token,
     )
 
     # If we don't have a validation split, split off a percentage of train as validation.
@@ -447,7 +470,8 @@ def main():
     config_kwargs = {
         "cache_dir": args.cache_dir,
         "revision": args.model_revision,
-        "use_auth_token": True if args.use_auth_token else None,
+        "token": args.token,
+        "trust_remote_code": args.trust_remote_code,
     }
     if args.config_name_or_path:
         config = AutoConfig.from_pretrained(args.config_name_or_path, **config_kwargs)
@@ -497,11 +521,16 @@ def main():
             config=config,
             cache_dir=args.cache_dir,
             revision=args.model_revision,
-            token=True if args.use_auth_token else None,
+            token=args.token,
+            trust_remote_code=args.trust_remote_code,
         )
     else:
         logger.info("Training new model from scratch")
-        model = AutoModelForMaskedImageModeling.from_config(config)
+        model = AutoModelForMaskedImageModeling.from_config(
+            config,
+            token=args.token,
+            trust_remote_code=args.trust_remote_code,
+        )
 
     column_names = ds["train"].column_names
 
@@ -649,14 +678,18 @@ def main():
     # Potentially load in the weights and states from a previous save
     if args.resume_from_checkpoint:
         if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
-            accelerator.print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
-            accelerator.load_state(args.resume_from_checkpoint)
+            checkpoint_path = args.resume_from_checkpoint
             path = os.path.basename(args.resume_from_checkpoint)
         else:
             # Get the most recent checkpoint
             dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
             dirs.sort(key=os.path.getctime)
             path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
+            checkpoint_path = path
+            path = os.path.basename(checkpoint_path)
+
+        accelerator.print(f"Resumed from checkpoint: {checkpoint_path}")
+        accelerator.load_state(path)
         # Extract `epoch_{i}` or `step_{i}`
         training_difference = os.path.splitext(path)[0]
 

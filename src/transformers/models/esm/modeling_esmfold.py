@@ -2018,6 +2018,8 @@ class EsmFoldingTrunk(nn.Module):
     ESM_START_DOCSTRING,
 )
 class EsmForProteinFolding(EsmPreTrainedModel):
+    _no_split_modules = ["EsmFoldStructureModule", "EsmFoldTriangularSelfAttentionBlock"]
+
     def __init__(self, config):
         super().__init__(config)
 

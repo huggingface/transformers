@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import os
-from typing import TYPE_CHECKING, Dict, Iterable, List, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import requests
@@ -144,17 +144,24 @@ def to_numpy_array(img) -> np.ndarray:
     return to_numpy(img)
 
 
-def infer_channel_dimension_format(image: np.ndarray) -> ChannelDimension:
+def infer_channel_dimension_format(
+    image: np.ndarray, num_channels: Optional[Union[int, Tuple[int, ...]]] = None
+) -> ChannelDimension:
     """
     Infers the channel dimension format of `image`.
 
     Args:
         image (`np.ndarray`):
             The image to infer the channel dimension of.
+        num_channels (`int` or `Tuple[int, ...]`, *optional*, defaults to `(1, 3)`):
+            The number of channels of the image.
 
     Returns:
         The channel dimension of the image.
     """
+    num_channels = num_channels if num_channels is not None else (1, 3)
+    num_channels = (num_channels,) if isinstance(num_channels, int) else num_channels
+
     if image.ndim == 3:
         first_dim, last_dim = 0, 2
     elif image.ndim == 4:
@@ -162,9 +169,9 @@ def infer_channel_dimension_format(image: np.ndarray) -> ChannelDimension:
     else:
         raise ValueError(f"Unsupported number of image dimensions: {image.ndim}")
 
-    if image.shape[first_dim] in (1, 3):
+    if image.shape[first_dim] in num_channels:
         return ChannelDimension.FIRST
-    elif image.shape[last_dim] in (1, 3):
+    elif image.shape[last_dim] in num_channels:
         return ChannelDimension.LAST
     raise ValueError("Unable to infer channel dimension format")
 
@@ -253,13 +260,15 @@ def valid_coco_panoptic_annotations(annotations: Iterable[Dict[str, Union[List, 
     return all(is_valid_annotation_coco_panoptic(ann) for ann in annotations)
 
 
-def load_image(image: Union[str, "PIL.Image.Image"]) -> "PIL.Image.Image":
+def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = None) -> "PIL.Image.Image":
     """
     Loads `image` to a PIL Image.
 
     Args:
         image (`str` or `PIL.Image.Image`):
             The image to convert to the PIL Image format.
+        timeout (`float`, *optional*):
+            The timeout value in seconds for the URL request.
 
     Returns:
         `PIL.Image.Image`: A PIL Image.
@@ -269,7 +278,7 @@ def load_image(image: Union[str, "PIL.Image.Image"]) -> "PIL.Image.Image":
         if image.startswith("http://") or image.startswith("https://"):
             # We need to actually check for a real protocol, otherwise it's impossible to use a local file
             # like http_huggingface_co.png
-            image = PIL.Image.open(requests.get(image, stream=True).raw)
+            image = PIL.Image.open(requests.get(image, stream=True, timeout=timeout).raw)
         elif os.path.isfile(image):
             image = PIL.Image.open(image)
         else:

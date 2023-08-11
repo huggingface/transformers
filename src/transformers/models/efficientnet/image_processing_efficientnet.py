@@ -116,33 +116,39 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.include_top = include_top
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize with PILImageResampling.BILINEAR->PILImageResampling.NEAREST
     def resize(
         self,
         image: np.ndarray,
         size: Dict[str, int],
-        resample: PILImageResampling = PIL.Image.NEAREST,
+        resample: PILImageResampling = PILImageResampling.NEAREST,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
-        Resize an image to `(size["height"], size["width"])` using the specified resampling filter.
+        Resize an image to `(size["height"], size["width"])`.
 
         Args:
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
-                Size of the output image.
-            resample (`PILImageResampling` filter, *optional*, defaults to `PILImageResampling.NEAREST`):
-                Resampling filter to use when resizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.NEAREST`):
+                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.NEAREST`.
+            data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The resized image.
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
-        return resize(
-            image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
-        )
+            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
+        output_size = (size["height"], size["width"])
+        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
 
     def rescale(
         self,
@@ -155,10 +161,11 @@ class EfficientNetImageProcessor(BaseImageProcessor):
         """
         Rescale an image by a scale factor.
 
-        If offset is True, the image is rescaled between [-1, 1].
-            image = image * scale * 2 - 1
+        If `offset` is `True`, the image has its values rescaled by `scale` and then offset by 1. If `scale` is
+        1/127.5, the image is rescaled between [-1, 1].
+            image = image * scale - 1
 
-        If offset is False, the image is rescaled between [0, 1].
+        If `offset` is `False`, and `scale` is 1/255, the image is rescaled between [0, 1].
             image = image * scale
 
         Args:
@@ -171,7 +178,6 @@ class EfficientNetImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
         """
-        scale = scale * 2 if offset else scale
         rescaled_image = rescale(image, scale=scale, data_format=data_format, **kwargs)
 
         if offset:
