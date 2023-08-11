@@ -25,9 +25,10 @@ import numpy as np
 
 from transformers import (
     WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+    AddedToken,
     Wav2Vec2Config,
     Wav2Vec2CTCTokenizer,
-    Wav2Vec2Tokenizer,AddedToken
+    Wav2Vec2Tokenizer,
 )
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES, Wav2Vec2CTCTokenizerOutput
 from transformers.testing_utils import require_torch, slow
@@ -734,7 +735,10 @@ class Wav2Vec2CTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertGreater(tokens[0], tokenizer.vocab_size - 1)
                 self.assertGreater(tokens[-3], tokenizer.vocab_size - 1)
 
-                new_toks_2 = {"eos_token": AddedToken(">>>>|||<||<<|<<", lstrip = False, rstrip = False), "pad_token": AddedToken("<<<<<|||>|>>>>|>", rstrip = False, lstrip=False)}
+                new_toks_2 = {
+                    "eos_token": AddedToken(">>>>|||<||<<|<<", lstrip=False, rstrip=False),
+                    "pad_token": AddedToken("<<<<<|||>|>>>>|>", rstrip=False, lstrip=False),
+                }
                 added_toks_2 = tokenizer.add_special_tokens(new_toks_2)
                 vocab_size_3 = tokenizer.vocab_size
                 all_size_3 = len(tokenizer)
