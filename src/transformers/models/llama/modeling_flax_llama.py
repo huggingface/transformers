@@ -1,5 +1,10 @@
 # coding=utf-8
-# Copyright 2021 The Eleuther AI and The Google Flax Team Authors and The HuggingFace Inc. team.
+# Copyright 2023 EleutherAI and the HuggingFace Inc. team. All rights reserved.
+#
+# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
+# and OPT implementations in this library. It has been modified from its
+# original forms to accommodate minor architectural differences compared
+# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# TODO: please verif the above license
 
 from functools import partial
 from typing import Optional, Tuple
@@ -35,7 +42,7 @@ from .configuration_llama import LlamaConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlamaConfig"
-_CHECKPOINT_FOR_DOC = "meta-llama/Llama-2-7b"  # TODO: is this an appropriate checkpoint?
+_CHECKPOINT_FOR_DOC = "openlm-research/open_llama_3b_v2" # TODO: is this checkpoint appropriate?
 
 LLAMA_START_DOCSTRING = r"""
 
@@ -58,6 +65,18 @@ LLAMA_START_DOCSTRING = r"""
         config ([`LlamaConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~FlaxPreTrainedModel.from_pretrained`] method to load the model weights.
+        dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16`, or
+            `jax.numpy.bfloat16`.
+
+            This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
+            specified all the computation will be performed with the given `dtype`.
+
+            **Note that this only specifies the dtype of the computation and does not influence the dtype of model
+            parameters.**
+
+            If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
+            [`~FlaxPreTrainedModel.to_bf16`].
 """
 
 LLAMA_INPUTS_DOCSTRING = r"""
@@ -98,13 +117,6 @@ LLAMA_INPUTS_DOCSTRING = r"""
         past_key_values (`Dict[str, np.ndarray]`, *optional*, returned by `init_cache` or when passing previous `past_key_values`):
             Dictionary of pre-computed hidden-states (key and values in the attention blocks) that can be used for fast
             auto-regressive decoding. Pre-computed key and value hidden-states are of shape *[batch_size, max_length]*.
-        inputs_embeds (`np.array` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -464,6 +476,7 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         else:
             mutable = False
 
+        # TODO: can this handle input tensors being passed as kwargs? I copied GPT-Neo directly here
         outputs = self.module.apply(
             inputs,
             jnp.array(input_ids, dtype="i4"),
@@ -651,8 +664,7 @@ class FlaxLlamaForCausalLMModule(nn.Module):
 
 @add_start_docstrings(
     """
-    The Llama Model transformer with a language modeling head on top (linear layer with weights tied to the input
-    embeddings).
+    The Llama Model transformer with a language modeling head (linear layer) on top.
     """,
     LLAMA_START_DOCSTRING,
 )
@@ -687,107 +699,3 @@ class FlaxLlamaForCausalLM(FlaxLlamaPreTrainedModel):
 
 
 append_call_sample_docstring(FlaxLlamaForCausalLM, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC)
-
-
-def main():
-    # jax.config.update("jax_platform_name", "cpu")
-    torch.set_printoptions(precision=8)
-    jnp.set_printoptions(precision=8, floatmode="fixed")
-
-    from .configuration_llama import LlamaConfig
-    from .modeling_llama import LlamaForCausalLM
-
-    key = jax.random.PRNGKey(0)
-    torch.manual_seed(0)
-
-    config = LlamaConfig(
-        num_hidden_layers=4,
-        vocab_size=16,
-        hidden_size=16,
-        num_attention_heads=2,
-        max_position_embeddings=128,
-        intermediate_size=64,
-    )
-    N = 1
-    # model = FlaxLlamaForCausalLM.from_pretrained(
-    #     "decapoda-research/llama-7b-hf", from_pt=True, dtype=jnp.float16, input_shape=(N, 128)
-    # )
-    # print(config)
-    # exit()
-
-    model = FlaxLlamaForCausalLM(config)
-    pt_model = LlamaForCausalLM(config)
-
-    key, subkey = jax.random.split(key)
-    x = jax.random.randint(subkey, (N, 128), 0, 16)
-    mask = jnp.ones((N, 128), dtype=bool)
-    position_ids = jnp.arange(128)[jnp.newaxis, :].repeat(N, axis=0)
-
-    key, model_key = jax.random.split(key)
-    params = model.params
-    y = model(x, attention_mask=mask, position_ids=position_ids)
-    y = y[0]
-
-    params = flatten_dict(params, sep=".")
-
-    for i, l in enumerate(pt_model.model.layers):
-        pt_state = l.state_dict()
-        l.load_state_dict(
-            {
-                "self_attn.q_proj.weight": torch.from_numpy(
-                    np.asarray(params[f"model.layers.{i}.self_attn.q_proj.kernel"])
-                ).T,
-                "self_attn.k_proj.weight": torch.from_numpy(
-                    np.asarray(params[f"model.layers.{i}.self_attn.k_proj.kernel"])
-                ).T,
-                "self_attn.v_proj.weight": torch.from_numpy(
-                    np.asarray(params[f"model.layers.{i}.self_attn.v_proj.kernel"])
-                ).T,
-                "self_attn.o_proj.weight": torch.from_numpy(
-                    np.asarray(params[f"model.layers.{i}.self_attn.o_proj.kernel"])
-                ).T,
-                "self_attn.rotary_emb.inv_freq": pt_state["self_attn.rotary_emb.inv_freq"],
-                "input_layernorm.weight": torch.from_numpy(
-                    np.asarray(params[f"model.layers.{i}.input_layernorm.weight"])
-                ),
-                "post_attention_layernorm.weight": torch.from_numpy(
-                    np.asarray(params[f"model.layers.{i}.post_attention_layernorm.weight"])
-                ),
-                "mlp.down_proj.weight": torch.from_numpy(
-                    np.asarray(params[f"model.layers.{i}.mlp.down_proj.kernel"])
-                ).T,
-                "mlp.up_proj.weight": torch.from_numpy(np.asarray(params[f"model.layers.{i}.mlp.up_proj.kernel"])).T,
-                "mlp.gate_proj.weight": torch.from_numpy(
-                    np.asarray(params[f"model.layers.{i}.mlp.gate_proj.kernel"])
-                ).T,
-            }
-        )
-
-    pt_model.model.embed_tokens.weight.copy_(torch.from_numpy(np.asarray(params["model.embed_tokens.embedding"])))
-    pt_model.model.norm.weight.copy_(torch.from_numpy(np.asarray(params["model.norm.weight"])))
-    pt_model.lm_head.weight.copy_(torch.from_numpy(np.asarray(params["lm_head.kernel"].T)))
-
-    x_pt = torch.tensor(np.asarray(x))
-    pt_y = pt_model(
-        x_pt,
-        attention_mask=torch.from_numpy(np.asarray(mask)),
-        position_ids=torch.from_numpy(np.asarray(position_ids)),
-    )[0]
-
-    pt_y = pt_y.detach().numpy()
-
-    try:
-        np.testing.assert_allclose(y, pt_y, atol=1e-5, rtol=1e-5)
-    except AssertionError as e:
-        print(e)
-        import ipdb
-
-        ipdb.set_trace()
-
-    print("done")
-
-
-if __name__ == "__main__":
-    import torch
-
-    torch.no_grad()(main)()
