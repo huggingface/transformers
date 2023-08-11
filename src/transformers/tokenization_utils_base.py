@@ -1304,13 +1304,9 @@ class SpecialTokensMixin:
         """
         set_attr = {}
         for attr in self.SPECIAL_TOKENS_ATTRIBUTES:
-            attr_value = getattr(self, "_" + attr)
+            attr_value = getattr(self, attr)
             if attr_value:
-                set_attr[attr] = (
-                    type(attr_value)(str(attr_value_sub) for attr_value_sub in attr_value)
-                    if isinstance(attr_value, (list, tuple))
-                    else str(attr_value)
-                )
+                set_attr[attr] = attr_value
         return set_attr
 
     @property
@@ -2055,6 +2051,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Merge resolved_vocab_files arguments in init_kwargs.
         added_tokens_file = resolved_vocab_files.pop("added_tokens_file", None)
+        special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
         for args_name, file_path in resolved_vocab_files.items():
             if args_name not in init_kwargs:
                 init_kwargs[args_name] = file_path
@@ -2099,7 +2096,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # begin legacy: read the added_tokens_file and update kwargs with special_tokens_map if modified
         else:
             # backward compatibility
-            special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
             if special_tokens_map_file is not None:
                 with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
                     special_tokens_map = json.load(special_tokens_map_handle)
@@ -2130,9 +2126,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens!
         slow_to_fast = from_slow and added_tokens_file is not None and "Fast" in cls.__name__
         init_kwargs["slow_to_fast"] = slow_to_fast
-        init_kwargs["additional_special_tokens"] = (
-            additional_special_tokens if len(additional_special_tokens) > 0 else None
-        )
+
+        if len(additional_special_tokens) > 0:
+            init_kwargs["additional_special_tokens"] = additional_special_tokens
         init_kwargs["added_tokens_decoder"] = added_tokens_decoder
         # Instantiate the tokenizer.
         try:
