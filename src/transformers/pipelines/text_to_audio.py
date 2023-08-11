@@ -56,7 +56,7 @@ class TextToAudioPipeline(Pipeline):
         if self.framework == "tf":
             raise ValueError("The TextToAudioPipeline is only available in PyTorch.")
 
-        use_forward_bool = "PreTrainedModel" in str(self.model.generate)
+        use_forward_bool = "GenerationMixin" in str(self.model.generate)
         self.forward_method = self.model if use_forward_bool else self.model.generate
 
         self.vocoder = None
