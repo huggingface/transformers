@@ -18,10 +18,14 @@ import copy
 import glob
 import os
 import random
+import subprocess
+import yaml
+from base64 import b64encode
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import yaml
+from git import Repo
 
 
 COMMON_ENV_VARIABLES = {
@@ -64,6 +68,8 @@ class CircleCIJob:
     working_directory: str = "~/transformers"
     # This should be only used for doctest job!
     command_timeout: Optional[int] = None
+    # The explicit checksum to use for cache load/save
+    checksum: Optional[str] = None
 
     def __post_init__(self):
         # Deal with defaults for mutable attributes.
@@ -100,6 +106,14 @@ class CircleCIJob:
             job["resource_class"] = self.resource_class
         if self.parallelism is not None:
             job["parallelism"] = self.parallelism
+
+        checksum = self.checksum if self.checksum is not None else '{{ checksum "setup.py" }}'
+        save_cache = True
+        if self.checksum is not None:
+            # `setup.py` is not modified and we are not on `main` branch
+            cache_branch_prefix = "main"
+            save_cache = False
+
         steps = [
             "checkout",
             {"attach_workspace": {"at": "~/transformers/test_preparation"}},
@@ -107,7 +121,7 @@ class CircleCIJob:
                 "restore_cache": {
                     "keys": [
                         # check the fully-matched cache first
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
+                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-{checksum}",
                         # try the partially-matched cache from `main`
                         f"v{self.cache_version}-{self.cache_name}-main-pip-",
                         # try the general partially-matched cache
@@ -118,7 +132,7 @@ class CircleCIJob:
             {
                 "restore_cache": {
                     "keys": [
-                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
+                        f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-{checksum}",
                         f"v{self.cache_version}-{self.cache_name}-main-site-packages-",
                         f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-",
                     ]
@@ -126,22 +140,23 @@ class CircleCIJob:
             },
         ]
         steps.extend([{"run": l} for l in self.install_steps])
-        steps.append(
-            {
-                "save_cache": {
-                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-" + '{{ checksum "setup.py" }}',
-                    "paths": ["~/.cache/pip"],
+        if save_cache:
+            steps.append(
+                {
+                    "save_cache": {
+                        "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-pip-{checksum}",
+                        "paths": ["~/.cache/pip"],
+                    }
                 }
-            }
-        )
-        steps.append(
-            {
-                "save_cache": {
-                    "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-" + '{{ checksum "setup.py" }}',
-                    "paths": ["~/.pyenv/versions/"],
+            )
+            steps.append(
+                {
+                    "save_cache": {
+                        "key": f"v{self.cache_version}-{self.cache_name}-{cache_branch_prefix}-site-packages-{checksum}",
+                        "paths": ["~/.pyenv/versions/"],
+                    }
                 }
-            }
-        )
+            )
         steps.append({"run": {"name": "Show installed libraries and their versions", "command": "pip freeze | tee installed.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/installed.txt"}})
 
@@ -531,11 +546,48 @@ REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
 
 
+def get_main_setup_checksum():
+
+    PATH_TO_REPO = Path(__file__).parent.parent.resolve()
+    repo = Repo(PATH_TO_REPO)
+
+    current_head = repo.head.ref
+    main_head = repo.refs.main
+
+    setup_file_path = os.path.join(PATH_TO_REPO, "setup.py")
+
+    main_head.checkout()
+    proc = subprocess.Popen(["sha256sum", f"{setup_file_path}"], stdout=subprocess.PIPE)
+    checksum = proc.stdout.read().decode().split(" ")[0]
+    checksum = b64encode(bytes.fromhex(checksum)).decode()
+
+    # go back to the original branch
+    current_head.checkout()
+
+    return checksum
+
+
 def create_circleci_config(folder=None):
     if folder is None:
         folder = os.getcwd()
     # Used in CircleCIJob.to_dict() to expand the test list (for using parallelism)
     os.environ["test_preparation_dir"] = folder
+
+    checksum = None
+    # if already on `main`, don't try to use the latest commit on `main` to avoid (rare) race condition where multiple
+    # commits are merged into `main`.
+    if os.environ.get("CIRCLE_BRANCH", "pull") != "main":
+        # Check if `setup.py` is modified.
+        summary_file = os.path.join(folder, "tests_fetched_summary.txt")
+        if os.path.exists(summary_file):
+            with open(summary_file) as f:
+                tests_fetched_summary = f.read()
+                setup_file_modifiled = "### TEST TO RUN ###\n- tests\n" in tests_fetched_summary
+                if not setup_file_modifiled:
+                    # If not, we use `setup.py` of the `latest` commit on the `main` branch to compute the checksum for
+                    # cache
+                    checksum = get_main_setup_checksum()
+
     jobs = []
     all_test_file = os.path.join(folder, "test_list.txt")
     if os.path.exists(all_test_file):
@@ -618,6 +670,10 @@ def create_circleci_config(folder=None):
         "nightly": {"type": "boolean", "default": False},
         "tests_to_run": {"type": "string", "default": test_list},
     }
+
+    for job in jobs:
+        job.checksum = checksum
+
     config["jobs"] = {j.job_name: j.to_dict() for j in jobs}
     config["workflows"] = {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
     with open(os.path.join(folder, "generated_config.yml"), "w") as f:
