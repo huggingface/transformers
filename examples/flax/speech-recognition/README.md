@@ -50,7 +50,7 @@ python run_flax_speech_recognition_seq2seq.py \
 	--learning_rate="1e-4" \
 	--warmup_steps="500" \
 	--logging_steps="25" \
-	--generation_max_length="225" \
+	--generation_max_length="40" \
 	--preprocessing_num_workers="32" \
 	--dataloader_num_workers="32" \
 	--max_duration_in_seconds="30" \
