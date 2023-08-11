@@ -55,27 +55,25 @@ class ImageToImagePipelineTests(unittest.TestCase):
 
     @require_torch
     @require_vision
-    @slow
     def test_pipeline(self):
         model_id = "caidas/swin2SR-classical-sr-x2-64"
-        upscaler = pipeline("image-to-image", model=model_id)
+        upscaler = pipeline("image-to-image", model=model_id, device=0)
         upscaled_list = upscaler(self.examples)
 
-        original_size = self.examples[0].size
-        target_size = 2 * original_size
+        target_size = (1296, 976)
 
         self.assertEqual(len(upscaled_list), len(self.examples))
-        self.assertEqual([ANY(Image.Image), ANY(Image.Image)], upscaled_list)
+        for output in upscaled_list:
+            self.assertIsInstance(output, Image.Image)
 
-        self.assertGreaterEqual(upscaled_list[0].size[0], target_size[0])
-        self.assertGreaterEqual(upscaled_list[0].size[1], target_size[1])
+        self.assertEqual(upscaled_list[0].size[0], target_size[0])
+        self.assertEqual(upscaled_list[0].size[1], target_size[1])
 
-        self.assertGreaterEqual(upscaled_list[1].size[0], target_size[0])
-        self.assertGreaterEqual(upscaled_list[1].size[1], target_size[1])
+        self.assertEqual(upscaled_list[1].size[0], target_size[0])
+        self.assertEqual(upscaled_list[1].size[1], target_size[1])
 
     @require_torch
     @require_vision
-    @slow
     def test_pipeline_model_processor(self):
         model_id = "caidas/swin2SR-classical-sr-x2-64"
         model = AutoModelForImageToImage.from_pretrained(model_id)
@@ -84,14 +82,14 @@ class ImageToImagePipelineTests(unittest.TestCase):
         upscaler = ImageToImagePipeline(model=model, image_processor=image_processor)
         upscaled_list = upscaler(self.examples)
 
-        original_size = self.examples[0].size
-        target_size = 2 * original_size
+        target_size = (1296, 976)
 
         self.assertEqual(len(upscaled_list), len(self.examples))
-        self.assertEqual([ANY(Image.Image), ANY(Image.Image)], upscaled_list)
+        for output in upscaled_list:
+            self.assertIsInstance(output, Image.Image)
 
-        self.assertGreaterEqual(upscaled_list[0].size[0], target_size[0])
-        self.assertGreaterEqual(upscaled_list[0].size[1], target_size[1])
+        self.assertEqual(upscaled_list[0].size[0], target_size[0])
+        self.assertEqual(upscaled_list[0].size[1], target_size[1])
 
-        self.assertGreaterEqual(upscaled_list[1].size[0], target_size[0])
-        self.assertGreaterEqual(upscaled_list[1].size[1], target_size[1])
+        self.assertEqual(upscaled_list[1].size[0], target_size[0])
+        self.assertEqual(upscaled_list[1].size[1], target_size[1])
