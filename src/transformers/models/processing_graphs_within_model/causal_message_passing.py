@@ -11,7 +11,6 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from torch_scatter import scatter, scatter_softmax
 import torch_geometric
 
 from .desequence_graph_ids import SequenceElement
@@ -23,7 +22,7 @@ class GNNLayerFactory(enum.Enum):
     gat = torch_geometric.nn.GATConv
 
 
-class GatedGraphCrossAttentionLayer(torch.nn.Module):
+class GatedCausalMessagePassingLayer(torch.nn.Module):
     """ A module for performing gated cross attention between elements in a graph that
         have been serialized in a sequence of tokens and the token sequence
 
@@ -74,6 +73,9 @@ class GatedGraphCrossAttentionLayer(torch.nn.Module):
         message_passing_dicts = []
         for edge_sequence in edge_sequences:
             message_passing_dict = {'tokens2elements': [], 'elements2tokens': [], 'edge_index': []}
+            if len(edge_sequence) == 0:
+                message_passing_dicts.append(cls.to_torch(dict(message_passing_dict), device))
+                continue
             add_node = partial(
                 cls.add_node,
                 end_idx=cls.get_sequence_end(edge_sequence),
@@ -109,6 +111,9 @@ class GatedGraphCrossAttentionLayer(torch.nn.Module):
         message_passing_dicts = []
         for edge_sequence in edge_sequences:
             message_passing_dict = {'tokens2elements': [], 'elements2tokens': [], 'edge_index': []}
+            if len(edge_sequence) == 0:
+                message_passing_dicts.append(cls.to_torch(dict(message_passing_dict), device))
+                continue
             node2edge_idxs = defaultdict(list)
             add_edge = partial(
                 cls.add_edge,

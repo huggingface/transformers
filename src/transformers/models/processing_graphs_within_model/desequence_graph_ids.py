@@ -26,18 +26,18 @@ def extract_edge_sequence(
     if len(sequence) > 2:
         for elem0, elem1, elem2 in zip(sequence[:-2], sequence[1:-1], sequence[2:]):
             if (
-                elem0.token == graph_tokens['gen_edge']
+                elem0.token == graph_tokens['pred_node']
                 and elem1.token == graph_tokens['edge']
-                and elem2.token == graph_tokens['node']
+                and elem2.token == graph_tokens['succ_node']
             ): # edge syntax
                 edges.append((elem0, elem1, elem2))
     if (
         len(sequence) > 1
-        and sequence[-2].token == graph_tokens['gen_edge']
+        and sequence[-2].token == graph_tokens['pred_node']
         and sequence[-1].token == graph_tokens['edge']
     ):
         edges.append((sequence[-2], sequence[-1], None))
-    elif len(sequence) > 0 and sequence[-1].token == graph_tokens['gen_edge']:
+    elif len(sequence) > 0 and sequence[-1].token == graph_tokens['pred_node']:
         edges.append((sequence[-1], None, None))
     return edges
 
@@ -49,15 +49,13 @@ def _extract_graph_elements(
     """ Returns a parsable representation of the serialized graph in a sequence of token ids,
         if none is found, returns an empty list
     """
-    if len(graph_tokens) == 0:
-        return []
     sequence = []
     prev_token_id, prev_idx, final_idx = None, -1, len(token_ids)
     for token_idx, token_id in enumerate(token_ids):
-        if token_id == graph_tokens['gen_edge'] and prev_token_id is None:
+        if token_id == graph_tokens['pred_node'] and prev_token_id is None:
             prev_token_id, prev_idx = token_id, token_idx
         elif (
-            token_id in [graph_tokens['gen_edge'], graph_tokens['edge'], graph_tokens['node']]
+            token_id in [graph_tokens['pred_node'], graph_tokens['edge'], graph_tokens['succ_node']]
             and prev_token_id is not None
         ):
             sequence.append(SequenceElement(
