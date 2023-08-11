@@ -23,7 +23,7 @@ from requests import ReadTimeout
 from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
 from transformers import is_torch_available, is_vision_available
 from transformers.image_utils import ChannelDimension, get_channel_dimension_axis, make_list_of_images
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import is_flaky, require_torch, require_vision
 
 
 if is_torch_available():
@@ -486,6 +486,7 @@ class LoadImageTester(unittest.TestCase):
 
         self.assertEqual(img_arr.shape, (1061, 750, 3))
 
+    @is_flaky()
     def test_load_img_url_timeout(self):
         with self.assertRaises(ReadTimeout):
             load_image(INVOICE_URL, timeout=0.001)
