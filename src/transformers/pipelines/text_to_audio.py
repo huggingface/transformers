@@ -133,7 +133,8 @@ class TextToAudioPipeline(Pipeline):
         Return:
             A `dict` or a list of `dict`: The dictionaries have two keys:
 
-            - **audio** (`np.ndarray` of shape `(audio_length,)` if mono audio or `(2, audio_length)` if stereo audio  -- The generated audio waveform.
+            - **audio** (`np.ndarray` of shape `(audio_length,)` if mono audio or `(2, audio_length)` if stereo audio
+              -- The generated audio waveform.
             - **sampling_rate** (`int`) -- The sampling rate of the generated audio waveform.
         """
         return super().__call__(text_inputs, **forward_params)
