@@ -766,8 +766,10 @@ def filter_tests(output_file, filters):
         print("No tests to filter.")
         return
 
-    if test_files == ["tests"]:
-        test_files = [os.path.join("tests", f) for f in os.listdir("tests") if f not in ["__init__.py"] + filters]
+    if "tests" in test_files:
+        test_files = [x for x in test_files if x != "tests"] + [
+            os.path.join("tests", f) for f in os.listdir("tests") if f not in ["__init__.py"] + filters
+        ]
     else:
         test_files = [f for f in test_files if f.split(os.path.sep)[1] not in filters]
 
