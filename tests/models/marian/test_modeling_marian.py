@@ -442,7 +442,7 @@ class MarianIntegrationTest(unittest.TestCase):
             attention_mask=model_inputs.attention_mask,
             num_beams=2,
             max_length=128,
-            renormalize_logits=True,
+            renormalize_logits=True,  # Marian should always renormalize its logits. See #25459
         )
         generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         return generated_words
