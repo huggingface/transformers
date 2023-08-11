@@ -2130,7 +2130,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens!
         slow_to_fast = from_slow and added_tokens_file is not None and "Fast" in cls.__name__
         init_kwargs["slow_to_fast"] = slow_to_fast
-        init_kwargs["additional_special_tokens"] = additional_special_tokens if len(additional_special_tokens) > 0 else None
+        init_kwargs["additional_special_tokens"] = (
+            additional_special_tokens if len(additional_special_tokens) > 0 else None
+        )
         init_kwargs["added_tokens_decoder"] = added_tokens_decoder
         # Instantiate the tokenizer.
         try:
