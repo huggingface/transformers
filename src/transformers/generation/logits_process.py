@@ -15,7 +15,7 @@
 
 import inspect
 import math
-from typing import Callable, Dict, Iterable, List, Tuple, Union
+from typing import Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -133,14 +133,53 @@ class MinLengthLogitsProcessor(LogitsProcessor):
 class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] enforcing a min-length of new tokens by setting EOS (End-Of-Sequence) token probability to 0.
+    Note that for decoder-only models, such as Llama2, `min_length` will compute the length of `prompt + newly
+    generated tokens` whereas for other models it will behave as `min_new_tokens`, that is, taking only into account
+    the newly generated ones.
 
     Args:
         prompt_length_to_skip (`int`):
-            The input tokens length.
+            The input tokens length. Not a valid argument when used with `generate` as it will automatically assign the
+            input length.
         min_new_tokens (`int`):
             The minimum *new* tokens length below which the score of `eos_token_id` is set to `-float("Inf")`.
         eos_token_id (`Union[int, List[int]]`):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+    >>> model.config.pad_token_id = model.config.eos_token_id
+    >>> model.generation_config.pad_token_id = model.config.eos_token_id
+    >>> input_context = "Hugging Face Company is"
+    >>> input_ids = tokenizer.encode(input_context, return_tensors="pt")
+
+    >>> # Without `eos_token_id`, it will generate the default length, 20, ignoring `min_new_tokens`
+    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=30)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is a company that has been working on a new product for the past year.
+
+    >>> # If `eos_token_id` is set to ` company` it will take into account how many `min_new_tokens` have been generated
+    >>> # before stopping. Note that ` Company` (5834) and ` company` (1664) are not actually the same token, and even
+    >>> # if they were ` Company` would be ignored by `min_new_tokens` as it excludes the prompt.
+    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=1, eos_token_id=1664)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is a company
+
+    >>> # Increasing `min_new_tokens` will bury the first occurrence of ` company` generating a different sequence.
+    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=2, eos_token_id=1664)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is a new company
+
+    >>> # If no more occurrences of the `eos_token` happen after `min_new_tokens` it returns to the 20 default tokens.
+    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=10, eos_token_id=1664)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is a new and innovative brand of facial recognition technology that is designed to help you
+    ```
     """
 
     def __init__(self, prompt_length_to_skip: int, min_new_tokens: int, eos_token_id: Union[int, List[int]]):
@@ -172,11 +211,57 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
 
 class TemperatureLogitsWarper(LogitsWarper):
     r"""
-    [`LogitsWarper`] for temperature (exponential scaling output probability distribution).
+    [`LogitsWarper`] for temperature (exponential scaling output probability distribution), which effectively means
+    that it can control the randomness of the predicted tokens.
+
+    <Tip>
+
+    Make sure that `do_sample=True` is included in the `generate` arguments otherwise the temperature value won't have
+    any effect.
+
+    </Tip>
 
     Args:
         temperature (`float`):
-            The value used to module the logits distribution.
+            Strictly positive float value used to modulate the logits distribution. A value smaller than `1` decreases
+            randomness (and vice versa), with `0` being equivalent to shifting all probability mass to the most likely
+            token.
+
+    Examples:
+
+    ```python
+    >>> import torch
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> model.config.pad_token_id = model.config.eos_token_id
+    >>> model.generation_config.pad_token_id = model.config.eos_token_id
+    >>> input_context = "Hugging Face Company is"
+    >>> input_ids = tokenizer.encode(input_context, return_tensors="pt")
+
+    >>> torch.manual_seed(0)
+
+    >>> # With temperature=1, the default, we consistently get random outputs due to random sampling.
+    >>> outputs = model.generate(input_ids=input_ids, max_new_tokens=10, temperature=1, do_sample=True)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is one of these companies that is going to take a
+
+    >>> outputs = model.generate(input_ids=input_ids, max_new_tokens=10, temperature=1, do_sample=True)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is one of these companies, you can make a very
+
+    >>> # However, with temperature close to 0 , the output remains invariant.
+    >>> outputs = model.generate(input_ids=input_ids, max_new_tokens=10, temperature=0.0001, do_sample=True)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is a company that has been around for over 20 years
+
+    >>> # even if we set a different seed.
+    >>> torch.manual_seed(42)
+    >>> outputs = model.generate(input_ids=input_ids, max_new_tokens=10, temperature=0.0001, do_sample=True)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    Hugging Face Company is a company that has been around for over 20 years
+    ```
     """
 
     def __init__(self, temperature: float):
@@ -285,6 +370,37 @@ class TopPLogitsWarper(LogitsWarper):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
+
+    Examples:
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
+
+    >>> set_seed(0)
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+    >>> text = "It is probably one of the most important things for parents to teach children about patience and acceptance. In this way, we as a society can ensure"
+    >>> inputs = tokenizer(text, return_tensors="pt")
+
+    >>> # Generate sequences without top_p sampling
+    >>> # We see that the answer tends to have a lot of repeated tokens and phrases
+    >>> outputs = model.generate(**inputs, max_length=55)
+    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
+    'It is probably one of the most important things for parents to teach children about patience and acceptance. In this way, we as a society can ensure that our children are not taught to be impatient or to be afraid of the future.\n\nThe first step is to teach them'
+
+    >>> # Generate sequences with top_p sampling: set `do_sample=True` to use top_p sampling with `top_p` arugment
+    >>> # We already see that the answer has less repetitive tokens and is more diverse
+    >>> outputs = model.generate(**inputs, max_length=55, do_sample=True, top_p=0.25)
+    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
+    'It is probably one of the most important things for parents to teach children about patience and acceptance. In this way, we as a society can ensure that children learn to be more accepting of others and to be more tolerant of others.\n\nWe can also teach children to be'
+
+    >>> # Generate sequences with top_p sampling with a larger top_p value
+    >>> # We see that as we increase the top_p value, less probable tokens also get selected during text generation, making the answer more diverse
+    >>> # Pro Tip: In practice, we tend to use top_p values between 0.9 and 1.0!
+    >>> outputs = model.generate(**inputs, max_length=55, do_sample=True, top_p=0.95)
+    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
+    'It is probably one of the most important things for parents to teach children about patience and acceptance. In this way, we as a society can ensure we have the best learning environment, so that we can teach to learn and not just take advantage of the environment.\n\nThe'
+    ```
     """
 
     def __init__(self, top_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
@@ -438,14 +554,65 @@ class EpsilonLogitsWarper(LogitsWarper):
 
 class EtaLogitsWarper(LogitsWarper):
     r"""
-    [`LogitsWarper`] that performs eta-sampling, i.e. calculates a dynamic cutoff `eta := min(epsilon, sqrt(epsilon,
-    e^-entropy(probabilities)))` and restricts to tokens with `prob >= eta`. Takes the largest min_tokens_to_keep
-    tokens if no tokens satisfy this constraint. See [Truncation Sampling as Language Model
-    Desmoothing](https://arxiv.org/abs/2210.15191) for more information.
+    [`LogitsWarper`] that performs eta-sampling, a technique to filter out tokens with probabilities below a dynamic
+    cutoff value, `eta`, which is calculated based on a combination of the hyperparameter `epsilon` and the entropy of
+    the token probabilities, i.e. `eta := min(epsilon, sqrt(epsilon, e^-entropy(probabilities)))`. Takes the largest
+    min_tokens_to_keep tokens if no tokens satisfy this constraint. It addresses the issue of poor quality in long
+    samples of text generated by neural language models leading to more coherent and fluent text. See [Truncation
+    Sampling as Language Model Desmoothing](https://arxiv.org/abs/2210.15191) for more information. Note: `do_sample`
+    must be set to `True` for this `LogitsWarper` to work.
+
 
     Args:
+        epsilon (`float`):
+            A float value in the range (0, 1). Hyperparameter used to calculate the dynamic cutoff value, `eta`. The
+            suggested values from the paper ranges from 3e-4 to 4e-3 depending on the size of the model.
+        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+            All values that are found to be below the dynamic cutoff value, `eta`, are set to this float value. This
+            parameter is useful when logits need to be modified for very low probability tokens that should be excluded
+            from generation entirely.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
-            Minimum number of tokens that cannot be filtered."""
+            Specifies the minimum number of tokens that must be kept for generation, regardless of their probabilities.
+            For example, if `min_tokens_to_keep` is set to 1, at least one token will always be kept for generation,
+            even if all tokens have probabilities below the cutoff `eta`.
+
+    Examples:
+    ```python
+    >>> # Import required libraries
+    >>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
+
+    >>> # Set the model name
+    >>> model_name = "gpt2"
+
+    >>> # Initialize the model and tokenizer
+    >>> model = AutoModelForCausalLM.from_pretrained(model_name)
+    >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+    >>> # Set the pad token to eos token
+    >>> model.config.pad_token_id = model.config.eos_token_id
+    >>> model.generation_config.pad_token_id = model.config.eos_token_id
+
+    >>> # The below sequence intentionally contains two subjects to show the difference between the two approaches
+    >>> sequence = "a quadcopter flight controller (RTFQ Flip MWC) that supports I2C sensors for adding things like a barometer, magnetometer, and GPS system. The officially supported sensor block (BMP180, HMC5883L on one board) is discontinued, as far as I know, everyone involved lived to sing another day. . . disorder and an extreme state of dysmetabolism characterized by extensive erythema and a significant reduction in uncovered"
+
+    >>> # Tokenize the sequence
+    >>> inputs = tokenizer(sequence, return_tensors="pt")
+
+    >>> set_seed(0)
+
+    >>> # We can see that the model is generating repeating text and also is not able to continue the sequence properly
+    >>> outputs = model.generate(inputs["input_ids"], max_length=128)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    a quadcopter flight controller (RTFQ Flip MWC) that supports I2C sensors for adding things like a barometer, magnetometer, and GPS system. The officially supported sensor block (BMP180, HMC5883L on one board) is discontinued, as far as I know, everyone involved lived to sing another day... disorder and an extreme state of dysmetabolism characterized by extensive erythema and a significant reduction in uncovered muscle mass. The patient was diagnosed with a severe erythema and a severe erythema-like condition. The patient was treated with a combination
+
+    >>> # The result is much better and coherent when we use the `eta_cutoff` parameter
+    >>> outputs = model.generate(
+    ...     inputs["input_ids"], max_length=128, do_sample=True, eta_cutoff=2e-2
+    ... )  # need to set do_sample=True for eta_cutoff to work
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    a quadcopter flight controller (RTFQ Flip MWC) that supports I2C sensors for adding things like a barometer, magnetometer, and GPS system. The officially supported sensor block (BMP180, HMC5883L on one board) is discontinued, as far as I know, everyone involved lived to sing another day... disorder and an extreme state of dysmetabolism characterized by extensive erythema and a significant reduction in uncovered fatty acids. A significant loss of brain development. The individual also experienced high levels of a common psychiatric condition called schizophrenia, with an important and life threatening consequence.
+    ```
+    """
 
     def __init__(self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         epsilon = float(epsilon)
@@ -479,10 +646,28 @@ class EtaLogitsWarper(LogitsWarper):
 
 
 def _get_ngrams(ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int):
+    """
+    Assume ngram_size=2 and prev_input_ids=tensor([[40, 2883, 2712, 4346]]). The output of generated ngrams look like
+    this {(40,): [2883], (2883,): [2712], (2712,): [4346]}.
+
+    Args:
+        ngram_size (`int`):
+            The number sequential tokens taken as a group which may only occur once before being banned.
+        prev_input_ids (`torch.Tensor`):
+           Generated token ids for the current hypothesis.
+        num_hypos (`int`):
+            The number of hypotheses for which n-grams need to be generated.
+
+    Returns:
+        generated_ngrams (`dict`):
+            Dictionary of generated ngrams.
+    """
+    # Initialize an empty list of dictionaries, one for each hypothesis (index) in the range of num_hypos
     generated_ngrams = [{} for _ in range(num_hypos)]
     for idx in range(num_hypos):
         gen_tokens = prev_input_ids[idx].tolist()
         generated_ngram = generated_ngrams[idx]
+        # Loop through each n-gram of size ngram_size in the list of tokens (gen_tokens)
         for ngram in zip(*[gen_tokens[i:] for i in range(ngram_size)]):
             prev_ngram_tuple = tuple(ngram[:-1])
             generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
@@ -490,6 +675,22 @@ def _get_ngrams(ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int):
 
 
 def _get_generated_ngrams(banned_ngrams, prev_input_ids, ngram_size, cur_len):
+    """
+    Determines the banned tokens for the current hypothesis based on previously generated n-grams.
+
+    Args:
+        banned_ngrams (`dict`):
+            A dictionary containing previously generated n-grams for each hypothesis.
+        prev_input_ids (`torch.Tensor`):
+            Generated token ids for the current hypothesis.
+        ngram_size (`int`):
+            The number sequential tokens taken as a group which may only occur once before being banned.
+        cur_len (`int`):
+            The current length of the token sequences for which the n-grams are being checked.
+
+    Returns:
+        List of tokens that are banned.
+    """
     # Before decoding the next token, prevent decoding of ngrams that have already appeared
     start_idx = cur_len + 1 - ngram_size
     ngram_idx = tuple(prev_input_ids[start_idx:cur_len].tolist())
@@ -503,9 +704,7 @@ def _calc_banned_ngram_tokens(
     if cur_len + 1 < ngram_size:
         # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
         return [[] for _ in range(num_hypos)]
-
     generated_ngrams = _get_ngrams(ngram_size, prev_input_ids, num_hypos)
-
     banned_tokens = [
         _get_generated_ngrams(generated_ngrams[hypo_idx], prev_input_ids[hypo_idx], ngram_size, cur_len)
         for hypo_idx in range(num_hypos)
@@ -515,12 +714,43 @@ def _calc_banned_ngram_tokens(
 
 class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     r"""
-    [`LogitsProcessor`] that enforces no repetition of n-grams. See
+    N-grams are groups of "n" consecutive words, characters, or tokens taken from a sequence of text. Given the
+    sentence: "She runs fast", the bi-grams (n=2) would be ("she", "runs") and ("runs", "fast"). In text generation,
+    avoiding repetitions of word sequences provides a more diverse output. This [`LogitsProcessor`] enforces no
+    repetition of n-grams by setting the scores of banned tokens to negative infinity which eliminates those tokens
+    from consideration when further processing the scores.
     [Fairseq](https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345).
+
+    <Tip>
+
+    Use n-gram penalties with care. For instance, penalizing 2-grams (bigrams) in an article about the city of New York
+    might lead to undesirable outcomes where the city's name appears only once in the entire text.
+    [Reference](https://huggingface.co/blog/how-to-generate)
+
+    </Tip>
 
     Args:
         ngram_size (`int`):
             All ngrams of size `ngram_size` can only occur once.
+
+    Examples:
+
+    ```py
+    >>> from transformers import GPT2Tokenizer, AutoModelForCausalLM
+
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+    >>> inputs = tokenizer(["I enjoy watching football"], return_tensors="pt")
+
+    >>> output = model.generate(**inputs, max_length=50)
+    >>> print(tokenizer.decode(output[0], skip_special_tokens=True))
+    "I enjoy playing football on the weekends, but I'm not a big fan of the idea of playing in the middle of the night. I'm not a big fan of the idea of playing in the middle of the night. I'm not a big"
+
+    >>> # Now let's add ngram size using <no_repeat_ngram_size> in model.generate. This should stop the repetitions in the output.
+    >>> output = model.generate(**inputs, max_length=50, no_repeat_ngram_size=2)
+    >>> print(tokenizer.decode(output[0], skip_special_tokens=True))
+    I enjoy playing football on the weekends, but I'm not a big fan of the idea of playing in the middle of a game. I think it's a bit of an overreaction to the fact that we're playing a team that's playing"
+    ```
     """
 
     def __init__(self, ngram_size: int):
@@ -533,7 +763,6 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
         num_batch_hypotheses = scores.shape[0]
         cur_len = input_ids.shape[-1]
         banned_batch_tokens = _calc_banned_ngram_tokens(self.ngram_size, input_ids, num_batch_hypotheses, cur_len)
-
         for i, banned_tokens in enumerate(banned_batch_tokens):
             scores[i, banned_tokens] = -float("inf")
 
@@ -678,7 +907,9 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
                 torch.tensor(sequence_ids[:-1], dtype=input_ids.dtype, device=input_ids.device),
             ).prod(dim=1)
             bias[:, last_token] += torch.where(
-                matching_rows.bool(), sequence_bias, torch.tensor(0.0, device=input_ids.device)
+                matching_rows.bool(),
+                torch.tensor(sequence_bias, device=input_ids.device),
+                torch.tensor(0.0, device=input_ids.device),
             )
 
         # 5 - apply the bias to the scores
@@ -747,6 +978,50 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
             List of list of token ids that are not allowed to be generated.
         eos_token_id (`Union[int, List[int]]`):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> inputs = tokenizer(["In a word, the cake is a"], return_tensors="pt")
+
+    >>> summary_ids = model.generate(inputs["input_ids"], max_new_tokens=5, pad_token_id=tokenizer.eos_token_id)
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True)[0])
+    In a word, the cake is a bit of a mess.
+
+    >>> # Now let's control generation taking the bad words out. Please note that the tokenizer is initialized differently
+
+    >>> tokenizer_with_prefix_space = AutoTokenizer.from_pretrained("gpt2", add_prefix_space=True)
+
+
+    >>> def get_tokens_as_list(word_list):
+    ...     "Converts a sequence of words into a list of tokens"
+    ...     tokens_list = []
+    ...     for word in word_list.split(" "):
+    ...         tokenized_word = tokenizer_with_prefix_space([word], add_special_tokens=False).input_ids[0]
+    ...         tokens_list.append(tokenized_word)
+    ...     return tokens_list
+
+
+    >>> word_list = "mess"
+    >>> bad_words_ids = get_tokens_as_list(word_list=word_list)
+
+    >>> badwords_ids = model.generate(
+    ...     inputs["input_ids"],
+    ...     max_new_tokens=5,
+    ...     bad_words_ids=bad_words_ids,
+    ...     eos_token_id=tokenizer_with_prefix_space.eos_token_id,
+    ... )
+    >>> print(tokenizer.batch_decode(badwords_ids, skip_special_tokens=True)[0])
+    In a word, the cake is a bit of a surprise.
+
+    >>> badwords_ids = model.generate(inputs["input_ids"], max_new_tokens=4, num_beams=5, bad_words_ids=bad_words_ids)
+    >>> print(tokenizer.batch_decode(biased_ids, skip_special_tokens=True)[0])
+    In a word, the cake is a great way to start
+    ```
     """
 
     def __init__(self, bad_words_ids: List[List[int]], eos_token_id: Union[int, List[int]]):
@@ -1190,3 +1465,126 @@ class AlternatingCodebooksLogitsProcessor(LogitsProcessor):
             scores[:, : self.semantic_vocab_size + self.codebook_size] = -float("inf")
 
         return scores
+
+
+class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
+    r"""Logits processor for Classifier-Free Guidance (CFG). The processors
+    computes a weighted average across scores from prompt conditional and prompt unconditional (or negative) logits,
+    parameterized by the `guidance_scale`. The unconditional scores are computed internally by prompting `model` with
+    the `unconditional_ids` branch.
+
+    See [the paper](https://arxiv.org/abs/2306.17806) for more information.
+
+    Args:
+        guidance_scale (`float`):
+            The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale != 1`.
+            Higher guidance scale encourages the model to generate samples that are more closely linked to the input
+            prompt, usually at the expense of poorer quality. A value smaller than 1 has the opposite effect, while
+            making the negative prompt provided with negative_prompt_ids (if any) act as a positive prompt.
+        unconditional_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of input sequence tokens in the vocabulary for the unconditional branch. If unset, will default to
+            the last token of the prompt.
+        unconditional_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, **optional**):
+            Attention mask for unconditional_ids.
+        model (`PreTrainedModel`):
+            The model computing the unconditional scores. Supposedly the same as the one computing the conditional
+            scores. Both models must use the same tokenizer.
+        smooth_factor (`float`, **optional**):
+            The interpolation weight for CFG Rescale. 1 means no rescaling, 0 reduces to the conditional scores without
+            CFG. Turn it lower if the output degenerates.
+        use_cache (`bool`, **optional**):
+            Whether to cache key/values during the negative prompt forward pass.
+
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> inputs = tokenizer(["Today, a dragon flew over Paris, France,"], return_tensors="pt")
+    >>> out = model.generate(inputs["input_ids"], guidance_scale=1.5)
+    >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
+    The dragon flew over Paris, France, landing in Lyon, a city of a few million. Dragon-flying was a new form of
+    transport, and the dragon was the first in Europe.
+
+    >>> # with a negative prompt
+    >>> neg_inputs = tokenizer(["A very happy event happened,"], return_tensors="pt")
+    >>> out = model.generate(inputs["input_ids"], guidance_scale=2, negative_prompt_ids=neg_inputs["input_ids"])
+    >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
+    The dragon flew over Paris, France, crashing into Notre Dame Cathedral in the French capital killing at least 127
+    people and injuring more than 350.
+
+    >>> # with a positive prompt
+    >>> neg_inputs = tokenizer(["A very happy event happened,"], return_tensors="pt")
+    >>> out = model.generate(inputs["input_ids"], guidance_scale=0, negative_prompt_ids=neg_inputs["input_ids"])
+    >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
+    Today, a dragon flew over Paris, France, and I'm very happy to be here.
+    ```
+    """
+
+    def __init__(
+        self,
+        guidance_scale: float,
+        model,
+        unconditional_ids: Optional[torch.LongTensor] = None,
+        unconditional_attention_mask: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = True,
+    ):
+        self.guidance_scale = guidance_scale
+        self.model = model
+        self.unconditional_context = {
+            "input_ids": unconditional_ids,
+            "attention_mask": unconditional_attention_mask,
+            "use_cache": use_cache,
+            "past_key_values": None,
+            "first_pass": True,
+        }
+
+    def get_unconditional_logits(self, input_ids):
+        if self.unconditional_context["first_pass"]:
+            if self.unconditional_context["input_ids"] is None:
+                self.unconditional_context["input_ids"] = input_ids[:, -1:]
+            if self.unconditional_context["attention_mask"] is None:
+                self.unconditional_context["attention_mask"] = torch.ones_like(
+                    self.unconditional_context["input_ids"], dtype=torch.long
+                )
+            input_ids = self.unconditional_context["input_ids"]
+            attention_mask = self.unconditional_context["attention_mask"]
+            self.unconditional_context["first_pass"] = False
+        else:
+            attention_mask = torch.cat(
+                [
+                    self.unconditional_context["attention_mask"],
+                    torch.ones_like(input_ids[:, -1:], dtype=torch.long),
+                ],
+                dim=1,
+            )
+            if not self.unconditional_context["use_cache"]:
+                input_ids = torch.cat([self.unconditional_context["input_ids"], input_ids[:, -1:]], dim=1)
+            else:
+                input_ids = input_ids[:, -1:]
+            self.unconditional_context["input_ids"] = input_ids
+            self.unconditional_context["attention_mask"] = attention_mask
+
+        out = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            use_cache=self.unconditional_context["use_cache"],
+            past_key_values=self.unconditional_context["past_key_values"],
+        )
+        self.unconditional_context["past_key_values"] = out.get("past_key_values", None)
+
+        return out.logits
+
+    def __call__(self, input_ids, scores):
+        scores = torch.nn.functional.log_softmax(scores, dim=-1)
+        if self.guidance_scale == 1:
+            return scores
+
+        logits = self.get_unconditional_logits(input_ids)
+
+        unconditional_logits = torch.nn.functional.log_softmax(logits[:, -1], dim=-1)
+        out = self.guidance_scale * (scores - unconditional_logits) + unconditional_logits
+        return out

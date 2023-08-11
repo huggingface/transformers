@@ -15,7 +15,7 @@
 """Tokenization classes for Whisper."""
 import json
 import os
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import numpy as np
 from tokenizers import pre_tokenizers, processors
@@ -25,6 +25,10 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .english_normalizer import EnglishTextNormalizer
 from .tokenization_whisper import LANGUAGES, TASK_IDS, TO_LANGUAGE_CODE, WhisperTokenizer, _decode_asr
+
+
+if TYPE_CHECKING:
+    from ...pipelines.conversational import Conversation
 
 
 logger = logging.get_logger(__name__)
@@ -468,7 +472,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._build_conversation_input_ids
-    def _build_conversation_input_ids(self, conversation) -> List[int]:
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         input_ids = []
         for is_user, text in conversation.iter_texts():
             input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])

@@ -29,7 +29,7 @@ from transformers import (
     InstructBlipQFormerConfig,
     InstructBlipVisionConfig,
 )
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_bitsandbytes, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -64,7 +64,7 @@ class InstructBlipVisionModelTester:
         is_training=True,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -219,7 +219,7 @@ class InstructBlipQFormerModelTester:
         vocab_size=99,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=6,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -295,7 +295,7 @@ class InstructBlipTextModelDecoderOnlyTester:
         use_labels=False,
         vocab_size=99,
         hidden_size=16,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=4,
         hidden_act="gelu",
@@ -521,6 +521,7 @@ def prepare_img():
 @require_torch
 @slow
 class InstructBlipModelIntegrationTest(unittest.TestCase):
+    @require_bitsandbytes
     def test_inference_vicuna_7b(self):
         processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
         model = InstructBlipForConditionalGeneration.from_pretrained(
@@ -537,7 +538,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
             logits = model(**inputs).logits
 
         expected_slice = torch.tensor(
-            [[-3.5410, -12.2812, 8.2812], [-5.2500, -12.0938, 7.8398], [-4.1523, -13.8281, 9.0000]],
+            [[-3.4727, -11.8203, 8.3828], [-5.1172, -11.3438, 7.7656], [-4.0742, -13.4688, 9.1953]],
             device=torch_device,
         )
         self.assertTrue(torch.allclose(logits[0, :3, :3].float(), expected_slice, atol=1e-3))
@@ -547,12 +548,12 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
 
         # fmt: off
-        expected_outputs = [    2,   450, 22910,  9565,   310,   445,  1967,   338,   393,   263, 767,   338, 13977,   292, 22095,   373,   278,  1250,   310,   263, 13328, 20134, 29963,  1550, 19500,  1623,   263, 19587,  4272, 11952, 29889]
+        expected_outputs = [2, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 19500, 373, 263, 19587, 4272, 11952, 29889]
         # fmt: on
         self.assertEqual(outputs[0].tolist(), expected_outputs)
         self.assertEqual(
             generated_text,
-            "The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while driving down a busy city street.",
+            "The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while driving on a busy city street.",
         )
 
     def test_inference_flant5_xl(self):

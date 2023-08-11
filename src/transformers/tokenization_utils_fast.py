@@ -132,6 +132,26 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         self._decode_use_source_tokenizer = False
 
+        _truncation = self._tokenizer.truncation
+
+        if _truncation is not None:
+            self._tokenizer.enable_truncation(**_truncation)
+            kwargs.setdefault("max_length", _truncation["max_length"])
+            kwargs.setdefault("truncation_side", _truncation["direction"])
+            kwargs.setdefault("stride", _truncation["stride"])
+            kwargs.setdefault("truncation_strategy", _truncation["strategy"])
+        else:
+            self._tokenizer.no_truncation()
+
+        _padding = self._tokenizer.padding
+        if _padding is not None:
+            self._tokenizer.enable_padding(**_padding)
+            kwargs.setdefault("pad_token", _padding["pad_token"])
+            kwargs.setdefault("pad_token_type_id", _padding["pad_type_id"])
+            kwargs.setdefault("padding_side", _padding["direction"])
+            kwargs.setdefault("max_length", _padding["length"])
+            kwargs.setdefault("pad_to_multiple_of", _padding["pad_to_multiple_of"])
+
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
 

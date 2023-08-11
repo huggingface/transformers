@@ -141,6 +141,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mobilevit", "MobileViTConfig"),
         ("mobilevitv2", "MobileViTV2Config"),
         ("mpnet", "MPNetConfig"),
+        ("mpt", "MptConfig"),
         ("mra", "MraConfig"),
         ("mt5", "MT5Config"),
         ("musicgen", "MusicgenConfig"),
@@ -161,6 +162,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("plbart", "PLBartConfig"),
         ("poolformer", "PoolFormerConfig"),
         ("prophetnet", "ProphetNetConfig"),
+        ("pvt", "PvtConfig"),
         ("qdqbert", "QDQBertConfig"),
         ("rag", "RagConfig"),
         ("realm", "RealmConfig"),
@@ -338,6 +340,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("mobilevit", "MOBILEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mobilevitv2", "MOBILEVITV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mpnet", "MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("mpt", "MPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mra", "MRA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("musicgen", "MUSICGEN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("mvp", "MVP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -357,6 +360,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("plbart", "PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("poolformer", "POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("prophetnet", "PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("pvt", "PVT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("qdqbert", "QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("realm", "REALM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("regnet", "REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -549,6 +553,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mobilevit", "MobileViT"),
         ("mobilevitv2", "MobileViTV2"),
         ("mpnet", "MPNet"),
+        ("mpt", "MPT"),
         ("mra", "MRA"),
         ("mt5", "MT5"),
         ("musicgen", "MusicGen"),
@@ -571,6 +576,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("plbart", "PLBart"),
         ("poolformer", "PoolFormer"),
         ("prophetnet", "ProphetNet"),
+        ("pvt", "PVT"),
         ("qdqbert", "QDQBert"),
         ("rag", "RAG"),
         ("realm", "REALM"),
@@ -981,6 +987,17 @@ class AutoConfig:
         >>> unused_kwargs
         {'foo': False}
         ```"""
+        use_auth_token = kwargs.pop("use_auth_token", None)
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if kwargs.get("token", None) is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            kwargs["token"] = use_auth_token
+
         kwargs["_from_auto"] = True
         kwargs["name_or_path"] = pretrained_model_name_or_path
         trust_remote_code = kwargs.pop("trust_remote_code", None)
