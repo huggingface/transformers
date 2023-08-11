@@ -468,7 +468,7 @@ def center_crop(
     # Check if cropped area is within image boundaries
     if top >= 0 and bottom <= orig_height and left >= 0 and right <= orig_width:
         image = image[..., top:bottom, left:right]
-        image = to_channel_dimension_format(image, output_data_format)
+        image = to_channel_dimension_format(image, output_data_format, ChannelDimension.FIRST)
         return image
 
     # Otherwise, we may need to pad if the image is too small. Oh joy...
