@@ -632,6 +632,7 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         do_resize: bool = None,
         size: Dict[str, int] = None,
         size_divisor: int = 0,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """Preprocesses a single mask."""
         segmentation_map = to_numpy_array(segmentation_map)
@@ -920,7 +921,9 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(pixel_values_list[0])
 
-        encoded_inputs = self.pad(pixel_values_list, return_tensors=return_tensors)
+        encoded_inputs = self.pad(
+            pixel_values_list, return_tensors=return_tensors, input_data_format=input_data_format
+        )
 
         if segmentation_maps is not None:
             mask_labels = []

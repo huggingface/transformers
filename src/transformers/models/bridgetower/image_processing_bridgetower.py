@@ -95,7 +95,7 @@ def get_resize_output_image_size(
     size_divisor: int = 32,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> Tuple[int, int]:
-    input_height, input_width = get_image_size(input_image, input_data_format=input_data_format)
+    input_height, input_width = get_image_size(input_image, input_data_format)
     min_size, max_size = shorter, longer
 
     scale = min_size / min(input_height, input_width)
@@ -508,7 +508,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
 
         if do_pad:
             encoded_outputs = self.pad(
-                images, return_pixel_mask=True, return_tensors=return_tensors, input_data_format=input_data_format
+                images, return_pixel_mask=True, return_tensors=return_tensors, input_data_format=data_format
             )
         else:
             encoded_outputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)

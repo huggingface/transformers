@@ -269,7 +269,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         image = torch.from_numpy(image)
 
         patch_height, patch_width = patch_size["height"], patch_size["width"]
-        image_height, image_width = get_image_size(image, input_data_format=ChannelDimension.FIRST)
+        image_height, image_width = get_image_size(image, ChannelDimension.FIRST)
 
         # maximize scale s.t.
         scale = math.sqrt(max_patches * (patch_height / image_height) * (patch_width / image_width))

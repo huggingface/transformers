@@ -53,11 +53,16 @@ def normalize_box(box, width, height):
     ]
 
 
-def apply_tesseract(image: np.ndarray, lang: Optional[str], tesseract_config: Optional[str]):
+def apply_tesseract(
+    image: np.ndarray,
+    lang: Optional[str],
+    tesseract_config: Optional[str],
+    input_data_format: Optional[Union[ChannelDimension, str]] = None,
+):
     """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
 
     # apply OCR
-    pil_image = to_pil_image(image)
+    pil_image = to_pil_image(image, input_data_format=input_data_format)
     image_width, image_height = pil_image.size
     data = pytesseract.image_to_data(pil_image, lang=lang, output_type="dict", config=tesseract_config)
     words, left, top, width, height = data["text"], data["left"], data["top"], data["width"], data["height"]
@@ -323,7 +328,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
             words_batch = []
             boxes_batch = []
             for image in images:
-                words, boxes = apply_tesseract(image, ocr_lang, tesseract_config)
+                words, boxes = apply_tesseract(image, ocr_lang, tesseract_config, input_data_format=input_data_format)
                 words_batch.append(words)
                 boxes_batch.append(boxes)
 

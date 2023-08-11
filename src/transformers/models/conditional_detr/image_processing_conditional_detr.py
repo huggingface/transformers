@@ -144,7 +144,7 @@ def get_resize_output_image_size(
         input_data_format (`ChannelDimension` or `str`, *optional*):
             The channel dimension format of the input image. If not provided, it will be inferred from the input image.
     """
-    image_size = get_image_size(input_image, input_data_format=input_data_format)
+    image_size = get_image_size(input_image, input_data_format)
     if isinstance(size, (list, tuple)):
         return size
 
@@ -1291,12 +1291,12 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
             if annotations is not None:
                 resized_images, resized_annotations = [], []
                 for image, target in zip(images, annotations):
-                    orig_size = get_image_size(image)
+                    orig_size = get_image_size(image, input_data_format)
                     resized_image = self.resize(
                         image, size=size, max_size=max_size, resample=resample, input_data_format=input_data_format
                     )
                     resized_annotation = self.resize_annotation(
-                        target, orig_size, get_image_size(resized_image), input_data_format=input_data_format
+                        target, orig_size, get_image_size(resized_image, input_data_format)
                     )
                     resized_images.append(resized_image)
                     resized_annotations.append(resized_annotation)
@@ -1318,7 +1318,9 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
             ]
             if annotations is not None:
                 annotations = [
-                    self.normalize_annotation(annotation, get_image_size(image), input_data_format=input_data_format)
+                    self.normalize_annotation(
+                        annotation, get_image_size(image, input_data_format), input_data_format=input_data_format
+                    )
                     for annotation, image in zip(annotations, images)
                 ]
 

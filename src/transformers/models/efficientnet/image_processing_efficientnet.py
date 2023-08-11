@@ -350,7 +350,7 @@ class EfficientNetImageProcessor(BaseImageProcessor):
 
         if include_top:
             images = [
-                self.normalize(image=image, mean=[0, 0, 0], std=image_std, input_data_format=input_data_format)
+                self.normalize(image=image, mean=0, std=image_std, input_data_format=input_data_format)
                 for image in images
             ]
 

@@ -93,7 +93,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The padded image.
         """
-        old_height, old_width = get_image_size(image)
+        old_height, old_width = get_image_size(image, input_data_format)
         pad_height = (old_height // size + 1) * size - old_height
         pad_width = (old_width // size + 1) * size - old_width
 

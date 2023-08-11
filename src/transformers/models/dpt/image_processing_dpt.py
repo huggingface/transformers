@@ -68,7 +68,7 @@ def get_resize_output_image_size(
 
     output_size = (output_size, output_size) if isinstance(output_size, int) else output_size
 
-    input_height, input_width = get_image_size(input_image, input_data_format=input_data_format)
+    input_height, input_width = get_image_size(input_image, input_data_format)
     output_height, output_width = output_size
 
     # determine new height and width
@@ -188,7 +188,7 @@ class DPTImageProcessor(BaseImageProcessor):
             input_data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        size = get_size_dict(size, input_data_format=input_data_format)
+        size = get_size_dict(size)
         if "height" not in size or "width" not in size:
             raise ValueError(f"The size dictionary must contain the keys 'height' and 'width'. Got {size.keys()}")
         output_size = get_resize_output_image_size(

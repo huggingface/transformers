@@ -568,6 +568,7 @@ class SamImageProcessor(BaseImageProcessor):
         points_per_crop: Optional[int] = 32,
         crop_n_points_downscale_factor: Optional[List[int]] = 1,
         device: Optional["torch.device"] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         return_tensors: str = "pt",
     ):
         """
@@ -590,6 +591,8 @@ class SamImageProcessor(BaseImageProcessor):
                 The number of points-per-side sampled in layer n is scaled down by crop_n_points_downscale_factor**n.
             device (`torch.device`, *optional*, defaults to None):
                 Device to use for the computation. If None, cpu will be used.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
             return_tensors (`str`, *optional*, defaults to `pt`):
                 If `pt`, returns `torch.Tensor`. If `tf`, returns `tf.Tensor`.
         """
@@ -600,6 +603,7 @@ class SamImageProcessor(BaseImageProcessor):
             overlap_ratio,
             points_per_crop,
             crop_n_points_downscale_factor,
+            input_data_format,
         )
         if return_tensors == "pt":
             if device is None:
@@ -906,6 +910,7 @@ def _generate_crop_boxes(
     overlap_ratio: float = 512 / 1500,
     points_per_crop: Optional[int] = 32,
     crop_n_points_downscale_factor: Optional[List[int]] = 1,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> Tuple[List[List[int]], List[int]]:
     """
     Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
@@ -925,12 +930,14 @@ def _generate_crop_boxes(
             Number of points to sample per crop.
         crop_n_points_downscale_factor (`int`, *optional*):
             The number of points-per-side sampled in layer n is scaled down by crop_n_points_downscale_factor**n.
+        input_data_format (`str` or `ChannelDimension`, *optional*):
+            The channel dimension format of the input image. If not provided, it will be inferred.
     """
 
     if isinstance(image, list):
         raise ValueError("Only one image is allowed for crop generation.")
     image = to_numpy_array(image)
-    original_size = get_image_size(image)
+    original_size = get_image_size(image, input_data_format)
 
     points_grid = []
     for i in range(crop_n_layers + 1):
@@ -940,7 +947,7 @@ def _generate_crop_boxes(
     crop_boxes, layer_idxs = _generate_per_layer_crops(crop_n_layers, overlap_ratio, original_size)
 
     cropped_images, point_grid_per_crop = _generate_crop_images(
-        crop_boxes, image, points_grid, layer_idxs, target_size, original_size
+        crop_boxes, image, points_grid, layer_idxs, target_size, original_size, input_data_format
     )
     crop_boxes = np.array(crop_boxes)
     crop_boxes = crop_boxes.astype(np.float32)
@@ -986,7 +993,9 @@ def _generate_per_layer_crops(crop_n_layers, overlap_ratio, original_size):
     return crop_boxes, layer_idxs
 
 
-def _generate_crop_images(crop_boxes, image, points_grid, layer_idxs, target_size, original_size):
+def _generate_crop_images(
+    crop_boxes, image, points_grid, layer_idxs, target_size, original_size, input_data_format=None
+):
     """
     Takes as an input bounding boxes that are used to crop the image. Based in the crops, the corresponding points are
     also passed.
@@ -996,7 +1005,7 @@ def _generate_crop_images(crop_boxes, image, points_grid, layer_idxs, target_siz
     for i, crop_box in enumerate(crop_boxes):
         left, top, right, bottom = crop_box
 
-        channel_dim = infer_channel_dimension_format(image)
+        channel_dim = infer_channel_dimension_format(image, input_data_format)
         if channel_dim == ChannelDimension.LAST:
             cropped_im = image[top:bottom, left:right, :]
         else:
@@ -1004,7 +1013,7 @@ def _generate_crop_images(crop_boxes, image, points_grid, layer_idxs, target_siz
 
         cropped_images.append(cropped_im)
 
-        cropped_im_size = get_image_size(cropped_im)
+        cropped_im_size = get_image_size(cropped_im, channel_dim)
         points_scale = np.array(cropped_im_size)[None, ::-1]
 
         points = points_grid[layer_idxs[i]] * points_scale

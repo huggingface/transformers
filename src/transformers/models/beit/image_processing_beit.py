@@ -238,9 +238,7 @@ class BeitImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
         if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(
-                image, input_data_format=input_data_format, num_channels=num_channels
-            )
+            input_data_format = infer_channel_dimension_format(image, num_channels=num_channels)
         image = self._preprocess(
             image,
             do_reduce_labels=False,

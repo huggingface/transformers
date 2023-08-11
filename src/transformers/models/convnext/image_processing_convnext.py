@@ -154,7 +154,14 @@ class ConvNextImageProcessor(BaseImageProcessor):
             resize_size = get_resize_output_image_size(
                 image, size=resize_shortest_edge, default_to_square=False, input_data_format=input_data_format
             )
-            image = resize(image=image, size=resize_size, resample=resample, data_format=data_format, **kwargs)
+            image = resize(
+                image=image,
+                size=resize_size,
+                resample=resample,
+                data_format=data_format,
+                input_data_format=input_data_format,
+                **kwargs,
+            )
             # then crop to (shortest_edge, shortest_edge)
             return center_crop(
                 image=image,
