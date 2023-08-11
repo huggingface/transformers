@@ -29,6 +29,7 @@ from transformers.testing_utils import (
     slow,
 )
 
+
 if is_vision_available():
     from PIL import Image
 
