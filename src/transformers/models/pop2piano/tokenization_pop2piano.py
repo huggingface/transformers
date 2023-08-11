@@ -629,7 +629,8 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
         # if we are processing batched inputs then we must need attention_masks
         if not attention_masks_present and feature_extractor_output["beatsteps"].shape[0] > 1:
             raise ValueError(
-                "attention_mask, attention_mask_beatsteps and attention_mask_extrapolated_beatstep must be present for batched inputs! But one of them were not present."
+                "attention_mask, attention_mask_beatsteps and attention_mask_extrapolated_beatstep must be present "
+                "for batched inputs! But one of them were not present."
             )
 
         # check for length mismatch between inputs_embeds, beatsteps and extrapolated_beatstep

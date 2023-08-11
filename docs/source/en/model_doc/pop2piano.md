@@ -47,7 +47,9 @@ of producing plausible piano covers.*
 Tips:
 
 1. To use Pop2Piano, you will need to install the 🤗 Transformers library, as well as the following third party modules:  
-`pip install pretty-midi==0.2.9 essentia==2.1b6.dev609 librosa scipy`  
+```
+pip install pretty-midi==0.2.9 essentia==2.1b6.dev609 librosa scipy
+```
 Please note that you may need to restart your runtime after installation.
 2. Pop2Piano is an Encoder-Decoder based model like T5.
 3. Pop2Piano can be used to generate midi-audio files for a given audio sequence.
@@ -75,7 +77,7 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 ... )
 >>> model_output = model.generate(input_features=inputs["input_features"], composer="composer1")
 >>> tokenizer_output = processor.batch_decode(
-...     token_ids=model_output, feature_extractor_output=inputs, return_midi=True
+...     token_ids=model_output, feature_extractor_output=inputs
 ... )["pretty_midi_objects"][0]
 >>> tokenizer_output.write("./Outputs/midi_output.mid")
 ```
@@ -93,7 +95,7 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 >>> inputs = processor(audio=audio, sampling_rate=sr, return_tensors="pt")
 >>> model_output = model.generate(input_features=inputs["input_features"], composer="composer1")
 >>> tokenizer_output = processor.batch_decode(
-...     token_ids=model_output, feature_extractor_output=inputs, return_midi=True
+...     token_ids=model_output, feature_extractor_output=inputs
 ... )["pretty_midi_objects"][0]
 >>> tokenizer_output.write("./Outputs/midi_output.mid")
 ```
@@ -118,7 +120,7 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 ...     composer="composer1",
 ... )
 >>> tokenizer_output = processor.batch_decode(
-...     token_ids=model_output, feature_extractor_output=inputs, return_midi=True
+...     token_ids=model_output, feature_extractor_output=inputs
 ... )["pretty_midi_objects"]
 
 >>> # Since we now have 2 generated MIDI files
@@ -153,7 +155,7 @@ The original code can be found [here](https://github.com/sweetcocoa/pop2piano).
 ...     composer="composer1",
 ... )
 >>> tokenizer_output = tokenizer.batch_decode(
-...     token_ids=model_output, feature_extractor_output=inputs, return_midi=True
+...     token_ids=model_output, feature_extractor_output=inputs
 ... )["pretty_midi_objects"]
 
 >>> # Since we now have 2 generated MIDI files

@@ -51,7 +51,7 @@ class Pop2PianoProcessor(ProcessorMixin):
         audio: Union[np.ndarray, List[float], List[np.ndarray]] = None,
         sampling_rate: Union[int, List[int]] = None,
         steps_per_beat: int = 2,
-        do_infer_resample: Optional[bool] = True,
+        resample: Optional[bool] = True,
         notes: Union[List, TensorType] = None,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = None,
@@ -80,7 +80,7 @@ class Pop2PianoProcessor(ProcessorMixin):
                 audio=audio,
                 sampling_rate=sampling_rate,
                 steps_per_beat=steps_per_beat,
-                do_infer_resample=do_infer_resample,
+                resample=resample,
                 **kwargs,
             )
         if notes is not None:

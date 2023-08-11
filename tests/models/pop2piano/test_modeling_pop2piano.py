@@ -691,10 +691,11 @@ class Pop2PianoModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.size(), torch.Size([10, 101, 512]))
 
         # check values
-        self.assertEqual(
-            outputs[0, :3, :3].detach().cpu().numpy().tolist(),
-            [[1.0475305318832397, 0.29052114486694336, -0.47778210043907166], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]],
+        EXPECTED_OUTPUTS = torch.tensor(
+            [[1.0475305318832397, 0.29052114486694336, -0.47778210043907166], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]
         )
+
+        self.assertTrue(torch.allclose(outputs[0, :3, :3], EXPECTED_OUTPUTS, atol=1e-4))
 
     @slow
     @require_essentia

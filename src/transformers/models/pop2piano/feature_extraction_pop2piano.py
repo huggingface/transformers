@@ -15,6 +15,7 @@
 """ Feature extractor class for Pop2Piano"""
 
 import copy
+import warnings
 from typing import List, Optional, Union
 
 import numpy
@@ -110,7 +111,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             sampling_rate=self.sampling_rate,
             norm=None,
             mel_scale="htk",
-        ).astype(np.float32)
+        )
 
     def mel_spectrogram(self, sequence: np.ndarray):
         """
@@ -147,7 +148,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
         """
         mel_specs = self.mel_spectrogram(sequence)
-        log_mel_specs = np.log(np.clip(mel_specs, a_min=1e-6, a_max=None)).astype(np.float32)
+        log_mel_specs = np.log(np.clip(mel_specs, a_min=1e-6, a_max=None))
 
         return log_mel_specs
 
@@ -211,7 +212,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
         if audio is not None and len(audio.shape) != 1:
             raise ValueError(
-                f"Expected `audio` to be a single channel audio input of shape (n, ) but found shape {audio.shape}."
+                f"Expected `audio` to be a single channel audio input of shape `(n, )` but found shape {audio.shape}."
             )
         if beatstep[0] > 0.0:
             beatstep = beatstep - beatstep[0]
@@ -313,7 +314,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         Return:
             `BatchFeature` with attention_mask, attention_mask_beatsteps and attention_mask_extrapolated_beatstep added
             to it:
-            - **attention_mask** numpy.ndarray of shape (batch_size, max_input_features_seq_length) --
+            - **attention_mask** numpy.ndarray of shape `(batch_size, max_input_features_seq_length)` --
                 Example :
                     1, 1, 1, 0, 0 (audio 1, also here it is padded to max length of 5 thats why there are 2 zeros at
                     the end indicating they are padded)
@@ -325,9 +326,9 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                     0, 0, 0, 0, 0 (zero pad to seperate audio 2 and 3)
 
                     1, 1, 1, 1, 1 (audio 3)
-            - **attention_mask_beatsteps** numpy.ndarray of shape (batch_size, max_beatsteps_seq_length)
-            - **attention_mask_extrapolated_beatstep** numpy.ndarray of shape (batch_size,
-              max_extrapolated_beatstep_seq_length)
+            - **attention_mask_beatsteps** numpy.ndarray of shape `(batch_size, max_beatsteps_seq_length)`
+            - **attention_mask_extrapolated_beatstep** numpy.ndarray of shape `(batch_size,
+              max_extrapolated_beatstep_seq_length)`
         """
 
         processed_features_dict = {}
@@ -357,7 +358,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         audio: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
         sampling_rate: Union[int, List[int]],
         steps_per_beat: int = 2,
-        do_infer_resample: Optional[bool] = True,
+        resample: Optional[bool] = True,
         return_attention_mask: Optional[bool] = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
@@ -374,7 +375,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 `sampling_rate` at the forward call to prevent silent errors.
             steps_per_beat (`int`, *optional*, defaults to 2):
                 This is used in interpolating `beat_times`.
-            do_infer_resample (`bool`, *optional*, defaults to `True`):
+            resample (`bool`, *optional*, defaults to `True`):
                 Determines whether to resample the audio to `sampling_rate` or not before processing. Must be True
                 during inference.
             return_attention_mask (`bool` *optional*, defaults to `False`):
@@ -386,6 +387,8 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 - `'np'`: Return Numpy `np.ndarray` objects.
                 If nothing is specified, it will return list of `np.ndarray` arrays.
         """
+
+        requires_backends(self, ["librosa"])
         is_batched = bool(isinstance(audio, (list, tuple)) and isinstance(audio[0], (np.ndarray, tuple, list)))
         if is_batched:
             # This enables the user to process files of different sampling_rate at same time
@@ -407,14 +410,22 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
             )
             beatsteps = self.interpolate_beat_times(beat_times=beat_times, steps_per_beat=steps_per_beat, n_extend=1)
 
-            if do_infer_resample and self.sampling_rate != single_sampling_rate and self.sampling_rate is not None:
-                # Change sampling_rate to self.sampling_rate
-                single_raw_audio = librosa.core.resample(
-                    single_raw_audio,
-                    orig_sr=single_sampling_rate,
-                    target_sr=self.sampling_rate,
-                    res_type="kaiser_best",
-                )
+            if self.sampling_rate != single_sampling_rate and self.sampling_rate is not None:
+                if resample:
+                    # Change sampling_rate to self.sampling_rate
+                    single_raw_audio = librosa.core.resample(
+                        single_raw_audio,
+                        orig_sr=single_sampling_rate,
+                        target_sr=self.sampling_rate,
+                        res_type="kaiser_best",
+                    )
+                else:
+                    warnings.warn(
+                        f"The sampling_rate of the provided audio is different from the target sampling_rate"
+                        f"of the Feature Extractor, {self.sampling_rate} vs {single_sampling_rate}. "
+                        f"In these cases it is recommended to use `resample=True` in the `__call__` method to"
+                        f"get the optimal behaviour."
+                    )
 
             single_sampling_rate = self.sampling_rate
             start_sample = int(beatsteps[0] * single_sampling_rate)
@@ -424,7 +435,7 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 single_raw_audio[start_sample:end_sample], beatsteps - beatsteps[0]
             )
 
-            input_features = np.transpose(self.log_mel_spectrogram(input_features), (0, -1, -2))
+            input_features = np.transpose(self.log_mel_spectrogram(input_features.astype(np.float32)), (0, -1, -2))
 
             batch_input_features.append(input_features)
             batch_beatsteps.append(beatsteps)
