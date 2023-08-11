@@ -34,9 +34,9 @@ jobs:
             - run: pip install -U --upgrade-strategy eager GitPython
             - run: pip install -U --upgrade-strategy eager .
             - run: mkdir -p test_preparation
-            - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
+            - run: python utils/tests_fetcher.py | tee test_preparation/tests_fetched_summary.txt
             - store_artifacts:
-                  path: ~/transformers/tests_fetched_summary.txt
+                  path: test_preparation/tests_fetched_summary.txt
             - run: |
                 if [ -f test_list.txt ]; then
                     cp test_list.txt test_preparation/test_list.txt
