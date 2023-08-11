@@ -573,21 +573,20 @@ def create_circleci_config(folder=None):
     # Used in CircleCIJob.to_dict() to expand the test list (for using parallelism)
     os.environ["test_preparation_dir"] = folder
 
-    test_file = os.path.join(folder, "filtered_test_list.txt")
-    if os.path.exists(test_file):
-        with open(test_file) as f:
-            test_list = f.read()
-    else:
-        test_list = []
-
     checksum = None
     # if already on `main`, don't try to use the latest commit on `main` to avoid (rare) race condition where multiple
     # commits are merged into `main`.
     if os.environ.get("CIRCLE_BRANCH", "pull") != "main":
         # Check if `setup.py` is modified.
-        if test_list != "tests":
-            # If not, we use `setup.py` of the `latest` commit on the `main` branch to compute the checksum for cache
-            checksum = get_main_setup_checksum()
+        summary_file = os.path.join(folder, "tests_fetched_summary.txt")
+        if os.path.exists(summary_file):
+            with open(summary_file) as f:
+                tests_fetched_summary = f.read()
+                setup_file_modifiled = "### TEST TO RUN ###\n- tests\n" in tests_fetched_summary
+                if not setup_file_modifiled:
+                    # If not, we use `setup.py` of the `latest` commit on the `main` branch to compute the checksum for
+                    # cache
+                    checksum = get_main_setup_checksum()
 
     jobs = []
     all_test_file = os.path.join(folder, "test_list.txt")
