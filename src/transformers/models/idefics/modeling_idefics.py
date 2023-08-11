@@ -65,6 +65,11 @@ def expand_inputs_for_generation(
     )
     input_ids = input_ids.index_select(0, expanded_return_idx)
 
+    model_kwargs["pixel_values"] = model_kwargs.get("pixel_values", None)
+    model_kwargs["image_encoder_embeddings"] = model_kwargs.get("image_encoder_embeddings", None)
+    model_kwargs["perceiver_embeddings"] = model_kwargs.get("perceiver_embeddings", None)
+    model_kwargs["image_attention_mask"] = model_kwargs.get("image_attention_mask", None)
+
     if "token_type_ids" in model_kwargs:
         token_type_ids = model_kwargs["token_type_ids"]
         model_kwargs["token_type_ids"] = token_type_ids.index_select(0, expanded_return_idx)
@@ -80,8 +85,15 @@ def expand_inputs_for_generation(
     if model_kwargs["pixel_values"] is not None:
         model_kwargs["pixel_values"] = model_kwargs["pixel_values"].index_select(0, expanded_return_idx)
 
-    elif model_kwargs["image_embeddings"] is not None:
-        model_kwargs["image_embeddings"] = model_kwargs["image_embeddings"].index_select(0, expanded_return_idx)
+    elif model_kwargs["image_encoder_embeddings"] is not None:
+        model_kwargs["image_encoder_embeddings"] = model_kwargs["image_encoder_embeddings"].index_select(
+            0, expanded_return_idx
+        )
+
+    elif model_kwargs["perceiver_embeddings"] is not None:
+        model_kwargs["perceiver_embeddings"] = model_kwargs["perceiver_embeddings"].index_select(
+            0, expanded_return_idx
+        )
 
     if is_encoder_decoder:
         if encoder_outputs is None:
@@ -146,7 +158,8 @@ def prepare_inputs_for_generation(input_ids, past=None, **kwargs):
             position_ids = position_ids[:, -1].unsqueeze(-1)
 
     pixel_values = kwargs.get("pixel_values", None)
-    image_embeddings = kwargs.get("image_embeddings", None)
+    image_encoder_embeddings = kwargs.get("image_encoder_embeddings", None)
+    perceiver_embeddings = kwargs.get("perceiver_embeddings", None)
     image_attention_mask = kwargs.get("image_attention_mask", None)
     # if pixel_values is None or image_attention_mask is None:
     #     raise ValueError("pixel values and image attention mask cannot be None")
@@ -159,7 +172,8 @@ def prepare_inputs_for_generation(input_ids, past=None, **kwargs):
         "attention_mask": attention_mask,
         "token_type_ids": token_type_ids,
         "pixel_values": pixel_values,
-        "image_embeddings": image_embeddings,
+        "image_encoder_embeddings": image_encoder_embeddings,
+        "perceiver_embeddings": perceiver_embeddings,
         "image_attention_mask": image_attention_mask,
     }
 
@@ -1064,7 +1078,8 @@ class IdeficsModel(IdeficsPreTrainedModel):
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
-        image_embeddings: Optional[torch.FloatTensor] = None,
+        image_encoder_embeddings: Optional[torch.FloatTensor] = None,
+        perceiver_embeddings: Optional[torch.FloatTensor] = None,
         image_attention_mask: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1112,11 +1127,17 @@ class IdeficsModel(IdeficsPreTrainedModel):
             position_ids = position_ids.view(-1, seq_length).long()
 
         no_images = False
-        if pixel_values is None and image_embeddings is None:
-            raise ValueError("Either pixel_values and image_embeddings have to be not-None.")
-
-        elif pixel_values is not None and image_embeddings is not None:
-            raise ValueError("You cannot specify both pixel_values and image_embeddings at the same time")
+        if (
+            sum(
+                1
+                for vision_input in (pixel_values, image_encoder_embeddings, perceiver_embeddings)
+                if vision_input is not None
+            )
+            != 1
+        ):
+            raise ValueError(
+                "Exactly 1 of pixel_values, image_encoder_embeddings or perceiver_embeddings has to be not-None."
+            )
 
         elif pixel_values is not None:
             no_images = len(torch.nonzero(pixel_values)) == 0
@@ -1127,14 +1148,22 @@ class IdeficsModel(IdeficsPreTrainedModel):
             # Get sequence from the vision encoder
             image_hidden_states = self.vision_model(pixel_values=pixel_values).last_hidden_state
 
-        elif image_embeddings is not None:
-            batch_size, num_images, image_seq_len, image_hidden_size = image_embeddings.size()
-            image_hidden_states = image_embeddings.to(dtype=self.dtype, device=input_ids.device)
+        elif image_encoder_embeddings is not None:
+            batch_size, num_images, image_seq_len, image_hidden_size = image_encoder_embeddings.size()
+            image_hidden_states = image_encoder_embeddings.to(dtype=self.dtype, device=input_ids.device)
             image_hidden_states = image_hidden_states.view(batch_size * num_images, image_seq_len, image_hidden_size)
 
-        if self.config.use_resampler:
+        if self.config.use_resampler and perceiver_embeddings is None:
             image_hidden_states = self.perceiver_resampler(image_hidden_states)
-        image_seq_len, image_hidden_size = image_hidden_states.size(1), image_hidden_states.size(2)
+            image_seq_len, image_hidden_size = image_hidden_states.size(1), image_hidden_states.size(2)
+        elif self.config.use_resampler and perceiver_embeddings is not None:
+            batch_size, num_images, image_seq_len, image_hidden_size = perceiver_embeddings.size()
+            image_hidden_states = perceiver_embeddings
+        elif not self.config.use_resampler and perceiver_embeddings is None:
+            image_seq_len, image_hidden_size = image_hidden_states.size(1), image_hidden_states.size(2)
+        elif not self.config.use_resampler and perceiver_embeddings is not None:
+            raise ValueError("If perceiver_embeddings are passed, use_resampler should be True")
+
         image_hidden_states = image_hidden_states.view(batch_size, num_images * image_seq_len, image_hidden_size)
         # # Hack to use the model in full language modeling mode
         # image_attention_mask = torch.zeros(batch_size, seq_length, 1, dtype=torch.long, device=image_hidden_states.device)
@@ -1359,7 +1388,8 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         pixel_values: Optional[torch.FloatTensor] = None,
-        image_embeddings: Optional[torch.FloatTensor] = None,
+        image_encoder_embeddings: Optional[torch.FloatTensor] = None,
+        perceiver_embeddings: Optional[torch.FloatTensor] = None,
         image_attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
@@ -1407,7 +1437,8 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             pixel_values=pixel_values,
-            image_embeddings=image_embeddings,
+            image_encoder_embeddings=image_encoder_embeddings,
+            perceiver_embeddings=perceiver_embeddings,
             image_attention_mask=image_attention_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
