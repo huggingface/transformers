@@ -1038,7 +1038,7 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         hidden_states = outputs[0]
@@ -1076,10 +1076,8 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
                     reduction=self.config.ctc_loss_reduction,
                     zero_infinity=self.config.ctc_zero_infinity,
                 )
-
         if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
+            return tuple(v for v in (loss, logits, outputs.hidden_states, outputs.attentions) if v is not None)
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
@@ -1197,8 +1195,7 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
             loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
+            return tuple(v for v in (loss, logits, outputs.hidden_states, outputs.attentions) if v is not None)
 
         return SequenceClassifierOutput(
             loss=loss,
@@ -1291,7 +1288,7 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         if self.config.use_weighted_layer_sum:
@@ -1310,8 +1307,7 @@ class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
             loss = loss_fct(logits.view(-1, self.num_labels), torch.argmax(labels.view(-1, self.num_labels), axis=1))
 
         if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return output
+            return tuple(v for v in (loss, logits, outputs.hidden_states, outputs.attentions) if v is not None)
 
         return TokenClassifierOutput(
             loss=loss,

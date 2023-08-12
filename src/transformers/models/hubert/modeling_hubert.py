@@ -385,11 +385,10 @@ class HubertFeatureProjection(nn.Module):
 
     def forward(self, hidden_states):
         # non-projected hidden states are needed for quantization
-        if self.feat_proj_layer_norm:
-            hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.projection(hidden_states)
+        norm_hidden_states = self.layer_norm(hidden_states) if self.feat_proj_layer_norm else hidden_states
+        hidden_states = self.projection(norm_hidden_states)
         hidden_states = self.dropout(hidden_states)
-        return hidden_states
+        return hidden_states, norm_hidden_states
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Hubert
@@ -1104,7 +1103,7 @@ class HubertModel(HubertPreTrainedModel):
             # compute reduced attention_mask corresponding to feature vectors
             attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
 
-        hidden_states = self.feature_projection(extract_features)
+        hidden_states, extract_features = self.feature_projection(extract_features)
         hidden_states = self._mask_hidden_states(hidden_states, mask_time_indices=mask_time_indices)
 
         encoder_outputs = self.encoder(
@@ -1118,7 +1117,8 @@ class HubertModel(HubertPreTrainedModel):
         hidden_states = encoder_outputs[0]
 
         if not return_dict:
-            return (hidden_states, extract_features) + encoder_outputs[1:]
+            outputs = (hidden_states, extract_features) + encoder_outputs[1:]
+            return outputs + (attention_mask,) if attention_mask is not None else outputs
 
         return Wav2Vec2BaseModelOutput(
             last_hidden_state=hidden_states,
@@ -1238,7 +1238,7 @@ class HubertForCTC(HubertPreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         hidden_states = outputs[0]
@@ -1276,10 +1276,8 @@ class HubertForCTC(HubertPreTrainedModel):
                     reduction=self.config.ctc_loss_reduction,
                     zero_infinity=self.config.ctc_zero_infinity,
                 )
-
         if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
+            return tuple(v for v in (loss, logits, outputs.hidden_states, outputs.attentions) if v is not None)
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
@@ -1399,8 +1397,7 @@ class HubertForSequenceClassification(HubertPreTrainedModel):
             loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
+            return tuple(v for v in (loss, logits, outputs.hidden_states, outputs.attentions) if v is not None)
 
         return SequenceClassifierOutput(
             loss=loss,

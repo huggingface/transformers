@@ -1367,7 +1367,8 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
             hidden_states = self.adapter(hidden_states)
 
         if not return_dict:
-            return (hidden_states, extract_features) + encoder_outputs[1:]
+            outputs = (hidden_states, extract_features) + encoder_outputs[1:]
+            return outputs + (attention_mask,) if attention_mask is not None else outputs
 
         return Wav2Vec2BaseModelOutput(
             last_hidden_state=hidden_states,
@@ -1662,7 +1663,7 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         hidden_states = outputs[0]
@@ -1700,10 +1701,8 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
                     reduction=self.config.ctc_loss_reduction,
                     zero_infinity=self.config.ctc_zero_infinity,
                 )
-
         if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
+            return tuple(v for v in (loss, logits, outputs.hidden_states, outputs.attentions) if v is not None)
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
@@ -1811,8 +1810,7 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
             loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
+            return tuple(v for v in (loss, logits, outputs.hidden_states, outputs.attentions) if v is not None)
 
         return SequenceClassifierOutput(
             loss=loss,
@@ -1895,7 +1893,7 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         if self.config.use_weighted_layer_sum:
@@ -1914,8 +1912,7 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
             loss = loss_fct(logits.view(-1, self.num_labels), torch.argmax(labels.view(-1, self.num_labels), axis=1))
 
         if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return output
+            return tuple(v for v in (loss, logits, outputs.hidden_states, outputs.attentions) if v is not None)
 
         return TokenClassifierOutput(
             loss=loss,
