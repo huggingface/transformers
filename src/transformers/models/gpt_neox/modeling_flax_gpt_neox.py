@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The EleutherAI and The HuggingFace Inc. team.
+# Copyright 2023 The EleutherAI and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,12 +12,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# source code from https://github.com/huggingface/transformers/pull/22950
+""" Flax GPT NeoX model."""
 
 from typing import Optional, Tuple
 
 import flax.linen as nn
-import flax.linen as linen
 
 import jax
 import jax.numpy as jnp
@@ -36,7 +35,7 @@ from transformers.models.gpt_neox.configuration_gpt_neox import GPTNeoXConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "GPTNeoX"
+_CHECKPOINT_FOR_DOC = "EleutherAI/gpt-neox-20b"
 _CONFIG_FOR_DOC = "GPTNeoXConfig"
 
 
@@ -45,7 +44,7 @@ GPTNeoX_START_DOCSTRING = r"""
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a Flax Linen
+    This model is also a Flax nn
     [flax.nn.Module](https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html) subclass. Use it as a
     regular Flax Module and refer to the Flax documentation for all matter related to general usage and behavior.
 
@@ -107,17 +106,16 @@ GPTNeoX_INPUTS_DOCSTRING = r"""
 """
 
 
-# positional embedding
-class RotaryEmbeddingNP(linen.Module):
+class FlaxGPTNeoXRotaryEmbedding(nn.Module):
     dim: int
-    max_seq_len_cached: int
+    max_position_embeddings: int
     base: int = 10000
 
     def setup(self):
         self.inv_freq = 1.0 / (self.base ** (jnp.arange(0, self.dim, 2).astype(jnp.float32) / self.dim))  # dim
 
     def __call__(self, x=None, seq_len=None):
-        t = jnp.arange(self.max_seq_len_cached, dtype=self.inv_freq.dtype)
+        t = jnp.arange(self.max_position_embeddings, dtype=self.inv_freq.dtype)
         freqs = jnp.outer(t, self.inv_freq)
         emb = jnp.concatenate((freqs, freqs), axis=-1)
         cos_cached = jnp.expand_dims(jnp.expand_dims(jnp.cos(emb), 0), 0)
@@ -145,11 +143,9 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     return q_embed, k_embed
 
 
-class FlaxGPTNeoXAttention(linen.Module):
+class FlaxGPTNeoXAttention(nn.Module):
     config: GPTNeoXConfig
     dtype: jnp.dtype = jnp.float32
-    causal: bool = True
-    is_cross_attention: bool = False
 
     def setup(self):
         config = self.config
@@ -157,16 +153,16 @@ class FlaxGPTNeoXAttention(linen.Module):
         self.hidden_size = config.hidden_size
         self.head_size = self.hidden_size // self.num_attention_heads
         self.rotary_ndims = int(self.head_size * config.rotary_pct)
-        self.rotary_emb = RotaryEmbeddingNP(
-            dim=self.rotary_ndims, max_seq_len_cached=config.max_position_embeddings, base=config.rotary_emb_base
+        self.rotary_emb = FlaxGPTNeoXRotaryEmbedding(
+            dim=self.rotary_ndims, max_position_embeddings=config.max_position_embeddings, base=config.rotary_emb_base
         )
         self.norm_factor = jnp.sqrt(self.head_size)
-        self.query_key_value = linen.Dense(
+        self.query_key_value = nn.Dense(
             3 * config.hidden_size,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
         )
-        self.dense = linen.Dense(
+        self.dense = nn.Dense(
             config.hidden_size,
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range),
@@ -174,12 +170,12 @@ class FlaxGPTNeoXAttention(linen.Module):
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
 
-    @linen.compact
+    @nn.compact
     def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
         This function takes projected key, value states from a single input token and concatenates the states to cached
         states from previous steps. This function is slighly adapted from the official Flax repository:
-        https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/linen/attention.py#L252
+        https://github.com/google/flax/blob/491ce18759622506588784b4fca0e4bf05f8c8cd/flax/nn/attention.py#L252
         """
         # detect if we're initializing by absence of existing cache data.
         is_initialized = self.has_variable("cache", "cached_key")
@@ -205,13 +201,10 @@ class FlaxGPTNeoXAttention(linen.Module):
             )
             attention_mask = combine_masks(pad_mask, attention_mask)
         return key, value, attention_mask
-
-    def _split_heads(self, hidden_states):
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.num_attention_heads, self.head_size))
-
+    
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.hidden_size,))
-
+    
     def __call__(
         self,
         hidden_states,
@@ -251,8 +244,7 @@ class FlaxGPTNeoXAttention(linen.Module):
         else:
             causal_mask = self.causal_mask[:, :, :query_length, :key_length]
 
-        batch_size = hidden_states.shape[0]
-        causal_mask = jnp.broadcast_to(causal_mask, (batch_size,) + causal_mask.shape[1:])
+        causal_mask = jnp.broadcast_to(causal_mask, (batch,) + causal_mask.shape[1:])
         attention_mask = jnp.broadcast_to(jnp.expand_dims(attention_mask, axis=(-3, -2)), causal_mask.shape)
         attention_mask = combine_masks(attention_mask, causal_mask)
 
@@ -303,13 +295,11 @@ class FlaxGPTNeoXMLP(nn.Module):
         self.dense_4h_to_h = nn.Dense(embed_dim, dtype=self.dtype, kernel_init=kernel_init)
 
         self.act = ACT2FN[self.config.hidden_act]
-        # self.dropout = nn.Dropout(rate=self.config.resid_pdrop)
 
-    def __call__(self, hidden_states, deterministic: bool = True):
+    def __call__(self, hidden_states):
         hidden_states = self.dense_h_to_4h(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.dense_4h_to_h(hidden_states)
-        # hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         return hidden_states
 
 
@@ -318,8 +308,7 @@ class FlaxGPTNeoXBlock(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.post_attention_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps)
-
+        self.post_attention_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.input_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.attention = FlaxGPTNeoXAttention(self.config, dtype=self.dtype)
 
