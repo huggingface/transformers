@@ -1628,6 +1628,12 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
 
         if hasattr(self.language_model, "_hf_hook"):
             self.language_model._hf_hook.io_same_device = True  # For `generate` compatibility
+    
+    def get_text_features(self):
+        ...
+    
+    def get_image_features(self):
+        ...
 
     @add_start_docstrings_to_model_forward(BLIP_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Blip2ForConditionalGenerationModelOutput, config_class=Blip2VisionConfig)
