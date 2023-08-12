@@ -308,12 +308,12 @@ class FlaxGPTNeoXBlock(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.post_attention_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.input_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
         self.attention = FlaxGPTNeoXAttention(self.config, dtype=self.dtype)
+        self.post_attention_dropout = nn.Dropout(rate=self.config.hidden_dropout)
+        self.post_attention_layernorm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
 
         self.mlp = FlaxGPTNeoXMLP(self.config, self.config.intermediate_size, dtype=self.dtype)
-        self.post_attention_dropout = nn.Dropout(rate=self.config.hidden_dropout)
         self.post_mlp_dropout = nn.Dropout(rate=self.config.hidden_dropout)
 
     def __call__(
@@ -637,15 +637,6 @@ class FlaxGPTNeoXForCausalLMModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-        batch_size, seq_length = input_ids.shape
-        if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
-
-        if position_ids is None:
-            position_ids = jnp.broadcast_to(
-                jnp.clip(jnp.cumsum(attention_mask, axis=-1) - 1, a_min=0), (batch_size, seq_length)
-            )
-
         outputs = self.gpt_neox(
             input_ids,
             attention_mask,
