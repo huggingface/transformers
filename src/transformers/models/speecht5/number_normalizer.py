@@ -187,8 +187,7 @@ class EnglishNumberNormalizer:
 
     def __call__(self, text):
         """
-        Convert numbers / number-like quantities in a string to their spelt-out
-        counterparts
+        Convert numbers / number-like quantities in a string to their spelt-out counterparts
         """
         pattern = r"(?<!\w)(-?\$?\€?\£?\¢?\d+(?:\.\d{1,2})?%?)(?!\w)"
 

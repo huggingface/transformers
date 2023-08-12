@@ -189,8 +189,8 @@ class SpeechT5Processor(ProcessorMixin):
 
     def _normalize(self, text: str):
         """
-        Normalizes a given string using the 'EnglishNumberNormalizer' class, which converts numeric elements in
-        english text.
+        Normalizes a given string using the 'EnglishNumberNormalizer' class, which converts numeric elements in english
+        text.
         """
         normalizer = EnglishNumberNormalizer()
         return normalizer(text)
