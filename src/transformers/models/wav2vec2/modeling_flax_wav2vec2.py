@@ -63,12 +63,15 @@ class FlaxWav2Vec2BaseModelOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        attention_mask (`jnp.ndarray`, *optional*, returned when `attention_mask` is passed):
+            Effective attention mask after feature extraction.
     """
 
     last_hidden_state: jnp.ndarray = None
     extract_features: jnp.ndarray = None
     hidden_states: Optional[Tuple[jnp.ndarray]] = None
     attentions: Optional[Tuple[jnp.ndarray]] = None
+    attention_mask: Optional[jnp.ndarray] = None
 
 
 @flax.struct.dataclass
@@ -1004,6 +1007,7 @@ class FlaxWav2Vec2Module(nn.Module):
             extract_features=extract_features,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+            attention_mask=attention_mask,
         )
 
     def _get_feat_extract_output_lengths(

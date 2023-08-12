@@ -1222,6 +1222,7 @@ class UniSpeechModel(UniSpeechPreTrainedModel):
             extract_features=extract_features,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+            attention_mask=attention_mask,
         )
 
 

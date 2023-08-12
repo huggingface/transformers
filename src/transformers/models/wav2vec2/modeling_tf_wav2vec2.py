@@ -83,12 +83,15 @@ class TFWav2Vec2BaseModelOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
+        attention_mask (`tf.Tensor`, *optional*, returned when `attention_mask` is passed):
+            Effective attention mask after feature extraction.
     """
 
     last_hidden_state: tf.Tensor = None
     extract_features: tf.Tensor = None
     hidden_states: Tuple[tf.Tensor] | None = None
     attentions: Tuple[tf.Tensor] | None = None
+    attention_mask: tf.Tensor | None = None
 
 
 def _sample_without_replacement(distribution, num_samples):
@@ -1173,6 +1176,7 @@ class TFWav2Vec2MainLayer(tf.keras.layers.Layer):
             extract_features=extract_features,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+            attention_mask=attention_mask,
         )
 
 
