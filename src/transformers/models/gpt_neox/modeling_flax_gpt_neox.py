@@ -105,42 +105,31 @@ GPTNeoX_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+def create_sinusoidal_positions(num_pos, dim):
+    inv_freq = 1.0 / (10000 ** (np.arange(0, dim, 2) / dim))
+    sinusoid_inp = np.einsum("i , j -> i j", np.arange(num_pos), inv_freq).astype("float32")
+    sin, cos = np.sin(sinusoid_inp), np.cos(sinusoid_inp)
 
-class FlaxGPTNeoXRotaryEmbedding(nn.Module):
-    dim: int
-    max_position_embeddings: int
-    base: int = 10000
+    sentinel = dim // 2 + dim % 2
+    out = np.zeros((num_pos, dim))
+    out[:, 0:sentinel] = sin
+    out[:, sentinel:] = cos
 
-    def setup(self):
-        self.inv_freq = 1.0 / (self.base ** (jnp.arange(0, self.dim, 2).astype(jnp.float32) / self.dim))  # dim
-
-    def __call__(self, x=None, seq_len=None):
-        t = jnp.arange(self.max_position_embeddings, dtype=self.inv_freq.dtype)
-        freqs = jnp.outer(t, self.inv_freq)
-        emb = jnp.concatenate((freqs, freqs), axis=-1)
-        cos_cached = jnp.expand_dims(jnp.expand_dims(jnp.cos(emb), 0), 0)
-        sin_cached = jnp.expand_dims(jnp.expand_dims(jnp.sin(emb), 0), 0)
-        return cos_cached[:seq_len, ...], sin_cached[:seq_len, ...]
+    return jnp.array(out)
 
 
-def rotate_half(x):
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return jnp.concatenate((-x2, x1), axis=-1)
+def rotate_every_two(tensor):
+    rotate_half_tensor = jnp.stack((-tensor[:, :, :, 1::2], tensor[:, :, :, ::2]), axis=-1)
+    rotate_half_tensor = rotate_half_tensor.reshape(rotate_half_tensor.shape[:-2] + (-1,))
+    return rotate_half_tensor
 
 
-# q,k are of shape [bs, n_heads, seq_len, head_dim]
-# cos, sin are of shape #[1, 1, seq_len, dim]
-# position_ids is of shape [bs, seq_len]
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
-    gather_indices = position_ids[:, :, None, None]  # [bs, seq_len, 1, 1]
-    gather_indices = jnp.repeat(gather_indices, cos.shape[1], axis=1)
-    gather_indices = jnp.repeat(gather_indices, cos.shape[3], axis=3)
-    cos = jnp.take_along_axis(cos.repeat(gather_indices.shape[0], axis=0), gather_indices, axis=2)
-    sin = jnp.take_along_axis(sin.repeat(gather_indices.shape[0], axis=0), gather_indices, axis=2)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
+def apply_rotary_pos_emb(tensor, sincos):
+    sin_pos, cos_pos = sincos
+    sin_pos = sin_pos[:, :, None, :].repeat(2, 3)
+    cos_pos = cos_pos[:, :, None, :].repeat(2, 3)
+    return (tensor * cos_pos) + (rotate_every_two(tensor) * sin_pos)
+
 
 
 class FlaxGPTNeoXAttention(nn.Module):
@@ -153,9 +142,7 @@ class FlaxGPTNeoXAttention(nn.Module):
         self.hidden_size = config.hidden_size
         self.head_size = self.hidden_size // self.num_attention_heads
         self.rotary_ndims = int(self.head_size * config.rotary_pct)
-        self.rotary_emb = FlaxGPTNeoXRotaryEmbedding(
-            dim=self.rotary_ndims, max_position_embeddings=config.max_position_embeddings, base=config.rotary_emb_base
-        )
+        self.embed_positions = create_sinusoidal_positions(config.max_position_embeddings, self.rotary_ndims)
         self.norm_factor = jnp.sqrt(self.head_size)
         self.query_key_value = nn.Dense(
             3 * config.hidden_size,
@@ -222,15 +209,23 @@ class FlaxGPTNeoXAttention(nn.Module):
         qkv = jnp.moveaxis(qkv, source=-2, destination=0)
         query, key, value = qkv
 
-        query_rot = query[..., : self.rotary_ndims]
-        query_pass = query[..., self.rotary_ndims :]
-        key_rot = key[..., : self.rotary_ndims]
-        key_pass = key[..., self.rotary_ndims :]
+        sincos = jnp.take(self.embed_positions, position_ids, axis=0)
+        sincos = jnp.split(sincos, 2, axis=-1)
+        if self.rotary_ndims is not None:
+            k_rot = key[:, :, :, : self.rotary_ndims]
+            k_pass = key[:, :, :, self.rotary_ndims :]
 
-        cos, sin = self.rotary_emb(value, seq_len=seq_len)
-        query, key = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
-        query = jnp.concatenate((query, query_pass), axis=-1)
-        key = jnp.concatenate((key, key_pass), axis=-1)
+            q_rot = query[:, :, :, : self.rotary_ndims]
+            q_pass = query[:, :, :, self.rotary_ndims :]
+
+            k_rot = apply_rotary_pos_emb(k_rot, sincos)
+            q_rot = apply_rotary_pos_emb(q_rot, sincos)
+
+            key = jnp.concatenate([k_rot, k_pass], axis=-1)
+            query = jnp.concatenate([q_rot, q_pass], axis=-1)
+        else:
+            key = apply_rotary_pos_emb(key, sincos)
+            query = apply_rotary_pos_emb(query, sincos)
 
         query_length, key_length = query.shape[1], key.shape[1]
 
