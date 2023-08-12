@@ -1367,13 +1367,14 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
             hidden_states = self.adapter(hidden_states)
 
         if not return_dict:
-            return (hidden_states, extract_features) + encoder_outputs[1:]
+            return (hidden_states, extract_features) + encoder_outputs[1:] + (attention_mask,)
 
         return Wav2Vec2BaseModelOutput(
             last_hidden_state=hidden_states,
             extract_features=extract_features,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+            attention_mask=attention_mask,
         )
 
 
