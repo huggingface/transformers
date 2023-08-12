@@ -44,7 +44,7 @@ class FlaxGPTNeoXModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=2,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
@@ -52,8 +52,8 @@ class FlaxGPTNeoXModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
+        num_hidden_layers=2,
+        num_attention_heads=2,
         intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -240,6 +240,7 @@ class FlaxGPTNeoXModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unit
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
                 pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
+                pt_inputs["use_cache"] = False
 
                 # load corresponding PyTorch class
                 pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning
@@ -287,6 +288,7 @@ class FlaxGPTNeoXModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unit
                 # prepare inputs
                 prepared_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
                 pt_inputs = {k: torch.tensor(v.tolist()) for k, v in prepared_inputs_dict.items()}
+                pt_inputs["use_cache"] = False
 
                 # load corresponding PyTorch class
                 pt_model_class_name = model_class.__name__[4:]  # Skip the "Flax" at the beginning

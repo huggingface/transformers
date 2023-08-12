@@ -4614,6 +4614,9 @@ else:
     _import_structure["models.gpt_neo"].extend(
         ["FlaxGPTNeoForCausalLM", "FlaxGPTNeoModel", "FlaxGPTNeoPreTrainedModel"]
     )
+    _import_structure["models.gpt_neox"].extend(
+        ["FlaxGPTNeoXForCausalLM", "FlaxGPTNeoXModel", "FlaxGPTNeoXPreTrainedModel"]
+    )
     _import_structure["models.gptj"].extend(["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"])
     _import_structure["models.llama"].extend(["FlaxLlamaForCausalLM", "FlaxLlamaModel", "FlaxLlamaPreTrainedModel"])
     _import_structure["models.longt5"].extend(

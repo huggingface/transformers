@@ -362,7 +362,7 @@ class FlaxGPTNeoXPreTrainedModel(FlaxPreTrainedModel):
     """
 
     config_class = GPTNeoXConfig
-    base_model_prefix = "transformer"
+    base_model_prefix = "gpt_neox"
     module_class: nn.Module = None
 
     def __init__(
@@ -577,7 +577,7 @@ class FlaxGPTNeoXModule(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
+        
         hidden_states = outputs[0]
         hidden_states = self.final_layer_norm(hidden_states)
 
