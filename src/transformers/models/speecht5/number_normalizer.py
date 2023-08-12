@@ -17,7 +17,7 @@
 import re
 
 
-class NumberNormalizer:
+class EnglishNumberNormalizer:
     def __init__(self):
         self.ones = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
         self.teens = [
@@ -89,7 +89,26 @@ class NumberNormalizer:
             integer_part, decimal_part = n, "00"
 
         # Define a dictionary to map currency symbols to their names
-        currency_symbols = {"$": " dollars", "€": " euros", "£": " pounds", "¢": " cents"}
+        currency_symbols = {
+            "$": " dollars",
+            "€": " euros",
+            "£": " pounds",
+            "¢": " cents",
+            "¥": "Japanese Yen",
+            "₹": "Indian Rupee",
+            "₽": "Russian Ruble",
+            "฿": "Thai Baht",
+            "₺": "Turkish Lira",
+            "₴": "Ukrainian Hryvnia",
+            "₣": "Swiss Franc",
+            "₡": "Costa Rican Colon",
+            "₱": "Philippine Peso",
+            "₪": "Israeli New Shekel",
+            "₮": "Mongolian Tögrög",
+            "₩": "South Korean Won",
+            "₦": "Nigerian Naira",
+            "₫": "Vietnamese Đồng",
+        }
 
         # Extract currency symbol if present
         currency_symbol = ""
