@@ -1729,6 +1729,11 @@ class ModelTesterMixin:
                     elif tuple_object is None:
                         return
                     else:
+                        # bool tensors do not support subtraction `-`
+                        if tuple_object.dtype == torch.bool:
+                            tuple_object = tuple_object.float()
+                        if dict_object.dtype == torch.bool:
+                            dict_object = dict_object.float()
                         self.assertTrue(
                             torch.allclose(
                                 set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
