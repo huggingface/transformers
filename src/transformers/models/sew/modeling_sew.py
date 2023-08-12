@@ -26,7 +26,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
-from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_sew import SEWConfig
@@ -953,12 +953,14 @@ class SEWModel(SEWPreTrainedModel):
         hidden_states = encoder_outputs[0]
 
         if not return_dict:
-            return (hidden_states,) + encoder_outputs[1:]
+            return (hidden_states, extract_features) + encoder_outputs[1:]
 
-        return BaseModelOutput(
+        return Wav2Vec2BaseModelOutput(
             last_hidden_state=hidden_states,
+            extract_features=extract_features,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+            attention_mask=attention_mask,
         )
 
 
