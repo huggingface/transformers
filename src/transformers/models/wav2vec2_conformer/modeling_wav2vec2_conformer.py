@@ -1367,7 +1367,7 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel):
             hidden_states = self.adapter(hidden_states)
 
         if not return_dict:
-            return (hidden_states, extract_features) + encoder_outputs[1:] + (attention_mask,)
+            return (hidden_states, extract_features) + encoder_outputs[1:]
 
         return Wav2Vec2BaseModelOutput(
             last_hidden_state=hidden_states,
@@ -1525,12 +1525,6 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
 
         # 2. quantize all (unmasked) extracted features and project to final vq dim
         extract_features = self.dropout_features(outputs[1])
-
-        if attention_mask is not None:
-            # compute reduced attention_mask correponding to feature vectors
-            attention_mask = self._get_feature_vector_attention_mask(
-                extract_features.shape[1], attention_mask, add_adapter=False
-            )
 
         quantized_features, codevector_perplexity = self.quantizer(
             extract_features, mask_time_indices=mask_time_indices

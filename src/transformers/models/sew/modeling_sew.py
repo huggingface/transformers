@@ -1205,7 +1205,7 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         if self.config.use_weighted_layer_sum:
@@ -1220,7 +1220,7 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
         if attention_mask is None:
             pooled_output = hidden_states.mean(dim=1)
         else:
-            padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
+            padding_mask = outputs.attention_mask
             hidden_states[~padding_mask] = 0.0
             pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
 

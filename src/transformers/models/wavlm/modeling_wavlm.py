@@ -1256,7 +1256,7 @@ class WavLMModel(WavLMPreTrainedModel):
             hidden_states = self.adapter(hidden_states)
 
         if not return_dict:
-            return (hidden_states, extract_features) + encoder_outputs[1:] + (attention_mask,)
+            return (hidden_states, extract_features) + encoder_outputs[1:]
 
         return Wav2Vec2BaseModelOutput(
             last_hidden_state=hidden_states,
