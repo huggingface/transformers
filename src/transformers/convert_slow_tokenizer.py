@@ -773,15 +773,13 @@ class NllbConverter(SpmConverter):
 
 
 class M2M100Converter(SpmConverter):
-
     def __init__(self, original_tokenizer):
         self.original_vocab_file = original_tokenizer.vocab_file
-        self.original_bpe_model = self.original_vocab_file.replace('vocab.json', 'sentencepiece.bpe.model')
+        self.original_bpe_model = self.original_vocab_file.replace("vocab.json", "sentencepiece.bpe.model")
 
         original_tokenizer.vocab_file = self.original_bpe_model
         super().__init__(original_tokenizer)
         original_tokenizer.vocab_file = self.original_vocab_file
-
 
     def vocab(self, proto):
         vocab = [
