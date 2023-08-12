@@ -61,6 +61,7 @@ logger = logging.get_logger(__name__)
 
 
 _HIDDEN_STATES_START_POSITION = 2
+_ATTENTION_MASK_START_POSITION = 4
 
 # General docstring
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
@@ -1751,12 +1752,6 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         # 2. quantize all (unmasked) extracted features and project to final vq dim
         extract_features = self.dropout_features(outputs[1])
 
-        if attention_mask is not None:
-            # compute reduced attention_mask correponding to feature vectors
-            attention_mask = self._get_feature_vector_attention_mask(
-                extract_features.shape[1], attention_mask, add_adapter=False
-            )
-
         quantized_features, codevector_perplexity = self.quantizer(
             extract_features, mask_time_indices=mask_time_indices
         )
@@ -2125,7 +2120,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
         if attention_mask is None:
             pooled_output = hidden_states.mean(dim=1)
         else:
-            padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
+            padding_mask = outputs[_ATTENTION_MASK_START_POSITION]
             hidden_states[~padding_mask] = 0.0
             pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
 
