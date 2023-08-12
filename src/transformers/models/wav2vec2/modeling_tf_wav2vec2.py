@@ -47,7 +47,6 @@ logger = logging.get_logger(__name__)
 
 
 _HIDDEN_STATES_START_POSITION = 2
-_ATTENTION_MASK_START_POSITION = 2
 
 _CHECKPOINT_FOR_DOC = "facebook/wav2vec2-base-960h"
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
@@ -1638,7 +1637,7 @@ class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
             training=training,
         )
         if self.config.use_weighted_layer_sum:
@@ -1653,7 +1652,7 @@ class TFWav2Vec2ForSequenceClassification(TFWav2Vec2PreTrainedModel):
         if attention_mask is None:
             pooled_output = tf.reduce_mean(hidden_states, axis=1)
         else:
-            padding_mask = outputs[_ATTENTION_MASK_START_POSITION]
+            padding_mask = outputs.attention_mask
             padding_mask_float = tf.cast(padding_mask, hidden_states.dtype)
             hidden_states = tf.multiply(hidden_states, tf.expand_dims(padding_mask_float, axis=-1))
             pooled_output = tf.divide(

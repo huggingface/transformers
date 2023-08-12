@@ -43,7 +43,6 @@ logger = logging.get_logger(__name__)
 
 
 _HIDDEN_STATES_START_POSITION = 2
-_ATTENTION_MASK_START_POSITION = 2
 
 # General docstring
 _CONFIG_FOR_DOC = "Data2VecAudioConfig"
@@ -1171,7 +1170,7 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         if self.config.use_weighted_layer_sum:
@@ -1186,7 +1185,7 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
         if attention_mask is None:
             pooled_output = hidden_states.mean(dim=1)
         else:
-            padding_mask = outputs[_ATTENTION_MASK_START_POSITION]
+            padding_mask = outputs.attention_mask
             hidden_states[~padding_mask] = 0.0
             pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
 
