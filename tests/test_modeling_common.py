@@ -2069,6 +2069,10 @@ class ModelTesterMixin:
                 self.check_pt_tf_models(tf_model, pt_model, pt_inputs_dict_with_labels)
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
+        # bool do not support subtraction
+        if a.dtype == bool:
+            a = a.astype(float)
+            b = b.astype(float)
         diff = np.abs((a - b)).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
@@ -2154,6 +2158,11 @@ class ModelTesterMixin:
             fx_outputs[fx_nans] = 0
             pt_outputs[pt_nans] = 0
             fx_outputs[pt_nans] = 0
+
+            # bool do not support subtraction
+            if fx_outputs.dtype == bool:
+                fx_outputs = fx_outputs.astype(float)
+                pt_outputs = pt_outputs.astype(float)
 
             max_diff = np.amax(np.abs(fx_outputs - pt_outputs))
             self.assertLessEqual(
