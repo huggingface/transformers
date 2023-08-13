@@ -1399,6 +1399,8 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
     correspond to the unconditional logits (predicted from an empty or 'null' prompt). The processor computes a
     weighted average across the conditional and unconditional logits, parameterised by the `guidance_scale`.
 
+    See [the paper](https://arxiv.org/abs/2306.17806) for more information.
+
     Args:
         guidance_scale (float):
             The guidance scale for classifier free guidance (CFG). CFG is enabled by setting `guidance_scale > 1`.
