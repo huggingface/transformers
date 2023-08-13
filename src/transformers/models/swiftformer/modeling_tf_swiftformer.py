@@ -464,7 +464,6 @@ class TFSwiftFormerEncoder(tf.keras.layers.Layer):
 
         all_hidden_states = (hidden_states,) if output_hidden_states else None
 
-        print(self.network)
         for i, block in enumerate(self.network):
             print(f"SwiftFormerEncoder {i+1}/{len(self.network)}, {block}", end="... ")
             print(hidden_states.shape)
@@ -490,38 +489,6 @@ class TFSwiftFormerPreTrainedModel(TFPreTrainedModel):
     config_class = SwiftFormerConfig
     base_model_prefix = "swiftformer"
     main_input_name = "pixel_values"
-
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(5, self.config.num_channels, self.config.image_size, self.config.image_size),
-            dtype=tf.float32,
-        )
-        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
-
-    @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-        return self.serving_output(output)
 
 
 # FIXME: change to tensorflow doc
@@ -654,14 +621,6 @@ class TFSwiftFormerModel(TFSwiftFormerPreTrainedModel):
         )
         return outputs
 
-    def serving_output(self, output: TFBaseModelOutputWithNoAttention) -> TFBaseModelOutputWithNoAttention:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-
-        return TFBaseModelOutputWithNoAttention(
-            last_hidden_state=output.last_hidden_state,
-            hidden_states=hs,
-        )
-
 
 @add_start_docstrings(
     """
@@ -763,12 +722,4 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
-        )
-
-    def serving_output(self, output: TFImageClassifierOutputWithNoAttention) -> TFImageClassifierOutputWithNoAttention:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-
-        return TFImageClassifierOutputWithNoAttention(
-            logits=output.logits,
-            hidden_states=hs,
         )
