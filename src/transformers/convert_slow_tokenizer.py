@@ -845,7 +845,7 @@ class M2M100Converter(SpmConverter):
         order the merges with respect to the piece scores instead.
         """
         vocab_scores = self.vocab()
-        vocab = dict(x for x in vocab_scores)
+        vocab = dict(vocab_scores)
 
         # Merges
         merges = []
