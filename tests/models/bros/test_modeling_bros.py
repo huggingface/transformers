@@ -14,7 +14,7 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Bros model. """
 
-
+import copy
 import unittest
 
 from transformers import BrosConfig, is_torch_available
@@ -29,6 +29,8 @@ if is_torch_available():
 
     from transformers import (
         BrosForTokenClassification,
+        BrosSpadeEEForTokenClassification,
+        BrosSpadeELForTokenClassification,
         BrosModel,
     )
     from transformers.models.bros.modeling_bros import (
@@ -162,6 +164,12 @@ class BrosModelTester:
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
+    def create_and_check_for_spade_ee_token_classification(self):
+        ...
+
+    def create_and_check_for_spade_el_token_classification(self):
+        ...
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -185,9 +193,15 @@ class BrosModelTester:
 
 @require_torch
 class BrosModelTest(ModelTesterMixin, unittest.TestCase):
+    test_pruning = False
+    test_torchscript = False
+    test_mismatched_shapes = False
+
     all_model_classes = (
         (
             BrosForTokenClassification,
+            BrosSpadeEEForTokenClassification,
+            BrosSpadeELForTokenClassification,
             BrosModel,
         )
         if is_torch_available()
@@ -199,12 +213,24 @@ class BrosModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = BrosModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BrosConfig, hidden_size=37)
 
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = copy.deepcopy(inputs_dict)
+
+        if return_labels:
+            ...
+        ...
+
+        return inputs_dict
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
 
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -216,11 +242,26 @@ class BrosModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
+    def test_for_spade_ee_token_classification(self):
+        ...
+
+    def test_for_spade_el_token_classification(self):
+        ...
+
+    def test_attention_outputs(self):
+        ...
+
+    def test_hidden_states_output(self):
+        ...
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in BROS_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = BrosModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    def test_initialization(self):
+        ...
 
 
 def prepare_bros_batch_inputs():

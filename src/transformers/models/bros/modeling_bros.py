@@ -1122,12 +1122,24 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         itc_outputs = self.itc_layer(last_hidden_states).transpose(0, 1).contiguous()
         stc_outputs = self.stc_layer(last_hidden_states, last_hidden_states).squeeze(0)
 
+        itc_logits = itc_outputs.view(-1, self.num_labels)
+
+        # calculate stc_logits
+        inv_attention_mask = 1 - attention_mask
+        bsz, max_seq_length = inv_attention_mask.shape
+        device = inv_attention_mask.device
+        invalid_token_mask = torch.cat([inv_attention_mask, torch.zeros([bsz, 1]).to(device)], axis=1).bool()
+        stc_outputs.masked_fill_(invalid_token_mask[:, None, :], -10000.0)
+        self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device).bool()
+        stc_outputs.masked_fill_(self_token_mask[None, :, :], -10000.0)
+        stc_mask = attention_mask.view(-1).bool()
+        stc_logits = stc_outputs.view(-1, max_seq_length + 1)
+
         loss = None
         if itc_labels is not None and stc_labels is not None:
             loss_fct = CrossEntropyLoss()
 
             # get itc loss
-            itc_logits = itc_outputs.view(-1, self.num_labels)
             itc_labels = itc_labels.view(-1)
             if itc_mask is not None:
                 itc_mask = itc_mask.view(-1)
@@ -1135,22 +1147,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
             else:
                 itc_loss = loss_fct(itc_logits, itc_labels)
 
-            # get stc loss
-            inv_attention_mask = 1 - attention_mask
-
-            bsz, max_seq_length = inv_attention_mask.shape
-            device = inv_attention_mask.device
-
-            invalid_token_mask = torch.cat([inv_attention_mask, torch.zeros([bsz, 1]).to(device)], axis=1).bool()
-            stc_outputs.masked_fill_(invalid_token_mask[:, None, :], -10000.0)
-
-            self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device).bool()
-            stc_outputs.masked_fill_(self_token_mask[None, :, :], -10000.0)
-
-            stc_mask = attention_mask.view(-1).bool()
-            stc_logits = stc_outputs.view(-1, max_seq_length + 1)
             stc_labels = stc_labels.view(-1)
-
             stc_loss = loss_fct(stc_logits[stc_mask], stc_labels[stc_mask])
 
             loss = itc_loss + stc_loss
