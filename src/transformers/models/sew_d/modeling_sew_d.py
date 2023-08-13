@@ -1448,7 +1448,7 @@ class SEWDModel(SEWDPreTrainedModel):
     @add_start_docstrings_to_model_forward(SEWD_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
+        output_type=Wav2Vec2BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -1461,7 +1461,7 @@ class SEWDModel(SEWDPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

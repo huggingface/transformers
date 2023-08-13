@@ -1053,7 +1053,7 @@ class HubertModel(HubertPreTrainedModel):
         return hidden_states
 
     @add_start_docstrings_to_model_forward(HUBERT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Wav2Vec2BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_values: Optional[torch.Tensor],
@@ -1062,7 +1062,7 @@ class HubertModel(HubertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
+    ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
         """
 
         Returns:
