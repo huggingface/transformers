@@ -152,7 +152,6 @@ class M2M100TokenizerFast(PreTrainedTokenizerFast):
         additional_special_tokens=None,
         **kwargs,
     ):
-
         super().__init__(
             vocab_file=vocab_file,
             bos_token=bos_token,
@@ -170,7 +169,6 @@ class M2M100TokenizerFast(PreTrainedTokenizerFast):
         self.vocab_file = vocab_file
         self.can_save_slow_tokenizer = bool(self.vocab_file)
 
-
         fairseq_language_code = FAIRSEQ_LANGUAGE_CODES[language_codes]
         self.lang_code_to_token = {lang_code: f"__{lang_code}__" for lang_code in fairseq_language_code}
 
@@ -185,7 +183,7 @@ class M2M100TokenizerFast(PreTrainedTokenizerFast):
         self.lang_code_to_id = {
             lang_code: self.convert_tokens_to_ids(token) for lang_code, token in self.lang_code_to_token.items()
         }
-        self.lang_token_to_id = { 
+        self.lang_token_to_id = {
             token: self.convert_tokens_to_ids(token) for token in self.lang_code_to_token.values()
         }
 
@@ -193,7 +191,6 @@ class M2M100TokenizerFast(PreTrainedTokenizerFast):
         self.cur_lang_code = self.convert_tokens_to_ids(self._src_lang)
         self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
-
 
     @property
     def src_lang(self) -> str:
