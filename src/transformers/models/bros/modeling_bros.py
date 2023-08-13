@@ -22,6 +22,7 @@ import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss
+from transformers.modeling_outputs import BrosSpadeOutput
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -30,20 +31,9 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import (
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_bros import BrosConfig
-from transformers.modeling_outputs import BrosSpadeOutput
-
 
 logger = logging.get_logger(__name__)
 
@@ -56,6 +46,79 @@ BROS_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "naver-clova-ocr/bros-large-uncased",
     # See all Bros models at https://huggingface.co/models?filter=bros
 ]
+
+BROS_START_DOCSTRING = r"""
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`BrosConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+BROS_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `({0})`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`BrosTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+
+        bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 8)'):
+            Bounding box coordinates for each token in the input sequence. Each bounding box is a list of eight values
+            (x1, y1, x2, y1, x2, y2, x1, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right corner of the
+            bounding box.
+
+        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+
+        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+
+        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+
+        head_mask (:
+            obj:*torch.FloatTensor* of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*): Mask to nullify
+            selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+"""
 
 
 class PositionalEmbedding1D(nn.Module):
@@ -634,6 +697,44 @@ class BrosPooler(nn.Module):
         return pooled_output
 
 
+class RelationExtractor(nn.Module):
+    def __init__(
+        self,
+        n_relations,
+        backbone_hidden_size,
+        head_hidden_size,
+        head_p_dropout=0.1,
+    ):
+        super().__init__()
+
+        self.n_relations = n_relations
+        self.backbone_hidden_size = backbone_hidden_size
+        self.head_hidden_size = head_hidden_size
+        self.head_p_dropout = head_p_dropout
+
+        self.drop = nn.Dropout(head_p_dropout)
+        self.q_net = nn.Linear(self.backbone_hidden_size, self.n_relations * self.head_hidden_size)
+
+        self.k_net = nn.Linear(self.backbone_hidden_size, self.n_relations * self.head_hidden_size)
+
+        self.dummy_node = nn.Parameter(torch.Tensor(1, self.backbone_hidden_size))
+        nn.init.normal_(self.dummy_node)
+
+    def forward(self, h_q, h_k):
+        h_q = self.q_net(self.drop(h_q))
+
+        dummy_vec = self.dummy_node.unsqueeze(0).repeat(1, h_k.size(1), 1)
+        h_k = torch.cat([h_k, dummy_vec], axis=0)
+        h_k = self.k_net(self.drop(h_k))
+
+        head_q = h_q.view(h_q.size(0), h_q.size(1), self.n_relations, self.head_hidden_size)
+        head_k = h_k.view(h_k.size(0), h_k.size(1), self.n_relations, self.head_hidden_size)
+
+        relation_score = torch.einsum("ibnd,jbnd->nbij", (head_q, head_k))
+
+        return relation_score
+
+
 class BrosPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -661,90 +762,11 @@ class BrosPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-BROS_START_DOCSTRING = r"""
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`BertConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-BROS_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        head_mask (:
-            obj:*torch.FloatTensor* of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*): Mask to nullify
-            selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 @add_start_docstrings(
     "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
     BROS_START_DOCSTRING,
 )
 class BrosModel(BrosPreTrainedModel):
-    """
-
-    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
-    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-
-    To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
-    to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
-    `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
-    """
-
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -1013,52 +1035,13 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         )
 
 
-class RelationExtractor(nn.Module):
-    def __init__(
-        self,
-        n_relations,
-        backbone_hidden_size,
-        head_hidden_size,
-        head_p_dropout=0.1,
-    ):
-        super().__init__()
-
-        self.n_relations = n_relations
-        self.backbone_hidden_size = backbone_hidden_size
-        self.head_hidden_size = head_hidden_size
-        self.head_p_dropout = head_p_dropout
-
-        self.drop = nn.Dropout(head_p_dropout)
-        self.q_net = nn.Linear(self.backbone_hidden_size, self.n_relations * self.head_hidden_size)
-
-        self.k_net = nn.Linear(self.backbone_hidden_size, self.n_relations * self.head_hidden_size)
-
-        self.dummy_node = nn.Parameter(torch.Tensor(1, self.backbone_hidden_size))
-        nn.init.normal_(self.dummy_node)
-
-    def forward(self, h_q, h_k):
-        h_q = self.q_net(self.drop(h_q))
-
-        dummy_vec = self.dummy_node.unsqueeze(0).repeat(1, h_k.size(1), 1)
-        h_k = torch.cat([h_k, dummy_vec], axis=0)
-        h_k = self.k_net(self.drop(h_k))
-
-        head_q = h_q.view(h_q.size(0), h_q.size(1), self.n_relations, self.head_hidden_size)
-        head_k = h_k.view(h_k.size(0), h_k.size(1), self.n_relations, self.head_hidden_size)
-
-        relation_score = torch.einsum("ibnd,jbnd->nbij", (head_q, head_k))
-
-        return relation_score
-
-
 @add_start_docstrings(
     """
-    Bros Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    Named-Entity-Recognition (NER) tasks.
+    Bros Model with a token classification head on top (initial token layers and sequence token layer on top of the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks.
     """,
     BROS_START_DOCSTRING,
 )
-class BrosSpadeForTokenClassification(BrosPreTrainedModel):
+class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
@@ -1088,6 +1071,8 @@ class BrosSpadeForTokenClassification(BrosPreTrainedModel):
             head_hidden_size=config.hidden_size,
             head_p_dropout=classifier_dropout,
         )
+
+        self.init_weights()
 
     @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1185,12 +1170,12 @@ class BrosSpadeForTokenClassification(BrosPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Bros Model with a Spade head on top (a linear layer on top of the hidden-states output) e.g. for
+    Bros Model with a token classification head on top (a relation extractor layer on top of the hidden-states output) e.g. for
     Entity-Linking.
     """,
     BROS_START_DOCSTRING,
 )
-class BrosSpadeForTokenLinking(BrosPreTrainedModel):
+class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
@@ -1211,6 +1196,8 @@ class BrosSpadeForTokenLinking(BrosPreTrainedModel):
             head_hidden_size=config.hidden_size,
             head_p_dropout=classifier_dropout,
         )
+
+        self.init_weights()
 
     @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1257,38 +1244,37 @@ class BrosSpadeForTokenLinking(BrosPreTrainedModel):
         last_hidden_states = outputs.last_hidden_state
         last_hidden_states = last_hidden_states.transpose(0, 1).contiguous()
 
-        el_outputs = self.relation_net(last_hidden_states, last_hidden_states).squeeze(0)
+        logits = self.relation_net(last_hidden_states, last_hidden_states).squeeze(0)
 
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
 
-            bsz, max_seq_length = batch["attention_mask"].shape
-            device = batch["attention_mask"].device
+            bsz, max_seq_length = attention_mask.shape
+            device = attention_mask.device
 
             self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device).bool()
 
+            mask = box_first_token_mask.view(-1)
             box_first_token_mask = torch.cat(
                 [
-                    (batch["are_box_first_tokens"] == False),
+                    (box_first_token_mask == False),
                     torch.zeros([bsz, 1], dtype=torch.bool).to(device),
                 ],
                 axis=1,
             )
-            el_outputs.masked_fill_(box_first_token_mask[:, None, :], -10000.0)
-            el_outputs.masked_fill_(self_token_mask[None, :, :], -10000.0)
+            logits.masked_fill_(box_first_token_mask[:, None, :], -10000.0)
+            logits.masked_fill_(self_token_mask[None, :, :], -10000.0)
 
-            mask = batch["are_box_first_tokens"].view(-1)
-            loss = loss_func(logits.view(-1, max_seq_lenght + 1)[mask], labels.view(-1)[mask])
+            loss = loss_fct(logits.view(-1, max_seq_length + 1)[mask], labels.view(-1)[mask])
 
         if not return_dict:
             output = (itc_logits, stc_logits) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return BrosSpadeOutput(
+        return TokenClassifierOutput(
             loss=loss,
-            itc_logits=itc_logits,
-            stc_logits=stc_logits,
+            logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

@@ -1321,8 +1321,8 @@ else:
         [
             "BROS_PRETRAINED_MODEL_ARCHIVE_LIST",
             "BrosForTokenClassification",
-            "BrosSpadeForTokenClassification",
-            "BrosSpadeForTokenLinking",
+            "BrosSpadeEEForTokenClassification",
+            "BrosSpadeELForTokenClassification",
             "BrosModel",
             "BrosPreTrainedModel",
         ]
@@ -5211,8 +5211,8 @@ if TYPE_CHECKING:
         from .models.bros import (
             BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
             BrosForTokenClassification,
-            BrosSpadeForTokenClassification,
-            BrosSpadeForTokenLinking,
+            BrosSpadeEEForTokenClassification,
+            BrosSpadeELForTokenClassification,
             BrosModel,
             BrosPreTrainedModel,
         )
