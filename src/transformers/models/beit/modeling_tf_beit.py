@@ -969,7 +969,9 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
         >>> import tensorflow as tf
 
         >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k", from_pt=True)
-        >>> model = TFBeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k", from_pt=True)
+        >>> model = TFBeitForMaskedImageModeling.from_pretrained(
+        ...     "microsoft/beit-base-patch16-224-pt22k-ft22k", from_pt=True
+        ... )
 
         >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="tf")
         >>> logits = model(**inputs).logits
@@ -983,13 +985,9 @@ class TFBeitForMaskedImageModeling(TFBeitPreTrainedModel):
         ```
 
         ```python
-        >>> labels = tokenizer("The capital of France is Paris.", return_tensors="tf")["input_ids"]
-        >>> # mask labels of non-{mask} tokens
-        >>> labels = tf.where(inputs.input_ids == tokenizer.mask_token_id, labels, -100)
-
-        >>> outputs = model(**inputs, labels=labels)
-        >>> round(float(outputs.loss), 2)
-        """
+        >>> labels = tokenizer("The capital of France is Paris.", return_tensors="tf")["input_ids"] >>> # mask labels
+        of non-{mask} tokens >>> labels = tf.where(inputs.input_ids == tokenizer.mask_token_id, labels, -100) >>>
+        outputs = model(**inputs, labels=labels) >>> round(float(outputs.loss), 2)"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.beit(
@@ -1078,8 +1076,12 @@ class TFBeitForImageClassification(TFBeitPreTrainedModel, TFSequenceClassificati
         >>> dataset = load_dataset("huggingface/cats-image")
         >>> image = dataset["test"]["image"][0]
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k", from_pt=True)
-        >>> model = TFBeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k", from_pt=True)
+        >>> image_processor = AutoImageProcessor.from_pretrained(
+        ...     "microsoft/beit-base-patch16-224-pt22k-ft22k", from_pt=True
+        ... )
+        >>> model = TFBeitForImageClassification.from_pretrained(
+        ...     "microsoft/beit-base-patch16-224-pt22k-ft22k", from_pt=True
+        ... )
 
         >>> inputs = image_processor(image, return_tensors="tf")
         >>> logits = model(**inputs).logits
@@ -1504,8 +1506,12 @@ class TFBeitForSemanticSegmentation(TFBeitPreTrainedModel):
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k", from_pt=True)
-        >>> model = TFBeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k", from_pt=True)
+        >>> image_processor = AutoImageProcessor.from_pretrained(
+        ...     "microsoft/beit-base-patch16-224-pt22k-ft22k", from_pt=True
+        ... )
+        >>> model = TFBeitForSemanticSegmentation.from_pretrained(
+        ...     "microsoft/beit-base-patch16-224-pt22k-ft22k", from_pt=True
+        ... )
         >>> inputs = image_processor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs)
         >>> # logits are of shape (batch_size, num_labels, height, width)
