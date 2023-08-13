@@ -13,21 +13,22 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# How to create a custom pipeline?
+# 커스텀 파이프라인을 어떻게 생성하나요? [[how-to-create-a-custom-pipeline]]
 
-In this guide, we will see how to create a custom pipeline and share it on the [Hub](hf.co/models) or add it to the
-🤗 Transformers library.
+이 가이드에서는 커스텀 파이프라인을 어떻게 생성하고 [허브](hf.co/models)에 공유하거나 🤗 Transformers 라이브러리에 추가하는 방법을 살펴보겠습니다.
 
-First and foremost, you need to decide the raw entries the pipeline will be able to take. It can be strings, raw bytes,
-dictionaries or whatever seems to be the most likely desired input. Try to keep these inputs as pure Python as possible
-as it makes compatibility easier (even through other languages via JSON). Those will be the `inputs` of the
-pipeline (`preprocess`).
+먼저, 파이프라인이 수용할 수 있는 원시 엔트리를 결정해야 합니다.
+문자열, 바이트, 사전 또는 가장 원하는 입력에 가장 적합한 것을 선택할 수 있습니다.
+이 입력을 가능한 한 순수한 Python 형식으로 유지하는 것이 좋습니다.
+이렇게 하면 호환성이 쉬워집니다(다른 언어를 통한 JSON을 통해 가능).
+이러한 것들은 파이프라인의 `inputs`(전처리)이 될 것입니다.
 
-Then define the `outputs`. Same policy as the `inputs`. The simpler, the better. Those will be the outputs of
-`postprocess` method.
+그런 다음 `outputs`를 정의합니다.
+`inputs`와 같은 정책을 따릅니다.
+간단할수록 좋습니다.
+이것들은 `postprocess` 메서드의 출력이 될 것입니다.
 
-Start by inheriting the base class `Pipeline` with the 4 methods needed to implement `preprocess`,
-`_forward`, `postprocess`, and `_sanitize_parameters`.
+먼저 4개의 메서드(`preprocess`, `_forward`, `postprocess` 및 `_sanitize_parameters`)를 구현하기 위해 기본 클래스 `Pipeline`을 상속하여 시작합니다.
 
 
 ```python
@@ -56,27 +57,25 @@ class MyPipeline(Pipeline):
         return best_class
 ```
 
-The structure of this breakdown is to support relatively seamless support for CPU/GPU, while supporting doing
-pre/postprocessing on the CPU on different threads
+이 분해 구조의 목적은 CPU/GPU에 대한 비교적 원활한 지원을 제공하면서, CPU에서 다른 스레드에서 사전/후처리를 수행할 수 있는 지원을 제공하는 것입니다.
 
-`preprocess` will take the originally defined inputs, and turn them into something feedable to the model. It might
-contain more information and is usually a `Dict`.
+`preprocess`는 최초에 정의된 입력을 가져와 모델에 피드할 수 있는 형식으로 변환합니다.
+더 많은 정보를 포함할 수 있으며 일반적으로 `Dict` 형태입니다.
 
-`_forward` is the implementation detail and is not meant to be called directly. `forward` is the preferred
-called method as it contains safeguards to make sure everything is working on the expected device. If anything is
-linked to a real model it belongs in the `_forward` method, anything else is in the preprocess/postprocess.
+`_forward`는 구현 세부 사항이며 직접 호출되지 않도록 설계되었습니다. 
+`forward`가 호출될 때 모든 것이 예상된 장치에서 작동되는지 확인하기 위한 보호 장치가 포함되어 있습니다.
+실제 모델과 관련된 것은 `_forward` 메서드에 속하며, 나머지는 전처리/후처리에 속합니다.
 
-`postprocess` methods will take the output of `_forward` and turn it into the final output that was decided
-earlier.
+`postprocess` 메서드는 `_forward`의 출력을 가져와 이전에 결정한 최종 출력 형식으로 변환합니다.
 
-`_sanitize_parameters` exists to allow users to pass any parameters whenever they wish, be it at initialization
-time `pipeline(...., maybe_arg=4)` or at call time `pipe = pipeline(...); output = pipe(...., maybe_arg=4)`.
+`_sanitize_parameters`는 사용자가 원하는 경우 언제든지 매개변수를 전달할 수 있도록 허용합니다. 초기화 시간에 `pipeline(...., maybe_arg=4)`이나 호출 시간에 `pipe = pipeline(...); output = pipe(...., maybe_arg=4)`과 같이 사용할 수 있습니다.
 
-The returns of `_sanitize_parameters` are the 3 dicts of kwargs that will be passed directly to `preprocess`,
-`_forward`, and `postprocess`. Don't fill anything if the caller didn't call with any extra parameter. That
-allows to keep the default arguments in the function definition which is always more "natural".
+`_sanitize_parameters`의 반환 값은 `preprocess`, `_forward`, `postprocess`에 직접 전달되는 3개의 kwargs 딕셔너리입니다.
+호출자가 추가 매개변수로 호출하지 않았다면 아무것도 채우지 마십시오.
+이렇게 하면 함수 정의의 기본 인수를 유지할 수 있습니다.
+이것이 항상 더 "자연스러운" 것입니다.
 
-A classic example would be a `top_k` argument in the post processing in classification tasks.
+분류 작업에서 `top_k` 매개변수가 대표적인 예입니다.
 
 ```python
 >>> pipe = pipeline("my-new-task")
@@ -88,8 +87,7 @@ A classic example would be a `top_k` argument in the post processing in classifi
 [{"label": "1-star", "score": 0.8}, {"label": "2-star", "score": 0.1}]
 ```
 
-In order to achieve that, we'll update our `postprocess` method with a default parameter to `5`. and edit
-`_sanitize_parameters` to allow this new parameter.
+이를 달성하기 위해 우리는 `postprocess` 메서드를 기본 매개변수인 `5`로 업데이트하고 `_sanitize_parameters`를 수정하여 이 새 매개변수를 허용합니다.
 
 
 ```python
@@ -110,15 +108,15 @@ def _sanitize_parameters(self, **kwargs):
     return preprocess_kwargs, {}, postprocess_kwargs
 ```
 
-Try to keep the inputs/outputs very simple and ideally JSON-serializable as it makes the pipeline usage very easy
-without requiring users to understand new kind of objects. It's also relatively common to support many different types
-of arguments for ease of use (audio files, can be filenames, URLs or pure bytes)
+입력/출력을 가능한한 간단하고 이상적으로 JSON 직렬화 가능한 형식으로 유지하려고 노력하십시오.
+이렇게 하면 사용자가 새로운 종류의 개체를 이해하지 않고도 파이프라인을 쉽게 사용할 수 있습니다.
+또한 사용 용이성을 위해 여러 가지 유형의 인수를 지원하는 것이 상대적으로 흔한 방법입니다(오디오 파일은 파일 이름, URL 또는 순수한 바이트일 수 있음).
 
 
 
-## Adding it to the list of supported tasks
+## 지원되는 작업 목록에 추가하기 [[adding-it-to-the-list-of-supported-tasks]]
 
-To register your `new-task` to the list of supported tasks, you have to add it to the `PIPELINE_REGISTRY`:
+`new-task`를 지원되는 작업 목록에 등록하려면 `PIPELINE_REGISTRY`에 추가해야 합니다:
 
 ```python
 from transformers.pipelines import PIPELINE_REGISTRY
@@ -130,7 +128,7 @@ PIPELINE_REGISTRY.register_pipeline(
 )
 ```
 
-You can specify a default model if you want, in which case it should come with a specific revision (which can be the name of a branch or a commit hash, here we took `"abcdef"`) as well as the type:
+원하는 경우 기본 모델을 지정할 수 있으며, 이 경우 특정 리비전(분기 이름 또는 커밋 해시일 수 있음, 여기서는 "abcdef")과 유형을 함께 가져와야 합니다:
 
 ```python
 PIPELINE_REGISTRY.register_pipeline(
@@ -142,10 +140,10 @@ PIPELINE_REGISTRY.register_pipeline(
 )
 ```
 
-## Share your pipeline on the Hub
+## 허브에 파이프라인 공유하기 [[share-your-pipeline-on-the-hub]]
 
-To share your custom pipeline on the Hub, you just have to save the custom code of your `Pipeline` subclass in a
-python file. For instance, let's say we want to use a custom pipeline for sentence pair classification like this:
+허브에 사용자 지정 파이프라인을 공유하려면 `Pipeline` 하위 클래스의 사용자 지정 코드를 Python 파일에 저장하기만 하면 됩니다.
+예를 들어, 다음과 같이 문장 쌍 분류를 위한 사용자 정의 파이프라인을 사용하려는 경우:
 
 ```py
 import numpy as np
@@ -183,8 +181,8 @@ class PairClassificationPipeline(Pipeline):
         return {"label": label, "score": score, "logits": logits}
 ```
 
-The implementation is framework agnostic, and will work for PyTorch and TensorFlow models. If we have saved this in
-a file named `pair_classification.py`, we can then import it and register it like this:
+구현은 프레임워크에 독립적이며 PyTorch와 TensorFlow 모델 모두에서 작동합니다.
+이를 `pair_classification.py`라는 파일에 저장한 경우 다음과 같이 가져오고 등록할 수 있습니다:
 
 ```py
 from pair_classification import PairClassificationPipeline
@@ -199,8 +197,8 @@ PIPELINE_REGISTRY.register_pipeline(
 )
 ```
 
-Once this is done, we can use it with a pretrained model. For instance `sgugger/finetuned-bert-mrpc` has been
-fine-tuned on the MRPC dataset, which classifies pairs of sentences as paraphrases or not.
+이 작업이 완료되면 사전 훈련된 모델과 함께 사용할 수 있습니다.
+예를 들어, `sgugger/finetuned-bert-mrpc`은 MRPC 데이터셋에서 미세 조정된 모델로 문장 쌍을 패러프레이즈로 분류합니다.
 
 ```py
 from transformers import pipeline
@@ -208,7 +206,7 @@ from transformers import pipeline
 classifier = pipeline("pair-classification", model="sgugger/finetuned-bert-mrpc")
 ```
 
-Then we can share it on the Hub by using the `save_pretrained` method in a `Repository`:
+그런 다음 `Repository`의 `save_pretrained` 메서드를 사용하여 허브에 공유할 수 있습니다:
 
 ```py
 from huggingface_hub import Repository
@@ -218,10 +216,8 @@ classifier.save_pretrained("test-dynamic-pipeline")
 repo.push_to_hub()
 ```
 
-This will copy the file where you defined `PairClassificationPipeline` inside the folder `"test-dynamic-pipeline"`,
-along with saving the model and tokenizer of the pipeline, before pushing everything in the repository
-`{your_username}/test-dynamic-pipeline`. After that anyone can use it as long as they provide the option
-`trust_remote_code=True`:
+이렇게 하면 "test-dynamic-pipeline" 폴더 내에 `PairClassificationPipeline`을 정의한 파일이 복사되며, 파이프라인의 모델과 토크나이저도 저장된 다음 모두 리포지토리 `{your_username}/test-dynamic-pipeline`에 푸시됩니다.
+이후에는 누구나 `trust_remote_code=True` 옵션을 제공하는 한 사용할 수 있습니다.
 
 ```py
 from transformers import pipeline
@@ -229,30 +225,28 @@ from transformers import pipeline
 classifier = pipeline(model="{your_username}/test-dynamic-pipeline", trust_remote_code=True)
 ```
 
-## Add the pipeline to 🤗 Transformers
+## 파이프라인을 🤗 Transformers에 추가하기 [[add-the-pipeline-to-transformers]]
 
-If you want to contribute your pipeline to 🤗 Transformers, you will need to add a new module in the `pipelines` submodule
-with the code of your pipeline, then add it in the list of tasks defined in `pipelines/__init__.py`.
+사용자 정의 파이프라인을 🤗 Transformers에 기여하려면 `pipelines` 하위 모듈에 새 모듈을 추가한 다음, `pipelines/__init__.py`에서 정의된 작업 목록에 추가해야 합니다.
 
-Then you will need to add tests. Create a new file `tests/test_pipelines_MY_PIPELINE.py` with example with the other tests.
+그런 다음 테스트를 추가해야 합니다.
+`tests/test_pipelines_MY_PIPELINE.py`라는 새 파일을 만들고 다른 테스트와 예제를 함께 작성합니다.
 
-The `run_pipeline_test` function will be very generic and run on small random models on every possible
-architecture as defined by `model_mapping` and `tf_model_mapping`.
+`run_pipeline_test` 함수는 매우 일반적이며, `model_mapping` 및 `tf_model_mapping`에서 정의한 모든 가능한 아키텍처에서 작은 무작위 모델에서 실행됩니다.
 
-This is very important to test future compatibility, meaning if someone adds a new model for
-`XXXForQuestionAnswering` then the pipeline test will attempt to run on it. Because the models are random it's
-impossible to check for actual values, that's why there is a helper `ANY` that will simply attempt to match the
-output of the pipeline TYPE.
+이는 미래 호환성을 테스트하는 데 매우 중요합니다.
+즉, 누군가가 `XXXForQuestionAnswering`을 위한 새 모델을 추가하면 파이프라인 테스트는 해당 모델에서 실행하려고 시도합니다.
+모델이 무작위이기 때문에 실제 값을 확인할 수 없으므로 출력 형식을 일치시키기 위한 도우미 `ANY`가 있습니다.
 
-You also *need* to implement 2 (ideally 4) tests.
+또한 2개(이상하게 4개)의 테스트를 구현해야 합니다.
 
-- `test_small_model_pt` : Define 1 small model for this pipeline (doesn't matter if the results don't make sense)
-  and test the pipeline outputs. The results should be the same as `test_small_model_tf`.
-- `test_small_model_tf` : Define 1 small model for this pipeline (doesn't matter if the results don't make sense)
-  and test the pipeline outputs. The results should be the same as `test_small_model_pt`.
-- `test_large_model_pt` (`optional`): Tests the pipeline on a real pipeline where the results are supposed to
-  make sense. These tests are slow and should be marked as such. Here the goal is to showcase the pipeline and to make
-  sure there is no drift in future releases.
-- `test_large_model_tf` (`optional`): Tests the pipeline on a real pipeline where the results are supposed to
-  make sense. These tests are slow and should be marked as such. Here the goal is to showcase the pipeline and to make
-  sure there is no drift in future releases.
+- `test_small_model_pt`: 이 파이프라인에 대한 작은 모델 1개를 정의(결과가 의미 없더라도 상관없음)하고 파이프라인 출력을 테스트합니다.
+결과는 `test_small_model_tf`와 동일해야 합니다.
+- `test_small_model_tf`: 이 파이프라인에 대한 작은 모델 1개를 정의(결과가 의미 없더라도 상관없음)하고 파이프라인 출력을 테스트합니다.
+결과는 `test_small_model_pt`와 동일해야 합니다.
+- `test_large_model_pt`(`선택사항`): 결과가 의미 있는 실제 파이프라인에서 파이프라인을 테스트합니다.
+이러한 테스트는 느리며 그렇게 표시되어야 합니다.
+여기서의 목표는 파이프라인을 쇼케이스하고 미래 릴리스에서의 변화가 없는지 확인하는 것입니다.
+- `test_large_model_tf`(`선택사항`): 결과가 의미 있는 실제 파이프라인에서 파이프라인을 테스트합니다.
+이러한 테스트는 느리며 그렇게 표시되어야 합니다.
+여기서의 목표는 파이프라인을 쇼케이스하고 미래 릴리스에서의 변화가 없는지 확인하는 것입니다.
