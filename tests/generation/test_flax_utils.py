@@ -296,8 +296,12 @@ class FlaxGenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             model = model_class(config)
 
-            jit_generate = jit(model.generate, static_argnames=["output_hidden_states", "output_scores", "return_dict_in_generate"])
-            jit_generation_outputs = jit_generate(input_ids, output_scores=True, output_hidden_states=True, return_dict_in_generate=True)
+            jit_generate = jit(
+                model.generate, static_argnames=["output_hidden_states", "output_scores", "return_dict_in_generate"]
+            )
+            jit_generation_outputs = jit_generate(
+                input_ids, output_scores=True, output_hidden_states=True, return_dict_in_generate=True
+            )
 
             self.assertIsNotNone(jit_generation_outputs.scores)
 
