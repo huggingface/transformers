@@ -35,6 +35,14 @@ else:
         "M2M100PreTrainedModel",
     ]
 
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_m2m_100_fast"] = ["M2M100TokenizerFast"]
+
 
 if TYPE_CHECKING:
     from .configuration_m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config, M2M100OnnxConfig
@@ -52,6 +60,14 @@ if TYPE_CHECKING:
             M2M100Model,
             M2M100PreTrainedModel,
         )
+
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_m2m_100_fast import M2M100TokenizerFast
 
 
 else:
