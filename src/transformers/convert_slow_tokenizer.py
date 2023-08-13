@@ -781,19 +781,19 @@ class M2M100Converter(SpmConverter):
         super().__init__(original_tokenizer)
         original_tokenizer.vocab_file = self.original_vocab_file
 
-    def vocab(self, proto):
-        vocab = [
-            ("<s>", 0.0),
-            ("<pad>", 0.0),
-            ("</s>", 0.0),
-            ("<unk>", 0.0),
-        ]
-        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
+    def vocab(self, proto=None):
+        import json
+
+        with open(self.original_vocab_file) as fp:
+            vocab = json.load(fp)
+
+        vocab = list(sorted(vocab.items(), key=lambda x: x[1]))
         vocab += [
             # fmt: off
             ('__af__', 0.0), ('__am__', 0.0), ('__ar__', 0.0), ('__ast__', 0.0), ('__az__', 0.0), ('__ba__', 0.0), ('__be__', 0.0), ('__bg__', 0.0), ('__bn__', 0.0), ('__br__', 0.0), ('__bs__', 0.0), ('__ca__', 0.0), ('__ceb__', 0.0), ('__cs__', 0.0), ('__cy__', 0.0), ('__da__', 0.0), ('__de__', 0.0), ('__el__', 0.0), ('__en__', 0.0), ('__es__', 0.0), ('__et__', 0.0), ('__fa__', 0.0), ('__ff__', 0.0), ('__fi__', 0.0), ('__fr__', 0.0), ('__fy__', 0.0), ('__ga__', 0.0), ('__gd__', 0.0), ('__gl__', 0.0), ('__gu__', 0.0), ('__ha__', 0.0), ('__he__', 0.0), ('__hi__', 0.0), ('__hr__', 0.0), ('__ht__', 0.0), ('__hu__', 0.0), ('__hy__', 0.0), ('__id__', 0.0), ('__ig__', 0.0), ('__ilo__', 0.0), ('__is__', 0.0), ('__it__', 0.0), ('__ja__', 0.0), ('__jv__', 0.0), ('__ka__', 0.0), ('__kk__', 0.0), ('__km__', 0.0), ('__kn__', 0.0), ('__ko__', 0.0), ('__lb__', 0.0), ('__lg__', 0.0), ('__ln__', 0.0), ('__lo__', 0.0), ('__lt__', 0.0), ('__lv__', 0.0), ('__mg__', 0.0), ('__mk__', 0.0), ('__ml__', 0.0), ('__mn__', 0.0), ('__mr__', 0.0), ('__ms__', 0.0), ('__my__', 0.0), ('__ne__', 0.0), ('__nl__', 0.0), ('__no__', 0.0), ('__ns__', 0.0), ('__oc__', 0.0), ('__or__', 0.0), ('__pa__', 0.0), ('__pl__', 0.0), ('__ps__', 0.0), ('__pt__', 0.0), ('__ro__', 0.0), ('__ru__', 0.0), ('__sd__', 0.0), ('__si__', 0.0), ('__sk__', 0.0), ('__sl__', 0.0), ('__so__', 0.0), ('__sq__', 0.0), ('__sr__', 0.0), ('__ss__', 0.0), ('__su__', 0.0), ('__sv__', 0.0), ('__sw__', 0.0), ('__ta__', 0.0), ('__th__', 0.0), ('__tl__', 0.0), ('__tn__', 0.0), ('__tr__', 0.0), ('__uk__', 0.0), ('__ur__', 0.0), ('__uz__', 0.0), ('__vi__', 0.0), ('__wo__', 0.0), ('__xh__', 0.0), ('__yi__', 0.0), ('__yo__', 0.0), ('__zh__', 0.0), ('__zu__', 0.0)
             # fmt: on
         ]
+        vocab += [(f"<madeupword{i}>", 0.0) for i in range(self.original_tokenizer.num_madeup_words)]
         return vocab
 
     def unk_id(self, proto):
@@ -814,6 +814,53 @@ class M2M100Converter(SpmConverter):
         conv = super().converted()
         self.original_tokenizer.vocab_file = self.original_vocab_file
         return conv
+
+    def tokenizer(self, proto):
+        model_type = proto.trainer_spec.model_type
+        vocab_scores = self.vocab(proto)
+        unk_id = self.unk_id(proto)
+
+        if model_type == 1:
+            tokenizer = Tokenizer(Unigram(vocab_scores, unk_id))
+        elif model_type == 2:
+            _, merges = self.extract(vocab_scores)
+            bpe_vocab = {word: i for i, (word, score) in enumerate(vocab_scores)}
+            tokenizer = Tokenizer(
+                BPE(
+                    bpe_vocab,
+                    merges,
+                    unk_token=proto.trainer_spec.unk_piece,
+                    fuse_unk=True,
+                )
+            )
+        else:
+            raise Exception(
+                "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
+            )
+        return tokenizer
+
+    def extract(self, vocab_scores=None) -> Tuple[Dict[str, int], List[Tuple]]:
+        """
+        By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
+        order the merges with respect to the piece scores instead.
+        """
+        vocab_scores = self.vocab()
+        vocab = dict(x for x in vocab_scores)
+
+        # Merges
+        merges = []
+        for merge, piece_score in vocab_scores:
+            local = []
+            for index in range(1, len(merge)):
+                piece_l, piece_r = merge[:index], merge[index:]
+                if piece_l in vocab and piece_r in vocab:
+                    local.append((piece_l, piece_r, piece_score))
+            local = sorted(local, key=lambda x: (vocab[x[0]], vocab[x[1]]))
+            merges.extend(local)
+
+        merges = sorted(merges, key=lambda val: val[2])
+        merges = [(val[0], val[1]) for val in merges]
+        return vocab, merges
 
 
 class XLMRobertaConverter(SpmConverter):
