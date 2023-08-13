@@ -1850,7 +1850,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
             input_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         hidden_states = outputs[0]
@@ -1858,8 +1858,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         logits = self.lm_head(hidden_states)
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
-            return output
+            return tuple(v for v in (logits, outputs.hidden_states, outputs.attentions) if v is not None)
 
         return MaskedLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
 
@@ -2400,7 +2399,7 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         if self.config.use_weighted_layer_sum:
@@ -2440,8 +2439,11 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
             loss = self.objective(logits, labels)
 
         if not return_dict:
-            output = (logits, output_embeddings) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
+            return tuple(
+                v
+                for v in (loss, logits, output_embeddings, outputs.hidden_states, outputs.attentions)
+                if v is not None
+            )
 
         return XVectorOutput(
             loss=loss,

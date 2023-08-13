@@ -1468,7 +1468,7 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            return_dict=True,
         )
 
         if self.config.use_weighted_layer_sum:
@@ -1508,8 +1508,11 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
             loss = self.objective(logits, labels)
 
         if not return_dict:
-            output = (logits, output_embeddings) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
+            return tuple(
+                v
+                for v in (loss, logits, output_embeddings, outputs.hidden_states, outputs.attentions)
+                if v is not None
+            )
 
         return XVectorOutput(
             loss=loss,
