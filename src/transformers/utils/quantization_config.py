@@ -19,7 +19,8 @@ import importlib.metadata
 import json
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Union
+from enum import Enum
+from typing import Any, Dict, List, Optional, Union
 
 from packaging import version
 
@@ -33,8 +34,100 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+class QuantizationMethod(str, Enum):
+    BITS_AND_BYTES = "bitsandbytes"
+    GPTQ = "gptq"
+
+
 @dataclass
-class BitsAndBytesConfig:
+class QuantizationConfigMixin:
+    """
+    Mixin class for quantization config
+    """
+
+    quant_method: QuantizationMethod
+
+    @classmethod
+    def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
+        """
+        Instantiates a [`QuantizationConfigMixin`] from a Python dictionary of parameters.
+
+        Args:
+            config_dict (`Dict[str, Any]`):
+                Dictionary that will be used to instantiate the configuration object.
+            return_unused_kwargs (`bool`,*optional*, defaults to `False`):
+                Whether or not to return a list of unused keyword arguments. Used for `from_pretrained` method in
+                `PreTrainedModel`.
+            kwargs (`Dict[str, Any]`):
+                Additional parameters from which to initialize the configuration object.
+
+        Returns:
+            [`QuantizationConfigMixin`]: The configuration object instantiated from those parameters.
+        """
+
+        config = cls(**config_dict)
+
+        to_remove = []
+        for key, value in kwargs.items():
+            if hasattr(config, key):
+                setattr(config, key, value)
+                to_remove.append(key)
+        for key in to_remove:
+            kwargs.pop(key, None)
+
+        if return_unused_kwargs:
+            return config, kwargs
+        else:
+            return config
+
+    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+        """
+        Save this instance to a JSON file.
+
+        Args:
+            json_file_path (`str` or `os.PathLike`):
+                Path to the JSON file in which this configuration instance's parameters will be saved.
+            use_diff (`bool`, *optional*, defaults to `True`):
+                If set to `True`, only the difference between the config instance and the default
+                `QuantizationConfig()` is serialized to JSON file.
+        """
+        with open(json_file_path, "w", encoding="utf-8") as writer:
+            config_dict = self.to_dict()
+            json_string = json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
+
+            writer.write(json_string)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary. Returns:
+            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        return copy.deepcopy(self.__dict__)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__} {self.to_json_string()}"
+
+    def to_json_string(self, use_diff: bool = True) -> str:
+        """
+        Serializes this instance to a JSON string.
+
+        Args:
+            use_diff (`bool`, *optional*, defaults to `True`):
+                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
+                is serialized to JSON string.
+
+        Returns:
+            `str`: String containing all the attributes that make up this configuration instance in JSON format.
+        """
+        if use_diff is True:
+            config_dict = self.to_diff_dict()
+        else:
+            config_dict = self.to_dict()
+        return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
+
+
+@dataclass
+class BitsAndBytesConfig(QuantizationConfigMixin):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
     loaded using `bitsandbytes`.
@@ -97,6 +190,7 @@ class BitsAndBytesConfig:
         bnb_4bit_use_double_quant=False,
         **kwargs,
     ):
+        self.quant_method = QuantizationMethod.BITS_AND_BYTES
         self.load_in_8bit = load_in_8bit
         self.load_in_4bit = load_in_4bit
         self.llm_int8_threshold = llm_int8_threshold
@@ -168,87 +262,15 @@ class BitsAndBytesConfig:
         else:
             return None
 
-    @classmethod
-    def from_dict(cls, config_dict, return_unused_kwargs, **kwargs):
-        """
-        Instantiates a [`BitsAndBytesConfig`] from a Python dictionary of parameters.
-
-        Args:
-            config_dict (`Dict[str, Any]`):
-                Dictionary that will be used to instantiate the configuration object.
-            return_unused_kwargs (`bool`):
-                Whether or not to return a list of unused keyword arguments. Used for `from_pretrained` method in
-                `PreTrainedModel`.
-            kwargs (`Dict[str, Any]`):
-                Additional parameters from which to initialize the configuration object.
-
-        Returns:
-            [`BitsAndBytesConfig`]: The configuration object instantiated from those parameters.
-        """
-
-        config = cls(**config_dict)
-
-        to_remove = []
-        for key, value in kwargs.items():
-            if hasattr(config, key):
-                setattr(config, key, value)
-                to_remove.append(key)
-        for key in to_remove:
-            kwargs.pop(key, None)
-
-        if return_unused_kwargs:
-            return config, kwargs
-        else:
-            return config
-
-    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
-        """
-        Save this instance to a JSON file.
-
-        Args:
-            json_file_path (`str` or `os.PathLike`):
-                Path to the JSON file in which this configuration instance's parameters will be saved.
-            use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default
-                `BitsAndBytesConfig()` is serialized to JSON file.
-        """
-        with open(json_file_path, "w", encoding="utf-8") as writer:
-            config_dict = self.to_dict()
-            json_string = json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
-
-            writer.write(json_string)
-
     def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
-
         output = copy.deepcopy(self.__dict__)
         output["bnb_4bit_compute_dtype"] = str(output["bnb_4bit_compute_dtype"]).split(".")[1]
 
         return output
-
-    def __repr__(self):
-        return f"{self.__class__.__name__} {self.to_json_string()}"
-
-    def to_json_string(self, use_diff: bool = True) -> str:
-        """
-        Serializes this instance to a JSON string.
-
-        Args:
-            use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
-                is serialized to JSON string.
-
-        Returns:
-            `str`: String containing all the attributes that make up this configuration instance in JSON format.
-        """
-        if use_diff is True:
-            config_dict = self.to_diff_dict()
-        else:
-            config_dict = self.to_dict()
-        return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
     def to_diff_dict(self) -> Dict[str, Any]:
         """
@@ -271,3 +293,119 @@ class BitsAndBytesConfig:
                 serializable_config_dict[key] = value
 
         return serializable_config_dict
+
+
+@dataclass
+class GPTQConfig(QuantizationConfigMixin):
+    """
+    This is a wrapper class about all possible attributes and features that you can play with a model that has been
+    loaded using `optimum` api for gptq quantization relying on auto_gptq backend.
+
+    Args:
+        bits (`int`):
+            The number of bits to quantize to, supported numbers are (2, 3, 4, 8).
+        tokenizer (`str` or `PreTrainedTokenizerBase`, *optional*):
+            The tokenizer used to process the dataset. You can pass either:
+                - A custom tokenizer object.
+                - A string, the *model id* of a predefined tokenizer hosted inside a model repo on huggingface.co.
+                    Valid model ids can be located at the root-level, like `bert-base-uncased`, or namespaced under a
+                    user or organization name, like `dbmdz/bert-base-german-cased`.
+                - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
+                    using the [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
+        dataset (`Union[List[str]]`, *optional*):
+            The dataset used for quantization. You can provide your own dataset in a list of string or just use the
+            original datasets used in GPTQ paper ['wikitext2','c4','c4-new','ptb','ptb-new']
+        group_size (`int`, *optional*, defaults to 128):
+            The group size to use for quantization. Recommended value is 128 and -1 uses per-column quantization.
+        damp_percent (`float`, *optional*, defaults to 0.01):
+            The percent of the average Hessian diagonal to use for dampening. Recommended value is 0.01.
+        desc_act (`bool`, *optional*, defaults to `True`):
+            Whether to quantize columns in order of decreasing activation size. Setting it to False can significantly
+            speed up inference but the perplexity may become slightly worse. Also known as act-order.
+        sym (`bool`, *optional*, defaults to `True`):
+            Whether to use symetric quantization.
+        true_sequential (`bool`, *optional*, defaults to `True`):
+            Whether to perform sequential quantization even within a single Transformer block. Instead of quantizing
+            the entire block at once, we perform layer-wise quantization. As a result, each layer undergoes
+            quantization using inputs that have passed through the previously quantized layers.
+        use_cuda_fp16 (`bool`, *optional*, defaults to `False`):
+            Whether or not to use optimized cuda kernel for fp16 model. Need to have model in fp16.
+        model_seqlen (`int`, *optional*):
+            The maximum sequence length that the model can take.
+        block_name_to_quantize (`str`, *optional*):
+            The transformers block name to quantize.
+        module_name_preceding_first_block (`List[str]`, *optional*):
+            The layers that are preceding the first Transformer block.
+        batch_size (`int`, *optional*, defaults to 1):
+            The batch size used when processing the dataset
+        pad_token_id (`int`, *optional*):
+            The pad token id. Needed to prepare the dataset when `batch_size` > 1.
+        disable_exllama (`bool`, *optional*, defaults to `False`):
+            Whether to use exllama backend. Only works with `bits` = 4.
+    """
+
+    def __init__(
+        self,
+        bits: int,
+        tokenizer: Any = None,
+        dataset: Optional[Union[List[str], str]] = None,
+        group_size: int = 128,
+        damp_percent: float = 0.01,
+        desc_act: bool = True,
+        sym: bool = True,
+        true_sequential: bool = True,
+        use_cuda_fp16: bool = False,
+        model_seqlen: Optional[int] = None,
+        block_name_to_quantize: Optional[str] = None,
+        module_name_preceding_first_block: Optional[List[str]] = None,
+        batch_size: int = 1,
+        pad_token_id: Optional[int] = None,
+        disable_exllama: bool = False,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.GPTQ
+        self.bits = bits
+        self.tokenizer = tokenizer
+        self.dataset = dataset
+        self.group_size = group_size
+        self.damp_percent = damp_percent
+        self.desc_act = desc_act
+        self.sym = sym
+        self.true_sequential = true_sequential
+        self.use_cuda_fp16 = use_cuda_fp16
+        self.model_seqlen = model_seqlen
+        self.block_name_to_quantize = block_name_to_quantize
+        self.module_name_preceding_first_block = module_name_preceding_first_block
+        self.batch_size = batch_size
+        self.pad_token_id = pad_token_id
+        self.disable_exllama = disable_exllama
+        self.post_init()
+
+    def get_loading_attributes(self):
+        attibutes_dict = copy.deepcopy(self.__dict__)
+        loading_attibutes = ["disable_exllama", "use_cuda_fp16"]
+        loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
+        return loading_attibutes_dict
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        if self.bits not in [2, 4, 6, 8]:
+            raise ValueError(f"Only support quantization to [2,4,6,8] bits but found {self.bits}")
+        if self.group_size != -1 and self.group_size <= 0:
+            raise ValueError("group_size must be greater than 0 or equal to -1")
+        if not (0 < self.damp_percent < 1):
+            raise ValueError("damp_percent must between 0 and 1.")
+        if self.dataset is not None:
+            if isinstance(self.dataset, str):
+                if self.dataset not in ["wikitext2", "c4", "c4-new", "ptb", "ptb-new"]:
+                    raise ValueError(
+                        f"""You have entered a string value for dataset. You can only choose between
+                        ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
+                    )
+            elif not isinstance(self.dataset, list):
+                raise ValueError(
+                    f"""dataset needs to be either a list of string or a value in
+                    ['wikitext2','c4','c4-new','ptb','ptb-new'], but we found {self.dataset}"""
+                )

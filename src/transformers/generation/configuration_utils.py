@@ -354,8 +354,8 @@ class GenerationConfig(PushToHubMixin):
         # 1. detect sampling-only parameterization when not in sampling mode
         if self.do_sample is False:
             greedy_wrong_parameter_msg = (
-                "`do_sample` is set to `False`. However, {flag_name} is set to {flag_value} -- this flag is only used "
-                "in sample-based generation modes. You should set `do_sample=True` or unset {flag_name}."
+                "`do_sample` is set to `False`. However, `{flag_name}` is set to `{flag_value}` -- this flag is only "
+                "used in sample-based generation modes. You should set `do_sample=True` or unset `{flag_name}`."
                 + fix_location
             )
             if self.temperature != 1.0:
@@ -392,8 +392,8 @@ class GenerationConfig(PushToHubMixin):
         # 2. detect beam-only parameterization when not in beam mode
         if self.num_beams == 1:
             single_beam_wrong_parameter_msg = (
-                "`num_beams` is set to 1. However, {flag_name} is set to {flag_value} -- this flag is only used in "
-                "beam-based generation modes. You should set `num_beams>1` or unset {flag_name}." + fix_location
+                "`num_beams` is set to 1. However, `{flag_name}` is set to `{flag_value}` -- this flag is only used "
+                "in beam-based generation modes. You should set `num_beams>1` or unset `{flag_name}`." + fix_location
             )
             if self.early_stopping is not False:
                 warnings.warn(
@@ -430,9 +430,9 @@ class GenerationConfig(PushToHubMixin):
             # constrained beam search
             if self.constraints is not None:
                 constrained_wrong_parameter_msg = (
-                    "`constraints` is not `None`, triggering constrained beam search. However, {flag_name} is set to "
-                    "{flag_value}, which is incompatible with this generation mode. Set `constraints=None` or unset "
-                    "{flag_name} to continue." + fix_location
+                    "`constraints` is not `None`, triggering constrained beam search. However, `{flag_name}` is set "
+                    "to `{flag_value}`, which is incompatible with this generation mode. Set `constraints=None` or "
+                    "unset `{flag_name}` to continue." + fix_location
                 )
                 if self.do_sample is True:
                     raise ValueError(
@@ -497,6 +497,22 @@ class GenerationConfig(PushToHubMixin):
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
+
+        # At save time, validate the instance -- if any warning/exception is thrown, we refuse to save the instance
+        try:
+            with warnings.catch_warnings(record=True) as caught_warnings:
+                self.validate()
+            for w in caught_warnings:
+                raise ValueError(w.message)
+        except ValueError as exc:
+            warnings.warn(
+                "The generation config instance is invalid -- `.validate()` throws warnings and/or exceptions. "
+                "Fix these issues to save the configuration. This warning will be raised to an exception in v4.34."
+                "\n\nThrown during validation:\n" + str(exc),
+                UserWarning,
+            )
+            return
+
         use_auth_token = kwargs.pop("use_auth_token", None)
 
         if use_auth_token is not None:
