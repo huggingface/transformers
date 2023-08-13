@@ -244,30 +244,6 @@ class TFSwiftFormerModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.T
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    def test_initialization(self):
-        def _config_zero_init(config):
-            configs_no_init = copy.deepcopy(config)
-            for key in configs_no_init.__dict__.keys():
-                if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
-                    setattr(configs_no_init, key, 1e-10)
-                if isinstance(getattr(configs_no_init, key, None), PretrainedConfig):
-                    no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
-                    setattr(configs_no_init, key, no_init_subconfig)
-            return configs_no_init
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9) / 1e9).round().item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
 
 # We will verify our results on an image of cute cats
 def prepare_img():
