@@ -775,9 +775,8 @@ class NllbConverter(SpmConverter):
 class M2M100Converter(SpmConverter):
     def __init__(self, original_tokenizer):
         self.original_vocab_file = original_tokenizer.vocab_file
-        self.original_bpe_model = self.original_vocab_file.replace("vocab.json", "sentencepiece.bpe.model")
 
-        original_tokenizer.vocab_file = self.original_bpe_model
+        original_tokenizer.vocab_file = self.original_vocab_file.replace("vocab.json", "sentencepiece.bpe.model")
         super().__init__(original_tokenizer)
         original_tokenizer.vocab_file = self.original_vocab_file
 
@@ -808,12 +807,6 @@ class M2M100Converter(SpmConverter):
                 ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
             ],
         )
-
-    def converted(self) -> Tokenizer:
-        self.original_tokenizer.vocab_file = self.original_bpe_model
-        conv = super().converted()
-        self.original_tokenizer.vocab_file = self.original_vocab_file
-        return conv
 
     def tokenizer(self, proto):
         model_type = proto.trainer_spec.model_type
