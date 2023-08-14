@@ -268,7 +268,6 @@ class IdeficsConfig(PretrainedConfig):
         freeze_vision_layers=True,
         freeze_vision_module_exceptions=[],
         use_resampler=False,
-        is_encoder_decoder=True,
         vision_config=None,
         perceiver_config=None,
         **kwargs,
@@ -298,7 +297,6 @@ class IdeficsConfig(PretrainedConfig):
         self.freeze_lm_head = freeze_lm_head
 
         self.use_resampler = use_resampler
-        self.is_encoder_decoder = is_encoder_decoder
 
         if perceiver_config is None:
             self.perceiver_config = IdeficsPerceiverConfig()
