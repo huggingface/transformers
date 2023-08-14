@@ -614,7 +614,15 @@ if is_torch_available():
     # Set env var CUDA_VISIBLE_DEVICES="" to force cpu-mode
     import torch
 
-    if torch.cuda.is_available():
+    if "TRANSFORMERS_TEST_DEVICE" in os.environ:
+        torch_device = os.environ["TRANSFORMERS_TEST_DEVICE"]
+        available_backends = ["cuda", "cpu", "mps"]
+        if torch_device not in available_backends:
+            raise ValueError(
+                f"unknown torch backend for transformers tests: {torch_device}. Available backends are:"
+                f" {available_backends}"
+            )
+    elif torch.cuda.is_available():
         torch_device = "cuda"
     elif _run_third_party_device_tests and is_torch_npu_available():
         torch_device = "npu"
