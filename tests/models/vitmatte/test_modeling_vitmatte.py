@@ -197,6 +197,10 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             model = VitMatteForImageMatting.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skip(reason="ViTMatte does not support retaining gradient on attention logits")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
