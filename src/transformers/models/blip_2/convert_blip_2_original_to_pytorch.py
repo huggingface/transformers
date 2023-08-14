@@ -38,6 +38,7 @@ from transformers import (
     BlipImageProcessor,
     OPTConfig,
     T5Config,
+    set_seed,
 )
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
@@ -148,11 +149,14 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     name, type = model_name_to_original[model_name]
 
+    # note: this script is tested on 2 GPUs, as models are compared in float32,
+    # which requires quite some memory. Hence loading both on a
+    # separate device is the easiest to compare
+    hf_model_device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    lavis_device = "cuda:1" if torch.cuda.is_available() else "cpu"
+
     # load original model
     print("Loading original model...")
-    hf_model_device = "cuda:1" if torch.cuda.is_available() else "cpu"
-    lavis_device = "cuda:2" if torch.cuda.is_available() else "cpu"
-
     original_model, vis_processors, _ = load_model_and_preprocess(
         name=name, model_type=type, is_eval=True, device=lavis_device
     )
@@ -228,8 +232,6 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     prompt = "Question: what object is in this image? Answer:"
     # prompt = "Question: what is the structure and geometry of this chair?"
     input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(hf_model_device)
-
-    from transformers import set_seed
 
     set_seed(42)
 

@@ -1693,15 +1693,14 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
 
         >>> processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
         >>> model = Blip2ForConditionalGeneration.from_pretrained(
-        ...     "Salesforce/blip2-opt-2.7b", torch_dtype=torch.float16
-        ... )
-        >>> model.to(device)  # doctest: +IGNORE_RESULT
+        ...     "Salesforce/blip2-opt-2.7b", load_in_8bit=True, device_map={"": 0}, torch_dtype=torch.float16
+        ... )  # doctest: +IGNORE_RESULT
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> prompt = "Question: how many cats are there? Answer:"
-        >>> inputs = processor(images=image, text=prompt, return_tensors="pt").to(device, torch.float16)
+        >>> inputs = processor(images=image, text=prompt, return_tensors="pt").to(device="cuda", dtype=torch.float16)
 
         >>> generated_ids = model.generate(**inputs)
         >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0].strip()
@@ -1720,7 +1719,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
 
         >>> processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
         >>> model = Blip2ForConditionalGeneration.from_pretrained(
-        ...     "Salesforce/blip2-flan-t5-xl", load_in_8bit=True, device_map="auto", torch_dtype=torch.bfloat16
+        ...     "Salesforce/blip2-flan-t5-xl", load_in_8bit=True, device_map={"": 0}, torch_dtype=torch.bfloat16
         ... )  # doctest: +IGNORE_RESULT
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
