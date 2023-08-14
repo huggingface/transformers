@@ -1085,19 +1085,19 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
 
 class HammingDiversityLogitsProcessor(LogitsProcessor):
     r"""
-    [`LogitsProcessor`] that enforces diverse beam search. 
-    
+    [`LogitsProcessor`] that enforces diverse beam search.
+
     Note that this logits processor is only effective for
     [`PreTrainedModel.group_beam_search`]. See [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence
     Models](https://arxiv.org/pdf/1610.02424.pdf) for more details.
 
     <Tip>
 
-    Diverse beam search can be particularly useful in scenarios where a variety of different outputs is desired, rather than multiple similar sequences. 
+    Diverse beam search can be particularly useful in scenarios where a variety of different outputs is desired, rather than multiple similar sequences.
     It allows the model to explore different generation paths and provides a broader coverage of possible outputs.
 
     </Tip>
-    
+
     <Warning>
 
     This logits processor can be resource-intensive, especially when using large models or long sequences.
@@ -1168,7 +1168,7 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
 
             # Set up for diverse beam search
             num_beams = 6
-            num_beam_groups = 2 
+            num_beam_groups = 2
 
             model_kwargs = {
                 "encoder_outputs": model.get_encoder()(
