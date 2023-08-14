@@ -10,6 +10,8 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
+    import torch
+
     from ..models.auto.modeling_auto import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
@@ -116,9 +118,20 @@ class VisualQuestionAnsweringPipeline(Pipeline):
 
     def preprocess(self, inputs, padding=False, truncation=False, timeout=None):
         image = load_image(inputs["image"], timeout=timeout)
-        model_inputs = self.tokenizer(
-            inputs["question"], return_tensors=self.framework, padding=padding, truncation=truncation
-        )
+
+        model_type = self.model.config.model_type
+
+        if model_type == "git":
+            input_ids = self.tokenizer(text=inputs["question"], add_special_tokens=False).input_ids
+            input_ids = [self.tokenizer.cls_token_id] + input_ids
+            input_ids = torch.tensor(input_ids).unsqueeze(0)
+            model_inputs = {"input_ids": input_ids}
+
+        else:
+            model_inputs = self.tokenizer(
+                inputs["question"], return_tensors=self.framework, padding=padding, truncation=truncation
+            )
+
         image_features = self.image_processor(images=image, return_tensors=self.framework)
         model_inputs.update(image_features)
         return model_inputs

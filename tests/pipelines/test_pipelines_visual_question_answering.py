@@ -121,6 +121,21 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         outputs = vqa_pipeline(image=image, question=question)
         self.assertEqual(outputs, [{"answer": ANY(str)}])
 
+    @require_torch
+    def test_small_model_pt_git(self):
+        vqa_pipeline = pipeline("visual-question-answering", model="hf-internal-testing/tiny-random-GitForCausalLM")
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        question = "How many cats are there?"
+
+        outputs = vqa_pipeline(image=image, question=question)
+        self.assertEqual(outputs, [{"answer": ANY(str)}])
+
+        outputs = vqa_pipeline({"image": image, "question": question})
+        self.assertEqual(outputs, [{"answer": ANY(str)}])
+
+        outputs = vqa_pipeline([{"image": image, "question": question}, {"image": image, "question": question}])
+        self.assertEqual(outputs, [[{"answer": ANY(str)}]] * 2)
+
     @slow
     @require_torch
     def test_large_model_pt(self):
@@ -170,6 +185,22 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
 
         outputs = vqa_pipeline([{"image": image, "question": question}, {"image": image, "question": question}])
         self.assertEqual(outputs, [[{"answer": "two"}]] * 2)
+
+    @slow
+    @require_torch
+    def test_large_model_pt_git(self):
+        vqa_pipeline = pipeline("visual-question-answering", model="microsoft/git-base-textvqa")
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        question = "How many cats are there?"
+
+        outputs = vqa_pipeline(image=image, question=question)
+        self.assertEqual(outputs, [{"answer": "how many cats are there? 3"}])
+
+        outputs = vqa_pipeline({"image": image, "question": question})
+        self.assertEqual(outputs, [{"answer": "how many cats are there? 3"}])
+
+        outputs = vqa_pipeline([{"image": image, "question": question}, {"image": image, "question": question}])
+        self.assertEqual(outputs, [[{"answer": "how many cats are there? 3"}]] * 2)
 
     @require_tf
     @unittest.skip("Visual question answering not implemented in TF")
