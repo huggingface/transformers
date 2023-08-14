@@ -65,7 +65,6 @@ def expand_inputs_for_generation(
     )
     input_ids = input_ids.index_select(0, expanded_return_idx)
 
-    model_kwargs["pixel_values"] = model_kwargs.get("pixel_values", None)
     model_kwargs["image_encoder_embeddings"] = model_kwargs.get("image_encoder_embeddings", None)
     model_kwargs["perceiver_embeddings"] = model_kwargs.get("perceiver_embeddings", None)
     model_kwargs["image_attention_mask"] = model_kwargs.get("image_attention_mask", None)
@@ -82,10 +81,7 @@ def expand_inputs_for_generation(
             0, expanded_return_idx
         )
 
-    if model_kwargs["pixel_values"] is not None:
-        model_kwargs["pixel_values"] = model_kwargs["pixel_values"].index_select(0, expanded_return_idx)
-
-    elif model_kwargs["image_encoder_embeddings"] is not None:
+    if model_kwargs["image_encoder_embeddings"] is not None:
         model_kwargs["image_encoder_embeddings"] = model_kwargs["image_encoder_embeddings"].index_select(
             0, expanded_return_idx
         )
@@ -95,17 +91,10 @@ def expand_inputs_for_generation(
             0, expanded_return_idx
         )
 
-    if is_encoder_decoder:
-        if encoder_outputs is None:
-            raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
-        encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.index_select(
-            0, expanded_return_idx.to(encoder_outputs.last_hidden_state.device)
-        )
-        model_kwargs["encoder_outputs"] = encoder_outputs
     return input_ids, model_kwargs
 
 
-def update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder=False):
+def update_model_kwargs_for_generation(outputs, model_kwargs):
     # must have this key set to at least None
     model_kwargs["past_key_values"] = model_kwargs.get("past_key_values", None)
 
@@ -125,16 +114,15 @@ def update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder
         model_kwargs["token_type_ids"] = torch.cat([token_type_ids, token_type_ids[:, -1].unsqueeze(-1)], dim=-1)
 
     # update attention masks
-    if not is_encoder_decoder:
-        if "attention_mask" in model_kwargs:
-            attention_mask = model_kwargs["attention_mask"]
-            model_kwargs["attention_mask"] = torch.cat(
-                [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
-            )
-        if "image_attention_mask" in model_kwargs:
-            image_attention_mask = model_kwargs["image_attention_mask"]
-            last_mask = image_attention_mask[:, -1, :].unsqueeze(1)
-            model_kwargs["image_attention_mask"] = last_mask
+    if "attention_mask" in model_kwargs:
+        attention_mask = model_kwargs["attention_mask"]
+        model_kwargs["attention_mask"] = torch.cat(
+            [attention_mask, attention_mask.new_ones((attention_mask.shape[0], 1))], dim=-1
+        )
+    if "image_attention_mask" in model_kwargs:
+        image_attention_mask = model_kwargs["image_attention_mask"]
+        last_mask = image_attention_mask[:, -1, :].unsqueeze(1)
+        model_kwargs["image_attention_mask"] = last_mask
 
     return model_kwargs
 
@@ -157,12 +145,9 @@ def prepare_inputs_for_generation(input_ids, past=None, **kwargs):
         if past:
             position_ids = position_ids[:, -1].unsqueeze(-1)
 
-    pixel_values = kwargs.get("pixel_values", None)
     image_encoder_embeddings = kwargs.get("image_encoder_embeddings", None)
     perceiver_embeddings = kwargs.get("perceiver_embeddings", None)
     image_attention_mask = kwargs.get("image_attention_mask", None)
-    # if pixel_values is None or image_attention_mask is None:
-    #     raise ValueError("pixel values and image attention mask cannot be None")
 
     return {
         "input_ids": input_ids,
@@ -171,7 +156,6 @@ def prepare_inputs_for_generation(input_ids, past=None, **kwargs):
         "position_ids": position_ids,
         "attention_mask": attention_mask,
         "token_type_ids": token_type_ids,
-        "pixel_values": pixel_values,
         "image_encoder_embeddings": image_encoder_embeddings,
         "perceiver_embeddings": perceiver_embeddings,
         "image_attention_mask": image_attention_mask,
@@ -1475,6 +1459,54 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+    def _prepare_encoder_decoder_kwargs_for_generation(self, inputs_tensor, model_kwargs, model_input_name):
+        pixel_values = model_kwargs.get("pixel_values", None)
+        image_encoder_embeddings = model_kwargs.get("image_encoder_embeddings", None)
+        model_kwargs["perceiver_embeddings"] = model_kwargs.get("perceiver_embeddings", None)
+
+        if image_encoder_embeddings is not None:
+            batch_size, num_images, image_seq_len, image_hidden_size = image_encoder_embeddings.size()
+            image_encoder_embeddings = image_encoder_embeddings.view(
+                batch_size * num_images, image_seq_len, image_hidden_size
+            )
+
+        elif pixel_values is not None:
+            batch_size, num_images = pixel_values.shape[:2]
+            pixel_values = pixel_values.contiguous().view(batch_size * num_images, *pixel_values.shape[2:])
+            image_encoder_embeddings = self.model.vision_model(pixel_values=pixel_values).last_hidden_state
+
+        if self.config.use_resampler:
+            if model_kwargs["perceiver_embeddings"] is None:
+                model_kwargs["perceiver_embeddings"] = self.model.perceiver_resampler(image_encoder_embeddings)
+
+            image_seq_len, image_hidden_size = model_kwargs["perceiver_embeddings"].size(1), model_kwargs[
+                "perceiver_embeddings"
+            ].size(2)
+            model_kwargs["perceiver_embeddings"] = model_kwargs["perceiver_embeddings"].view(
+                batch_size, num_images, image_seq_len, image_hidden_size
+            )
+        else:
+            image_seq_len, image_hidden_size = image_encoder_embeddings.size(1), image_encoder_embeddings.size(2)
+            model_kwargs["image_encoder_embeddings"] = image_encoder_embeddings.view(
+                batch_size, num_images, image_seq_len, image_hidden_size
+            )
+
+        model_kwargs["pixel_values"] = None
+        model_kwargs["input_ids"] = inputs_tensor
+        return model_kwargs
+
+    def _prepare_decoder_input_ids_for_generation(
+        self,
+        batch_size,
+        model_input_name,
+        model_kwargs,
+        decoder_start_token_id,
+        bos_token_id,
+        device,
+    ):
+        decoder_input_ids = model_kwargs.pop("input_ids")
+        return decoder_input_ids, model_kwargs
+
     def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
         inputs = prepare_inputs_for_generation(input_ids, past=past, **kwargs)
         unwanted_kwargs = ["token_type_ids"]
@@ -1490,8 +1522,8 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         return expand_inputs_for_generation(*args, **model_kwargs)
 
     @staticmethod
-    def _update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder=False):
-        return update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder=is_encoder_decoder)
+    def _update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder):
+        return update_model_kwargs_for_generation(outputs, model_kwargs)
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
