@@ -1119,17 +1119,17 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
 
         last_hidden_states = outputs.last_hidden_state
         last_hidden_states = last_hidden_states.transpose(0, 1).contiguous()
-        itc_outputs = self.itc_layer(last_hidden_states).transpose(0, 1).contiguous()
-        stc_outputs = self.stc_layer(last_hidden_states, last_hidden_states).squeeze(0)
+        itc_logits = self.itc_layer(last_hidden_states).transpose(0, 1).contiguous()
+        stc_logits = self.stc_layer(last_hidden_states, last_hidden_states).squeeze(0)
 
         # make stc(sequence token classification) mask
         inv_attention_mask = 1 - attention_mask
         bsz, max_seq_length = inv_attention_mask.shape
         device = inv_attention_mask.device
         invalid_token_mask = torch.cat([inv_attention_mask, torch.zeros([bsz, 1]).to(device)], axis=1).bool()
-        stc_outputs.masked_fill_(invalid_token_mask[:, None, :], -10000.0)
+        stc_logits.masked_fill_(invalid_token_mask[:, None, :], -10000.0)
         self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device).bool()
-        stc_outputs.masked_fill_(self_token_mask[None, :, :], -10000.0)
+        stc_logits.masked_fill_(self_token_mask[None, :, :], -10000.0)
         stc_mask = attention_mask.view(-1).bool()
 
         loss = None
