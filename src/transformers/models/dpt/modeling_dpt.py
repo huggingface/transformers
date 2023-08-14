@@ -988,7 +988,7 @@ class DPTNeck(nn.Module):
             self.reassemble_stage = None
         else:
             self.reassemble_stage = DPTReassembleStage(config)
-        
+
         self.convs = nn.ModuleList()
         for channel in config.neck_hidden_sizes:
             self.convs.append(nn.Conv2d(channel, config.fusion_hidden_size, kernel_size=3, padding=1, bias=False))

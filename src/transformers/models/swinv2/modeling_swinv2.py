@@ -643,7 +643,6 @@ class Swinv2Output(nn.Module):
 class Swinv2Layer(nn.Module):
     def __init__(self, config, dim, input_resolution, num_heads, shift_size=0, pretrained_window_size=0):
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.input_resolution = input_resolution
         window_size, shift_size = self._calc_window_shift(
             (config.window_size, config.window_size), (shift_size, shift_size)
@@ -773,7 +772,6 @@ class Swinv2Stage(nn.Module):
         self.dim = dim
         blocks = []
         for i in range(depth):
-            print("Block:", i)
             block = Swinv2Layer(
                 config=config,
                 dim=dim,
@@ -812,8 +810,6 @@ class Swinv2Stage(nn.Module):
             )
 
             hidden_states = layer_outputs[0]
-            print("Shape of hidden states after block {} is {}".format(i, hidden_states.shape))
-            print("First values of hidden states after block {} are {}".format(i, hidden_states[0, :3, :3]))
 
         hidden_states_before_downsampling = hidden_states
         if self.downsample is not None:
@@ -833,7 +829,6 @@ class Swinv2Stage(nn.Module):
 class Swinv2Encoder(nn.Module):
     def __init__(self, config, grid_size, pretrained_window_sizes=(0, 0, 0, 0)):
         super().__init__()
-        print("Grid size:", grid_size)
         self.num_layers = len(config.depths)
         self.config = config
         if self.config.pretrained_window_sizes is not None:
@@ -842,7 +837,6 @@ class Swinv2Encoder(nn.Module):
 
         layers = []
         for i_layer in range(self.num_layers):
-            print("---------------------STAGE:", i_layer)
             stage = Swinv2Stage(
                 config=config,
                 dim=int(config.embed_dim * 2**i_layer),
@@ -881,7 +875,6 @@ class Swinv2Encoder(nn.Module):
             all_reshaped_hidden_states += (reshaped_hidden_state,)
 
         for i, layer_module in enumerate(self.layers):
-            print("-------------STAGE ------------", i)
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
@@ -1336,6 +1329,9 @@ class Swinv2Backbone(Swinv2PreTrainedModel, BackboneMixin):
         # initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.embeddings.patch_embeddings
+
     @add_start_docstrings_to_model_forward(SWINV2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1405,5 +1401,5 @@ class Swinv2Backbone(Swinv2PreTrainedModel, BackboneMixin):
         return BackboneOutput(
             feature_maps=feature_maps,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=None,
+            attentions=outputs.attentions if output_attentions else None,
         )
