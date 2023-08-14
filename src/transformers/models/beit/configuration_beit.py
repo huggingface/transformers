@@ -85,6 +85,8 @@ class BeitConfig(PretrainedConfig, BackboneConfigMixin):
         use_mean_pooling (`bool`, *optional*, defaults to `True`):
             Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
             CLS token, before applying the classification head.
+        semantic_out_indices (`List[int]`, *optional*, defaults to `[3, 5, 7, 11]`):
+            Indices of the feature maps to use for semantic segmentation.
         pool_scales (`Tuple[int]`, *optional*, defaults to `[1, 2, 3, 6]`):
             Pooling scales used in Pooling Pyramid Module applied on the last feature map.
         use_auxiliary_head (`bool`, *optional*, defaults to `True`):
@@ -148,6 +150,7 @@ class BeitConfig(PretrainedConfig, BackboneConfigMixin):
         layer_scale_init_value=0.1,
         drop_path_rate=0.1,
         use_mean_pooling=True,
+        semantic_out_indices=[3, 5, 7, 11],
         pool_scales=[1, 2, 3, 6],
         use_auxiliary_head=True,
         auxiliary_loss_weight=0.4,
@@ -183,7 +186,7 @@ class BeitConfig(PretrainedConfig, BackboneConfigMixin):
         self.drop_path_rate = drop_path_rate
         self.use_mean_pooling = use_mean_pooling
         # decode head attributes (semantic segmentation)
-        # self.out_indices = out_indices
+        self.semantic_out_indices = semantic_out_indices
         self.pool_scales = pool_scales
         # auxiliary head attributes (semantic segmentation)
         self.use_auxiliary_head = use_auxiliary_head
