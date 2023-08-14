@@ -1463,7 +1463,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
     def _prepare_encoder_decoder_kwargs_for_generation(self, inputs_tensor, model_kwargs, model_input_name):
         pixel_values = model_kwargs.get("pixel_values", None)
         image_encoder_embeddings = model_kwargs.get("image_encoder_embeddings", None)
-        model_kwargs["perceiver_embeddings"] = model_kwargs.get("perceiver_embeddings", None)
+        perceiver_embeddings = model_kwargs.get("perceiver_embeddings", None)
 
         if pixel_values is not None:
             batch_size, num_images = pixel_values.shape[:2]
@@ -1477,15 +1477,14 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
             )
 
         if self.config.use_resampler:
-            if model_kwargs["perceiver_embeddings"] is None:
-                model_kwargs["perceiver_embeddings"] = self.model.perceiver_resampler(image_encoder_embeddings)
-
-            image_seq_len, image_hidden_size = model_kwargs["perceiver_embeddings"].size(1), model_kwargs[
-                "perceiver_embeddings"
-            ].size(2)
-            model_kwargs["perceiver_embeddings"] = model_kwargs["perceiver_embeddings"].view(
-                batch_size, num_images, image_seq_len, image_hidden_size
-            )
+            if perceiver_embeddings is None:
+                perceiver_embeddings = self.model.perceiver_resampler(image_encoder_embeddings)
+                image_seq_len, image_hidden_size = perceiver_embeddings.size(1), perceiver_embeddings.size(2)
+                model_kwargs["perceiver_embeddings"] = perceiver_embeddings.view(
+                    batch_size, num_images, image_seq_len, image_hidden_size
+                )
+            else:
+                model_kwargs["perceiver_embeddings"] = perceiver_embeddings
         else:
             image_seq_len, image_hidden_size = image_encoder_embeddings.size(1), image_encoder_embeddings.size(2)
             model_kwargs["image_encoder_embeddings"] = image_encoder_embeddings.view(
