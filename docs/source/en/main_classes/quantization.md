@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## `AutoGPTQ` Integration
 
-🤗 Transformers has integrated `optimum` API to perform GPTQ quantization on language models. You can load and quantize your model in 8,4,3 or even 2 bits without a big drop of performance and faster inference speed! This is supported by most GPU hardwares.
+🤗 Transformers has integrated `optimum` API to perform GPTQ quantization on language models. You can load and quantize your model in 8, 4, 3 or even 2 bits without a big drop of performance and faster inference speed! This is supported by most GPU hardwares.
 
 To learn more about the the quantization model, check out: 
 - the [GPTQ](https://arxiv.org/pdf/2210.17323.pdf) paper
