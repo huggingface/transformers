@@ -1312,6 +1312,9 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
         # initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.embeddings.patch_embeddings
+
     @add_start_docstrings_to_model_forward(BEIT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
     def forward(

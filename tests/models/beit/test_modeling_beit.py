@@ -36,6 +36,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import (
+        MODEL_FOR_BACKBONE_MAPPING,
         MODEL_MAPPING,
         BeitBackbone,
         BeitForImageClassification,
@@ -65,7 +66,7 @@ class BeitModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=2,
+        num_hidden_layers=4,  # we use 4 here since `BeitForSemanticSegmentation` hardcodes 4 stages
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -75,7 +76,7 @@ class BeitModelTester:
         initializer_range=0.02,
         num_labels=3,
         scope=None,
-        out_indices=[0, 1, 2, 3],
+        out_features=["stage1", "stage2", "stage3", "stage4"],
     ):
         self.parent = parent
         self.vocab_size = 100
@@ -95,7 +96,7 @@ class BeitModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
-        self.out_indices = out_indices
+        self.out_features = out_features
         self.num_labels = num_labels
 
         # in BeiT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
@@ -130,7 +131,7 @@ class BeitModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            out_indices=self.out_indices,
+            out_features=self.out_features,
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
@@ -280,7 +281,11 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             # we don't test BeitForMaskedImageModeling
-            if model_class in [*get_values(MODEL_MAPPING), BeitForMaskedImageModeling]:
+            if model_class in [
+                *get_values(MODEL_MAPPING),
+                *get_values(MODEL_FOR_BACKBONE_MAPPING),
+                BeitForMaskedImageModeling,
+            ]:
                 continue
 
             model = model_class(config)
@@ -301,7 +306,8 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             # we don't test BeitForMaskedImageModeling
             if (
-                model_class in [*get_values(MODEL_MAPPING), BeitForMaskedImageModeling]
+                model_class
+                in [*get_values(MODEL_MAPPING), *get_values(MODEL_FOR_BACKBONE_MAPPING), BeitForMaskedImageModeling]
                 or not model_class.supports_gradient_checkpointing
             ):
                 continue

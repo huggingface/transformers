@@ -44,7 +44,7 @@ def verify_out_features_out_indices(
         if not isinstance(out_indices, (list, tuple)):
             raise ValueError(f"out_indices must be a list or tuple, got {type(out_indices)}")
         if any(idx >= len(stage_names) for idx in out_indices):
-            raise ValueError("out_indices must be valid indices for stage_names {stage_names}, got {out_indices}")
+            raise ValueError(f"out_indices must be valid indices for stage_names {stage_names}, got {out_indices}")
 
     if out_features is not None and out_indices is not None:
         if len(out_features) != len(out_indices):
