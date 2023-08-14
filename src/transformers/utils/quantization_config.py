@@ -351,7 +351,7 @@ class GPTQConfig(QuantizationConfigMixin):
         dataset: Optional[Union[List[str], str]] = None,
         group_size: int = 128,
         damp_percent: float = 0.01,
-        desc_act: bool = True,
+        desc_act: bool = False,
         sym: bool = True,
         true_sequential: bool = True,
         use_cuda_fp16: bool = False,
@@ -391,8 +391,8 @@ class GPTQConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct
         """
-        if self.bits not in [2, 4, 6, 8]:
-            raise ValueError(f"Only support quantization to [2,4,6,8] bits but found {self.bits}")
+        if self.bits not in [2, 3, 4, 8]:
+            raise ValueError(f"Only support quantization to [2,3,4,8] bits but found {self.bits}")
         if self.group_size != -1 and self.group_size <= 0:
             raise ValueError("group_size must be greater than 0 or equal to -1")
         if not (0 < self.damp_percent < 1):
