@@ -34,15 +34,29 @@ def get_dpt_config(model_name):
     if "tiny" in model_name:
         embed_dim = 96
         depths = (2, 2, 6, 2)
+        window_size = 7
+        pretrained_window_sizes = (0, 0, 0, 0)
         num_heads = (3, 6, 12, 24)
+    elif "base" in model_name:
+        embed_dim = 128
+        depths = (2, 2, 18, 2)
+        window_size = 24
+        pretrained_window_sizes = (12, 12, 12, 6)
+        num_heads = (4, 8, 16, 32)
 
     backbone_config = Swinv2Config(embed_dim=embed_dim,
                                    depths=depths,
+                                   window_size=window_size,
+                                   pretrained_window_sizes=pretrained_window_sizes,
                                    num_heads=num_heads,
                                    out_features=["stage1", "stage2", "stage3", "stage4"])
 
     # TODO get rid of config.hidden_size, using config.backbone_config.hidden_size instead
-    config = DPTConfig(backbone_config=backbone_config, hidden_size=1024, neck_hidden_sizes=[96, 192, 384, 768])
+    if model_name == "dpt-swinv2-tiny-256":
+        neck_hidden_sizes = [96, 192, 384, 768]
+    elif model_name == "dpt-swinv2-base-384":
+        neck_hidden_sizes = [128, 256, 512, 1024]
+    config = DPTConfig(backbone_config=backbone_config, hidden_size=1024, neck_hidden_sizes=neck_hidden_sizes)
 
     return config
 
@@ -156,6 +170,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     name_to_url = {
         "dpt-swinv2-tiny-256": "https://github.com/isl-org/MiDaS/releases/download/v3_1/dpt_swin2_tiny_256.pt",
+        "dpt-swinv2-base-384": "https://github.com/isl-org/MiDaS/releases/download/v3_1/dpt_swin2_base_384.pt",
     }
 
     # define DPT configuration based on URL
@@ -185,7 +200,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     model.eval()
 
     # Check outputs on an image
-    size = 512
+    size = 384 if "384" in model_name else 512
     processor = DPTImageProcessor(size={"height": size, "width": size})
 
     image = prepare_img()
@@ -198,12 +213,10 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
 
-    transforms = transforms.Compose(
-        [
-            transforms.Resize((512, 512)),
-            transforms.ToTensor(),
-        ]
-    )
+    transforms = transforms.Compose([
+        transforms.Resize((size, size)),
+        transforms.ToTensor(),
+    ])
     pixel_values = transforms(image).unsqueeze(0)
 
     # forward pass
@@ -242,9 +255,9 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="dpt-swinv2-tiny-256",
+        default="dpt-swinv2-base-384",
         type=str,
-        choices=["dpt-swinv2-tiny-256"],
+        choices=["dpt-swinv2-base-384"],
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(

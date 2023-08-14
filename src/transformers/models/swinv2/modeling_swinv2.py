@@ -1405,12 +1405,14 @@ class Swinv2Backbone(Swinv2PreTrainedModel, BackboneMixin):
             return_dict=True,
         )
 
-        hidden_states = outputs.hidden_states
+        hidden_states = outputs.reshaped_hidden_states
+
+        print("Number of hidden states:", len(hidden_states))
 
         feature_maps = ()
-        for idx, stage in enumerate(self.stage_names):
+        for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
-                feature_maps += (hidden_states[idx],)
+                feature_maps += (hidden_state,)
 
         if not return_dict:
             output = (feature_maps,)

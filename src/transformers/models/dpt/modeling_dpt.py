@@ -983,8 +983,8 @@ class DPTNeck(nn.Module):
         super().__init__()
         self.config = config
 
-        # postprocessing
-        self.reassemble_stage = DPTReassembleStage(config)
+        # postprocessing: only required in case of a non-hierarchical backbone (e.g. ViT, BEiT)
+        self.reassemble_stage = DPTReassembleStage(config) if config.backbone_config.model_type in ["vit", "beit"] else None
         self.convs = nn.ModuleList()
         for channel in config.neck_hidden_sizes:
             self.convs.append(nn.Conv2d(channel, config.fusion_hidden_size, kernel_size=3, padding=1, bias=False))
@@ -1000,7 +1000,12 @@ class DPTNeck(nn.Module):
             raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
 
         # postprocess hidden states
-        hidden_states = self.reassemble_stage(hidden_states)
+        if self.reassemble_stage is not None:
+            hidden_states = self.reassemble_stage(hidden_states)
+
+        print("Features after postprocessing:")
+        for i in hidden_states:
+            print(i.shape)
 
         features = [self.convs[i](feature) for i, feature in enumerate(hidden_states)]
 
@@ -1055,7 +1060,6 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         self.backbone = None
         if config.backbone_config is not None and config.is_hybrid is False:
-            print("Backbone config:", config.backbone_config)
             self.backbone = AutoBackbone.from_config(config.backbone_config)
         else:
             self.dpt = DPTModel(config, add_pooling_layer=False)
@@ -1155,9 +1159,9 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
                 hidden_states = backbone_hidden_states
 
+        print("Backbone features:")
         for i in hidden_states:
             print(i.shape)
-            print(i[0, :3, :3])
 
         hidden_states = self.neck(hidden_states)
 
