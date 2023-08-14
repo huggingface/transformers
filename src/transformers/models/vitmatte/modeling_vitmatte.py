@@ -72,14 +72,10 @@ class VitMattePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
-        if isinstance(module, VitMattePreTrainedModel):
-            module.backbone.init_weights()
-            module.decoder.init_weights()
-
-    def init_weights(self):
-        """Initialize the weights"""
-        self.backbone.init_weights()
-        self.decoder.init_weights()
+        if isinstance(module, nn.Conv2d):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, BackboneMixin):
@@ -204,15 +200,6 @@ class VitMatteDetailCaptureModule(nn.Module):
             )
 
         self.matting_head = VitMatteHead(in_channels=config.fusion_out[-1])
-
-    def init_weights(self):
-        self.apply(self._init_weights)
-
-    def _init_weights(self, module):
-        if isinstance(module, nn.Conv2d):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
 
     def forward(self, features, pixel_values):
         detail_features = self.convstream(pixel_values)
