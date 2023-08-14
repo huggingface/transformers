@@ -44,7 +44,13 @@ def get_dpt_config(model_name):
         pretrained_window_sizes = (12, 12, 12, 6)
         num_heads = (4, 8, 16, 32)
 
-    backbone_config = Swinv2Config(embed_dim=embed_dim,
+    if "384" in model_name:
+        image_size = 384 
+    else:
+        raise ValueError("Model not supported, to do")
+
+    backbone_config = Swinv2Config(image_size=image_size,
+                                   embed_dim=embed_dim,
                                    depths=depths,
                                    window_size=window_size,
                                    pretrained_window_sizes=pretrained_window_sizes,
@@ -179,9 +185,6 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     # load original state_dict from URL
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
 
-    for k,v in state_dict.items():
-        print(k,v.shape)
-
     # load HuggingFace model
     model = DPTForDepthEstimation(config)
 
@@ -230,9 +233,11 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     # assert logits
     # TODO there's still a small difference with the original logits
-    expected_shape = torch.Size([1, 512, 512])
+    expected_shape = torch.Size([1, 384, 384])
     expected_slice = torch.tensor(
-        [[2804.6260, 2792.5708, 2812.9263], [2772.0288, 2780.1118, 2796.2529], [2748.1094, 2766.6558, 2766.9834]]
+        [[1998.5575, 1997.3887, 2009.2981],
+        [1952.8607, 1979.6488, 2001.0854],
+        [1953.7697, 1961.7711, 1968.8904]]
     )
     assert predicted_depth.shape == torch.Size(expected_shape)
     assert torch.allclose(predicted_depth[0, :3, :3], expected_slice)

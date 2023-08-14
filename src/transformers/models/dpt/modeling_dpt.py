@@ -1003,10 +1003,6 @@ class DPTNeck(nn.Module):
         if self.reassemble_stage is not None:
             hidden_states = self.reassemble_stage(hidden_states)
 
-        print("Features after postprocessing:")
-        for i in hidden_states:
-            print(i.shape)
-
         features = [self.convs[i](feature) for i, feature in enumerate(hidden_states)]
 
         # fusion blocks
@@ -1158,10 +1154,6 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
                 )
 
                 hidden_states = backbone_hidden_states
-
-        print("Backbone features:")
-        for i in hidden_states:
-            print(i.shape)
 
         hidden_states = self.neck(hidden_states)
 
