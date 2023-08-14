@@ -242,7 +242,10 @@ class VitMatteImageProcessor(BaseImageProcessor):
         if do_pad:
             images = self.pad(np.array(images), size_divisibility=size_divisibility)
 
-        images = [to_channel_dimension_format(image, data_format) for image in images]
+        images = [
+            to_channel_dimension_format(image=image, channel_dim=data_format, input_channel_dim=ChannelDimension.LAST)
+            for image in images
+        ]
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
