@@ -41,7 +41,7 @@ You need to have the following requirements installed to run the code below:
 - Install latest `accelerate` library 
 `pip install --upgrade accelerate`
 
-Notet hat GPTQ integration supports for now only text models and you may encounter unexpected behaviour for vision, speech or multi-modal models.
+Note that GPTQ integration supports for now only text models and you may encounter unexpected behaviour for vision, speech or multi-modal models.
 
 ### Load and quantize a model
 
