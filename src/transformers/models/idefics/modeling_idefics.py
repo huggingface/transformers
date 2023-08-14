@@ -1113,9 +1113,8 @@ class IdeficsModel(IdeficsPreTrainedModel):
         no_images = False
         if (
             sum(
-                1
+                vision_input is not None
                 for vision_input in (pixel_values, image_encoder_embeddings, perceiver_embeddings)
-                if vision_input is not None
             )
             != 1
         ):
