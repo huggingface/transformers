@@ -1026,9 +1026,10 @@ class Mask2FormerImageProcessor(BaseImageProcessor):
                     )
                     current_segment_id += 1
                     instance_maps.append(pred_masks[j])
-                    # Return segmentation map in run-length encoding (RLE) format
-                    if return_coco_annotation:
-                        segmentation = convert_segmentation_to_rle(segmentation)
+
+            # Return segmentation map in run-length encoding (RLE) format
+            if return_coco_annotation:
+                segmentation = convert_segmentation_to_rle(segmentation)
 
             # Return a concatenated tensor of binary instance maps
             if return_binary_maps and len(instance_maps) != 0:
