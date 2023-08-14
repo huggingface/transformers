@@ -1465,16 +1465,16 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         image_encoder_embeddings = model_kwargs.get("image_encoder_embeddings", None)
         model_kwargs["perceiver_embeddings"] = model_kwargs.get("perceiver_embeddings", None)
 
-        if image_encoder_embeddings is not None:
+        if pixel_values is not None:
+            batch_size, num_images = pixel_values.shape[:2]
+            pixel_values = pixel_values.contiguous().view(batch_size * num_images, *pixel_values.shape[2:])
+            image_encoder_embeddings = self.model.vision_model(pixel_values=pixel_values).last_hidden_state
+
+        elif image_encoder_embeddings is not None:
             batch_size, num_images, image_seq_len, image_hidden_size = image_encoder_embeddings.size()
             image_encoder_embeddings = image_encoder_embeddings.view(
                 batch_size * num_images, image_seq_len, image_hidden_size
             )
-
-        elif pixel_values is not None:
-            batch_size, num_images = pixel_values.shape[:2]
-            pixel_values = pixel_values.contiguous().view(batch_size * num_images, *pixel_values.shape[2:])
-            image_encoder_embeddings = self.model.vision_model(pixel_values=pixel_values).last_hidden_state
 
         if self.config.use_resampler:
             if model_kwargs["perceiver_embeddings"] is None:
