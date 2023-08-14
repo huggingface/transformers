@@ -347,3 +347,5 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
             f"{self.eos_token}{self.bos_token}" + f"{self.bos_token}".join(all_responses) + f"{self.bos_token}Bot:"
         )
         return self.encode(text=prompt)
+
+        # TODO This is the weird one - what chat properties do we write?

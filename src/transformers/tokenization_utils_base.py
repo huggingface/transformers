@@ -1501,7 +1501,7 @@ INIT_TOKENIZER_DOCSTRING = r"""
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
-class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
+class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, ChatMixin):
     """
     Base class for [`PreTrainedTokenizer`] and [`PreTrainedTokenizerFast`].
 
@@ -1626,6 +1626,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             `Dict[str, int]`: The vocabulary.
         """
         raise NotImplementedError()
+
+    # TODO
+    # 1) See if you can make Llama work with the new format, or what you need to add to the
+    #    chat template. (CHECK)
+    # 2) Promote build_conversation_input_ids to a public method and remove the individual tokenizer instances (added as Mixin)
+    # 3) Accept lists of dicts in ChatML format as well as Conversation objects (CHECK)
+    # 4) Ensure backward compatibility for Conversation objects is maintained (maybe by editing ConversationalPipeline if we have to change the method) (leave this for now)
+    # 5) Tokenizer reads prompt_config.json
+    # 6) Tokenizer saves prompt_config.json
+    # 7) prompt_config.json contains strings that build_conversation_input_ids uses to format the message (kinda CHECK)
+    # 8) prompt_config can also supply token IDs that are added to the sequence post-tokenization (kinda CHECK)
+    # 9) Existing model-specific build_conversation_input_ids to be replaced with default
 
     @classmethod
     def from_pretrained(

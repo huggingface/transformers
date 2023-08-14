@@ -760,6 +760,16 @@ class WhisperTokenizer(PreTrainedTokenizer):
             input_ids = input_ids[-self.model_max_length :]
         return input_ids
 
+    @property
+    def default_chat_settings(self):
+        return {
+            "user_message_end_token": self.eos_token_id,
+            "assistant_message_eos_token": self.eos_token_id,
+            "tokenize_messages_separately": True,
+            "add_special_tokens": False,
+            "max_length": self.model_max_length
+        }
+
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         self.set_prefix_tokens(task=task, language=language, predict_timestamps=not no_timestamps)
         # prefix tokens are of the form: <|startoftranscript|> <|lang_id|> <|task|> <|notimestamps|>

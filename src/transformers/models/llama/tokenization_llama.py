@@ -152,14 +152,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         self.add_eos_token = add_eos_token
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
-        if prompt is None:
-            prompt = {}
-        self.system_message_start = prompt.get("system_message_start", "<<SYS>>\n")
-        self.system_message_end = prompt.get("system_message_end", "\n<</SYS>>\n\n")
-        self.user_message_start = prompt.get("user_message_start", "[INST] ")
-        self.user_message_end = prompt.get("user_message_end", " [/INST]")
-        self.assistant_message_start = prompt.get("assistant_message_start", " ")
-        self.assistant_message_end = prompt.get("assistant_message_end", " ")
+
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -357,7 +350,8 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         return output
 
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
+
+    def _build_conversation_input_ids(self, conversation: "ChatConversation") -> List[int]:
         r"""Builds the input ids for a conversation.
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
         the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
@@ -369,9 +363,9 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         If you want to use your own system prompt, make sure to use both `B_SYS` and `E_SYS` use the following:
         ```python
-        >>> from transformers import Conversation
+        >>> from transformers import ChatConversation
 
-        >>> Conversation(
+        >>> ChatConversation(
         ...     "<<SYS>>\n Only answer with emojis, and charades\n<</SYS>>\n\nHow can I build a house in 10 septs?"
         ... )  # doctest: +IGNORE_RESULT
         ```
@@ -382,71 +376,55 @@ class LlamaTokenizer(PreTrainedTokenizer):
             `List[int]`:
                 Input ids for the conversation.
         """
-        if len(conversation.past_user_inputs) > 0:
-            # If the first message is not a system message, add the default system prompt
-            if (
-                not conversation.past_user_inputs[0].startswith(self.system_message_start)
-                or self.system_message_end not in conversation.past_user_inputs[0]
-            ):
-                conversation.past_user_inputs[0] = (
-                    self.system_message_start
-                    + DEFAULT_SYSTEM_PROMPT
-                    + self.system_message_end
-                    + conversation.past_user_inputs[0]
-                )
-        elif conversation.new_user_input:
-            if (
-                not conversation.new_user_input.startswith(self.system_message_start)
-                or self.system_message_end not in conversation.new_user_input
-            ):
-                # If the user message is not a system message, add the default system prompt
-                conversation.new_user_input = (
-                    self.system_message_start
-                    + DEFAULT_SYSTEM_PROMPT
-                    + self.system_message_end
-                    + conversation.new_user_input
-                )
-        else:
-            raise ValueError("Last message must be from user")
+        if len(conversation.messages) == 0 or conversation.messages[0]["role"] != "system":
+            # If the first message is not a system message, add the default system prompt as the first message
+            conversation.messages = [{"role": "system", "message": DEFAULT_SYSTEM_PROMPT}] + conversation.messages
 
-        dialogue = list(conversation.iter_texts())
-        if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
-            [not is_user for is_user, msg in dialogue[1::2]]
-        ):
+        message_roles = [message["role"] for message in conversation.messages[1:]]  # Skip the system message here
+
+        if not all([role == "user" for role in message_roles[::2]]) or not all(role == "assistant" for role in message_roles[1::2]):
+            # TODO Matt: Do we need to keep this check? Maybe some future LLaMA fine-tunes won't want this rule
             raise ValueError(
-                "The model only supports 'user' and 'assistant' roles, starting with user and alternating (u/a/u/a/u...)"
+                "LLaMA only supports 'user' and 'assistant' roles after the system message, starting with user and alternating (u/a/u/a/u...)"
             )
 
         dialog_tokens: List[int] = []
-        dialog_tokens += sum(
-            [
-                [self.bos_token_id]
-                + self.encode(
-                    "".join(
-                        [
-                            self.user_message_start,
-                            prompt[1].strip(),
-                            self.user_message_end,
-                            self.assistant_message_start,
-                            answer[1].strip(),
-                            self.assistant_message_end,
-                        ]
-                    ),
-                    add_special_tokens=False,
-                )
-                + [self.eos_token_id]
-                for prompt, answer in zip(dialogue[::2], dialogue[1::2])
-            ],
-            [],
-        )
-        dialog_tokens += [self.bos_token_id] + self.encode(
-            "".join(
-                [
-                    self.user_message_start,
-                    dialogue[-1][1].strip(),
-                    self.user_message_end,
-                ]
-            ),
-            add_special_tokens=False,
-        )
+        # TODO Figure out where the chat settings live
+
+        for message in conversation:
+            if message["role"] == "user":
+                message_start = self.user_message_start
+                message_end = self.user_message_end
+                message_start_token = self.user_message_start_token
+                message_end_token = self.user_message_end_token
+            elif message["role"] == "system":
+                message_start = self.system_message_start
+                message_end = self.system_message_end
+                message_start_token = self.system_message_start_token
+                message_end_token = self.system_message_end_token
+            elif message["role"] == "assistant":
+                message_start = self.assistant_message_start
+                message_end = self.assistant_message_end
+                message_start_token = self.assistant_message_start_token
+                message_end_token = self.assistant_message_end_token
+            message = "".join([message_start, message["message"].strip(), message_end])
+            tokenized_message = self.encode(message, add_special_tokens=self.add_special_tokens)
+            tokenized_message = [message_start_token] + tokenized_message + [message_end_token]
+            dialog_tokens.extend(tokenized_message)
         return dialog_tokens
+
+    @property
+    def default_chat_settings(self):
+        return {
+            "default_system_message": DEFAULT_SYSTEM_PROMPT,
+            "system_message_start": "<<SYS>>\n",
+            "system_message_end": "\n<</SYS>>\n\n",
+            "user_message_start": "[INST] ",
+            "user_message_end": " [/INST]",
+            "assistant_message_start": " ",
+            "assistant_message_end": " ",
+            "user_message_start_token": self.bos_token_id,
+            "assistant_message_end_token": self.eos_token_id,
+            "tokenize_messages_separately": True,
+            "add_special_tokens": False,
+        }

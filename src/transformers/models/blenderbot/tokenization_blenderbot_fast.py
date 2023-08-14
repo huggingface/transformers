@@ -313,3 +313,13 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
             input_ids = input_ids[-self.model_max_length :]
             logger.warning(f"Trimmed input from conversation as it was longer than {self.model_max_length} tokens.")
         return input_ids
+
+    @property
+    def default_chat_settings(self):
+        return {
+            "user_message_start": " ",
+            "tokenize_messages_separately": False,
+            "add_special_tokens": True,
+            "spacer_between_messages": "  ",
+            "max_length": self.model_max_length,
+        }
