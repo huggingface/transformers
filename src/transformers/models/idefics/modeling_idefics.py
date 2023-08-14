@@ -23,6 +23,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
+import inspect
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -1460,7 +1461,65 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def _prepare_encoder_decoder_kwargs_for_generation(self, inputs_tensor, model_kwargs, model_input_name):
+    def _prepare_model_inputs(
+        self,
+        inputs,
+        bos_token_id,
+        model_kwargs,
+    ):
+        if (
+            self.config.is_encoder_decoder
+            and hasattr(self, "encoder")
+            and self.encoder.main_input_name != self.main_input_name
+        ):
+            input_name = self.encoder.main_input_name
+        else:
+            input_name = self.main_input_name
+
+        model_kwargs = {k: v for k, v in model_kwargs.items() if v is not None or k != input_name}
+
+        # 2. check whether model_input_name is passed as kwarg
+        # if yes and `inputs` is None use kwarg inputs
+        inputs_kwarg = model_kwargs.pop(input_name, None)
+        if inputs_kwarg is not None and inputs is not None:
+            raise ValueError(
+                f"`inputs`: {inputs}` were passed alongside {input_name} which is not allowed."
+                f"Make sure to either pass {inputs} or {input_name}=..."
+            )
+        elif inputs_kwarg is not None:
+            inputs = inputs_kwarg
+
+        # 3. In the presence of `inputs_embeds` for text models:
+        # - decoder-only models should complain if the user attempts to pass `inputs_embeds`, but the model
+        # doesn't have its forwarding implemented. `inputs_embeds` is kept in `model_kwargs` and can coexist with
+        # input_ids (`inputs_embeds` will be used in the 1st generation step, as opposed to `input_ids`)
+        # - encoder-decoder models should complain if the user attempts to pass `inputs_embeds` and `input_ids`, and
+        # pull the former to inputs. It will be used in place of `input_ids` to get the encoder hidden states.
+        if input_name == "input_ids" and "inputs_embeds" in model_kwargs:
+            if not self.config.is_encoder_decoder:
+                has_inputs_embeds_forwarding = "inputs_embeds" in set(
+                    inspect.signature(self.prepare_inputs_for_generation).parameters.keys()
+                )
+                if not has_inputs_embeds_forwarding:
+                    raise ValueError(
+                        f"You passed `inputs_embeds` to `.generate()`, but the model class {self.__class__.__name__} "
+                        "doesn't have its forwarding implemented. See the GPT2 implementation for an example "
+                        "(https://github.com/huggingface/transformers/pull/21405), and feel free to open a PR with it!"
+                    )
+                # In this case, `input_ids` is moved to the `model_kwargs`, so a few automations (like the creation of
+                # the attention mask) can rely on the actual model input.
+                model_kwargs["input_ids"] = self._maybe_initialize_input_ids_for_generation(
+                    inputs, bos_token_id, model_kwargs=model_kwargs
+                )
+            else:
+                if inputs is not None:
+                    raise ValueError("You passed `inputs_embeds` and `input_ids` to `.generate()`. Please pick one.")
+            inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
+
+        # 4. if `inputs` is still None, try to create `input_ids` from BOS token
+        inputs = self._maybe_initialize_input_ids_for_generation(inputs, bos_token_id, model_kwargs)
+
+        # 5. Prepare model kwargs from IDEFICS vision component
         pixel_values = model_kwargs.get("pixel_values", None)
         image_encoder_embeddings = model_kwargs.get("image_encoder_embeddings", None)
         perceiver_embeddings = model_kwargs.get("perceiver_embeddings", None)
@@ -1492,20 +1551,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
             )
 
         model_kwargs["pixel_values"] = None
-        model_kwargs["input_ids"] = inputs_tensor
-        return model_kwargs
-
-    def _prepare_decoder_input_ids_for_generation(
-        self,
-        batch_size,
-        model_input_name,
-        model_kwargs,
-        decoder_start_token_id,
-        bos_token_id,
-        device,
-    ):
-        decoder_input_ids = model_kwargs.pop("input_ids")
-        return decoder_input_ids, model_kwargs
+        return inputs, input_name, model_kwargs
 
     def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
         inputs = prepare_inputs_for_generation(input_ids, past=past, **kwargs)
