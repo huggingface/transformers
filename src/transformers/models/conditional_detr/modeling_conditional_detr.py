@@ -1534,7 +1534,7 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[torch.FloatTensor, ConditionalDetrModelOutput]:
+    ) -> Union[Tuple[torch.FloatTensor], ConditionalDetrModelOutput]:
         r"""
         Returns:
 
