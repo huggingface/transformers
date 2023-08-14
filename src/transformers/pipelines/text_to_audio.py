@@ -13,13 +13,13 @@
 # limitations under the License.from typing import List, Union
 from typing import List, Union
 
-from ..models.speecht5.modeling_speecht5 import SpeechT5HifiGan
 from ..utils import is_torch_available
 from .base import Pipeline
 
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING
+    from ..models.speecht5.modeling_speecht5 import SpeechT5HifiGan
 
 DEFAULT_VOCODER_ID = "microsoft/speecht5_hifigan"
 
