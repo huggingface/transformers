@@ -1,5 +1,7 @@
-from transformers import Swinv2Config, Swinv2Backbone
 import torch
+
+from transformers import Swinv2Backbone, Swinv2Config
+
 
 config = Swinv2Config(out_features=["stage1", "stage2", "stage3", "stage4"])
 

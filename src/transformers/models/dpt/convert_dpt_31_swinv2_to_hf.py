@@ -22,7 +22,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import Swinv2Config, DPTConfig, DPTForDepthEstimation, DPTImageProcessor
+from transformers import DPTConfig, DPTForDepthEstimation, DPTImageProcessor, Swinv2Config
 from transformers.utils import logging
 
 
@@ -45,17 +45,19 @@ def get_dpt_config(model_name):
         num_heads = (4, 8, 16, 32)
 
     if "384" in model_name:
-        image_size = 384 
+        image_size = 384
     else:
         raise ValueError("Model not supported, to do")
 
-    backbone_config = Swinv2Config(image_size=image_size,
-                                   embed_dim=embed_dim,
-                                   depths=depths,
-                                   window_size=window_size,
-                                   pretrained_window_sizes=pretrained_window_sizes,
-                                   num_heads=num_heads,
-                                   out_features=["stage1", "stage2", "stage3", "stage4"])
+    backbone_config = Swinv2Config(
+        image_size=image_size,
+        embed_dim=embed_dim,
+        depths=depths,
+        window_size=window_size,
+        pretrained_window_sizes=pretrained_window_sizes,
+        num_heads=num_heads,
+        out_features=["stage1", "stage2", "stage3", "stage4"],
+    )
 
     # TODO get rid of config.hidden_size, using config.backbone_config.hidden_size instead
     if model_name == "dpt-swinv2-tiny-256":
@@ -105,7 +107,7 @@ def create_rename_keys(config):
             rename_keys.append((f"pretrained.model.layers.{i}.downsample.norm.bias", f"backbone.encoder.layers.{i}.downsample.norm.bias"))
 
     # TODO Swinv2 et al don't require activation postprocessing (readout projections + resize blocks)
-    
+
     # refinenet (tricky here)
     mapping = {1:3, 2:2, 3:1, 4:0}
 
@@ -153,7 +155,9 @@ def read_in_q_k_v(state_dict, config, model):
             state_dict[f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.key.weight"] = in_proj_weight[
                 dim : dim * 2, :
             ]
-            state_dict[f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.value.weight"] = in_proj_weight[-dim:, :]
+            state_dict[f"backbone.encoder.layers.{i}.blocks.{j}.attention.self.value.weight"] = in_proj_weight[
+                -dim:, :
+            ]
 
 
 def rename_key(dct, old, new):
@@ -216,10 +220,12 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw)
 
-    transforms = transforms.Compose([
-        transforms.Resize((size, size)),
-        transforms.ToTensor(),
-    ])
+    transforms = transforms.Compose(
+        [
+            transforms.Resize((size, size)),
+            transforms.ToTensor(),
+        ]
+    )
     pixel_values = transforms(image).unsqueeze(0)
 
     # forward pass
@@ -235,9 +241,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     # TODO there's still a small difference with the original logits
     expected_shape = torch.Size([1, 384, 384])
     expected_slice = torch.tensor(
-        [[1998.5575, 1997.3887, 2009.2981],
-        [1952.8607, 1979.6488, 2001.0854],
-        [1953.7697, 1961.7711, 1968.8904]]
+        [[1998.5575, 1997.3887, 2009.2981], [1952.8607, 1979.6488, 2001.0854], [1953.7697, 1961.7711, 1968.8904]]
     )
     assert predicted_depth.shape == torch.Size(expected_shape)
     assert torch.allclose(predicted_depth[0, :3, :3], expected_slice)

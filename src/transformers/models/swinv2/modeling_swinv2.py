@@ -645,9 +645,9 @@ class Swinv2Layer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.input_resolution = input_resolution
-        print("Input shift size:", shift_size)
-        print("Input resolution:", self.input_resolution)
-        window_size, shift_size = self._calc_window_shift((config.window_size, config.window_size), (shift_size, shift_size))
+        window_size, shift_size = self._calc_window_shift(
+            (config.window_size, config.window_size), (shift_size, shift_size)
+        )
         self.window_size = window_size[0]
         self.shift_size = shift_size[0]
         self.attention = Swinv2Attention(
@@ -711,19 +711,10 @@ class Swinv2Layer(nn.Module):
         input_dimensions: Tuple[int, int],
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-        always_partition: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-
-        # if not always_partition:
-        #     self.set_shift_and_window_size(input_dimensions)
-        # else:
-        #     pass
         height, width = input_dimensions
         batch_size, _, channels = hidden_states.size()
         shortcut = hidden_states
-
-        print("Shift size:", self.shift_size)
-        print("Window size:", self.window_size)
 
         # pad hidden_states to multiples of window size
         hidden_states = hidden_states.view(batch_size, height, width, channels)
@@ -784,13 +775,13 @@ class Swinv2Stage(nn.Module):
         for i in range(depth):
             print("Block:", i)
             block = Swinv2Layer(
-                    config=config,
-                    dim=dim,
-                    input_resolution=input_resolution,
-                    num_heads=num_heads,
-                    shift_size=0 if (i % 2 == 0) else config.window_size // 2,
-                    pretrained_window_size=pretrained_window_size,
-                )
+                config=config,
+                dim=dim,
+                input_resolution=input_resolution,
+                num_heads=num_heads,
+                shift_size=0 if (i % 2 == 0) else config.window_size // 2,
+                pretrained_window_size=pretrained_window_size,
+            )
             blocks.append(block)
         self.blocks = nn.ModuleList(blocks)
 
@@ -802,21 +793,22 @@ class Swinv2Stage(nn.Module):
 
         self.pointing = False
 
-    # Copied from transformers.models.swin.modeling_swin.SwinStage.forward
     def forward(
         self,
         hidden_states: torch.Tensor,
         input_dimensions: Tuple[int, int],
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-        always_partition: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             layer_outputs = layer_module(
-                hidden_states, input_dimensions, layer_head_mask, output_attentions, always_partition
+                hidden_states,
+                input_dimensions,
+                layer_head_mask,
+                output_attentions,
             )
 
             hidden_states = layer_outputs[0]
@@ -852,21 +844,20 @@ class Swinv2Encoder(nn.Module):
         for i_layer in range(self.num_layers):
             print("---------------------STAGE:", i_layer)
             stage = Swinv2Stage(
-                    config=config,
-                    dim=int(config.embed_dim * 2**i_layer),
-                    input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
-                    depth=config.depths[i_layer],
-                    num_heads=config.num_heads[i_layer],
-                    drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                    downsample=Swinv2PatchMerging if (i_layer < self.num_layers - 1) else None,
-                    pretrained_window_size=pretrained_window_sizes[i_layer],
-                )
+                config=config,
+                dim=int(config.embed_dim * 2**i_layer),
+                input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
+                depth=config.depths[i_layer],
+                num_heads=config.num_heads[i_layer],
+                drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
+                downsample=Swinv2PatchMerging if (i_layer < self.num_layers - 1) else None,
+                pretrained_window_size=pretrained_window_sizes[i_layer],
+            )
             layers.append(stage)
         self.layers = nn.ModuleList(layers)
 
         self.gradient_checkpointing = False
 
-    # Copied from transformers.models.swin.modeling_swin.SwinEncoder.forward with SwinEncoderOutput->Swinv2EncoderOutput
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -875,7 +866,6 @@ class Swinv2Encoder(nn.Module):
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         output_hidden_states_before_downsampling: Optional[bool] = False,
-        always_partition: Optional[bool] = False,
         return_dict: Optional[bool] = True,
     ) -> Union[Tuple, Swinv2EncoderOutput]:
         all_hidden_states = () if output_hidden_states else None
@@ -907,7 +897,10 @@ class Swinv2Encoder(nn.Module):
                 )
             else:
                 layer_outputs = layer_module(
-                    hidden_states, input_dimensions, layer_head_mask, output_attentions, always_partition
+                    hidden_states,
+                    input_dimensions,
+                    layer_head_mask,
+                    output_attentions,
                 )
 
             hidden_states = layer_outputs[0]
@@ -1393,7 +1386,6 @@ class Swinv2Backbone(Swinv2PreTrainedModel, BackboneMixin):
             output_attentions=output_attentions,
             output_hidden_states=True,
             output_hidden_states_before_downsampling=True,
-            always_partition=True,
             return_dict=True,
         )
 

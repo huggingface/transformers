@@ -984,7 +984,11 @@ class DPTNeck(nn.Module):
         self.config = config
 
         # postprocessing: only required in case of a non-hierarchical backbone (e.g. ViT, BEiT)
-        self.reassemble_stage = DPTReassembleStage(config) if config.backbone_config.model_type in ["vit", "beit"] else None
+        if config.backbone_config is not None and config.backbone_config.model_type in ["swinv2"]:
+            self.reassemble_stage = None
+        else:
+            self.reassemble_stage = DPTReassembleStage(config)
+        
         self.convs = nn.ModuleList()
         for channel in config.neck_hidden_sizes:
             self.convs.append(nn.Conv2d(channel, config.fusion_hidden_size, kernel_size=3, padding=1, bias=False))
