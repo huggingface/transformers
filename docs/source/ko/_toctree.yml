@@ -149,7 +149,7 @@
       title: 🤗 Transformers에 새로운 모델을 추가하는 방법 
     - local: add_tensorflow_model
       title: 어떻게 🤗 Transformers 모델을 TensorFlow로 변환하나요?
-    - local: in_translation
+    - local: add_new_pipeline
       title: 어떻게 🤗 Transformers에 파이프라인을 추가하나요?
     - local: testing
       title: 테스트
