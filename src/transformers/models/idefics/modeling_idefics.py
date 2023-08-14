@@ -1137,16 +1137,18 @@ class IdeficsModel(IdeficsPreTrainedModel):
             image_hidden_states = image_encoder_embeddings.to(dtype=self.dtype, device=input_ids.device)
             image_hidden_states = image_hidden_states.view(batch_size * num_images, image_seq_len, image_hidden_size)
 
-        if self.config.use_resampler and perceiver_embeddings is None:
-            image_hidden_states = self.perceiver_resampler(image_hidden_states)
-            image_seq_len, image_hidden_size = image_hidden_states.size(1), image_hidden_states.size(2)
-        elif self.config.use_resampler and perceiver_embeddings is not None:
-            batch_size, num_images, image_seq_len, image_hidden_size = perceiver_embeddings.size()
-            image_hidden_states = perceiver_embeddings
-        elif not self.config.use_resampler and perceiver_embeddings is None:
-            image_seq_len, image_hidden_size = image_hidden_states.size(1), image_hidden_states.size(2)
-        elif not self.config.use_resampler and perceiver_embeddings is not None:
-            raise ValueError("If perceiver_embeddings are passed, use_resampler should be True")
+        if self.config.use_resampler:
+            if perceiver_embeddings is None:
+                image_hidden_states = self.perceiver_resampler(image_hidden_states)
+                image_seq_len, image_hidden_size = image_hidden_states.size(1), image_hidden_states.size(2)
+            else:
+                batch_size, num_images, image_seq_len, image_hidden_size = perceiver_embeddings.size()
+                image_hidden_states = perceiver_embeddings
+        else:
+            if perceiver_embeddings is None:
+                image_seq_len, image_hidden_size = image_hidden_states.size(1), image_hidden_states.size(2)
+            else:
+                raise ValueError("If perceiver_embeddings are passed, use_resampler should be True")
 
         image_hidden_states = image_hidden_states.view(batch_size, num_images * image_seq_len, image_hidden_size)
         # # Hack to use the model in full language modeling mode
