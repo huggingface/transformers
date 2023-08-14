@@ -174,7 +174,7 @@ _deps = [
     "tf2onnx",
     "timeout-decorator",
     "timm",
-    "tokenizers==0.13.4.rc1",
+    "tokenizers==0.13.4.rc2",
     "torch>=1.9,!=1.12.0",
     "torchaudio",
     "torchvision",
