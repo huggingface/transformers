@@ -1519,7 +1519,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         # 4. if `inputs` is still None, try to create `input_ids` from BOS token
         inputs = self._maybe_initialize_input_ids_for_generation(inputs, bos_token_id, model_kwargs)
 
-        # 5. Prepare model kwargs from IDEFICS vision component
+        # 5. Prepare model_kwargs for IDEFICS vision component
         pixel_values = model_kwargs.get("pixel_values", None)
         image_encoder_embeddings = model_kwargs.get("image_encoder_embeddings", None)
         perceiver_embeddings = model_kwargs.get("perceiver_embeddings", None)
