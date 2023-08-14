@@ -1122,9 +1122,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         itc_outputs = self.itc_layer(last_hidden_states).transpose(0, 1).contiguous()
         stc_outputs = self.stc_layer(last_hidden_states, last_hidden_states).squeeze(0)
 
-        itc_logits = itc_outputs.view(-1, self.num_labels)
-
-        # calculate stc_logits
+        # make stc(sequence token classification) mask
         inv_attention_mask = 1 - attention_mask
         bsz, max_seq_length = inv_attention_mask.shape
         device = inv_attention_mask.device
@@ -1133,7 +1131,6 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device).bool()
         stc_outputs.masked_fill_(self_token_mask[None, :, :], -10000.0)
         stc_mask = attention_mask.view(-1).bool()
-        stc_logits = stc_outputs.view(-1, max_seq_length + 1)
 
         loss = None
         if itc_labels is not None and stc_labels is not None:
@@ -1143,12 +1140,12 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
             itc_labels = itc_labels.view(-1)
             if itc_mask is not None:
                 itc_mask = itc_mask.view(-1)
-                itc_loss = loss_fct(itc_logits[itc_mask], itc_labels[itc_mask])
+                itc_loss = loss_fct(itc_logits.view(-1, self.num_labels)[itc_mask], itc_labels[itc_mask])
             else:
-                itc_loss = loss_fct(itc_logits, itc_labels)
+                itc_loss = loss_fct(itc_logits.view(-1, self.num_labels), itc_labels)
 
             stc_labels = stc_labels.view(-1)
-            stc_loss = loss_fct(stc_logits[stc_mask], stc_labels[stc_mask])
+            stc_loss = loss_fct(stc_logits.view(-1, max_seq_length + 1)[stc_mask], stc_labels[stc_mask])
 
             loss = itc_loss + stc_loss
 
