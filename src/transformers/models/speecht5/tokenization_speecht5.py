@@ -111,6 +111,7 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
+            normalize=normalize,
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )

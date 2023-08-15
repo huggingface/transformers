@@ -64,6 +64,7 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         return text, ids
 
     def test_tokenizer_normalization(self):
+        tokenizer = self.get_tokenizer()
         input_text, output_text = self.get_numeric_input_output_texts()
         input_ids = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(input_text))
         output_ids = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(output_text))
@@ -164,20 +165,20 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokens,
             # fmt: off
-            [SPIECE_UNDERLINE, 'I', SPIECE_UNDERLINE, 'w', 'a', 's', SPIECE_UNDERLINE, 'b', 'o', 'r', 'n', SPIECE_UNDERLINE, 'i', 'n', SPIECE_UNDERLINE, 'n', 'i', 'n', 'e', 't', 'y', SPIECE_UNDERLINE, 't', 'w', 'o', SPIECE_UNDERLINE, 't', 'h', 'o', 'u', 's', 'a', 'n', 'd', SPIECE_UNDERLINE, ',', SPIECE_UNDERLINE, 'a', 'n', 'd', SPIECE_UNDERLINE, 't', 'h', 'i', 's', SPIECE_UNDERLINE, 'i', 's', SPIECE_UNDERLINE, 'f', 'a', 'l', 's', 'é', '.']
+            [SPIECE_UNDERLINE, 'I', SPIECE_UNDERLINE, 'w', 'a', 's', SPIECE_UNDERLINE, 'b', 'o', 'r', 'n', SPIECE_UNDERLINE, 'i', 'n', SPIECE_UNDERLINE, 'n', 'i', 'n', 'e', 't', 'y', SPIECE_UNDERLINE, 't', 'w', 'o', SPIECE_UNDERLINE, 't', 'h', 'o', 'u', 's', 'a', 'n', 'd', ',', SPIECE_UNDERLINE, 'a', 'n', 'd', SPIECE_UNDERLINE, 't', 'h', 'i', 's', SPIECE_UNDERLINE, 'i', 's', SPIECE_UNDERLINE, 'f', 'a', 'l', 's', 'é', '.']
             # fmt: on
         )
 
         ids = tokenizer.convert_tokens_to_ids(tokens)
         # fmt: off
-        self.assertListEqual(ids, [4, 30, 4, 20, 7, 12, 4, 25, 8, 13, 9, 4, 10, 9, 4, 3, 23, 4, 7, 9, 14, 4, 6, 11, 10, 12, 4, 10, 12, 4, 19, 7, 15, 12, 73, 26])
+        self.assertListEqual(ids, [4, 30, 4, 20, 7, 12, 4, 25, 8, 13, 9, 4, 10, 9, 4, 9, 10, 9, 5, 6, 22, 4, 6, 20, 8, 4, 6, 11, 8, 16, 12, 7, 9, 14, 23, 4, 7, 9, 14, 4, 6, 11, 10, 12, 4, 10, 12, 4, 19, 7, 15, 12, 73, 26])
         # fmt: on
 
         back_tokens = tokenizer.convert_ids_to_tokens(ids)
         self.assertListEqual(
             back_tokens,
             # fmt: off
-            [SPIECE_UNDERLINE, 'I', SPIECE_UNDERLINE, 'w', 'a', 's', SPIECE_UNDERLINE, 'b', 'o', 'r', 'n', SPIECE_UNDERLINE, 'i', 'n', SPIECE_UNDERLINE, '<unk>', ',', SPIECE_UNDERLINE, 'a', 'n', 'd', SPIECE_UNDERLINE, 't', 'h', 'i', 's', SPIECE_UNDERLINE, 'i', 's', SPIECE_UNDERLINE, 'f', 'a', 'l', 's', 'é', '.']
+            [SPIECE_UNDERLINE, 'I', SPIECE_UNDERLINE, 'w', 'a', 's', SPIECE_UNDERLINE, 'b', 'o', 'r', 'n', SPIECE_UNDERLINE, 'i', 'n', SPIECE_UNDERLINE, 'n', 'i', 'n', 'e', 't', 'y', SPIECE_UNDERLINE, 't', 'w', 'o', SPIECE_UNDERLINE, 't', 'h', 'o', 'u', 's', 'a', 'n', 'd', ',', SPIECE_UNDERLINE, 'a', 'n', 'd', SPIECE_UNDERLINE, 't', 'h', 'i', 's', SPIECE_UNDERLINE, 'i', 's', SPIECE_UNDERLINE, 'f', 'a', 'l', 's', 'é', '.']
             # fmt: on
         )
 
