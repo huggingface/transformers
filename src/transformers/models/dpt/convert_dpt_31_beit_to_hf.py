@@ -30,22 +30,41 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def get_dpt_config():
-    # beit-large-512 uses [5, 11, 17, 23]
+def get_dpt_config(model_name):
+
+    num_hidden_layers = 12
+    num_attention_heads = 12
+    hidden_size = 768
+    intermediate_size = 3072
+
+    if "large" in model_name:
+        hidden_size = 1024
+        num_hidden_layers = 24
+        num_attention_heads = 16
+        intermediate_size = 4096
+        out_features = ["stage6", "stage12", "stage18", "stage24"]  # beit-large-512 uses [5, 11, 17, 23]
+
+    if "512" in model_name:
+        image_size = 512
+    elif "384" in model_name:
+        image_size = 384
+    else:
+        raise ValueError("Model not supported")
+
     backbone_config = BeitConfig(
-        image_size=512,
-        num_hidden_layers=24,
-        hidden_size=1024,
-        intermediate_size=4096,
-        num_attention_heads=16,
+        image_size=image_size,
+        num_hidden_layers=num_hidden_layers,
+        hidden_size=hidden_size,
+        intermediate_size=intermediate_size,
+        num_attention_heads=num_attention_heads,
         use_relative_position_bias=True,
-        out_features=["stage6", "stage12", "stage18", "stage24"],
+        out_features=out_features,
     )
 
     # TODO get rid of config.hidden_size, using config.backbone_config.hidden_size instead
     config = DPTConfig(backbone_config=backbone_config, hidden_size=1024, neck_hidden_sizes=[256, 512, 1024, 1024])
 
-    return config
+    return config, image_size
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
@@ -159,11 +178,13 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     name_to_url = {
         "dpt-beit-large-512": "https://github.com/isl-org/MiDaS/releases/download/v3_1/dpt_beit_large_512.pt",
+        "dpt-beit-large-384": "https://github.com/isl-org/MiDaS/releases/download/v3_1/dpt_beit_large_384.pt",
+        "dpt-beit-base-384": "https://github.com/isl-org/MiDaS/releases/download/v3_1/dpt_beit_base_384.pt",
     }
 
     # define DPT configuration based on URL
     checkpoint_url = name_to_url[model_name]
-    config = get_dpt_config()
+    config, image_size = get_dpt_config(model_name)
     # load original state_dict from URL
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
     # remove certain keys
@@ -185,8 +206,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     model.eval()
 
     # Check outputs on an image
-    size = 512
-    processor = DPTImageProcessor(size={"height": size, "width": size})
+    processor = DPTImageProcessor(size={"height": image_size, "width": image_size})
 
     image = prepare_img()
     processor(image, return_tensors="pt")
@@ -200,7 +220,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     transforms = transforms.Compose(
         [
-            transforms.Resize((512, 512)),
+            transforms.Resize((image_size, image_size)),
             transforms.ToTensor(),
         ]
     )
@@ -217,10 +237,17 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     # assert logits
     # TODO there's still a small difference with the original logits
-    expected_shape = torch.Size([1, 512, 512])
-    expected_slice = torch.tensor(
-        [[2804.6260, 2792.5708, 2812.9263], [2772.0288, 2780.1118, 2796.2529], [2748.1094, 2766.6558, 2766.9834]]
-    )
+    if model_name == "dpt-beit-large-512":
+        expected_shape = torch.Size([1, 512, 512])
+        expected_slice = torch.tensor(
+            [[2804.6260, 2792.5708, 2812.9263], [2772.0288, 2780.1118, 2796.2529], [2748.1094, 2766.6558, 2766.9834]]
+        )
+    elif model_name == "dpt-beit-large-384":
+        expected_shape = torch.Size([1, 384, 384])
+        expected_slice = torch.tensor(
+            [[2804.6260, 2792.5708, 2812.9263], [2772.0288, 2780.1118, 2796.2529], [2748.1094, 2766.6558, 2766.9834]]
+        )
+
     assert predicted_depth.shape == torch.Size(expected_shape)
     assert torch.allclose(predicted_depth[0, :3, :3], expected_slice)
     print("Looks ok!")
@@ -244,7 +271,7 @@ if __name__ == "__main__":
         "--model_name",
         default="dpt-beit-large-512",
         type=str,
-        choices=["dpt-beit-large-512"],
+        choices=["dpt-beit-large-512", "dpt-beit-large-384", "dpt-beit-base-384"],
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
