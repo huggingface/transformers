@@ -23,18 +23,20 @@ rendered properly in your Markdown viewer.
 시작하기 전에 필요한 라이브러리가 모두 설치되어 있는지 확인하세요:
 
 ```bash
-!pip install transformers datasets
+pip install transformers datasets
 ```
 
 또한 선호하는 머신 러닝 프레임워크를 설치해야 합니다:
 
 <frameworkcontent>
 <pt>
+
 ```bash
 pip install torch
 ```
 </pt>
 <tf>
+
 ```bash
 pip install tensorflow
 ```
@@ -210,6 +212,7 @@ label: NEGATIVE, with score: 0.5309
 
 <frameworkcontent>
 <pt>
+
 ```py
 >>> pt_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
@@ -221,6 +224,7 @@ label: NEGATIVE, with score: 0.5309
 ```
 </pt>
 <tf>
+
 ```py
 >>> tf_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
@@ -353,6 +357,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 
 <frameworkcontent>
 <pt>
+
 ```py
 >>> from transformers import AutoModel
 
@@ -361,6 +366,7 @@ tensor([[0.0021, 0.0018, 0.0115, 0.2121, 0.7725],
 ```
 </pt>
 <tf>
+
 ```py
 >>> from transformers import TFAutoModel
 

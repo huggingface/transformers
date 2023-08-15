@@ -23,18 +23,20 @@ Get up and running with 🤗 Transformers! Whether you're a developer or an ever
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-!pip install transformers datasets
+pip install transformers datasets
 ```
 
 You'll also need to install your preferred machine learning framework:
 
 <frameworkcontent>
 <pt>
+
 ```bash
 pip install torch
 ```
 </pt>
 <tf>
+
 ```bash
 pip install tensorflow
 ```
@@ -208,6 +210,7 @@ A tokenizer can also accept a list of inputs, and pad and truncate the text to r
 
 <frameworkcontent>
 <pt>
+
 ```py
 >>> pt_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
@@ -219,6 +222,7 @@ A tokenizer can also accept a list of inputs, and pad and truncate the text to r
 ```
 </pt>
 <tf>
+
 ```py
 >>> tf_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
@@ -352,6 +356,7 @@ One particularly cool 🤗 Transformers feature is the ability to save a model a
 
 <frameworkcontent>
 <pt>
+
 ```py
 >>> from transformers import AutoModel
 
@@ -360,6 +365,7 @@ One particularly cool 🤗 Transformers feature is the ability to save a model a
 ```
 </pt>
 <tf>
+
 ```py
 >>> from transformers import TFAutoModel
 
