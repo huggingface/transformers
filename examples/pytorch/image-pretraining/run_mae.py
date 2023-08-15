@@ -165,10 +165,13 @@ class CustomTrainingArguments(TrainingArguments):
 
     def __post_init__(self):
         # Compute absolute learning rate while args are mutable
+        super().__post_init__()
         if self.base_learning_rate is not None:
             total_train_batch_size = self.train_batch_size * self.gradient_accumulation_steps * self.world_size
+            delattr(self, "_frozen")
             self.learning_rate = self.base_learning_rate * total_train_batch_size / 256
-        super().__post_init__()
+            setattr(self, "_frozen", True)
+        
 
 
 def collate_fn(examples):
