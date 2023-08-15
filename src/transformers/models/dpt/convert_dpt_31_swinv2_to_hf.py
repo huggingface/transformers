@@ -34,18 +34,26 @@ def get_dpt_config(model_name):
     if "tiny" in model_name:
         embed_dim = 96
         depths = (2, 2, 6, 2)
+        num_heads = (3, 6, 12, 24)
         window_size = 7
         pretrained_window_sizes = (0, 0, 0, 0)
-        num_heads = (3, 6, 12, 24)
     elif "base" in model_name:
         embed_dim = 128
         depths = (2, 2, 18, 2)
+        num_heads = (4, 8, 16, 32)
         window_size = 24
         pretrained_window_sizes = (12, 12, 12, 6)
-        num_heads = (4, 8, 16, 32)
+    elif "large" in model_name:
+        embed_dim = 192
+        depths = (2, 2, 18, 2)
+        num_heads = (6, 12, 24, 48)
+        window_size = 24
+        pretrained_window_sizes = (12, 12, 12, 6)
 
     if "384" in model_name:
         image_size = 384
+    elif "256" in model_name:
+        image_size = 256
     else:
         raise ValueError("Model not supported, to do")
 
@@ -64,6 +72,8 @@ def get_dpt_config(model_name):
         neck_hidden_sizes = [96, 192, 384, 768]
     elif model_name == "dpt-swinv2-base-384":
         neck_hidden_sizes = [128, 256, 512, 1024]
+    elif model_name == "dpt-swinv2-large-384":
+        neck_hidden_sizes = [192, 384, 768, 1536]
     config = DPTConfig(backbone_config=backbone_config, hidden_size=1024, neck_hidden_sizes=neck_hidden_sizes)
 
     return config
@@ -143,7 +153,6 @@ def remove_ignore_keys_(state_dict):
 
 
 # we split up the matrix of each encoder layer into queries, keys and values
-# TODO biases??
 def read_in_q_k_v(state_dict, config, model):
     for i in range(len(config.backbone_config.depths)):
         for j in range(config.backbone_config.depths[i]):
@@ -181,6 +190,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     name_to_url = {
         "dpt-swinv2-tiny-256": "https://github.com/isl-org/MiDaS/releases/download/v3_1/dpt_swin2_tiny_256.pt",
         "dpt-swinv2-base-384": "https://github.com/isl-org/MiDaS/releases/download/v3_1/dpt_swin2_base_384.pt",
+        "dpt-swinv2-large-384": "https://github.com/isl-org/MiDaS/releases/download/v3_1/dpt_swin2_large_384.pt",
     }
 
     # define DPT configuration based on URL
@@ -239,10 +249,24 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     # assert logits
     # TODO there's still a small difference with the original logits
-    expected_shape = torch.Size([1, 384, 384])
-    expected_slice = torch.tensor(
-        [[1998.5575, 1997.3887, 2009.2981], [1952.8607, 1979.6488, 2001.0854], [1953.7697, 1961.7711, 1968.8904]]
-    )
+    if model_name == "dpt-swinv2-base-384":
+        # OK, checked
+        expected_shape = torch.Size([1, 384, 384])
+        expected_slice = torch.tensor(
+            [[1998.5575, 1997.3887, 2009.2981], [1952.8607, 1979.6488, 2001.0854], [1953.7697, 1961.7711, 1968.8904]]
+        )
+    elif model_name == "dpt-swinv2-tiny-256":
+        expected_shape = torch.Size([1, 512, 512])
+        expected_slice = torch.tensor(
+            [[1291.4197, 1298.2261, 1300.9379], [1293.7563, 1297.8181, 1303.7618], [1303.2360, 1301.7085, 1301.3245]]
+        )
+    elif model_name == "dpt-swinv2-large-384":
+        # OK, checked
+        expected_shape = torch.Size([1, 384, 384])
+        expected_slice = torch.tensor(
+            [[1203.7206, 1200.1495, 1197.8234], [1196.2484, 1183.5033, 1186.4640], [1178.8131, 1182.3260, 1174.3975]]
+        )
+
     assert predicted_depth.shape == torch.Size(expected_shape)
     assert torch.allclose(predicted_depth[0, :3, :3], expected_slice)
     print("Looks ok!")
@@ -266,7 +290,7 @@ if __name__ == "__main__":
         "--model_name",
         default="dpt-swinv2-base-384",
         type=str,
-        choices=["dpt-swinv2-base-384"],
+        choices=["dpt-swinv2-tiny-256", "dpt-swinv2-base-384", "dpt-swinv2-large-384"],
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
