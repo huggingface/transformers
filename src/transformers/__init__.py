@@ -4209,7 +4209,6 @@ if TYPE_CHECKING:
 
     # Generation
     from .generation import GenerationConfig, TextIteratorStreamer, TextStreamer
-    from .prompt_utils import PromptConfig
     from .hf_argparser import HfArgumentParser
 
     # Integrations
@@ -4744,6 +4743,7 @@ if TYPE_CHECKING:
         pipeline,
     )
     from .processing_utils import ProcessorMixin
+    from .prompt_utils import PromptConfig
 
     # Tokenization
     from .tokenization_utils import PreTrainedTokenizer

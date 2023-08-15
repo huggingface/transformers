@@ -47,19 +47,20 @@ class PromptConfig(PushToHubMixin):
     Arg:
 
     """
+
     # TODO Fill in docstring
     def __init__(self, **kwargs):
-        self.role_prefixes = kwargs.pop("role_prefixes", {})
-        self.role_token_prefixes = kwargs.pop("role_token_prefixes", {})
-        self.role_suffixes = kwargs.pop("role_suffixes", {})
-        self.role_token_suffixes = kwargs.pop("role_token_suffixes", {})
-        self.chat_add_special_tokens = kwargs.pop("add_special_tokens", True)
-        self.chat_default_system_prompt = kwargs.pop("default_system_prompt", None)
+        self.role_prefixes = kwargs.pop("chat_role_prefixes", {})
+        self.role_token_prefixes = kwargs.pop("chat_role_token_prefixes", {})
+        self.role_suffixes = kwargs.pop("chat_role_suffixes", {})
+        self.role_token_suffixes = kwargs.pop("chat_role_token_suffixes", {})
+        self.add_special_tokens = kwargs.pop("chat_add_special_tokens", True)
+        self.default_system_prompt = kwargs.pop("chat_default_system_prompt", None)
         # TODO Matt: If we want past key-values to be consistent across multiple generation calls,
         #            then we will probably need to force something like this in all cases so that
         #            we don't change tokens we've already computed key-values for.
-        self.tokenize_separately = kwargs.pop("tokenize_separately", True)
-        self.max_length = kwargs.pop("max_length", None)
+        self.tokenize_separately = kwargs.pop("chat_tokenize_separately", True)
+        self.max_length = kwargs.pop("chat_max_length", None)
 
     def __eq__(self, other):
         if not isinstance(other, PromptConfig):
@@ -477,3 +478,50 @@ class PromptConfig(PushToHubMixin):
         # remove all the attributes that were updated, without modifying the input dict
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
+
+
+class ChatConversation:
+    def __init__(self, messages: List[Dict[str, str]] = None, conversation_id: uuid.UUID = None):
+        if not conversation_id:
+            conversation_id = uuid.uuid4()
+        if messages is None:
+            messages = []
+
+        self.uuid = conversation_id
+        self.messages = messages
+
+    def __eq__(self, other):
+        if not isinstance(other, ChatConversation):
+            return False
+        return self.uuid == other.uuid or self.messages == other.messages
+
+    def add_message(self, message: Dict[str, str]):
+        if not set(message.keys()) == {"role", "content"}:
+            raise ValueError("Message should contain only 'role' and 'content' keys!")
+        if message["role"] not in ("user", "assistant", "system"):
+            raise ValueError("Only 'user', 'assistant' and 'system' roles are supported for now!")
+        self.messages.append(message)
+
+    def __iter__(self):
+        for message in self.messages:
+            yield message
+
+    def __len__(self):
+        return len(self.messages)
+
+    def __repr__(self):
+        """
+        Generates a string representation of the conversation.
+
+        Returns:
+            `str`:
+
+        Example:
+            Conversation id: 7d15686b-dc94-49f2-9c4b-c9eac6a1f114
+            user: Going to the movies tonight - any suggestions?
+            bot: The Big Lebowski
+        """
+        output = f"Conversation id: {self.uuid}\n"
+        for message in self.messages:
+            output += f"{message['role']}: {message['content']}\n"
+        return output

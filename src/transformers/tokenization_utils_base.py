@@ -34,6 +34,7 @@ from packaging import version
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
+from .prompt_utils import ChatConversation, PromptConfig
 from .utils import (
     ExplicitEnum,
     PaddingStrategy,
@@ -1558,7 +1559,28 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             {}
         )  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
         self._in_target_context_manager = False
+        self.prompt_config = (
+            PromptConfig.from_dict(self.default_prompt_config, **kwargs) if self.can_generate else None
+        )
         super().__init__(**kwargs)
+
+    @property
+    def can_generate(self):
+        # TODO Figure out how to get this as the tokenizer
+        return True
+
+    @property
+    def default_prompt_config(self):
+        return {
+            "system_message_start": "[SYS]",
+            "system_message_end": "[/SYS]",
+            "user_message_start": "[USER_MSG]",
+            "user_message_end": "[/USER_MSG]",
+            "assistant_message_start": "[ASST_MSG]",
+            "assistant_message_end": "[ASST_MSG]",
+            "tokenize_messages_separately": True,
+            "add_special_tokens": False,
+        }
 
     @property
     def max_len_single_sentence(self) -> int:
@@ -1627,38 +1649,40 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         raise NotImplementedError()
 
-    def build_conversation_input_ids(self, conversation: Union[List[Dict[str, str]], ChatConversation]) -> List[int]:
+    def build_conversation_input_ids(
+        self,
+        conversation: Union[List[Dict[str, str]], ChatConversation],
+        prompt_config: Optional[PromptConfig] = None,
+        **kwargs,
+    ) -> List[int]:
         if isinstance(conversation, ChatConversation):
             conversation = conversation.messages
-        if self.default_system_prompt is not None and (len(conversation) == 0 or conversation.messages[0]["role"] != "system"):
-            conversation = [{"role": "system", "content": self.default_system_prompt}] + conversation.messages
+
+        # priority: `prompt_config` argument > `model.prompt_config` (the default generation config)
+        if prompt_config is None:
+            prompt_config = self.prompt_config
+
+        # TODO How will this handle partial updates, such as when the kwargs only cover one role?
+        prompt_config.update(**kwargs)
+
+        if prompt_config.default_system_prompt is not None and (
+            len(conversation) == 0 or conversation.messages[0]["role"] != "system"
+        ):
+            conversation = [{"role": "system", "content": prompt_config.default_system_prompt}] + conversation.messages
 
         dialog_tokens: List[int] = []
-        # TODO Figure out where the chat settings live
 
         for message in conversation:
             role = message["role"]
-            message_prefix = self.string_prefixes.get(role, "")
-            message_suffix = self.string_suffixes.get(role, "")
-            message_prefix_tokens = self.token_prefixes.get(role, [])
-            message_suffix_tokens = self.token_suffixes.get(role, [])
+            message_prefix = prompt_config.string_prefixes.get(role, "")
+            message_suffix = prompt_config.string_suffixes.get(role, "")
+            message_prefix_tokens = prompt_config.token_prefixes.get(role, [])
+            message_suffix_tokens = prompt_config.token_suffixes.get(role, [])
             message = "".join([message_prefix, message["content"].strip(), message_suffix])
             tokenized_message = self.encode(message, add_special_tokens=self.add_special_tokens)
             tokenized_message = message_prefix_tokens + tokenized_message + message_suffix_tokens
             dialog_tokens.extend(tokenized_message)
         return dialog_tokens
-
-    # TODO
-    # 1) See if you can make Llama work with the new format, or what you need to add to the
-    #    chat template. (CHECK)
-    # 2) Promote build_conversation_input_ids to a public method and remove the individual tokenizer instances (added as Mixin)
-    # 3) Accept lists of dicts in ChatML format as well as Conversation objects (CHECK)
-    # 4) Ensure backward compatibility for Conversation objects is maintained (maybe by editing ConversationalPipeline if we have to change the method) (leave this for now)
-    # 5) Tokenizer reads prompt_config.json
-    # 6) Tokenizer saves prompt_config.json
-    # 7) prompt_config.json contains strings that build_conversation_input_ids uses to format the message (kinda CHECK)
-    # 8) prompt_config can also supply token IDs that are added to the sequence post-tokenization (kinda CHECK)
-    # 9) Existing model-specific build_conversation_input_ids to be replaced with default
 
     @classmethod
     def from_pretrained(

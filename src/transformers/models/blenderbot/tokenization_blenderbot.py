@@ -431,7 +431,7 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
         return input_ids
 
     @property
-    def default_chat_settings(self):
+    def default_prompt_config(self):
         return {
             "user_message_start": " ",
             "tokenize_messages_separately": False,

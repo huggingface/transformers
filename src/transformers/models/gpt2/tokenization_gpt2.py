@@ -363,7 +363,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
         return input_ids
 
     @property
-    def default_chat_settings(self):
+    def default_prompt_config(self):
         return {
             "user_message_end_token": self.eos_token_id,
             "assistant_message_eos_token": self.eos_token_id,

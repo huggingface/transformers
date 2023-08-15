@@ -270,13 +270,13 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         return input_ids
 
     @property
-    def default_chat_settings(self):
+    def default_prompt_config(self):
         return {
             "user_message_end_token": self.eos_token_id,
             "assistant_message_eos_token": self.eos_token_id,
             "tokenize_messages_separately": True,
             "add_special_tokens": False,
-            "max_length": self.model_max_length
+            "max_length": self.model_max_length,
         }
 
     # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer.save_vocabulary

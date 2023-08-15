@@ -151,53 +151,6 @@ class Conversation:
         return output
 
 
-class ChatConversation:
-    def __init__(self, messages: List[Dict[str, str]] = None, conversation_id: uuid.UUID = None):
-        if not conversation_id:
-            conversation_id = uuid.uuid4()
-        if messages is None:
-            messages = []
-
-        self.uuid = conversation_id
-        self.messages = messages
-
-    def __eq__(self, other):
-        if not isinstance(other, ChatConversation):
-            return False
-        return self.uuid == other.uuid or self.messages == other.messages
-
-    def add_message(self, message: Dict[str, str]):
-        if not set(message.keys()) == {"role", "content"}:
-            raise ValueError("Message should contain only 'role' and 'content' keys!")
-        if message["role"] not in ("user", "assistant", "system"):
-            raise ValueError("Only 'user', 'assistant' and 'system' roles are supported for now!")
-        self.messages.append(message)
-
-    def __iter__(self):
-        for message in self.messages:
-            yield message
-
-    def __len__(self):
-        return len(self.messages)
-
-    def __repr__(self):
-        """
-        Generates a string representation of the conversation.
-
-        Returns:
-            `str`:
-
-        Example:
-            Conversation id: 7d15686b-dc94-49f2-9c4b-c9eac6a1f114
-            user: Going to the movies tonight - any suggestions?
-            bot: The Big Lebowski
-        """
-        output = f"Conversation id: {self.uuid}\n"
-        for message in self.messages:
-            output += f"{message['role']}: {message['content']}\n"
-        return output
-
-
 @add_end_docstrings(
     PIPELINE_INIT_ARGS,
     r"""
