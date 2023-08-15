@@ -18,12 +18,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Idefics model."""
+import inspect
 from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-import inspect
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
