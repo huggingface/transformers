@@ -36,7 +36,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import Dinov2ForImageClassification, Dinov2Model
+    from transformers import Dinov2Backbone, Dinov2ForImageClassification, Dinov2Model
     from transformers.models.dinov2.modeling_dinov2 import DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -159,7 +159,15 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (Dinov2Model, Dinov2ForImageClassification) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            Dinov2Model,
+            Dinov2ForImageClassification,
+            Dinov2Backbone,
+        )
+        if is_torch_available()
+        else ()
+    )
     pipeline_model_mapping = (
         {"feature-extraction": Dinov2Model, "image-classification": Dinov2ForImageClassification}
         if is_torch_available()

@@ -1623,6 +1623,7 @@ else:
     _import_structure["models.dinov2"].extend(
         [
             "DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Dinov2Backbone",
             "Dinov2ForImageClassification",
             "Dinov2Model",
             "Dinov2PreTrainedModel",
@@ -5530,6 +5531,7 @@ if TYPE_CHECKING:
         )
         from .models.dinov2 import (
             DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Dinov2Backbone,
             Dinov2ForImageClassification,
             Dinov2Model,
             Dinov2PreTrainedModel,
