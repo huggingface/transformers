@@ -85,10 +85,11 @@ class Dinov2Config(PretrainedConfig, BackboneConfigMixin):
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage.
         apply_layernorm (`bool`, *optional*, defaults to `True`):
-            Whether to apply layer normalization in case the model is used as backbone.
+            Whether to apply layer normalization to the feature maps in case the model is used as backbone.
         reshape (`bool`, *optional*, defaults to `True`):
-            Whether to reshape the output to a 4D tensor in case the model is used as backbone. If `False`, the output
-            will be a 3D tensor of shape `(batch_size, seq_len, hidden_size)`.
+            Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
+            case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
+            seq_len, hidden_size)`.
 
     Example:
 
