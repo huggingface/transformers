@@ -725,6 +725,70 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
 
         return center, scale
 
+    def get_warp_matrix(self, theta, size_dst, size_target, size_input):
+        theta = torch.tensor(np.deg2rad(theta))
+        matrix = torch.zeros((2, 3), dtype=torch.float32)
+        scale_x = size_dst[0] / size_target[0]
+        scale_y = size_dst[1] / size_target[1]
+        matrix[0, 0] = torch.cos(theta) * scale_x
+        matrix[0, 1] = -torch.sin(theta) * scale_x
+        matrix[0, 2] = scale_x * (-0.5 * size_input[0] * torch.cos(theta) +
+                                  0.5 * size_input[1] * torch.sin(theta) +
+                                  0.5 * size_target[0])
+        matrix[1, 0] = torch.sin(theta) * scale_y
+        matrix[1, 1] = torch.cos(theta) * scale_y
+        matrix[1, 2] = scale_y * (-0.5 * size_input[0] * torch.sin(theta) -
+                                  0.5 * size_input[1] * torch.cos(theta) +
+                                  0.5 * size_target[1])
+        return matrix
+
+    def warp_affine_joints(self, joints, mat):
+        """Apply affine transformation defined by the transform matrix on the
+        joints.
+
+        Args:
+            joints (torch.Tensor[..., 2]): Origin coordinate of joints.
+            mat (torch.Tensor[3, 2]): The affine matrix.
+
+        Returns:
+            torch.Tensor[..., 2]: Result coordinate of joints.
+        """
+        joints = torch.tensor(joints)
+        shape = joints.shape
+        joints = joints.reshape(-1, 2)
+        ones = torch.ones((joints.shape[0], 1), dtype=joints.dtype, device=joints.device)
+        joints_with_ones = torch.cat((joints, ones), dim=1)
+        transformed_joints = torch.mm(joints_with_ones, mat.t())
+        return transformed_joints.reshape(shape)
+
+    def processing(self,results):
+        image_size = results['ann_info']['image_size']
+
+        img_tensor = results['img']
+        joints_3d_tensor = results['joints_3d']
+        c = results['center']
+        s = results['scale']
+        r = results['rotation']
+
+        trans = self.get_warp_matrix(r, c * 2.0, image_size - 1.0, s * 200.0)
+
+        img_tensor = torch.tensor(cv2.warpAffine(
+            img_tensor.numpy(),
+            trans, (int(image_size[0]), int(image_size[1])),
+            flags=cv2.INTER_LINEAR
+        ), dtype=torch.float32)
+
+        joints_3d_tensor[:, 0:2] = self.warp_affine_joints(
+            joints_3d_tensor[:, 0:2].clone(), trans)
+
+
+        results['img'] = img_tensor
+        results['joints_3d'] = joints_3d_tensor
+        results["joints_3d_visible"] = joints_3d_visible
+
+        return results
+
+
     def _inference_pose_model(self, model, img, bboxes, return_heatmap=False):
         device = next(model.parameters()).device
         if device.type == 'cpu':
@@ -756,7 +820,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
 
             data['img'] = img
 
-            #data = preprocess(data)
+            #data = self.processing(data)
             batch_data.append(data)
 
         with torch.no_grad():
@@ -787,6 +851,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
             bboxes,
             return_heatmap = False)
 
+        pose_results.append(pixel_values)
         for pose, person_result, bbox in zip(poses, person_results, bboxes):
             pose_result = person_result.copy()
             pose_result['keypoints'] = pose
