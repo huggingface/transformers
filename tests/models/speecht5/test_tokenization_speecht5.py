@@ -52,11 +52,22 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         output_text = "this is a test"
         return input_text, output_text
 
+    def get_numeric_input_output_texts(self):
+        input_text = "I have $123.45 and owe €59.78. My balance is -₴876.90 and have 73% stocks in my company which equals to ₦72649201"
+        output_text = "I have one hundred and twenty three point four five dollars and owe fifty nine point seven eight euros. My balance is minus eight hundred and seventy six point nine zero ukrainian hryvnia and have seventy three percent stocks in my company which equals to seventy two million six hundred and forty nine thousand two hundred and one nigerian naira"
+        return input_text, output_text
+
     def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5):
         input_text, output_text = self.get_input_output_texts(tokenizer)
         ids = tokenizer.encode(output_text, add_special_tokens=False)
         text = tokenizer.decode(ids, clean_up_tokenization_spaces=False)
         return text, ids
+
+    def test_tokenizer_normalization(self):
+        input_text, output_text = self.get_numeric_input_output_texts()
+        input_ids = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(input_text))
+        output_ids = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(output_text))
+        self.assertListEqual(input_ids, output_ids)
 
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
@@ -153,7 +164,7 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokens,
             # fmt: off
-            [SPIECE_UNDERLINE, 'I', SPIECE_UNDERLINE, 'w', 'a', 's', SPIECE_UNDERLINE, 'b', 'o', 'r', 'n', SPIECE_UNDERLINE, 'i', 'n', SPIECE_UNDERLINE, '92000', ',', SPIECE_UNDERLINE, 'a', 'n', 'd', SPIECE_UNDERLINE, 't', 'h', 'i', 's', SPIECE_UNDERLINE, 'i', 's', SPIECE_UNDERLINE, 'f', 'a', 'l', 's', 'é', '.']
+            [SPIECE_UNDERLINE, 'I', SPIECE_UNDERLINE, 'w', 'a', 's', SPIECE_UNDERLINE, 'b', 'o', 'r', 'n', SPIECE_UNDERLINE, 'i', 'n', SPIECE_UNDERLINE, 'n', 'i', 'n', 'e', 't', 'y', SPIECE_UNDERLINE, 't', 'w', 'o', SPIECE_UNDERLINE, 't', 'h', 'o', 'u', 's', 'a', 'n', 'd', SPIECE_UNDERLINE, ',', SPIECE_UNDERLINE, 'a', 'n', 'd', SPIECE_UNDERLINE, 't', 'h', 'i', 's', SPIECE_UNDERLINE, 'i', 's', SPIECE_UNDERLINE, 'f', 'a', 'l', 's', 'é', '.']
             # fmt: on
         )
 
