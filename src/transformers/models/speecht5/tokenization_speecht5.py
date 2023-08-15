@@ -23,6 +23,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from .number_normalizer import EnglishNumberNormalizer
 
 
 logger = logging.get_logger(__name__)
@@ -64,6 +65,8 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
+        normalize (`bool`, *optional*, defaults to `True`):
+            Whether to convert numeric quantities in the text to their spelt-out english counterparts.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
@@ -97,6 +100,7 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
+        normalize=True,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> None:
@@ -112,6 +116,7 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
         )
 
         self.vocab_file = vocab_file
+        self.normalize = normalize
 
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
@@ -142,6 +147,8 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
+        if self.normalize:
+            text = self._normalize(text)
         return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token):
@@ -203,3 +210,11 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
+
+    def _normalize(self, text: str):
+        """
+        Normalizes a given string using the 'EnglishNumberNormalizer' class, which converts numeric elements in english
+        text.
+        """
+        normalizer = EnglishNumberNormalizer()
+        return normalizer(text)

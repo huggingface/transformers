@@ -15,7 +15,6 @@
 """Speech processor class for SpeechT5."""
 
 from ...processing_utils import ProcessorMixin
-from .number_normalizer import EnglishNumberNormalizer
 
 
 class SpeechT5Processor(ProcessorMixin):
@@ -66,7 +65,6 @@ class SpeechT5Processor(ProcessorMixin):
         text_target = kwargs.pop("text_target", None)
         audio_target = kwargs.pop("audio_target", None)
         sampling_rate = kwargs.pop("sampling_rate", None)
-        normalize = kwargs.pop("normalize", None)
 
         if audio is not None and text is not None:
             raise ValueError(
@@ -84,8 +82,6 @@ class SpeechT5Processor(ProcessorMixin):
         if audio is not None:
             inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
         elif text is not None:
-            if normalize:
-                text = self._normalize(text)
             inputs = self.tokenizer(text, **kwargs)
         else:
             inputs = None
@@ -94,8 +90,6 @@ class SpeechT5Processor(ProcessorMixin):
             targets = self.feature_extractor(audio_target=audio_target, *args, sampling_rate=sampling_rate, **kwargs)
             labels = targets["input_values"]
         elif text_target is not None:
-            if normalize:
-                text_target = self._normalize(text_target)
             targets = self.tokenizer(text_target, **kwargs)
             labels = targets["input_ids"]
         else:
@@ -186,11 +180,3 @@ class SpeechT5Processor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
-
-    def _normalize(self, text: str):
-        """
-        Normalizes a given string using the 'EnglishNumberNormalizer' class, which converts numeric elements in english
-        text.
-        """
-        normalizer = EnglishNumberNormalizer()
-        return normalizer(text)

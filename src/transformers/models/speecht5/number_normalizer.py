@@ -48,6 +48,28 @@ class EnglishNumberNormalizer:
             "decillion",
         ]
 
+        # Define a dictionary to map currency symbols to their names
+        self.currency_symbols = {
+            "$": " dollars",
+            "€": " euros",
+            "£": " pounds",
+            "¢": " cents",
+            "¥": " japanese yen",
+            "₹": " indian rupees",
+            "₽": " russian rubles",
+            "฿": " thai baht",
+            "₺": " turkish liras",
+            "₴": " ukrainian hryvnia",
+            "₣": " swiss francs",
+            "₡": " costa rican colon",
+            "₱": " philippine peso",
+            "₪": " israeli shekels",
+            "₮": " mongolian tögrög",
+            "₩": " south korean won",
+            "₦": " nigerian naira",
+            "₫": " vietnamese Đồng",
+        }
+
     def spell_number(self, num):
         if num == 0:
             return "zero"
@@ -82,37 +104,18 @@ class EnglishNumberNormalizer:
 
         return " ".join(reversed(parts))
 
-    def convert(self, n):
-        if "." in n:
-            integer_part, decimal_part = n.split(".")
+    def convert(self, number):
+        """
+        Converts an individual number passed in string form to spelt-out form
+        """
+        if "." in number:
+            integer_part, decimal_part = number.split(".")
         else:
-            integer_part, decimal_part = n, "00"
-
-        # Define a dictionary to map currency symbols to their names
-        currency_symbols = {
-            "$": " dollars",
-            "€": " euros",
-            "£": " pounds",
-            "¢": " cents",
-            "¥": "Japanese Yen",
-            "₹": "Indian Rupee",
-            "₽": "Russian Ruble",
-            "฿": "Thai Baht",
-            "₺": "Turkish Lira",
-            "₴": "Ukrainian Hryvnia",
-            "₣": "Swiss Franc",
-            "₡": "Costa Rican Colon",
-            "₱": "Philippine Peso",
-            "₪": "Israeli New Shekel",
-            "₮": "Mongolian Tögrög",
-            "₩": "South Korean Won",
-            "₦": "Nigerian Naira",
-            "₫": "Vietnamese Đồng",
-        }
+            integer_part, decimal_part = number, "00"
 
         # Extract currency symbol if present
         currency_symbol = ""
-        for symbol, name in currency_symbols.items():
+        for symbol, name in self.currency_symbols.items():
             if integer_part.startswith(symbol):
                 currency_symbol = name
                 integer_part = integer_part[len(symbol) :]
@@ -139,38 +142,22 @@ class EnglishNumberNormalizer:
             integer_part = integer_part.replace("%", "")
             decimal_part = decimal_part.replace("%", "")
 
-        print(integer_part, decimal_part)
-
-        # integer_part = re.sub(r"\D", "", integer_part)
         integer_part = integer_part.zfill(3 * ((len(integer_part) - 1) // 3 + 1))
 
         parts = []
-        units = [
-            "",
-            "thousand",
-            "million",
-            "billion",
-            "trillion",
-            "quadrillion",
-            "quintillion",
-            "sextillion",
-            "septillion",
-            "octillion",
-            "nonillion",
-            "decillion",
-        ]
-
         for i in range(0, len(integer_part), 3):
             chunk = int(integer_part[i : i + 3])
             if chunk > 0:
                 part = self.spell_number(chunk)
-                unit = units[len(integer_part[i:]) // 3 - 1]
+                unit = self.thousands[len(integer_part[i:]) // 3 - 1]
                 if unit:
                     part += " " + unit
                 parts.append(part)
 
         spelled_integer = " ".join(parts)
 
+        # Format the spelt-out number based on conditions, such as:
+        # If it has decimal parts, currency symbol, minus prefix, etc
         if decimal_part == "00":
             return (
                 f"{minus_prefix}{spelled_integer}{percent_suffix}{currency_symbol}"
@@ -189,7 +176,8 @@ class EnglishNumberNormalizer:
         """
         Convert numbers / number-like quantities in a string to their spelt-out counterparts
         """
-        pattern = r"(?<!\w)(-?\$?\€?\£?\¢?\d+(?:\.\d{1,2})?%?)(?!\w)"
+        # Form part of the pattern for all currency symbols
+        pattern = r"(?<!\w)(-?\$?\€?\£?\¢?\¥?\₹?\₽?\฿?\₺?\₴?\₣?\₡?\₱?\₪?\₮?\₩?\₦?\₫?\d+(?:\.\d{1,2})?%?)(?!\w)"
 
         # Use regex to find and replace numbers in the text
         converted_text = re.sub(pattern, lambda match: self.convert(match.group(1)), text)
