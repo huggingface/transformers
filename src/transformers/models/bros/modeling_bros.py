@@ -976,12 +976,12 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         input_ids=None,
         bbox=None,
         attention_mask=None,
+        box_first_token_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        box_first_token_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1085,10 +1085,10 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         input_ids=None,
         bbox=None,
         attention_mask=None,
+        box_first_token_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
-        itc_mask=None,
         inputs_embeds=None,
         itc_labels=None,
         stc_labels=None,
@@ -1137,9 +1137,11 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
 
             # get itc loss
             itc_labels = itc_labels.view(-1)
-            if itc_mask is not None:
-                itc_mask = itc_mask.view(-1)
-                itc_loss = loss_fct(itc_logits.view(-1, self.num_labels)[itc_mask], itc_labels[itc_mask])
+            if box_first_token_mask is not None:
+                box_first_token_mask = box_first_token_mask.view(-1)
+                itc_loss = loss_fct(
+                    itc_logits.view(-1, self.num_labels)[box_first_token_mask], itc_labels[box_first_token_mask]
+                )
             else:
                 itc_loss = loss_fct(itc_logits.view(-1, self.num_labels), itc_labels)
 
@@ -1204,12 +1206,12 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
         input_ids=None,
         bbox=None,
         attention_mask=None,
+        box_first_token_mask=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        box_first_token_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
