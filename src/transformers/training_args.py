@@ -24,6 +24,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+from huggingface_hub import get_full_repo_name
 from packaging import version
 
 from .debug_utils import DebugOption
@@ -38,7 +39,6 @@ from .trainer_utils import (
 from .utils import (
     ExplicitEnum,
     cached_property,
-    get_full_repo_name,
     is_accelerate_available,
     is_safetensors_available,
     is_sagemaker_dp_enabled,
@@ -193,9 +193,9 @@ class TrainingArguments:
         prediction_loss_only (`bool`, *optional*, defaults to `False`):
             When performing evaluation and generating predictions, only returns the loss.
         per_device_train_batch_size (`int`, *optional*, defaults to 8):
-            The batch size per GPU/TPU core/CPU for training.
+            The batch size per GPU/TPU/MPS/NPU core/CPU for training.
         per_device_eval_batch_size (`int`, *optional*, defaults to 8):
-            The batch size per GPU/TPU core/CPU for evaluation.
+            The batch size per GPU/TPU/MPS/NPU core/CPU for evaluation.
         gradient_accumulation_steps (`int`, *optional*, defaults to 1):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
@@ -493,7 +493,7 @@ class TrainingArguments:
             - `"tpu_metrics_debug"`: print debug metrics on TPU
 
             The options should be separated by whitespaces.
-        optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_hf"`):
+        optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch"`):
             The optimizer to use: adamw_hf, adamw_torch, adamw_torch_fused, adamw_apex_fused, adamw_anyprecision or
             adafactor.
         optim_args (`str`, *optional*):
@@ -507,8 +507,9 @@ class TrainingArguments:
             instance of `Dataset`.
         report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
-            `"comet_ml"`, `"mlflow"`, `"neptune"`, `"tensorboard"`,`"clearml"` and `"wandb"`. Use `"all"` to report to
-            all integrations installed, `"none"` for no integrations.
+            `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"flyte"`, `"mlflow"`, `"neptune"`,
+            `"tensorboard"`, and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"` for no
+            integrations.
         ddp_find_unused_parameters (`bool`, *optional*):
             When using distributed training, the value of the flag `find_unused_parameters` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
@@ -567,6 +568,8 @@ class TrainingArguments:
             `huggingface-cli login`.
         hub_private_repo (`bool`, *optional*, defaults to `False`):
             If True, the Hub repo will be set to private.
+        hub_always_push (`bool`, *optional*, defaults to `False`):
+            Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not finished.
         gradient_checkpointing (`bool`, *optional*, defaults to `False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
@@ -645,10 +648,10 @@ class TrainingArguments:
     )
 
     per_device_train_batch_size: int = field(
-        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for training."}
+        default=8, metadata={"help": "Batch size per GPU/TPU/MPS/NPU core/CPU for training."}
     )
     per_device_eval_batch_size: int = field(
-        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
+        default=8, metadata={"help": "Batch size per GPU/TPU/MPS/NPU core/CPU for evaluation."}
     )
 
     per_gpu_train_batch_size: Optional[int] = field(
@@ -801,7 +804,9 @@ class TrainingArguments:
     )
     use_cpu: bool = field(
         default=False,
-        metadata={"help": " Whether or not to use cpu. If set to False, we will use cuda or mps device if available."},
+        metadata={
+            "help": " Whether or not to use cpu. If set to False, we will use cuda/tpu/mps/npu device if available."
+        },
     )
     use_mps_device: bool = field(
         default=False,
@@ -1034,12 +1039,12 @@ class TrainingArguments:
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
 
-    default_optim = "adamw_hf"
+    default_optim = "adamw_torch"
     # XXX: enable when pytorch==2.0.1 comes out - we want to give it time to get all the bugs sorted out
     # if is_torch_available() and version.parse(version.parse(torch.__version__).base_version) >= version.parse("2.1.0"):
     #     default_optim = "adamw_torch_fused"
     # and update the doc above to:
-    # optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch_fused"` (for torch<2.1.0 `"adamw_hf"`):
+    # optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch_fused"` (for torch<2.1.0 `"adamw_torch"`):
     optim: Union[OptimizerNames, str] = field(
         default=default_optim,
         metadata={"help": "The optimizer to use."},
@@ -1109,6 +1114,10 @@ class TrainingArguments:
     )
     hub_token: Optional[str] = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
     hub_private_repo: bool = field(default=False, metadata={"help": "Whether the model repository is private or not."})
+    hub_always_push: bool = field(
+        default=False,
+        metadata={"help": "Unless `True`, the Trainer will skip pushes if the previous one wasn't finished yet."},
+    )
     gradient_checkpointing: bool = field(
         default=False,
         metadata={
@@ -1627,6 +1636,12 @@ class TrainingArguments:
 
             os.environ["ACCELERATE_USE_DEEPSPEED"] = "true"
             self.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.hf_deepspeed_config)
+        elif strtobool(os.environ.get("ACCELERATE_USE_DEEPSPEED", "false")):
+            # Accelerate DeepSpeed Plugin
+            from accelerate.utils import DeepSpeedPlugin
+
+            self.deepspeed_plugin = DeepSpeedPlugin()
+            self.deepspeed_plugin.set_deepspeed_weakref()
 
         if self.push_to_hub_token is not None:
             warnings.warn(
@@ -2360,6 +2375,7 @@ class TrainingArguments:
         strategy: Union[str, HubStrategy] = "every_save",
         token: Optional[str] = None,
         private_repo: bool = False,
+        always_push: bool = False,
     ):
         """
         A method that regroups all arguments linked to synchronizing checkpoints with the Hub.
@@ -2400,6 +2416,9 @@ class TrainingArguments:
                 with `huggingface-cli login`.
             private_repo (`bool`, *optional*, defaults to `False`):
                 If True, the Hub repo will be set to private.
+            always_push (`bool`, *optional*, defaults to `False`):
+                Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not
+                finished.
 
         Example:
 
@@ -2417,11 +2436,12 @@ class TrainingArguments:
         self.hub_strategy = HubStrategy(strategy)
         self.hub_token = token
         self.hub_private_repo = private_repo
+        self.hub_always_push = always_push
         return self
 
     def set_optimizer(
         self,
-        name: Union[str, OptimizerNames] = "adamw_hf",
+        name: Union[str, OptimizerNames] = "adamw_torch",
         learning_rate: float = 5e-5,
         weight_decay: float = 0,
         beta1: float = 0.9,
@@ -2433,7 +2453,7 @@ class TrainingArguments:
         A method that regroups all arguments linked to the optimizer and its hyperparameters.
 
         Args:
-            name (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_hf"`):
+            name (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_torch"`):
                 The optimizer to use: `"adamw_hf"`, `"adamw_torch"`, `"adamw_torch_fused"`, `"adamw_apex_fused"`,
                 `"adamw_anyprecision"` or `"adafactor"`.
             learning_rate (`float`, *optional*, defaults to 5e-5):

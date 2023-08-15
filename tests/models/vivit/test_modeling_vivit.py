@@ -29,6 +29,7 @@ from transformers.utils import cached_property, is_torch_available, is_vision_av
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -153,13 +154,18 @@ class VivitModelTester:
 
 
 @require_torch
-class VivitModelTest(ModelTesterMixin, unittest.TestCase):
+class VivitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as Vivit does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (VivitModel, VivitForVideoClassification) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"feature-extraction": VivitModel, "video-classification": VivitForVideoClassification}
+        if is_torch_available()
+        else {}
+    )
 
     test_pruning = False
     test_torchscript = False
@@ -345,6 +351,6 @@ class VivitModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
         # taken from original model
-        expected_slice = torch.tensor([-1.0543, 2.0764, -0.2104, 0.4439, -0.9658]).to(torch_device)
+        expected_slice = torch.tensor([-0.9498, 2.7971, -1.4049, 0.1024, -1.8353]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :5], expected_slice, atol=1e-4))

@@ -39,7 +39,7 @@ try:
     from xformers import ops as xops
 except ImportError:
     xops = None
-    logger.warn(
+    logger.warning(
         "Xformers is not installed correctly. If you want to use memory_efficient_attention to accelerate training use the following command to install Xformers\npip install xformers."
     )
 
@@ -956,7 +956,9 @@ class OpenLlamaForSequenceClassification(OpenLlamaPreTrainedModel):
             sequence_lengths = -1
         else:
             if input_ids is not None:
-                sequence_lengths = (torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1).to(logits.device)
+                sequence_lengths = (torch.eq(input_ids, self.config.pad_token_id).long().argmax(-1) - 1).to(
+                    logits.device
+                )
             else:
                 sequence_lengths = -1
 

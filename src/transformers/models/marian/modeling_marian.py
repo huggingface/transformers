@@ -745,6 +745,7 @@ class MarianEncoder(MarianPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             input_ids = input_ids.view(-1, input_shape[-1])
         elif inputs_embeds is not None:
@@ -1523,10 +1524,6 @@ class MarianMTModel(MarianPreTrainedModel):
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
-
-    def adjust_logits_during_generation(self, logits, cur_len):
-        logits[:, self.config.pad_token_id] = float("-inf")  # never predict pad token.
-        return logits
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):

@@ -30,6 +30,7 @@ else:
         "UMT5EncoderModel",
         "UMT5ForConditionalGeneration",
         "UMT5ForQuestionAnswering",
+        "UMT5ForSequenceClassification",
         "UMT5Model",
         "UMT5PreTrainedModel",
     ]
@@ -47,6 +48,7 @@ if TYPE_CHECKING:
             UMT5EncoderModel,
             UMT5ForConditionalGeneration,
             UMT5ForQuestionAnswering,
+            UMT5ForSequenceClassification,
             UMT5Model,
             UMT5PreTrainedModel,
         )

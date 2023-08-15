@@ -65,7 +65,7 @@ class SEWModelTester:
         num_conv_pos_embeddings=31,
         num_conv_pos_embedding_groups=2,
         squeeze_factor=2,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_attention_heads=2,
         hidden_dropout=0.1,
         intermediate_size=20,
