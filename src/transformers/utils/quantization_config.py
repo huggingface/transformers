@@ -272,6 +272,10 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
 
         return output
 
+    def __repr__(self):
+        config_dict = self.to_dict()
+        return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
+
     def to_diff_dict(self) -> Dict[str, Any]:
         """
         Removes all attributes from config which correspond to the default config attributes for better readability and
