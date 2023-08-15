@@ -507,7 +507,7 @@ class Trainer:
 
         # Force n_gpu to 1 to avoid DataParallel as MP will manage the GPUs
         if self.is_model_parallel:
-            self.args._set_value("_n_gpu", 1)
+            self.args._n_gpu = 1
 
         # later use `self.model is self.model_wrapped` to check if it's wrapped or not
         self.model_wrapped = model

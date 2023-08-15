@@ -1692,16 +1692,10 @@ class TrainingArguments:
 
     def __setattr__(self, name, value):
         # Once fully through the `__post_init__`, `TrainingArguments` are immutable
-        if getattr(self, "_frozen", False):
+        if not name.startswith("_") and getattr(self, "_frozen", False):
             raise FrozenInstanceError(f"cannot assign to field {name}")
         else:
             super().__setattr__(name, value)
-
-    def _set_value(self, attr, value):
-        # This should *only* be used during testing and for setting `_n_gpu` in one specific case.
-        delattr(self, "_frozen")
-        setattr(self, attr, value)
-        self._frozen = True
 
     def __str__(self):
         self_as_dict = asdict(self)
