@@ -27,17 +27,17 @@ class EGTConfig(PretrainedConfig):
 
 
     Args:
-        feat_size (`int`, *optional*, defaults to 128):
+        feat_size (`int`, *optional*, defaults to 768):
             Node feature size.
-        edge_feat_size (`int`, *optional*, defaults to 8):
+        edge_feat_size (`int`, *optional*, defaults to 64):
             Edge feature size.
-        num_heads (`int`, *optional*, defaults to 8):
+        num_heads (`int`, *optional*, defaults to 32):
             Number of attention heads, by which :attr: `feat_size` is divisible.
-        num_layers (`int`, *optional*, defaults to 4):
+        num_layers (`int`, *optional*, defaults to 30):
             Number of layers.
         dropout (`float`, *optional*, defaults to 0.0):
             Dropout probability.
-        attn_dropout (`float`, *optional*, defaults to 0.0):
+        attn_dropout (`float`, *optional*, defaults to 0.3):
             Attention dropout probability.
         activation (`nn.Module`, *optional*, defaults to nn.ELU()):
             Activation function.
@@ -77,12 +77,12 @@ class EGTConfig(PretrainedConfig):
 
     def __init__(
         self,
-        feat_size: int = 128,
-        edge_feat_size: int = 32,
-        num_heads: int = 8,
-        num_layers: int = 4,
+        feat_size: int = 768,
+        edge_feat_size: int = 64,
+        num_heads: int = 32,
+        num_layers: int = 30,
         dropout: float = 0.,
-        attn_dropout: float = 0.,
+        attn_dropout: float = 0.3,
         activation: nn.Module = nn.ELU(),
         egt_simple: bool = False,
         upto_hop: int = 16,
