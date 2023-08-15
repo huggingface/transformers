@@ -530,7 +530,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
         # Re-training should restart from scratch, thus lead the same results and new seed should be used.
         args = TrainingArguments("./regression", learning_rate=0.1, seed=314)
-        trainer.args = args
+        trainer = Trainer(args=args, train_dataset=train_dataset, model_init=lambda: RegressionModel())
         trainer.train()
         self.check_trained_model(trainer.model, alternate_seed=True)
 
