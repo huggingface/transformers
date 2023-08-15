@@ -171,7 +171,6 @@ class CustomTrainingArguments(TrainingArguments):
             delattr(self, "_frozen")
             self.learning_rate = self.base_learning_rate * total_train_batch_size / 256
             setattr(self, "_frozen", True)
-        
 
 
 def collate_fn(examples):
