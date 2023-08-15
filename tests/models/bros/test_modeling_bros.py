@@ -17,10 +17,9 @@
 import copy
 import unittest
 
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
-
 from transformers.utils import is_torch_available
+
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
@@ -29,12 +28,11 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         BrosConfig,
         BrosForTokenClassification,
+        BrosModel,
         BrosSpadeEEForTokenClassification,
         BrosSpadeELForTokenClassification,
-        BrosModel,
     )
     from transformers.models.bros.modeling_bros import (
         BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -122,9 +120,7 @@ class BrosModelTester:
         if self.use_token_type_ids:
             token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
-        sequence_labels = None
         token_labels = None
-        choice_labels = None
         if self.use_labels:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             itc_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)

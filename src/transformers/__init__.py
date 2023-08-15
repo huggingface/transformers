@@ -5211,10 +5211,10 @@ if TYPE_CHECKING:
         from .models.bros import (
             BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
             BrosForTokenClassification,
-            BrosSpadeEEForTokenClassification,
-            BrosSpadeELForTokenClassification,
             BrosModel,
             BrosPreTrainedModel,
+            BrosSpadeEEForTokenClassification,
+            BrosSpadeELForTokenClassification,
         )
         from .models.camembert import (
             CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
