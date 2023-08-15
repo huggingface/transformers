@@ -764,21 +764,19 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
 
         return results['preds'], results['output_heatmap']
 
-    def yolo(self, pixel_values) -> torch.Tensor:
-        feature_extractor = DetrImageProcessor.from_pretrained('facebook/detr-resnet-50')
-        model = DetrForObjectDetection.from_pretrained('facebook/detr-resnet-50')
-
-        inputs = feature_extractor(images=pixel_values, return_tensor="pt")
-        output = model(**inputs)
-
-        return output.pred_boxes
-
     def forward(self, pixel_values, pred_boxes):
         """Detection and bounding box pipeling"""
         #det_out = self.yolo(pixel_values)
         person_results = self.process_det([pred_boxes])
 
         pose_results = []
+        if person_results in None:
+            height, width = pixel_values[2:]
+            person_results = [{'bbox': torch.tensor([0,0, width, height])}]
+
+        if len(person_results) == 0:
+            return pose_results
+
         bboxes = [box['bbox'] for box in person_results]
         bboxes_xyxy = []
         for bbox in bboxes:
@@ -790,10 +788,10 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
             bboxes,
             return_heatmap = False)
 
-        for pose, person_result, bbox_xyxy in zip(poses, person_results, bboxes_xyxy):
+        for pose, person_result, bbox in zip(poses, person_results, bboxes):
             pose_result = person_result.copy()
             pose_result['keypoints'] = pose
-            pose_result['bbox'] = bbox_xyxy
+            pose_result['bbox'] = bbox
             pose_results.append(pose_result)
 
         return pose_results
