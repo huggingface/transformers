@@ -75,7 +75,8 @@ def get_dpt_config(model_name):
         neck_hidden_sizes = [128, 256, 512, 1024]
     elif model_name == "dpt-swinv2-large-384":
         neck_hidden_sizes = [192, 384, 768, 1536]
-    config = DPTConfig(backbone_config=backbone_config, hidden_size=1024, neck_hidden_sizes=neck_hidden_sizes)
+        
+    config = DPTConfig(backbone_config=backbone_config, neck_hidden_sizes=neck_hidden_sizes)
 
     return config, image_size
 

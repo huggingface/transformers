@@ -588,6 +588,12 @@ class DPTReassembleStage(nn.Module):
 
         self.neck_ignore_stages = config.neck_ignore_stages
 
+    def get_backbone_hidden_size(self):
+        if self.config.backbone_config is not None and self.config.is_hybrid is False:
+            return self.config.backbone_config.hidden_size
+        else:
+            return self.config.hidden_size
+
     def _init_reassemble_dpt_hybrid(self, config):
         r""" "
         For DPT-Hybrid the first 2 reassemble layers are set to `nn.Identity()`, please check the official
@@ -605,12 +611,13 @@ class DPTReassembleStage(nn.Module):
 
         # When using DPT-Hybrid the readout type is set to "project". The sanity check is done on the config file
         self.readout_projects = nn.ModuleList()
+        hidden_size = self.get_backbone_hidden_size()
         for i in range(len(config.neck_hidden_sizes)):
             if i <= 1:
                 self.readout_projects.append(nn.Sequential(nn.Identity()))
             elif i > 1:
                 self.readout_projects.append(
-                    nn.Sequential(nn.Linear(2 * config.hidden_size, config.hidden_size), ACT2FN[config.hidden_act])
+                    nn.Sequential(nn.Linear(2 * hidden_size, hidden_size), ACT2FN[config.hidden_act])
                 )
 
     def _init_reassemble_dpt(self, config):
@@ -619,9 +626,10 @@ class DPTReassembleStage(nn.Module):
 
         if config.readout_type == "project":
             self.readout_projects = nn.ModuleList()
+            hidden_size = self.get_backbone_hidden_size()
             for _ in range(len(config.neck_hidden_sizes)):
                 self.readout_projects.append(
-                    nn.Sequential(nn.Linear(2 * config.hidden_size, config.hidden_size), ACT2FN[config.hidden_act])
+                    nn.Sequential(nn.Linear(2 * hidden_size, hidden_size), ACT2FN[config.hidden_act])
                 )
 
     def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
@@ -663,7 +671,11 @@ class DPTReassembleLayer(nn.Module):
     def __init__(self, config, channels, factor):
         super().__init__()
         # projection
-        self.projection = nn.Conv2d(in_channels=config.hidden_size, out_channels=channels, kernel_size=1)
+        if config.backbone_config is not None and config.is_hybrid is False:
+            hidden_size = config.backbone_config.hidden_size
+        else:
+            hidden_size = config.hidden_size
+        self.projection = nn.Conv2d(in_channels=hidden_size, out_channels=channels, kernel_size=1)
 
         # up/down sampling depending on factor
         if factor > 1:

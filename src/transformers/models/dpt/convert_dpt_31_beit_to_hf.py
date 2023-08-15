@@ -61,8 +61,7 @@ def get_dpt_config(model_name):
         out_features=out_features,
     )
 
-    # TODO get rid of config.hidden_size, using config.backbone_config.hidden_size instead
-    config = DPTConfig(backbone_config=backbone_config, hidden_size=1024, neck_hidden_sizes=[256, 512, 1024, 1024])
+    config = DPTConfig(backbone_config=backbone_config, neck_hidden_sizes=[256, 512, 1024, 1024])
 
     return config, image_size
 
