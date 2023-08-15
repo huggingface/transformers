@@ -766,11 +766,10 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
 
     def forward(self, pixel_values, pred_boxes):
         """Detection and bounding box pipeling"""
-        #det_out = self.yolo(pixel_values)
         person_results = self.process_det([pred_boxes])
 
         pose_results = []
-        if person_results in None:
+        if person_results is None:
             height, width = pixel_values[2:]
             person_results = [{'bbox': torch.tensor([0,0, width, height])}]
 
