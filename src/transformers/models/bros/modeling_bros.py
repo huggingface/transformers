@@ -742,7 +742,6 @@ class BrosPreTrainedModel(PreTrainedModel):
 
     config_class = BrosConfig
     base_model_prefix = "bros"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -766,6 +765,8 @@ class BrosPreTrainedModel(PreTrainedModel):
     BROS_START_DOCSTRING,
 )
 class BrosModel(BrosPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"embeddings.position_ids"]
+
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
