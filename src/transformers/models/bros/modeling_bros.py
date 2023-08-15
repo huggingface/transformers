@@ -1116,7 +1116,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
             return_dict=return_dict,
         )
 
-        last_hidden_states = outputs.last_hidden_state
+        last_hidden_states = outputs[0]
         last_hidden_states = last_hidden_states.transpose(0, 1).contiguous()
         itc_logits = self.itc_layer(last_hidden_states).transpose(0, 1).contiguous()
         stc_logits = self.stc_layer(last_hidden_states, last_hidden_states).squeeze(0)
@@ -1234,7 +1234,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
             return_dict=return_dict,
         )
 
-        last_hidden_states = outputs.last_hidden_state
+        last_hidden_states = outputs[0]
         last_hidden_states = last_hidden_states.transpose(0, 1).contiguous()
 
         logits = self.relation_net(last_hidden_states, last_hidden_states).squeeze(0)
@@ -1262,7 +1262,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
             loss = loss_fct(logits.view(-1, max_seq_length + 1)[mask], labels.view(-1)[mask])
 
         if not return_dict:
-            output = (itc_logits, stc_logits) + outputs[2:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
