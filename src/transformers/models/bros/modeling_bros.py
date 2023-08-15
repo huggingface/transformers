@@ -717,8 +717,7 @@ class RelationExtractor(nn.Module):
 
         self.k_net = nn.Linear(self.backbone_hidden_size, self.n_relations * self.head_hidden_size)
 
-        self.dummy_node = nn.Parameter(torch.Tensor(1, self.backbone_hidden_size))
-        nn.init.normal_(self.dummy_node)
+        self.dummy_node = nn.Parameter(torch.zeros(1, self.backbone_hidden_size))
 
     def forward(self, h_q, h_k):
         h_q = self.q_net(self.drop(h_q))
