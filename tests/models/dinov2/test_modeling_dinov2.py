@@ -220,6 +220,10 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
+    @unittest.skip(reason="Dinov2 does not support feedforward chunking yet")
+    def test_feed_forward_chunking(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:

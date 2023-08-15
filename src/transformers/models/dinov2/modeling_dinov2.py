@@ -833,7 +833,9 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
 
         embedding_output = self.embeddings(pixel_values)
 
-        outputs = self.encoder(embedding_output, output_hidden_states=True, return_dict=True)
+        outputs = self.encoder(
+            embedding_output, output_hidden_states=True, output_attentions=output_attentions, return_dict=True
+        )
 
         hidden_states = outputs.hidden_states
 
