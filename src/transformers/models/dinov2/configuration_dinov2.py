@@ -145,7 +145,7 @@ class Dinov2Config(PretrainedConfig, BackboneConfigMixin):
         self.layerscale_value = layerscale_value
         self.drop_path_rate = drop_path_rate
         self.use_swiglu_ffn = use_swiglu_ffn
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(num_hidden_layers + 1)]
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_hidden_layers + 1)]
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )

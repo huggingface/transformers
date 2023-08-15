@@ -1,5 +1,7 @@
-from transformers import Dinov2Config, Dinov2Backbone
 import torch
+
+from transformers import Dinov2Backbone, Dinov2Config
+
 
 config = Dinov2Config(out_features=["stage1", "stage2", "stage3", "stage11"])
 

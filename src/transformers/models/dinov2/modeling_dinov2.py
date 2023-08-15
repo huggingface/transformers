@@ -778,6 +778,7 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
         super().__init__(config)
         super()._init_backbone(config)
 
+        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.embeddings = Dinov2Embeddings(config)
         self.encoder = Dinov2Encoder(config)
 
@@ -785,6 +786,9 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self) -> Dinov2PatchEmbeddings:
+        return self.embeddings.patch_embeddings
 
     @add_start_docstrings_to_model_forward(DINOV2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
@@ -850,6 +854,8 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
             output = (feature_maps,)
             if output_hidden_states:
                 output += (outputs.hidden_states,)
+            if output_attentions:
+                output += (outputs.attentions,)
             return output
 
         return BackboneOutput(

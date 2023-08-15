@@ -27,6 +27,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -260,3 +261,14 @@ class Dinov2ModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+
+
+@require_torch
+class Dinov2BackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (Dinov2Backbone,) if is_torch_available() else ()
+    config_class = Dinov2Config
+
+    has_attentions = False
+
+    def setUp(self):
+        self.model_tester = Dinov2ModelTester(self)
