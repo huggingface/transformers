@@ -221,7 +221,7 @@ class BrosModelTester:
             input_ids,
             bbox=bbox,
             attention_mask=input_mask,
-            itc_mask=box_first_token_mask,
+            box_first_token_mask=box_first_token_mask,
             token_type_ids=token_type_ids,
             itc_labels=token_labels,
             stc_labels=token_labels,
@@ -303,9 +303,30 @@ class BrosModelTest(ModelTesterMixin, unittest.TestCase):
         inputs_dict = copy.deepcopy(inputs_dict)
 
         if return_labels:
-            if model_class in [*get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING)]:
+            if model_class.__name__ in ["BrosForTokenClassification", "BrosSpadeELForTokenClassification"]:
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["box_first_token_mask"] = torch.ones(
+                    [self.model_tester.batch_size, self.model_tester.seq_length],
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+            elif model_class.__name__ in ["BrosSpadeEEForTokenClassification"]:
+                inputs_dict["itc_labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["stc_labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["box_first_token_mask"] = torch.ones(
+                    [self.model_tester.batch_size, self.model_tester.seq_length],
                     dtype=torch.long,
                     device=torch_device,
                 )
