@@ -35,7 +35,9 @@ def get_dpt_config(model_name):
         embed_dim = 96
         depths = (2, 2, 6, 2)
         num_heads = (3, 6, 12, 24)
-        window_size = 7
+        window_size = 16
+        # note: for Swinv2-tiny authors used the window_size = 16 variant
+        # as seen here: https://github.com/isl-org/MiDaS/blob/bdc4ed64c095e026dc0a2f17cabb14d58263decb/midas/backbones/swin2.py#L26
         pretrained_window_sizes = (0, 0, 0, 0)
     elif "base" in model_name:
         embed_dim = 128
@@ -67,7 +69,6 @@ def get_dpt_config(model_name):
         out_features=["stage1", "stage2", "stage3", "stage4"],
     )
 
-    # TODO get rid of config.hidden_size, using config.backbone_config.hidden_size instead
     if model_name == "dpt-swinv2-tiny-256":
         neck_hidden_sizes = [96, 192, 384, 768]
     elif model_name == "dpt-swinv2-base-384":
@@ -76,7 +77,7 @@ def get_dpt_config(model_name):
         neck_hidden_sizes = [192, 384, 768, 1536]
     config = DPTConfig(backbone_config=backbone_config, hidden_size=1024, neck_hidden_sizes=neck_hidden_sizes)
 
-    return config
+    return config, image_size
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
@@ -195,7 +196,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     # define DPT configuration based on URL
     checkpoint_url = name_to_url[model_name]
-    config = get_dpt_config(model_name)
+    config, image_size = get_dpt_config(model_name)
     # load original state_dict from URL
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
 
@@ -217,12 +218,12 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     model.eval()
 
     # Check outputs on an image
-    size = 384 if "384" in model_name else 512
-    processor = DPTImageProcessor(size={"height": size, "width": size})
+    processor = DPTImageProcessor(size={"height": image_size, "width": image_size})
 
     image = prepare_img()
     processor(image, return_tensors="pt")
 
+    # TODO remove torchvision, just use image processor
     import requests
     from PIL import Image
     from torchvision import transforms
@@ -232,7 +233,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
 
     transforms = transforms.Compose(
         [
-            transforms.Resize((size, size)),
+            transforms.Resize((image_size, image_size)),
             transforms.ToTensor(),
         ]
     )
@@ -253,18 +254,19 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
         # OK, checked
         expected_shape = torch.Size([1, 384, 384])
         expected_slice = torch.tensor(
-            [[1998.5575, 1997.3887, 2009.2981], [1952.8607, 1979.6488, 2001.0854], [1953.7697, 1961.7711, 1968.8904]]
+            [[1998.5575, 1997.3887, 2009.2981], [1952.8607, 1979.6488, 2001.0854], [1953.7697, 1961.7711, 1968.8904]],
         )
     elif model_name == "dpt-swinv2-tiny-256":
-        expected_shape = torch.Size([1, 512, 512])
+        # OK, checked
+        expected_shape = torch.Size([1, 256, 256])
         expected_slice = torch.tensor(
-            [[1291.4197, 1298.2261, 1300.9379], [1293.7563, 1297.8181, 1303.7618], [1303.2360, 1301.7085, 1301.3245]]
+            [[978.9163, 976.5215, 978.5349], [974.1859, 971.7249, 975.8046], [971.3419, 970.3118, 971.6830]],
         )
     elif model_name == "dpt-swinv2-large-384":
         # OK, checked
         expected_shape = torch.Size([1, 384, 384])
         expected_slice = torch.tensor(
-            [[1203.7206, 1200.1495, 1197.8234], [1196.2484, 1183.5033, 1186.4640], [1178.8131, 1182.3260, 1174.3975]]
+            [[1203.7206, 1200.1495, 1197.8234], [1196.2484, 1183.5033, 1186.4640], [1178.8131, 1182.3260, 1174.3975]],
         )
 
     assert predicted_depth.shape == torch.Size(expected_shape)
