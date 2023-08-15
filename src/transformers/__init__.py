@@ -956,6 +956,7 @@ else:
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
+    _import_structure["models.vitpose"].extend(["ViTPoseImageProcessor"])
     _import_structure["models.vit_hybrid"].extend(["ViTHybridImageProcessor"])
     _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
@@ -2823,7 +2824,7 @@ else:
     _import_structure["models.vitpose"].extend(
         [
             "VITPOSE_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ViTForImageClassification",
+            "ViTPoseForPoseEstimation",
             "ViTPoseModel",
             "ViTPosePreTrainedModel",
         ]

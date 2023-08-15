@@ -419,9 +419,7 @@ class ViTPoseTopDownHeatMap(nn.Module):
 
     def decode(self, img_metas, img, img_size):
         #img_metas = [img_metas]
-        print("img_metas",img_metas)
         batch_size = len(img_metas)
-        print(batch_size)
 
         if 'bbox_id' in img_metas:
             bbox_ids = []
