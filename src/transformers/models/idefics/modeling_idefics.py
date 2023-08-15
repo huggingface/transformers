@@ -19,7 +19,7 @@
 # limitations under the License.
 """ PyTorch Idefics model."""
 import inspect
-from typing import List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -1463,10 +1463,10 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
 
     def _prepare_model_inputs(
         self,
-        inputs,
-        bos_token_id,
-        model_kwargs,
-    ):
+        inputs: Optional[torch.Tensor] = None,
+        bos_token_id: Optional[int] = None,
+        model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, Optional[str], Dict[str, torch.Tensor]]:
         if (
             self.config.is_encoder_decoder
             and hasattr(self, "encoder")
