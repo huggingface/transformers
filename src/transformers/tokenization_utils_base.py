@@ -1501,7 +1501,7 @@ INIT_TOKENIZER_DOCSTRING = r"""
 
 
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
-class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, ChatMixin):
+class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     """
     Base class for [`PreTrainedTokenizer`] and [`PreTrainedTokenizerFast`].
 
@@ -1626,6 +1626,27 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin, ChatMixin):
             `Dict[str, int]`: The vocabulary.
         """
         raise NotImplementedError()
+
+    def build_conversation_input_ids(self, conversation: Union[List[Dict[str, str]], ChatConversation]) -> List[int]:
+        if isinstance(conversation, ChatConversation):
+            conversation = conversation.messages
+        if self.default_system_prompt is not None and (len(conversation) == 0 or conversation.messages[0]["role"] != "system"):
+            conversation = [{"role": "system", "content": self.default_system_prompt}] + conversation.messages
+
+        dialog_tokens: List[int] = []
+        # TODO Figure out where the chat settings live
+
+        for message in conversation:
+            role = message["role"]
+            message_prefix = self.string_prefixes.get(role, "")
+            message_suffix = self.string_suffixes.get(role, "")
+            message_prefix_tokens = self.token_prefixes.get(role, [])
+            message_suffix_tokens = self.token_suffixes.get(role, [])
+            message = "".join([message_prefix, message["content"].strip(), message_suffix])
+            tokenized_message = self.encode(message, add_special_tokens=self.add_special_tokens)
+            tokenized_message = message_prefix_tokens + tokenized_message + message_suffix_tokens
+            dialog_tokens.extend(tokenized_message)
+        return dialog_tokens
 
     # TODO
     # 1) See if you can make Llama work with the new format, or what you need to add to the

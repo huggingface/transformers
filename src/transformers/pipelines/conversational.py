@@ -198,54 +198,6 @@ class ChatConversation:
         return output
 
 
-class ChatMixin:
-    CHAT_ATTRIBUTES = [
-        "role_prefixes",
-        "role_token_prefixes",
-        "role_suffixes",
-        "role_token_suffixes",
-        "chat_add_special_tokens",
-        "chat_default_system_prompt",
-        "chat_tokenize_separately",
-        "chat_max_length",
-    ]
-
-    def __init__(self, **kwargs):
-        # TODO Make sure co-operative inheritance works - this init should be called as well as the special tokens one
-        self.role_prefixes = kwargs.pop("role_prefixes", {})
-        self.role_token_prefixes = kwargs.pop("role_token_prefixes", {})
-        self.role_suffixes = kwargs.pop("role_suffixes", {})
-        self.role_token_suffixes = kwargs.pop("role_token_suffixes", {})
-        self.chat_add_special_tokens = kwargs.pop("chat_add_special_tokens", True)
-        self.chat_default_system_prompt = kwargs.pop("chat_default_system_prompt", None)
-        # TODO Matt: If we want past key-values to be consistent across multiple generation calls,
-        #            then we will probably need to force something like this in all cases so that
-        #            we don't change tokens we've already computed key-values for.
-        self.tokenize_separately = kwargs.pop("chat_tokenize_separately", True)
-        self.max_length = kwargs.pop("chat_max_length", None)
-
-    def build_conversation_input_ids(self, conversation: Union[List[Dict[str, str]], ChatConversation]) -> List[int]:
-        if isinstance(conversation, ChatConversation):
-            conversation = conversation.messages
-        if self.default_system_prompt is not None and (len(conversation) == 0 or conversation.messages[0]["role"] != "system"):
-            conversation = [{"role": "system", "content": self.default_system_prompt}] + conversation.messages
-
-        dialog_tokens: List[int] = []
-        # TODO Figure out where the chat settings live
-
-        for message in conversation:
-            role = message["role"]
-            message_prefix = self.string_prefixes.get(role, "")
-            message_suffix = self.string_suffixes.get(role, "")
-            message_prefix_tokens = self.token_prefixes.get(role, [])
-            message_suffix_tokens = self.token_suffixes.get(role, [])
-            message = "".join([message_prefix, message["content"].strip(), message_suffix])
-            tokenized_message = self.encode(message, add_special_tokens=self.add_special_tokens)
-            tokenized_message = message_prefix_tokens + tokenized_message + message_suffix_tokens
-            dialog_tokens.extend(tokenized_message)
-        return dialog_tokens
-
-
 @add_end_docstrings(
     PIPELINE_INIT_ARGS,
     r"""
