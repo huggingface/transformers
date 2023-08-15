@@ -25,6 +25,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available, is_vision_available
 
+from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -231,7 +232,7 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             expected_num_stages = self.model_tester.num_hidden_layers
             self.assertEqual(len(hidden_states), expected_num_stages + 1)
 
-            # ConvNext's feature maps are of shape (batch_size, num_channels, height, width)
+            # VitDet's feature maps are of shape (batch_size, num_channels, height, width)
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
                 [
@@ -292,3 +293,14 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="VitDet does not have standalone checkpoints since it used as backbone in other models")
     def test_model_from_pretrained(self):
         pass
+
+
+@require_torch
+class VitDetBackboneTest(unittest.TestCase, BackboneTesterMixin):
+    all_model_classes = (VitDetBackbone,) if is_torch_available() else ()
+    config_class = VitDetConfig
+
+    has_attentions = False
+
+    def setUp(self):
+        self.model_tester = VitDetModelTester(self)
