@@ -156,9 +156,9 @@ class Dinov2ModelTester:
         # verify channels
         self.parent.assertEqual(len(model.channels), 1)
 
-        # verify backbone works with apply_layernorm=False and reshape=False
+        # verify backbone works with apply_layernorm=False and reshape_hidden_states=False
         config.apply_layernorm = False
-        config.reshape = False
+        config.reshape_hidden_states = False
 
         model = Dinov2Backbone(config=config)
         model.to(torch_device)

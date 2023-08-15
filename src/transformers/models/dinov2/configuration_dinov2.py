@@ -86,7 +86,7 @@ class Dinov2Config(PretrainedConfig, BackboneConfigMixin):
             If unset and `out_features` is unset, will default to the last stage.
         apply_layernorm (`bool`, *optional*, defaults to `True`):
             Whether to apply layer normalization to the feature maps in case the model is used as backbone.
-        reshape (`bool`, *optional*, defaults to `True`):
+        reshape_hidden_states (`bool`, *optional*, defaults to `True`):
             Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
             case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
             seq_len, hidden_size)`.
@@ -128,7 +128,7 @@ class Dinov2Config(PretrainedConfig, BackboneConfigMixin):
         out_features=None,
         out_indices=None,
         apply_layernorm=True,
-        reshape=True,
+        reshape_hidden_states=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -154,7 +154,7 @@ class Dinov2Config(PretrainedConfig, BackboneConfigMixin):
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
         self.apply_layernorm = apply_layernorm
-        self.reshape = reshape
+        self.reshape_hidden_states = reshape_hidden_states
 
 
 class Dinov2OnnxConfig(OnnxConfig):

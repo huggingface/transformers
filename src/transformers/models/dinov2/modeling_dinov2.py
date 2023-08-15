@@ -844,7 +844,7 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
             if stage in self.out_features:
                 if self.config.apply_layernorm:
                     hidden_state = self.layernorm(hidden_state)
-                if self.config.reshape:
+                if self.config.reshape_hidden_states:
                     batch_size, _, height, width = pixel_values.shape
                     patch_size = self.config.patch_size
                     hidden_state = hidden_state[:, 1:, :].reshape(
