@@ -369,11 +369,16 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         # No parameters on this pipeline right now
         preprocess_params = {}
         if chunk_length_s is not None:
+            if self.type == "seq2seq" and not ignore_warning:
+                logger.warning(
+                    "Using `chunk_length_s` is very experimental with seq2seq models. The results will not necessarily"
+                    " be entirely accurate and will have caveats. More information:"
+                    " https://github.com/huggingface/transformers/pull/20104. Ignore this warning with pipeline(...,"
+                    " ignore_warning=True)"
+                )
             preprocess_params["chunk_length_s"] = chunk_length_s
         if stride_length_s is not None:
             preprocess_params["stride_length_s"] = stride_length_s
-        if ignore_warning is not None:
-            preprocess_params["ignore_warning"] = ignore_warning
 
         forward_params = defaultdict(dict)
         if max_new_tokens is not None:
@@ -394,9 +399,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if self.type == "seq2seq" and return_timestamps:
                 raise ValueError("We cannot return_timestamps yet on non-CTC models apart from Whisper!")
             if self.type == "ctc_with_lm" and return_timestamps != "word":
-                raise ValueError(
-                    "CTC with LM can only predict word level timestamps, set `return_timestamps='word'`"
-                )
+                raise ValueError("CTC with LM can only predict word level timestamps, set `return_timestamps='word'`")
             if self.type == "ctc" and return_timestamps not in ["char", "word"]:
                 raise ValueError(
                     "CTC can either predict character (char) level timestamps, or word level timestamps."
@@ -410,11 +413,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             forward_params["return_timestamps"] = return_timestamps
             postprocess_params["return_timestamps"] = return_timestamps
         if return_language is not None:
+            if self.type != "seq2seq_whisper":
+                raise ValueError("Only Whisper can return language for now.")
             postprocess_params["return_language"] = return_language
 
         return preprocess_params, forward_params, postprocess_params
 
-    def preprocess(self, inputs, chunk_length_s=0, stride_length_s=None, ignore_warning=False):
+    def preprocess(self, inputs, chunk_length_s=0, stride_length_s=None):
         if isinstance(inputs, str):
             if inputs.startswith("http://") or inputs.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
@@ -478,14 +483,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             raise ValueError("We expect a single channel audio input for AutomaticSpeechRecognitionPipeline")
 
         if chunk_length_s:
-            if self.type == "seq2seq" and not ignore_warning:
-                logger.warning(
-                    "Using `chunk_length_s` is very experimental with seq2seq models. The results will not necessarily"
-                    " be entirely accurate and will have caveats. More information:"
-                    " https://github.com/huggingface/transformers/pull/20104. Ignore this warning with pipeline(...,"
-                    " ignore_warning=True)"
-                )
-                self._preprocess_params["ignore_warning"] = True
             if stride_length_s is None:
                 stride_length_s = chunk_length_s / 6
 
@@ -594,9 +591,6 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
     ):
         # Optional return types
         optional = {}
-
-        if self.type != "seq2seq_whisper" and return_language is not None:
-            raise ValueError("Only whisper can return language for now.")
 
         final_items = []
         key = "logits" if self.type == "ctc_with_lm" else "tokens"
