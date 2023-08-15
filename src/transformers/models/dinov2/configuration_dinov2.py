@@ -84,9 +84,11 @@ class Dinov2Config(PretrainedConfig, BackboneConfigMixin):
             If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
             many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
             If unset and `out_features` is unset, will default to the last stage.
+        apply_layernorm (`bool`, *optional*, defaults to `True`):
+            Whether to apply layer normalization in case the model is used as backbone.
         reshape (`bool`, *optional*, defaults to `True`):
-            Whether to reshape the output to a 4D tensor or not. If `False`, the output will be a 3D tensor of shape
-            `(batch_size, seq_len, hidden_size)`.
+            Whether to reshape the output to a 4D tensor in case the model is used as backbone. If `False`, the output
+            will be a 3D tensor of shape `(batch_size, seq_len, hidden_size)`.
 
     Example:
 
@@ -124,6 +126,7 @@ class Dinov2Config(PretrainedConfig, BackboneConfigMixin):
         use_swiglu_ffn=False,
         out_features=None,
         out_indices=None,
+        apply_layernorm=True,
         reshape=True,
         **kwargs,
     ):
@@ -149,6 +152,7 @@ class Dinov2Config(PretrainedConfig, BackboneConfigMixin):
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
+        self.apply_layernorm = apply_layernorm
         self.reshape = reshape
 
 
