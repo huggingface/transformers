@@ -114,7 +114,7 @@ class Dinov2Embeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor = None) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values)
 
@@ -834,10 +834,10 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
         embedding_output = self.embeddings(pixel_values)
 
         outputs = self.encoder(
-            embedding_output, output_hidden_states=True, output_attentions=output_attentions, return_dict=True
+            embedding_output, output_hidden_states=True, output_attentions=output_attentions, return_dict=return_dict
         )
 
-        hidden_states = outputs.hidden_states
+        hidden_states = outputs.hidden_states if return_dict else outputs[1]
 
         feature_maps = ()
         for stage, hidden_state in zip(self.stage_names, hidden_states):
@@ -854,11 +854,10 @@ class Dinov2Backbone(Dinov2PreTrainedModel, BackboneMixin):
                 feature_maps += (hidden_state,)
 
         if not return_dict:
-            output = (feature_maps,)
             if output_hidden_states:
-                output += (outputs.hidden_states,)
-            if output_attentions:
-                output += (outputs.attentions,)
+                output = (feature_maps,) + outputs[1:]
+            else:
+                output = (feature_maps,) + outputs[2:]
             return output
 
         return BackboneOutput(

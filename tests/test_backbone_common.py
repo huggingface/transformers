@@ -33,7 +33,6 @@ class BackboneTesterMixin:
         self.assertIsNotNone(config)
         num_stages = len(config.depths) if hasattr(config, "depths") else config.num_hidden_layers
         expected_stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_stages + 1)]
-        print(expected_stage_names)
         self.assertEqual(config.stage_names, expected_stage_names)
         self.assertTrue(set(config.out_features).issubset(set(config.stage_names)))
 
