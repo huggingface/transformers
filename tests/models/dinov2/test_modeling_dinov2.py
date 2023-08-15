@@ -124,6 +124,52 @@ class Dinov2ModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    def create_and_check_backbone(self, config, pixel_values, labels):
+        model = Dinov2Backbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify hidden states
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        expected_size = self.image_size // config.patch_size
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], expected_size, expected_size]
+        )
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), len(config.out_features))
+
+        # verify backbone works with out_features=None
+        config.out_features = None
+        model = Dinov2Backbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify feature maps
+        self.parent.assertEqual(len(result.feature_maps), 1)
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape), [self.batch_size, model.channels[0], expected_size, expected_size]
+        )
+
+        # verify channels
+        self.parent.assertEqual(len(model.channels), 1)
+
+        # verify backbone works with apply_layernorm=False and reshape=False
+        config.apply_layernorm = False
+        config.reshape = False
+
+        model = Dinov2Backbone(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(pixel_values)
+
+        # verify feature maps
+        self.parent.assertEqual(len(result.feature_maps), 1)
+        self.parent.assertListEqual(
+            list(result.feature_maps[0].shape), [self.batch_size, self.seq_length, self.hidden_size])
+
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
         model = Dinov2ForImageClassification(config)
@@ -215,6 +261,10 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_backbone(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_backbone(*config_and_inputs)
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
