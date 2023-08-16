@@ -731,7 +731,7 @@ _import_structure = {
         "logging",
     ],
     "utils.bitsandbytes": [],
-    "utils.quantization_config": ["BitsAndBytesConfig"],
+    "utils.quantization_config": ["BitsAndBytesConfig", "GPTQConfig"],
 }
 
 # sentencepiece-backed objects
@@ -1168,6 +1168,7 @@ else:
             "BartForSequenceClassification",
             "BartModel",
             "BartPretrainedModel",
+            "BartPreTrainedModel",
             "PretrainedBartModel",
         ]
     )
@@ -3892,6 +3893,13 @@ else:
             "FlaxBlenderbotSmallPreTrainedModel",
         ]
     )
+    _import_structure["models.bloom"].extend(
+        [
+            "FlaxBloomForCausalLM",
+            "FlaxBloomModel",
+            "FlaxBloomPreTrainedModel",
+        ]
+    )
     _import_structure["models.clip"].extend(
         [
             "FlaxCLIPModel",
@@ -4695,7 +4703,7 @@ if TYPE_CHECKING:
     )
 
     # bitsandbytes config
-    from .utils.quantization_config import BitsAndBytesConfig
+    from .utils.quantization_config import BitsAndBytesConfig, GPTQConfig
 
     try:
         if not is_sentencepiece_available():
@@ -5065,6 +5073,7 @@ if TYPE_CHECKING:
             BartForQuestionAnswering,
             BartForSequenceClassification,
             BartModel,
+            BartPreTrainedModel,
             BartPretrainedModel,
             PretrainedBartModel,
         )
@@ -7275,6 +7284,7 @@ if TYPE_CHECKING:
             FlaxBlenderbotSmallModel,
             FlaxBlenderbotSmallPreTrainedModel,
         )
+        from .models.bloom import FlaxBloomForCausalLM, FlaxBloomModel, FlaxBloomPreTrainedModel
         from .models.clip import (
             FlaxCLIPModel,
             FlaxCLIPPreTrainedModel,

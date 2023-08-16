@@ -19,7 +19,7 @@ from typing import Dict, Iterable, Optional, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import normalize, rescale, resize, to_channel_dimension_format, to_pil_image
+from ...image_transforms import resize, to_channel_dimension_format, to_pil_image
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -157,6 +157,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         self.ocr_lang = ocr_lang
         self.tesseract_config = tesseract_config
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
@@ -166,66 +167,29 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> np.ndarray:
         """
-        Resize an image to (size["height"], size["width"]) dimensions.
+        Resize an image to `(size["height"], size["width"])`.
 
         Args:
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
-                Size of the output image.
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-                Resampling filter to use when resiizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
+            data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The resized image.
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"The size dictionary must contain the keys 'height' and 'width'. Got {size.keys()}")
+            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
         output_size = (size["height"], size["width"])
         return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
-
-    def rescale(
-        self,
-        image: np.ndarray,
-        scale: Union[int, float],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Rescale an image by a scale factor. image = image * scale.
-
-        Args:
-            image (`np.ndarray`):
-                Image to rescale.
-            scale (`int` or `float`):
-                Scale to apply to the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        return rescale(image, scale=scale, data_format=data_format, **kwargs)
-
-    def normalize(
-        self,
-        image: np.ndarray,
-        mean: Union[float, Iterable[float]],
-        std: Union[float, Iterable[float]],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> np.ndarray:
-        """
-        Normalize an image.
-
-        Args:
-            image (`np.ndarray`):
-                Image to normalize.
-            mean (`float` or `Iterable[float]`):
-                Mean values to be used for normalization.
-            std (`float` or `Iterable[float]`):
-                Standard deviation values to be used for normalization.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
-        """
-        return normalize(image, mean=mean, std=std, data_format=data_format, **kwargs)
 
     def preprocess(
         self,

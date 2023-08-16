@@ -30,7 +30,8 @@ from ...utils import logging
 
 
 if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
+    from ...pipelines.conversational import Conversation
+    from ...tokenization_utils_base import TextInput
 
 logger = logging.get_logger(__name__)
 
@@ -111,7 +112,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
-        legacy=True,
+        legacy=None,
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -131,11 +132,13 @@ class LlamaTokenizer(PreTrainedTokenizer):
             legacy=legacy,
             **kwargs,
         )
-        if legacy:
+        if legacy is None:
             logger.warning_once(
-                f"You are using the legacy behaviour of the {self.__class__}. This means that tokens that come after special tokens will not be properly handled. We recommend you to"
-                " read the related pull request available at https://github.com/huggingface/transformers/pull/24565"
+                f"You are using the default legacy behaviour of the {self.__class__}. This means that tokens that come after special tokens will not be properly handled. We recommend you to"
+                " read the related pull request available at https://github.com/huggingface/transformers/pull/24565, and set the legacy attribute accordingly."
             )
+            legacy = True
+
         self.legacy = legacy
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
@@ -166,7 +169,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         return vocab
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
-    def tokenize(self, text, **kwargs) -> List[str]:
+    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         # Replace the SPIECE_UNDERLINE with a space to make sure SPIECE_UNDERLINE is only used at
         # the beginning of the text
         if not self.legacy:
@@ -174,7 +177,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         return super().tokenize(text, **kwargs)
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
-    def _tokenize(self, text):
+    def _tokenize(self, text, **kwargs):
         """
         Returns a tokenized string.
 

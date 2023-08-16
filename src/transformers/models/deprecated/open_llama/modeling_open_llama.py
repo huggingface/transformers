@@ -39,7 +39,7 @@ try:
     from xformers import ops as xops
 except ImportError:
     xops = None
-    logger.warn(
+    logger.warning(
         "Xformers is not installed correctly. If you want to use memory_efficient_attention to accelerate training use the following command to install Xformers\npip install xformers."
     )
 

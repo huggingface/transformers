@@ -413,11 +413,20 @@ def get_supported_tasks() -> List[str]:
     return PIPELINE_REGISTRY.get_supported_tasks()
 
 
-def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
+def get_task(model: str, token: Optional[str] = None, **deprecated_kwargs) -> str:
+    use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
+    if use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+        )
+        if token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        token = use_auth_token
+
     if is_offline_mode():
         raise RuntimeError("You cannot infer task automatically within `pipeline` when using offline mode")
     try:
-        info = model_info(model, token=use_auth_token)
+        info = model_info(model, token=token)
     except Exception as e:
         raise RuntimeError(f"Instantiating a pipeline without a task set raised an error: {e}")
     if not info.pipeline_tag:
@@ -501,7 +510,7 @@ def pipeline(
     framework: Optional[str] = None,
     revision: Optional[str] = None,
     use_fast: bool = True,
-    use_auth_token: Optional[Union[str, bool]] = None,
+    token: Optional[Union[str, bool]] = None,
     device: Optional[Union[int, str, "torch.device"]] = None,
     device_map=None,
     torch_dtype=None,
@@ -654,10 +663,18 @@ def pipeline(
         model_kwargs = {}
     # Make sure we only pass use_auth_token once as a kwarg (it used to be possible to pass it in model_kwargs,
     # this is to keep BC).
-    use_auth_token = model_kwargs.pop("use_auth_token", use_auth_token)
+    use_auth_token = model_kwargs.pop("use_auth_token", None)
+    if use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+        )
+        if token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        token = use_auth_token
+
     hub_kwargs = {
         "revision": revision,
-        "use_auth_token": use_auth_token,
+        "token": token,
         "trust_remote_code": trust_remote_code,
         "_commit_hash": None,
     }
