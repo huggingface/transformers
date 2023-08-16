@@ -131,17 +131,15 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
         pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
+        pre_tokenizers = pre_tok_state.get("pretokenizers", pre_tok_state)
+        for pre_tok_idx in range(len(pre_tokenizers)):
+            if not hasattr(pre_tok_state, "pretokenizers"):
+                pre_tok_state["add_prefix_space"] = add_prefix_space
+            if hasattr(pre_tok_state["pretokenizers"][pre_tok_idx], "add_prefix_space"):
+                pre_tok_state["pretokenizers"][pre_tok_idx]["add_prefix_space"] = add_prefix_space
 
-        pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-        if pre_tok_class == "Sequence":
-            for pre_tok in pre_tok_state.get("pretokenizers"):
-                if hasattr(pre_tok, "add_prefix_space"):
-                    pre_tok["add_prefix_space"] = add_prefix_space
-        elif hasattr(pre_tok, "add_prefix_space"):
-            pre_tok["add_prefix_space"] = add_prefix_space
-
-        self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
-
+        new_pre_tok_state = json.dumps(pre_tok_state).encode()
+        self.backend_tokenizer.pre_tokenizer.__setstate__(new_pre_tok_state)
         self.add_prefix_space = add_prefix_space
 
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
