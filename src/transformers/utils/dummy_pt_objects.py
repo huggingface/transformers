@@ -2572,6 +2572,12 @@ class LayoutLMForTokenClassification(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+class LayoutLMForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
 
 class LayoutLMModel(metaclass=DummyObject):
     _backends = ["torch"]

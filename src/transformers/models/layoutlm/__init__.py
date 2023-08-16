@@ -54,6 +54,7 @@ else:
         "LayoutLMForQuestionAnswering",
         "LayoutLMModel",
         "LayoutLMPreTrainedModel",
+        "LayoutLMForRelationExtraction"
     ]
 
 try:
@@ -100,6 +101,7 @@ if TYPE_CHECKING:
             LayoutLMForTokenClassification,
             LayoutLMModel,
             LayoutLMPreTrainedModel,
+            LayoutLMForRelationExtraction,
         )
     try:
         if not is_tf_available():

@@ -3329,16 +3329,23 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             difference = max_length - len(required_input)
 
             if self.padding_side == "right":
-                if return_attention_mask:
+                if "input_ids" in encoded_inputs:
+                    encoded_inputs["input_ids"] = encoded_inputs["input_ids"] + [0] * difference
 
+                if return_attention_mask:
                     encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
+
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = (
                         encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
                     )
+
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
-                encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
+
+                if "bbox" in encoded_inputs:
+                    encoded_inputs["bbox"] = encoded_inputs["bbox"] + [[0, 0, 0, 0] for i in range(difference)]
+
             elif self.padding_side == "left":
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = [0] * difference + encoded_inputs["attention_mask"]
