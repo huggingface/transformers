@@ -131,7 +131,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             Resize the shorter side of the input to `size["shortest_edge"]`. The longer side will be limited to under
             `int((1333 / 800) * size["shortest_edge"])` while preserving the aspect ratio. Only has an effect if
             `do_resize` is set to `True`. Can be overridden by the `size` parameter in the `preprocess` method.
-        size_divisor (`int`, *optional*, defaults to `32`):
+        size_divisor (`int`, *optional*, defaults to 32):
             The size by which to make sure both the height and width can be divided. Only has an effect if `do_resize`
             is set to `True`. Can be overridden by the `size_divisor` parameter in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):

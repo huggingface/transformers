@@ -102,7 +102,7 @@ class DPTImageProcessor(BaseImageProcessor):
         keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
             If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
             be overidden by `keep_aspect_ratio` in `preprocess`.
-        ensure_multiple_of (`int`, *optional*, defaults to `1`):
+        ensure_multiple_of (`int`, *optional*, defaults to 1):
             If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
             by `ensure_multiple_of` in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
@@ -176,7 +176,7 @@ class DPTImageProcessor(BaseImageProcessor):
                 Target size of the output image.
             keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
                 If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
-            ensure_multiple_of (`int`, *optional*, defaults to `1`):
+            ensure_multiple_of (`int`, *optional*, defaults to 1):
                 The image is resized to a size that is a multiple of this value.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Defines the resampling filter to use if resizing the image. Otherwise, the image is resized to size

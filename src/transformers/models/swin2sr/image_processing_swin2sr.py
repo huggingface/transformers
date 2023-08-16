@@ -129,7 +129,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
             do_pad (`bool`, *optional*, defaults to `True`):
                 Whether to pad the image to make the height and width divisible by `window_size`.
-            pad_size (`int`, *optional*, defaults to `32`):
+            pad_size (`int`, *optional*, defaults to 32):
                 The size of the sliding window for the local attention.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
