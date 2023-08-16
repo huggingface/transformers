@@ -17,6 +17,7 @@ from transformers.modeling_outputs import (
     BaseModelOutputWithNoAttention,
     SequenceClassifierOutput,
 )
+# from dgl.nn import EGTLayer
 
 NODE_FEATURES_OFFSET = 128
 NUM_NODE_FEATURES = 9
@@ -304,13 +305,13 @@ class EGTModel(EGTPreTrainedModel):
                                          for i in range(len(mlp_dims)-1)])
         self.mlp_fn = config.activation
      
-    def input_block(self, nodef, featm, dm, nodem, svd_pe_size):
+    def input_block(self, nodef, featm, dm, nodem, svd_pe):
         dm = dm.long().clamp(min=0, max=self.upto_hop+1)  # (b,i,j)
         
         h = self.nodef_embed(nodef).sum(dim=2)      # (b,i,w,h) -> (b,i,h)
         
         if self.svd_pe_size:
-            h = h + self.svd_embed(svd_pe_size)
+            h = h + self.svd_embed(svd_pe)
         
         e = self.dist_embed(dm)\
               + self.featm_embed(featm).sum(dim=3)  # (b,i,j,f,e) -> (b,i,j,e)
@@ -342,11 +343,11 @@ class EGTModel(EGTPreTrainedModel):
         featm: torch.LongTensor,
         dm: torch.LongTensor,
         attn_mask: torch.LongTensor,
-        svd_pe_size: torch.Tensor,
+        svd_pe: torch.Tensor,
         return_dict: Optional[bool] = None,
         **unused,
     ) -> torch.Tensor:
-        h, e, mask = self.input_block(node_feat, featm, dm, attn_mask, svd_pe_size)
+        h, e, mask = self.input_block(node_feat, featm, dm, attn_mask, svd_pe)
 
         for layer in self.EGT_layers[:-1]:
             if self.edge_update:
