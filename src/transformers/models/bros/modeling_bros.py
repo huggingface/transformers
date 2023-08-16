@@ -72,8 +72,8 @@ BROS_INPUTS_DOCSTRING = r"""
 
         bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 8)'):
             Bounding box coordinates for each token in the input sequence. Each bounding box is a list of eight values
-            (x1, y1, x2, y1, x2, y2, x1, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right corner of the
-            bounding box.
+            (x1, y1, x2, y1, x2, y2, x1, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right
+            corner of the bounding box.
 
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -373,7 +373,7 @@ class BrosSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in BrosModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -763,7 +763,7 @@ class BrosPreTrainedModel(PreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare Bros Model transformer outputting raw hidden-states without any specific head on top.",
     BROS_START_DOCSTRING,
 )
 class BrosModel(BrosPreTrainedModel):
@@ -1039,7 +1039,8 @@ class BrosForTokenClassification(BrosPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Bros Model with a token classification head on top (initial token layers and sequence token layer on top of the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks.
+    Bros Model with a token classification head on top (initial token layers and sequence token layer on top of the
+    hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks.
     """,
     BROS_START_DOCSTRING,
 )
@@ -1168,8 +1169,8 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Bros Model with a token classification head on top (a relation extractor layer on top of the hidden-states output) e.g. for
-    Entity-Linking.
+    Bros Model with a token classification head on top (a relation extractor layer on top of the hidden-states output)
+    e.g. for Entity-Linking.
     """,
     BROS_START_DOCSTRING,
 )

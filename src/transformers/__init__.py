@@ -1321,10 +1321,10 @@ else:
         [
             "BROS_PRETRAINED_MODEL_ARCHIVE_LIST",
             "BrosForTokenClassification",
-            "BrosSpadeEEForTokenClassification",
-            "BrosSpadeELForTokenClassification",
             "BrosModel",
             "BrosPreTrainedModel",
+            "BrosSpadeEEForTokenClassification",
+            "BrosSpadeELForTokenClassification",
         ]
     )
     _import_structure["models.camembert"].extend(
