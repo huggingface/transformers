@@ -31,8 +31,7 @@ from ...utils import logging
 
 
 if TYPE_CHECKING:
-    from ...pipelines.conversational import Conversation
-    from ...tokenization_utils_base import TextInput
+    from transformers.pipelines.conversational import Conversation
 
 logger = logging.get_logger(__name__)
 

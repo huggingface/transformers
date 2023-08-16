@@ -24,7 +24,7 @@ from ...utils.versions import require_version
 
 
 if TYPE_CHECKING:
-    from ...pipelines.conversational import Conversation
+    from transformers.pipelines.conversational import Conversation
 
 require_version("tokenizers>=0.13.3")
 
