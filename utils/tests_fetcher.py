@@ -97,7 +97,7 @@ IMPORTANT_MODELS = [
 @contextmanager
 def checkout_commit(repo: Repo, commit_id: str):
     """
-    Context manager that checks out a given commit when entered, but gets bacj to the reference it was at on exit.
+    Context manager that checks out a given commit when entered, but gets back to the reference it was at on exit.
 
     Args:
         repo (`git.Repo`): A git repository (for instance the Transformers repo).
@@ -177,7 +177,7 @@ def get_all_tests() -> List[str]:
     Walks the `tests` folder to return a list of files/subfolders. This is used to split the tests to run when using
     paralellism. The split is:
 
-    - folders under `tests`: ()`tokenization`, `pipelines`, etc) except the subfolder `models` is excluded.
+    - folders under `tests`: (`tokenization`, `pipelines`, etc) except the subfolder `models` is excluded.
     - folders under `tests/models`: `bert`, `gpt2`, etc.
     - test files under `tests`: `test_modeling_common.py`, `test_tokenization_common.py`, etc.
     """
@@ -258,9 +258,12 @@ def get_diff(repo: Repo, base_commit: str, commits: List[str]) -> List[str]:
     Get the diff between a base commit and one or several commits.
 
     Args:
-        repo (`git.Repo`): A git repository (for instance the Transformers repo).
-        base_commit (`str`): The commit reference of where to compare for the diff.
-        commits (`List[str]`): The list of commits with which to compare the repo at `base_commit`.
+        repo (`git.Repo`):
+            A git repository (for instance the Transformers repo).
+        base_commit (`str`):
+            The commit reference of where to compare for the diff. This is the current commit, not the branching point!
+        commits (`List[str]`):
+            The list of commits with which to compare the repo at `base_commit` (so the branching point).
 
     Returns:
         `List[str]`: The list of Python files with a diff (files added, renamed or deleted are always returned, files
@@ -327,9 +330,12 @@ def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: List[str]) ->
     Get the diff in doc examples between a base commit and one or several commits.
 
     Args:
-        repo (`git.Repo`): A git repository (for instance the Transformers repo).
-        base_commit (`str`): The commit reference of where to compare for the diff.
-        commits (`List[str]`): The list of commits with which to compare the repo at `base_commit`.
+        repo (`git.Repo`):
+            A git repository (for instance the Transformers repo).
+        base_commit (`str`):
+            The commit reference of where to compare for the diff. This is the current commit, not the branching point!
+        commits (`List[str]`):
+            The list of commits with which to compare the repo at `base_commit` (so the branching point).
 
     Returns:
         `List[str]`: The list of Python and Markdown files with a diff (files added or renamed are always returned, files
@@ -449,7 +455,7 @@ def extract_imports(module_fname: str, cache: Dict[str, List[str]] = None) -> Li
     with open(PATH_TO_REPO / module_fname, "r", encoding="utf-8") as f:
         content = f.read()
 
-    # Filter out all docstrings to not get imports in code examples. As bevore we need to deactivate formatting to
+    # Filter out all docstrings to not get imports in code examples. As before we need to deactivate formatting to
     # keep this as escaped quotes and avoid this function failing on this file.
     # fmt: off
     splits = content.split('\"\"\"')
