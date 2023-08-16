@@ -2124,7 +2124,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # end legacy
 
         # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens!
-        slow_to_fast = from_slow and added_tokens_file is not None and "Fast" in cls.__name__
+        # TODO 3 models are still failing because they need to have from_slow = True but still read the added_tokens file
+        slow_to_fast = slow_tokenizer is not None and added_tokens_file is not None and "Fast" in cls.__name__
         init_kwargs["slow_to_fast"] = slow_to_fast
 
         if len(additional_special_tokens) > 0:
@@ -2162,7 +2163,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             " the token will be added is different from the one saved in the `added_tokens.json`. This means"
                             f" that the {cls.__name__} was initialized with tokens that were not part of the vocab."
                         )
-                # TODO @ArthurZ will allow initializing with `special` in rust. No point in not having this and will make our life easier
                 is_special = bool(token in special_tokens)
                 if is_last_special is None or is_last_special == is_special:
                     tokens.append(token)
