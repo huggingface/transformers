@@ -16,6 +16,7 @@ def gaussian(x, mean, std):
     return th.exp(-0.5 * (((x - mean) / std) ** 2)) / (a * std)
 
 
+"""Temporarily define spatialencoder3d here for api change in DGL"""
 class SpatialEncoder3d(nn.Module):
     r"""3D Spatial Encoder, as introduced in
     `One Transformer Can Understand Both 2D & 3D Molecular Data
@@ -244,3 +245,332 @@ class TransformerM(nn.Module):
     def forward(self, data_dict):
 
         return None
+
+
+class TransformerMGraphEncoder(nn.Module):
+    def __init__(self, config: TransformerMConfig):
+        super().__init__()
+
+        self.dropout_module = torch.nn.Dropout(p=config.dropout, inplace=False)
+        self.layerdrop = config.layerdrop
+        self.embed_dim = config.embed_dim
+        self.apply_transformerm_init = config.apply_transformerm_init
+        self.traceable = config.traceable
+
+        self.embed_scale = config.embed_scale
+
+        if config.q_noise > 0:
+            self.quant_noise = quant_noise(
+                nn.Linear(self.embed_dim, self.embed_dim, bias=False),
+                config.q_noise,
+                config.qn_block_size,
+            )
+        else:
+            self.quant_noise = None
+        
+        # 1 for padding
+        self.atom_encoder = nn.Embedding(
+            args.num_atoms + 1, args.embed_dim, padding_idx=0
+        )
+        # one additional embedding for the virtual graph token
+        self.graph_token_emb = nn.Parameter(torch.randn(args.embed_dim))
+
+        # degree encoder
+        self.degree_encoder = DegreeEncoder(
+            max_degree=args.max_degree,
+            embedding_dim=args.embed_dim
+        )
+
+        # spatial encoder
+        self.spatial_encoder = SpatialEncoder(
+            max_dist=args.num_spatial,
+            num_heads=args.num_heads
+        )
+        # embedding for the virtual graph token distance
+        self.graph_token_virtual_dist = nn.Parameter(
+            torch.randn(args.num_heads)
+        )
+
+        # path encoder
+        self.path_encoder = PathEncoder(
+            max_len=args.max_path_len,
+            num_edges=args.num_edges,
+            feat_dim=args.edge_dim,
+            num_heads=args.num_heads,
+        )
+
+        # spatial encoder 3d
+        """
+         default 0
+         src 1 (pad), 2, ..., 512
+         tgt 513 (pad), 514, ..., 1024
+        """
+        self.spatial_encoder_3d = SpatialEncoder3d(
+            num_kernels=args.num_kernels,
+            num_heads=args.num_heads,
+            max_node_type=args.max_node_type,
+        )
+
+        if config.encoder_normalize_before:
+            self.emb_layer_norm = nn.LayerNorm(self.embedding_dim)
+        else:
+            self.emb_layer_norm = None
+
+        if self.layerdrop > 0.0:
+            self.layers = LayerDropModuleList(p=self.layerdrop)
+        else:
+            self.layers = nn.ModuleList([])
+        self.layers.extend([GraphormerLayer(
+                feat_size=config.embed_dim,
+                hidden_size=config.ffn_embed_dim,
+                num_heads=config.num_heads,
+                dropout=config.dropout,
+                attn_dropout=config.attn_dropout,
+                activation=get_activation(config.activation),
+            ) for _ in range(config.num_hidden_layers)
+        ])
+
+        # Apply initialization of model params after building the model
+        if config.freeze_embeddings:
+            raise NotImplementedError("Freezing embeddings is not implemented yet.")
+
+        for layer in range(config.num_trans_layers_to_freeze):
+            m = self.layers[layer]
+            if m is not None:
+                for p in m.parameters():
+                    p.requires_grad = False
+
+    def forward(
+        self,
+        node_feat: torch.LongTensor,
+        in_degree: torch.LongTensor,
+        out_degree: torch.LongTensor,
+        dist: torch.LongTensor,
+        path_data: torch.LongTensor,
+        spatial_pos: torch.LongTensor,
+        node_type: torch.LongTensor,
+        last_state_only: bool = False,
+        attn_mask: Optional[torch.Tensor] = None,
+    ) -> Tuple[Union[torch.Tensor, List[torch.LongTensor]], torch.Tensor]:
+        # encode input node feature
+        num_graphs, max_num_nodes, _ = node_feat.shape
+        deg_emb = self.degree_encoder(th.stack((in_degree, out_degree)))
+        node_feat = self.atom_encoder(node_feat)
+        node_feat = node_feat + deg_emb
+        graph_token_feat = self.graph_token.weight.unsqueeze(0).repeat(
+            num_graphs, 1, 1
+        )
+        x = th.cat([graph_token_feat, node_feat], dim=1)
+
+        attn_bias = th.zeros(
+            num_graphs,
+            max_num_nodes + 1,
+            max_num_nodes + 1,
+            self.num_heads,
+            device=dist.device,
+        )
+        path_encoding = self.path_encoder(dist, path_data)
+        spatial_encoding = self.spatial_encoder(dist)
+        spatial3d_encoding = self.spatial_encoder_3d(spatial_pos, node_type)
+
+        attn_bias[:, 1:, 1:, :] = path_encoding + spatial_encoding + \
+            spatial3d_encoding
+
+        # spatial encoding of the virtual node
+        t = self.graph_token_virtual_dist.weight.reshape(1, 1, self.num_heads)
+        # Since the virtual node comes first, the spatial encodings between it
+        # and other nodes will fill the 1st row and 1st column (omit num_graphs
+        # and num_heads dimensions) of attn_bias matrix by broadcasting.
+        attn_bias[:, 1:, 0, :] = attn_bias[:, 1:, 0, :] + t
+        attn_bias[:, 0, :, :] = attn_bias[:, 0, :, :] + t
+
+        if self.quant_noise is not None:
+            x = self.quant_noise(x)
+
+        if self.emb_layer_norm is not None:
+            x = self.emb_layer_norm(x)
+
+        x = self.dropout_module(x)
+
+        inner_states = []
+        if not last_state_only:
+            inner_states.append(x)
+
+        for layer in self.layers:
+            x = layer(
+                x,
+                attn_mask=attn_mask,
+                attn_bias=attn_bias,
+            )
+            if not last_state_only:
+                inner_states.append(x)
+
+        graph_rep = x[:, 0, :]
+
+        if last_state_only:
+            inner_states = [x]
+
+        if self.traceable:
+            return torch.stack(inner_states), graph_rep
+        else:
+            return inner_states, graph_rep
+
+
+class TransformerMDecoderHead(nn.Module):
+    def __init__(self, embedding_dim: int, num_classes: int):
+        super().__init__()
+        """num_classes should be 1 for regression, or the number of classes for classification"""
+        self.lm_output_learned_bias = nn.Parameter(torch.zeros(1))
+        self.classifier = nn.Linear(embedding_dim, num_classes, bias=False)
+        self.num_classes = num_classes
+
+    def forward(self, input_nodes: torch.Tensor, **unused) -> torch.Tensor:
+        input_nodes = self.classifier(input_nodes)
+        input_nodes = input_nodes + self.lm_output_learned_bias
+        return input_nodes
+
+
+class TransformerMPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = TransformerMConfig
+    base_model_prefix = "transformerm"
+    supports_gradient_checkpointing = True
+    main_input_name_nodes = "input_nodes"
+    main_input_name_edges = "input_edges"
+
+    def normal_(self, data: torch.Tensor):
+        # with FSDP, module params will be on CUDA, so we cast them back to CPU
+        # so that the RNG is consistent with and without FSDP
+        data.copy_(
+            data.cpu().normal_(mean=0.0, std=0.02).to(data.device)
+        )
+
+    def init_transformerm_params(self, module: Union[nn.Linear, nn.Embedding, TransformerMMultiheadAttention]):
+        """
+        Initialize the weights of the Transformer-M Model.
+        """
+        if isinstance(module, nn.Linear):
+            self.normal_(module.weight.data)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        if isinstance(module, nn.Embedding):
+            self.normal_(module.weight.data)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        if isinstance(module, MultiheadAttention):
+            self.normal_(module.q_proj.weight.data)
+            self.normal_(module.k_proj.weight.data)
+            self.normal_(module.v_proj.weight.data)
+
+    def _init_weights(
+        self,
+        module: Union[
+            nn.Linear, nn.Conv2d, nn.Embedding, nn.LayerNorm,
+            TransformerMGraphEncoder
+        ],
+    ):
+        """
+        Initialize the weights
+        """
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            # update the initialization part
+            module.weight.data.normal_(mean=0.0, std=0.02)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=0.02)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        # elif isinstance(module, GraphormerMultiheadAttention):
+        #     module.q_proj.weight.data.normal_(mean=0.0, std=0.02)
+        #     module.k_proj.weight.data.normal_(mean=0.0, std=0.02)
+        #     module.v_proj.weight.data.normal_(mean=0.0, std=0.02)
+        #     module.reset_parameters()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module,TransformerMGraphEncoder):
+            if module.apply_graphormer_init:
+                module.apply(self.init_transformerm_params)
+
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, GraphormerModel):
+            module.gradient_checkpointing = value
+
+
+class TransformerMForGraphClassification(TransformerMPreTrainedModel):
+    """
+    This model can be used for graph-level classification or regression tasks.
+    It can be trained on
+    - regression (by setting config.num_classes to 1); there should be one
+      float-type label per graph
+    - one task classification (by setting config.num_classes to the number of
+      classes); there should be one integer label per graph
+    - binary multi-task classification (by setting config.num_classes to the
+      number of labels); there should be a list of integer labels for each graph.
+    """
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.encoder = TransformerMModel(config)
+        self.embedding_dim = config.embedding_dim
+        self.num_classes = config.num_classes
+        self.classifier = TransformerMDecoderHead(self.embedding_dim, self.num_classes)
+        self.is_encoder_decoder = True
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        node_feat: torch.LongTensor,
+        in_degree: torch.LongTensor,
+        out_degree: torch.LongTensor,
+        dist: torch.LongTensor,
+        path_data: torch.LongTensor,
+        spatial_pos: torch.LongTensor,
+        node_type: torch.LongTensor,
+        attn_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        return_dict: Optional[bool] = True,
+        **unused,
+    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
+        encoder_outputs = self.encoder(
+            node_feat,
+            in_degree,
+            out_degree,
+            dist,
+            path_data,
+            spatial_pos,
+            node_type,
+            attn_mask = attn_mask,
+        )
+        outputs, hidden_states = encoder_outputs["last_hidden_state"], encoder_outputs["hidden_states"]
+
+        head_outputs = self.classifier(outputs)
+        logits = head_outputs[:, 0, :].contiguous()
+
+        if labels is not None:
+            mask = ~torch.isnan(labels)
+
+            if self.num_classes == 1:  # regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits[mask].squeeze(), labels[mask].squeeze().float())
+            elif self.num_classes > 1 and len(labels.shape) == 1:  # One task classification
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits[mask].view(-1, self.num_classes), labels[mask].view(-1))
+            else:  # Binary multi-task classification
+                loss_fct = BCEWithLogitsLoss(reduction="sum")
+                loss = loss_fct(logits[mask], labels[mask])
+
+        if not return_dict:
+            return (loss, logits, hidden_states)
+        return SequenceClassifierOutput(loss=loss, logits=logits, hidden_states=hidden_states, attentions=None)
