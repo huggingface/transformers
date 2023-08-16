@@ -185,7 +185,6 @@ class LevitImageProcessor(BaseImageProcessor):
         return_tensors: Optional[TensorType] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        num_channels: Optional[int] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -236,9 +235,6 @@ class LevitImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            num_channels (`int`, *optional*):
-                The number of channels in the input image, used to infer the channel dimension format if
-                `input_data_format` is unset. if `input_data_format` is unset.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         resample = resample if resample is not None else self.resample
@@ -279,7 +275,7 @@ class LevitImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0], num_channels=num_channels)
+            input_data_format = infer_channel_dimension_format(images[0])
 
         if do_resize:
             images = [self.resize(image, size, resample, input_data_format=input_data_format) for image in images]

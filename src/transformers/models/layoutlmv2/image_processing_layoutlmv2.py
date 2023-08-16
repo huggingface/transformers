@@ -198,7 +198,6 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        num_channels: Optional[int] = None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -258,7 +257,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0], num_channels=num_channels)
+            input_data_format = infer_channel_dimension_format(images[0])
 
         if apply_ocr:
             requires_backends(self, "pytesseract")

@@ -312,7 +312,6 @@ class DonutImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        num_channels: Optional[int] = None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -368,9 +367,6 @@ class DonutImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            num_channels (`int`, *optional*):
-                The number of channels in the input image, used to infer the channel dimension format if
-                `input_data_format` is unset. if `input_data_format` is unset.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -413,7 +409,7 @@ class DonutImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0], num_channels=num_channels)
+            input_data_format = infer_channel_dimension_format(images[0])
 
         if do_align_long_axis:
             images = [self.align_long_axis(image, size=size, input_data_format=input_data_format) for image in images]

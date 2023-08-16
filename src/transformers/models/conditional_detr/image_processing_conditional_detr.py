@@ -1119,7 +1119,6 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        num_channels: Optional[int] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -1176,9 +1175,6 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            num_channels (`int`, *optional*):
-                The number of channels in the input image, used to infer the channel dimension format if
-                `input_data_format` is unset.
         """
         if "pad_and_return_pixel_mask" in kwargs:
             logger.warning_once(
@@ -1265,7 +1261,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0], num_channels=num_channels)
+            input_data_format = infer_channel_dimension_format(images[0])
 
         # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
         if annotations is not None:

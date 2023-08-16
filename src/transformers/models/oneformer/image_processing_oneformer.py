@@ -570,13 +570,12 @@ class OneFormerImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        num_channels: Optional[int] = None,
     ) -> np.ndarray:
         """Preprocesses a single image."""
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
         if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image, num_channels=num_channels)
+            input_data_format = infer_channel_dimension_format(image)
         image = self._preprocess(
             image=image,
             do_resize=do_resize,
@@ -647,7 +646,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        num_channels: Optional[int] = None,
         **kwargs,
     ) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
@@ -725,7 +723,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
                 image_std=image_std,
                 data_format=data_format,
                 input_data_format=input_data_format,
-                num_channels=num_channels,
             )
             for image in images
         ]

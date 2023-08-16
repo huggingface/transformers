@@ -115,7 +115,6 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        num_channels: Optional[int] = None,
         **kwargs,
     ):
         """
@@ -151,9 +150,6 @@ class Swin2SRImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            num_channels (`int`, *optional*):
-                The number of channels in the input image, used to infer the channel dimension format if
-                `input_data_format` is unset. if `input_data_format` is unset.
         """
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
@@ -176,7 +172,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0], num_channels=num_channels)
+            input_data_format = infer_channel_dimension_format(images[0])
 
         if do_rescale:
             images = [

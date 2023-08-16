@@ -209,7 +209,6 @@ class TvltImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        num_channels: Optional[int] = None,
     ) -> np.ndarray:
         """Preprocesses a single image."""
         if do_resize and size is None or resample is None:
@@ -228,7 +227,7 @@ class TvltImageProcessor(BaseImageProcessor):
         image = to_numpy_array(image)
 
         if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image, num_channels=num_channels)
+            input_data_format = infer_channel_dimension_format(image)
 
         if do_resize:
             image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
@@ -263,7 +262,6 @@ class TvltImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        num_channels: Optional[int] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -317,9 +315,6 @@ class TvltImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            num_channels (`int`, *optional*):
-                The number of channels in the input image, used to infer the channel dimension format if
-                `input_data_format` is unset. if `input_data_format` is unset.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -391,7 +386,6 @@ class TvltImageProcessor(BaseImageProcessor):
                     image_std=image_std,
                     data_format=data_format,
                     input_data_format=input_data_format,
-                    num_channels=num_channels,
                 )
                 for img in video
             ]
