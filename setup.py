@@ -33,7 +33,7 @@ To create the package for pypi.
 
 4. Wait for the tests on the release branch to be completed and be green (otherwise revert and fix bugs)
 
-5. Add a tag in git to mark the release: "git tag v<VERSION> -m 'Adds tag v<VERSION> for pypi' "
+5. On the release branch, add a tag in git to mark the release: "git tag v<VERSION> -m 'Adds tag v<VERSION> for pypi' "
    Push the tag to git: git push --tags origin v<RELEASE>-release
 
 6. Build both the sources and the wheel. Do not change anything in setup.py between

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Utility that checks the big table in the index.md of the doc and potentially updates it.
+Utility that checks the big table in the file docs/source/en/index.md and potentially updates it.
 
 Use from the root of the repo with:
 

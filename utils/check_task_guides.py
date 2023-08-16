@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Utility that checks the list of models that can be used for each in task (as defined in the task-specific pages of the
-doc) is up to date and potentially fixes it.
+Utility that checks the list of models in the tips in the task-specific pages of the doc is up to date and potentially
+fixes it.
 
 Use from the root of the repo with:
 
