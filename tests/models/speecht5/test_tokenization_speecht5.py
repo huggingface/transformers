@@ -64,11 +64,11 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         return text, ids
 
     def test_tokenizer_normalization(self):
-        tokenizer = self.get_tokenizer()
-        input_text, output_text = self.get_numeric_input_output_texts()
-        input_ids = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(input_text))
-        output_ids = tokenizer.convert_tokens_to_ids(tokenizer.tokenize(output_text))
-        self.assertListEqual(input_ids, output_ids)
+        tokenizer = self.get_tokenizer(normalize=True)
+        input_text, expected_text = self.get_numeric_input_output_texts()
+        input_ids = tokenizer.encode(input_text)
+        output_text = tokenizer.decode(input_ids, skip_special_tokens=True)
+        self.assertEqual(output_text, expected_text)
 
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
@@ -149,7 +149,7 @@ class SpeechT5TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         pass
 
     def test_full_tokenizer(self):
-        tokenizer = self.get_tokenizer()
+        tokenizer = self.get_tokenizer(normalize=True)
 
         tokens = tokenizer.tokenize("This is a test")
         # fmt: off

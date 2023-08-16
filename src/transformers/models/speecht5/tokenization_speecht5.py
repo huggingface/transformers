@@ -65,7 +65,7 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        normalize (`bool`, *optional*, defaults to `True`):
+        normalize (`bool`, *optional*, defaults to `False`):
             Whether to convert numeric quantities in the text to their spelt-out english counterparts.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
@@ -100,7 +100,7 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        normalize=True,
+        normalize=False,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> None:
