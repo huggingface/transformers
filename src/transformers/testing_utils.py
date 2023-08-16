@@ -616,8 +616,11 @@ if is_torch_available():
 
     if "TRANSFORMERS_TEST_DEVICE" in os.environ:
         torch_device = os.environ["TRANSFORMERS_TEST_DEVICE"]
-        # try creating device to see if provided device is valid
-        _ = torch.device(torch_device)
+        try:
+            # try creating device to see if provided device is valid
+            _ = torch.device(torch_device)
+        except RuntimeError as e:
+            raise RuntimeError(f"Unknown testing device specified by environment variable `TRANSFORMERS_TEST_DEVICE`: {torch_device}") from e
     elif torch.cuda.is_available():
         torch_device = "cuda"
     elif _run_third_party_device_tests and is_torch_npu_available():
