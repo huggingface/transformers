@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from . import (
+    seamless_m4t,
     albert,
     align,
     altclip,

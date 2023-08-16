@@ -123,6 +123,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.seamless_m4t": ["SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP", "SeamlessM4TConfig", "SeamlessM4TTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -789,6 +790,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
+    _import_structure["models.seamless_m4t"].append("SeamlessM4TTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -1027,6 +1029,22 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.seamless_m4t"].extend(
+        [
+            "SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SeamlessM4TForMaskedLM",
+            "SeamlessM4TForCausalLM",
+            "SeamlessM4TForMultipleChoice",
+            "SeamlessM4TForQuestionAnswering",
+            "SeamlessM4TForSequenceClassification",
+            "SeamlessM4TForTokenClassification",
+            "SeamlessM4TLayer",
+            "SeamlessM4TModel",
+            "SeamlessM4TPreTrainedModel",
+            "load_tf_weights_in_seamless_m4t",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4129,6 +4147,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.seamless_m4t import SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP, SeamlessM4TConfig, SeamlessM4TTokenizer
     from .models.align import (
         ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AlignConfig,
@@ -4749,6 +4768,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
+        from .models.seamless_m4t import SeamlessM4TTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -4948,6 +4968,20 @@ if TYPE_CHECKING:
         from .modeling_utils import PreTrainedModel
 
         # PyTorch model imports
+
+        from .models.seamless_m4t import (
+            SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SeamlessM4TForMaskedLM,
+            SeamlessM4TForCausalLM,
+            SeamlessM4TForMultipleChoice,
+            SeamlessM4TForQuestionAnswering,
+            SeamlessM4TForSequenceClassification,
+            SeamlessM4TForTokenClassification,
+            SeamlessM4TLayer,
+            SeamlessM4TModel,
+            SeamlessM4TPreTrainedModel,
+            load_tf_weights_in_seamless_m4t,
+        )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
