@@ -62,17 +62,20 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 <PipelineTag pipeline="text-generation"/>
 
 - A blog on [Llama 2 is here - get it on Hugging Face](https://huggingface.co/blog/llama2) which introduces Llama 2, a family of state-of-the-art open-access large language models released by Meta. This release is fully supported by Hugging Face with comprehensive integration, including models on the Hub, Transformers integration, and examples for fine-tuning.
-- A blog on [DPO and Llama 2](https://huggingface.co/blog/dpo-trl) (Link to be updated after extracting content).
+
+⚗️ Optimization
+
+- A blog on [Fine-tune Llama 2 with DPO](https://huggingface.co/blog/dpo-trl) which discusses the Direct Preference Optimization (DPO) method, now available in the TRL library. The post demonstrates how to fine-tune the Llama v2 7B-parameter model using the stack-exchange preference dataset.
+- A blog on [How to instruction-tune Llama 2](https://www.philschmid.de/instruction-tune-llama-2) by Phil Schmid, detailing the methods and techniques for optimizing the performance of Llama 2. 🌎
 
 ⚡️ Inference
 
-- 🌎 A blog on [How to use SageMaker with Llama2 and QLora](https://www.philschmid.de/sagemaker-llama2-qlora) by Phil Schmid.
-- 🌎 A blog on [Introduction to Llama 2](https://www.philschmid.de/llama-2) by Phil Schmid.
-- 🌎 A blog on [How to instruction-tune Llama 2](https://www.philschmid.de/instruction-tune-llama-2) by Phil Schmid.
+- A blog on [How to use SageMaker with Llama2 and QLora](https://www.philschmid.de/sagemaker-llama2-qlora) by Phil Schmid. 🌎
+- A blog on [Introduction to Llama 2](https://www.philschmid.de/llama-2) by Phil Schmid. 🌎
 
 🚀 Deploy
 
-- 🌎 A blog on [SageMaker, Llama, and LLM](https://www.philschmid.de/sagemaker-llama-llm) by Phil Schmid (Deployment of Llama models using SageMaker).
+- A blog on [SageMaker, Llama, and LLM](https://www.philschmid.de/sagemaker-llama-llm) by Phil Schmid (Deployment of Llama models using SageMaker). 🌎
 
 ## LlamaConfig
 
