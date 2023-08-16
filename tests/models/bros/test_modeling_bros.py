@@ -114,7 +114,7 @@ class BrosModelTester:
 
         box_first_token_mask = None
         if self.use_box_first_token_mask:
-            box_first_token_mask = random_attention_mask([self.batch_size, self.seq_length])
+            box_first_token_mask = torch.ones([self.batch_size, self.seq_length], dtype=torch.bool).to(torch_device)
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -307,7 +307,7 @@ class BrosModelTest(ModelTesterMixin, unittest.TestCase):
                 )
                 inputs_dict["box_first_token_mask"] = torch.ones(
                     [self.model_tester.batch_size, self.model_tester.seq_length],
-                    dtype=torch.long,
+                    dtype=torch.bool,
                     device=torch_device,
                 )
             elif model_class.__name__ in ["BrosSpadeEEForTokenClassification"]:
@@ -323,7 +323,7 @@ class BrosModelTest(ModelTesterMixin, unittest.TestCase):
                 )
                 inputs_dict["box_first_token_mask"] = torch.ones(
                     [self.model_tester.batch_size, self.model_tester.seq_length],
-                    dtype=torch.long,
+                    dtype=torch.bool,
                     device=torch_device,
                 )
 

@@ -1256,7 +1256,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
             mask = box_first_token_mask.view(-1)
             box_first_token_mask = torch.cat(
                 [
-                    (box_first_token_mask is False),
+                    ~box_first_token_mask,
                     torch.zeros([bsz, 1], dtype=torch.bool).to(device),
                 ],
                 axis=1,
