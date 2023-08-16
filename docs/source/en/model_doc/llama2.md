@@ -55,6 +55,24 @@ come in several checkpoints they each contain a part of each weight of the model
 
 This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ) with contributions from [Lysandre Debut](https://huggingface.co/lysandre). The code of the implementation in Hugging Face is based on GPT-NeoX [here](https://github.com/EleutherAI/gpt-neox). The original code of the authors can be found [here](https://github.com/facebookresearch/llama).
 
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with LLaMA2. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+
+<PipelineTag pipeline="text-generation"/>
+
+- A blog on [Llama 2 is here - get it on Hugging Face](https://huggingface.co/blog/llama2) which introduces Llama 2, a family of state-of-the-art open-access large language models released by Meta. This release is fully supported by Hugging Face with comprehensive integration, including models on the Hub, Transformers integration, and examples for fine-tuning.
+- A blog on [DPO and Llama 2](https://huggingface.co/blog/dpo-trl) (Link to be updated after extracting content).
+
+⚡️ Inference
+
+- 🌎 A blog on [How to use SageMaker with Llama2 and QLora](https://www.philschmid.de/sagemaker-llama2-qlora) by Phil Schmid.
+- 🌎 A blog on [Introduction to Llama 2](https://www.philschmid.de/llama-2) by Phil Schmid.
+- 🌎 A blog on [How to instruction-tune Llama 2](https://www.philschmid.de/instruction-tune-llama-2) by Phil Schmid.
+
+🚀 Deploy
+
+- 🌎 A blog on [SageMaker, Llama, and LLM](https://www.philschmid.de/sagemaker-llama-llm) by Phil Schmid (Deployment of Llama models using SageMaker).
 
 ## LlamaConfig
 
