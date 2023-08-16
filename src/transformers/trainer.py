@@ -44,10 +44,11 @@ from .integrations import (
 
 # isort: on
 
+import huggingface_hub.utils as hf_hub_utils
 import numpy as np
 import torch
 import torch.distributed as dist
-from huggingface_hub import Repository, create_repo
+from huggingface_hub import Repository, create_repo, upload_folder
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
@@ -127,6 +128,7 @@ from .utils import (
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
+    PushInProgress,
     can_return_loss,
     find_labels,
     is_accelerate_available,
@@ -144,6 +146,7 @@ from .utils import (
     logging,
     strtobool,
 )
+from .utils.quantization_config import QuantizationMethod
 
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
@@ -394,15 +397,14 @@ class Trainer:
         if getattr(model, "is_quantized", False):
             if getattr(model, "_is_quantized_training_enabled", False):
                 logger.info(
-                    "The model is loaded in 8-bit precision. To train this model you need to add additional modules"
+                    "The model is quantized. To train this model you need to add additional modules"
                     " inside the model such as adapters using `peft` library and freeze the model weights. Please"
-                    " check "
-                    " the examples in https://github.com/huggingface/peft for more details."
+                    " check the examples in https://github.com/huggingface/peft for more details."
                 )
             else:
                 raise ValueError(
                     "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit"
-                    " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
+                    " model, please make sure that you have installed `bitsandbytes>=0.41.1`. "
                 )
 
         # Setup Sharded DDP training
@@ -496,8 +498,11 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
 
-        # Quantized models doesn't support `.to` operation.
-        if self.place_model_on_device and not getattr(model, "is_quantized", False):
+        # Bnb Quantized models doesn't support `.to` operation.
+        if (
+            self.place_model_on_device
+            and not getattr(model, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES
+        ):
             self._move_model_to_device(model, args.device)
 
         # Force n_gpu to 1 to avoid DataParallel as MP will manage the GPUs
@@ -548,15 +553,10 @@ class Trainer:
         # Will be set to True by `self._setup_loggers()` on first call to `self.log()`.
         self._loggers_initialized = False
 
-        # Create clone of distant repo and output directory if needed
+        # Create distant repo and output directory if needed
+        self.hub_model_id = None
         if self.args.push_to_hub:
-            self.init_git_repo(at_init=True)
-            # In case of pull, we need to make sure every process has the latest.
-            if is_torch_tpu_available():
-                xm.rendezvous("init git repo")
-            elif args.parallel_mode == ParallelMode.DISTRIBUTED:
-                dist.barrier()
-
+            self.init_hf_repo()
         if self.args.should_save:
             os.makedirs(self.args.output_dir, exist_ok=True)
 
@@ -1089,14 +1089,6 @@ class Trainer:
                 optimizer_kwargs.update(bnb_kwargs)
             except ImportError:
                 raise ValueError("Trainer tried to instantiate bnb optimizer but bnb is not installed!")
-        elif args.optim == OptimizerNames.ADAMW_BNB:
-            try:
-                from bitsandbytes.optim import Adam8bit
-
-                optimizer_cls = Adam8bit
-                optimizer_kwargs.update(adam_kwargs)
-            except ImportError:
-                raise ValueError("Trainer tried to instantiate bnb Adam8bit but bnb is not installed!")
         elif args.optim == OptimizerNames.ADAMW_ANYPRECISION:
             try:
                 from torchdistx.optimizers import AnyPrecisionAdamW
@@ -1531,12 +1523,25 @@ class Trainer:
         inner_training_loop = find_executable_batch_size(
             self._inner_training_loop, self._train_batch_size, args.auto_find_batch_size
         )
-        return inner_training_loop(
-            args=args,
-            resume_from_checkpoint=resume_from_checkpoint,
-            trial=trial,
-            ignore_keys_for_eval=ignore_keys_for_eval,
-        )
+        if args.push_to_hub:
+            try:
+                # Disable progress bars when uploading models during checkpoints to avoid polluting stdout
+                hf_hub_utils.disable_progress_bars()
+                return inner_training_loop(
+                    args=args,
+                    resume_from_checkpoint=resume_from_checkpoint,
+                    trial=trial,
+                    ignore_keys_for_eval=ignore_keys_for_eval,
+                )
+            finally:
+                hf_hub_utils.enable_progress_bars()
+        else:
+            return inner_training_loop(
+                args=args,
+                resume_from_checkpoint=resume_from_checkpoint,
+                trial=trial,
+                ignore_keys_for_eval=ignore_keys_for_eval,
+            )
 
     def _inner_training_loop(
         self, batch_size=None, args=None, resume_from_checkpoint=None, trial=None, ignore_keys_for_eval=None
@@ -1584,14 +1589,6 @@ class Trainer:
                 f" {args.max_steps}"
             )
 
-        # Compute absolute values for logging, eval, and save if given as ratio
-        if args.logging_steps and args.logging_steps < 1:
-            args.logging_steps = math.ceil(max_steps * args.logging_steps)
-        if args.eval_steps and args.eval_steps < 1:
-            args.eval_steps = math.ceil(max_steps * args.eval_steps)
-        if args.save_steps and args.save_steps < 1:
-            args.save_steps = math.ceil(max_steps * args.save_steps)
-
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
                 # nn.DataParallel(model) replicates the model, creating new variables and module
@@ -1624,6 +1621,23 @@ class Trainer:
 
         self.state = TrainerState()
         self.state.is_hyper_param_search = trial is not None
+
+        # Compute absolute values for logging, eval, and save if given as ratio
+        if args.logging_steps is not None:
+            if args.logging_steps < 1:
+                self.state.logging_steps = math.ceil(max_steps * args.logging_steps)
+            else:
+                self.state.logging_steps = args.logging_steps
+        if args.eval_steps is not None:
+            if args.eval_steps < 1:
+                self.state.eval_steps = math.ceil(max_steps * args.eval_steps)
+            else:
+                self.state.eval_steps = args.eval_steps
+        if args.save_steps is not None:
+            if args.save_steps < 1:
+                self.state.save_steps = math.ceil(max_steps * args.save_steps)
+            else:
+                self.state.save_steps = args.save_steps
 
         # Activate gradient checkpointing if needed
         if args.gradient_checkpointing:
@@ -1967,6 +1981,9 @@ class Trainer:
                     shutil.rmtree(checkpoint)
 
         self.control = self.callback_handler.on_train_end(args, self.state, self.control)
+
+        # Wait for the checkpoint to be uploaded.
+        self._finish_current_push()
 
         return TrainOutput(self.state.global_step, train_loss, metrics)
 
@@ -3386,9 +3403,32 @@ class Trainer:
         else:
             return 0
 
+    def init_hf_repo(self):
+        """
+        Initializes a git repo in `self.args.hub_model_id`.
+        """
+        # Only on process zero
+        if not self.is_world_process_zero():
+            return
+
+        if self.args.hub_model_id is None:
+            repo_name = Path(self.args.output_dir).absolute().name
+        else:
+            repo_name = self.args.hub_model_id
+
+        repo_url = create_repo(repo_name, token=self.args.hub_token, private=self.args.hub_private_repo, exist_ok=True)
+        self.hub_model_id = repo_url.repo_id
+        self.push_in_progress = None
+
     def init_git_repo(self, at_init: bool = False):
         """
         Initializes a git repo in `self.args.hub_model_id`.
+
+        <Tip warning={true}>
+
+        This function is deprecated and will be removed in v4.34.0 of Transformers.
+
+        </Tip>
 
         Args:
             at_init (`bool`, *optional*, defaults to `False`):
@@ -3396,6 +3436,10 @@ class Trainer:
                 `True` and `at_init` is `True`, the path to the repo (which is `self.args.output_dir`) might be wiped
                 out.
         """
+        warnings.warn(
+            "`Trainer.init_git_repo` is deprecated and will be removed in v4.34.0 of Transformers. Use "
+            "`Trainer.init_hf_repo` instead."
+        )
         if not self.is_world_process_zero():
             return
 
@@ -3493,8 +3537,8 @@ class Trainer:
         # Only push from one node.
         if not self.is_world_process_zero() or self.args.hub_strategy == HubStrategy.END:
             return
-        # If we haven't finished the last push, we don't do this one.
-        if self.push_in_progress is not None and not self.push_in_progress.is_done:
+        # If we haven't finished the last push, we don't do this one unless args.hub_always_push=True.
+        if not self.args.hub_always_push and self.push_in_progress is not None and not self.push_in_progress.is_done():
             return
 
         output_dir = self.args.output_dir
@@ -3511,34 +3555,51 @@ class Trainer:
         # Same for the training arguments
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
 
-        try:
-            if self.args.hub_strategy == HubStrategy.CHECKPOINT:
-                # Temporarily move the checkpoint just saved for the push
-                tmp_checkpoint = os.path.join(output_dir, "last-checkpoint")
-                # We have to remove the "last-checkpoint" dir if it exists, otherwise the checkpoint is moved as a
-                # subfolder.
-                if os.path.isdir(tmp_checkpoint):
-                    shutil.rmtree(tmp_checkpoint)
-                shutil.move(checkpoint_folder, tmp_checkpoint)
+        if self.args.save_strategy == IntervalStrategy.STEPS:
+            commit_message = f"Training in progress, step {self.state.global_step}"
+        else:
+            commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
 
-            if self.args.save_strategy == IntervalStrategy.STEPS:
-                commit_message = f"Training in progress, step {self.state.global_step}"
-            else:
-                commit_message = f"Training in progress, epoch {int(self.state.epoch)}"
-            push_work = self.repo.push_to_hub(commit_message=commit_message, blocking=False, auto_lfs_prune=True)
-            # Return type of `Repository.push_to_hub` is either None or a tuple.
-            if push_work is not None:
-                self.push_in_progress = push_work[1]
-        except Exception as e:
-            logger.error(f"Error when pushing to hub: {e}")
-        finally:
-            if self.args.hub_strategy == HubStrategy.CHECKPOINT:
-                # Move back the checkpoint to its place
-                shutil.move(tmp_checkpoint, checkpoint_folder)
+        model_push_job = upload_folder(
+            repo_id=self.hub_model_id,
+            folder_path=output_dir,
+            commit_message=commit_message,
+            token=self.args.hub_token,
+            run_as_future=True,
+            ignore_patterns=["_*", "**/*"],
+        )
+
+        push_jobs = [model_push_job]
+
+        if self.args.hub_strategy in [HubStrategy.CHECKPOINT, HubStrategy.ALL_CHECKPOINTS]:
+            path_in_repo = (
+                "last-checkpoint" if self.args.hub_strategy == HubStrategy.CHECKPOINT else Path(checkpoint_folder).name
+            )
+            checkpoint_push = upload_folder(
+                repo_id=self.hub_model_id,
+                folder_path=checkpoint_folder,
+                path_in_repo=path_in_repo,
+                commit_message=commit_message + ", checkpoint",
+                token=self.args.hub_token,
+                run_as_future=True,
+            )
+            push_jobs.append(checkpoint_push)
+
+        if self.push_in_progress is None or self.push_in_progress.is_done():
+            self.push_in_progress = PushInProgress(push_jobs)
+        else:
+            self.push_in_progress.jobs.extend(push_jobs)
+
+    def _finish_current_push(self):
+        if not hasattr(self, "push_in_progress"):
+            return
+        if self.push_in_progress is not None and not self.push_in_progress.is_done():
+            logger.info("Waiting for the current checkpoint push to be finished, this might take a couple of minutes.")
+            self.push_in_progress.wait_until_done()
 
     def push_to_hub(self, commit_message: Optional[str] = "End of training", blocking: bool = True, **kwargs) -> str:
         """
-        Upload *self.model* and *self.tokenizer* to the 🤗 model hub on the repo *self.args.hub_model_id*.
+        Upload `self.model` and `self.tokenizer` to the 🤗 model hub on the repo `self.args.hub_model_id`.
 
         Parameters:
             commit_message (`str`, *optional*, defaults to `"End of training"`):
@@ -3549,20 +3610,19 @@ class Trainer:
                 Additional keyword arguments passed along to [`~Trainer.create_model_card`].
 
         Returns:
-            The url of the commit of your model in the given repository if `blocking=False`, a tuple with the url of
-            the commit and an object to track the progress of the commit if `blocking=True`
+            The URL of the repository where the model was pushed if `blocking=False`, or a `Future` object tracking the
+            progress of the commit if `blocking=True`.
         """
-        # If a user calls manually `push_to_hub` with `self.args.push_to_hub = False`, we try to create the repo but
-        # it might fail.
-        if not hasattr(self, "repo"):
-            self.init_git_repo()
-
         model_name = kwargs.pop("model_name", None)
         if model_name is None and self.args.should_save:
             if self.args.hub_model_id is None:
                 model_name = Path(self.args.output_dir).name
             else:
                 model_name = self.args.hub_model_id.split("/")[-1]
+
+        # In case the user calls this method with args.push_to_hub = False
+        if self.hub_model_id is None:
+            self.init_hf_repo()
 
         # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
         # self.args.should_save.
@@ -3572,25 +3632,19 @@ class Trainer:
         if not self.is_world_process_zero():
             return
 
-        # Cancel any async push in progress if blocking=True. The commits will all be pushed together.
-        if blocking and self.push_in_progress is not None and not self.push_in_progress.is_done:
-            self.push_in_progress._process.kill()
-            self.push_in_progress = None
+        self.create_model_card(model_name=model_name, **kwargs)
 
-        git_head_commit_url = self.repo.push_to_hub(
-            commit_message=commit_message, blocking=blocking, auto_lfs_prune=True
+        # Wait for the current upload to be finished.
+        self._finish_current_push()
+
+        return upload_folder(
+            repo_id=self.hub_model_id,
+            folder_path=self.args.output_dir,
+            commit_message=commit_message,
+            token=self.args.hub_token,
+            run_as_future=not blocking,
+            ignore_patterns=["_*", "**/*"],
         )
-        # push separately the model card to be independant from the rest of the model
-        if self.args.should_save:
-            self.create_model_card(model_name=model_name, **kwargs)
-            try:
-                self.repo.push_to_hub(
-                    commit_message="update model card README.md", blocking=blocking, auto_lfs_prune=True
-                )
-            except EnvironmentError as exc:
-                logger.error(f"Error pushing update to the model card. Please read logs and retry.\n${exc}")
-
-        return git_head_commit_url
 
     #
     # Deprecated code

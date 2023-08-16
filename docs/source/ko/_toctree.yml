@@ -115,8 +115,8 @@
       title: (번역중) Training on many GPUs
     - local: perf_train_cpu
       title: CPU에서 훈련
-    - local: in_translation
-      title: (번역중) Training on many CPUs
+    - local: perf_train_cpu_many
+      title: 다중 CPU에서 훈련하기
     - local: in_translation
       title: (번역중) Training on TPUs
     - local: in_translation
@@ -125,8 +125,8 @@
       title: (번역중) Training on Specialized Hardware
     - local: perf_infer_cpu
       title: CPU로 추론하기
-    - local: in_translation
-      title: (번역중) Inference on one GPU
+    - local: perf_infer_gpu_one
+      title: 하나의 GPU를 활용한 추론
     - local: perf_infer_gpu_many
       title: 여러 GPU에서 추론
     - local: in_translation
@@ -145,10 +145,10 @@
 - sections:
     - local: in_translation
       title: (번역중) How to contribute to transformers?
-    - local: in_translation
-      title: (번역중) How to add a model to 🤗 Transformers?
-    - local: in_translation
-      title: (번역중) How to convert a 🤗 Transformers model to TensorFlow?
+    - local: add_new_model
+      title: 🤗 Transformers에 새로운 모델을 추가하는 방법 
+    - local: add_tensorflow_model
+      title: 어떻게 🤗 Transformers 모델을 TensorFlow로 변환하나요?
     - local: in_translation
       title: (번역중) How to add a pipeline to 🤗 Transformers?
     - local: testing
@@ -158,16 +158,16 @@
   title: (번역중) 기여하기
 
 - sections:
-  - local: in_translation
-    title: (번역중) Philosophy
+  - local: philosophy
+    title: 이념과 목표
   - local: in_translation
     title: (번역중) Glossary
   - local: task_summary
     title: 🤗 Transformers로 할 수 있는 작업
   - local: tasks_explained
     title: 🤗 Transformers로 작업을 해결하는 방법
-  - local: in_translation
-    title: (번역중) The Transformer model family
+  - local: model_summary
+    title: Transformer 모델군
   - local: in_translation
     title: (번역중) Summary of the tokenizers
   - local: attention

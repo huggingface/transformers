@@ -91,6 +91,16 @@ class ModelArguments:
             "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
         },
     )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+                "execute code present on the Hub on your local machine."
+            )
+        },
+    )
 
 
 @dataclass
@@ -304,9 +314,19 @@ def main():
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     if model_args.config_name:
-        config = AutoConfig.from_pretrained(model_args.config_name, num_labels=num_labels)
+        config = AutoConfig.from_pretrained(
+            model_args.config_name,
+            num_labels=num_labels,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
+        )
     elif model_args.model_name_or_path:
-        config = AutoConfig.from_pretrained(model_args.model_name_or_path, num_labels=num_labels)
+        config = AutoConfig.from_pretrained(
+            model_args.model_name_or_path,
+            num_labels=num_labels,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
+        )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
@@ -319,9 +339,20 @@ def main():
         )
 
     if config.model_type in {"gpt2", "roberta"}:
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=True, add_prefix_space=True)
+        tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_name_or_path,
+            use_fast=True,
+            add_prefix_space=True,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
+        )
     else:
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=True)
+        tokenizer = AutoTokenizer.from_pretrained(
+            tokenizer_name_or_path,
+            use_fast=True,
+            token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
+        )
     # endregion
 
     # region Preprocessing the raw datasets
@@ -392,10 +423,14 @@ def main():
             model = TFAutoModelForTokenClassification.from_pretrained(
                 model_args.model_name_or_path,
                 config=config,
+                token=model_args.token,
+                trust_remote_code=model_args.trust_remote_code,
             )
         else:
             logger.info("Training new model from scratch")
-            model = TFAutoModelForTokenClassification.from_config(config)
+            model = TFAutoModelForTokenClassification.from_config(
+                config, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+            )
 
         # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
         # on a small vocab and want a smaller embedding size, remove this test.

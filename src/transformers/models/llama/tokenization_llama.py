@@ -31,7 +31,8 @@ from ...utils import logging
 
 
 if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
+    from ...pipelines.conversational import Conversation
+    from ...tokenization_utils_base import TextInput
 
 logger = logging.get_logger(__name__)
 
@@ -187,7 +188,8 @@ class LlamaTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def tokenize(self, text, **kwargs) -> List[str]:
+    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
+    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         # Replace the SPIECE_UNDERLINE with a space to make sure SPIECE_UNDERLINE is only used at
         # the beginning of the text
         if self.legacy:
@@ -208,7 +210,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         return tokens
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
-    def _tokenize(self, text):
+    def _tokenize(self, text, **kwargs):
         """
         Returns a tokenized string.
 
