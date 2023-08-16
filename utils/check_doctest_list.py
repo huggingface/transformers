@@ -40,7 +40,16 @@ REPO_PATH = "."
 DOCTEST_FILE_PATHS = ["documentation_tests.txt", "slow_documentation_tests.txt"]
 
 
-def clean_doctest_list(doctest_file, overwrite=False):
+def clean_doctest_list(doctest_file: str, overwrite: bool = False):
+    """
+    Cleans the doctest in a given file.
+
+    Args:
+        doctest_file (`str`):
+            The path to the doctest file to check or clean.
+        overwrite (`bool`, *optional*, defaults to `False`):
+            Whether or not to fix problems. If `False`, will error when the file is not clean.
+    """
     non_existent_paths = []
     all_paths = []
     with open(doctest_file, "r", encoding="utf-8") as f:

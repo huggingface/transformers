@@ -293,6 +293,7 @@ Below you can find inference durations in milliseconds for each model with and w
 We also benchmarked on PyTorch nightly (2.1.0dev, find the wheel [here](https://download.pytorch.org/whl/nightly/cu118)) and observed improvement in latency both for uncompiled and compiled models. 
 
 ### A100
+
 | **Task/Model** | **Batch Size** | **torch 2.0 - no compile** | **torch 2.0 -<br> compile** |
 |:---:|:---:|:---:|:---:|
 | Image Classification/BeiT | Unbatched | 12.462 | 6.954 | 
@@ -303,6 +304,7 @@ We also benchmarked on PyTorch nightly (2.1.0dev, find the wheel [here](https://
 | Object Detection/DETR | 16 | 163.749 | 163.706  |
 
 ### T4
+
 | **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** |
 |:---:|:---:|:---:|:---:|
 | Image Classification/BeiT | Unbatched | 14.408 | 14.052 | 
@@ -313,6 +315,7 @@ We also benchmarked on PyTorch nightly (2.1.0dev, find the wheel [here](https://
 | Object Detection/DETR | 16 | OOM | OOM   |
 
 ### V100
+
 | **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** |
 |:---:|:---:|:---:|:---:|
 | Image Classification/BeiT | Unbatched | 13.477 | 7.926 | 
@@ -327,6 +330,7 @@ We also benchmarked on PyTorch nightly (2.1.0dev, find the wheel [here](https://
 We benchmarked `reduce-overhead` compilation mode for A100 and T4 in Nightly.
 
 ### A100
+
 | **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** |
 |:---:|:---:|:---:|:---:|
 | Image Classification/ConvNeXT | Unbatched | 11.758 | 7.335 | 
@@ -340,6 +344,7 @@ We benchmarked `reduce-overhead` compilation mode for A100 and T4 in Nightly.
 
 
 ### T4
+
 | **Task/Model** | **Batch Size** | **torch 2.0 - <br>no compile** | **torch 2.0 - <br>compile** | 
 |:---:|:---:|:---:|:---:|
 | Image Classification/ConvNeXT | Unbatched | 32.137 | 31.84 | 
