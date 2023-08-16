@@ -1,3 +1,17 @@
+# Copyright 2023 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import inspect
 import unittest
 
@@ -125,7 +139,7 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
             ]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    # this model does not output hidden states
+    @unittest.skip(reason="UnivNetGan does not output hidden states.")
     def test_hidden_states_output(self):
         pass
 
@@ -149,11 +163,11 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    # skip because it fails on automapping of SpeechT5HifiGanConfig
+    # skip because it fails on automapping of UnivNetGanGanConfig
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # skip because it fails on automapping of SpeechT5HifiGanConfig
+    # skip because it fails on automapping of UnivNetGanConfig
     def test_save_load_fast_init_to_base(self):
         pass
 

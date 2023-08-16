@@ -1,3 +1,17 @@
+# Copyright 2023 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -29,7 +43,7 @@ class UnivNetKernelPredictorResidualBlock(nn.Module):
     block (LVCBlock).
 
     Parameters:
-        channels ('int', *optional*, defaults to 64):
+        channels (`int`, *optional*, defaults to 64):
             The number of hidden channels for the residual block.
         kernel_size (`int`, *optional*, defaults to 3):
             The kernel size for the 1D convolutional layers in the residual block.
@@ -293,18 +307,22 @@ class UnivNetLVCResidualBlock(nn.Module):
     # Based on https://github.com/mindslab-ai/univnet/blob/master/model/lvcnet.py#L171
     def location_variable_convolution(
         self,
-        x: torch.FloatTensor,
+        hidden_states: torch.FloatTensor,
         kernel: torch.FloatTensor,
         bias: torch.FloatTensor,
         dilation: int = 1,
         hop_size: int = 256,
     ):
         """
-        Performs location-variable convolution operation on the input sequence (x) using the local convolution kernal.
+        Performs location-variable convolution operation on the input sequence (hidden_states) using the local
+        convolution kernal. This was introduced in [LVCNet: Efficient Condition-Dependent Modeling Network for
+        Waveform Generation](https://arxiv.org/abs/2102.10815) by Zhen Zheng, Jianzong Wang, Ning Cheng, and Jing
+        Xiao.
+        
         Time: 414 μs ± 309 ns per loop (mean ± std. dev. of 7 runs, 1000 loops each), test on NVIDIA V100.
 
         Args:
-            x (`torch.FloatTensor` of shape `(batch_size, in_channels, in_length)`):
+            hidden_states (`torch.FloatTensor` of shape `(batch_size, in_channels, in_length)`):
                 The input sequence of shape (batch, in_channels, in_length).
             kernel (`torch.FloatTensor` of shape `(batch_size, in_channels, out_channels, kernel_size, kernel_length)`):
                 The local convolution kernel of shape (batch, in_channels, out_channels, kernel_size, kernel_length).
@@ -318,30 +336,32 @@ class UnivNetLVCResidualBlock(nn.Module):
             `torch.FloatTensor`: the output sequence after performing local convolution with shape (batch_size,
             out_channels, in_length).
         """
-        batch, _, in_length = x.shape
+        batch, _, in_length = hidden_states.shape
         batch, _, out_channels, kernel_size, kernel_length = kernel.shape
-        assert in_length == (kernel_length * hop_size), "length of (x, kernel) is not matched"
+        assert in_length == (kernel_length * hop_size), "length of (hidden_states, kernel) is not matched"
 
         padding = dilation * int((kernel_size - 1) / 2)
-        x = nn.functional.pad(x, (padding, padding), "constant", 0)  # (batch, in_channels, in_length + 2*padding)
-        x = x.unfold(2, hop_size + 2 * padding, hop_size)  # (batch, in_channels, kernel_length, hop_size + 2*padding)
+        hidden_states = nn.functional.pad(hidden_states, (padding, padding), "constant", 0)  # (batch, in_channels, in_length + 2*padding)
+        hidden_states = hidden_states.unfold(2, hop_size + 2 * padding, hop_size)  # (batch, in_channels, kernel_length, hop_size + 2*padding)
 
         if hop_size < dilation:
-            x = nn.functional.pad(x, (0, dilation), "constant", 0)
-        x = x.unfold(
+            hidden_states = nn.functional.pad(hidden_states, (0, dilation), "constant", 0)
+        hidden_states = hidden_states.unfold(
             3, dilation, dilation
         )  # (batch, in_channels, kernel_length, (hop_size + 2*padding)/dilation, dilation)
-        x = x[:, :, :, :, :hop_size]
-        x = x.transpose(3, 4)  # (batch, in_channels, kernel_length, dilation, (hop_size + 2*padding)/dilation)
-        x = x.unfold(4, kernel_size, 1)  # (batch, in_channels, kernel_length, dilation, _, kernel_size)
+        hidden_states = hidden_states[:, :, :, :, :hop_size]
+        hidden_states = hidden_states.transpose(3, 4)  # (batch, in_channels, kernel_length, dilation, (hop_size + 2*padding)/dilation)
+        hidden_states = hidden_states.unfold(4, kernel_size, 1)  # (batch, in_channels, kernel_length, dilation, _, kernel_size)
 
-        o = torch.einsum("bildsk,biokl->bolsd", x, kernel)
-        o = o.to(memory_format=torch.channels_last_3d)
+        # Apply local convolutional kernel to hidden_states.
+        output_hidden_states = torch.einsum("bildsk,biokl->bolsd", hidden_states, kernel)
+        
+        output_hidden_states = output_hidden_states.to(memory_format=torch.channels_last_3d)
         bias = bias.unsqueeze(-1).unsqueeze(-1).to(memory_format=torch.channels_last_3d)
-        o = o + bias
-        o = o.contiguous().view(batch, out_channels, -1)
+        output_hidden_states = output_hidden_states + bias
+        output_hidden_states = output_hidden_states.contiguous().view(batch, out_channels, -1)
 
-        return o
+        return output_hidden_states
 
     def _init_weights(self, module):
         """Initialize the weights."""
