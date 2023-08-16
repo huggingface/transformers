@@ -337,6 +337,11 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     def test_call_numpy(self):
         self._test_call_framework(np.ndarray, prepare_kwargs={"numpify": True})
 
+    def test_call_numpy_4_channels(self):
+        self.image_processing_class.num_channels = 4
+        self._test_call_framework(np.ndarray, prepare_kwargs={"numpify": True})
+        self.image_processing_class.num_channels = 3
+
     def test_call_pytorch(self):
         self._test_call_framework(torch.Tensor, prepare_kwargs={"torchify": True})
 

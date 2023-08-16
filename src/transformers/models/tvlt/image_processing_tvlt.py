@@ -29,6 +29,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    infer_channel_dimension_format,
     is_valid_image,
     to_numpy_array,
     valid_images,
@@ -155,6 +156,7 @@ class TvltImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -171,15 +173,26 @@ class TvltImageProcessor(BaseImageProcessor):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
         """
         size = get_size_dict(size, default_to_square=False)
         if "shortest_edge" in size:
-            output_size = get_resize_output_image_size(image, size["shortest_edge"], default_to_square=False)
+            output_size = get_resize_output_image_size(
+                image, size["shortest_edge"], default_to_square=False, input_data_format=input_data_format
+            )
         elif "height" in size and "width" in size:
             output_size = (size["height"], size["width"])
         else:
             raise ValueError(f"Size must have 'height' and 'width' or 'shortest_edge' as keys. Got {size.keys()}")
-        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        return resize(
+            image,
+            size=output_size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
 
     def _preprocess_image(
         self,
@@ -195,6 +208,7 @@ class TvltImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """Preprocesses a single image."""
         if do_resize and size is None or resample is None:
@@ -212,18 +226,21 @@ class TvltImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
 
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image)
+
         if do_resize:
-            image = self.resize(image=image, size=size, resample=resample)
+            image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
 
         if do_center_crop:
-            image = self.center_crop(image, size=crop_size)
+            image = self.center_crop(image, size=crop_size, input_data_format=input_data_format)
 
         if do_rescale:
-            image = self.rescale(image=image, scale=rescale_factor)
+            image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
         if do_normalize:
-            image = self.normalize(image=image, mean=image_mean, std=image_std)
-        image = to_channel_dimension_format(image, data_format)
+            image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+        image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
         return image
 
     def preprocess(
@@ -244,6 +261,7 @@ class TvltImageProcessor(BaseImageProcessor):
         is_mixed: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -291,6 +309,12 @@ class TvltImageProcessor(BaseImageProcessor):
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                     - Unset: Use the inferred channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -361,6 +385,7 @@ class TvltImageProcessor(BaseImageProcessor):
                     image_mean=image_mean,
                     image_std=image_std,
                     data_format=data_format,
+                    input_data_format=input_data_format,
                 )
                 for img in video
             ]

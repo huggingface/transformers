@@ -157,7 +157,9 @@ def render_text(
 
 
 # Adapted from https://github.com/google-research/pix2struct/blob/0e1779af0f4db4b652c1d92b3bbd2550a7399123/pix2struct/preprocessing/preprocessing_utils.py#L87
-def render_header(image: np.ndarray, header: str, **kwargs):
+def render_header(
+    image: np.ndarray, header: str, input_data_format: Optional[Union[str, ChildProcessError]] = None, **kwargs
+):
     """
     Renders the input text as a header on the input image.
 
@@ -176,7 +178,7 @@ def render_header(image: np.ndarray, header: str, **kwargs):
     requires_backends(render_header, "vision")
 
     # Convert to PIL image if necessary
-    image = to_pil_image(image)
+    image = to_pil_image(image, input_data_format=input_data_format)
 
     header_image = render_text(header, **kwargs)
     new_width = max(header_image.width, image.width)
@@ -236,7 +238,14 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         self.max_patches = max_patches
         self.is_vqa = is_vqa
 
-    def extract_flattened_patches(self, image: np.ndarray, max_patches: int, patch_size: dict, **kwargs) -> np.ndarray:
+    def extract_flattened_patches(
+        self,
+        image: np.ndarray,
+        max_patches: int,
+        patch_size: dict,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> np.ndarray:
         """
         Extract flattened patches from an image.
 
@@ -256,11 +265,11 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         _check_torch_version()
 
         # convert to torch
-        image = to_channel_dimension_format(image, ChannelDimension.FIRST)
+        image = to_channel_dimension_format(image, ChannelDimension.FIRST, input_data_format)
         image = torch.from_numpy(image)
 
         patch_height, patch_width = patch_size["height"], patch_size["width"]
-        image_height, image_width = get_image_size(image)
+        image_height, image_width = get_image_size(image, ChannelDimension.FIRST)
 
         # maximize scale s.t.
         scale = math.sqrt(max_patches * (patch_height / image_height) * (patch_width / image_width))
@@ -312,7 +321,11 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         return result
 
     def normalize(
-        self, image: np.ndarray, data_format: Optional[Union[str, ChannelDimension]] = None, **kwargs
+        self,
+        image: np.ndarray,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
     ) -> np.ndarray:
         """
         Normalize an image. image = (image - image_mean) / image_std.
@@ -323,6 +336,11 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to normalize.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
         """
         if image.dtype == np.uint8:
             image = image.astype(np.float32)
@@ -332,7 +350,14 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         std = np.std(image)
         adjusted_stddev = max(std, 1.0 / math.sqrt(np.prod(image.shape)))
 
-        return normalize(image, mean=mean, std=adjusted_stddev, **kwargs)
+        return normalize(
+            image,
+            mean=mean,
+            std=adjusted_stddev,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
 
     def preprocess(
         self,
@@ -344,6 +369,7 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         patch_size: Optional[Dict[str, int]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> ImageInput:
         """
@@ -374,6 +400,17 @@ class Pix2StructImageProcessor(BaseImageProcessor):
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                     - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
+                The channel dimension format for the output image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - Unset: Use the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
@@ -399,6 +436,10 @@ class Pix2StructImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
         if is_vqa:
             if header_text is None:
                 raise ValueError("A header text must be provided for VQA models.")
@@ -414,11 +455,13 @@ class Pix2StructImageProcessor(BaseImageProcessor):
             ]
 
         if do_normalize:
-            images = [self.normalize(image=image) for image in images]
+            images = [self.normalize(image=image, input_data_format=input_data_format) for image in images]
 
         # convert to torch tensor and permute
         images = [
-            self.extract_flattened_patches(image=image, max_patches=max_patches, patch_size=patch_size)
+            self.extract_flattened_patches(
+                image=image, max_patches=max_patches, patch_size=patch_size, input_data_format=input_data_format
+            )
             for image in images
         ]
 
