@@ -315,10 +315,9 @@ class UnivNetLVCResidualBlock(nn.Module):
     ):
         """
         Performs location-variable convolution operation on the input sequence (hidden_states) using the local
-        convolution kernal. This was introduced in [LVCNet: Efficient Condition-Dependent Modeling Network for
-        Waveform Generation](https://arxiv.org/abs/2102.10815) by Zhen Zheng, Jianzong Wang, Ning Cheng, and Jing
-        Xiao.
-        
+        convolution kernal. This was introduced in [LVCNet: Efficient Condition-Dependent Modeling Network for Waveform
+        Generation](https://arxiv.org/abs/2102.10815) by Zhen Zheng, Jianzong Wang, Ning Cheng, and Jing Xiao.
+
         Time: 414 μs ± 309 ns per loop (mean ± std. dev. of 7 runs, 1000 loops each), test on NVIDIA V100.
 
         Args:
@@ -341,8 +340,12 @@ class UnivNetLVCResidualBlock(nn.Module):
         assert in_length == (kernel_length * hop_size), "length of (hidden_states, kernel) is not matched"
 
         padding = dilation * int((kernel_size - 1) / 2)
-        hidden_states = nn.functional.pad(hidden_states, (padding, padding), "constant", 0)  # (batch, in_channels, in_length + 2*padding)
-        hidden_states = hidden_states.unfold(2, hop_size + 2 * padding, hop_size)  # (batch, in_channels, kernel_length, hop_size + 2*padding)
+        hidden_states = nn.functional.pad(
+            hidden_states, (padding, padding), "constant", 0
+        )  # (batch, in_channels, in_length + 2*padding)
+        hidden_states = hidden_states.unfold(
+            2, hop_size + 2 * padding, hop_size
+        )  # (batch, in_channels, kernel_length, hop_size + 2*padding)
 
         if hop_size < dilation:
             hidden_states = nn.functional.pad(hidden_states, (0, dilation), "constant", 0)
@@ -350,12 +353,16 @@ class UnivNetLVCResidualBlock(nn.Module):
             3, dilation, dilation
         )  # (batch, in_channels, kernel_length, (hop_size + 2*padding)/dilation, dilation)
         hidden_states = hidden_states[:, :, :, :, :hop_size]
-        hidden_states = hidden_states.transpose(3, 4)  # (batch, in_channels, kernel_length, dilation, (hop_size + 2*padding)/dilation)
-        hidden_states = hidden_states.unfold(4, kernel_size, 1)  # (batch, in_channels, kernel_length, dilation, _, kernel_size)
+        hidden_states = hidden_states.transpose(
+            3, 4
+        )  # (batch, in_channels, kernel_length, dilation, (hop_size + 2*padding)/dilation)
+        hidden_states = hidden_states.unfold(
+            4, kernel_size, 1
+        )  # (batch, in_channels, kernel_length, dilation, _, kernel_size)
 
         # Apply local convolutional kernel to hidden_states.
         output_hidden_states = torch.einsum("bildsk,biokl->bolsd", hidden_states, kernel)
-        
+
         output_hidden_states = output_hidden_states.to(memory_format=torch.channels_last_3d)
         bias = bias.unsqueeze(-1).unsqueeze(-1).to(memory_format=torch.channels_last_3d)
         output_hidden_states = output_hidden_states + bias
