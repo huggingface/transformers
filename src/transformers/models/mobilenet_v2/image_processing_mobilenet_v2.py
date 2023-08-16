@@ -115,6 +115,7 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
+    # Copied from transformers.models.mobilenet_v1.image_processing_mobilenet_v1.MobileNetV1ImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
@@ -254,6 +255,7 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->MobileNetV2
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
         """
         Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports
@@ -262,14 +264,14 @@ class MobileNetV2ImageProcessor(BaseImageProcessor):
         Args:
             outputs ([`MobileNetV2ForSemanticSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`List[Tuple]`, *optional*):
-                A list of length `batch_size`, where each item is a `Tuple[int, int]` corresponding to the requested
-                final size (height, width) of each prediction. If left to None, predictions will not be resized.
+            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If unset,
+                predictions will not be resized.
+
         Returns:
-            `List[torch.Tensor]`:
-                A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
-                corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
-                `torch.Tensor` correspond to a semantic class id.
+            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
+            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
         # TODO: add support for other frameworks
         logits = outputs.logits

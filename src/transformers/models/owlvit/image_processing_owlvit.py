@@ -196,17 +196,25 @@ class OwlViTImageProcessor(BaseImageProcessor):
 
         return center_crop(image, (crop_size["height"], crop_size["width"]), data_format=data_format, **kwargs)
 
+    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.rescale
     def rescale(
-        self,
-        image: np.ndarray,
-        rescale_factor: float,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
+        self, image: np.ndarray, rescale_factor: float, data_format: Optional[Union[str, ChannelDimension]] = None
     ) -> np.ndarray:
         """
-        Rescale an image by a certain factor.
+        Rescale the image by the given factor. image = image * rescale_factor.
+
+        Args:
+            image (`np.ndarray`):
+                Image to rescale.
+            rescale_factor (`float`):
+                The value to use for rescaling.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
-        return rescale(image, rescale_factor, data_format=data_format, **kwargs)
+        return rescale(image, rescale_factor, data_format=data_format)
 
     def preprocess(
         self,

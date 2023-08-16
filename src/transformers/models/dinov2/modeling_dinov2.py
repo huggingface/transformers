@@ -583,7 +583,7 @@ DINOV2_INPUTS_DOCSTRING = r"""
     DINOV2_START_DOCSTRING,
 )
 class Dinov2Model(Dinov2PreTrainedModel):
-    def __init__(self, config: Dinov2Config, add_pooling_layer: bool = True):
+    def __init__(self, config: Dinov2Config):
         super().__init__(config)
         self.config = config
 
@@ -591,7 +591,6 @@ class Dinov2Model(Dinov2PreTrainedModel):
         self.encoder = Dinov2Encoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = Dinov2Pooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -651,10 +650,10 @@ class Dinov2Model(Dinov2PreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        pooled_output = sequence_output[:, 0, :]
 
         if not return_dict:
-            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
+            head_outputs = (sequence_output, pooled_output)
             return head_outputs + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
@@ -663,22 +662,6 @@ class Dinov2Model(Dinov2PreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->Dinov2
-class Dinov2Pooler(nn.Module):
-    def __init__(self, config: Dinov2Config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
-
-    def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
 
 
 @add_start_docstrings(
@@ -693,7 +676,7 @@ class Dinov2ForImageClassification(Dinov2PreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.dinov2 = Dinov2Model(config, add_pooling_layer=False)
+        self.dinov2 = Dinov2Model(config)
 
         # Classifier head
         self.classifier = (
@@ -770,7 +753,7 @@ class Dinov2ForImageClassification(Dinov2PreTrainedModel):
                 loss = loss_fct(logits, labels)
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutput(

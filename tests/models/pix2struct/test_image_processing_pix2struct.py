@@ -22,7 +22,7 @@ import requests
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingSavingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -73,6 +73,17 @@ class Pix2StructImageProcessingTester(unittest.TestCase):
         raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
         return raw_image
 
+    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+        return prepare_image_inputs(
+            batch_size=self.batch_size,
+            num_channels=self.num_channels,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
+            equal_resolution=equal_resolution,
+            numpify=numpify,
+            torchify=torchify,
+        )
+
 
 @unittest.skipIf(
     not is_torch_greater_or_equal_than_1_11,
@@ -80,7 +91,7 @@ class Pix2StructImageProcessingTester(unittest.TestCase):
 )
 @require_torch
 @require_vision
-class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
+class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Pix2StructImageProcessor if is_vision_available() else None
 
     def setUp(self):
@@ -108,7 +119,7 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
-        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
@@ -141,7 +152,7 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
-        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
@@ -183,7 +194,7 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False, numpify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
@@ -215,7 +226,7 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
-        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False, torchify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
@@ -251,7 +262,7 @@ class Pix2StructImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Tes
 )
 @require_torch
 @require_vision
-class Pix2StructImageProcessingTestFourChannels(ImageProcessingSavingTestMixin, unittest.TestCase):
+class Pix2StructImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Pix2StructImageProcessor if is_vision_available() else None
 
     def setUp(self):
@@ -267,11 +278,11 @@ class Pix2StructImageProcessingTestFourChannels(ImageProcessingSavingTestMixin, 
         self.assertTrue(hasattr(image_processor, "do_normalize"))
         self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
 
-    def test_call_pil_four_channels(self):
+    def test_call_pil(self):
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
-        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
@@ -299,3 +310,11 @@ class Pix2StructImageProcessingTestFourChannels(ImageProcessingSavingTestMixin, 
                 encoded_images.shape,
                 (self.image_processor_tester.batch_size, max_patch, expected_hidden_dim),
             )
+
+    @unittest.skip("Pix2StructImageProcessor does not support 4 channels yet")  # FIXME Amy
+    def test_call_numpy(self):
+        return super().test_call_numpy()
+
+    @unittest.skip("Pix2StructImageProcessor does not support 4 channels yet")  # FIXME Amy
+    def test_call_pytorch(self):
+        return super().test_call_torch()

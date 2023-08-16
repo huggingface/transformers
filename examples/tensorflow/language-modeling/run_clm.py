@@ -259,7 +259,6 @@ def main():
             assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, json or txt file."
 
     if training_args.output_dir is not None:
-        training_args.output_dir = Path(training_args.output_dir)
         os.makedirs(training_args.output_dir, exist_ok=True)
     # endregion
 
@@ -267,8 +266,8 @@ def main():
     # Detecting last checkpoint.
     checkpoint = None
     if len(os.listdir(training_args.output_dir)) > 0 and not training_args.overwrite_output_dir:
-        config_path = training_args.output_dir / CONFIG_NAME
-        weights_path = training_args.output_dir / TF2_WEIGHTS_NAME
+        config_path = Path(training_args.output_dir) / CONFIG_NAME
+        weights_path = Path(training_args.output_dir) / TF2_WEIGHTS_NAME
         if config_path.is_file() and weights_path.is_file():
             checkpoint = training_args.output_dir
             logger.info(
@@ -378,11 +377,12 @@ def main():
     if model_args.config_name:
         config = AutoConfig.from_pretrained(
             model_args.config_name,
+            token=model_args.token,
             trust_remote_code=model_args.trust_remote_code,
         )
     elif model_args.model_name_or_path:
         config = AutoConfig.from_pretrained(
-            model_args.model_name_or_path, trust_remote_code=model_args.trust_remote_code
+            model_args.model_name_or_path, token=model_args.token, trust_remote_code=model_args.trust_remote_code
         )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
@@ -390,11 +390,11 @@ def main():
 
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.tokenizer_name, trust_remote_code=model_args.trust_remote_code
+            model_args.tokenizer_name, token=model_args.token, trust_remote_code=model_args.trust_remote_code
         )
     elif model_args.model_name_or_path:
         tokenizer = AutoTokenizer.from_pretrained(
-            model_args.model_name_or_path, trust_remote_code=model_args.trust_remote_code
+            model_args.model_name_or_path, token=model_args.token, trust_remote_code=model_args.trust_remote_code
         )
     else:
         raise ValueError(
@@ -499,15 +499,20 @@ def main():
         # region Prepare model
         if checkpoint is not None:
             model = TFAutoModelForCausalLM.from_pretrained(
-                checkpoint, config=config, trust_remote_code=model_args.trust_remote_code
+                checkpoint, config=config, token=model_args.token, trust_remote_code=model_args.trust_remote_code
             )
         elif model_args.model_name_or_path:
             model = TFAutoModelForCausalLM.from_pretrained(
-                model_args.model_name_or_path, config=config, trust_remote_code=model_args.trust_remote_code
+                model_args.model_name_or_path,
+                config=config,
+                token=model_args.token,
+                trust_remote_code=model_args.trust_remote_code,
             )
         else:
             logger.info("Training new model from scratch")
-            model = TFAutoModelForCausalLM.from_config(config, trust_remote_code=model_args.trust_remote_code)
+            model = TFAutoModelForCausalLM.from_config(
+                config, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+            )
 
         # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
         # on a small vocab and want a smaller embedding size, remove this test.

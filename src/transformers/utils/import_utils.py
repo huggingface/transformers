@@ -98,6 +98,7 @@ _natten_available = _is_package_available("natten")
 _onnx_available = _is_package_available("onnx")
 _openai_available = _is_package_available("openai")
 _optimum_available = _is_package_available("optimum")
+_auto_gptq_available = _is_package_available("auto_gptq")
 _pandas_available = _is_package_available("pandas")
 _peft_available = _is_package_available("peft")
 _phonemizer_available = _is_package_available("phonemizer")
@@ -552,6 +553,10 @@ def is_accelerate_available(min_version: str = None):
 
 def is_optimum_available():
     return _optimum_available
+
+
+def is_auto_gptq_available():
+    return _auto_gptq_available
 
 
 def is_optimum_neuron_available():
