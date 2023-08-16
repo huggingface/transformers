@@ -138,20 +138,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
 
         return mel_specs
 
-    def log_mel_spectrogram(self, sequence: np.ndarray):
-        """
-        Generates MelSpectrogram then applies log base e.
-
-        Args:
-            sequence (`numpy.ndarray`):
-                The sequence of which the log-mel-spectrogram will be computed.
-
-        """
-        mel_specs = self.mel_spectrogram(sequence)
-        log_mel_specs = np.log(np.clip(mel_specs, a_min=1e-6, a_max=None))
-
-        return log_mel_specs
-
     def extract_rhythm(self, audio: np.ndarray):
         """
         This algorithm(`RhythmExtractor2013`) extracts the beat positions and estimates their confidence as well as
@@ -435,7 +421,12 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
                 single_raw_audio[start_sample:end_sample], beatsteps - beatsteps[0]
             )
 
-            input_features = np.transpose(self.log_mel_spectrogram(input_features.astype(np.float32)), (0, -1, -2))
+            mel_specs = self.mel_spectrogram(input_features.astype(np.float32))
+
+            # apply np.log to get log mel-spectrograms
+            log_mel_specs = np.log(np.clip(mel_specs, a_min=1e-6, a_max=None))
+
+            input_features = np.transpose(log_mel_specs, (0, -1, -2))
 
             batch_input_features.append(input_features)
             batch_beatsteps.append(beatsteps)

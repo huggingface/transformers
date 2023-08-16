@@ -16,6 +16,7 @@ import shutil
 import tempfile
 import unittest
 
+import numpy as np
 import pytest
 from datasets import load_dataset
 
@@ -154,7 +155,7 @@ class Pop2PianoProcessorTest(unittest.TestCase):
         processor_outputs = processor(audio=input_speech, sampling_rate=sampling_rate, return_tensors="np")
 
         for key in feature_extractor_outputs.keys():
-            self.assertAlmostEqual(feature_extractor_outputs[key].sum(), processor_outputs[key].sum(), delta=1e-2)
+            self.assertTrue(np.allclose(feature_extractor_outputs[key], processor_outputs[key], atol=1e-4))
 
     def test_processor_batch_decode(self):
         feature_extractor = self.get_feature_extractor()

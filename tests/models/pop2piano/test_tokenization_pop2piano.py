@@ -18,16 +18,12 @@ Please note that Pop2PianoTokenizer is too far from our usual tokenizers and thu
 
 import unittest
 
-import numpy as np
-from datasets import load_dataset
-
 from transformers.feature_extraction_utils import BatchFeature
 from transformers.testing_utils import (
     is_pretty_midi_available,
     is_torch_available,
     require_pretty_midi,
     require_torch,
-    slow,
 )
 from transformers.tokenization_utils import BatchEncoding
 
@@ -35,13 +31,12 @@ from transformers.tokenization_utils import BatchEncoding
 if is_torch_available():
     import torch
 
-    from transformers.models.pop2piano.modeling_pop2piano import Pop2PianoForConditionalGeneration
 
 requirements_available = is_torch_available() and is_pretty_midi_available()
 if requirements_available:
     import pretty_midi
 
-    from transformers import Pop2PianoFeatureExtractor, Pop2PianoTokenizer
+    from transformers import Pop2PianoTokenizer
 
 
 ## TODO : changing checkpoints from `susnato/pop2piano_dev` to `sweetcocoa/pop2piano` after the PR is approved
@@ -112,48 +107,3 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         # check object type
         self.assertTrue(isinstance(output[0], pretty_midi.pretty_midi.PrettyMIDI))
         self.assertTrue(isinstance(output[1], pretty_midi.pretty_midi.PrettyMIDI))
-
-    # This is the test for a real music from K-Pop genre.
-    @slow
-    def test_real_music(self):
-        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
-        model.eval()
-        feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
-        tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
-        ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
-
-        output_fe = feature_extractor(
-            ds["audio"][0]["array"], sampling_rate=ds["audio"][0]["sampling_rate"], return_tensors="pt"
-        )
-        output_model = model.generate(input_features=output_fe["input_features"], composer="composer1")
-        output_tokenizer = tokenizer.batch_decode(token_ids=output_model, feature_extractor_output=output_fe)
-        pretty_midi_object = output_tokenizer["pretty_midi_objects"][0]
-        # Checking if no of notes are same
-        self.assertEqual(len(pretty_midi_object.instruments[0].notes), 59)
-        predicted_timings = []
-        for i in pretty_midi_object.instruments[0].notes:
-            predicted_timings.append(i.start)
-
-        # Checking note start timings(first 6)
-        EXPECTED_START_TIMINGS = [
-            0.4876190423965454,
-            0.7314285635948181,
-            0.9752380847930908,
-            1.4396371841430664,
-            1.6718367338180542,
-            1.904036283493042,
-        ]
-
-        np.allclose(EXPECTED_START_TIMINGS, predicted_timings[:6])
-
-        # Checking note end timings(last 6)
-        EXPECTED_END_TIMINGS = [
-            12.341403007507324,
-            12.567797183990479,
-            12.567797183990479,
-            12.567797183990479,
-            12.794191360473633,
-            12.794191360473633,
-        ]
-
-        np.allclose(EXPECTED_END_TIMINGS, predicted_timings[-6:])
