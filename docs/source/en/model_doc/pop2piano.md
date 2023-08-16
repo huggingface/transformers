@@ -48,7 +48,7 @@ Tips:
 
 1. To use Pop2Piano, you will need to install the 🤗 Transformers library, as well as the following third party modules:  
 ```
-pip install pretty-midi==0.2.9 essentia==2.1b6.dev609 librosa scipy
+pip install pretty-midi==0.2.9 essentia==2.1b6.dev1034 librosa scipy
 ```
 Please note that you may need to restart your runtime after installation.
 2. Pop2Piano is an Encoder-Decoder based model like T5.
