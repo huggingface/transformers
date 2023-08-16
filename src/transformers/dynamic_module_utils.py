@@ -156,12 +156,16 @@ def get_imports(filename: Union[str, os.PathLike]) -> List[str]:
     return list(set(imports))
 
 
-def check_imports(filename: Union[str, os.PathLike]):
+def check_imports(filename: Union[str, os.PathLike]) -> List[str]:
     """
-    Check if the current Python environment contains all the libraries that are imported in a file.
+    Check if the current Python environment contains all the libraries that are imported in a file. Will raise if a
+    library is missing.
 
     Args:
         filename (`str` or `os.PathLike`): The module file to check.
+
+    Returns:
+        `List[str]`: The list of relative imports in the file.
     """
     imports = get_imports(filename)
     missing_packages = []
