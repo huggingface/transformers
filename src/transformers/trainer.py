@@ -466,7 +466,7 @@ class Trainer:
                 self.backward_prefetch = BackwardPrefetch.BACKWARD_POST
 
             self.forward_prefetch = False
-            if self.args.fsdp_config.get("forward_prefect", False):
+            if self.args.fsdp_config.get("forward_prefetch", False):
                 self.forward_prefetch = True
 
             self.limit_all_gathers = False
