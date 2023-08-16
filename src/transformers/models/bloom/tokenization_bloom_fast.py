@@ -131,10 +131,16 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
         pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
+
+        pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
+        if pre_tok_class == "Sequence":
+            for pre_tok in pre_tok_state.get("pretokenizers"):
+                if hasattr(pre_tok, "add_prefix_space"):
+                    pre_tok["add_prefix_space"] = add_prefix_space
+        elif hasattr(pre_tok, "add_prefix_space"):
+            pre_tok["add_prefix_space"] = add_prefix_space
+
+        self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
 
         self.add_prefix_space = add_prefix_space
 
