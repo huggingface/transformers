@@ -32,7 +32,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_patchtst"] = [
         "PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "PatchTSTForPrediction",
+        "PatchTSTForPretraining",
         "PatchTSTModel",
         "PatchTSTPreTrainedModel",
     ]
@@ -49,7 +49,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_patchtst import (
             PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PatchTSTForPrediction,
+            PatchTSTForPretraining,
             PatchTSTModel,
             PatchTSTPreTrainedModel,
         )
