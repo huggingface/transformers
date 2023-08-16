@@ -1138,7 +1138,7 @@ class SpecialTokensMixin:
         `Optional[int]`: Id of the beginning of sentence token in the vocabulary. Returns `None` if the token has not
         been set.
         """
-        if self._bos_token is None:
+        if getattr(self, "_bos_token", None) is None:
             return None
         return self.convert_tokens_to_ids(self.bos_token)
 
@@ -1148,7 +1148,7 @@ class SpecialTokensMixin:
         `Optional[int]`: Id of the end of sentence token in the vocabulary. Returns `None` if the token has not been
         set.
         """
-        if self._eos_token is None:
+        if getattr(self, "_eos_token", None) is None:
             return None
         return self.convert_tokens_to_ids(self.eos_token)
 
@@ -1157,7 +1157,7 @@ class SpecialTokensMixin:
         """
         `Optional[int]`: Id of the unknown token in the vocabulary. Returns `None` if the token has not been set.
         """
-        if self._unk_token is None:
+        if getattr(self, "_unk_token", None) is None:
             return None
         return self.convert_tokens_to_ids(self.unk_token)
 
@@ -1167,7 +1167,7 @@ class SpecialTokensMixin:
         `Optional[int]`: Id of the separation token in the vocabulary, to separate context and query in an input
         sequence. Returns `None` if the token has not been set.
         """
-        if self._sep_token is None:
+        if getattr(self, "_sep_token", None) is None:
             return None
         return self.convert_tokens_to_ids(self.sep_token)
 
@@ -1176,7 +1176,7 @@ class SpecialTokensMixin:
         """
         `Optional[int]`: Id of the padding token in the vocabulary. Returns `None` if the token has not been set.
         """
-        if self._pad_token is None:
+        if getattr(self, "_pad_token", None) is None:
             return None
         return self.convert_tokens_to_ids(self.pad_token)
 
@@ -1195,7 +1195,7 @@ class SpecialTokensMixin:
 
         Returns `None` if the token has not been set.
         """
-        if self._cls_token is None:
+        if getattr(self, "_cls_token", None) is None:
             return None
         return self.convert_tokens_to_ids(self.cls_token)
 
@@ -1205,7 +1205,7 @@ class SpecialTokensMixin:
         `Optional[int]`: Id of the mask token in the vocabulary, used when training a model with masked-language
         modeling. Returns `None` if the token has not been set.
         """
-        if self._mask_token is None:
+        if getattr(self, "_mask_token", None) is None:
             return None
         return self.convert_tokens_to_ids(self.mask_token)
 
@@ -1561,7 +1561,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         )  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
         self._in_target_context_manager = False
         self.prompt_config = (
-            PromptConfig.from_dict(self.default_prompt_config, **kwargs) if self.can_generate else None
+            PromptConfig.from_dict({}, **kwargs) if self.can_generate else None
         )
         super().__init__(**kwargs)
 
@@ -1572,13 +1572,19 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     @property
     def default_prompt_config(self):
+        role_prefixes = {
+            "system": "[SYS]",
+            "user": "[USER_MSG]",
+            "assistant": "[ASST_MSG]",
+        }
+        role_suffixes = {
+            "system": "[/SYS]",
+            "user": "[/USER_MSG]",
+            "assistant": "[/ASST_MSG]",
+        }
         return {
-            "system_message_start": "[SYS]",
-            "system_message_end": "[/SYS]",
-            "user_message_start": "[USER_MSG]",
-            "user_message_end": "[/USER_MSG]",
-            "assistant_message_start": "[ASST_MSG]",
-            "assistant_message_end": "[ASST_MSG]",
+            "role_prefixes": role_prefixes,
+            "role_suffixes": role_suffixes,
             "tokenize_messages_separately": True,
             "add_special_tokens": False,
         }
@@ -1656,6 +1662,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         prompt_config: Optional[PromptConfig] = None,
         **kwargs,
     ) -> List[int]:
+
         if hasattr(conversation, "messages"):
             # Indicates it's a Conversation object
             conversation = conversation.messages
@@ -1674,14 +1681,29 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         dialog_tokens: List[int] = []
 
+        # We could build the prompt config by incorporating the defaults and then overriding them with any
+        # user-specified arguments
+        # TODO Reformat all the default prompt configs to handle the new format
         for message in conversation:
             role = message["role"]
-            message_prefix = prompt_config.string_prefixes.get(role, "")
-            message_suffix = prompt_config.string_suffixes.get(role, "")
-            message_prefix_tokens = prompt_config.token_prefixes.get(role, [])
-            message_suffix_tokens = prompt_config.token_suffixes.get(role, [])
+            message_prefix = prompt_config.role_prefixes.get(role, None)
+            if message_prefix is None:
+                default_prefixes = self.default_prompt_config.get("role_prefixes", {})
+                message_prefix = default_prefixes.get(role, "")
+            message_suffix = prompt_config.role_suffixes.get(role, None)
+            if message_suffix is None:
+                default_suffixes = self.default_prompt_config.get("role_suffixes", {})
+                message_suffix = default_suffixes.get(role, "")
+            message_prefix_tokens = prompt_config.role_token_prefixes.get(role, None)
+            if message_prefix_tokens is None:
+                default_prefix_tokens = self.default_prompt_config.get("role_token_prefixes", {})
+                message_prefix_tokens = default_prefix_tokens.get(role, [])
+            message_suffix_tokens = prompt_config.role_token_suffixes.get(role, None)
+            if message_suffix_tokens is None:
+                default_suffix_tokens = self.default_prompt_config.get("role_token_suffixes", {})
+                message_suffix_tokens = default_suffix_tokens.get(role, [])
             message = "".join([message_prefix, message["content"].strip(), message_suffix])
-            tokenized_message = self.encode(message, add_special_tokens=self.add_special_tokens)
+            tokenized_message = self.encode(message, add_special_tokens=prompt_config.add_special_tokens)
             tokenized_message = message_prefix_tokens + tokenized_message + message_suffix_tokens
             dialog_tokens.extend(tokenized_message)
         return dialog_tokens
