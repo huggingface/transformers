@@ -1,5 +1,5 @@
 import uuid
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
@@ -13,6 +13,7 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
+
 
 class Conversation:
     def __init__(self, messages: List[Dict[str, str]] = None, conversation_id: uuid.UUID = None):
@@ -51,8 +52,7 @@ class Conversation:
             `str`:
 
         Example:
-            Conversation id: 7d15686b-dc94-49f2-9c4b-c9eac6a1f114
-            user: Going to the movies tonight - any suggestions?
+            Conversation id: 7d15686b-dc94-49f2-9c4b-c9eac6a1f114 user: Going to the movies tonight - any suggestions?
             bot: The Big Lebowski
         """
         output = f"Conversation id: {self.uuid}\n"

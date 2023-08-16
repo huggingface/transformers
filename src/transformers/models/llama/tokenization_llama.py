@@ -133,7 +133,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             spaces_between_special_tokens=spaces_between_special_tokens,
             legacy=legacy,
-            prompt=prompt,
             **kwargs,
         )
         if legacy is None:
@@ -349,7 +348,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         return output
 
-    def _build_conversation_input_ids(self, conversation: "ChatConversation") -> List[int]:
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         r"""Builds the input ids for a conversation.
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
         the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
@@ -361,9 +360,9 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         If you want to use your own system prompt, make sure to use both `B_SYS` and `E_SYS` use the following:
         ```python
-        >>> from transformers import ChatConversation
+        >>> from transformers import Conversation
 
-        >>> ChatConversation(
+        >>> Conversation(
         ...     "<<SYS>>\n Only answer with emojis, and charades\n<</SYS>>\n\nHow can I build a house in 10 septs?"
         ... )  # doctest: +IGNORE_RESULT
         ```

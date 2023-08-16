@@ -39,14 +39,12 @@ logger = logging.get_logger(__name__)
 class PromptConfig(PushToHubMixin):
     r"""
     This class holds the prompt configuration used when training a model. This is used to ensure that downstream
-    fine-tuning and generation runs can correctly match the prompt configuration used in training, avoiding
-    silent quality loss due to distribution drift.
+    fine-tuning and generation runs can correctly match the prompt configuration used in training, avoiding silent
+    quality loss due to distribution drift.
 
     This class contains several 'standard' parameters which are common to most chat-based models.
 
-    Arg:
-
-    """
+    Arg:"""
 
     # TODO Fill in docstring
     def __init__(self, **kwargs):
@@ -478,5 +476,3 @@ class PromptConfig(PushToHubMixin):
         # remove all the attributes that were updated, without modifying the input dict
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
-
-

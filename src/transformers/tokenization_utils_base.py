@@ -34,7 +34,7 @@ from packaging import version
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
-from .prompt_utils import ChatConversation, PromptConfig
+from .prompt_utils import PromptConfig
 from .utils import (
     ExplicitEnum,
     PaddingStrategy,
@@ -70,6 +70,7 @@ if TYPE_CHECKING:
         import tensorflow as tf
     if is_flax_available():
         import jax.numpy as jnp  # noqa: F401
+    from .pipelines.conversational import Conversation
 
 
 if is_tokenizers_available():
@@ -1651,11 +1652,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     def build_conversation_input_ids(
         self,
-        conversation: Union[List[Dict[str, str]], ChatConversation],
+        conversation: Union[List[Dict[str, str]], "Conversation"],
         prompt_config: Optional[PromptConfig] = None,
         **kwargs,
     ) -> List[int]:
-        if isinstance(conversation, ChatConversation):
+        if hasattr(conversation, "messages"):
+            # Indicates it's a Conversation object
             conversation = conversation.messages
 
         # priority: `prompt_config` argument > `model.prompt_config` (the default generation config)

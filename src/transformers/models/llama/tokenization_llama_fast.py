@@ -24,7 +24,7 @@ from ...utils.versions import require_version
 
 
 if TYPE_CHECKING:
-    pass
+    from ...pipelines.conversational import Conversation
 
 require_version("tokenizers>=0.13.3")
 
@@ -107,7 +107,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         eos_token="</s>",
         add_bos_token=True,
         add_eos_token=False,
-        prompt=None,
         **kwargs,
     ):
         super().__init__(
@@ -117,20 +116,11 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
-            prompt=prompt,
             **kwargs,
         )
         self._add_bos_token = add_bos_token
         self._add_eos_token = add_eos_token
         self.update_post_processor()
-        if prompt is None:
-            prompt = {}
-        self.system_message_start = prompt.get("system_message_start", "<<SYS>>\n")
-        self.system_message_end = prompt.get("system_message_end", "\n<</SYS>>\n\n")
-        self.user_message_start = prompt.get("user_message_start", "[INST] ")
-        self.user_message_end = prompt.get("user_message_end", " [/INST]")
-        self.assistant_message_start = prompt.get("assistant_message_start", " ")
-        self.assistant_message_end = prompt.get("assistant_message_end", " ")
 
         self.vocab_file = vocab_file
 
@@ -197,7 +187,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
 
         return (out_vocab_file,)
 
-    def _build_conversation_input_ids(self, conversation: "ChatConversation") -> List[int]:
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         r"""Builds the input ids for a conversation.
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
         the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
@@ -209,9 +199,9 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
 
         If you want to use your own system prompt, make sure to use both `B_SYS` and `E_SYS` use the following:
         ```python
-        >>> from transformers import ChatConversation
+        >>> from transformers import Conversation
 
-        >>> ChatConversation(
+        >>> Conversation(
         ...     "<<SYS>>\n Only answer with emojis, and charades\n<</SYS>>\n\nHow can I build a house in 10 septs?"
         ... )  # doctest: +IGNORE_RESULT
         ```
