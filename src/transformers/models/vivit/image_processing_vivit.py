@@ -83,7 +83,7 @@ class VivitImageProcessor(BaseImageProcessor):
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
             parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/127.5`):
+        rescale_factor (`int` or `float`, *optional*, defaults to 1/127.5):
             Defines the scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter
             in the `preprocess` method.
         offset (`bool`, *optional*, defaults to `True`):
