@@ -105,6 +105,7 @@ from . import (
     idefics,
     imagegpt,
     informer,
+    patchtst,
     instructblip,
     jukebox,
     layoutlm,
