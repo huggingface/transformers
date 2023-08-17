@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
+from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
@@ -71,9 +72,10 @@ class LlamaTokenizer(PreTrainedTokenizer):
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
-        legacy (`bool`, *optional*, defaults to `True`):
-            Whether or not the `legacy` behaviour of the tokenizer should be used. Legacy is before the merge of #24622
-            which includes fixes to properly handle tokens that appear after special tokens. A simple example:
+        legacy (`bool`, *optional*):
+            Whether or not the `legacy` behavior of the tokenizer should be used. Legacy is before the merge of #24622
+            and #25224 which includes fixes to properly handle tokens that appear after special tokens. A simple
+            example:
 
             - `legacy=True`:
             ```python
@@ -91,8 +93,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             >>> tokenizer.encode("Hello <extra_id_0>.")  # the extra space `[3]` is no longer here
             [8774, 32099, 5, 1]
             ```
-            Checkout the pull request and the issue [here](https://github.com/huggingface/transformers/pull/24565) for
-            more details.
+            Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
 
     """
 
@@ -112,6 +113,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
+        spaces_between_special_tokens=False,
         legacy=None,
         **kwargs,
     ):
@@ -129,13 +131,17 @@ class LlamaTokenizer(PreTrainedTokenizer):
             add_eos_token=add_eos_token,
             sp_model_kwargs=self.sp_model_kwargs,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            spaces_between_special_tokens=spaces_between_special_tokens,
             legacy=legacy,
             **kwargs,
         )
         if legacy is None:
             logger.warning_once(
-                f"You are using the default legacy behaviour of the {self.__class__}. This means that tokens that come after special tokens will not be properly handled. We recommend you to"
-                " read the related pull request available at https://github.com/huggingface/transformers/pull/24565, and set the legacy attribute accordingly."
+                f"You are using the default legacy behaviour of the {self.__class__}. If you see this, DO NOT PANIC! This is"
+                " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
+                " If you want to use the new behaviour, set `legacy=True`. This should only be set if you understand what it"
+                " means, and thouroughly read the reason why this was added as explained in"
+                " https://github.com/huggingface/transformers/pull/24565"
             )
             legacy = True
 
@@ -143,8 +149,24 @@ class LlamaTokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
+        self.sp_model = self.get_spm_processor()
+
+        self.unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
+
+    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
+    def get_spm_processor(self):
+        tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        with open(self.vocab_file, "rb") as f:
+            sp_model = f.read()
+            model_pb2 = import_protobuf()
+            model = model_pb2.ModelProto.FromString(sp_model)
+            if not self.legacy:
+                normalizer_spec = model_pb2.NormalizerSpec()
+                normalizer_spec.add_dummy_prefix = False
+                model.normalizer_spec.MergeFrom(normalizer_spec)
+            sp_model = model.SerializeToString()
+            tokenizer.LoadFromSerializedProto(sp_model)
+        return tokenizer
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -170,33 +192,38 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
     def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
-        # Replace the SPIECE_UNDERLINE with a space to make sure SPIECE_UNDERLINE is only used at
-        # the beginning of the text
-        if not self.legacy:
-            text = SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " ")
-        return super().tokenize(text, **kwargs)
+        """
+        Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
+        first token is special.
+        """
+        if self.legacy:
+            return super().tokenize(text, **kwargs)
+
+        if len(text) > 0:
+            tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
+
+        if tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
+            tokens = tokens[1:]
+        return tokens
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
     def _tokenize(self, text, **kwargs):
         """
         Returns a tokenized string.
 
-        Since the sentencepiece internal model always adds a SPIECE_UNDERLINE, at the beginning of the provided text,
-        we need to remove it by hand when the current text is a subsequence. This happens whenever the `self.tokenize`
-        function is called with specials tokens: the input is split on the special tokens, and each subsequence is
-        passed to `_tokenize`. Thus if a subsequence did not start with a `" "` or SPIECE_UNDERLINE, we have to remove
-        the extra `SPIECE_UNDERLINE` prepended.
+        We de-activated the `add_dummy_prefix` option, thus the sentencepiece internals will always strip any
+        SPIECE_UNDERLINE. For example: `self.sp_model.encode(f"{SPIECE_UNDERLINE}Hey", out_type = str)` will give
+        `['H', 'e', 'y']` instead of `['▁He', 'y']`. Thus we always encode `f"{unk_token}text"` and strip the
+        `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
+        `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
-        if not self.legacy:
-            is_first = text.startswith(SPIECE_UNDERLINE)
-            if is_first:
-                text = text[1:]
+        if self.legacy:
+            return self.sp_model.encode(text, out_type=str)
 
+        unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
+        text = self.unk_token + text
         tokens = self.sp_model.encode(text, out_type=str)
-
-        if not self.legacy and not is_first and not text.startswith(" ") and tokens[0].startswith(SPIECE_UNDERLINE):
-            tokens = ([tokens[0][1:]] if len(tokens[0]) > 1 else []) + tokens[1:]
-        return tokens
+        return tokens[unk_token_length:]
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
@@ -209,13 +236,17 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
+        # since we manually add the prefix space, we have to remove it when decoding
+        if tokens[0].startswith(SPIECE_UNDERLINE):
+            tokens[0] = tokens[0][1:]
+
         current_sub_tokens = []
         out_string = ""
         prev_is_special = False
         for i, token in enumerate(tokens):
             # make sure that special tokens are not decoded using sentencepiece model
             if token in self.all_special_tokens:
-                if not prev_is_special and i != 0:
+                if not prev_is_special and i != 0 and self.legacy:
                     out_string += " "
                 out_string += self.sp_model.decode(current_sub_tokens) + token
                 prev_is_special = True
