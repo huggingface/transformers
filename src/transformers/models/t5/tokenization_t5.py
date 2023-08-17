@@ -191,8 +191,6 @@ class T5Tokenizer(PreTrainedTokenizer):
 
         self.sp_model = self.get_spm_processor()
 
-        self.unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
-
     def get_spm_processor(self):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         with open(self.vocab_file, "rb") as f:
@@ -367,18 +365,19 @@ class T5Tokenizer(PreTrainedTokenizer):
         """
         Returns a tokenized string.
 
-        Since the sentencepiece internal model always adds a SPIECE_UNDERLINE, at the beginning of the provided text,
-        we need to remove it by hand when the current text is a subsequence. This happens whenever the `self.tokenize`
-        function is called with specials tokens: the input is split on the special tokens, and each subsequence is
-        passed to `_tokenize`. Thus if a subsequence did not start with a `" "` or SPIECE_UNDERLINE, we have to remove
-        the extra `SPIECE_UNDERLINE` prepended.
+        We de-activated the `add_dummy_prefix` option, thus the sentencepiece internals will always strip any
+        SPIECE_UNDERLINE. For example: `self.sp_model.encode(f"{SPIECE_UNDERLINE}Hey", out_type = str)` will give
+        `['H', 'e', 'y']` instead of `['▁He', 'y']`. Thus we always encode `f"{unk_token}text"` and strip the
+        `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
+        `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
         if self.legacy:
             return self.sp_model.encode(text, out_type=str)
 
+        unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
         text = self.unk_token + text
         tokens = self.sp_model.encode(text, out_type=str)
-        return tokens[self.unk_token_length :]
+        return tokens[unk_token_length:]
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
