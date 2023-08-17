@@ -139,36 +139,28 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
             ]
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
-    @unittest.skip(reason="UnivNetGan does not output hidden states.")
+    @unittest.skip(reason="UnivNetGan does not output hidden_states.")
     def test_hidden_states_output(self):
         pass
 
-    # skip
+    @unittest.skip(reason="UnivNetGan._init_weights allows weights to be initialized to negative values.")
     def test_initialization(self):
         pass
 
-    # this model has no inputs_embeds
+    @unittest.skip(reason="UnivNetGan.forward does not accept an inputs_embeds argument.")
     def test_inputs_embeds(self):
         pass
 
-    # this model has no input embeddings
+    @unittest.skip(reason="UnivNetGan does not use input embeddings and thus has no get_input_embeddings method.")
     def test_model_common_attributes(self):
         pass
 
-    # skip as this model doesn't support all arguments tested
+    @unittest.skip(reason="UnivNetGan does not support all arguments tested, such as output_hidden_states.")
     def test_model_outputs_equivalence(self):
         pass
 
-    # this model does not output hidden states
+    @unittest.skip(reason="UnivNetGan does not output hidden_states.")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    # skip because it fails on automapping of UnivNetGanGanConfig
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    # skip because it fails on automapping of UnivNetGanConfig
-    def test_save_load_fast_init_to_base(self):
         pass
 
     def test_batched_inputs_outputs(self):
