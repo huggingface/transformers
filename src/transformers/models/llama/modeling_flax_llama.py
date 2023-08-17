@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO: please verif the above license
-
 from functools import partial
 from typing import Optional, Tuple
 
@@ -42,7 +40,7 @@ from .configuration_llama import LlamaConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlamaConfig"
-_CHECKPOINT_FOR_DOC = "openlm-research/open_llama_3b_v2" # TODO: is this checkpoint appropriate?
+_CHECKPOINT_FOR_DOC = "openlm-research/open_llama_3b_v2"
 
 LLAMA_START_DOCSTRING = r"""
 
@@ -149,21 +147,23 @@ def apply_rotary_pos_emb(tensor, sincos):
 
 
 class FlaxLlamaRMSNorm(nn.Module):
-    eps: float = 1e-6
+    config: LlamaConfig
+    dtype: jnp.dtype = jnp.float32
+    def setup(self):
+        self.epsilon = self.config.rms_norm_eps
+        self.weight = self.param("weight", lambda _, shape: jnp.ones(shape), self.config.hidden_size)
 
     @nn.compact
     def __call__(self, hidden_states):
         input_dtype = hidden_states.dtype
-        variance = jnp.asarray(hidden_states, dtype=jnp.float32)
+        variance = jnp.asarray(hidden_states, dtype=self.dtype)
         variance = jnp.power(variance, 2)
         variance = variance.mean(-1, keepdims=True)
         # use `jax.numpy.sqrt` as `jax.lax.rsqrt` does not match `torch.rsqrt`
-        # hidden_states = hidden_states * jax.lax.rsqrt(variance + self.eps)
-        hidden_states = hidden_states / jnp.sqrt(variance + self.eps)
+        # hidden_states = hidden_states * jax.lax.rsqrt(variance + self.epsilon)
+        hidden_states = hidden_states / jnp.sqrt(variance + self.epsilon)
 
-        weight = self.param("weight", lambda _, shape: jnp.ones(shape), hidden_states.shape[-1])
-
-        return jnp.asarray(weight * hidden_states, dtype=input_dtype)
+        return jnp.asarray(self.weight * hidden_states, dtype=input_dtype)
 
 
 class FlaxLlamaAttention(nn.Module):
@@ -198,6 +198,7 @@ class FlaxLlamaAttention(nn.Module):
     def _merge_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
 
+    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoSelfAttention._concatenate_to_cache
     @nn.compact
     def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
@@ -242,6 +243,7 @@ class FlaxLlamaAttention(nn.Module):
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
+
         query = self._split_heads(query)
         key = self._split_heads(key)
         value = self._split_heads(value)
@@ -300,17 +302,18 @@ class FlaxLlamaAttention(nn.Module):
 
 class FlaxLlamaMLP(nn.Module):
     config: LlamaConfig
-    intermediate_size: int
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
         embed_dim = self.config.hidden_size
+        inner_dim = self.config.intermediate_size if self.config.intermediate_size is not None else 4 * hidden_size
+
         jax.nn.initializers.normal(self.config.initializer_range)
         self.act = ACT2FN[self.config.hidden_act]
 
-        self.gate_proj = nn.Dense(self.intermediate_size, use_bias=False, dtype=self.dtype)
+        self.gate_proj = nn.Dense(inner_dim, use_bias=False, dtype=self.dtype)
         self.down_proj = nn.Dense(embed_dim, use_bias=False, dtype=self.dtype)
-        self.up_proj = nn.Dense(self.intermediate_size, use_bias=False, dtype=self.dtype)
+        self.up_proj = nn.Dense(inner_dim, use_bias=False, dtype=self.dtype)
 
     def __call__(self, hidden_states):
         hidden_states = self.up_proj(hidden_states) * self.act(self.gate_proj(hidden_states))
@@ -324,12 +327,11 @@ class FlaxLlamaDecoderLayer(nn.Module):
 
     def setup(self):
         hidden_size = self.config.hidden_size
-        inner_dim = self.config.intermediate_size if self.config.intermediate_size is not None else 4 * hidden_size
 
-        self.input_layernorm = FlaxLlamaRMSNorm(eps=self.config.rms_norm_eps)
+        self.input_layernorm = FlaxLlamaRMSNorm(self.config, dtype=self.dtype)
         self.self_attn = FlaxLlamaAttention(self.config, dtype=self.dtype)
-        self.post_attention_layernorm = FlaxLlamaRMSNorm(eps=self.config.rms_norm_eps)
-        self.mlp = FlaxLlamaMLP(self.config, inner_dim, dtype=self.dtype)
+        self.post_attention_layernorm = FlaxLlamaRMSNorm(self.config, dtype=self.dtype)
+        self.mlp = FlaxLlamaMLP(self.config, dtype=self.dtype)
 
     def __call__(
         self,
@@ -476,7 +478,6 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         else:
             mutable = False
 
-        # TODO: can this handle input tensors being passed as kwargs? I copied GPT-Neo directly here
         outputs = self.module.apply(
             inputs,
             jnp.array(input_ids, dtype="i4"),
@@ -560,6 +561,7 @@ class FlaxLlamaModule(nn.Module):
             self.config.vocab_size,
             self.hidden_size,
             embedding_init=embedding_init,
+            dtype=self.dtype,
         )
         self.layers = FlaxLlamaBlockCollection(self.config, dtype=self.dtype)
         self.norm = FlaxLlamaRMSNorm(self.config.rms_norm_eps)
