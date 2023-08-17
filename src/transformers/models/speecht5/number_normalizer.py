@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The Facebook Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The Fairseq Authors, Microsoft Research, and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -49,12 +49,15 @@ class EnglishNumberNormalizer:
         ]
 
         # Define a dictionary to map currency symbols to their names
+        # Top most traded currencies according to
+        # https://en.wikipedia.org/wiki/Template:Most_traded_currencies
         self.currency_symbols = {
             "$": " dollars",
             "€": " euros",
             "£": " pounds",
             "¢": " cents",
             "¥": " japanese yen",
+            "﷼": " saudi riyal",
             "₹": " indian rupees",
             "₽": " russian rubles",
             "฿": " thai baht",
@@ -177,7 +180,10 @@ class EnglishNumberNormalizer:
         Convert numbers / number-like quantities in a string to their spelt-out counterparts
         """
         # Form part of the pattern for all currency symbols
-        pattern = r"(?<!\w)(-?\$?\€?\£?\¢?\¥?\₹?\₽?\฿?\₺?\₴?\₣?\₡?\₱?\₪?\₮?\₩?\₦?\₫?\d+(?:\.\d{1,2})?%?)(?!\w)"
+        pattern = r"(?<!\w)(-?\$?\€?\£?\¢?\¥?\₹?\₽?\฿?\₺?\₴?\₣?\₡?\₱?\₪?\₮?\₩?\₦?\₫?\﷼?\d+(?:\.\d{1,2})?%?)(?!\w)"
+
+        # Find and replace commas in numbers (15,000 -> 15000, etc)
+        text = re.sub(r"(\d+,\d+)", lambda match: match.group(1).replace(",", ""), text)
 
         # Use regex to find and replace numbers in the text
         converted_text = re.sub(pattern, lambda match: self.convert(match.group(1)), text)

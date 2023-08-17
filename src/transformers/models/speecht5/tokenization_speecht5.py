@@ -118,13 +118,32 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
 
         self.vocab_file = vocab_file
         self.normalize = normalize
+        self._normalizer = None
 
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
 
+    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
+        normalize = kwargs.pop("normalize", self.normalize)
+        if is_split_into_words:
+            text = " " + text
+        if normalize:
+            text = self.normalizer(text)
+        return (text, kwargs)
+
     @property
     def vocab_size(self):
         return self.sp_model.get_piece_size()
+
+    @property
+    def normalizer(self):
+        if self._normalizer is None:
+            self._normalizer = EnglishNumberNormalizer()
+        return self._normalizer
+
+    @normalizer.setter
+    def normalizer(self, value):
+        self._normalizer = value
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
@@ -148,8 +167,6 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text: str) -> List[str]:
         """Take as input a string and return a list of strings (tokens) for words/sub-words"""
-        if self.normalize:
-            text = self._normalize(text)
         return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token):
@@ -211,11 +228,3 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
                 fi.write(content_spiece_model)
 
         return (out_vocab_file,)
-
-    def _normalize(self, text: str):
-        """
-        Normalizes a given string using the 'EnglishNumberNormalizer' class, which converts numeric elements in english
-        text.
-        """
-        normalizer = EnglishNumberNormalizer()
-        return normalizer(text)
