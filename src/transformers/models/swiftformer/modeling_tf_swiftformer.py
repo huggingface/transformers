@@ -58,6 +58,39 @@ TF_SWIFTFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all SwiftFormer models at https://huggingface.co/models?filter=swiftformer
 ]
 
+class TFSwiftFormerPatchEmbeddingsSequential(tf.keras.layers.Layer):
+    """
+    The sequential component of the patch embedding layer.
+
+    Input: tensor of shape `[batch_size, in_channels, height, width]`
+
+    Output: tensor of shape `[batch_size, out_channels, height/4, width/4]`
+    """
+    def __init__(self, config: SwiftFormerConfig, **kwargs):
+        super().__init__(**kwargs)
+        out_chs = config.embed_dims[0]
+
+        self.zero_padding = tf.keras.layers.ZeroPadding2D(padding=(1, 1))
+        self.conv1 = tf.keras.layers.Conv2D(out_chs // 2, kernel_size=3, strides=2, name="0")
+        self.batch_norm1 = tf.keras.layers.BatchNormalization(
+            epsilon=config.batch_norm_eps, momentum=0.9, name="1"
+        ) # FIXME: is this the equivalent momentum?
+        self.conv2 = tf.keras.layers.Conv2D(out_chs, kernel_size=3, strides=2, name="2")
+        self.batch_norm2 = tf.keras.layers.BatchNormalization(
+            epsilon=config.batch_norm_eps, momentum=0.9, name="3"
+        ) # FIXME: is this the equivalent momentum?
+
+    def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
+        x = self.zero_padding(x)
+        x = self.conv1(x)
+        x = self.batch_norm1(x, training=training)
+        x = get_tf_activation("relu")(x)
+        x = self.zero_padding(x)
+        x = self.conv2(x)
+        x = self.batch_norm2(x, training=training)
+        x = get_tf_activation("relu")(x)
+        return x
+
 
 class TFSwiftFormerPatchEmbedding(tf.keras.layers.Layer):
     """
@@ -67,28 +100,10 @@ class TFSwiftFormerPatchEmbedding(tf.keras.layers.Layer):
 
     Output: tensor of shape `[batch_size, out_channels, height/4, width/4]`
     """
-
     def __init__(self, config: SwiftFormerConfig, **kwargs):
         super().__init__(**kwargs)
+        self.patch_embedding = TFSwiftFormerPatchEmbeddingsSequential(config, name="patch_embeddings")
 
-        out_chs = config.embed_dims[0]
-        self.patch_embedding = tf.keras.Sequential(
-            [
-                tf.keras.layers.ZeroPadding2D(padding=(1, 1)),
-                tf.keras.layers.Conv2D(out_chs // 2, kernel_size=3, strides=2),
-                tf.keras.layers.BatchNormalization(
-                    epsilon=config.batch_norm_eps, momentum=0.9
-                ),  # FIXME: is this the equivalent momentum?
-                tf.keras.layers.Activation("relu"),
-                tf.keras.layers.ZeroPadding2D(padding=(1, 1)),
-                tf.keras.layers.Conv2D(out_chs, kernel_size=3, strides=2),
-                tf.keras.layers.BatchNormalization(
-                    epsilon=config.batch_norm_eps, momentum=0.9
-                ),  # FIXME: is this the equivalent momentum?
-                tf.keras.layers.Activation("relu"),
-            ],
-            name="patch_embeddings",
-        )
 
     def call(self, x: tf.Tensor, training: bool = False) -> tf.Tensor:
         return self.patch_embedding(x, training=training)
@@ -633,7 +648,7 @@ class TFSwiftFormerForImageClassification(TFSwiftFormerPreTrainedModel):
         super().__init__(config, **kwargs)
 
         self.num_labels = config.num_labels
-        self.swiftformer = TFSwiftFormerMainLayer(config)
+        self.swiftformer = TFSwiftFormerMainLayer(config, name="swiftformer")
 
         # Classifier head
         self.norm = tf.keras.layers.BatchNormalization(epsilon=config.batch_norm_eps, momentum=0.9)  # FIXME
