@@ -73,6 +73,7 @@ from .utils import (
     is_torch_tpu_available,
     logging,
     replace_return_docstrings,
+    strtobool,
 )
 from .utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 from .utils.import_utils import ENV_VARS_TRUE_VALUES, is_sagemaker_mp_enabled, is_torch_fx_proxy
@@ -104,6 +105,14 @@ logger = logging.get_logger(__name__)
 
 
 _init_weights = True
+
+
+def is_fsdp_enabled():
+    return strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
+
+
+def is_fsdp_enabled_and_dist_rank_0():
+    return is_fsdp_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() == 0
 
 
 if is_sagemaker_mp_enabled():
@@ -458,7 +467,11 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
             )
         return safe_load_file(checkpoint_file)
     try:
-        if is_deepspeed_zero3_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() > 0:
+        if (
+            (is_deepspeed_zero3_enabled() or is_fsdp_enabled)
+            and torch.distributed.is_initialized()
+            and torch.distributed.get_rank() > 0
+        ):
             map_location = "meta"
         else:
             map_location = "cpu"
@@ -2283,6 +2296,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
 
+        if is_fsdp_enabled():
+            low_cpu_mem_usage = True
+
         if use_auth_token is not None:
             warnings.warn(
                 "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
@@ -3238,7 +3254,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model_buffers = {".".join([prefix, key]) for key in model_buffers}
         unexpected_keys = list(unexpected_keys - model_buffers)
 
-        if device_map is None:
+        model.tie_weights()
+        if device_map is None and not is_fsdp_enabled():
             ptrs = collections.defaultdict(list)
             for name, tensor in model.state_dict().items():
                 id_tensor = id_tensor_storage(tensor)
@@ -3443,23 +3460,35 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
                 if low_cpu_mem_usage:
-                    new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
-                        model_to_load,
-                        state_dict,
-                        loaded_keys,
-                        start_prefix,
-                        expected_keys,
-                        device_map=device_map,
-                        offload_folder=offload_folder,
-                        offload_index=offload_index,
-                        state_dict_folder=state_dict_folder,
-                        state_dict_index=state_dict_index,
-                        dtype=dtype,
-                        is_quantized=is_quantized,
-                        is_safetensors=is_safetensors,
-                        keep_in_fp32_modules=keep_in_fp32_modules,
-                    )
-                    error_msgs += new_error_msgs
+                    if not is_fsdp_enabled() or is_fsdp_enabled_and_dist_rank_0():
+                        new_error_msgs, offload_index, state_dict_index = _load_state_dict_into_meta_model(
+                            model_to_load,
+                            state_dict,
+                            loaded_keys,
+                            start_prefix,
+                            expected_keys,
+                            device_map=device_map,
+                            offload_folder=offload_folder,
+                            offload_index=offload_index,
+                            state_dict_folder=state_dict_folder,
+                            state_dict_index=state_dict_index,
+                            dtype=dtype,
+                            is_quantized=is_quantized,
+                            is_safetensors=is_safetensors,
+                            keep_in_fp32_modules=keep_in_fp32_modules,
+                        )
+                        error_msgs += new_error_msgs
+                    else:
+                        for key, param in model_to_load.state_dict().items():
+                            if param.device == torch.device("meta"):
+                                if not (is_quantized):
+                                    set_module_tensor_to_device(
+                                        model, key, "cpu", torch.empty(*param.size(), dtype=dtype)
+                                    )
+                                else:
+                                    set_module_quantized_tensor_to_device(
+                                        model, key, "cpu", torch.empty(*param.size(), dtype=dtype)
+                                    )
                 else:
                     error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
 
