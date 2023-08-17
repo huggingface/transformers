@@ -830,16 +830,16 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
     @replace_return_docstrings(output_type=DecisionTransformerOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        states=None,
-        actions=None,
-        rewards=None,
-        returns_to_go=None,
-        timesteps=None,
-        attention_mask=None,
-        output_hidden_states=None,
-        output_attentions=None,
-        return_dict=None,
-    ) -> Union[Tuple, DecisionTransformerOutput]:
+        states: Optional[torch.FloatTensor] = None,
+        actions: Optional[torch.FloatTensor] = None,
+        rewards: Optional[torch.FloatTensor] = None,
+        returns_to_go: Optional[torch.FloatTensor] = None,
+        timesteps: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.FloatTensor], DecisionTransformerOutput]:
         r"""
         Returns:
 
