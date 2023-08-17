@@ -21,23 +21,30 @@ import argparse
 import requests
 import torch
 from PIL import Image
+from torchvision import transforms as T
+import torchvision.transforms.functional as F
 
-from transformers import GroundingDINOConfig, GroundingDINOForObjectDetection,ViTImageProcessor
+from transformers import (
+    GroundingDINOConfig, GroundingDINOModel, GroundingDINOForObjectDetection, ViTImageProcessor
+)
+
+IMAGENET_MEAN = [0.485, 0.456, 0.406]
+IMAGENET_STD = [0.229, 0.224, 0.225]
 
 
 def get_grounding_dino_config(model_name):
-    config = GroundingDINOConfig(image_size=192)
+    config = GroundingDINOConfig()
 
-    if "base" in model_name:
+    if "tiny" in model_name:
         window_size = 6
+        embed_dim = 96
+        depths = (2, 2, 18, 2)
+        num_heads = (4, 8, 16, 32)
+    elif "base" in model_name:
+        window_size = 12
         embed_dim = 128
         depths = (2, 2, 18, 2)
         num_heads = (4, 8, 16, 32)
-    elif "large" in model_name:
-        window_size = 12
-        embed_dim = 192
-        depths = (2, 2, 18, 2)
-        num_heads = (6, 12, 24, 48)
     else:
         raise ValueError("Model not supported, only supports base and large variants")
 
@@ -49,110 +56,146 @@ def get_grounding_dino_config(model_name):
     return config
 
 
-def rename_key(name):
-    if "encoder.mask_token" in name:
-        name = name.replace("encoder.mask_token", "embeddings.mask_token")
-    if "encoder.patch_embed.proj" in name:
-        name = name.replace("encoder.patch_embed.proj", "embeddings.patch_embeddings.projection")
-    if "encoder.patch_embed.norm" in name:
-        name = name.replace("encoder.patch_embed.norm", "embeddings.norm")
-    if "attn.proj" in name:
-        name = name.replace("attn.proj", "attention.output.dense")
-    if "attn" in name:
-        name = name.replace("attn", "attention.self")
-    if "norm1" in name:
-        name = name.replace("norm1", "layernorm_before")
-    if "norm2" in name:
-        name = name.replace("norm2", "layernorm_after")
-    if "mlp.fc1" in name:
-        name = name.replace("mlp.fc1", "intermediate.dense")
-    if "mlp.fc2" in name:
-        name = name.replace("mlp.fc2", "output.dense")
+def create_rename_keys(config):
+    rename_keys = []
+    # fmt: off
 
-    if name == "encoder.norm.weight":
-        name = "layernorm.weight"
-    if name == "encoder.norm.bias":
-        name = "layernorm.bias"
+    # patch embedding layer
+    rename_keys.append(("module.backbone.0.patch_embed.proj.weight", "embeddings.patch_embeddings.projection.weight"))
+    rename_keys.append(("module.backbone.0.patch_embed.proj.bias", "embeddings.patch_embeddings.projection.bias"))
+    rename_keys.append(("module.backbone.0.patch_embed.norm.weight", "embeddings.norm.weight"))
+    rename_keys.append(("module.backbone.0.patch_embed.norm.bias", "embeddings.norm.bias"))
 
-    if "decoder" in name:
-        pass
-    else:
-        name = "grounding_dino." + name
+    # for i in range(config.num_hidden_layers):
+    #     # layernorms
+    #     rename_keys.append((f"blocks.{i}.norm1.weight", f"encoder.layer.{i}.norm1.weight"))
+    #     rename_keys.append((f"blocks.{i}.norm1.bias", f"encoder.layer.{i}.norm1.bias"))
+    #     rename_keys.append((f"blocks.{i}.norm2.weight", f"encoder.layer.{i}.norm2.weight"))
+    #     rename_keys.append((f"blocks.{i}.norm2.bias", f"encoder.layer.{i}.norm2.bias"))
+    #     # MLP
+    #     if config.use_swiglu_ffn:
+    #         rename_keys.append((f"blocks.{i}.mlp.w12.weight", f"encoder.layer.{i}.mlp.w12.weight"))
+    #         rename_keys.append((f"blocks.{i}.mlp.w12.bias", f"encoder.layer.{i}.mlp.w12.bias"))
+    #         rename_keys.append((f"blocks.{i}.mlp.w3.weight", f"encoder.layer.{i}.mlp.w3.weight"))
+    #         rename_keys.append((f"blocks.{i}.mlp.w3.bias", f"encoder.layer.{i}.mlp.w3.bias"))
+    #     else:
+    #         rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"encoder.layer.{i}.mlp.fc1.weight"))
+    #         rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"encoder.layer.{i}.mlp.fc1.bias"))
+    #         rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"encoder.layer.{i}.mlp.fc2.weight"))
+    #         rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"encoder.layer.{i}.mlp.fc2.bias"))
+    #     # layerscale
+    #     rename_keys.append((f"blocks.{i}.ls1.gamma", f"encoder.layer.{i}.layer_scale1.lambda1"))
+    #     rename_keys.append((f"blocks.{i}.ls2.gamma", f"encoder.layer.{i}.layer_scale2.lambda1"))
+    #     # attention projection layer
+    #     rename_keys.append((f"blocks.{i}.attn.proj.weight", f"encoder.layer.{i}.attention.output.dense.weight"))
+    #     rename_keys.append((f"blocks.{i}.attn.proj.bias", f"encoder.layer.{i}.attention.output.dense.bias"))
 
-    return name
+    # # final layernorm
+    # rename_keys.append(("norm.weight", "layernorm.weight"))
+    # rename_keys.append(("norm.bias", "layernorm.bias"))
 
-
-def convert_state_dict(orig_state_dict, model):
-    for key in orig_state_dict.copy().keys():
-        val = orig_state_dict.pop(key)
-
-        if "attn_mask" in key:
-            pass
-        elif "qkv" in key:
-            key_split = key.split(".")
-            layer_num = int(key_split[2])
-            block_num = int(key_split[4])
-            dim = model.grounding_dino.encoder.layers[layer_num].blocks[block_num].attention.self.all_head_size
-
-            if "weight" in key:
-                orig_state_dict[
-                    f"grounding_dino.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.weight"
-                ] = val[:dim, :]
-                orig_state_dict[f"grounding_dino.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.weight"] = val[
-                    dim : dim * 2, :
-                ]
-                orig_state_dict[
-                    f"grounding_dino.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.weight"
-                ] = val[-dim:, :]
-            else:
-                orig_state_dict[f"grounding_dino.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.query.bias"] = val[
-                    :dim
-                ]
-                orig_state_dict[f"grounding_dino.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.key.bias"] = val[
-                    dim : dim * 2
-                ]
-                orig_state_dict[f"grounding_dino.encoder.layers.{layer_num}.blocks.{block_num}.attention.self.value.bias"] = val[
-                    -dim:
-                ]
-        else:
-            orig_state_dict[rename_key(key)] = val
-
-    return orig_state_dict
+    # fmt: on
+    return rename_keys
 
 
-def convert_grounding_dino_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_path, push_to_hub):
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+def rename_key(dct, old, new):
+    val = dct.pop(old)
+    dct[new] = val
 
-    config = get_grounding_dino_config(model_name)
-    model = GroundingDINOForObjectDetection(config)
-    model.eval()
+# we split up the matrix of each encoder layer into queries, keys and values
+def read_in_q_k_v(state_dict, config):
+    for i in range(config.num_hidden_layers):
+        # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
+        in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
+        in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
+        # next, add query, keys and values (in that order) to the state dict
+        state_dict[f"encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: config.hidden_size, :]
+        state_dict[f"encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
+        state_dict[f"encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
+            config.hidden_size : config.hidden_size * 2, :
+        ]
+        state_dict[f"encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
+            config.hidden_size : config.hidden_size * 2
+        ]
+        state_dict[f"encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-config.hidden_size :, :]
+        state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
 
-    new_state_dict = convert_state_dict(state_dict, model)
-    model.load_state_dict(new_state_dict)
 
+# We will verify our results on an image of cute cats
+def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    return image
 
-    image_processor = ViTImageProcessor(size={"height": 192, "width": 192})
-    image = Image.open(requests.get(url, stream=True).raw)
-    inputs = image_processor(images=image, return_tensors="pt")
+def image_processor(image: Image.Image) -> torch.Tensor:
+    def resize(image, size, max_size=None):
+        def get_size_with_aspect_ratio(image_size, size, max_size=None):
+            w, h = image_size
+            if max_size is not None:
+                min_original_size = float(min((w, h)))
+                max_original_size = float(max((w, h)))
+                if max_original_size / min_original_size * size > max_size:
+                    size = int(round(max_size * min_original_size / max_original_size))
 
-    with torch.no_grad():
-        outputs = model(**inputs).logits
+            if (w <= h and w == size) or (h <= w and h == size):
+                return (h, w)
 
-    print(outputs.keys())
-    print("Looks ok!")
+            if w < h:
+                ow = size
+                oh = int(size * h / w)
+            else:
+                oh = size
+                ow = int(size * w / h)
 
-    if pytorch_dump_folder_path is not None:
-        print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
-        model.save_pretrained(pytorch_dump_folder_path)
+            return (oh, ow)
 
-        print(f"Saving image processor to {pytorch_dump_folder_path}")
-        image_processor.save_pretrained(pytorch_dump_folder_path)
+        size = get_size_with_aspect_ratio(image.size, size, max_size)
+        return F.resize(image, size)
+    
+    transform = T.Compose([T.ToTensor(), T.Normalize(IMAGENET_MEAN, IMAGENET_STD)])
+    image_resized = resize(image, 800, 1333)
+    return transform(image_resized)
 
-    if push_to_hub:
-        print(f"Pushing model and image processor for {model_name} to hub")
-        model.push_to_hub(f"microsoft/{model_name}")
-        image_processor.push_to_hub(f"microsoft/{model_name}")
+@torch.no_grad()
+def convert_grounding_dino_checkpoint(model_name, checkpoint_path):
+    #Define default GroundingDINO configuation
+    config = get_grounding_dino_config(model_name)
+
+    # Load original checkpoint
+    original_state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+
+    # Rename keys
+    new_state_dict = original_state_dict.copy()
+    rename_keys = create_rename_keys(config)
+    for src, dest in rename_keys:
+        rename_key(new_state_dict, src, dest)
+    # read_in_q_k_v(new_state_dict, config)
+
+    # Load HF implementation with default config and converted state dict
+    model = GroundingDINOModel(config).eval()
+    model.load_state_dict(new_state_dict, strict=False)
+
+    # Load and process test image
+    image = prepare_img()
+    inputs = image_processor(image)
+    model(pixel_values=inputs.unsqueeze(0))
+
+    # outputs = model(**inputs).logits
+
+    # print(outputs.keys())
+    # print("Looks ok!")
+
+    # if pytorch_dump_folder_path is not None:
+    #     print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
+    #     model.save_pretrained(pytorch_dump_folder_path)
+
+    #     print(f"Saving image processor to {pytorch_dump_folder_path}")
+    #     image_processor.save_pretrained(pytorch_dump_folder_path)
+
+    # if push_to_hub:
+    #     print(f"Pushing model and image processor for {model_name} to hub")
+    #     model.push_to_hub(f"microsoft/{model_name}")
+    #     image_processor.push_to_hub(f"microsoft/{model_name}")
 
 
 if __name__ == "__main__":
@@ -160,14 +203,14 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="grounding_dino-base-simmim-window6-192",
+        default="grounding-dino-tiny",
         type=str,
-        choices=["grounding_dino-base-simmim-window6-192", "grounding_dino-large-simmim-window12-192"],
-        help="Name of the GroundingDINO SimMIM model you'd like to convert.",
+        choices=["grounding-dino-tiny", "grounding-dino-base"],
+        help="Name of the GroundingDINO model you'd like to convert.",
     )
     parser.add_argument(
         "--checkpoint_path",
-        default="/Users/nielsrogge/Documents/GroundingDINOSimMIM/simmim_pretrain__grounding_dino_base__img192_window6__100ep.pth",
+        default="/home/eduardo/Desktop/Projects/GroundingDINO/weights/grounding_dino_tiny.pth",
         type=str,
         help="Path to the original PyTorch checkpoint (.pth file).",
     )
@@ -179,4 +222,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_grounding_dino_checkpoint(args.model_name, args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_grounding_dino_checkpoint(args.model_name, args.checkpoint_path)

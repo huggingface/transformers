@@ -1005,6 +1005,8 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, len(self.config.depths))
 
         embedding_output, input_dimensions = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
+        print(embedding_output.shape)
+        print(input_dimensions)
 
         encoder_outputs = self.encoder(
             embedding_output,

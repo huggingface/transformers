@@ -2673,8 +2673,7 @@ else:
         [
             "GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST",
             "GroundingDINOBackbone",
-            "GroundingDINOForImageClassification",
-            "GroundingDINOForMaskedImageModeling",
+            "GroundingDINOForObjectDetection",
             "GroundingDINOModel",
             "GroundingDINOPreTrainedModel",
         ]
