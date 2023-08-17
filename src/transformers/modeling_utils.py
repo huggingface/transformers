@@ -1470,6 +1470,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             import deepspeed
 
             with deepspeed.zero.Init(config_dict_or_path=deepspeed_config()):
+                # Build new embeddings
                 new_embeddings = nn.Embedding(
                     new_num_tokens,
                     old_embedding_dim,
@@ -1479,7 +1480,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             params = [old_embeddings.weight, new_embeddings.weight]
             with deepspeed.zero.GatheredParameters(params, modifier_rank=0):
+                # initialize all new embeddings (in particular added tokens)
                 self._init_weights(new_embeddings)
+
+                # Copy token embeddings from the previous weights
                 new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
         else:
             # Build new embeddings
@@ -1492,6 +1496,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             # initialize all new embeddings (in particular added tokens)
             self._init_weights(new_embeddings)
+
+            # Copy token embeddings from the previous weights
             new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
 
         return new_embeddings
