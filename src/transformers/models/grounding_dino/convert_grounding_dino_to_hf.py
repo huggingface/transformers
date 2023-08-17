@@ -98,11 +98,12 @@ def create_rename_keys(config):
                             f"encoder.layers.{layer}.blocks.{block}.output.dense.weight"))
             rename_keys.append((f"module.backbone.0.layers.{layer}.blocks.{block}.mlp.fc2.bias", 
                             f"encoder.layers.{layer}.blocks.{block}.output.dense.bias"))
-
-
-    # # final layernorm
-    # rename_keys.append(("norm.weight", "layernorm.weight"))
-    # rename_keys.append(("norm.bias", "layernorm.bias"))
+            
+        # downsample
+        rename_keys.append((f"module.backbone.0.layers.{layer}.downsample.reduction.weight", 
+                            f"encoder.layers.{layer}.downsample.reduction.weight"))
+        rename_keys.append((f"module.backbone.0.layers.{layer}.downsample.reduction.bias", 
+                            f"encoder.layers.{layer}.downsample.reduction.bias"))
 
     # fmt: on
     return rename_keys
