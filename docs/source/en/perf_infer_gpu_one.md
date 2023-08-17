@@ -23,7 +23,7 @@ BetterTransformer API converts 🤗 transformers models to make them use PyTorch
 
 <Tip>
 
-Flash Attention can only be used for models using fp16 or bf16 dtype. Make sure to cast you model before using BetterTransformer.
+Flash Attention can only be used for models using fp16 or bf16 dtype. Make sure to cast your model before using BetterTransformer.
   
 </Tip>
 
@@ -66,7 +66,7 @@ model.to_bettertransformer()
 # Use it for training or inference
 ```
 
-According to the official documentation, `torch.nn.functional.scaled_dot_product_attention` can also call [Flash-Attention](https://arxiv.org/abs/2205.14135) kernels under the hood. If you want to force the usage of Flash Attention or check that Flash Attention is available in your setting (hardware, problem size), you can use the [`torch.backends.cuda.sdp_kernel(enable_flash=True)`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as below:
+The operator `torch.nn.functional.scaled_dot_product_attention` can also call [Flash-Attention](https://arxiv.org/abs/2205.14135) kernels under the hood. If you want to force the usage of Flash Attention or check that Flash Attention is available in your setting (hardware, problem size), you can use the [`torch.backends.cuda.sdp_kernel(enable_flash=True)`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as below:
 
 
 ```python
@@ -93,7 +93,7 @@ If you see a bug with a traceback saying
 RuntimeError: No available kernel.  Aborting execution.
 ```
 
-Install the PyTorch nightly version
+you may try to use the PyTorch nightly version, which may have a larger coverage for Flash Attention:
 
 ```bash
 pip3 install -U --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu118

@@ -30,7 +30,7 @@ BetterTransformer is also supported for faster inference on multi-GPU for text, 
 
 <Tip>
 
-Flash Attention can only be used for models using fp16 or bf16 dtype. Make sure to cast you model before using BetterTransformer.
+Flash Attention can only be used for models using fp16 or bf16 dtype. Make sure to cast your model before using BetterTransformer.
   
 </Tip>
 
@@ -50,7 +50,7 @@ model.to_bettertransformer()
 # Use it for training or inference
 ```
 
-SDPA can also call [Flash-Attention](https://arxiv.org/abs/2205.14135) kernels under the hood. If you want to force the usage of Flash Attention or check that Flash Attention is available in your setting (hardware, problem size), use [`torch.backends.cuda.sdp_kernel(enable_flash=True)`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel):
+SDPA can also call [Flash-Attention](https://arxiv.org/abs/2205.14135) kernels under the hood. In order to force the usage of Flash Attention or check that Flash Attention is available in a given setting (hardware, problem size), the context manager [`with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False)`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) can be used:
 
 
 ```python
@@ -87,6 +87,8 @@ Have a look at this [blog post](https://pytorch.org/blog/out-of-the-box-accelera
 
 ### Encoder models
 
-For encoder models the API will dispatch the forward call of encoder layers to `torch.nn.TransformerEncoder` that will execute the fast path implementation of the encoder layers.
+For encoder models during inference, BetterTransformer will dispatch the forward call of encoder layers to an equivalent of [`torch.nn.TransformerEncoderLayer`](https://pytorch.org/docs/stable/generated/torch.nn.TransformerEncoderLayer.html) that will execute the fast path implementation of the encoder layers.
 
-Have a look at this [blog post](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2) and [this one from PyTorch](torch.nn.TransformerEncoder) to learn more about what is possible to do with `BetterTransformer` API for encoder models.
+As `torch.nn.TransformerEncoderLayer` fastpath does not support training, we instead dispatch to `torch.nn.functional.scaled_dot_product_attention` during training, that do not leverage nested tensors but can leverage Flash Attention or Memory-Efficient Attention fused kernels.
+
+More details can be found in [this blog post](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2) and [this second one](https://pytorch.org/blog/a-better-transformer-for-fast-transformer-encoder-inference/).
