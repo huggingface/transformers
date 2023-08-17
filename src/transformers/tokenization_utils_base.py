@@ -1560,9 +1560,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             {}
         )  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
         self._in_target_context_manager = False
-        self.prompt_config = (
-            PromptConfig.from_dict({}, **kwargs) if self.can_generate else None
-        )
+        self.prompt_config = PromptConfig.from_dict({}, **kwargs) if self.can_generate else None
         super().__init__(**kwargs)
 
     @property
@@ -1662,7 +1660,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         prompt_config: Optional[PromptConfig] = None,
         **kwargs,
     ) -> List[int]:
-
         if hasattr(conversation, "messages"):
             # Indicates it's a Conversation object
             conversation = conversation.messages

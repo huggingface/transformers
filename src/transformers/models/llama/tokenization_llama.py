@@ -387,7 +387,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             )
 
         dialog_tokens: List[int] = []
-        # TODO Figure out where the chat settings live
+        # TODO Revert the overridden methods to their original forms for testing, then delete
 
         for message in conversation:
             if message["role"] == "user":
@@ -413,16 +413,28 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
     @property
     def default_prompt_config(self):
+        role_prefixes = {
+            "user": "[INST] ",
+            "system": "<<SYS>>\n",
+            "assistant": " ",
+        }
+        role_suffixes = {
+            "user": " [/INST]",
+            "system": "\n<</SYS>>\n\n",
+            "assistant": " ",
+        }
+        role_token_prefixes = {
+            "user": self.bos_token_id,
+        }
+        role_token_suffixes = {
+            "assistant": self.eos_token_id,
+        }
         return {
             "default_system_message": DEFAULT_SYSTEM_PROMPT,
-            "system_message_start": "<<SYS>>\n",
-            "system_message_end": "\n<</SYS>>\n\n",
-            "user_message_start": "[INST] ",
-            "user_message_end": " [/INST]",
-            "assistant_message_start": " ",
-            "assistant_message_end": " ",
-            "user_message_start_token": self.bos_token_id,
-            "assistant_message_end_token": self.eos_token_id,
+            "role_prefixes": role_prefixes,
+            "role_suffixes": role_suffixes,
+            "role_token_prefixes": role_token_prefixes,
+            "role_token_suffixes": role_token_suffixes,
             "tokenize_messages_separately": True,
             "add_special_tokens": False,
         }
