@@ -2904,10 +2904,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model = replace_with_bnb_linear(
                 model, modules_to_not_convert=modules_to_not_convert, quantization_config=quantization_config
             )
-            # training in 8-bit is only available in 0.37.0+ but a major bug in 8-bit optimizers was fixed in 0.41.1
+            # training in 8-bit is only available in 0.37.0+
             model._is_quantized_training_enabled = version.parse(
                 importlib.metadata.version("bitsandbytes")
-            ) >= version.parse("0.41.1")
+            ) >= version.parse("0.37.0")
 
             model.config.quantization_config = quantization_config
             model.is_8bit_serializable = is_8bit_serializable
