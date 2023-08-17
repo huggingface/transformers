@@ -110,21 +110,21 @@ class IdeficsCausalLMOutputWithPast(ModelOutput):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         past_key_values (:
             obj:*List[torch.FloatTensor]*, *optional*, returned when `use_cache=True` is passed or when
-            `config.use_cache=True`): List of `torch.FloatTensor` of length `config.n_layers`, with each
-            tensor of shape `(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
+            `config.use_cache=True`): List of `torch.FloatTensor` of length `config.n_layers`, with each tensor of
+            shape `(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
             `past_key_values` input) to speed up sequential decoding.
         hidden_states (:
             obj:*tuple(torch.FloatTensor)*, *optional*, returned when `output_hidden_states=True` is passed or when
-            `config.output_hidden_states=True`): Tuple of `torch.FloatTensor` (one for the output of the
-            embeddings + one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+            `config.output_hidden_states=True`): Tuple of `torch.FloatTensor` (one for the output of the embeddings +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:
             obj:*tuple(torch.FloatTensor)*, *optional*, returned when `output_attentions=True` is passed or when
-            `config.output_attentions=True`): Tuple of `torch.FloatTensor` (one for each layer) of shape
-            `(batch_size, num_heads, sequence_length, sequence_length)`.
+            `config.output_attentions=True`): Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size,
+            num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
