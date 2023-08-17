@@ -53,7 +53,7 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         super().setUp()
         self.tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
 
-    def get_inputs_outputs(self):
+    def get_input_notes(self):
         notes = [
             [
                 pretty_midi.Note(start=0.441179, end=2.159456, pitch=70, velocity=77),
@@ -66,12 +66,11 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
                 pretty_midi.Note(start=0.441179, end=2.159456, pitch=70, velocity=77),
             ],
         ]
-        token_ids = self.tokenizer(notes)
 
-        return notes, token_ids
+        return notes
 
     def test_call(self):
-        notes, _ = self.get_inputs_outputs()
+        notes = self.get_input_notes()
 
         output = self.tokenizer(
             notes,
@@ -138,7 +137,7 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
     def test_save_and_load_tokenizer(self):
         tmpdirname = tempfile.mkdtemp()
 
-        sample_notes, _ = self.get_inputs_outputs()
+        sample_notes = self.get_input_notes()
 
         self.tokenizer.add_tokens(["bim", "bambam"])
         additional_special_tokens = self.tokenizer.additional_special_tokens
@@ -162,7 +161,7 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
     def test_pickle_tokenizer(self):
         tmpdirname = tempfile.mkdtemp()
 
-        notes, _ = self.get_inputs_outputs()
+        notes = self.get_input_notes()
         subwords = self.tokenizer(notes)["token_ids"]
 
         filename = os.path.join(tmpdirname, "tokenizer.bin")
@@ -206,7 +205,7 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
 
     def test_right_and_left_padding(self):
         tokenizer = self.tokenizer
-        notes, _ = self.get_inputs_outputs()
+        notes = self.get_input_notes()
         notes = notes[0]
         max_length = 20
 
@@ -257,7 +256,7 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
 
     def test_right_and_left_truncation(self):
         tokenizer = self.tokenizer
-        notes, _ = self.get_inputs_outputs()
+        notes = self.get_input_notes()
         notes = notes[0]
         truncation_size = 3
 
@@ -303,7 +302,7 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         self.assertEqual(truncated_notes_left, full_encoded_notes)
 
     def test_padding_to_multiple_of(self):
-        notes, _ = self.get_inputs_outputs()
+        notes = self.get_input_notes()
 
         if self.tokenizer.pad_token is None:
             self.skipTest("No padding token.")
