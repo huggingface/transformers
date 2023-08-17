@@ -465,10 +465,6 @@ class Trainer:
             ):
                 self.backward_prefetch = BackwardPrefetch.BACKWARD_POST
 
-            self.forward_prefetch = False
-            if self.args.fsdp_config.get("forward_prefetch", False):
-                self.forward_prefetch = True
-
             self.limit_all_gathers = False
             if self.args.fsdp_config.get("limit_all_gathers", False):
                 self.limit_all_gathers = True
@@ -1379,12 +1375,12 @@ class Trainer:
             auto_wrapper_callable = None
             default_transformer_cls_names_to_wrap = getattr(model, "_no_split_modules", None)
             fsdp_transformer_layer_cls_to_wrap = self.args.fsdp_config.get(
-                "fsdp_transformer_layer_cls_to_wrap", default_transformer_cls_names_to_wrap
+                "transformer_layer_cls_to_wrap", default_transformer_cls_names_to_wrap
             )
 
-            if self.args.fsdp_config["fsdp_min_num_params"] > 0:
+            if self.args.fsdp_config["min_num_params"] > 0:
                 auto_wrap_policy = functools.partial(
-                    size_based_auto_wrap_policy, min_num_params=self.args.fsdp_config["fsdp_min_num_params"]
+                    size_based_auto_wrap_policy, min_num_params=self.args.fsdp_config["min_num_params"]
                 )
             elif fsdp_transformer_layer_cls_to_wrap is not None:
                 transformer_cls_to_wrap = set()
@@ -1517,7 +1513,12 @@ class Trainer:
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
-        if resume_from_checkpoint is not None and not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled:
+        if (
+            resume_from_checkpoint is not None
+            and not is_sagemaker_mp_enabled()
+            and not self.is_deepspeed_enabled
+            and not self.is_fsdp_enabled
+        ):
             self._load_from_checkpoint(resume_from_checkpoint)
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
@@ -1651,7 +1652,7 @@ class Trainer:
 
         model = self._wrap_model(self.model_wrapped)
 
-        if is_sagemaker_mp_enabled() and resume_from_checkpoint is not None:
+        if (is_sagemaker_mp_enabled() or self.is_fsdp_enabled) and resume_from_checkpoint is not None:
             self._load_from_checkpoint(resume_from_checkpoint, model)
 
         # as the model is wrapped, don't use `accelerator.prepare`
@@ -3886,7 +3887,6 @@ class Trainer:
             fsdp_plugin.limit_all_gathers = self.args.fsdp_config.get(
                 "limit_all_gathers", fsdp_plugin.limit_all_gathers
             )
-            fsdp_plugin.use_orig_params = self.args.fsdp_config.get("use_orig_params", fsdp_plugin.use_orig_params)
 
         if self.is_deepspeed_enabled:
             if getattr(self.args, "hf_deepspeed_config", None) is None:
