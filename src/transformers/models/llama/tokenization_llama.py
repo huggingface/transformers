@@ -371,6 +371,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
             "role_suffixes": role_suffixes,
             "role_token_prefixes": role_token_prefixes,
             "role_token_suffixes": role_token_suffixes,
-            "tokenize_messages_separately": True,
+            "tokenize_separately": True,
             "add_special_tokens": False,
         }

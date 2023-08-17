@@ -1583,7 +1583,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         return {
             "role_prefixes": role_prefixes,
             "role_suffixes": role_suffixes,
-            "tokenize_messages_separately": True,
+            "tokenize_separately": True,
             "add_special_tokens": False,
         }
 
@@ -1678,9 +1678,19 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         dialog_tokens: List[int] = []
 
-        # We could build the prompt config by incorporating the defaults and then overriding them with any
-        # user-specified arguments
-        # TODO Reformat all the default prompt configs to handle the new format
+        tokenize_separately = prompt_config.tokenize_separately
+        if tokenize_separately is None:
+            tokenize_separately = self.default_prompt_config.get("tokenize_separately", True)
+        add_special_tokens = prompt_config.add_special_tokens
+        if add_special_tokens is None:
+            add_special_tokens = self.default_prompt_config.get("add_special_tokens", False)
+        if not tokenize_separately:
+            messages = []
+            join_string = prompt_config.join_string
+            if join_string is None:
+                join_string = self.default_prompt_config.get("join_string", None)
+            if join_string is None:
+                raise ValueError("Tokenizing chat messages jointly but no join_string specified in prompt_config!")
         for message in conversation:
             role = message["role"]
             message_prefix = prompt_config.role_prefixes.get(role, None)
@@ -1700,9 +1710,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 default_suffix_tokens = self.default_prompt_config.get("role_token_suffixes", {})
                 message_suffix_tokens = default_suffix_tokens.get(role, [])
             message = "".join([message_prefix, message["content"].strip(), message_suffix])
-            tokenized_message = self.encode(message, add_special_tokens=prompt_config.add_special_tokens)
-            tokenized_message = message_prefix_tokens + tokenized_message + message_suffix_tokens
-            dialog_tokens.extend(tokenized_message)
+            if tokenize_separately:
+                tokenized_message = self.encode(message, add_special_tokens=add_special_tokens)
+                tokenized_message = message_prefix_tokens + tokenized_message + message_suffix_tokens
+                dialog_tokens.extend(tokenized_message)
+            else:
+                messages.append(message)
+        if not tokenize_separately:
+            import pdb; pdb.set_trace()
+            dialog_tokens = self.encode(join_string.join(messages), add_special_tokens=add_special_tokens)
         return dialog_tokens
 
     @classmethod

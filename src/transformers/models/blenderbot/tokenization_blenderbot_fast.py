@@ -319,8 +319,8 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         # BlenderBot actually tokenizes messages together with a "  " separator between them, so we try to imitate that
         return {
             "role_prefixes": {"user": " "},
-            "role_suffixes": {"user": "  ", "system": "  ", "assistant": "  "},
-            "user_message_start": " ",
-            "tokenize_messages_separately": False,
+            "tokenize_separately": False,
+            "join_string": "  ",
+            "add_special_tokens": False,
             "max_length": self.model_max_length,
         }

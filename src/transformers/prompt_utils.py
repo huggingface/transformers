@@ -52,12 +52,13 @@ class PromptConfig(PushToHubMixin):
         self.role_token_prefixes = kwargs.pop("chat_role_token_prefixes", {})
         self.role_suffixes = kwargs.pop("chat_role_suffixes", {})
         self.role_token_suffixes = kwargs.pop("chat_role_token_suffixes", {})
-        self.add_special_tokens = kwargs.pop("chat_add_special_tokens", True)
+        self.add_special_tokens = kwargs.pop("chat_add_special_tokens", None)
         self.default_system_prompt = kwargs.pop("chat_default_system_prompt", None)
         # TODO Matt: If we want past key-values to be consistent across multiple generation calls,
         #            then we will probably need to force something like this in all cases so that
         #            we don't change tokens we've already computed key-values for.
-        self.tokenize_separately = kwargs.pop("chat_tokenize_separately", True)
+        self.tokenize_separately = kwargs.pop("chat_tokenize_separately", None)
+        self.join_string = kwargs.pop("chat_join_string", None)
         self.max_length = kwargs.pop("chat_max_length", None)
 
     def __eq__(self, other):
