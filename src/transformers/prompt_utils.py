@@ -43,8 +43,7 @@ class PromptConfig(PushToHubMixin):
     quality loss due to distribution drift.
 
     This class contains several 'standard' parameters which are common to most chat-based models.
-
-    Arg:"""
+    """
 
     # TODO Fill in docstring
     def __init__(self, **kwargs):
