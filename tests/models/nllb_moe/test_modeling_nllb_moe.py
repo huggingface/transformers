@@ -347,6 +347,7 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.assertIsNotNone(model(**input_dict)["encoder_router_logits"][1])
         self.assertIsNotNone(model(**input_dict)["decoder_router_logits"][0])
 
+
 @require_torch
 @require_sentencepiece
 @require_tokenizers
