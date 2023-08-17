@@ -410,10 +410,10 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=0, legacy=False)
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<extra_id_0>"]})
+        tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=1, legacy=False)
         tokenizer._create_trie(tokenizer.all_special_tokens)
-        # TODO ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
+        tokenizer.unique_no_split_tokens = ["<extra_id_0>"]
+        # TODO @ArthurZ the above is necessary as addedTokens / intialization sucks. Trie is not correctly created
         # So the extra ids are split....
         cls.tokenizer = tokenizer
 
@@ -423,7 +423,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode(". Hello", add_special_tokens=False)
         self.assertEqual(input_ids, [7, 4, 156, 86, 20])
         sp_encode = self.tokenizer.sp_model.encode(". Hello")
-        self.assertEqual(input_ids, sp_encode)
+        self.assertEqual(input_ids, [7] + sp_encode)
         tokens = self.tokenizer.tokenize(". Hello")
         self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
 
@@ -433,7 +433,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode("       . Hello", add_special_tokens=False)
         self.assertEqual(input_ids, [7, 4, 156, 86, 20])
         sp_encode = self.tokenizer.sp_model.encode("       . Hello")
-        self.assertEqual(input_ids, sp_encode)
+        self.assertEqual(input_ids, [7] + sp_encode)
         tokens = self.tokenizer.tokenize(" . Hello")
         self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
 
@@ -444,12 +444,13 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(tokens, ["▁He", "▁is", "▁not"])  # no extra space added
 
         input_ids = self.tokenizer.encode("▁He is not<extra_id_0>             ▁He")
-        # here t5x does not eat with lstrip, so there is and extra ▁He in the original one
-        # TODO @arthurzucker we should probably not srip right since it is done by default
-        # for certain models...
-        self.assertEqual(input_ids, [156, 46, 44, 999, 0, 2])
+        # TODO another example of lstrip
+        self.assertEqual(input_ids, [156, 46, 44, 1000, 262, 15, 2])
+
         tokens = self.tokenizer.tokenize("▁He is not<extra_id_0>              ▁He")
-        self.assertEqual(tokens, ["▁He", "▁is", "▁not", "<extra_id_0>", "He"])  # spaces are eaten by spm + our strip
+        self.assertEqual(
+            tokens, ["▁He", "▁is", "▁not", "<extra_id_0>", "H", "e"]
+        )  # spaces are eaten by spm + our strip
         # make sure that the output after the extra id is the same as if
         # extra_id was not there
         input_ids = self.tokenizer.encode("▁He is not             ▁He")
@@ -461,28 +462,28 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         # Make sure that `tokenizer.tokenize` is similar to
         # adding the equivalent special token to the vocab
         input_ids = self.tokenizer.encode("Hey <extra_id_0>I")
-        self.assertEqual(input_ids, [156, 30, 999, 100, 2])
+        self.assertEqual(input_ids, [156, 30, 1000, 100, 2])
         tokens = self.tokenizer.tokenize("Hey <extra_id_0>I")
         self.assertEqual(tokens, ["▁He", "y", "<extra_id_0>", "I"])
 
         input_ids = self.tokenizer.encode("Hello, <extra_id_0>,")
-        self.assertEqual(input_ids, [156, 86, 20, 3, 999, 3, 2])
+        self.assertEqual(input_ids, [156, 86, 20, 3, 1000, 3, 2])
         tokens = self.tokenizer.tokenize("Hello, <extra_id_0>,")
         self.assertEqual(tokens, ["▁He", "ll", "o", ",", "<extra_id_0>", ","])
 
     def test_special_tokens_strip(self):
         input_ids = self.tokenizer.encode(" <extra_id_0> ,")
-        self.assertEqual(input_ids, [999, 3, 2])
+        self.assertEqual(input_ids, [1000, 3, 2])
         tokens = self.tokenizer.tokenize(" <extra_id_0> ,")
         # spaces are eaten by rstrip / lstrip
         self.assertEqual(tokens, ["<extra_id_0>", ","])
 
         # test with a begin of word like `▁He`
         input_ids = self.tokenizer.encode("No <extra_id_0> He")
-        self.assertEqual(input_ids, [284, 999, 0, 2])
+        self.assertEqual(input_ids, [284, 1000, 262, 15, 2])
         # spaces are eaten by rstrip / lstrip, so this is expected. Don't strip otherwise you break
         tokens = self.tokenizer.tokenize("No <extra_id_0> He")
-        self.assertEqual(tokens, ["▁No", "<extra_id_0>", "He"])
+        self.assertEqual(tokens, ["▁No", "<extra_id_0>", "H", "e"])
 
         # Make sure this does not happen if we don't strip
         tokenizer = T5Tokenizer(SAMPLE_VOCAB, extra_ids=0)
@@ -505,7 +506,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
         ds = load_dataset("xnli", "all_languages", split="train+test+validation")
 
-        # TODO ArthurZucker fix the 3 commented tests with #23909
+        # TODO @ArthurZucker fix the 3 commented tests with #23909
         input_texts = [
             "Bonjour <extra_id_0>.",
             # "Bonjour<extra_id_0>.",  # this will fail. In T5 the special token has to be at the end.
