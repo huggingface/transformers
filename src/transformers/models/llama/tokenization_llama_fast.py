@@ -120,6 +120,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
+            use_default_system_prompt=use_default_system_prompt,
             **kwargs,
         )
         self._add_bos_token = add_bos_token
@@ -215,7 +216,10 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         """
         if self.use_default_system_prompt:
             if len(conversation.past_user_inputs) > 0:
-                if not conversation.past_user_inputs[0].startswith(B_SYS) or E_SYS not in conversation.past_user_inputs[0]:
+                if (
+                    not conversation.past_user_inputs[0].startswith(B_SYS)
+                    or E_SYS not in conversation.past_user_inputs[0]
+                ):
                     conversation.past_user_inputs[0] = (
                         B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
                     )

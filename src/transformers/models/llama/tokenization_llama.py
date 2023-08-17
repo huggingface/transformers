@@ -130,6 +130,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             add_eos_token=add_eos_token,
             sp_model_kwargs=self.sp_model_kwargs,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            use_default_system_prompt=use_default_system_prompt,
             legacy=legacy,
             **kwargs,
         )
@@ -146,7 +147,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         self.add_eos_token = add_eos_token
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
-        self.use_default_system_prompt=use_default_system_prompt
+        self.use_default_system_prompt = use_default_system_prompt
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -363,7 +364,10 @@ class LlamaTokenizer(PreTrainedTokenizer):
         """
         if self.use_default_system_prompt:
             if len(conversation.past_user_inputs) > 0:
-                if not conversation.past_user_inputs[0].startswith(B_SYS) or E_SYS not in conversation.past_user_inputs[0]:
+                if (
+                    not conversation.past_user_inputs[0].startswith(B_SYS)
+                    or E_SYS not in conversation.past_user_inputs[0]
+                ):
                     conversation.past_user_inputs[0] = (
                         B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
                     )
