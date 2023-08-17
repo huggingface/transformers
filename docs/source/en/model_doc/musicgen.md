@@ -54,7 +54,7 @@ and can be explicitly specified by setting `do_sample=True` in the call to [`Mus
 or by overriding the model's generation config (see below).
 
 Generation is limited by the sinusoidal positional embeddings to 30 second inputs. Meaning, MusicGen cannot generate more
-than 30 seconds of audio (1506 tokens), and input audio passed by Audio-Prompted Generation contributes to this limit so,
+than 30 seconds of audio (1503 tokens), and input audio passed by Audio-Prompted Generation contributes to this limit so,
 given an input of 20 seconds of audio, MusicGen cannot generate more than 10 seconds of additional audio.
 
 ### Unconditional Generation
