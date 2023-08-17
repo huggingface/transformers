@@ -178,7 +178,6 @@ class SwitchTransformersConfig(PretrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.dense_act_fn = dense_act_fn
 
-
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
