@@ -18,8 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ PyTorch Idefics model."""
-import inspect
-from typing import Dict, List, Optional, Tuple, Union
+from dataclasses import dataclass
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -29,7 +29,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import PreTrainedModel
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PretrainedConfig
 from ...utils import (
     add_start_docstrings,
@@ -53,6 +53,96 @@ IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+@dataclass
+class IdeficsBaseModelOutputWithPast(ModelOutput):
+    """
+    Base class for Idefics model's outputs that may also contain a past key/values (to speed up sequential decoding).
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+
+            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+            hidden_size)` is output.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
+            `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
+            encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
+            `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
+            input) to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
+            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+            sequence_length, hidden_size)`.
+
+            image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class IdeficsCausalLMOutputWithPast(ModelOutput):
+    """
+    Base class for causal language model (or autoregressive) outputs.
+
+    Args:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+            Language modeling loss (for next-token prediction).
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (:
+            obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when
+            ``config.use_cache=True``): List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`, with each
+            tensor of shape :obj:`(2, batch_size, num_heads, sequence_length, embed_size_per_head)`).
+
+            Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
+            ``past_key_values`` input) to speed up sequential decoding.
+        hidden_states (:
+            obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when
+            ``config.output_hidden_states=True``): Tuple of :obj:`torch.FloatTensor` (one for the output of the
+            embeddings + one for the output of each layer) of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:
+            obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when
+            ``config.output_attentions=True``): Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        image_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`):
+            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+            sequence_length, hidden_size)`.
+
+            image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    image_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+
+
 def expand_inputs_for_generation(
     input_ids,
     expand_size=1,
@@ -65,7 +155,7 @@ def expand_inputs_for_generation(
         torch.arange(input_ids.shape[0]).view(-1, 1).repeat(1, expand_size).view(-1).to(input_ids.device)
     )
     input_ids = input_ids.index_select(0, expanded_return_idx)
-
+    model_kwargs["pixel_values"] = model_kwargs.get("pixel_values", None)
     model_kwargs["image_encoder_embeddings"] = model_kwargs.get("image_encoder_embeddings", None)
     model_kwargs["perceiver_embeddings"] = model_kwargs.get("perceiver_embeddings", None)
     model_kwargs["image_attention_mask"] = model_kwargs.get("image_attention_mask", None)
@@ -82,7 +172,10 @@ def expand_inputs_for_generation(
             0, expanded_return_idx
         )
 
-    if model_kwargs["image_encoder_embeddings"] is not None:
+    if model_kwargs["pixel_values"] is not None:
+        model_kwargs["pixel_values"] = model_kwargs["pixel_values"].index_select(0, expanded_return_idx)
+
+    elif model_kwargs["image_encoder_embeddings"] is not None:
         model_kwargs["image_encoder_embeddings"] = model_kwargs["image_encoder_embeddings"].index_select(
             0, expanded_return_idx
         )
@@ -125,6 +218,9 @@ def update_model_kwargs_for_generation(outputs, model_kwargs):
         last_mask = image_attention_mask[:, -1, :].unsqueeze(1)
         model_kwargs["image_attention_mask"] = last_mask
 
+    # Get the precomputed image_hidden_states
+    model_kwargs["image_hidden_states"] = outputs.image_hidden_states
+
     return model_kwargs
 
 
@@ -146,6 +242,7 @@ def prepare_inputs_for_generation(input_ids, past=None, **kwargs):
         if past:
             position_ids = position_ids[:, -1].unsqueeze(-1)
 
+    pixel_values = kwargs.get("pixel_values", None)
     image_encoder_embeddings = kwargs.get("image_encoder_embeddings", None)
     perceiver_embeddings = kwargs.get("perceiver_embeddings", None)
     image_attention_mask = kwargs.get("image_attention_mask", None)
@@ -157,6 +254,7 @@ def prepare_inputs_for_generation(input_ids, past=None, **kwargs):
         "position_ids": position_ids,
         "attention_mask": attention_mask,
         "token_type_ids": token_type_ids,
+        "pixel_values": pixel_values,
         "image_encoder_embeddings": image_encoder_embeddings,
         "perceiver_embeddings": perceiver_embeddings,
         "image_attention_mask": image_attention_mask,
@@ -1070,7 +1168,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPast]:
+    ) -> Union[Tuple, IdeficsBaseModelOutputWithPast]:
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1296,13 +1394,19 @@ class IdeficsModel(IdeficsPreTrainedModel):
             all_hidden_states += (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
+        image_hidden_states = image_hidden_states.view(batch_size, num_images, image_seq_len, image_hidden_size)
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
-        return BaseModelOutputWithPast(
+            return tuple(
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, image_hidden_states]
+                if v is not None
+            )
+        return IdeficsBaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
+            image_hidden_states=image_hidden_states,
         )
 
 
@@ -1365,7 +1469,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
                 output_embeddings.out_additional_features = input_embeddings.num_additional_embeddings
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=IdeficsCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1382,7 +1486,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
+    ) -> Union[Tuple, IdeficsCausalLMOutputWithPast]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1453,107 +1557,23 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        return CausalLMOutputWithPast(
+        return IdeficsCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=outputs.image_hidden_states,
         )
 
-    def _prepare_model_inputs(
-        self,
-        inputs: Optional[torch.Tensor] = None,
-        bos_token_id: Optional[int] = None,
-        model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
-    ) -> Tuple[torch.Tensor, Optional[str], Dict[str, torch.Tensor]]:
-        if (
-            self.config.is_encoder_decoder
-            and hasattr(self, "encoder")
-            and self.encoder.main_input_name != self.main_input_name
-        ):
-            input_name = self.encoder.main_input_name
-        else:
-            input_name = self.main_input_name
-
-        model_kwargs = {k: v for k, v in model_kwargs.items() if v is not None or k != input_name}
-
-        # 2. check whether model_input_name is passed as kwarg
-        # if yes and `inputs` is None use kwarg inputs
-        inputs_kwarg = model_kwargs.pop(input_name, None)
-        if inputs_kwarg is not None and inputs is not None:
-            raise ValueError(
-                f"`inputs`: {inputs}` were passed alongside {input_name} which is not allowed."
-                f"Make sure to either pass {inputs} or {input_name}=..."
-            )
-        elif inputs_kwarg is not None:
-            inputs = inputs_kwarg
-
-        # 3. In the presence of `inputs_embeds` for text models:
-        # - decoder-only models should complain if the user attempts to pass `inputs_embeds`, but the model
-        # doesn't have its forwarding implemented. `inputs_embeds` is kept in `model_kwargs` and can coexist with
-        # input_ids (`inputs_embeds` will be used in the 1st generation step, as opposed to `input_ids`)
-        # - encoder-decoder models should complain if the user attempts to pass `inputs_embeds` and `input_ids`, and
-        # pull the former to inputs. It will be used in place of `input_ids` to get the encoder hidden states.
-        if input_name == "input_ids" and "inputs_embeds" in model_kwargs:
-            if not self.config.is_encoder_decoder:
-                has_inputs_embeds_forwarding = "inputs_embeds" in set(
-                    inspect.signature(self.prepare_inputs_for_generation).parameters.keys()
-                )
-                if not has_inputs_embeds_forwarding:
-                    raise ValueError(
-                        f"You passed `inputs_embeds` to `.generate()`, but the model class {self.__class__.__name__} "
-                        "doesn't have its forwarding implemented. See the GPT2 implementation for an example "
-                        "(https://github.com/huggingface/transformers/pull/21405), and feel free to open a PR with it!"
-                    )
-                # In this case, `input_ids` is moved to the `model_kwargs`, so a few automations (like the creation of
-                # the attention mask) can rely on the actual model input.
-                model_kwargs["input_ids"] = self._maybe_initialize_input_ids_for_generation(
-                    inputs, bos_token_id, model_kwargs=model_kwargs
-                )
-            else:
-                if inputs is not None:
-                    raise ValueError("You passed `inputs_embeds` and `input_ids` to `.generate()`. Please pick one.")
-            inputs, input_name = model_kwargs["inputs_embeds"], "inputs_embeds"
-
-        # 4. if `inputs` is still None, try to create `input_ids` from BOS token
-        inputs = self._maybe_initialize_input_ids_for_generation(inputs, bos_token_id, model_kwargs)
-
-        # 5. Prepare model_kwargs for IDEFICS vision component
-        pixel_values = model_kwargs.get("pixel_values", None)
-        image_encoder_embeddings = model_kwargs.get("image_encoder_embeddings", None)
-        perceiver_embeddings = model_kwargs.get("perceiver_embeddings", None)
-
-        if pixel_values is not None:
-            batch_size, num_images = pixel_values.shape[:2]
-            pixel_values = pixel_values.contiguous().view(batch_size * num_images, *pixel_values.shape[2:])
-            image_encoder_embeddings = self.model.vision_model(pixel_values=pixel_values).last_hidden_state
-
-        elif image_encoder_embeddings is not None:
-            batch_size, num_images, image_seq_len, image_hidden_size = image_encoder_embeddings.size()
-            image_encoder_embeddings = image_encoder_embeddings.view(
-                batch_size * num_images, image_seq_len, image_hidden_size
-            )
-
-        if self.config.use_resampler:
-            if perceiver_embeddings is None:
-                perceiver_embeddings = self.model.perceiver_resampler(image_encoder_embeddings)
-                image_seq_len, image_hidden_size = perceiver_embeddings.size(1), perceiver_embeddings.size(2)
-                model_kwargs["perceiver_embeddings"] = perceiver_embeddings.view(
-                    batch_size, num_images, image_seq_len, image_hidden_size
-                )
-            else:
-                model_kwargs["perceiver_embeddings"] = perceiver_embeddings
-        else:
-            image_seq_len, image_hidden_size = image_encoder_embeddings.size(1), image_encoder_embeddings.size(2)
-            model_kwargs["image_encoder_embeddings"] = image_encoder_embeddings.view(
-                batch_size, num_images, image_seq_len, image_hidden_size
-            )
-
-        model_kwargs["pixel_values"] = None
-        return inputs, input_name, model_kwargs
-
     def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
+        image_hidden_states = kwargs.get("image_hidden_states", None)
+        if image_hidden_states is not None:
+            if self.config.use_resampler:
+                kwargs["perceiver_embeddings"] = image_hidden_states
+            else:
+                kwargs["image_encoder_embeddings"] = image_hidden_states
+            kwargs["pixel_values"] = None
         inputs = prepare_inputs_for_generation(input_ids, past=past, **kwargs)
         unwanted_kwargs = ["token_type_ids"]
         for kwarg in unwanted_kwargs:
