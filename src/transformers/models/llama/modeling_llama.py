@@ -692,7 +692,7 @@ class LlamaModel(LlamaPreTrainedModel):
                     hidden_states,
                     attention_mask,
                     position_ids,
-                    None,
+                    past_key_value,
                 )
             else:
                 layer_outputs = decoder_layer(
