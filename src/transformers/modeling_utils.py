@@ -2386,7 +2386,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         quantizer = None
         quantization_method_from_config = None
         if hasattr(config, "quantization_config"):
-            if hasattr(config.quantization_config, "get"):
+            if isinstance(config.quantization_config, dict):
                 quantization_method_from_config = config.quantization_config.get(
                     "quant_method", QuantizationMethod.BITS_AND_BYTES
                 )
