@@ -561,8 +561,8 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
 
         # two examples with different lengths to confirm that attention masks are operational in XLA
         sentences = [
-            model.config.prefix + "Today is a beautiful day.",
-            model.config.prefix + "I have four cats, three dogs, two birds, and a horse.",
+            model.config.prefix + "I love this dog!",
+            model.config.prefix + "This cat looks beautiful.",
         ]
         input_ids = tokenizer(sentences, return_tensors="tf", padding=True).input_ids
 
@@ -575,8 +575,8 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
         output_strings_xla = tokenizer.batch_decode(output_ids_xla, skip_special_tokens=True)
 
         expected_output_string = [
-            "Aujourd'hui est une belle journée.",
-            "J'ai quatre chats, trois chiens, deux oiseaux et un cheval.",
+            "J'aime ce chien!",
+            "Ce chat ressemble bien.",
         ]
 
         self.assertListEqual(expected_output_string, output_strings)
