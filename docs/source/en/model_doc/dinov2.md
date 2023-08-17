@@ -43,3 +43,14 @@ The original code can be found [here](https://github.com/facebookresearch/dinov2
 
 [[autodoc]] Dinov2ForImageClassification
     - forward
+
+## FlaxDinov2Model
+
+[[autodoc]] FlaxDinov2Model
+    - __call__
+
+## FlaxDinov2ForImageClassification
+
+[[autodoc]] FlaxDinov2ForImageClassification
+    - __call__
+
