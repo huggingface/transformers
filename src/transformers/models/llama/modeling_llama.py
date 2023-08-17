@@ -686,7 +686,7 @@ class LlamaModel(LlamaPreTrainedModel):
                         return module(*inputs, past_key_value, output_attentions)
 
                     return custom_forward
-        
+
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(decoder_layer),
                     hidden_states,
