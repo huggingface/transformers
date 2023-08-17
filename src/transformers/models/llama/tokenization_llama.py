@@ -148,8 +148,24 @@ class LlamaTokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
+        self.sp_model = self.get_spm_processor()
+
+        self.unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
+
+    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
+    def get_spm_processor(self):
+        tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        with open(self.vocab_file, "rb") as f:
+            sp_model = f.read()
+            model_pb2 = import_protobuf()
+            model = model_pb2.ModelProto.FromString(sp_model)
+            if not self.legacy:
+                normalizer_spec = model_pb2.NormalizerSpec()
+                normalizer_spec.add_dummy_prefix = False
+                model.normalizer_spec.MergeFrom(normalizer_spec)
+            sp_model = model.SerializeToString()
+            tokenizer.LoadFromSerializedProto(sp_model)
+        return tokenizer
 
     def __getstate__(self):
         state = self.__dict__.copy()
