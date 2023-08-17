@@ -207,6 +207,8 @@
       title: Auto Classes
     - local: main_classes/callback
       title: Callbacks
+    - local: main_classes/chat_prompts
+      title: Chat Prompts
     - local: main_classes/configuration
       title: Configuration
     - local: main_classes/data_collator
