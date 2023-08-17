@@ -644,6 +644,7 @@ _import_structure = {
         "Text2TextGenerationPipeline",
         "TextClassificationPipeline",
         "TextGenerationPipeline",
+        "TextToAudioPipeline",
         "TokenClassificationPipeline",
         "TranslationPipeline",
         "VideoClassificationPipeline",
@@ -732,7 +733,7 @@ _import_structure = {
         "logging",
     ],
     "utils.bitsandbytes": [],
-    "utils.quantization_config": ["BitsAndBytesConfig"],
+    "utils.quantization_config": ["BitsAndBytesConfig", "GPTQConfig"],
 }
 
 # sentencepiece-backed objects
@@ -1096,6 +1097,8 @@ else:
             "MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
             "MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
             "MODEL_FOR_TEXT_ENCODING_MAPPING",
+            "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING",
+            "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING",
             "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING",
             "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING",
@@ -1169,6 +1172,7 @@ else:
             "BartForSequenceClassification",
             "BartModel",
             "BartPretrainedModel",
+            "BartPreTrainedModel",
             "PretrainedBartModel",
         ]
     )
@@ -4611,6 +4615,7 @@ if TYPE_CHECKING:
         Text2TextGenerationPipeline,
         TextClassificationPipeline,
         TextGenerationPipeline,
+        TextToAudioPipeline,
         TokenClassificationPipeline,
         TranslationPipeline,
         VideoClassificationPipeline,
@@ -4707,7 +4712,7 @@ if TYPE_CHECKING:
     )
 
     # bitsandbytes config
-    from .utils.quantization_config import BitsAndBytesConfig
+    from .utils.quantization_config import BitsAndBytesConfig, GPTQConfig
 
     try:
         if not is_sentencepiece_available():
@@ -5011,6 +5016,8 @@ if TYPE_CHECKING:
             MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_TEXT_ENCODING_MAPPING,
+            MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING,
+            MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING,
             MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
@@ -5077,6 +5084,7 @@ if TYPE_CHECKING:
             BartForQuestionAnswering,
             BartForSequenceClassification,
             BartModel,
+            BartPreTrainedModel,
             BartPretrainedModel,
             PretrainedBartModel,
         )

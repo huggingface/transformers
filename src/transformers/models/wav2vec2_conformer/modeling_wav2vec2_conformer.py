@@ -1603,7 +1603,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
 )
 class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC.__init__ with Wav2Vec2->Wav2Vec2Conformer,wav2vec2->wav2vec2_conformer
-    def __init__(self, config, target_lang=None):
+    def __init__(self, config, target_lang: Optional[str] = None):
         super().__init__(config)
 
         self.wav2vec2_conformer = Wav2Vec2ConformerModel(config)
