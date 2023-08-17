@@ -952,12 +952,11 @@ class YolosImageProcessor(BaseImageProcessor):
         )
         return padded_image
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.pad
     def pad(
         self,
         images: List[np.ndarray],
         constant_values: Union[float, Iterable[float]] = 0,
-        return_pixel_mask: bool = True,
+        return_pixel_mask: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
