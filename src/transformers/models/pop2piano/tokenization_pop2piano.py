@@ -82,7 +82,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
             Determines cutoff_time_idx in for each token.
     """
 
-    model_input_names = ["token_ids"]
+    model_input_names = ["token_ids", "attention_mask"]
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
 
@@ -127,7 +127,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
     def get_vocab(self):
         """Returns the vocabulary of the tokenizer."""
-        return self.encoder
+        return dict(self.encoder, **self.added_tokens_encoder)
 
     def _convert_id_to_token(self, token_id: int) -> list:
         """
