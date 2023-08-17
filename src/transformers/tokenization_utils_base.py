@@ -1717,7 +1717,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             else:
                 messages.append(message)
         if not tokenize_separately:
-            import pdb; pdb.set_trace()
             dialog_tokens = self.encode(join_string.join(messages), add_special_tokens=add_special_tokens)
         return dialog_tokens
 

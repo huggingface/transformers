@@ -437,6 +437,6 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
             "role_prefixes": {"user": " "},
             "tokenize_separately": False,
             "join_string": "  ",
-            "add_special_tokens": False,
+            "add_special_tokens": True,
             "max_length": self.model_max_length,
         }
