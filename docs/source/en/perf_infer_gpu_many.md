@@ -87,11 +87,6 @@ Have a look at this [blog post](https://pytorch.org/blog/out-of-the-box-accelera
 
 ### Encoder models
 
-For encoder models, the [`~PreTrainedModel.reverse_bettertransformer`] method reverts to the original model, which should be used before saving the model to use the canonical transformers modeling:
+For encoder models the API will dispatch the forward call of encoder layers to `torch.nn.TransformerEncoder` that will execute the fast path implementation of the encoder layers.
 
-```python
-model = model.reverse_bettertransformer()
-model.save_pretrained("saved_model")
-```
-
-Have a look at this [blog post](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2) to learn more about what is possible to do with `BetterTransformer` API for encoder models.
+Have a look at this [blog post](https://medium.com/pytorch/bettertransformer-out-of-the-box-performance-for-huggingface-transformers-3fbe27d50ab2) and [this one from PyTorch](torch.nn.TransformerEncoder) to learn more about what is possible to do with `BetterTransformer` API for encoder models.
