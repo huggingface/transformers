@@ -59,7 +59,7 @@ def get_grounding_dino_config(model_name):
 def create_rename_keys(config):
     rename_keys = []
     # fmt: off
-
+    ########################################## VISION BACKBONE - START
     # patch embedding layer
     rename_keys.append(("module.backbone.0.patch_embed.proj.weight", "embeddings.patch_embeddings.projection.weight"))
     rename_keys.append(("module.backbone.0.patch_embed.proj.bias", "embeddings.patch_embeddings.projection.bias"))
@@ -104,6 +104,8 @@ def create_rename_keys(config):
                             f"encoder.layers.{layer}.downsample.reduction.weight"))
         rename_keys.append((f"module.backbone.0.layers.{layer}.downsample.reduction.bias", 
                             f"encoder.layers.{layer}.downsample.reduction.bias"))
+        
+    ########################################## VISION BACKBONE - END
 
     # fmt: on
     return rename_keys
@@ -115,21 +117,24 @@ def rename_key(dct, old, new):
 
 # we split up the matrix of each encoder layer into queries, keys and values
 def read_in_q_k_v(state_dict, config):
-    for i in range(config.num_hidden_layers):
-        # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
-        in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
-        # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: config.hidden_size, :]
-        state_dict[f"encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
-        state_dict[f"encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
-            config.hidden_size : config.hidden_size * 2, :
-        ]
-        state_dict[f"encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
-            config.hidden_size : config.hidden_size * 2
-        ]
-        state_dict[f"encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[-config.hidden_size :, :]
-        state_dict[f"encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
+    ########################################## VISION BACKBONE - START
+    for layer, depth in enumerate(config.depths):
+        for block in range(depth):
+            # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
+            in_proj_weight = state_dict.pop(f"module.backbone.0.layers.{layer}.blocks.{block}.attn.qkv.weight")
+            in_proj_bias = state_dict.pop(f"module.backbone.0.layers.{layer}.blocks.{block}.attn.qkv.bias")
+            # next, add query, keys and values (in that order) to the state dict
+            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.query.weight"] = in_proj_weight[: config.hidden_size, :]
+            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.query.bias"] = in_proj_bias[: config.hidden_size]
+            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.key.weight"] = in_proj_weight[
+                config.hidden_size : config.hidden_size * 2, :
+            ]
+            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.key.bias"] = in_proj_bias[
+                config.hidden_size : config.hidden_size * 2
+            ]
+            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.value.weight"] = in_proj_weight[-config.hidden_size :, :]
+            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.value.bias"] = in_proj_bias[-config.hidden_size :]
+    ########################################## VISION BACKBONE - END
 
 
 # We will verify our results on an image of cute cats
