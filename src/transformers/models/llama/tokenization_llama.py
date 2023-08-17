@@ -372,43 +372,40 @@ class LlamaTokenizer(PreTrainedTokenizer):
             `List[int]`:
                 Input ids for the conversation.
         """
-        if len(conversation.messages) == 0 or conversation.messages[0]["role"] != "system":
-            # If the first message is not a system message, add the default system prompt as the first message
-            conversation.messages = [{"role": "system", "message": DEFAULT_SYSTEM_PROMPT}] + conversation.messages
+        if len(conversation.past_user_inputs) > 0:
+            if not conversation.past_user_inputs[0].startswith(B_SYS) or E_SYS not in conversation.past_user_inputs[0]:
+                conversation.past_user_inputs[0] = (
+                    B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
+                )
+        elif conversation.new_user_input:
+            if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
+                conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
+        else:
+            raise ValueError("Last message must be from user")
 
-        message_roles = [message["role"] for message in conversation.messages[1:]]  # Skip the system message here
-
-        if not all([role == "user" for role in message_roles[::2]]) or not all(
-            role == "assistant" for role in message_roles[1::2]
+        dialogue = list(conversation.iter_texts())
+        if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
+            [not is_user for is_user, msg in dialogue[1::2]]
         ):
-            # TODO Matt: Do we need to keep this check? Maybe some future LLaMA fine-tunes won't want this rule
             raise ValueError(
-                "LLaMA only supports 'user' and 'assistant' roles after the system message, starting with user and alternating (u/a/u/a/u...)"
+                "The model only supports 'user' and 'assistant' roles, starting with user and alternating (u/a/u/a/u...)"
             )
 
         dialog_tokens: List[int] = []
-        # TODO Revert the overridden methods to their original forms for testing, then delete
-
-        for message in conversation:
-            if message["role"] == "user":
-                message_start = self.user_message_start
-                message_end = self.user_message_end
-                message_start_token = self.user_message_start_token
-                message_end_token = self.user_message_end_token
-            elif message["role"] == "system":
-                message_start = self.system_message_start
-                message_end = self.system_message_end
-                message_start_token = self.system_message_start_token
-                message_end_token = self.system_message_end_token
-            elif message["role"] == "assistant":
-                message_start = self.assistant_message_start
-                message_end = self.assistant_message_end
-                message_start_token = self.assistant_message_start_token
-                message_end_token = self.assistant_message_end_token
-            message = "".join([message_start, message["message"].strip(), message_end])
-            tokenized_message = self.encode(message, add_special_tokens=self.add_special_tokens)
-            tokenized_message = [message_start_token] + tokenized_message + [message_end_token]
-            dialog_tokens.extend(tokenized_message)
+        dialog_tokens += sum(
+            [
+                [self.bos_token_id]
+                + self.encode(
+                    f"{B_INST} {(prompt[1]).strip()} {E_INST} {(answer[1]).strip()} ", add_special_tokens=False
+                )
+                + [self.eos_token_id]
+                for prompt, answer in zip(dialogue[::2], dialogue[1::2])
+            ],
+            [],
+        )
+        dialog_tokens += [self.bos_token_id] + self.encode(
+            f"{B_INST} {(dialogue[-1][1]).strip()} {E_INST}", add_special_tokens=False
+        )
         return dialog_tokens
 
     @property
