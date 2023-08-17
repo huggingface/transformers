@@ -128,7 +128,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             >>> tokenizer.encode("Hello <extra_id_0>.")  # the extra space `[3]` is no longer here
             [8774, 32099, 5, 1]
             ```
-            Checkout the pull request and the issue [here](https://github.com/huggingface/transformers/pull/25224) for
+            Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for
             more details.
 
     Attributes:
@@ -167,8 +167,11 @@ class T5Tokenizer(PreTrainedTokenizer):
                 )
         if legacy is None:
             logger.warning_once(
-                f"You are using the default legacy behaviour of the {self.__class__}. This means that tokens that come after special tokens will not be properly handled. We recommend you to"
-                " read the related pull request available at https://github.com/huggingface/transformers/pull/24565, and set the legacy attribute accordingly."
+                f"You are using the default legacy behaviour of the {self.__class__}. If you see this, DO NOT PANIC! This is"
+                " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
+                " If you want to use the new behaviour, set `legacy=True`. This should only be set if you understand what it"
+                " means, and thouroughly read the reason why this was added as explained in"
+                " https://github.com/huggingface/transformers/pull/24565"
             )
             legacy = True
 

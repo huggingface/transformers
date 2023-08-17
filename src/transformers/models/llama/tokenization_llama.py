@@ -73,7 +73,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         vocab_file (`str`):
             Path to the vocabulary file.
         legacy (`bool`, *optional*):
-            Whether or not the `legacy` behaviour of the tokenizer should be used. Legacy is before the merge of #24622
+            Whether or not the `legacy` behavior of the tokenizer should be used. Legacy is before the merge of #24622
             and #25224 which includes fixes to properly handle tokens that appear after special tokens. A simple
             example:
 
@@ -93,8 +93,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             >>> tokenizer.encode("Hello <extra_id_0>.")  # the extra space `[3]` is no longer here
             [8774, 32099, 5, 1]
             ```
-            Checkout the pull request and the issue [here](https://github.com/huggingface/transformers/pull/25224) for
-            more details.
+            Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
 
     """
 
@@ -138,8 +137,11 @@ class LlamaTokenizer(PreTrainedTokenizer):
         )
         if legacy is None:
             logger.warning_once(
-                f"You are using the default legacy behaviour of the {self.__class__}. This means that tokens that come after special tokens will not be properly handled. We recommend you to"
-                " read the related pull request available at https://github.com/huggingface/transformers/pull/24565, and set the legacy attribute accordingly."
+                f"You are using the default legacy behaviour of the {self.__class__}. If you see this, DO NOT PANIC! This is"
+                " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
+                " If you want to use the new behaviour, set `legacy=True`. This should only be set if you understand what it"
+                " means, and thouroughly read the reason why this was added as explained in"
+                " https://github.com/huggingface/transformers/pull/24565"
             )
             legacy = True
 
