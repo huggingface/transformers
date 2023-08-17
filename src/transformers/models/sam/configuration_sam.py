@@ -14,7 +14,6 @@
 # limitations under the License.
 """ SAM model configuration"""
 
-import copy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -286,7 +285,6 @@ class SamConfig(PretrainedConfig):
     ```"""
 
     model_type = "sam"
-    is_composition = True
 
     def __init__(
         self,
@@ -312,17 +310,3 @@ class SamConfig(PretrainedConfig):
         self.prompt_encoder_config = SamPromptEncoderConfig(**prompt_encoder_config)
         self.mask_decoder_config = SamMaskDecoderConfig(**mask_decoder_config)
         self.initializer_range = initializer_range
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["vision_config"] = self.vision_config.to_dict()
-        output["prompt_encoder_config"] = self.prompt_encoder_config.to_dict()
-        output["mask_decoder_config"] = self.mask_decoder_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

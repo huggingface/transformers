@@ -186,6 +186,16 @@ class ModelArguments:
             "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
         },
     )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+                "execute code present on the Hub on your local machine."
+            )
+        },
+    )
 
 
 # endregion
@@ -315,6 +325,7 @@ def main():
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     else:
         config = AutoConfig.from_pretrained(
@@ -322,12 +333,14 @@ def main():
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     # endregion
 
@@ -416,6 +429,7 @@ def main():
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
         # endregion
 

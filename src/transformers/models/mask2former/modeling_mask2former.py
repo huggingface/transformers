@@ -359,7 +359,7 @@ def pair_wise_dice_loss(inputs: Tensor, labels: Tensor) -> Tensor:
         `torch.Tensor`: The computed loss between each pairs.
     """
     inputs = inputs.sigmoid().flatten(1)
-    numerator = 2 * torch.einsum("nc,mc->nm", inputs, labels)
+    numerator = 2 * torch.matmul(inputs, labels.T)
     # using broadcasting to get a [num_queries, NUM_CLASSES] matrix
     denominator = inputs.sum(-1)[:, None] + labels.sum(-1)[None, :]
     loss = 1 - (numerator + 1) / (denominator + 1)
@@ -387,9 +387,9 @@ def pair_wise_sigmoid_cross_entropy_loss(inputs: torch.Tensor, labels: torch.Ten
     cross_entropy_loss_pos = criterion(inputs, torch.ones_like(inputs))
     cross_entropy_loss_neg = criterion(inputs, torch.zeros_like(inputs))
 
-    loss = torch.einsum("nc,mc->nm", cross_entropy_loss_pos, labels) + torch.einsum(
-        "nc,mc->nm", cross_entropy_loss_neg, (1 - labels)
-    )
+    loss_pos = torch.matmul(cross_entropy_loss_pos, labels.T)
+    loss_neg = torch.matmul(cross_entropy_loss_neg, (1 - labels).T)
+    loss = loss_pos + loss_neg
     loss = loss / height_and_width
     return loss
 
@@ -864,15 +864,15 @@ class Mask2FormerSinePositionEmbedding(nn.Module):
     def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
         if mask is None:
             mask = torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool)
-        not_mask = ~mask
-        y_embed = not_mask.cumsum(1, dtype=torch.float32)
-        x_embed = not_mask.cumsum(2, dtype=torch.float32)
+        not_mask = (~mask).to(x.dtype)
+        y_embed = not_mask.cumsum(1)
+        x_embed = not_mask.cumsum(2)
         if self.normalize:
             eps = 1e-6
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
             x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
+        dim_t = torch.arange(self.num_pos_feats, dtype=x.dtype, device=x.device)
         dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
 
         pos_x = x_embed[:, :, :, None] / dim_t
@@ -1104,8 +1104,8 @@ class Mask2FormerPixelDecoderEncoderOnly(nn.Module):
         reference_points_list = []
         for lvl, (height, width) in enumerate(spatial_shapes):
             ref_y, ref_x = torch.meshgrid(
-                torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
-                torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
+                torch.linspace(0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device),
+                torch.linspace(0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device),
                 indexing="ij",
             )
             ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * height)
@@ -1267,14 +1267,14 @@ class Mask2FormerPixelDecoder(nn.Module):
         self.lateral_convolutions = lateral_convs[::-1]
         self.output_convolutions = output_convs[::-1]
 
-    def get_valid_ratio(self, mask):
+    def get_valid_ratio(self, mask, dtype=torch.float32):
         """Get the valid ratio of all feature maps."""
 
         _, height, width = mask.shape
         valid_height = torch.sum(~mask[:, :, 0], 1)
         valid_width = torch.sum(~mask[:, 0, :], 1)
-        valid_ratio_heigth = valid_height.float() / height
-        valid_ratio_width = valid_width.float() / width
+        valid_ratio_heigth = valid_height.to(dtype) / height
+        valid_ratio_width = valid_width.to(dtype) / width
         valid_ratio = torch.stack([valid_ratio_width, valid_ratio_heigth], -1)
         return valid_ratio
 
@@ -1295,8 +1295,8 @@ class Mask2FormerPixelDecoder(nn.Module):
         input_embeds = []
         position_embeddings = []
         for level, x in enumerate(features[::-1][: self.num_feature_levels]):
-            input_embeds.append(self.input_projections[level](x.float()))
-            position_embeddings.append(self.position_embedding(x.float()))
+            input_embeds.append(self.input_projections[level](x))
+            position_embeddings.append(self.position_embedding(x))
 
         masks = [
             torch.zeros((x.size(0), x.size(2), x.size(3)), device=x.device, dtype=torch.bool) for x in input_embeds
@@ -1313,7 +1313,7 @@ class Mask2FormerPixelDecoder(nn.Module):
         level_pos_embed_flat = torch.cat(level_pos_embed_flat, 1)
 
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-        valid_ratios = torch.stack([self.get_valid_ratio(mask) for mask in masks], 1)
+        valid_ratios = torch.stack([self.get_valid_ratio(mask, dtype=input_embeds_flat.dtype) for mask in masks], 1)
 
         # Send input_embeds_flat + masks_flat + level_pos_embed_flat (backbone + proj layer output) through encoder
         if encoder_outputs is None:
@@ -1351,7 +1351,7 @@ class Mask2FormerPixelDecoder(nn.Module):
         for idx, feature in enumerate(features[: self.num_fpn_levels][::-1]):
             lateral_conv = self.lateral_convolutions[idx]
             output_conv = self.output_convolutions[idx]
-            current_fpn = lateral_conv(feature.float())
+            current_fpn = lateral_conv(feature)
 
             # Following FPN implementation, we use nearest upsampling here
             out = current_fpn + nn.functional.interpolate(
@@ -2012,7 +2012,12 @@ class Mask2FormerMaskPredictor(nn.Module):
         mask_embeddings = self.mask_embedder(outputs.transpose(0, 1))
 
         # Sum up over the channels
-        outputs_mask = torch.einsum("bqc,   bchw -> bqhw", mask_embeddings, pixel_embeddings)
+        # (batch_size, num_queries, num_channels, 1, 1)
+        mask_embeddings = mask_embeddings.unsqueeze(-1).unsqueeze(-1)
+        # (batch_size, 1, num_channels, height, width)
+        pixel_embeddings = pixel_embeddings.unsqueeze(1)
+        # (batch_size, num_queries, height, width)
+        outputs_mask = (mask_embeddings * pixel_embeddings).sum(2)
 
         attention_mask = nn.functional.interpolate(
             outputs_mask, size=attention_mask_target_size, mode="bilinear", align_corners=False

@@ -18,7 +18,7 @@ import json
 import math
 import os
 import warnings
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import FrozenInstanceError, asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
@@ -193,9 +193,9 @@ class TrainingArguments:
         prediction_loss_only (`bool`, *optional*, defaults to `False`):
             When performing evaluation and generating predictions, only returns the loss.
         per_device_train_batch_size (`int`, *optional*, defaults to 8):
-            The batch size per GPU/TPU core/CPU for training.
+            The batch size per GPU/TPU/MPS/NPU core/CPU for training.
         per_device_eval_batch_size (`int`, *optional*, defaults to 8):
-            The batch size per GPU/TPU core/CPU for evaluation.
+            The batch size per GPU/TPU/MPS/NPU core/CPU for evaluation.
         gradient_accumulation_steps (`int`, *optional*, defaults to 1):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
@@ -568,6 +568,8 @@ class TrainingArguments:
             `huggingface-cli login`.
         hub_private_repo (`bool`, *optional*, defaults to `False`):
             If True, the Hub repo will be set to private.
+        hub_always_push (`bool`, *optional*, defaults to `False`):
+            Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not finished.
         gradient_checkpointing (`bool`, *optional*, defaults to `False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         include_inputs_for_metrics (`bool`, *optional*, defaults to `False`):
@@ -646,10 +648,10 @@ class TrainingArguments:
     )
 
     per_device_train_batch_size: int = field(
-        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for training."}
+        default=8, metadata={"help": "Batch size per GPU/TPU/MPS/NPU core/CPU for training."}
     )
     per_device_eval_batch_size: int = field(
-        default=8, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
+        default=8, metadata={"help": "Batch size per GPU/TPU/MPS/NPU core/CPU for evaluation."}
     )
 
     per_gpu_train_batch_size: Optional[int] = field(
@@ -802,7 +804,9 @@ class TrainingArguments:
     )
     use_cpu: bool = field(
         default=False,
-        metadata={"help": " Whether or not to use cpu. If set to False, we will use cuda or mps device if available."},
+        metadata={
+            "help": " Whether or not to use cpu. If set to False, we will use cuda/tpu/mps/npu device if available."
+        },
     )
     use_mps_device: bool = field(
         default=False,
@@ -1110,6 +1114,10 @@ class TrainingArguments:
     )
     hub_token: Optional[str] = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
     hub_private_repo: bool = field(default=False, metadata={"help": "Whether the model repository is private or not."})
+    hub_always_push: bool = field(
+        default=False,
+        metadata={"help": "Unless `True`, the Trainer will skip pushes if the previous one wasn't finished yet."},
+    )
     gradient_checkpointing: bool = field(
         default=False,
         metadata={
@@ -1678,6 +1686,16 @@ class TrainingArguments:
             elif self.bf16:
                 mixed_precision_dtype = "bf16"
             os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
+
+        # Finally set the `TrainingArguments` to be immutable
+        self._frozen = True
+
+    def __setattr__(self, name, value):
+        # Once fully through the `__post_init__`, `TrainingArguments` are immutable
+        if not name.startswith("_") and getattr(self, "_frozen", False):
+            raise FrozenInstanceError(f"cannot assign to field {name}")
+        else:
+            super().__setattr__(name, value)
 
     def __str__(self):
         self_as_dict = asdict(self)
@@ -2367,6 +2385,7 @@ class TrainingArguments:
         strategy: Union[str, HubStrategy] = "every_save",
         token: Optional[str] = None,
         private_repo: bool = False,
+        always_push: bool = False,
     ):
         """
         A method that regroups all arguments linked to synchronizing checkpoints with the Hub.
@@ -2407,6 +2426,9 @@ class TrainingArguments:
                 with `huggingface-cli login`.
             private_repo (`bool`, *optional*, defaults to `False`):
                 If True, the Hub repo will be set to private.
+            always_push (`bool`, *optional*, defaults to `False`):
+                Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not
+                finished.
 
         Example:
 
@@ -2424,6 +2446,7 @@ class TrainingArguments:
         self.hub_strategy = HubStrategy(strategy)
         self.hub_token = token
         self.hub_private_repo = private_repo
+        self.hub_always_push = always_push
         return self
 
     def set_optimizer(

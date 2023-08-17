@@ -502,7 +502,7 @@ class BartClassificationHead(nn.Module):
         return hidden_states
 
 
-class BartPretrainedModel(PreTrainedModel):
+class BartPreTrainedModel(PreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
@@ -536,10 +536,18 @@ class BartPretrainedModel(PreTrainedModel):
         return dummy_inputs
 
 
-class PretrainedBartModel(BartPretrainedModel):
+class PretrainedBartModel(BartPreTrainedModel):
     def __init_subclass__(self):
         warnings.warn(
-            "The class `PretrainedBartModel` has been depreciated, please use `BartPretrainedModel` instead.",
+            "The class `PretrainedBartModel` has been depreciated, please use `BartPreTrainedModel` instead.",
+            FutureWarning,
+        )
+
+
+class BartPretrainedModel(BartPreTrainedModel):
+    def __init_subclass__(self):
+        warnings.warn(
+            "The class `PretrainedBartModel` has been depreciated, please use `BartPreTrainedModel` instead.",
             FutureWarning,
         )
 
@@ -700,7 +708,7 @@ BART_INPUTS_DOCSTRING = r"""
 """
 
 
-class BartEncoder(BartPretrainedModel):
+class BartEncoder(BartPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
     [`BartEncoderLayer`].
@@ -882,7 +890,7 @@ class BartEncoder(BartPretrainedModel):
         )
 
 
-class BartDecoder(BartPretrainedModel):
+class BartDecoder(BartPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`BartDecoderLayer`]
 
@@ -1169,7 +1177,7 @@ class BartDecoder(BartPretrainedModel):
     "The bare BART Model outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
 )
-class BartModel(BartPretrainedModel):
+class BartModel(BartPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: BartConfig):
@@ -1296,7 +1304,7 @@ class BartModel(BartPretrainedModel):
 @add_start_docstrings(
     "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING
 )
-class BartForConditionalGeneration(BartPretrainedModel):
+class BartForConditionalGeneration(BartPreTrainedModel):
     base_model_prefix = "model"
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
@@ -1471,7 +1479,7 @@ class BartForConditionalGeneration(BartPretrainedModel):
     """,
     BART_START_DOCSTRING,
 )
-class BartForSequenceClassification(BartPretrainedModel):
+class BartForSequenceClassification(BartPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config: BartConfig, **kwargs):
@@ -1601,7 +1609,7 @@ class BartForSequenceClassification(BartPretrainedModel):
     """,
     BART_START_DOCSTRING,
 )
-class BartForQuestionAnswering(BartPretrainedModel):
+class BartForQuestionAnswering(BartPreTrainedModel):
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
 
     def __init__(self, config):
@@ -1719,7 +1727,7 @@ class BartForQuestionAnswering(BartPretrainedModel):
         )
 
 
-class BartDecoderWrapper(BartPretrainedModel):
+class BartDecoderWrapper(BartPreTrainedModel):
     """
     This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
     used in combination with the [`EncoderDecoderModel`] framework.
@@ -1739,7 +1747,7 @@ class BartDecoderWrapper(BartPretrainedModel):
     """,
     BART_START_DOCSTRING,
 )
-class BartForCausalLM(BartPretrainedModel):
+class BartForCausalLM(BartPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
