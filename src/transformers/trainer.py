@@ -20,6 +20,7 @@ import contextlib
 import copy
 import functools
 import glob
+import importlib.metadata
 import inspect
 import math
 import os
@@ -1089,6 +1090,11 @@ class Trainer:
                 optimizer_kwargs.update(bnb_kwargs)
             except ImportError:
                 raise ValueError("Trainer tried to instantiate bnb optimizer but bnb is not installed!")
+            if version.parse(importlib.metadata.version("bitsandbytes")) < version.parse("0.41.1"):
+                logger.warning(
+                    "You are using 8-bit optimizers with a version of `bitsandbytes` < 0.41.1. "
+                    "It is recommended to update your version as a major bug has been fixed in 8-bit optimizers."
+                )
         elif args.optim == OptimizerNames.ADAMW_ANYPRECISION:
             try:
                 from torchdistx.optimizers import AnyPrecisionAdamW
