@@ -22,25 +22,131 @@ import tempfile
 import unittest
 import torch.nn as nn
 
-from transformers import EGTConfig, is_torch_available
+# from transformers import EGTConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
+from transformers.configuration_utils import PretrainedConfig
+from typing import List
+
 
 if is_torch_available():
     import torch
     from torch import tensor
 
-    from transformers import EGTForGraphClassification, EGTModel
-    from transformers.models.egt.modeling_egt import EGT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.egt.modeling_egt import EGTForGraphClassification, EGTModel
+    # from transformers import EGTForGraphClassification, EGTModel
+    # from transformers.models.egt.modeling_egt import EGT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 NODE_FEATURES_OFFSET = 128
 NUM_NODE_FEATURES = 9
 EDGE_FEATURES_OFFSET = 8
 NUM_EDGE_FEATURES = 3
+
+class EGTConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`~EGTModel`]. It is used to instantiate an
+    EGT model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the EGT
+    [graphormer-base-pcqm4mv1](https://huggingface.co/graphormer-base-pcqm4mv1) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+
+    Args:
+        feat_size (`int`, *optional*, defaults to 768):
+            Node feature size.
+        edge_feat_size (`int`, *optional*, defaults to 64):
+            Edge feature size.
+        num_heads (`int`, *optional*, defaults to 32):
+            Number of attention heads, by which :attr: `feat_size` is divisible.
+        num_layers (`int`, *optional*, defaults to 30):
+            Number of layers.
+        dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability.
+        attn_dropout (`float`, *optional*, defaults to 0.3):
+            Attention dropout probability.
+        activation (`str`, *optional*, defaults to 'ELU'):
+            Activation function.
+        egt_simple (`bool`, *optional*, defaults to False):
+            If `False`, update the edge embedding.
+        upto_hop (`int`, *optional*, defaults to 16):
+            Maximum distance between nodes in the distance matrices.
+        mlp_ratios (`List[float]`, *optional*, defaults to [1., 1.]):
+            Ratios of inner dimensions with respect to the input dimension in MLP output block.
+        num_virtual_nodes (`int`, *optional*, defaults to 4):
+            Number of virtual nodes in EGT model, aggregated to graph embedding in the readout function.
+        svd_pe_size (`int`, *optional*, defaults to 8):
+            SVD positional encoding size.
+        num_classes (`int`, *optional*, defaults to 1):
+            Number of target classes or labels, set to n for binary classification of n tasks.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
+        traceable (`bool`, *optional*, defaults to `False`):
+            Changes return value of the encoder's inner_state to stacked tensors.
+
+        Example:
+            ```python
+            >>> from transformers import EGTForGraphClassification, EGTConfig
+
+            >>> # Initializing a EGT graphormer-base-pcqm4mv2 style configuration
+            >>> configuration = EGTConfig()
+
+            >>> # Initializing a model from the graphormer-base-pcqm4mv1 style configuration
+            >>> model = EGTForGraphClassification(configuration)
+
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
+            ```
+    """
+    model_type = "egt"
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    def __init__(
+        self,
+        feat_size: int = 768,
+        edge_feat_size: int = 64,
+        num_heads: int = 32,
+        num_layers: int = 30,
+        dropout: float = 0.,
+        attn_dropout: float = 0.3,
+        activation: str = 'ELU',
+        egt_simple: bool = False,
+        upto_hop: int = 16,
+        mlp_ratios: List[float] = [1., 1.],
+        num_virtual_nodes: int = 4,
+        svd_pe_size: int = 8,
+        num_classes: int = 1,
+        pad_token_id=0,
+        bos_token_id=1,
+        eos_token_id=2,
+        **kwargs,
+    ):
+        self.feat_size = feat_size
+        self.edge_feat_size = edge_feat_size
+        self.num_heads = num_heads
+        self.num_layers = num_layers
+        self.dropout = dropout
+        self.attn_dropout = attn_dropout
+        self.activation = activation
+        self.egt_simple = egt_simple
+        self.upto_hop = upto_hop
+        self.mlp_ratios = mlp_ratios
+        self.num_virtual_nodes = num_virtual_nodes
+        self.svd_pe_size = svd_pe_size
+        self.num_classes = num_classes
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
 
 
 class EGTModelTester:
@@ -53,7 +159,7 @@ class EGTModelTester:
         num_layers=4,
         dropout=0.,
         attn_dropout=0.,
-        activation=nn.ELU(),
+        activation='ELU',
         egt_simple=False,
         upto_hop=16,
         mlp_ratios=[1., 1.],
@@ -83,16 +189,16 @@ class EGTModelTester:
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        attn_edge_type = ids_tensor([self.batch_size, self.graph_size, self.graph_size, 1], NUM_EDGE_FEATURES*EDGE_FEATURES_OFFSET+1)
-        spatial_pos = ids_tensor([self.batch_size, self.graph_size, self.graph_size], self.upto_hop+2)
-        input_nodes = ids_tensor([self.batch_size, self.graph_size, 1], NUM_NODE_FEATURES*NODE_FEATURES_OFFSET+1)
-        svd_pe = floats_tensor([self.batch_size, self.graph_size, self.svd_pe_size])
+        featm = ids_tensor([self.batch_size, self.graph_size, self.graph_size, 1], NUM_EDGE_FEATURES*EDGE_FEATURES_OFFSET+1)
+        dm = ids_tensor([self.batch_size, self.graph_size, self.graph_size], self.upto_hop+2)
+        node_feat = ids_tensor([self.batch_size, self.graph_size, 1], NUM_NODE_FEATURES*NODE_FEATURES_OFFSET+1)
+        svd_pe = floats_tensor([self.batch_size, self.graph_size, self.svd_pe_size*2])
         attn_mask = random_attention_mask([self.batch_size, self.graph_size])
         labels = ids_tensor([self.batch_size], self.num_classes)
 
         config = self.get_config()
 
-        return config, attn_edge_type, spatial_pos, input_nodes, svd_pe, attn_mask, labels
+        return config, featm, dm, node_feat, svd_pe, attn_mask, labels
 
     def get_config(self):
         return EGTConfig(
@@ -112,15 +218,15 @@ class EGTModelTester:
         )
 
     def create_and_check_model(
-        self, config, attn_edge_type, spatial_pos, input_nodes, svd_pe, attn_mask, labels
+        self, config, featm, dm, node_feat, svd_pe, attn_mask, labels
     ):
         model = EGTModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
-            node_feat=input_nodes,
-            dm=spatial_pos,
-            featm=attn_edge_type,
+            node_feat=node_feat,
+            dm=dm,
+            featm=featm,
             attn_mask=attn_mask,
             svd_pe=svd_pe,
             labels=labels,
@@ -130,15 +236,15 @@ class EGTModelTester:
         )
 
     def create_and_check_for_graph_classification(
-        self, config, attn_edge_type, spatial_pos, input_nodes, svd_pe, attn_mask, labels
+        self, config, featm, dm, node_feat, svd_pe, attn_mask, labels
     ):
         model = EGTForGraphClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(
-            input_nodes=input_nodes,
-            spatial_pos=spatial_pos,
-            attn_edge_type=attn_edge_type,
+            node_feat=node_feat,
+            dm=dm,
+            featm=featm,
             svd_pe=svd_pe,
             attn_mask=attn_mask,
             labels=labels,
@@ -149,17 +255,17 @@ class EGTModelTester:
         config_and_inputs = self.prepare_config_and_inputs()
         (
             config,
-            attn_edge_type,
-            spatial_pos,
-            input_nodes,
+            featm,
+            dm,
+            node_feat,
             svd_pe,
             attn_mask,
             labels,
         ) = config_and_inputs
         inputs_dict = {
-            "attn_edge_type": attn_edge_type,
-            "spatial_pos": spatial_pos,
-            "input_nodes": input_nodes,
+            "featm": featm,
+            "dm": dm,
+            "node_feat": node_feat,
             "svd_pe": svd_pe,
             "attn_mask": attn_mask,
             "labels": labels,
@@ -181,7 +287,7 @@ class EGTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = EGTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=EGTConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(self, config_class=EGTConfig, common_properties=["feat_size", "edge_feat_size", "num_heads", "num_layers"], has_text_modality=False)
 
     # overwrite from common as `EGT` requires more input arguments
     def _create_and_check_torchscript(self, config, inputs_dict):
@@ -198,9 +304,9 @@ class EGTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             try:
                 required_keys = (
-                    "input_nodes",
-                    "spatial_pos",
-                    "attn_edge_type",
+                    "node_feat",
+                    "dm",
+                    "featm",
                     "svd_pe",
                     "attn_mask",
                 )
@@ -313,6 +419,14 @@ class EGTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+    @unittest.skip(reason="EGT does not record hidden states")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="EGT does not record hidden states")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
     # Inputs are 'input_nodes' and 'attn_edge_type' not 'input_ids'
     def test_model_main_input_name(self):
         for model_class in self.all_model_classes:
@@ -332,7 +446,7 @@ class EGTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["input_nodes", "attn_edge_type"]
+            expected_arg_names = ["node_feat", "featm"]
             self.assertListEqual(arg_names[:2], expected_arg_names)
 
     def test_model(self):
@@ -359,7 +473,7 @@ class EGTModelIntegrationTest(unittest.TestCase):
         # Actual real graph data from the MUTAG dataset
         # fmt: off
         model_input = {
-            "attn_edge_type": tensor(
+            "featm": tensor(
                 [
                     [
                         [[0], [2], [0], [0], [0], [2], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0], [0]],
@@ -402,7 +516,7 @@ class EGTModelIntegrationTest(unittest.TestCase):
                 ]
             ),
             # fmt: on
-            "spatial_pos": tensor(
+            "dm": tensor(
                 [
                     [
                         [0, 1, 2, 3, 2, 1, 3, 4, 5, 4, 5, 6, 7, 6, 8, 9, 9],
@@ -444,7 +558,7 @@ class EGTModelIntegrationTest(unittest.TestCase):
                     ],
                 ]
             ),
-            "input_nodes": tensor(
+            "node_feat": tensor(
                 [
                     [[2], [2], [2], [2], [2], [2], [2], [2], [2], [2], [2], [2], [2], [2], [2], [2], [2]],
                     [[2], [2], [2], [2], [2], [2], [2], [2], [2], [2], [2], [2], [2], [0], [0], [0], [0]],

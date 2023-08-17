@@ -70,24 +70,24 @@ class EGTDataCollator:
         max_node_num = max(len(i["input_nodes"]) for i in features)
         node_feat_size = len(features[0]["input_nodes"][0])
         edge_feat_size = len(features[0]["attn_edge_type"][0][0])
-        svd_pe_size = len(features[0]["svd_pe"][0])
+        svd_pe_size = len(features[0]["svd_pe"][0]) // 2
         batch_size = len(features)
 
-        batch["attn_edge_type"] = torch.zeros(batch_size, max_node_num, max_node_num, edge_feat_size, dtype=torch.long)
-        batch["spatial_pos"] = torch.zeros(batch_size, max_node_num, max_node_num, dtype=torch.long)
-        batch["input_nodes"] = torch.zeros(batch_size, max_node_num, node_feat_size, dtype=torch.long)
-        batch["svd_pe"] = torch.zeros(batch_size, max_node_num, svd_pe_size, dtype=torch.float)
+        batch["featm"] = torch.zeros(batch_size, max_node_num, max_node_num, edge_feat_size, dtype=torch.long)
+        batch["dm"] = torch.zeros(batch_size, max_node_num, max_node_num, dtype=torch.long)
+        batch["node_feat"] = torch.zeros(batch_size, max_node_num, node_feat_size, dtype=torch.long)
+        batch["svd_pe"] = torch.zeros(batch_size, max_node_num, svd_pe_size*2, dtype=torch.float)
         batch["attn_mask"] = torch.zeros(batch_size, max_node_num, dtype=torch.long)
 
         for ix, f in enumerate(features):
             for k in ["attn_edge_type", "spatial_pos", "input_nodes", "svd_pe"]:
                 f[k] = torch.tensor(f[k])
 
-            batch["attn_edge_type"][ix, : f["attn_edge_type"].shape[0], : f["attn_edge_type"].shape[1], :] = f[
+            batch["featm"][ix, : f["attn_edge_type"].shape[0], : f["attn_edge_type"].shape[1], :] = f[
                 "attn_edge_type"
             ]
-            batch["spatial_pos"][ix, : f["spatial_pos"].shape[0], : f["spatial_pos"].shape[1]] = f["spatial_pos"]
-            batch["input_nodes"][ix, : f["input_nodes"].shape[0], :] = f["input_nodes"]
+            batch["dm"][ix, : f["spatial_pos"].shape[0], : f["spatial_pos"].shape[1]] = f["spatial_pos"]
+            batch["node_feat"][ix, : f["input_nodes"].shape[0], :] = f["input_nodes"]
             batch["svd_pe"][ix, : f["svd_pe"].shape[0], :] = f["svd_pe"]
             batch["attn_mask"][ix, : f["svd_pe"].shape[0]] = 1
 

@@ -3,17 +3,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-# from ...modeling_utils import PreTrainedModel
-# from .configuration_egt import EGTConfig
-from transformers.modeling_utils import PreTrainedModel
-from configuration_egt import EGTConfig
+from ...modeling_utils import PreTrainedModel
+from .configuration_egt import EGTConfig
 from typing import Optional, Union, Tuple
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-# from ...modeling_outputs import (
-#     BaseModelOutputWithNoAttention,
-#     SequenceClassifierOutput,
-# )
-from transformers.modeling_outputs import (
+from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
     SequenceClassifierOutput,
 )
@@ -247,6 +241,8 @@ class EGTPreTrainedModel(PreTrainedModel):
     config_class = EGTConfig
     base_model_prefix = "egt"
     supports_gradient_checkpointing = True
+    main_input_name_nodes = "node_feat"
+    main_input_name_edges = "featm"
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, EGTModel):
@@ -263,6 +259,8 @@ class EGTModel(EGTPreTrainedModel):
     def __init__(self, config: EGTConfig):
         super().__init__(config)
 
+        self.activation = getattr(nn, config.activation)()
+
         self.layer_common_kwargs = dict(
              feat_size          = config.feat_size            ,
              edge_feat_size          = config.edge_feat_size           ,
@@ -270,7 +268,7 @@ class EGTModel(EGTPreTrainedModel):
              num_virtual_nodes  = config.num_virtual_nodes,
              dropout    = config.dropout      ,
              attn_dropout        = config.attn_dropout          ,
-             activation          = config.activation            ,
+             activation          = self.activation            ,
         )        
         self.edge_update = not config.egt_simple
         
@@ -303,7 +301,9 @@ class EGTModel(EGTPreTrainedModel):
                         +[config.num_classes]
         self.mlp_layers = nn.ModuleList([nn.Linear(mlp_dims[i],mlp_dims[i+1])
                                          for i in range(len(mlp_dims)-1)])
-        self.mlp_fn = config.activation
+        self.mlp_fn = self.activation
+
+        self._backward_compatibility_gradient_checkpointing()
      
     def input_block(self, nodef, featm, dm, nodem, svd_pe):
         dm = dm.long().clamp(min=0, max=self.upto_hop+1)  # (b,i,j)
@@ -347,6 +347,8 @@ class EGTModel(EGTPreTrainedModel):
         return_dict: Optional[bool] = None,
         **unused,
     ) -> torch.Tensor:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         h, e, mask = self.input_block(node_feat, featm, dm, attn_mask, svd_pe)
 
         for layer in self.EGT_layers[:-1]:
@@ -383,11 +385,13 @@ class EGTForGraphClassification(EGTPreTrainedModel):
         self.model = EGTModel(config)
         self.num_classes = config.num_classes
 
+        self._backward_compatibility_gradient_checkpointing()
+
     def forward(
         self,
-        input_nodes: torch.LongTensor,
-        attn_edge_type: torch.LongTensor,
-        spatial_pos: torch.LongTensor,
+        node_feat: torch.LongTensor,
+        featm: torch.LongTensor,
+        dm: torch.LongTensor,
         attn_mask: torch.LongTensor,
         svd_pe: torch.Tensor,
         labels: Optional[torch.LongTensor] = None,
@@ -397,17 +401,15 @@ class EGTForGraphClassification(EGTPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         logits = self.model(
-            input_nodes,
-            attn_edge_type,
-            spatial_pos,
+            node_feat,
+            featm,
+            dm,
             attn_mask,
             svd_pe,
-            return_dict,
+            return_dict=True,
         )['last_hidden_state']
 
         loss = None
-        print(logits)
-        print(labels)
         if labels is not None:
             mask = ~torch.isnan(labels)
 

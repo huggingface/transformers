@@ -39,7 +39,7 @@ class EGTConfig(PretrainedConfig):
             Dropout probability.
         attn_dropout (`float`, *optional*, defaults to 0.3):
             Attention dropout probability.
-        activation (`nn.Module`, *optional*, defaults to nn.ELU()):
+        activation (`str`, *optional*, defaults to 'ELU'):
             Activation function.
         egt_simple (`bool`, *optional*, defaults to False):
             If `False`, update the edge embedding.
@@ -83,7 +83,7 @@ class EGTConfig(PretrainedConfig):
         num_layers: int = 30,
         dropout: float = 0.,
         attn_dropout: float = 0.3,
-        activation: nn.Module = nn.ELU(),
+        activation: str = 'ELU',
         egt_simple: bool = False,
         upto_hop: int = 16,
         mlp_ratios: List[float] = [1., 1.],
