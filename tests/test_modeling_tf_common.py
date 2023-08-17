@@ -330,6 +330,9 @@ class TFModelTesterMixin:
 
             self.assertEqual(len(incompatible_ops), 0, incompatible_ops)
 
+    # `tf2onnx` issue page: https://github.com/onnx/tensorflow-onnx/issues/2172
+    # TODO: undo skip once a fix is done in `tf2onnx`
+    @unittest.skip("`tf2onnx` broke with TF 2.13")
     @require_tf2onnx
     @slow
     def test_onnx_runtime_optimize(self):
