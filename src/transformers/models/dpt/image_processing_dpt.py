@@ -28,6 +28,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     get_image_size,
+    infer_channel_dimension_format,
     is_torch_available,
     is_torch_tensor,
     make_list_of_images,
@@ -48,7 +49,11 @@ logger = logging.get_logger(__name__)
 
 
 def get_resize_output_image_size(
-    input_image: np.ndarray, output_size: Union[int, Iterable[int]], keep_aspect_ratio: bool, multiple: int
+    input_image: np.ndarray,
+    output_size: Union[int, Iterable[int]],
+    keep_aspect_ratio: bool,
+    multiple: int,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> Tuple[int, int]:
     def constraint_to_multiple_of(val, multiple, min_val=0, max_val=None):
         x = round(val / multiple) * multiple
@@ -63,7 +68,7 @@ def get_resize_output_image_size(
 
     output_size = (output_size, output_size) if isinstance(output_size, int) else output_size
 
-    input_height, input_width = get_image_size(input_image)
+    input_height, input_width = get_image_size(input_image, input_data_format)
     output_height, output_width = output_size
 
     # determine new height and width
@@ -97,7 +102,7 @@ class DPTImageProcessor(BaseImageProcessor):
         keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
             If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
             be overidden by `keep_aspect_ratio` in `preprocess`.
-        ensure_multiple_of (`int`, *optional*, defaults to `1`):
+        ensure_multiple_of (`int`, *optional*, defaults to 1):
             If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
             by `ensure_multiple_of` in `preprocess`.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
@@ -156,6 +161,7 @@ class DPTImageProcessor(BaseImageProcessor):
         ensure_multiple_of: int = 1,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -170,7 +176,7 @@ class DPTImageProcessor(BaseImageProcessor):
                 Target size of the output image.
             keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
                 If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
-            ensure_multiple_of (`int`, *optional*, defaults to `1`):
+            ensure_multiple_of (`int`, *optional*, defaults to 1):
                 The image is resized to a size that is a multiple of this value.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Defines the resampling filter to use if resizing the image. Otherwise, the image is resized to size
@@ -179,6 +185,8 @@ class DPTImageProcessor(BaseImageProcessor):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
@@ -188,8 +196,16 @@ class DPTImageProcessor(BaseImageProcessor):
             output_size=(size["height"], size["width"]),
             keep_aspect_ratio=keep_aspect_ratio,
             multiple=ensure_multiple_of,
+            input_data_format=input_data_format,
         )
-        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        return resize(
+            image,
+            size=output_size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
 
     def preprocess(
         self,
@@ -206,6 +222,7 @@ class DPTImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -249,6 +266,12 @@ class DPTImageProcessor(BaseImageProcessor):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -282,16 +305,31 @@ class DPTImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
         if do_resize:
-            images = [self.resize(image=image, size=size, resample=resample) for image in images]
+            images = [
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_rescale:
-            images = [self.rescale(image=image, scale=rescale_factor) for image in images]
+            images = [
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_normalize:
-            images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
+            images = [
+                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                for image in images
+            ]
 
-        images = [to_channel_dimension_format(image, data_format) for image in images]
+        images = [
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+        ]
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)

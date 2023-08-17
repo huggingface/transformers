@@ -144,3 +144,18 @@ class GLPNImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
         expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
         self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
+
+    def test_call_numpy_4_channels(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random numpy tensors
+        self.image_processing_class.num_channels = 4
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        for image in image_inputs:
+            self.assertIsInstance(image, np.ndarray)
+
+        # Test not batched input (GLPNImageProcessor doesn't support batching)
+        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        self.assertTrue(tuple(encoded_images.shape) == (1, *expected_output_image_shape))
+        self.image_processing_class.num_channels = 3
