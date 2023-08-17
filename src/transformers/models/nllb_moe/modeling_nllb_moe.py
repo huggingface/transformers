@@ -130,9 +130,6 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
-    Adapted from transfomers.models.modeling_switch_transformers.load_balancing_loss_func with
-    SwitchTransformers->NllbMoeModel to support None
-
     See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
     experts is too unbalanced.
@@ -1788,8 +1785,6 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
         )
 
     def _unpack_router_logits(self, router_outputs):
-        # Adapted from transfomers.models.switch_transformers.SwitchTransformersForConditionalGeneration._unpack_router_logits
-        # to support None
         total_router_logits = []
         total_expert_indexes = []
         for router_output in router_outputs:
