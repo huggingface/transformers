@@ -73,6 +73,7 @@ from . import (
     dpt,
     efficientformer,
     efficientnet,
+    egt,
     electra,
     encodec,
     encoder_decoder,

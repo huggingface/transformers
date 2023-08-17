@@ -351,6 +351,7 @@ _import_structure = {
         "GPTSanJapaneseTokenizer",
     ],
     "models.graphormer": ["GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphormerConfig"],
+    "models.egt": ["EGT_PRETRAINED_CONFIG_ARCHIVE_MAP", "EGTConfig"],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroupViTConfig",
@@ -1889,6 +1890,14 @@ else:
             "GraphormerForGraphClassification",
             "GraphormerModel",
             "GraphormerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.egt"].extend(
+        [
+            "EGT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "EGTForGraphClassification",
+            "EGTModel",
+            "EGTPreTrainedModel",
         ]
     )
     _import_structure["models.groupvit"].extend(
@@ -4344,6 +4353,7 @@ if TYPE_CHECKING:
         GPTSanJapaneseTokenizer,
     )
     from .models.graphormer import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphormerConfig
+    from .models.egt import EGT_PRETRAINED_CONFIG_ARCHIVE_MAP, EGTConfig
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroupViTConfig,
@@ -5661,6 +5671,12 @@ if TYPE_CHECKING:
             GraphormerForGraphClassification,
             GraphormerModel,
             GraphormerPreTrainedModel,
+        )
+        from .models.egt import (
+            EGT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            EGTForGraphClassification,
+            EGTModel,
+            EGTPreTrainedModel,
         )
         from .models.groupvit import (
             GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,

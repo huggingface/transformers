@@ -468,7 +468,7 @@ class EGTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 class EGTModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_graph_classification(self):
-        model = EGTForGraphClassification.from_pretrained("clefourrier/egt-base-pcqm4mv2")
+        model = EGTForGraphClassification.from_pretrained("/home/ubuntu/transformers/egt_pretrained_model")
 
         # Actual real graph data from the MUTAG dataset
         # fmt: off
