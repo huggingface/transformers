@@ -505,8 +505,8 @@ And for Pytorch DeepSpeed has built one as well: [DeepSpeed-MoE: Advancing Mixtu
 
 ## Using PyTorch native attention and Flash Attention
 
-PyTorch 2.0 released the native [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA), 
-that allows to use fused GPU kernels as [memory-efficient attention](https://arxiv.org/abs/2112.05682) and [flash attention](https://arxiv.org/abs/2205.14135).
+PyTorch 2.0 released a native [`torch.nn.functional.scaled_dot_product_attention`](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA), 
+that allows using fused GPU kernels such as [memory-efficient attention](https://arxiv.org/abs/2112.05682) and [flash attention](https://arxiv.org/abs/2205.14135).
 
 After installing the [`optimum`](https://github.com/huggingface/optimum) package, the relevant internal modules can be 
 replaced to use PyTorch's native attention with:
@@ -521,8 +521,8 @@ Once converted, train the model as usual.
 
 The PyTorch-native `scaled_dot_product_attention` operator can only dispatch to Flash Attention if no `attention_mask` is provided.
 
-Thus, by default in training mode, the BetterTransformer integration **drops the mask support and can only be used for training that do not require a padding mask for batched training**. This is the case for example for masked language modeling or causal language modeling. BetterTransformer is not suited for the fine-tuning of models on tasks that requires a padding mask. 
+By default, in training mode, the BetterTransformer integration **drops the mask support and can only be used for training that does not require a padding mask for batched training**. This is the case, for example, during masked language modeling or causal language modeling. BetterTransformer is not suited for fine-tuning models on tasks that require a padding mask. 
 
 </Tip>
 
-Check out [this blogpost](https://pytorch.org/blog/out-of-the-box-acceleration/) to read more about what is possible to achieve with SDPA using transformers.
+Check out this [blogpost](https://pytorch.org/blog/out-of-the-box-acceleration/) to learn more about acceleration and memory-savings with SDPA.
