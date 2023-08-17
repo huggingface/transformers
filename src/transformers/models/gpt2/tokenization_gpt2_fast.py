@@ -190,3 +190,16 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         if len(input_ids) > self.model_max_length:
             input_ids = input_ids[-self.model_max_length :]
         return input_ids
+
+    @property
+    def default_prompt_config(self):
+        return {
+            "role_token_suffixes": {
+                "user": [self.eos_token_id],
+                "assistant": [self.eos_token_id],
+                "system": [self.eos_token_id],
+            },
+            "tokenize_separately": True,
+            "add_special_tokens": False,
+            "max_length": self.model_max_length,
+        }
