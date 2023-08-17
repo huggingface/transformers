@@ -15,10 +15,8 @@
 """Tokenization classes for Bloom."""
 
 
-import json
+import pickle
 from typing import TYPE_CHECKING, List, Optional, Tuple
-
-from tokenizers import pre_tokenizers
 
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -130,16 +128,12 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        pre_tokenizers = pre_tok_state.get("pretokenizers", pre_tok_state)
-        for pre_tok_idx in range(len(pre_tokenizers)):
-            if not hasattr(pre_tok_state, "pretokenizers"):
-                pre_tok_state["add_prefix_space"] = add_prefix_space
-            if hasattr(pre_tok_state["pretokenizers"][pre_tok_idx], "add_prefix_space"):
-                pre_tok_state["pretokenizers"][pre_tok_idx]["add_prefix_space"] = add_prefix_space
-
-        new_pre_tok_state = json.dumps(pre_tok_state).encode()
-        self.backend_tokenizer.pre_tokenizer.__setstate__(new_pre_tok_state)
+        pre_tok_state = pickle.dumps(self.backend_tokenizer.pre_tokenizer)
+        if add_prefix_space:
+            pre_tok_state.replace(b'"add_prefix_space":false',b'"add_prefix_space":true')
+        else:
+            pre_tok_state.replace(b'"add_prefix_space":true',b'"add_prefix_space":false')
+        self.backend_tokenizer.pre_tokenizer = pickle.loads(pre_tok_state)
         self.add_prefix_space = add_prefix_space
 
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
