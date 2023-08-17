@@ -27,6 +27,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    infer_channel_dimension_format,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -145,6 +146,7 @@ class BeitImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -159,12 +161,19 @@ class BeitImageProcessor(BaseImageProcessor):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
         """
         size = get_size_dict(size, default_to_square=True, param_name="size")
         if "height" not in size or "width" not in size:
             raise ValueError(f"The `size` argument must contain `height` and `width` keys. Got {size.keys()}")
         return resize(
-            image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
+            image,
+            size=(size["height"], size["width"]),
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
         )
 
     def reduce_label(self, label: ImageInput) -> np.ndarray:
@@ -189,21 +198,22 @@ class BeitImageProcessor(BaseImageProcessor):
         do_normalize: bool = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         if do_reduce_labels:
             image = self.reduce_label(image)
 
         if do_resize:
-            image = self.resize(image=image, size=size, resample=resample)
+            image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
 
         if do_center_crop:
-            image = self.center_crop(image=image, size=crop_size)
+            image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
 
         if do_rescale:
-            image = self.rescale(image=image, scale=rescale_factor)
+            image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
         if do_normalize:
-            image = self.normalize(image=image, mean=image_mean, std=image_std)
+            image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
 
         return image
 
@@ -221,10 +231,13 @@ class BeitImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """Preprocesses a single image."""
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image)
         image = self._preprocess(
             image,
             do_reduce_labels=False,
@@ -238,9 +251,10 @@ class BeitImageProcessor(BaseImageProcessor):
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
+            input_data_format=input_data_format,
         )
         if data_format is not None:
-            image = to_channel_dimension_format(image, data_format)
+            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
         return image
 
     def _preprocess_segmentation_map(
@@ -252,6 +266,7 @@ class BeitImageProcessor(BaseImageProcessor):
         do_center_crop: bool = None,
         crop_size: Dict[str, int] = None,
         do_reduce_labels: bool = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         """Preprocesses a single segmentation map."""
         # All transformations expect numpy arrays.
@@ -260,8 +275,11 @@ class BeitImageProcessor(BaseImageProcessor):
         if segmentation_map.ndim == 2:
             segmentation_map = segmentation_map[None, ...]
             added_dimension = True
+            input_data_format = ChannelDimension.FIRST
         else:
             added_dimension = False
+            if input_data_format is None:
+                input_data_format = infer_channel_dimension_format(segmentation_map, num_channels=1)
         segmentation_map = self._preprocess(
             image=segmentation_map,
             do_reduce_labels=do_reduce_labels,
@@ -272,6 +290,7 @@ class BeitImageProcessor(BaseImageProcessor):
             crop_size=crop_size,
             do_normalize=False,
             do_rescale=False,
+            input_data_format=ChannelDimension.FIRST,
         )
         # Remove extra axis if added
         if added_dimension:
@@ -301,6 +320,7 @@ class BeitImageProcessor(BaseImageProcessor):
         do_reduce_labels: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -344,8 +364,15 @@ class BeitImageProcessor(BaseImageProcessor):
                     - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
-                    - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - Unset: Use the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -403,6 +430,7 @@ class BeitImageProcessor(BaseImageProcessor):
                 image_mean=image_mean,
                 image_std=image_std,
                 data_format=data_format,
+                input_data_format=input_data_format,
             )
             for img in images
         ]

@@ -198,6 +198,10 @@ class ImageGPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
         )
 
+    @unittest.skip("ImageGPT assumes clusters for 3 channels")
+    def test_call_numpy_4_channels(self):
+        pass
+
     # Override the test from ImageProcessingTestMixin as ImageGPT model takes input_ids as input
     def test_call_pytorch(self):
         # Initialize image_processing
