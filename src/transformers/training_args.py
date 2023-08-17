@@ -18,7 +18,7 @@ import json
 import math
 import os
 import warnings
-from dataclasses import asdict, dataclass, field, fields
+from dataclasses import FrozenInstanceError, asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
@@ -1686,6 +1686,16 @@ class TrainingArguments:
             elif self.bf16:
                 mixed_precision_dtype = "bf16"
             os.environ["ACCELERATE_MIXED_PRECISION"] = mixed_precision_dtype
+
+        # Finally set the `TrainingArguments` to be immutable
+        self._frozen = True
+
+    def __setattr__(self, name, value):
+        # Once fully through the `__post_init__`, `TrainingArguments` are immutable
+        if not name.startswith("_") and getattr(self, "_frozen", False):
+            raise FrozenInstanceError(f"cannot assign to field {name}")
+        else:
+            super().__setattr__(name, value)
 
     def __str__(self):
         self_as_dict = asdict(self)

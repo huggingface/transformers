@@ -511,6 +511,16 @@ from transformers.testing_utils import get_gpu_count
 n_gpu = get_gpu_count()  # works with torch and tf
 ```
 
+### Testing with a specific PyTorch backend
+
+To run the test suite on a specific torch backend add `TRANSFORMERS_TEST_DEVICE="$device"` where `$device` is the target backend. For example, to test on CPU only:
+```bash
+TRANSFORMERS_TEST_DEVICE="cpu" pytest tests/test_logging.py
+```
+
+This variable is useful for testing custom or less common PyTorch backends such as `mps`. It can also be used to achieve the same effect as `CUDA_VISIBLE_DEVICES` by targeting specific GPUs or testing in CPU-only mode.
+
+
 ### Distributed training
 
 `pytest` can't deal with distributed training directly. If this is attempted - the sub-processes don't do the right

@@ -17,25 +17,26 @@ Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/m
 
 To create the package for pypi.
 
-1. Run `make pre-release` (or `make pre-patch` for a patch release) then run `make fix-copies` to fix the index of the
-   documentation.
+1. Create the release branch named: v<RELEASE>-release, for example v4.19-release. For a patch release checkout the
+   current release branch.
 
    If releasing on a special branch, copy the updated README.md on the main branch for your the commit you will make
    for the post-release and run `make fix-copies` on the main branch as well.
 
-2. Run Tests for Amazon Sagemaker. The documentation is located in `./tests/sagemaker/README.md`, otherwise @philschmid.
+2. Run `make pre-release` (or `make pre-patch` for a patch release) and commit these changes with the message:
+   "Release: <VERSION>" and push.
 
-3. Unpin specific versions from setup.py that use a git install.
+3. Go back to the main branch and run `make post-release` then `make fix-copies`. Commit these changes with the
+   message "v<NEXT_VERSION>.dev.0" and push to main.
 
-4. Checkout the release branch (v<RELEASE>-release, for example v4.19-release), and commit these changes with the
-   message: "Release: <VERSION>" and push.
+# If you were just cutting the branch in preparation for a release, you can stop here for now.
 
-5. Wait for the tests on main to be completed and be green (otherwise revert and fix bugs)
+4. Wait for the tests on the release branch to be completed and be green (otherwise revert and fix bugs)
 
-6. Add a tag in git to mark the release: "git tag v<VERSION> -m 'Adds tag v<VERSION> for pypi' "
+5. On the release branch, add a tag in git to mark the release: "git tag v<VERSION> -m 'Adds tag v<VERSION> for pypi' "
    Push the tag to git: git push --tags origin v<RELEASE>-release
 
-7. Build both the sources and the wheel. Do not change anything in setup.py between
+6. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
 
    Run `make build-release`. This will build the release and do some sanity checks for you. If this ends with an error
@@ -43,7 +44,7 @@ To create the package for pypi.
 
    You should now have a /dist directory with both .whl and .tar.gz source versions.
 
-8. Check that everything looks correct by uploading the package to the pypi test server:
+7. Check that everything looks correct by uploading the package to the pypi test server:
 
    twine upload dist/* -r testpypi
    (pypi suggest using twine as other methods upload files via plaintext.)
@@ -60,13 +61,10 @@ To create the package for pypi.
 
    If making a patch release, double check the bug you are patching is indeed resolved.
 
-9. Upload the final version to actual pypi:
+8. Upload the final version to actual pypi:
    twine upload dist/* -r pypi
 
-10. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
-
-11. Run `make post-release` then run `make fix-copies`. If you were on a branch for the release,
-    you need to go back to main before executing this.
+9. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 """
 
 import os

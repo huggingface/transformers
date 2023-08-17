@@ -26,6 +26,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    infer_channel_dimension_format,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -52,11 +53,16 @@ def normalize_box(box, width, height):
     ]
 
 
-def apply_tesseract(image: np.ndarray, lang: Optional[str], tesseract_config: Optional[str]):
+def apply_tesseract(
+    image: np.ndarray,
+    lang: Optional[str],
+    tesseract_config: Optional[str],
+    input_data_format: Optional[Union[ChannelDimension, str]] = None,
+):
     """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
 
     # apply OCR
-    pil_image = to_pil_image(image)
+    pil_image = to_pil_image(image, input_data_format=input_data_format)
     image_width, image_height = pil_image.size
     data = pytesseract.image_to_data(pil_image, lang=lang, output_type="dict", config=tesseract_config)
     words, left, top, width, height = data["text"], data["left"], data["top"], data["width"], data["height"]
@@ -164,6 +170,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -181,6 +188,13 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
                 image is used. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
 
         Returns:
             `np.ndarray`: The resized image.
@@ -189,7 +203,14 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         if "height" not in size or "width" not in size:
             raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
         output_size = (size["height"], size["width"])
-        return resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        return resize(
+            image,
+            size=output_size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
 
     def preprocess(
         self,
@@ -207,6 +228,7 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         tesseract_config: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -252,6 +274,12 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
                 The channel dimension format for the output image. Can be one of:
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -286,26 +314,41 @@ class LayoutLMv3ImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
         # Tesseract OCR to get words + normalized bounding boxes
         if apply_ocr:
             requires_backends(self, "pytesseract")
             words_batch = []
             boxes_batch = []
             for image in images:
-                words, boxes = apply_tesseract(image, ocr_lang, tesseract_config)
+                words, boxes = apply_tesseract(image, ocr_lang, tesseract_config, input_data_format=input_data_format)
                 words_batch.append(words)
                 boxes_batch.append(boxes)
 
         if do_resize:
-            images = [self.resize(image=image, size=size, resample=resample) for image in images]
+            images = [
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_rescale:
-            images = [self.rescale(image=image, scale=rescale_factor) for image in images]
+            images = [
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_normalize:
-            images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
+            images = [
+                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                for image in images
+            ]
 
-        images = [to_channel_dimension_format(image, data_format) for image in images]
+        images = [
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+        ]
 
         data = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
 
