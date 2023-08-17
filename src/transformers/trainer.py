@@ -404,7 +404,7 @@ class Trainer:
             else:
                 raise ValueError(
                     "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit"
-                    " model, please make sure that you have installed `bitsandbytes>=0.41.1`. "
+                    " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
                 )
 
         # Setup Sharded DDP training
