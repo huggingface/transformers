@@ -1,6 +1,6 @@
 # Testing mixed int8 quantization
 
-![HFxbitsandbytes.png](https://s3.amazonaws.com/moonup/production/uploads/1660567705337-62441d1d9fdefb55a0b7d12c.png)
+![HFxbitsandbytes.png](https://cdn-uploads.huggingface.co/production/uploads/1660567705337-62441d1d9fdefb55a0b7d12c.png)
 
 The following is the recipe on how to effectively debug `bitsandbytes` integration on Hugging Face `transformers`.
 
@@ -89,11 +89,11 @@ Here is an example of a badly configured CUDA installation:
 
 `nvcc --version` gives:
 
-![Screenshot 2022-08-15 at 15.12.23.png](https://s3.amazonaws.com/moonup/production/uploads/1660569220888-62441d1d9fdefb55a0b7d12c.png)
+![Screenshot 2022-08-15 at 15.12.23.png](https://cdn-uploads.huggingface.co/production/uploads/1660569220888-62441d1d9fdefb55a0b7d12c.png)
 
 which means that the detected CUDA version is 11.3 but `bitsandbytes` outputs:
 
-![image.png](https://s3.amazonaws.com/moonup/production/uploads/1660569284243-62441d1d9fdefb55a0b7d12c.png)
+![image.png](https://cdn-uploads.huggingface.co/production/uploads/1660569284243-62441d1d9fdefb55a0b7d12c.png)
 
 First check:
 
@@ -115,6 +115,6 @@ ls -l $LD_LIBRARY_PATH/libcudart.so
 
 and you can see
 
-![Screenshot 2022-08-15 at 15.12.33.png](https://s3.amazonaws.com/moonup/production/uploads/1660569176504-62441d1d9fdefb55a0b7d12c.png)
+![Screenshot 2022-08-15 at 15.12.33.png](https://cdn-uploads.huggingface.co/production/uploads/1660569176504-62441d1d9fdefb55a0b7d12c.png)
 
 If you see that the file is linked to the wrong CUDA version (here 10.2), find the correct location for `libcudart.so` (`find --name libcudart.so`) and replace the environment variable `LD_LIBRARY_PATH` with the one containing the correct `libcudart.so` file.
