@@ -35,4 +35,3 @@ the model further without accidentally changing the chat format and silently hur
 [[autodoc]] prompt_utils.PromptConfig
 	- from_pretrained
 	- save_pretrained
-
