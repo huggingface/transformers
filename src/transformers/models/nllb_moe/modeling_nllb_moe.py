@@ -126,7 +126,6 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     return incremental_indices.long() + padding_idx
 
 
-# Copied from transformers.models.switch_transformers.modeling_switch_transformers.load_balancing_loss_func with SwitchTransformers->NllbMoeModel
 def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.Tensor) -> float:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
@@ -699,12 +698,11 @@ class NllbMoeEncoderLayer(nn.Module):
         residual = hidden_states
 
         hidden_states = self.ff_layer_norm(hidden_states)
-
-        router_states = None # set to None to track which layers have None gradients.
         if self.is_sparse:
             hidden_states, router_states = self.ffn(hidden_states, attention_mask)
         else:
-            hidden_states = self.ffn(hidden_states)
+            # router_states set to None to track which layers have None gradients.
+            hidden_states, router_states = self.ffn(hidden_states), None
         hidden_states = self.ff_dropout(hidden_states)
 
         hidden_states = residual + hidden_states
@@ -832,12 +830,10 @@ class NllbMoeDecoderLayer(nn.Module):
         residual = hidden_states
 
         hidden_states = self.ff_layer_norm(hidden_states)
-        
-        router_states = None
         if self.is_sparse:
             hidden_states, router_states = self.ffn(hidden_states, attention_mask)
         else:
-            hidden_states = self.ffn(hidden_states)
+            hidden_states, router_states = self.ffn(hidden_states), None
         hidden_states = self.ff_dropout(hidden_states)
 
         hidden_states = residual + hidden_states
