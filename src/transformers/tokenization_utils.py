@@ -498,7 +498,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         all_special_tokens_extended = {
             str(t): t for t in self.all_special_tokens_extended if isinstance(t, AddedToken)
         }
-
         split_special_tokens = kwargs.pop("split_special_tokens", self.split_special_tokens)
 
         text, kwargs = self.prepare_for_tokenization(text, **kwargs)
