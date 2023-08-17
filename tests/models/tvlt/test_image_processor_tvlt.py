@@ -217,6 +217,47 @@ class TvltImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
             ),
         )
 
+    def test_call_numpy_4_channels(self):
+        # Initialize image_processor
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+        # create random numpy tensors
+        self.image_processor_tester.num_channels = 4
+        video_inputs = prepare_video_inputs(self.image_processor_tester, equal_resolution=False, numpify=True)
+        for video in video_inputs:
+            self.assertIsInstance(video, list)
+            self.assertIsInstance(video[0], np.ndarray)
+
+        # Test not batched input
+        encoded_videos = image_processor(
+            video_inputs[0], return_tensors="pt", input_data_format="channels_first", image_mean=0, image_std=1
+        ).pixel_values
+        self.assertEqual(
+            encoded_videos.shape,
+            (
+                1,
+                self.image_processor_tester.num_frames,
+                self.image_processor_tester.num_channels,
+                self.image_processor_tester.crop_size["height"],
+                self.image_processor_tester.crop_size["width"],
+            ),
+        )
+
+        # Test batched
+        encoded_videos = image_processor(
+            video_inputs, return_tensors="pt", input_data_format="channels_first", image_mean=0, image_std=1
+        ).pixel_values
+        self.assertEqual(
+            encoded_videos.shape,
+            (
+                self.image_processor_tester.batch_size,
+                self.image_processor_tester.num_frames,
+                self.image_processor_tester.num_channels,
+                self.image_processor_tester.crop_size["height"],
+                self.image_processor_tester.crop_size["width"],
+            ),
+        )
+        self.image_processor_tester.num_channels = 3
+
     def test_call_pytorch(self):
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)

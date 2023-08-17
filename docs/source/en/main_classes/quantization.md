@@ -18,11 +18,11 @@ rendered properly in your Markdown viewer.
 
 ## `AutoGPTQ` Integration
 
-🤗 Transformers has integrated `optimum` API to perform GPTQ quantization on language models. You can load and quantize your model in 8,6,4 or even 2 bits without a big drop of performance and faster inference speed! This is supported by most GPU hardwares.
+🤗 Transformers has integrated `optimum` API to perform GPTQ quantization on language models. You can load and quantize your model in 8, 4, 3 or even 2 bits without a big drop of performance and faster inference speed! This is supported by most GPU hardwares.
 
 To learn more about the the quantization model, check out: 
 - the [GPTQ](https://arxiv.org/pdf/2210.17323.pdf) paper
-<!-- - the `optimum` [guide]() on GPTQ quantization -->
+- the `optimum` [guide](https://huggingface.co/docs/optimum/llm_quantization/usage_guides/quantization) on GPTQ quantization
 - the [`AutoGPTQ`](https://github.com/PanQiWei/AutoGPTQ) library used as the backend
 
 ### Requirements
@@ -40,11 +40,12 @@ You need to have the following requirements installed to run the code below:
 
 - Install latest `accelerate` library 
 `pip install --upgrade accelerate`
-GPTQ integration supports for now only text models and you may encounter unexpected behaviour for vision, speech or multi-modal models.
+
+Note that GPTQ integration supports for now only text models and you may encounter unexpected behaviour for vision, speech or multi-modal models.
 
 ### Load and quantize a model
 
-GPTQ is a quantization method that requires weights calibration before using the quantized models. If you want to quantize transformers model from scratch, it might take some time before producing the quantized model (~10 min on a Google colab for `facebook/opt-350m` model. 
+GPTQ is a quantization method that requires weights calibration before using the quantized models. If you want to quantize transformers model from scratch, it might take some time before producing the quantized model (~5 min on a Google colab for `facebook/opt-350m` model). 
 
 Hence, there are two different scenarios where you want to use GPTQ-quantized models. The first use case would be to load models that has been already quantized by other users that are available on the Hub, the second use case would be to quantize your model from scratch and save it or push it on the Hub so that other users can also use it.
 #### GPTQ Configuration
