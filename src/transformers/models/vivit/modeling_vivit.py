@@ -639,8 +639,9 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         ```python
         >>> import av
         >>> import numpy as np
-
-        >>> from transformers import VivitImageProcessor, VivitModel
+        
+        >>> import torch
+        >>> from transformers import VivitImageProcessor, VivitForVideoClassification
         >>> from huggingface_hub import hf_hub_download
 
         >>> np.random.seed(0)
@@ -668,8 +669,17 @@ class VivitForVideoClassification(VivitPreTrainedModel):
 
 
         >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+        ...     '''
+        ...     Sample frames from the video.
+        ...     Args:
+        ...         clip_len (`int`): Total number of frames to sample
+        ...         frame_sample_rate (`int`): Frame sample rate
+        ...         seg_len (`int`):  Number of frames in a sample segment
+        ...     Returns:
+        ...         result (`List[int]`): List of sampled video frame indices
+        ...     '''
         ...     converted_len = int(clip_len * frame_sample_rate)
-        ...     end_idx = np.random.randint(converted_len, seg_len)
+        ...     end_idx = np.random.randint(converted_len, converted_len + seg_len)
         ...     start_idx = end_idx - converted_len
         ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
         ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
@@ -683,8 +693,8 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         >>> container = av.open(file_path)
 
         >>> # sample 32 frames
-        >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=1, seg_len=len(videoreader))
-        >>> video = videoreader.get_batch(indices).asnumpy()
+        >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=2, seg_len=2)
+        >>> video = read_video_pyav(container=container, indices=indices)
 
         >>> image_processor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2-kinetics400")
         >>> model = VivitForVideoClassification.from_pretrained("google/vivit-b-16x2-kinetics400")
@@ -697,6 +707,7 @@ class VivitForVideoClassification(VivitPreTrainedModel):
 
         >>> # model predicts one of the 400 Kinetics-400 classes
         >>> predicted_label = logits.argmax(-1).item()
+        >>> # Output class label. LABEL_116 corresponds to eating spaghetti
         >>> print(model.config.id2label[predicted_label])
         eating spaghetti
         ```"""
