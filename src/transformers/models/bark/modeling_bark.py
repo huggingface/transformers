@@ -1077,18 +1077,25 @@ class BarkFineModel(BarkPreTrainedModel):
         # one lm_head for each codebook
         self.lm_heads = new_output_embeddings
 
-    def _resize_token_embeddings(self, new_num_tokens):
+    def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None):
         old_embeddings_list = self.get_input_embeddings()
         new_embeddings_list = nn.ModuleList(
-            [self._get_resized_embeddings(old_embeddings, new_num_tokens) for old_embeddings in old_embeddings_list]
+            [
+                self._get_resized_embeddings(old_embeddings, new_num_tokens, pad_to_multiple_of)
+                for old_embeddings in old_embeddings_list
+            ]
         )
         self.set_input_embeddings(new_embeddings_list)
+        new_num_tokens = [embed.weight.shape[0] for embed in new_embeddings_list]
 
         # if word embeddings are not tied, make sure that lm head is resized as well
         if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
             old_lm_head_list = self.get_output_embeddings()
             new_lm_head_list = nn.ModuleList(
-                [self._get_resized_lm_head(old_lm_head, new_num_tokens) for old_lm_head in old_lm_head_list]
+                [
+                    self._get_resized_lm_head(old_lm_head, new_num_token)
+                    for old_lm_head, new_num_token in zip(old_lm_head_list, new_num_tokens)
+                ]
             )
             self.set_output_embeddings(new_lm_head_list)
 

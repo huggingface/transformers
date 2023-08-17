@@ -549,6 +549,8 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
 
         self.assertListEqual(expected_output_string, output_strings)
 
+    # TODO (ydshieh): undo skip once a fix is done on TF side.
+    @unittest.skip("Skip for now as TF 2.13 breaks it on GPU")
     @slow
     def test_beam_search_xla_generate_simple(self):
         model = TFT5ForConditionalGeneration.from_pretrained("t5-small")

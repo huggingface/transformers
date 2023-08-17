@@ -879,7 +879,7 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = tf.shape(past_key_values[0][0])[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
             check_embeddings_within_bounds(input_ids, self.embed_tokens.input_dim)

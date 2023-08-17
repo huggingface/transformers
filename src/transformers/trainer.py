@@ -404,7 +404,7 @@ class Trainer:
             else:
                 raise ValueError(
                     "The model you want to train is loaded in 8-bit precision.  if you want to fine-tune an 8-bit"
-                    " model, please make sure that you have installed `bitsandbytes>=0.41.1`. "
+                    " model, please make sure that you have installed `bitsandbytes>=0.37.0`. "
                 )
 
         # Setup Sharded DDP training
@@ -464,10 +464,6 @@ class Trainer:
                 "backward_prefetch", []
             ):
                 self.backward_prefetch = BackwardPrefetch.BACKWARD_POST
-
-            self.forward_prefetch = False
-            if self.args.fsdp_config.get("forward_prefect", False):
-                self.forward_prefetch = True
 
             self.limit_all_gathers = False
             if self.args.fsdp_config.get("limit_all_gathers", False):
@@ -1165,6 +1161,8 @@ class Trainer:
         elif self.hp_search_backend == HPSearchBackend.WANDB:
             params = trial
 
+        # Unfreeze args for hyperparameter search
+        delattr(self.args, "_frozen")
         for key, value in params.items():
             if not hasattr(self.args, key):
                 logger.warning(
@@ -1176,6 +1174,7 @@ class Trainer:
             # Casting value to the proper type
             if old_attr is not None:
                 value = type(old_attr)(value)
+
             setattr(self.args, key, value)
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             logger.info(f"Trial: {trial.params}")
@@ -1194,6 +1193,9 @@ class Trainer:
             self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
             self.args.hf_deepspeed_config.trainer_config_process(self.args)
             self.args.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.args.hf_deepspeed_config)
+
+        # Re-freeze them
+        setattr(self.args, "_frozen", True)
         self.create_accelerator_and_postprocess()
 
     def _report_to_hp_search(self, trial: Union["optuna.Trial", Dict[str, Any]], step: int, metrics: Dict[str, float]):
@@ -1373,12 +1375,12 @@ class Trainer:
             auto_wrapper_callable = None
             default_transformer_cls_names_to_wrap = getattr(model, "_no_split_modules", None)
             fsdp_transformer_layer_cls_to_wrap = self.args.fsdp_config.get(
-                "fsdp_transformer_layer_cls_to_wrap", default_transformer_cls_names_to_wrap
+                "transformer_layer_cls_to_wrap", default_transformer_cls_names_to_wrap
             )
 
-            if self.args.fsdp_config["fsdp_min_num_params"] > 0:
+            if self.args.fsdp_config["min_num_params"] > 0:
                 auto_wrap_policy = functools.partial(
-                    size_based_auto_wrap_policy, min_num_params=self.args.fsdp_config["fsdp_min_num_params"]
+                    size_based_auto_wrap_policy, min_num_params=self.args.fsdp_config["min_num_params"]
                 )
             elif fsdp_transformer_layer_cls_to_wrap is not None:
                 transformer_cls_to_wrap = set()
@@ -1511,7 +1513,12 @@ class Trainer:
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
-        if resume_from_checkpoint is not None and not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled:
+        if (
+            resume_from_checkpoint is not None
+            and not is_sagemaker_mp_enabled()
+            and not self.is_deepspeed_enabled
+            and not self.is_fsdp_enabled
+        ):
             self._load_from_checkpoint(resume_from_checkpoint)
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
@@ -1645,7 +1652,7 @@ class Trainer:
 
         model = self._wrap_model(self.model_wrapped)
 
-        if is_sagemaker_mp_enabled() and resume_from_checkpoint is not None:
+        if (is_sagemaker_mp_enabled() or self.is_fsdp_enabled) and resume_from_checkpoint is not None:
             self._load_from_checkpoint(resume_from_checkpoint, model)
 
         # as the model is wrapped, don't use `accelerator.prepare`
@@ -3880,7 +3887,6 @@ class Trainer:
             fsdp_plugin.limit_all_gathers = self.args.fsdp_config.get(
                 "limit_all_gathers", fsdp_plugin.limit_all_gathers
             )
-            fsdp_plugin.use_orig_params = self.args.fsdp_config.get("use_orig_params", fsdp_plugin.use_orig_params)
 
         if self.is_deepspeed_enabled:
             if getattr(self.args, "hf_deepspeed_config", None) is None:

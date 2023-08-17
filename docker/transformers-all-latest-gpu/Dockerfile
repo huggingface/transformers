@@ -50,6 +50,9 @@ RUN python3 -m pip install --no-cache-dir bitsandbytes
 # Add auto-gptq for gtpq quantization testing
 RUN python3 -m pip install --no-cache-dir auto-gptq 
 
+# Add einops for additional model testing
+RUN python3 -m pip install --no-cache-dir einops
+
 # For bettertransformer + gptq 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 
