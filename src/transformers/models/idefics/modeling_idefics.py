@@ -1567,7 +1567,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
-        image_hidden_states = kwargs.get("image_hidden_states", None)
+        image_hidden_states = kwargs.pop("image_hidden_states", None)
         if image_hidden_states is not None:
             if self.config.use_resampler:
                 kwargs["perceiver_embeddings"] = image_hidden_states
