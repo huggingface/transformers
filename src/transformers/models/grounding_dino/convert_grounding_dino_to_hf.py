@@ -66,29 +66,39 @@ def create_rename_keys(config):
     rename_keys.append(("module.backbone.0.patch_embed.norm.weight", "embeddings.norm.weight"))
     rename_keys.append(("module.backbone.0.patch_embed.norm.bias", "embeddings.norm.bias"))
 
-    # for i in range(config.num_hidden_layers):
-    #     # layernorms
-    #     rename_keys.append((f"blocks.{i}.norm1.weight", f"encoder.layer.{i}.norm1.weight"))
-    #     rename_keys.append((f"blocks.{i}.norm1.bias", f"encoder.layer.{i}.norm1.bias"))
-    #     rename_keys.append((f"blocks.{i}.norm2.weight", f"encoder.layer.{i}.norm2.weight"))
-    #     rename_keys.append((f"blocks.{i}.norm2.bias", f"encoder.layer.{i}.norm2.bias"))
-    #     # MLP
-    #     if config.use_swiglu_ffn:
-    #         rename_keys.append((f"blocks.{i}.mlp.w12.weight", f"encoder.layer.{i}.mlp.w12.weight"))
-    #         rename_keys.append((f"blocks.{i}.mlp.w12.bias", f"encoder.layer.{i}.mlp.w12.bias"))
-    #         rename_keys.append((f"blocks.{i}.mlp.w3.weight", f"encoder.layer.{i}.mlp.w3.weight"))
-    #         rename_keys.append((f"blocks.{i}.mlp.w3.bias", f"encoder.layer.{i}.mlp.w3.bias"))
-    #     else:
-    #         rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"encoder.layer.{i}.mlp.fc1.weight"))
-    #         rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"encoder.layer.{i}.mlp.fc1.bias"))
-    #         rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"encoder.layer.{i}.mlp.fc2.weight"))
-    #         rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"encoder.layer.{i}.mlp.fc2.bias"))
-    #     # layerscale
-    #     rename_keys.append((f"blocks.{i}.ls1.gamma", f"encoder.layer.{i}.layer_scale1.lambda1"))
-    #     rename_keys.append((f"blocks.{i}.ls2.gamma", f"encoder.layer.{i}.layer_scale2.lambda1"))
-    #     # attention projection layer
-    #     rename_keys.append((f"blocks.{i}.attn.proj.weight", f"encoder.layer.{i}.attention.output.dense.weight"))
-    #     rename_keys.append((f"blocks.{i}.attn.proj.bias", f"encoder.layer.{i}.attention.output.dense.bias"))
+    for layer, depth in enumerate(config.depths):
+        for block in range(depth):
+            # layernorms
+            rename_keys.append((f"module.backbone.0.layers.{layer}.blocks.{block}.norm1.weight", 
+                                f"encoder.layers.{layer}.blocks.{block}.layernorm_before.weight"))
+            rename_keys.append((f"module.backbone.0.layers.{layer}.blocks.{block}.norm1.bias", 
+                                f"encoder.layers.{layer}.blocks.{block}.layernorm_before.bias"))
+            
+            rename_keys.append((f"module.backbone.0.layers.{layer}.blocks.{block}.norm2.weight", 
+                                f"encoder.layers.{layer}.blocks.{block}.layernorm_after.weight"))
+            rename_keys.append((f"module.backbone.0.layers.{layer}.blocks.{block}.norm2.bias", 
+                                f"encoder.layers.{layer}.blocks.{block}.layernorm_after.bias"))
+            # attention
+            rename_keys.append((f"module.backbone.0.layers.{layer}.blocks.{block}.attn.relative_position_bias_table", 
+                                f"encoder.layers.{layer}.blocks.{block}.attention.self.relative_position_bias_table"))
+            # rename_keys.append((f"module.backbone.0.layers.{layer}.blocks.{block}.attn.relative_position_index", 
+            #                     f"encoder.layers.{layer}.blocks.{block}.attention.relative_position_index"))
+            rename_keys.append((f"module.backbone.0.layers.{layer}.blocks.{block}.attn.proj.weight", 
+                            f"encoder.layers.{layer}.blocks.{block}.attention.output.dense.weight"))
+            rename_keys.append((f"module.backbone.0.layers.{layer}.blocks.{block}.attn.proj.bias", 
+                            f"encoder.layers.{layer}.blocks.{block}.attention.output.dense.bias"))
+            # intermidiate
+            rename_keys.append((f"module.backbone.0.layers.{layer}.blocks.{block}.mlp.fc1.weight", 
+                            f"encoder.layers.{layer}.blocks.{block}.intermediate.dense.weight"))
+            rename_keys.append((f"module.backbone.0.layers.{layer}.blocks.{block}.mlp.fc1.bias", 
+                            f"encoder.layers.{layer}.blocks.{block}.intermediate.dense.bias"))
+            
+            # output
+            rename_keys.append((f"module.backbone.0.layers.{layer}.blocks.{block}.mlp.fc2.weight", 
+                            f"encoder.layers.{layer}.blocks.{block}.output.dense.weight"))
+            rename_keys.append((f"module.backbone.0.layers.{layer}.blocks.{block}.mlp.fc2.bias", 
+                            f"encoder.layers.{layer}.blocks.{block}.output.dense.bias"))
+
 
     # # final layernorm
     # rename_keys.append(("norm.weight", "layernorm.weight"))
