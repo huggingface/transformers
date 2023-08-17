@@ -130,8 +130,8 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
-    Adapted from transfomers.models.modeling_switch_transformers.load_balancing_loss_func with SwitchTransformers->NllbMoeModel
-    to support None
+    Adapted from transfomers.models.modeling_switch_transformers.load_balancing_loss_func with
+    SwitchTransformers->NllbMoeModel to support None
 
     See Switch Transformer (https://arxiv.org/abs/2101.03961) for more details. This function implements the loss
     function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
@@ -148,7 +148,7 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     """
     if router_probs is None:
         return 0
-    
+
     num_experts = router_probs.shape[-1]
 
     # cast the expert indices to int64, otherwise one-hot encoding will fail
@@ -706,6 +706,7 @@ class NllbMoeEncoderLayer(nn.Module):
         else:
             # router_states set to None to track which layers have None gradients.
             hidden_states, router_states = self.ffn(hidden_states), None
+
         hidden_states = self.ff_dropout(hidden_states)
 
         hidden_states = residual + hidden_states
@@ -837,6 +838,7 @@ class NllbMoeDecoderLayer(nn.Module):
             hidden_states, router_states = self.ffn(hidden_states, attention_mask)
         else:
             hidden_states, router_states = self.ffn(hidden_states), None
+
         hidden_states = self.ff_dropout(hidden_states)
 
         hidden_states = residual + hidden_states
@@ -1795,7 +1797,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
                 router_logits, expert_indexes = router_output
                 total_router_logits.append(router_logits)
                 total_expert_indexes.append(expert_indexes)
-        
+
         total_router_logits = torch.cat(total_router_logits, dim=1) if len(total_router_logits) > 0 else None
         total_expert_indexes = torch.stack(total_expert_indexes, dim=1) if len(total_expert_indexes) > 0 else None
         return total_router_logits, total_expert_indexes
