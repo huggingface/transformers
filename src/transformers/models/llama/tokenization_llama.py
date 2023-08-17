@@ -191,8 +191,8 @@ class LlamaTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
     def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         """
-        Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added
-        unless the first token is special.
+        Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
+        first token is special.
         """
         if self.legacy:
             return super().tokenize(text, **kwargs)

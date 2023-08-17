@@ -350,8 +350,8 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         """
-        Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added
-        unless the first token is special.
+        Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
+        first token is special.
         """
         if self.legacy:
             return super().tokenize(text, **kwargs)
