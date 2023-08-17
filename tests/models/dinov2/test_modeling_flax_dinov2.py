@@ -15,8 +15,6 @@
 import inspect
 import unittest
 
-import numpy as np
-
 from transformers import Dinov2Config, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
@@ -27,8 +25,11 @@ from ...test_modeling_flax_common import FlaxModelTesterMixin, floats_tensor, id
 if is_flax_available():
     import jax
 
-    from transformers.models.dinov2.modeling_flax_dinov2 import (FlaxDinov2ForImageClassification, FlaxDinov2Model,
-                                                                 DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST)
+    from transformers.models.dinov2.modeling_flax_dinov2 import (
+        DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+        FlaxDinov2ForImageClassification,
+        FlaxDinov2Model,
+    )
 
 
 class FlaxDinov2ModelTester(unittest.TestCase):
