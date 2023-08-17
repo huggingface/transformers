@@ -639,7 +639,7 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         ```python
         >>> import av
         >>> import numpy as np
-        
+
         >>> import torch
         >>> from transformers import VivitImageProcessor, VivitForVideoClassification
         >>> from huggingface_hub import hf_hub_download
