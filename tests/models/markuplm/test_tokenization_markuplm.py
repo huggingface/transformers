@@ -1344,9 +1344,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     self.assertTrue(special_token_id in p_output)
                     self.assertTrue(special_token_id in cr_output)
 
-
     def test_split_special_tokens(self):
-        tokenizer =  self.get_rust_tokenizer()
+        tokenizer = self.get_rust_tokenizer()
         xpaths = [["html/body"] * 3, ["html/body"] * 3]
         special_token = "[SPECIAL_TOKEN]"
         tokenizer.add_special_tokens({"additional_special_tokens": [special_token]})
@@ -1357,7 +1356,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             special_token, add_special_tokens=False, split_special_tokens=True, xpaths=xpaths
         )
         self.assertTrue(len(encoded_split_special_token) > 1)
-        
 
     def test_training_new_tokenizer(self):
         # This feature only exists for fast tokenizers
