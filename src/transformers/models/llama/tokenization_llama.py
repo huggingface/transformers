@@ -112,6 +112,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
+        use_default_system_prompt=True,
         legacy=None,
         **kwargs,
     ):
@@ -145,6 +146,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         self.add_eos_token = add_eos_token
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
+        self.use_default_system_prompt=use_default_system_prompt
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -359,16 +361,17 @@ class LlamaTokenizer(PreTrainedTokenizer):
             `List[int]`:
                 Input ids for the conversation.
         """
-        if len(conversation.past_user_inputs) > 0:
-            if not conversation.past_user_inputs[0].startswith(B_SYS) or E_SYS not in conversation.past_user_inputs[0]:
-                conversation.past_user_inputs[0] = (
-                    B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
-                )
-        elif conversation.new_user_input:
-            if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
-                conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
-        else:
-            raise ValueError("Last message must be from user")
+        if self.use_default_system_prompt:
+            if len(conversation.past_user_inputs) > 0:
+                if not conversation.past_user_inputs[0].startswith(B_SYS) or E_SYS not in conversation.past_user_inputs[0]:
+                    conversation.past_user_inputs[0] = (
+                        B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
+                    )
+            elif conversation.new_user_input:
+                if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
+                    conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
+            else:
+                raise ValueError("Last message must be from user")
 
         dialogue = list(conversation.iter_texts())
         if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
