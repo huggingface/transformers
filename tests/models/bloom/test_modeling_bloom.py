@@ -423,7 +423,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         # >=1b1 + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
 
         path_560m = "bigscience/bloom-560m"
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").cuda()
+        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_560m)
 
@@ -435,7 +435,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         )
 
         input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
-        greedy_output = model.generate(input_ids.cuda(), max_length=50)
+        greedy_output = model.generate(input_ids.to(torch_device), max_length=50)
 
         self.assertEqual(tokenizer.decode(greedy_output[0], skip_special_tokens=True), EXPECTED_OUTPUT)
 
@@ -443,7 +443,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @require_torch_gpu
     def test_batch_generation(self):
         path_560m = "bigscience/bloom-560m"
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").cuda()
+        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_560m, padding_side="left")
 
@@ -451,7 +451,10 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         input_ids = tokenizer.batch_encode_plus(input_sentence, return_tensors="pt", padding=True)
         greedy_output = model.generate(
-            input_ids["input_ids"].cuda(), attention_mask=input_ids["attention_mask"], max_length=50, do_sample=False
+            input_ids["input_ids"].to(torch_device),
+            attention_mask=input_ids["attention_mask"],
+            max_length=50,
+            do_sample=False,
         )
 
         self.assertEqual(
@@ -463,7 +466,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @require_torch_gpu
     def test_batch_generation_padd(self):
         path_560m = "bigscience/bloom-560m"
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").cuda()
+        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_560m, padding_side="left")
 
@@ -474,9 +477,14 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         input_ids_without_pad = tokenizer.encode(input_sentence_without_pad, return_tensors="pt")
 
         greedy_output = model.generate(
-            input_ids["input_ids"].cuda(), attention_mask=input_ids["attention_mask"], max_length=50, do_sample=False
+            input_ids["input_ids"].to(torch_device),
+            attention_mask=input_ids["attention_mask"],
+            max_length=50,
+            do_sample=False,
         )
-        greedy_output_without_pad = model.generate(input_ids_without_pad.cuda(), max_length=50, do_sample=False)
+        greedy_output_without_pad = model.generate(
+            input_ids_without_pad.to(torch_device), max_length=50, do_sample=False
+        )
 
         # test token values
         self.assertEqual(greedy_output[-1, 3:].tolist(), greedy_output_without_pad[0, :-3].tolist())
@@ -492,7 +500,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_batch_generated_text(self):
         path_560m = "bigscience/bloom-560m"
 
-        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").cuda()
+        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").to(torch_device)
         model = model.eval()
         tokenizer = BloomTokenizerFast.from_pretrained(path_560m, padding_side="left")
 
@@ -502,7 +510,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         ]
         inputs = tokenizer(input_sentences, return_tensors="pt", padding=True, truncation=True)
         generated_ids = model.generate(
-            inputs["input_ids"].cuda(), attention_mask=inputs["attention_mask"], max_length=20
+            inputs["input_ids"].to(torch_device), attention_mask=inputs["attention_mask"], max_length=20
         )
         generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 
