@@ -446,7 +446,7 @@ class DebertaTokenizer(PreTrainedTokenizer):
     @property
     def default_prompt_config(self):
         return {
-            "role_token_suffixes": {"user": [self.eos_token_id], "assistant": [self.eos_token_id]},
+            "role_token_suffixes": {"user": [self.eos_token_id], "assistant": [self.eos_token_id], "system": [self.eos_token_id]},
             "tokenize_messages_separately": True,
             "add_special_tokens": False,
             "max_length": self.model_max_length,
