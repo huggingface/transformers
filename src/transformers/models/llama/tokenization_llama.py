@@ -190,12 +190,19 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
     def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
-        # Replace the SPIECE_UNDERLINE with a space to make sure SPIECE_UNDERLINE is only used at
-        # the beginning of the text
-        if not self.legacy and len(text) > 0:
-            # replacing " " by SPIECE_UNDERLINE prevents any form of stripping...
-            text = SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " ")
-        return super().tokenize(text, **kwargs)
+        """
+        Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added
+        unless the first token is special.
+        """
+        if self.legacy:
+            return super().tokenize(text, **kwargs)
+
+        if len(text) > 0:
+            tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
+
+        if tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
+            tokens = tokens[1:]
+        return tokens
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
     def _tokenize(self, text, **kwargs):
