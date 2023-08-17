@@ -41,6 +41,12 @@ class Conversation:
         for message in self.messages:
             yield message
 
+    def __getitem__(self, item):
+        return self.messages[item]
+
+    def __setitem__(self, key, value):
+        self.messages[key] = value
+
     def __len__(self):
         return len(self.messages)
 
