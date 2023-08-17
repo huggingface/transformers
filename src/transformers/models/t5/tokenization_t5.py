@@ -128,8 +128,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             >>> tokenizer.encode("Hello <extra_id_0>.")  # the extra space `[3]` is no longer here
             [8774, 32099, 5, 1]
             ```
-            Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for
-            more details.
+            Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
 
     Attributes:
         sp_model (`SentencePieceProcessor`):
