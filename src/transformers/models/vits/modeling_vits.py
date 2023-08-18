@@ -542,7 +542,7 @@ class VitsResidualCouplingLayer(nn.Module):
         else:
             second_half = (second_half - mean) * torch.exp(-log_stddev) * padding_mask
             outputs = torch.cat([first_half, second_half], dim=1)
-            return outputs
+            return outputs, None
 
 
 class VitsResidualCouplingBlock(nn.Module):
@@ -560,7 +560,7 @@ class VitsResidualCouplingBlock(nn.Module):
         else:
             for flow in reversed(self.flows):
                 inputs = torch.flip(inputs, [1])
-                inputs = flow(inputs, padding_mask, global_conditioning, reverse=True)
+                inputs, _ = flow(inputs, padding_mask, global_conditioning, reverse=True)
         return inputs
 
 
@@ -650,7 +650,7 @@ class VitsConvFlow(nn.Module):
             log_determinant = torch.sum(log_abs_det * padding_mask, [1, 2])
             return outputs, log_determinant
         else:
-            return outputs
+            return outputs, None
 
 
 class VitsElementwiseAffine(nn.Module):
@@ -668,7 +668,7 @@ class VitsElementwiseAffine(nn.Module):
             return outputs, log_determinant
         else:
             outputs = (inputs - self.translate) * torch.exp(-self.log_scale) * padding_mask
-            return outputs
+            return outputs, None
 
 
 class VitsStochasticDurationPredictor(nn.Module):
@@ -767,7 +767,7 @@ class VitsStochasticDurationPredictor(nn.Module):
             )
             for flow in flows:
                 latents = torch.flip(latents, [1])
-                latents = flow(latents, padding_mask, global_conditioning=inputs, reverse=True)
+                latents, _ = flow(latents, padding_mask, global_conditioning=inputs, reverse=True)
 
             log_duration, _ = torch.split(latents, [1, 1], dim=1)
             return log_duration
