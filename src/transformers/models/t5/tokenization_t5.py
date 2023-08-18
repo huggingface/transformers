@@ -199,7 +199,6 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
 
-
         super().__init__(
             eos_token=eos_token,
             unk_token=unk_token,
@@ -210,9 +209,6 @@ class T5Tokenizer(PreTrainedTokenizer):
             legacy=legacy,
             **kwargs,
         )
-
-
-
 
     def get_spm_processor(self):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
