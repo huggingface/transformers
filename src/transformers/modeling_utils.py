@@ -86,6 +86,7 @@ XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 
 if is_accelerate_available():
     from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
+    from accelerate.hooks import add_hook_to_module
     from accelerate.utils import (
         check_tied_parameters_on_same_device,
         find_tied_parameters,
@@ -95,7 +96,6 @@ if is_accelerate_available():
         save_offload_index,
         set_module_tensor_to_device,
     )
-    from accelerate.hooks import add_hook_to_module
 
 if is_safetensors_available():
     from safetensors import safe_open
