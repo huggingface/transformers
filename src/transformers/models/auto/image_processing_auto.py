@@ -67,6 +67,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("git", "CLIPImageProcessor"),
         ("glpn", "GLPNImageProcessor"),
         ("groupvit", "CLIPImageProcessor"),
+        ("idefics", "IdeficsImageProcessor"),
         ("imagegpt", "ImageGPTImageProcessor"),
         ("instructblip", "BlipImageProcessor"),
         ("layoutlmv2", "LayoutLMv2ImageProcessor"),

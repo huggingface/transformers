@@ -362,6 +362,10 @@ _import_structure = {
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
+    "models.idefics": [
+        "IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "IdeficsConfig",
+    ],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
     "models.informer": ["INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "InformerConfig"],
     "models.instructblip": [
@@ -939,6 +943,7 @@ else:
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
+    _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
@@ -1927,6 +1932,15 @@ else:
             "IBertForTokenClassification",
             "IBertModel",
             "IBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.idefics"].extend(
+        [
+            "IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "IdeficsForVisionText2Text",
+            "IdeficsModel",
+            "IdeficsPreTrainedModel",
+            "IdeficsProcessor",
         ]
     )
     _import_structure["models.imagegpt"].extend(
@@ -4361,6 +4375,10 @@ if TYPE_CHECKING:
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
+    from .models.idefics import (
+        IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        IdeficsConfig,
+    )
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
     from .models.instructblip import (
@@ -4873,6 +4891,7 @@ if TYPE_CHECKING:
         from .models.efficientnet import EfficientNetImageProcessor
         from .models.flava import FlavaFeatureExtractor, FlavaImageProcessor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
+        from .models.idefics import IdeficsImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2ImageProcessor
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor, LayoutLMv3ImageProcessor
@@ -5699,6 +5718,13 @@ if TYPE_CHECKING:
             IBertForTokenClassification,
             IBertModel,
             IBertPreTrainedModel,
+        )
+        from .models.idefics import (
+            IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            IdeficsForVisionText2Text,
+            IdeficsModel,
+            IdeficsPreTrainedModel,
+            IdeficsProcessor,
         )
         from .models.imagegpt import (
             IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
