@@ -144,6 +144,19 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(encoding_tokenizer_slow_1, encoding_tokenizer_slow_2)
         self.assertEqual(encoding_tokenizer_slow_1, encoding_tokenizer_slow_3)
 
+    def test_split_special_tokens(self):
+        tokenizer = self.tokenizer_class.from_pretrained("microsoft/layoutxlm-base")
+        _, _, boxes = self.get_question_words_and_boxes()
+        special_token = "[SPECIAL_TOKEN]"
+        tokenizer.add_special_tokens({"additional_special_tokens": [special_token]})
+        encoded_special_token = tokenizer.tokenize(special_token, boxes=boxes, add_special_tokens=False)
+        self.assertEqual(len(encoded_special_token), 1)
+
+        encoded_split_special_token = tokenizer.tokenize(
+            special_token, add_special_tokens=False, split_special_tokens=True, boxes=boxes
+        )
+        self.assertTrue(len(encoded_split_special_token) > 1)
+
     @slow
     def test_sequence_builders(self):
         tokenizer = self.tokenizer_class.from_pretrained("microsoft/layoutxlm-base")

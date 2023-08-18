@@ -1492,6 +1492,11 @@ INIT_TOKENIZER_DOCSTRING = r"""
         clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
             Whether or not the model should cleanup the spaces that were added when splitting the input text during the
             tokenization process.
+        split_special_tokens (`bool`, *optional*, defaults to `False`):
+            Whether or not the special tokens should be split during the tokenization process. The default behavior is
+            to not split special tokens. This means that if `<s>` is the `bos_token`, then `tokenizer.tokenize("<s>") =
+            ['<s>`]. Otherwise, if `split_special_tokens=True`, then `tokenizer.tokenize("<s>")` will be give `['<',
+            's', '>']`. This argument is only supported for `slow` tokenizers for the moment.
 """
 
 
@@ -1545,6 +1550,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # By default, cleaning tokenization spaces for both fast and slow tokenizers
         self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", True)
+
+        # By default, do not split special tokens for both fast and slow tokenizers
+        self.split_special_tokens = kwargs.pop("split_special_tokens", False)
 
         self.deprecation_warnings = (
             {}
