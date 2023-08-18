@@ -129,8 +129,8 @@ class IdeficsCausalLMOutputWithPast(ModelOutput):
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
         image_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of *torch.FloatTensor* (one for the output of the image embeddings, *(batch_size, num_images,
-            sequence_length, hidden_size)*.
+            Tuple of `torch.FloatTensor` (one for the output of the image embeddings, `(batch_size, num_images,
+            sequence_length, hidden_size)`.
 
             image_hidden_states of the model produced by the vision encoder, and optionally by the perceiver
     """
