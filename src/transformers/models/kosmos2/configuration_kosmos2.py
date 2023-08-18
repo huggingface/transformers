@@ -113,8 +113,6 @@ class Kosmos2TextConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        # TODO: should be in generation_config
-        no_repeat_ngram_size=3,
         **kwargs,
     ):
         super().__init__(
@@ -138,8 +136,6 @@ class Kosmos2TextConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.scale_embedding = scale_embedding
         self.use_cache = use_cache
-        # TODO: should be in generation_config
-        self.no_repeat_ngram_size = no_repeat_ngram_size
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
