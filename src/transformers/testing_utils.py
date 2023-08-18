@@ -69,6 +69,7 @@ from .utils import (
     is_onnx_available,
     is_optimum_available,
     is_pandas_available,
+    is_peft_available,
     is_phonemizer_available,
     is_pyctcdecode_available,
     is_pytesseract_available,
@@ -367,6 +368,16 @@ def require_torch(test_case):
 
     """
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
+
+
+def require_peft(test_case):
+    """
+    Decorator marking a test that requires PEFT.
+
+    These tests are skipped when PEFT isn't installed.
+
+    """
+    return unittest.skipUnless(is_peft_available(), "test requires PEFT")(test_case)
 
 
 def require_torchvision(test_case):
