@@ -91,11 +91,11 @@ class SeamlessM4TConfig(PretrainedConfig):
         self,
         vocab_size=30522,
         # overall_config
-        hidden_size=1024,
+        hidden_size=1024, # works for speech encoder
         use_text_encoder=True,
         use_conformer_adaptor=True,
-        num_hidden_layers=12,
-        num_attention_heads=12,
+        num_hidden_layers=24, # works for speech encoder
+        num_attention_heads=16, # works for speech encoder
         intermediate_size=3072,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
@@ -128,7 +128,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         feat_quantizer_dropout=0.0,
         final_dropout=0.1,
         layerdrop=0.1,
-        conv_dim=(512, 512, 512, 512, 512, 512, 512),
+        conv_dim=(512, 512, 512, 512, 512, 512, 160),
         conv_stride=(5, 2, 2, 2, 2, 2, 2),
         conv_kernel=(10, 3, 3, 3, 3, 2, 2),
         conv_bias=False,
@@ -196,7 +196,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.feat_proj_dropout = feat_proj_dropout 
         self.feat_quantizer_dropout = feat_quantizer_dropout 
         self.final_dropout = final_dropout 
-        self.layerdrop = layerdrop 
         self.conv_dim = conv_dim 
         self.conv_stride = conv_stride 
         self.conv_kernel = conv_kernel 

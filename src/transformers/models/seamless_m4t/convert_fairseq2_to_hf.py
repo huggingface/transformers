@@ -26,8 +26,8 @@ from seamless_communication.models.inference.translator import Translator
 from transformers import Wav2Vec2ConformerConfig, Wav2Vec2ConformerModel
 from transformers.utils import logging
 
-from .modeling_seamless_m4t import SeamlessM4TModel
-from .configuration_seamless_m4t import SeamlessM4TConfig
+from transformers.models.seamless_m4t.modeling_seamless_m4t import SeamlessM4TModel
+from transformers.models.seamless_m4t.configuration_seamless_m4t import SeamlessM4TConfig
 
 
 api = HfApi()
@@ -50,21 +50,9 @@ def _grab_best_device(use_gpu=True):
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
-new_layer_name_dict = {
-    "c_attn": "att_proj",
-    "c_proj": "out_proj",
-    "c_fc": "in_proj",
-    "transformer.": "",
-    "h.": "layers.",
-    "ln_1": "layernorm_1",
-    "ln_2": "layernorm_2",
-    "ln_f": "layernorm_final",
-    "wpe": "position_embeds_layer",
-    "wte": "input_embeds_layer",
-}
 
 # order is important
-wav2vec_convert_dict = [
+wav2vec_convert_list = [
     ("speech_encoder_frontend.model_dim_proj", "feature_projection.projection"),
     ("speech_encoder_frontend.post_extract_layer_norm", "feature_projection.layer_norm"),
     ("speech_encoder_frontend.pos_encoder.conv", "encoder.pos_conv_embed.conv"),
@@ -87,9 +75,15 @@ wav2vec_convert_dict = [
     ("conv.depthwise_conv", "conv_module.depthwise_conv"),
     ("conv.batch_norm", "conv_module.batch_norm"),
     ("conv_layer_norm", "conv_module.layer_norm"),
+    ("speech_encoder.proj", "proj"),
+    ("speech_encoder.layer_norm", "inner_layer_norm"),
     # "layer_norm", "encoder.layers.*.final_layer_norm",
     # "inner.layer_norm", "encoder.layer_norm",
 ]
+
+t2u_convert_dict = {
+    
+}
 
 
 CUR_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -169,20 +163,44 @@ def load_model(pytorch_dump_folder_path):
     device = _grab_best_device()
     original_model = _load_original_model(device)
     
-    hf_config = SeamlessM4TConfig()
+    # init model
+    hf_config = SeamlessM4TConfig(**{
+        
+            "attention_dropout": 0.0,
+            "hidden_dropout": 0.0,
+            "final_dropout": 0.0,
+            "hidden_size": 1024,
+            "num_hidden_layers": 24,
+            "intermediate_size": 4096,
+            "max_seq_len": 4096,
+            "add_adapter": True,
+            "num_adapter_layers": 1,
+        
+    })
     hf_model = SeamlessM4TModel(hf_config)
 
-    wav2vec = hf_model.speech_encoder
-    
-    hf_model.speech_encoder = _convert_model(
-        original_model, wav2vec, wav2vec_convert_dict, device, unwanted_prefix="model.", filter_state_dict="speech"
-    )
 
+    # 1. take care of speech encoder
+    wav2vec = hf_model.speech_encoder
+    hf_model.speech_encoder = _convert_model(
+        original_model, wav2vec, wav2vec_convert_list, device, unwanted_prefix="model.", filter_state_dict="speech"
+    )
+    
+    # verify same number of parameters speech encoder
+    count_1 = sum(p.numel() for p in hf_model.speech_encoder.parameters())
+    count_2 = sum(p.numel() for p in original_model.model.speech_encoder_frontend.parameters()) + sum(p.numel() for p in original_model.model.speech_encoder.parameters())
+    assert count_1 == count_2, f"Speech Encoder --- Count HF: {count_1} != Count Seamless: {count_2}"
+
+    # 2. take care of t2u
+    
+    hf_model.t2u_model = _convert_model(
+        original_model, hf_model.t2u_model, t2u_convert_dict, device, unwanted_prefix="model.", filter_state_dict="t2u_model"
+    )
 
 
     new_model = hf_model
 
-    if original_model.num_parameters(exclude_embeddings=True) != new_model.get_num_params():
+    if not assert_param_count(original_model, new_model):
         raise ValueError("initial and new models don't have the same number of parameters")
 
     # check if same output as the bark model
