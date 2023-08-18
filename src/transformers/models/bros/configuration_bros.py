@@ -21,8 +21,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 BROS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "bros-base-uncased": "https://huggingface.co/naver-clova-ocr/bros-base-uncased/resolve/main/config.json",
-    "bros-large-uncased": "https://huggingface.co/naver-clova-ocr/bros-large-uncased/resolve/main/config.json",
+    "naver-clova-ocr/bros-base-uncased": "https://huggingface.co/naver-clova-ocr/bros-base-uncased/resolve/main/config.json",
+    "naver-clova-ocr/bros-large-uncased": "https://huggingface.co/naver-clova-ocr/bros-large-uncased/resolve/main/config.json",
 }
 
 
@@ -31,12 +31,10 @@ class BrosConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`BrosModel`] or a [`TFBrosModel`]. It is used to
     instantiate a Bros model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Bros
-    [bros-base-uncased](https://huggingface.co/naver-clova-ocr/bros-base-uncased) architecture.
-
+    [naver-clova-ocr/bros-base-uncased](https://huggingface.co/naver-clova-ocr/bros-base-uncased) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
@@ -83,15 +81,16 @@ class BrosConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from bros import BrosModel, BrosConfig
+    >>> from transformers import BrosConfig, BrosModel
 
-    >>> # Initializing a BROS naver-clova-ocr/bros-base-uncased style configuration >>> configuration =
-    BrosConfig()
+    >>> # Initializing a BROS naver-clova-ocr/bros-base-uncased style configuration
+    >>> configuration = BrosConfig()
 
-    >>> # Initializing a model from the naver-clova-ocr/bros-base-uncased style configuration >>> model =
-    BrosModel(configuration)
+    >>> # Initializing a model from the naver-clova-ocr/bros-base-uncased style configuration
+    >>> model = BrosModel(configuration)
 
-    >>> # Accessing the model configuration >>> configuration = model.config
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "bros"
 
