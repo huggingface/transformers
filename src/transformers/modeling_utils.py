@@ -3799,8 +3799,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         """
 
         # Skip the check during tracing.
-        if is_torch_fx_proxy(input_ids) or torch.jit.is_tracing() or torch._dynamo.is_compiling():
+        if is_torch_fx_proxy(input_ids) or torch.jit.is_tracing():
             return
+
+        # Skip the check during dynamo tracing.
+        try:
+            import torch._dynamo as torchdynamo
+
+            if torchdynamo.is_compiling():
+                return
+        except ImportError:
+            pass
 
         if (attention_mask is not None) or (self.config.pad_token_id is None):
             return
