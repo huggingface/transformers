@@ -476,12 +476,8 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         input_ids = tokenizer.batch_encode_plus(input_sentence, return_tensors="pt", padding=True)
         input_ids_without_pad = tokenizer.encode(input_sentence_without_pad, return_tensors="pt")
 
-        greedy_output = model.generate(
-            input_ids["input_ids"].to(torch_device),
-            attention_mask=input_ids["attention_mask"],
-            max_length=50,
-            do_sample=False,
-        )
+        input_ids, attention_mask = input_ids["input_ids"].to(torch_device), input_ids["attention_mask"]
+        greedy_output = model.generate(input_ids, attention_mask=attention_mask, max_length=50, do_sample=False)
         greedy_output_without_pad = model.generate(
             input_ids_without_pad.to(torch_device), max_length=50, do_sample=False
         )

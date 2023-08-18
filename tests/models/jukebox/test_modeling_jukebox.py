@@ -16,7 +16,7 @@ import unittest
 from unittest import skip
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 from transformers.trainer_utils import set_seed
 
 
@@ -363,6 +363,7 @@ class Jukebox5bModelTester(unittest.TestCase):
         self.assertIn(zs[2][0].detach().cpu().tolist(), [self.EXPECTED_OUTPUT_0, self.EXPECTED_OUTPUT_0_PT_2])
 
     @slow
+    @require_torch_gpu
     @skip("Not enough GPU memory on CI runners")
     def test_slow_sampling(self):
         model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
@@ -387,6 +388,7 @@ class Jukebox5bModelTester(unittest.TestCase):
         torch.testing.assert_allclose(zs[2][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_0))
 
     @slow
+    @require_torch_gpu
     def test_fp16_slow_sampling(self):
         prior_id = "ArthurZ/jukebox_prior_0"
         model = JukeboxPrior.from_pretrained(prior_id, min_duration=0).eval().half().to(torch_device)
