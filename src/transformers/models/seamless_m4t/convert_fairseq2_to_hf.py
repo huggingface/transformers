@@ -58,34 +58,42 @@ new_layer_name_dict = {
     "wte": "input_embeds_layer",
 }
 
-wav2vec_convert_dict = {
-    "speech_encoder_frontend.model_dim_proj": "feature_projection.projection",
-    "speech_encoder_frontend.post_extract_layer_norm": "feature_projection.layer_norm",
-    "speech_encoder_frontend.pos_encoder.conv": "encoder.pos_conv_embed.conv",
-    
-    "speech_encoder.inner.layers": "encoder.layers",
-    "inner_proj": "intermediate_dense",
-    "out_proj": "output_dense",
-    
-    "self_attn.k_proj": "self_attn.linear_k",
-    "self_attn.v_proj": "self_attn.linear_v",
-    "self_attn.q_proj": "self_attn.linear_q",
-    
-    "self_attn.sdpa.u_bias": "self_attn.pos_bias_u",
-    "self_attn.sdpa.v_bias": "self_attn.pos_bias_v",
-    "self_attn.output_proj": "self_attn.linear_out",
-    "self_attn.sdpa.r_proj": "self_attn.linear_pos",
-    
-    "conv.pointwise_conv1": "conv_module.pointwise_conv1",
-    "conv.pointwise_conv2": "conv_module.pointwise_conv2",
-    "conv.depthwise_conv": "conv_module.depthwise_conv",
-    "conv.batch_norm": "conv_module.batch_norm",
-    "conv_layer_norm": "conv_module.layer_norm",
-    
+# order is important
+wav2vec_convert_dict = [
+    ("speech_encoder_frontend.model_dim_proj", "feature_projection.projection"),
+    ("speech_encoder_frontend.post_extract_layer_norm", "feature_projection.layer_norm"),
+    ("speech_encoder_frontend.pos_encoder.conv", "encoder.pos_conv_embed.conv"),
 
-    #"layer_norm": "encoder.layers.*.final_layer_norm",
-    #"inner.layer_norm": "encoder.layer_norm",
-}
+    ("speech_encoder.inner.layers", "encoder.layers"),
+    ("speech_encoder.inner_layer_norm", "encoder.layer_norm"),
+    
+    ("speech_encoder.adaptor_layers", "adapter.layers"),
+    
+    ("inner_proj", "intermediate_dense"),
+    
+    ("self_attn.output_proj", "self_attn.linear_out"),
+    ("self_attn.output_dense", "self_attn.linear_out"),
+
+    ("output_proj", "output_dense"),
+
+    ("self_attn.k_proj", "self_attn.linear_k"),
+    ("self_attn.v_proj", "self_attn.linear_v"),
+    ("self_attn.q_proj", "self_attn.linear_q"),
+
+    ("self_attn.sdpa.u_bias", "self_attn.pos_bias_u"),
+    ("self_attn.sdpa.v_bias", "self_attn.pos_bias_v"),
+    ("self_attn.output_proj", "self_attn.linear_out"),
+    ("self_attn.sdpa.r_proj", "self_attn.linear_pos"),
+
+    ("conv.pointwise_conv1", "conv_module.pointwise_conv1"),
+    ("conv.pointwise_conv2", "conv_module.pointwise_conv2"),
+    ("conv.depthwise_conv", "conv_module.depthwise_conv"),
+    ("conv.batch_norm", "conv_module.batch_norm"),
+    ("conv_layer_norm", "conv_module.layer_norm"),
+    
+    #"layer_norm", "encoder.layers.*.final_layer_norm",
+    #"inner.layer_norm", "encoder.layer_norm",
+]
 
 
 CUR_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -105,7 +113,18 @@ def _load_original_model(device):
 
 def _load_hf_wav2vec(device, config_dict = None):
     if config_dict is None:
-        config_dict = {}
+        config_dict = {
+            "attention_dropout": 0.,
+            "hidden_dropout": 0.,
+            "final_dropout": 0.,
+            "layerdrop": 0.,
+            "hidden_size": 1024,
+            "num_hidden_layers": 24,
+            "intermediate_size": 4096,
+            "max_seq_len": 4096,
+            "add_adapter": True,
+            "num_adapter_layers": 1,
+        }
         
     
     config = Wav2Vec2ConformerConfig(
@@ -117,30 +136,33 @@ def _load_hf_wav2vec(device, config_dict = None):
     hf_wav2vec = Wav2Vec2ConformerModel(config).to(device)
     
     return hf_wav2vec
+
+
+def _convert_model(original_model, hf_model, convert_list, device, unwanted_prefix="model.", filter_state_dict="speech"):
     
-
-
-def _convert_wav2vec(original_model, device):
-
-    hf_model = _load_hf_wav2vec()
-
     state_dict = original_model.state_dict()
     
-    # fixup checkpoint
-    unwanted_prefix = "_orig_mod."
-    for k, v in list(state_dict.items()):
-        if k.startswith(unwanted_prefix):
-            # replace part of the key with corresponding layer name in HF implementation
-            new_k = k[len(unwanted_prefix) :]
-            for old_layer_name in new_layer_name_dict:
-                new_k = new_k.replace(old_layer_name, new_layer_name_dict[old_layer_name])
+    # filter
+    state_dict = dict(filter(lambda x: filter_state_dict in x[0], state_dict.items()))
+    
 
-            state_dict[new_k] = state_dict.pop(k)
+    for k, v in list(state_dict.items()):
+        new_k = k[len(unwanted_prefix) :]
+        for old_layer_name, new_layer_name in convert_list:
+            if old_layer_name in new_k:
+                new_k = new_k.replace(old_layer_name, new_layer_name)
+                
+        # must do it by hand
+        if ".layer_norm" in new_k and new_k.split(".layer_norm")[0][-1].isnumeric():
+            new_k = new_k.replace("layer_norm", "final_layer_norm")
+
+        state_dict[new_k] = state_dict.pop(k)
+        
 
     extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
-    extra_keys = {k for k in extra_keys if not k.endswith(".attn.bias")}
+    extra_keys = {k for k in extra_keys}
     missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
-    missing_keys = {k for k in missing_keys if not k.endswith(".attn.bias")}
+    missing_keys = {k for k in missing_keys}
     if len(extra_keys) != 0:
         raise ValueError(f"extra keys found: {extra_keys}")
     if len(missing_keys) != 0:
@@ -148,22 +170,24 @@ def _convert_wav2vec(original_model, device):
     hf_model.load_state_dict(state_dict, strict=False)
     n_params = hf_model.num_parameters(exclude_embeddings=True)
 
-    logger.info(f"model loaded: {round(n_params/1e6,1)}M params loss")
+    logger.info(f"model loaded: {round(n_params/1e6,1)}M params")
     
     hf_model.eval()
     hf_model.to(device)
     del state_dict
 
-    return hf_model
+    return hf_model 
+
 
 
 def load_model(pytorch_dump_folder_path):
 
 
     device = _grab_best_device()
-    original_model = _load_original_model()
+    original_model = _load_original_model(device)
     
-    wav2vec = _convert_wav2vec(original_model, device)
+    wav2vec =  _load_hf_wav2vec(device)
+    new_wav2vec = _convert_model(original_model, wav2vec, wav2vec_convert_dict, device, unwanted_prefix="model.", filter_state_dict="speech")
     
     
     
@@ -193,7 +217,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
 
-    parser.add_argument("pytorch_dump_folder_path", default="/home/yoach/m4t_weights", type=str, help="Path to the output PyTorch model.")
+    parser.add_argument("--pytorch_dump_folder_path", default="/home/yoach/m4t_weights", type=str, help="Path to the output PyTorch model.")
 
     args = parser.parse_args()
 
