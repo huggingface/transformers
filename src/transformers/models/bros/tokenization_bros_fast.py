@@ -47,7 +47,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class BrosTokenizerFast(BertTokenizerFast):
     r"""
-    Construct a "fast" BERT tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
+    Construct a "fast" Bros tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
 
     This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
@@ -80,7 +80,7 @@ class BrosTokenizerFast(BertTokenizerFast):
             issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents: (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for `lowercase` (as in the original BERT).
+            value for `lowercase` (as in the original Bros).
         wordpieces_prefix: (`str`, *optional*, defaults to `"##"`):
             The prefix for subwords.
     """

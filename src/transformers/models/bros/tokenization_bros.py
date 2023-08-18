@@ -65,7 +65,7 @@ def whitespace_tokenize(text):
 
 class BrosTokenizer(BertTokenizer):
     r"""
-    Construct a BERT tokenizer. Based on WordPiece.
+    Construct a Bros tokenizer. Based on WordPiece.
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
