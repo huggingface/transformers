@@ -48,7 +48,6 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Base objects, independent of any specific backend
 _import_structure = {
-    "adapters": [],
     "audio_utils": [],
     "benchmark": [],
     "commands": [],
@@ -112,6 +111,7 @@ _import_structure = {
         "is_tensorboard_available",
         "is_wandb_available",
     ],
+    "lib_integrations": [],
     "modelcard": ["ModelCard"],
     "modeling_tf_pytorch_utils": [
         "convert_tf_weight_name_to_pt_weight_name",

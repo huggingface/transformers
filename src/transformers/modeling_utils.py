@@ -34,11 +34,11 @@ from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
 from .activations import get_activation
-from .adapters import PeftAdapterMixin
 from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, GenerationMixin
+from .lib_integrations import PeftAdapterMixin
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
