@@ -88,17 +88,10 @@ def expand_inputs_for_generation(
 
 def update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder=False):
     # must have this key set to at least None
-    model_kwargs["past_key_values"] = model_kwargs.get("past_key_values", None)
-
-    # update past
     if "past_key_values" in outputs:
-        model_kwargs["past"] = outputs.past_key_values
-    elif "mems" in outputs:
-        model_kwargs["past"] = outputs.mems
-    elif "past_buckets_states" in outputs:
-        model_kwargs["past"] = outputs.past_buckets_states
+        model_kwargs["past_key_values"] = outputs.past_key_values
     else:
-        model_kwargs["past"] = None
+        model_kwargs["past_key_values"] = None
 
     # update token_type_ids with last value
     if "token_type_ids" in model_kwargs:
@@ -120,10 +113,10 @@ def update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder
     return model_kwargs
 
 
-def prepare_inputs_for_generation(input_ids, past=None, **kwargs):
+def prepare_inputs_for_generation(input_ids, past_key_values=None, **kwargs):
     token_type_ids = kwargs.get("token_type_ids", None)
     # only last token for inputs_ids if past is defined in kwargs
-    if past:
+    if past_key_values:
         input_ids = input_ids[:, -1].unsqueeze(-1)
         if token_type_ids is not None:
             token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
@@ -135,7 +128,7 @@ def prepare_inputs_for_generation(input_ids, past=None, **kwargs):
         # create position_ids on the fly for batch generation
         position_ids = attention_mask.long().cumsum(-1) - 1
         position_ids.masked_fill_(attention_mask == 0, 1)
-        if past:
+        if past_key_values:
             position_ids = position_ids[:, -1].unsqueeze(-1)
 
     pixel_values = kwargs.get("pixel_values", None)
@@ -145,7 +138,7 @@ def prepare_inputs_for_generation(input_ids, past=None, **kwargs):
 
     return {
         "input_ids": input_ids,
-        "past_key_values": past,
+        "past_key_values": past_key_values,
         "use_cache": kwargs.get("use_cache"),
         "position_ids": position_ids,
         "attention_mask": attention_mask,
