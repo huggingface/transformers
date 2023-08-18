@@ -127,7 +127,7 @@ class IdeficsImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         size = (image_size, image_size)
 
-        if len(images) == 0:
+        if isinstance(images, list) and len(images) == 0:
             return []
 
         images = make_list_of_images(images)

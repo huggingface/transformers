@@ -19,7 +19,7 @@ import unittest
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingSavingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_torch_available():
@@ -105,10 +105,25 @@ class IdeficsImageProcessingTester(unittest.TestCase):
 
         return expected_height, expected_width
 
+    def expected_output_image_shape(self, images):
+        height, width = self.get_expected_values(images, batched=True)
+        return (self.num_channels, height, width)
+
+    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+        return prepare_image_inputs(
+            batch_size=self.batch_size,
+            num_channels=self.num_channels,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
+            equal_resolution=equal_resolution,
+            numpify=numpify,
+            torchify=torchify,
+        )
+
 
 @require_torch
 @require_vision
-class IdeficsImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
+class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = IdeficsImageProcessor if is_vision_available() else None
 
     def setUp(self):
@@ -136,7 +151,7 @@ class IdeficsImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCa
         # as we had to reimplement the torchvision transforms using transformers utils we must check
         # they both do the same
 
-        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
         image_processor = self.image_processing_class(**self.image_processor_dict)
 
         print(image_inputs)
@@ -170,3 +185,19 @@ class IdeficsImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCa
         pixel_values_transform_supplied = image_processor(image_inputs, transform=transform)
 
         torch.testing.assert_close(pixel_values_transform_implied, pixel_values_transform_supplied, rtol=0.0, atol=0.0)
+
+    @unittest.skip("not supported")
+    def test_call_numpy(self):
+        pass
+
+    @unittest.skip("not supported")
+    def test_call_numpy_4_channels(self):
+        pass
+
+    @unittest.skip("not supported")
+    def test_call_pil(self):
+        pass
+
+    @unittest.skip("not supported")
+    def test_call_pytorch(self):
+        pass
