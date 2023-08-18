@@ -39,7 +39,9 @@ from .configuration_bros import BrosConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "naver-clova-ocr/bros-base-uncased"
 _CONFIG_FOR_DOC = "BrosConfig"
+_TOKENIZER_FOR_DOC = "BrosTokenizer"
 
 BROS_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "naver-clova-ocr/bros-base-uncased",
