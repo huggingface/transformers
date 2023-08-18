@@ -2108,7 +2108,7 @@ Please note that if you're not using the [`Trainer`] integration, you're complet
 
 ## HfDeepSpeedConfig
 
-[[autodoc]] deepspeed.HfDeepSpeedConfig
+[[autodoc]] lib_integrations.deepspeed.HfDeepSpeedConfig
     - all
 
 ### Custom DeepSpeed ZeRO Inference
