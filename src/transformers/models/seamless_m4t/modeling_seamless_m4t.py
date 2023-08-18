@@ -906,33 +906,19 @@ class SeamlessM4TConformerEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerAdapter with Wav2Vec2->SeamlessM4T
 class SeamlessM4TConformerAdapter(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        # feature dim might need to be down-projected
-        if config.output_hidden_size != config.hidden_size:
-            self.proj = nn.Linear(config.hidden_size, config.output_hidden_size)
-            self.proj_layer_norm = nn.LayerNorm(config.output_hidden_size)
-        else:
-            self.proj = self.proj_layer_norm = None
-
         self.layers = nn.ModuleList(SeamlessM4TConformerAdapterLayer(config) for _ in range(config.num_adapter_layers))
-        self.layerdrop = config.layerdrop
 
     def forward(self, hidden_states):
         # down project hidden_states if necessary
-        if self.proj is not None and self.proj_layer_norm is not None:
-            hidden_states = self.proj(hidden_states)
-            hidden_states = self.proj_layer_norm(hidden_states)
 
         hidden_states = hidden_states.transpose(1, 2)
 
         for layer in self.layers:
-            layerdrop_prob = np.random.random()
-            if not self.training or (layerdrop_prob > self.layerdrop):
-                hidden_states = layer(hidden_states)
+            hidden_states = layer(hidden_states)
 
         hidden_states = hidden_states.transpose(1, 2)
         return hidden_states
