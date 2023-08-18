@@ -74,6 +74,18 @@ class Conversation:
         for message in self.messages:
             yield message["role"] == "user", message["content"]
 
+    @property
+    def past_user_inputs(self):
+        # This is a legacy property for backwards compatibility. It is recommended to just directly access
+        # conversation.messages instead.
+        return [message["content"] for message in self.messages if message["role"] == "user"]
+
+    @property
+    def generated_responses(self):
+        # This is a legacy property for backwards compatibility. It is recommended to just directly access
+        # conversation.messages instead.
+        return [message["content"] for message in self.messages if message["role"] == "assistant"]
+
 
 @add_end_docstrings(
     PIPELINE_INIT_ARGS,
