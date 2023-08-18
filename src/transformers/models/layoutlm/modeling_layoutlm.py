@@ -1456,6 +1456,11 @@ class LayoutLMRelationExtractionDecoder(nn.Module):
         batch_size = len(relations)
         new_relations = []
         for b in range(batch_size):
+
+            # handle empty entities/relations case
+            if len(entities[b]["start"]) <= 2:
+                entities[b] = {"end": [1, 1], "label": [0, 0], "start": [0, 0]}
+
             all_possible_relations = set(
                 [
                     (i, j)
@@ -1476,6 +1481,7 @@ class LayoutLMRelationExtractionDecoder(nn.Module):
             relation_per_doc["label"] = [1] * len(positive_relations) + [0] * (
                 len(reordered_relations) - len(positive_relations)
             )
+            assert len(relation_per_doc["head"]) != 0
             new_relations.append(relation_per_doc)
         return new_relations, entities
 
