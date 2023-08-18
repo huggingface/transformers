@@ -3942,6 +3942,37 @@ class IBertPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class IdeficsForVisionText2Text(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class IdeficsModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class IdeficsPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class IdeficsProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
