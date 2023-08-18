@@ -1133,6 +1133,8 @@ else:
             "AutoModelForSpeechSeq2Seq",
             "AutoModelForTableQuestionAnswering",
             "AutoModelForTextEncoding",
+            "AutoModelForTextToSpectrogram",
+            "AutoModelForTextToWaveform",
             "AutoModelForTokenClassification",
             "AutoModelForUniversalSegmentation",
             "AutoModelForVideoClassification",
