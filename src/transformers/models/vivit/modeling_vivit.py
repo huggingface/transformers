@@ -532,8 +532,17 @@ class VivitModel(VivitPreTrainedModel):
 
 
         >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+        ...     '''
+        ...     Sample frames from the video.
+        ...     Args:
+        ...         clip_len (`int`): Total number of frames to sample
+        ...         frame_sample_rate (`int`): Frame sample rate
+        ...         seg_len (`int`):  Number of frames in a sample segment
+        ...     Returns:
+        ...         result (`List[int]`): List of sampled video frame indices
+        ...     '''
         ...     converted_len = int(clip_len * frame_sample_rate)
-        ...     end_idx = np.random.randint(converted_len, seg_len)
+        ...     end_idx = np.random.randint(converted_len, converted_len + seg_len)
         ...     start_idx = end_idx - converted_len
         ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
         ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
@@ -547,8 +556,8 @@ class VivitModel(VivitPreTrainedModel):
         >>> container = av.open(file_path)
 
         >>> # sample 32 frames
-        >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=1, seg_len=len(videoreader))
-        >>> video = videoreader.get_batch(indices).asnumpy()
+        >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=2, seg_len=2)
+        >>> video = read_video_pyav(container=container, indices=indices)
 
         >>> image_processor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2-kinetics400")
         >>> model = VivitModel.from_pretrained("google/vivit-b-16x2-kinetics400")
@@ -559,7 +568,7 @@ class VivitModel(VivitPreTrainedModel):
         >>> # forward pass
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
-        >>> list(last_hidden_states.shape)
+        >>> print(list(last_hidden_states.shape))
         [1, 3137, 768]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
