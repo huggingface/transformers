@@ -119,8 +119,8 @@
       title: 다중 CPU에서 훈련하기
     - local: in_translation
       title: (번역중) Training on TPUs
-    - local: in_translation
-      title: (번역중) Training on TPU with TensorFlow
+    - local: perf_train_tpu_tf
+      title: TensorFlow로 TPU에서 훈련하기
     - local: in_translation
       title: (번역중) Training on Specialized Hardware
     - local: perf_infer_cpu
