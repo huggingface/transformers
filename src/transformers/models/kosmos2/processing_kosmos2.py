@@ -323,6 +323,9 @@ class Kosmos2Processor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
+    def post_processor_generation(self, text):
+        return text.split("</image>")[-1]
+
     @property
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.model_input_names
     def model_input_names(self):

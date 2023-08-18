@@ -1606,7 +1606,6 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Kosmos2ForConditionalGenerationModelOutput]:
-        # TODO: make this works better
         r"""
         Returns:
 
@@ -1619,7 +1618,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         >>> model = Kosmos2ForConditionalGeneration.from_pretrained("ydshieh/kosmos-2-patch14-224")
         >>> processor = AutoProcessor.from_pretrained("ydshieh/kosmos-2-patch14-224")
 
-        >>> prompt = "<grounding>Describe this image in detail:"
+        >>> prompt = "<grounding> An image of"
         >>> image = Image.open("snowman.jpg")
 
         >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
@@ -1635,10 +1634,9 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel):
         ... )
 
         >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        >>> generated_text
-        >>> <image>. the, to and of as in I that' for is was- on’ it with The as at bet he have from by are " you his “ this said not has an ( but had we her they will my or were their): up about out who one all be
-en she can more would It</image><grounding> Describe this image in detail: The image features a snowman sitting by<phrase> a campfire</phrase><object><patch_index_0005><patch_index_1007></object> in the
- snow. He is wearing<phrase> a hat</phrase><object><patch_index_0048><patch_index_0250></object>,<phrase> scarf</phrase><object><patch_index_0240><patch_index_0604></object>, and<phrase> gloves</phrase><object><patch_index_0400><patch_index_0532></object>, with<phrase> a pot</phrase><object><patch_index_0610><patch_index_0872></object> nearby and<phrase> a cup</phrase><object>
+        >>> result = processor.post_processor_generation(generated_text)
+        >>> result
+        <grounding> An image of<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863></object> warming himself by<phrase> a fire</phrase><object><patch_index_0005><patch_index_0911></object>.
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
