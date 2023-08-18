@@ -128,6 +128,8 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
+        # TODO @ArthurZucker this can only work one way for now, to update later-on. Tests should also properly
+        # check this as they were green before.
         pre_tok_state = pickle.dumps(self.backend_tokenizer.pre_tokenizer)
         decoder_state = pickle.dumps(self.backend_tokenizer.decoder)
 
