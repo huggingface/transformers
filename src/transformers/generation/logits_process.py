@@ -1333,7 +1333,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     Whisper specific Processor. This processor can be used to force a list of tokens. The processor will set their log
     probs to `inf` so that they are sampled at their corresponding index.
 
-    See [the paper](https://arxiv.org/abs/2303.00747) for more information.
+    See [the paper](https://arxiv.org/abs/2212.04356) for more information.
 
     Args:
         generate_config (`GenerateConfig`):
@@ -1401,7 +1401,7 @@ class ClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
     correspond to the unconditional logits (predicted from an empty or 'null' prompt). The processor computes a
     weighted average across the conditional and unconditional logits, parameterised by the `guidance_scale`.
 
-    See [the paper](https://arxiv.org/abs/2306.17806) for more information.
+    See [the paper](https://arxiv.org/abs/2306.05284) for more information.
 
     Args:
         guidance_scale (float):
