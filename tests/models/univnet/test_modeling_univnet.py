@@ -12,15 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 import inspect
 import unittest
+
+import numpy as np
 
 from transformers import UnivNetGanConfig
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
+    slow,
     torch_device,
 )
+from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -196,3 +201,83 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(inputs["spectrogram"].to(torch_device), inputs["noise_waveform"].to(torch_device))
             self.assertTrue(outputs.dim() == 1, msg="Got un-batched inputs but batched output")
+
+
+@require_torch
+@slow
+class UnivNetGanIntegrationTests(unittest.TestCase):
+    def tearDown(self):
+        super().tearDown()
+        gc.collect()
+        torch.cuda.empty_cache()
+    
+    def get_inputs(
+        self,
+        device,
+        num_samples: int = 3,
+        noise_length: int = 64,
+        spectrogram_seq_len: int = 32,
+        seed: int = 0
+    ):
+        generator = torch.manual_seed(seed)
+        # Note: hardcode model_in_channels
+        if num_samples == 1:
+            noise_waveform_shape = (noise_length, 64)
+        else:
+            noise_waveform_shape = (num_samples, noise_length, 64)
+        # Explicity generate noise waveform on CPU for consistency.
+        noise_waveform = torch.randn(
+            noise_waveform_shape, generator=generator, dtype=torch.float32, device="cpu"
+        )
+        # Put noise_waveform on the desired device.
+        noise_waveform = noise_waveform.to(device)
+
+        # Note: hardcode num_mel_channels
+        if num_samples == 1:
+            spectrogram_shape = [spectrogram_seq_len, 100]
+        else:
+            spectrogram_shape = [num_samples, spectrogram_seq_len, 100]
+        spectrogram = floats_tensor(spectrogram_shape, scale=1.0)
+        # Note: spectrogram should already be on torch_device
+
+        inputs = {
+            "spectrogram": spectrogram,
+            "noise_waveform": noise_waveform,
+            "generator": generator,
+        }
+
+        return inputs
+
+    def test_generation_tortoise_tts_batched(self):
+        # Load sample checkpoint from Tortoise TTS
+        model = UnivNetGan.from_pretrained("dg845/univnet-dev")
+        model.to(torch_device)
+
+        # Get batched noise and spectrogram inputs.
+        input_speech = self.get_inputs(torch_device, 3)
+
+        waveform = model(**input_speech)
+        waveform_slice = waveform[-1, -9:]
+
+        # TODO: get expected waveform slice from reference implementation
+        expected_slice = np.array([0.0] * 9)
+
+        assert np.abs(waveform_slice.flatten() - expected_slice).max() < 1e-3
+    
+    def test_generation_tortoise_tts_unbatched(self):
+        # Load sample checkpoint from Tortoise TTS
+        model = UnivNetGan.from_pretrained("dg845/univnet-dev")
+        model.to(torch_device)
+
+        # Get unbatched noise and spectrogram inputs.
+        input_speech = self.get_inputs(torch_device, 1)
+
+        waveform = model(**input_speech)
+        waveform_slice = waveform[-9:]
+
+        # TODO: get expected waveform slice from reference implementation
+        expected_slice = np.array([0.0] * 9)
+
+        assert np.abs(waveform_slice.flatten() - expected_slice).max() < 1e-3
+
+
