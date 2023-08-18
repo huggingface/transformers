@@ -1210,13 +1210,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
             position_ids = position_ids.view(-1, seq_length).long()
 
         no_images = False
-        if (
-            sum(
-                vision_input is not None
-                for vision_input in (pixel_values, image_encoder_embeddings, perceiver_embeddings)
-            )
-            != 1
-        ):
+if (pixel_values, image_encoder_embeddings, perceiver_embeddings).count(None) != 2:
             raise ValueError(
                 "Exactly 1 of pixel_values, image_encoder_embeddings or perceiver_embeddings has to be not-None."
             )
