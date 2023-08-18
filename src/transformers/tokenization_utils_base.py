@@ -1660,6 +1660,23 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         prompt_config: Optional[PromptConfig] = None,
         **kwargs,
     ) -> List[int]:
+        """
+        Converts a Conversation object or a list of {"role", "content"} dictionaries to a list of token ids.
+        This method is intended for use with chat models, and will read the model's PromptConfig object to determine
+        the format and control tokens to use when converting. When the PromptConfig is not present, it may fall back
+        to the default_prompt_config specified at the class level.
+
+        Args:
+            conversation (Union[List[Dict[str, str]], "Conversation"]): A Conversation object or list of dicts
+            with "role" and "content" keys, representing the chat history so far.
+            prompt_config (Optional[PromptConfig], *optional*): A PromptConfig object to use for this conversion. If
+            this is not passed, the model's prompt config will be used instead.
+            **kwargs: Additional kwargs. These will be interpreted as prompt config kwargs.
+
+        Returns:
+            List[int]: A list of token ids representing the tokenized chat so far, including control tokens. This
+            output is ready to pass to the model, either directly or via methods like `generate()`.
+        """
         if hasattr(conversation, "messages"):
             # Indicates it's a Conversation object
             conversation = conversation.messages
