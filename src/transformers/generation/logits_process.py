@@ -1087,14 +1087,15 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that enforces diverse beam search.
 
-    Note that this logits processor is only effective for
-    [`PreTrainedModel.group_beam_search`]. See [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence
-    Models](https://arxiv.org/pdf/1610.02424.pdf) for more details.
+    Note that this logits processor is only effective for [`PreTrainedModel.group_beam_search`]. See [Diverse Beam
+    Search: Decoding Diverse Solutions from Neural Sequence Models](https://arxiv.org/pdf/1610.02424.pdf) for more
+    details.
 
     <Tip>
 
-    Diverse beam search can be particularly useful in scenarios where a variety of different outputs is desired, rather than multiple similar sequences.
-    It allows the model to explore different generation paths and provides a broader coverage of possible outputs.
+    Diverse beam search can be particularly useful in scenarios where a variety of different outputs is desired, rather
+    than multiple similar sequences. It allows the model to explore different generation paths and provides a broader
+    coverage of possible outputs.
 
     </Tip>
 
@@ -1106,12 +1107,15 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
 
     Traditional beam search often generates very similar sequences across different beams.
 
-    The `HammingDiversityLogitsProcessor` addresses this by penalizing beams that generate tokens already chosen by other beams in the same time step.
+    The `HammingDiversityLogitsProcessor` addresses this by penalizing beams that generate tokens already chosen by
+    other beams in the same time step.
 
     How It Works:
     - **Grouping Beams**: Beams are divided into groups. Each group selects tokens independently of the others.
-    - **Penalizing Repeated Tokens**: If a beam in a group selects a token already chosen by another group in the same step, a penalty is applied to that token's score.
-    - **Promoting Diversity**: This penalty discourages beams within a group from selecting the same tokens as beams in other groups.
+    - **Penalizing Repeated Tokens**: If a beam in a group selects a token already chosen by another group in the same
+      step, a penalty is applied to that token's score.
+    - **Promoting Diversity**: This penalty discourages beams within a group from selecting the same tokens as beams in
+      other groups.
 
     Benefits:
     - **Diverse Outputs**: Produces a variety of different sequences.
@@ -1125,22 +1129,23 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
                             by another beam within the same group during the same time step.
                     -- A higher `diversity_penalty` will enforce greater diversity among the beams,
                             making it less likely for multiple beams to choose the same token.
-                    -- Conversely, a lower penalty will allow beams to more freely choose similar tokens.
-                    -- Adjusting this value can help strike a balance between diversity and natural likelihood.
+                    -- Conversely, a lower penalty will allow beams to more freely choose similar tokens. -- Adjusting
+                    this value can help strike a balance between diversity and natural likelihood.
         num_beams (`int`):
             Number of beams used for group beam search. See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more
             details.
                     -- Beam search is a method used that maintains beams (or "multiple hypotheses") at each step,
                             expanding each one and keeping the top-scoring sequences.
-                    -- A higher `num_beams` will explore more potential sequences
-                    -- This can increase chances of finding a high-quality output but also increases computational cost.
+                    -- A higher `num_beams` will explore more potential sequences -- This can increase chances of
+                    finding a high-quality output but also increases computational cost.
         num_beam_groups (`int`):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
             See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
-                    -- Each group of beams will operate independently, selecting tokens without considering the choices of other groups.
-                    -- This division promotes diversity by ensuring that beams within different groups explore different paths.
-                    --  For instance, if `num_beams` is 6 and `num_beam_groups` is 2, there will be 2 groups each containing 3 beams.
-                    -- The choice of `num_beam_groups` should be made considering the desired level of output diversity and the total number of beams.
+                    -- Each group of beams will operate independently, selecting tokens without considering the choices
+                    of other groups. -- This division promotes diversity by ensuring that beams within different groups
+                    explore different paths. -- For instance, if `num_beams` is 6 and `num_beam_groups` is 2, there
+                    will be 2 groups each containing 3 beams. -- The choice of `num_beam_groups` should be made
+                    considering the desired level of output diversity and the total number of beams.
 
 
     Example: the below example shows a comparison before and after applying Hamming Diversity.
@@ -1161,9 +1166,9 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
             encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
 
             # Set the parameters for diverse beam search
-            num_beams = 8 #higher is more diverse
-            num_beam_groups = 4 #4 groups of 2 beams will explore 4*2=8 beams (=num_beams). by separating the beams into groups and applying penalties within groups, the model is encouraged to explore different sequence possibilities in each group
-            diversity_penalty = 5.5 #enforces diversity among different groups of beams, discourages beams within a group from selecting the same tokens
+            num_beams = 8  # higher is more diverse
+            num_beam_groups = 4  # 4 groups of 2 beams will explore 4*2=8 beams (=num_beams). by separating the beams into groups and applying penalties within groups, the model is encouraged to explore different sequence possibilities in each group
+            diversity_penalty = 5.5  # enforces diversity among different groups of beams, discourages beams within a group from selecting the same tokens
 
             # Generate three diverse summaries using the `generate` method
             outputs_diverse = model.generate(
@@ -1174,7 +1179,7 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
                 diversity_penalty=diversity_penalty,
                 no_repeat_ngram_size=2,
                 early_stopping=True,
-                num_return_sequences=3
+                num_return_sequences=3,
             )
 
             # Generate two non-diverse summaries
@@ -1184,7 +1189,7 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
                 num_beams=num_beams,
                 no_repeat_ngram_size=2,
                 early_stopping=True,
-                num_return_sequences=2
+                num_return_sequences=2,
             )
 
             # Decode and print the summaries
@@ -1204,9 +1209,9 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
                 print(summary)
                 # summary 1:  the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud.
                 # summary 2:  the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud.
-
     ```
-                For more details, see [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models](https://arxiv.org/pdf/1610.02424.pdf).
+                For more details, see [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence
+                Models](https://arxiv.org/pdf/1610.02424.pdf).
 
     """
 
