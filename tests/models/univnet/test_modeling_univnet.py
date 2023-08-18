@@ -25,7 +25,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -210,14 +209,9 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         super().tearDown()
         gc.collect()
         torch.cuda.empty_cache()
-    
+
     def get_inputs(
-        self,
-        device,
-        num_samples: int = 3,
-        noise_length: int = 64,
-        spectrogram_seq_len: int = 32,
-        seed: int = 0
+        self, device, num_samples: int = 3, noise_length: int = 64, spectrogram_seq_len: int = 32, seed: int = 0
     ):
         generator = torch.manual_seed(seed)
         # Note: hardcode model_in_channels
@@ -226,9 +220,7 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         else:
             noise_waveform_shape = (num_samples, noise_length, 64)
         # Explicity generate noise waveform on CPU for consistency.
-        noise_waveform = torch.randn(
-            noise_waveform_shape, generator=generator, dtype=torch.float32, device="cpu"
-        )
+        noise_waveform = torch.randn(noise_waveform_shape, generator=generator, dtype=torch.float32, device="cpu")
         # Put noise_waveform on the desired device.
         noise_waveform = noise_waveform.to(device)
 
@@ -263,7 +255,7 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         expected_slice = np.array([0.0] * 9)
 
         assert np.abs(waveform_slice.flatten() - expected_slice).max() < 1e-3
-    
+
     def test_generation_tortoise_tts_unbatched(self):
         # Load sample checkpoint from Tortoise TTS
         model = UnivNetGan.from_pretrained("dg845/univnet-dev")
@@ -279,5 +271,3 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         expected_slice = np.array([0.0] * 9)
 
         assert np.abs(waveform_slice.flatten() - expected_slice).max() < 1e-3
-
-
