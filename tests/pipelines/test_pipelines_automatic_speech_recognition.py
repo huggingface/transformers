@@ -317,29 +317,29 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(
             res,
             {
-                "text": " Conquered returned to its place amidst the tents.",
-                "chunks": [{"text": " Conquered returned to its place amidst the tents.", "timestamp": (0.0, 3.36)}],
+                "text": " Conchord returned to its place amidst the tents.",
+                "chunks": [{"timestamp": (0.0, 3.36), "text": " Conchord returned to its place amidst the tents."}],
             },
         )
         pipe.model.generation_config.alignment_heads = [[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]]
         res = pipe(sample["audio"]["array"], return_timestamps="word")
+
         # fmt: off
-        # Note that the word-level timestamps predicted here are pretty bad.
         self.assertEqual(
             res,
             {
-                "text": " Conquered returned to its place amidst the tents.",
+                "text": " Conchord returned to its place amidst the tents.",
                 "chunks": [
-                    {'text': ' Conquered', 'timestamp': (29.78, 29.9)},
-                    {'text': ' returned', 'timestamp': (29.9, 29.9)},
-                    {'text': ' to', 'timestamp': (29.9, 29.9)},
-                    {'text': ' its', 'timestamp': (29.9, 29.9)},
-                    {'text': ' place', 'timestamp': (29.9, 29.9)},
-                    {'text': ' amidst', 'timestamp': (29.9, 29.9)},
-                    {'text': ' the', 'timestamp': (29.9, 29.9)},
-                    {'text': ' tents.', 'timestamp': (29.9, 29.9)}
-                ]
-            }
+                    {"text": " Conchord", "timestamp": (0.54, 1.2)},
+                    {"text": " returned", "timestamp": (1.2, 1.62)},
+                    {"text": " to", "timestamp": (1.62, 1.88)},
+                    {"text": " its", "timestamp": (1.88, 2.02)},
+                    {"text": " place", "timestamp": (2.02, 2.3)},
+                    {"text": " amidst", "timestamp": (2.3, 2.84)},
+                    {"text": " the", "timestamp": (2.84, 2.98)},
+                    {"text": " tents.", "timestamp": (2.98, 3.5)},
+                ],
+            },
         )
         # fmt: on
 
