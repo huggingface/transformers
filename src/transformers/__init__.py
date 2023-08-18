@@ -112,6 +112,7 @@ _import_structure = {
         "is_wandb_available",
     ],
     "lib_integrations": [],
+    "lib_integrations.peft": [],
     "modelcard": ["ModelCard"],
     "modeling_tf_pytorch_utils": [
         "convert_tf_weight_name_to_pt_weight_name",
