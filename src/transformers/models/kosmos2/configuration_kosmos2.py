@@ -16,7 +16,7 @@
 
 import copy
 import os
-from typing import Mapping, Union
+from typing import Union
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging

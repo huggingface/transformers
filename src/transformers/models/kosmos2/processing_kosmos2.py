@@ -14,19 +14,19 @@
 # limitations under the License.
 """Processor class for KOSMOS-2."""
 
+import copy
 import math
-import numpy as np
 import re
 from typing import List, Optional, Tuple, Union
+
+import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, is_batched
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, TextInput, TruncationStrategy
-from ...utils import TensorType
-from ...utils import is_tf_available, is_torch_available
+from ...utils import TensorType, is_tf_available, is_torch_available
 
-import copy
 
 if is_torch_available():
     import torch
@@ -39,7 +39,7 @@ BboxInput = Union[
     List[Tuple[int, int]],
     List[Tuple[float, float, float, float]],
     List[List[Tuple[int, int]]],
-    List[List[Tuple[float, float, float]]]
+    List[List[Tuple[float, float, float]]],
 ]
 
 
@@ -138,10 +138,11 @@ class Kosmos2Processor(ProcessorMixin):
             start_index = int(with_bos) + 1
 
             if return_tensors:
-
                 # change the ids for the fake `<image>` tokens in `input_ids`
                 input_ids = np.array(encoding["input_ids"])
-                input_ids[:, start_index:(start_index + num_image_tokens)] = np.arange(first_image_token_id, first_image_token_id + num_image_tokens)
+                input_ids[:, start_index : (start_index + num_image_tokens)] = np.arange(
+                    first_image_token_id, first_image_token_id + num_image_tokens
+                )
 
                 batch_size, seq_len = input_ids.shape[:2]
                 img_attn_mask = []
@@ -155,7 +156,7 @@ class Kosmos2Processor(ProcessorMixin):
                 # for `</image>`
                 img_attn_mask.append(np.zeros(shape=(batch_size, 1), dtype=np.int64))
                 # trailing part (which are not related to the image)
-                seq_len -= (int(with_bos) + 1 + num_image_tokens + 1)
+                seq_len -= int(with_bos) + 1 + num_image_tokens + 1
                 img_attn_mask.append(np.zeros(shape=(batch_size, seq_len), dtype=np.int64))
 
                 # concatenate along the sequence dimension
@@ -187,7 +188,7 @@ class Kosmos2Processor(ProcessorMixin):
                     all_input_ids = [all_input_ids]
                 for text_ids in all_input_ids:
                     # change the ids for the fake `<image>` tokens in `input_ids`
-                    text_ids = text_ids[:start_index] + image_token_ids + text_ids[start_index + num_image_tokens:]
+                    text_ids = text_ids[:start_index] + image_token_ids + text_ids[start_index + num_image_tokens :]
                     input_ids.append(text_ids)
 
                     mask = copy.copy(base_img_attn_mask)
@@ -254,13 +255,16 @@ class Kosmos2Processor(ProcessorMixin):
                 elif not isinstance(bbox, list):
                     bbox = [bbox]
                 for elt in bbox:
-                    if not isinstance(elt, tuple) or not ((len(elt) == 2 and all(isinstance(x, int) for x in elt)) or (len(elt) == 4 and all(isinstance(x, float) for x in elt))):
+                    if not isinstance(elt, tuple) or not (
+                        (len(elt) == 2 and all(isinstance(x, int) for x in elt))
+                        or (len(elt) == 4 and all(isinstance(x, float) for x in elt))
+                    ):
                         raise ValueError(
                             "Each element in `bboxes` (for a single text example) should be `None`, a tuple containing "
                             "2 integers or 4 float point numbers, or a list containing such tuples. Also "
                             "make sure the arguments `texts` and `bboxes` passed to `preprocess_text` are both in "
                             "batches or both for a single example."
-                    )
+                        )
 
         def preprocess_single(text, image, bboxes):
             if image is not None:
@@ -284,7 +288,9 @@ class Kosmos2Processor(ProcessorMixin):
         elif not is_batched(images):
             images = [images]
         if len(texts) != len(images):
-            raise ValueError(f"The number of examples in `texts` and `images` should be the same. Got {len(texts)} v.s. {len(images)} instead.")
+            raise ValueError(
+                f"The number of examples in `texts` and `images` should be the same. Got {len(texts)} v.s. {len(images)} instead."
+            )
 
         if not batched:
             check_bboxes_for_single_text(bboxes)
@@ -298,7 +304,9 @@ class Kosmos2Processor(ProcessorMixin):
             bboxes = [None] * len(texts)
 
         if len(bboxes) != len(texts):
-            raise ValueError(f"The number of examples in `texts` and `bboxes` should be the same. Got {len(texts)} v.s. {len(bboxes)} instead.")
+            raise ValueError(
+                f"The number of examples in `texts` and `bboxes` should be the same. Got {len(texts)} v.s. {len(bboxes)} instead."
+            )
 
         result = [preprocess_single(text, image, bbox) for text, image, bbox in zip(texts, images, bboxes)]
         # un-batch if necessary
@@ -339,7 +347,9 @@ class Kosmos2Processor(ProcessorMixin):
 
         matched_phrases = list(re.finditer(r"<phrase>.+?</phrase>", string=text))
         if len(matched_phrases) != len(bboxes):
-            raise ValueError(f"The number of elements in `bboxes` should be the same as the number of `<phrase> ... </phrase>` pairs in `text`. Got {len(matched_phrases)} v.s. {len(bboxes)} instead.")
+            raise ValueError(
+                f"The number of elements in `bboxes` should be the same as the number of `<phrase> ... </phrase>` pairs in `text`. Got {len(matched_phrases)} v.s. {len(bboxes)} instead."
+            )
 
         # insert object's patch index tokens
         # the found `<phrase> ... </phrase>` pairs.
@@ -393,7 +403,10 @@ class Kosmos2Processor(ProcessorMixin):
         the inconsistency of tokenization results between kosmos-2 slow and fast tokenizers.
         """
 
-        tag_tokens = set(self.tokenizer.tag_tokens + [f"<patch_index_{str(x).zfill(4)}>" for x in range(self.tokenizer.num_patch_index_tokens)])
+        tag_tokens = set(
+            self.tokenizer.tag_tokens
+            + [f"<patch_index_{str(x).zfill(4)}>" for x in range(self.tokenizer.num_patch_index_tokens)]
+        )
         pattern = "|".join(tag_tokens)
         splits = re.split(rf"({pattern})", text)
 

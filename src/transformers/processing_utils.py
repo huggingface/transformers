@@ -70,8 +70,6 @@ class ProcessorMixin(PushToHubMixin):
 
         # Check each arg is of the proper class (this will also catch a user initializing in the wrong order)
         for attribute_name, arg in kwargs.items():
-
-
             setattr(self, attribute_name, arg)
 
     def __repr__(self):
