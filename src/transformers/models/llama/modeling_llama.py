@@ -33,11 +33,12 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_flash_attn_available,
     logging,
     replace_return_docstrings,
-    is_flash_attn_available,
 )
 from .configuration_llama import LlamaConfig
+
 
 if is_flash_attn_available():
     from flash_attn import flash_attn_func
@@ -327,7 +328,6 @@ class LlamaAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
@@ -378,16 +378,14 @@ class LlamaAttention(nn.Module):
                     f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
                     f" {attn_output.size()}"
                 )
-            
+
             attn_output = attn_output.transpose(1, 2).contiguous()
         else:
-            attn_output = flash_attn_func(
-                query_states, key_states, value_states, 0.0, causal=True
-            )
+            attn_output = flash_attn_func(query_states, key_states, value_states, 0.0, causal=True)
             attn_weights = None
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
-        
+
         if self.config.pretraining_tp > 1:
             attn_output = attn_output.split(self.hidden_size // self.config.pretraining_tp, dim=2)
             o_proj_slices = self.o_proj.weight.split(self.hidden_size // self.config.pretraining_tp, dim=1)
