@@ -1213,36 +1213,7 @@ class Kosmos2VisionModel(Kosmos2PreTrainedModel):
         r"""
         Returns:
 
-        Examples:
-
-        ```python
-        >>> from PIL import Image
-        >>> from transformers import AutoProcessor, Kosmos2ForConditionalGeneration
-
-        >>> model = Kosmos2ForConditionalGeneration.from_pretrained("ydshieh/kosmos-2-patch14-224")
-        >>> processor = AutoProcessor.from_pretrained("ydshieh/kosmos-2-patch14-224")
-
-        >>> prompt = "<grounding>Describe this image in detail:"
-        >>> image = Image.open("snowman.jpg")
-
-        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
-
-        >>> generated_ids = model.generate(
-        ...     pixel_values=inputs["pixel_values"],
-        ...     input_ids=inputs["input_ids"][:, :-1],
-        ...     attention_mask=inputs["attention_mask"][:, :-1],
-        ...     img_features=None,
-        ...     img_attn_mask=inputs["img_attn_mask"][:, :-1],
-        ...     use_cache=True,
-        ...     max_new_tokens=64,
-        ... )
-
-        >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        >>> generated_text
-        >>> <image>. the, to and of as in I that' for is was- on’ it with The as at bet he have from by are " you his “ this said not has an ( but had we her they will my or were their): up about out who one all be
-en she can more would It</image><grounding> Describe this image in detail: The image features a snowman sitting by<phrase> a campfire</phrase><object><patch_index_0005><patch_index_1007></object> in the
- snow. He is wearing<phrase> a hat</phrase><object><patch_index_0048><patch_index_0250></object>,<phrase> scarf</phrase><object><patch_index_0240><patch_index_0604></object>, and<phrase> gloves</phrase><object><patch_index_0400><patch_index_0532></object>, with<phrase> a pot</phrase><object><patch_index_0610><patch_index_0872></object> nearby and<phrase> a cup</phrase><object>
-        ```"""
+        """
         return self.model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -1528,6 +1499,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Kosmos2ModelOutput]:
+        # TODO: Add this
         r"""
         Returns:
 
