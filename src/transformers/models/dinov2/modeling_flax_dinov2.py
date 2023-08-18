@@ -1,3 +1,17 @@
+# coding=utf-8
+# Copyright 2023 Istvan Fehervari and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """ Flax DINOv2 model."""
 
 from typing import Optional, Tuple, Union
@@ -29,21 +43,43 @@ DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 DINOV2_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
+    This model inherits from [`FlaxPreTrainedModel`].Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading, saving and converting weights from PyTorch models)
+
+    This model is also a Flax Linen [flax.linen.Module](https://flax.readthedocs.io/en/latest/flax.linen.html#module)
+    subclass. Use it as a regular Flax linen Module and refer to the Flax documentation for all matter related to
+    general usage and behavior.
+
+    Finally, this model supports inherent JAX features such as:
+
+    - [Just-In-Time (JIT) compilation](https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit)
+    - [Automatic Differentiation](https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation)
+    - [Vectorization](https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap)
+    - [Parallelization](https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap)
 
     Parameters:
         config ([`Dinov2Config`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+        dtype (`jax.numpy.dtype`, *optional*, defaults to `jax.numpy.float32`):
+            The data type of the computation. Can be one of `jax.numpy.float32`, `jax.numpy.float16` (on GPUs) and
+            `jax.numpy.bfloat16` (on TPUs).
+
+            This can be used to enable mixed-precision training or half-precision inference on GPUs or TPUs. If
+            specified all the computation will be performed with the given `dtype`.
+
+            **Note that this only specifies the dtype of the computation and does not influence the dtype of model
+            parameters.**
+
+            If you wish to change the dtype of the model parameters, see [`~FlaxPreTrainedModel.to_fp16`] and
+            [`~FlaxPreTrainedModel.to_bf16`].
 """
 
 DINOV2_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        pixel_values (`numpy.ndarray` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`BitImageProcessor.preprocess`] for details.
+            [`Dinov2ImageProcessor.__call__`] for details.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -335,9 +371,9 @@ class FlaxDinov2Layer(nn.Module):
             self.mlp = FlaxDinov2MLP(self.config, dtype=self.dtype)
         self.layer_scale2 = FlaxDinov2LayerScale(self.config, dtype=self.dtype)
 
-    def __call__(self, hidden_states, deterministic: bool = True, output_attentions: bool = False):
+    def __call__(self, hidden_states: jnp.ndarray, deterministic: bool = True, output_attentions: bool = False):
         self_attention_outputs = self.attention(
-            self.norm1(hidden_states),  # in ViT, layernorm is applied before self-attention
+            self.norm1(hidden_states),  # in Dinov2, layernorm is applied before self-attention
             deterministic=deterministic,
             output_attentions=output_attentions,
         )
@@ -373,7 +409,7 @@ class FlaxDinov2LayerCollection(nn.Module):
 
     def __call__(
         self,
-        hidden_states,
+        hidden_states: jnp.ndarray,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -476,7 +512,7 @@ class FlaxDinov2PreTrainedModel(FlaxPreTrainedModel):
     @add_start_docstrings_to_model_forward(DINOV2_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
         self,
-        pixel_values,
+        pixel_values: jnp.ndarray,
         params: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
@@ -519,7 +555,7 @@ class FlaxDinov2Module(nn.Module):
 
     def __call__(
         self,
-        pixel_values,
+        pixel_values: jnp.ndarray,
         deterministic: bool = True,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -575,11 +611,11 @@ class FlaxDinov2ForImageClassificationModule(nn.Module):
 
     def __call__(
         self,
-        pixel_values=None,
+        pixel_values: jnp.ndarray,
         deterministic: bool = True,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -637,7 +673,7 @@ FLAX_VISION_CLASSIF_DOCSTRING = """
     >>> image = Image.open(requests.get(url, stream=True).raw)
 
     >>> image_processor = AutoImageProcessor.from_pretrained("facebook/dinov2-base-patch16-224")
-    >>> model = FlaxViTForImageClassification.from_pretrained("facebook/dinov2-base-patch16-224")
+    >>> model = FlaxDinov2ForImageClassification.from_pretrained("facebook/dinov2-base-patch16-224")
 
     >>> inputs = image_processor(images=image, return_tensors="np")
     >>> outputs = model(**inputs)
