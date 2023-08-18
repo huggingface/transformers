@@ -38,6 +38,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
+    Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import (
@@ -59,6 +60,8 @@ SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all SeamlessM4T models at https://huggingface.co/models?filter=seamless_m4t
 ]
 
+############ UTILS ################
+
 # Copied from transformers.models.roberta.modeling_roberta.create_position_ids_from_input_ids
 def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
     """
@@ -74,6 +77,27 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
+# Copied from transformers.models.bart.modeling_mbart.shift_tokens_right
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
+    """
+    Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that MBart does not
+    have a single `decoder_start_token_id` in contrast to other Bart-like models.
+    """
+    prev_output_tokens = input_ids.clone()
+
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
+    # replace possible -100 values in labels by `pad_token_id`
+    prev_output_tokens.masked_fill_(prev_output_tokens == -100, pad_token_id)
+
+    index_of_eos = (prev_output_tokens.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
+    decoder_start_tokens = prev_output_tokens.gather(1, index_of_eos).squeeze()
+    prev_output_tokens[:, 1:] = prev_output_tokens[:, :-1].clone()
+    prev_output_tokens[:, 0] = decoder_start_tokens
+
+    return prev_output_tokens
+
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(
@@ -108,14 +132,13 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-# TODO: remove if necessary
-#class StandardLayerNorm(LayerNorm):
-#    """Applies Layer Normalization to incoming data as described in
-#    :cite:t:`https://doi.org/10.48550/arxiv.1607.06450`."""
-#
-#    @finaloverride
-#    def forward(self, x: Tensor) -> Tensor:
-#        return layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+
+############ SPEECH ENCODER related code ################
+
+
+
+############ TEXT / UNITS related code ################
+
 
 # Copied from transformers.models.m2m_100.modeling_m2m_100.M2M100SinusoidalPositionalEmbedding
 class SeamlessM4TSinusoidalPositionalEmbedding(nn.Module):
@@ -1088,73 +1111,130 @@ class SeamlessM4TTextToUnitModel(nn.Module):
         # Initialize weights and apply final processing
         self.post_init()
         
-    def forward(self, batch):
-        encoder_output, encoder_padding_mask = self.encode(
-            batch.source_seqs, batch.source_seq_lens
-        )
 
-        decoder_output, decoder_padding_mask = self.decode(
-            batch.target_seqs,
-            batch.target_seq_lens,
-            encoder_output,
-            encoder_padding_mask,
-        )
+    def get_input_embeddings(self):
+        return self.shared
 
-        return self.project(decoder_output, decoder_padding_mask)
+    def set_input_embeddings(self, value):
+        self.shared = value
+        self.encoder.embed_tokens = self.shared
+        self.decoder.embed_tokens = self.shared
 
-    def encode(
+    def get_encoder(self):
+        return self.encoder
+
+    def get_decoder(self):
+        return self.decoder
+
+    def forward(
         self,
-        text_decoder_output: Tensor,
-        text_decoder_padding_mask: Optional[Tensor],
-    ) -> Tuple[Tensor, Optional[Tensor]]:
-        if self.encoder is None:
-            return text_decoder_output, text_decoder_padding_mask
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Seq2SeqModelOutput, Tuple[torch.FloatTensor]]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        return self.encoder(text_decoder_output, text_decoder_padding_mask)  # type: ignore[no-any-return]
+        # different to other models, MBart automatically creates decoder_input_ids from
+        # input_ids if no decoder_input_ids are provided
+        if decoder_input_ids is None and decoder_inputs_embeds is None:
+            decoder_input_ids = shift_tokens_right(input_ids, self.config.pad_token_id)
 
-    def decode(
-        self,
-        seqs: Tensor,
-        seq_lens: Optional[Tensor],
-        encoder_output: Tensor,
-        encoder_padding_mask: Optional[Tensor],
-        state_bag: Optional[IncrementalStateBag] = None,
-    ) -> Tuple[Tensor, Optional[Tensor]]:
-        seqs, padding_mask = self.decoder_frontend(seqs, seq_lens, state_bag)
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
 
-        return self.decoder(  # type: ignore[no-any-return]
-            seqs, padding_mask, encoder_output, encoder_padding_mask, state_bag
+        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=encoder_outputs[0],
+            encoder_attention_mask=attention_mask,
+            head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
-    def project(
-        self, decoder_output: Tensor, decoder_padding_mask: Optional[Tensor]
-    ) -> SequenceModelOutput:
-        logits = self.final_proj(decoder_output)
+        if not return_dict:
+            return decoder_outputs + encoder_outputs
+
+        return Seq2SeqModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
 
         
         
-class SeamlessM4TUnitYModel(nn.Module):
+############ WHOLE MODEL related code ################
+        
+
+class SeamlessM4TModel(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         
-        self.speech_encoder_frontend = ... # wav2vec2 frontend
+        
+        padding_idx, vocab_size = config.pad_token_id, config.vocab_size
+        self.shared_text = nn.Embedding(vocab_size, config.d_model, padding_idx)
+        self.shared_units = nn.Embedding(vocab_size, config.d_model, padding_idx)
+        
         
         self.speech_encoder = ... # unity_encoder_adaptor - wav2vec2 encoder
         
-        self.text_encoder_frontend = ... # transformer_embedding_frontend
 
         if self.config.use_text_encoder:            
-            self.text_encoder = SeamlessM4TEncoder(config)
+            self.text_encoder = SeamlessM4TEncoder(config, self.shared_text)
         
-        self.text_decoder = SeamlessM4TDecoder(config)
-        
-        self.final_proj = ... # tied projection
-        
+        self.text_decoder = SeamlessM4TDecoder(config, self.shared_text)
+                
         self.t2u_model = SeamlessM4TTextToUnitModel(config)
         
+        # Initialize weights and apply final processing
+        self.post_init()
         
-####### VOCODER
+
+############ VOCODER related code ################
 
 
 class SeamlessM4TVariancePredictor(nn.Module):
@@ -1180,6 +1260,7 @@ class SeamlessM4TVocoder(nn.Module):
         self.dur_predictor = SeamlessM4TVariancePredictor()
 
 
+# TODO: model with vocoder head
  
 
 
