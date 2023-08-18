@@ -500,78 +500,6 @@ class SeamlessM4TConformerSamePadLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerFeatureEncoder with Wav2Vec2->SeamlessM4T
-class SeamlessM4TConformerFeatureEncoder(nn.Module):
-    """Construct the features from raw audio waveform"""
-
-    def __init__(self, config):
-        super().__init__()
-
-        if config.feat_extract_norm == "group":
-            conv_layers = [SeamlessM4TConformerGroupNormConvLayer(config, layer_id=0)] + [
-                SeamlessM4TConformerNoLayerNormConvLayer(config, layer_id=i + 1)
-                for i in range(config.num_feat_extract_layers - 1)
-            ]
-        elif config.feat_extract_norm == "layer":
-            conv_layers = [
-                SeamlessM4TConformerLayerNormConvLayer(config, layer_id=i)
-                for i in range(config.num_feat_extract_layers)
-            ]
-        else:
-            raise ValueError(
-                f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
-            )
-        self.conv_layers = nn.ModuleList(conv_layers)
-        self.gradient_checkpointing = False
-        self._requires_grad = True
-
-    def _freeze_parameters(self):
-        for param in self.parameters():
-            param.requires_grad = False
-        self._requires_grad = False
-
-    def forward(self, input_values):
-        hidden_states = input_values[:, None]
-
-        # make sure hidden_states require grad for gradient_checkpointing
-        if self._requires_grad and self.training:
-            hidden_states.requires_grad = True
-
-        for conv_layer in self.conv_layers:
-            if self._requires_grad and self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs)
-
-                    return custom_forward
-
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(conv_layer),
-                    hidden_states,
-                )
-            else:
-                hidden_states = conv_layer(hidden_states)
-
-        return hidden_states
-
-
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerFeatureProjection with Wav2Vec2->SeamlessM4T
-class SeamlessM4TConformerFeatureProjection(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
-        self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
-        self.dropout = nn.Dropout(config.feat_proj_dropout)
-
-    def forward(self, hidden_states):
-        # non-projected hidden states are needed for quantization
-        norm_hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.projection(norm_hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states, norm_hidden_states
-
-
 # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerFeedForward with Wav2Vec2->SeamlessM4T
 class SeamlessM4TConformerFeedForward(nn.Module):
     def __init__(self, config):
@@ -978,83 +906,6 @@ class SeamlessM4TConformerEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerGumbelVectorQuantizer with Wav2Vec2->SeamlessM4T
-class SeamlessM4TConformerGumbelVectorQuantizer(nn.Module):
-    """
-    Vector quantization using gumbel softmax. See `[CATEGORICAL REPARAMETERIZATION WITH
-    GUMBEL-SOFTMAX](https://arxiv.org/pdf/1611.01144.pdf) for more information.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.num_groups = config.num_codevector_groups
-        self.num_vars = config.num_codevectors_per_group
-
-        if config.codevector_dim % self.num_groups != 0:
-            raise ValueError(
-                f"`config.codevector_dim {config.codevector_dim} must be divisible "
-                f"by `config.num_codevector_groups` {self.num_groups} for concatenation"
-            )
-
-        # storage for codebook variables (codewords)
-        self.codevectors = nn.Parameter(
-            torch.FloatTensor(1, self.num_groups * self.num_vars, config.codevector_dim // self.num_groups)
-        )
-        self.weight_proj = nn.Linear(config.conv_dim[-1], self.num_groups * self.num_vars)
-
-        # can be decayed for training
-        self.temperature = 2
-
-    @staticmethod
-    def _compute_perplexity(probs, mask=None):
-        if mask is not None:
-            mask_extended = mask.flatten()[:, None, None].expand(probs.shape)
-            probs = torch.where(mask_extended, probs, torch.zeros_like(probs))
-            marginal_probs = probs.sum(dim=0) / mask.sum()
-        else:
-            marginal_probs = probs.mean(dim=0)
-
-        perplexity = torch.exp(-torch.sum(marginal_probs * torch.log(marginal_probs + 1e-7), dim=-1)).sum()
-        return perplexity
-
-    def forward(self, hidden_states, mask_time_indices=None):
-        batch_size, sequence_length, hidden_size = hidden_states.shape
-
-        # project to codevector dim
-        hidden_states = self.weight_proj(hidden_states)
-        hidden_states = hidden_states.view(batch_size * sequence_length * self.num_groups, -1)
-
-        if self.training:
-            # sample code vector probs via gumbel in differentiateable way
-            codevector_probs = nn.functional.gumbel_softmax(
-                hidden_states.float(), tau=self.temperature, hard=True
-            ).type_as(hidden_states)
-
-            # compute perplexity
-            codevector_soft_dist = torch.softmax(
-                hidden_states.view(batch_size * sequence_length, self.num_groups, -1).float(), dim=-1
-            )
-            perplexity = self._compute_perplexity(codevector_soft_dist, mask_time_indices)
-        else:
-            # take argmax in non-differentiable way
-            # comptute hard codevector distribution (one hot)
-            codevector_idx = hidden_states.argmax(dim=-1)
-            codevector_probs = hidden_states.new_zeros(hidden_states.shape).scatter_(
-                -1, codevector_idx.view(-1, 1), 1.0
-            )
-            codevector_probs = codevector_probs.view(batch_size * sequence_length, self.num_groups, -1)
-
-            perplexity = self._compute_perplexity(codevector_probs, mask_time_indices)
-
-        codevector_probs = codevector_probs.view(batch_size * sequence_length, -1)
-        # use probs to retrieve codevectors
-        codevectors_per_group = codevector_probs.unsqueeze(-1) * self.codevectors
-        codevectors = codevectors_per_group.view(batch_size * sequence_length, self.num_groups, self.num_vars, -1)
-        codevectors = codevectors.sum(-2).view(batch_size, sequence_length, -1)
-
-        return codevectors, perplexity
-
-
 # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerAdapter with Wav2Vec2->SeamlessM4T
 class SeamlessM4TConformerAdapter(nn.Module):
     def __init__(self, config):
@@ -1087,24 +938,89 @@ class SeamlessM4TConformerAdapter(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerAdapterLayer with Wav2Vec2->SeamlessM4T
+
 class SeamlessM4TConformerAdapterLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.conv = nn.Conv1d(
-            config.output_hidden_size,
-            2 * config.output_hidden_size,
-            config.adapter_kernel_size,
-            stride=config.adapter_stride,
-            padding=1,
+        embed_dim = config.hidden_size
+        dropout = config.attention_dropout
+        
+        
+        # 1. residual convolution
+        self.residual_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.self_attn_conv = nn.Conv1d(
+            self.embed_dim,
+            2 * self.embed_dim,
+            self.kernel_size,
+            stride=self.stride,
+            padding=self.kernel_size // 2,
         )
+        self.glu = torch.nn.GLU(dim=1)
+        
 
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-        hidden_states = nn.functional.glu(hidden_states, dim=1)
+        
+        # TODO: change attention so that it it standards attention with no positional encoder
+        # Self-Attention
+        self.self_attn_layer_norm = nn.LayerNorm(embed_dim)
+        self.self_attn_conv = nn.Conv1d(
+            self.model_dim,
+            self.model_dim * 2,
+            self.kernel_size,
+            self.stride,
+            padding=self.kernel_size // 2,
+        )
+        self.self_attn = SeamlessM4TConformerSelfAttention(config)
+        self.self_attn_dropout = torch.nn.Dropout(dropout)
 
+
+        # Feed-forward 2
+        self.ffn_layer_norm = nn.LayerNorm(embed_dim)
+        self.ffn = SeamlessM4TConformerFeedForward(config)
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask: Optional[torch.Tensor] = None,
+        relative_position_embeddings: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ):
+        # TODO: define this function - https://vscode.dev/github/ylacombe/transformers/blob/add-S2S-model/fairseq2/models/unity/adaptor_block.py#L236
+        
+        hidden_states = hidden_states
+        
         return hidden_states
 
+        # 1. Feed-Forward 1 layer
+        residual = hidden_states
+        hidden_states = self.ffn1_layer_norm(hidden_states)
+        hidden_states = self.ffn1(hidden_states)
+        hidden_states = hidden_states * 0.5 + residual
+        residual = hidden_states
+
+        # 2. Self-Attention layer
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states, attn_weigts = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            relative_position_embeddings=relative_position_embeddings,
+            output_attentions=output_attentions,
+        )
+        hidden_states = self.self_attn_dropout(hidden_states)
+        hidden_states = hidden_states + residual
+
+        # 3. Convolutional Layer
+        residual = hidden_states
+        hidden_states = self.conv_module(hidden_states)
+        hidden_states = residual + hidden_states
+
+        # 4. Feed-Forward 2 Layer
+        residual = hidden_states
+        hidden_states = self.ffn2_layer_norm(hidden_states)
+        hidden_states = self.ffn2(hidden_states)
+        hidden_states = hidden_states * 0.5 + residual
+        hidden_states = self.final_layer_norm(hidden_states)
+
+        return hidden_states, attn_weigts
 
 # not exactly the same as Wav2Vec2ConformerPreTrainedModel
 class SeamlessM4TConformerPreTrainedModel(PreTrainedModel):
@@ -1120,12 +1036,8 @@ class SeamlessM4TConformerPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        # gumbel softmax requires special init
-        if isinstance(module, SeamlessM4TConformerGumbelVectorQuantizer):
-            module.weight_proj.weight.data.normal_(mean=0.0, std=1)
-            module.weight_proj.bias.data.zero_()
-            nn.init.uniform_(module.codevectors)
-        elif isinstance(module, SeamlessM4TConformerSelfAttention):
+        
+        if isinstance(module, SeamlessM4TConformerSelfAttention):
             if hasattr(module, "pos_bias_u"):
                 nn.init.xavier_uniform_(module.pos_bias_u)
             if hasattr(module, "pos_bias_v"):
@@ -1199,9 +1111,6 @@ class SeamlessM4TConformerPreTrainedModel(PreTrainedModel):
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (SeamlessM4TConformerEncoder, SeamlessM4TConformerFeatureEncoder)):
-            module.gradient_checkpointing = value
 
 
 # not exactly the same as Wav2Vec2ConformerModel
@@ -1209,27 +1118,12 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TConformerPreTrainedModel):
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__(config)
         self.config = config
-        self.feature_extractor = SeamlessM4TConformerFeatureEncoder(config)
-        self.feature_projection = SeamlessM4TConformerFeatureProjection(config)
-
-        # model only needs masking vector if mask prob is > 0.0
-        if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
-            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
         self.encoder = SeamlessM4TConformerEncoder(config)
-
         self.adapter = SeamlessM4TConformerAdapter(config) if config.add_adapter else None
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model.freeze_feature_encoder
-    def freeze_feature_encoder(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
-        not be updated during training.
-        """
-        self.feature_extractor._freeze_parameters()
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
     def _mask_hidden_states(
@@ -1294,18 +1188,10 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TConformerPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        extract_features = self.feature_extractor(input_values)
-        extract_features = extract_features.transpose(1, 2)
+        # TODO: might be an intermediate step here
 
-        if attention_mask is not None:
-            # compute reduced attention_mask corresponding to feature vectors
-            attention_mask = self._get_feature_vector_attention_mask(
-                extract_features.shape[1], attention_mask, add_adapter=False
-            )
-
-        hidden_states, extract_features = self.feature_projection(extract_features)
         hidden_states = self._mask_hidden_states(
-            hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
+            input_values, mask_time_indices=mask_time_indices, attention_mask=attention_mask
         )
 
         encoder_outputs = self.encoder(
@@ -1322,11 +1208,10 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TConformerPreTrainedModel):
             hidden_states = self.adapter(hidden_states)
 
         if not return_dict:
-            return (hidden_states, extract_features) + encoder_outputs[1:]
+            return (hidden_states,) + encoder_outputs[1:]
 
         return Wav2Vec2BaseModelOutput(
             last_hidden_state=hidden_states,
-            extract_features=extract_features,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
