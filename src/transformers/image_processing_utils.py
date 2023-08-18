@@ -530,7 +530,9 @@ class ImageProcessingMixin(PushToHubMixin):
         if isinstance(image_url_or_urls, list):
             return [self.fetch_images(x) for x in image_url_or_urls]
         elif isinstance(image_url_or_urls, str):
-            return Image.open(BytesIO(requests.get(image_url_or_urls, stream=True, headers=headers).content))
+            response = requests.get(image_url_or_urls, stream=True, headers=headers)
+            response.raise_for_status()
+            return Image.open(BytesIO(response.content))
         else:
             raise ValueError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
 
