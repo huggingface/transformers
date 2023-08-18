@@ -66,6 +66,7 @@ from .utils import (
     is_accelerate_available,
     is_auto_gptq_available,
     is_bitsandbytes_available,
+    is_flash_attn_available,
     is_offline_mode,
     is_optimum_available,
     is_remote_url,
@@ -1090,6 +1091,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     is_parallelizable = False
     supports_gradient_checkpointing = False
 
+    # Flash Attention 2 support
+    _supports_flash_attn_2 = False
+
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
         """
@@ -1222,6 +1226,60 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             output.requires_grad_(True)
 
         self._require_grads_hook = self.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
+
+    def enable_flash_attn_2(self) -> None:
+        """
+        Enable the Flash Attention 2.0 implementation for this model for more memory efficient inference
+        and training.
+        If you don't know about Flash Attention, check out the official repository of flash attention:
+        https://github.com/Dao-AILab/flash-attention
+
+        For using Flash Attention 1.0 you can do it directly via the `BetterTransformer` API, have a
+        look at this specific section of the documentation to learn more about it:
+        https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#decoder-models
+        """
+        if not self._supports_flash_attn_2:
+            raise ValueError(
+                "The current architecture does not support Flash Attention 2.0. Please open an issue on GitHub to "
+                "request support for this architecture."
+            )
+
+        if not is_flash_attn_available():
+            raise ImportError(
+                "Flash Attention 2.0 is not available. Please refer to the documentation of https://github.com/Dao-AILab/flash-attention for"
+                " installing it."
+            )
+
+        _is_bettertransformer = getattr(self, "use_bettertransformer", False)
+
+        if _is_bettertransformer:
+            raise ValueError(
+                "Flash Attention 2 and BetterTransformer API are not compatible. Please use one API or the other."
+            )
+
+        self._enable_flash_attn_2()
+        self._flash_attn_2_enabled = True
+
+    def disable_flash_attn_2(self) -> None:
+        """
+        Disables the Flash Attention 2.0 implementation for this model for more memory efficient inference
+        and training.
+        """
+        if not self._supports_flash_attn_2:
+            raise ValueError(
+                "The current architecture does not support Flash Attention 2.0. Please open an issue on GitHub to "
+                "request support for this architecture."
+            )
+
+        _flash_attn_2_enabled = self._flash_attn_2_enabled
+
+        if not _flash_attn_2_enabled:
+            raise ValueError(
+                "Flash Attention 2.0 is not enabled. Please enable it with `model.enable_flash_attn_2()`."
+            )
+
+        self._disable_flash_attn_2()
+        self._flash_attn_2_enabled = False
 
     def disable_input_require_grads(self):
         """
