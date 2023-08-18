@@ -1229,13 +1229,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def enable_flash_attn_2(self) -> None:
         """
-        Enable the Flash Attention 2.0 implementation for this model for more memory efficient inference
-        and training.
+        Enable the Flash Attention 2.0 implementation for this model for more memory efficient inference and training.
         If you don't know about Flash Attention, check out the official repository of flash attention:
         https://github.com/Dao-AILab/flash-attention
 
-        For using Flash Attention 1.0 you can do it directly via the `BetterTransformer` API, have a
-        look at this specific section of the documentation to learn more about it:
+        For using Flash Attention 1.0 you can do it directly via the `BetterTransformer` API, have a look at this
+        specific section of the documentation to learn more about it:
         https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#decoder-models
         """
         if not self._supports_flash_attn_2:
@@ -1262,8 +1261,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def disable_flash_attn_2(self) -> None:
         """
-        Disables the Flash Attention 2.0 implementation for this model for more memory efficient inference
-        and training.
+        Disables the Flash Attention 2.0 implementation for this model for more memory efficient inference and
+        training.
         """
         if not self._supports_flash_attn_2:
             raise ValueError(
