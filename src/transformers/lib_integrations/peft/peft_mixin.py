@@ -78,7 +78,7 @@ class PeftAdapterMixin:
             peft_model_id (`str`):
                 The identifier of the model to look for on the Hub, or a local path to the saved adapter config file
                 and adapter weights.
-            adapter_name (`str`, `optional`):
+            adapter_name (`str`, *optional*):
                 The adapter name to use. If not set, will use the default adapter.
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
@@ -108,7 +108,7 @@ class PeftAdapterMixin:
             max_memory (`Dict`, *optional*):
                 A dictionary device identifier to maximum memory. Will default to the maximum memory available for each
                 GPU and the available CPU RAM if unset.
-            offload_folder (`str` or `os.PathLike`, *optional*):
+            offload_folder (`str` or `os.PathLike`, `optional`):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_index (`int`, `optional`):
                 `offload_index` argument to be passed to `accelerate.dispatch_model` method.
@@ -195,7 +195,7 @@ class PeftAdapterMixin:
             adapter_config (`~peft.PeftConfig`):
                 The configuration of the adapter to add, supported adapters are non-prefix tuning and adaption prompts
                 methods
-            adapter_name (`str`, **optional**, defaults to `"default"`):
+            adapter_name (`str`, *optional*, defaults to `"default"`):
                 The name of the adapter to add. If no name is passed, a default name is assigned to the adapter.
         """
         check_peft_version(min_version="0.4.0")
@@ -317,7 +317,7 @@ class PeftAdapterMixin:
         If no adapter_name is passed, the active adapter is used.
 
         Args:
-            adapter_name (`str`, **optional**):
+            adapter_name (`str`, *optional*):
                 The name of the adapter to get the state dict from. If no name is passed, the active adapter is used.
         """
         check_peft_version(min_version="0.4.0")
@@ -360,7 +360,7 @@ class PeftAdapterMixin:
                 GPU and the available CPU RAM if unset.
             offload_folder (`str` or `os.PathLike`, *optional*):
                 If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
-            offload_index (`int`, `optional`):
+            offload_index (`int`, *optional*):
                 The offload_index argument to be passed to `accelerate.dispatch_model` method.
         """
         dispatch_model_kwargs = {}
