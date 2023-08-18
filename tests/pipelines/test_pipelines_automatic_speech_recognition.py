@@ -317,8 +317,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(
             res,
             {
-                "text": " Conchord returned to its place amidst the tents.",
-                "chunks": [{"timestamp": (0.0, 3.36), "text": " Conchord returned to its place amidst the tents."}],
+                "text": " Conquered returned to its place amidst the tents.",
+                "chunks": [{"timestamp": (0.0, 3.36), "text": " Conquered returned to its place amidst the tents."}],
             },
         )
         pipe.model.generation_config.alignment_heads = [[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]]
@@ -328,9 +328,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(
             res,
             {
-                "text": " Conchord returned to its place amidst the tents.",
+                "text": " Conquered returned to its place amidst the tents.",
                 "chunks": [
-                    {"text": " Conchord", "timestamp": (0.54, 1.2)},
+                    {"text": " Conquered", "timestamp": (0.54, 1.2)},
                     {"text": " returned", "timestamp": (1.2, 1.62)},
                     {"text": " to", "timestamp": (1.62, 1.88)},
                     {"text": " its", "timestamp": (1.88, 2.02)},
