@@ -1464,6 +1464,8 @@ class LayoutLMRelationExtractionDecoder(nn.Module):
                     if entities[b]["label"][i] == 1 and entities[b]["label"][j] == 2
                 ]
             )
+            if len(all_possible_relations) == 0:
+                all_possible_relations = set([(0, 1)])
             positive_relations = set(list(zip(relations[b]["head"], relations[b]["tail"])))
             negative_relations = all_possible_relations - positive_relations
             positive_relations = set([i for i in positive_relations if i in all_possible_relations])
