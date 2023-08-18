@@ -5050,6 +5050,8 @@ if TYPE_CHECKING:
             AutoModelForSpeechSeq2Seq,
             AutoModelForTableQuestionAnswering,
             AutoModelForTextEncoding,
+            AutoModelForTextToSpectrogram,
+            AutoModelForTextToWaveform,
             AutoModelForTokenClassification,
             AutoModelForUniversalSegmentation,
             AutoModelForVideoClassification,
