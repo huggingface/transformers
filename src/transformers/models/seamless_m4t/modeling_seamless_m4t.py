@@ -303,7 +303,7 @@ class SeamlessM4TConformerNoLayerNormConvLayer(nn.Module):
             stride=config.conv_stride[layer_id],
             bias=config.conv_bias,
         )
-        self.activation = ACT2FN[config.feat_extract_activation]
+        self.activation = ACT2FN[config.speech_encoder_hidden_act]
 
     def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
@@ -326,7 +326,7 @@ class SeamlessM4TConformerLayerNormConvLayer(nn.Module):
             bias=config.conv_bias,
         )
         self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
-        self.activation = ACT2FN[config.feat_extract_activation]
+        self.activation = ACT2FN[config.speech_encoder_hidden_act]
 
     def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
@@ -353,7 +353,7 @@ class SeamlessM4TConformerGroupNormConvLayer(nn.Module):
             stride=config.conv_stride[layer_id],
             bias=config.conv_bias,
         )
-        self.activation = ACT2FN[config.feat_extract_activation]
+        self.activation = ACT2FN[config.speech_encoder_hidden_act]
 
         self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
 
@@ -391,7 +391,7 @@ class SeamlessM4TConformerPositionalConvEmbedding(nn.Module):
             self.conv = weight_norm(self.conv, name="weight", dim=2)
 
         self.padding = SeamlessM4TConformerSamePadLayer(config.num_conv_pos_embeddings)
-        self.activation = ACT2FN[config.feat_extract_activation]
+        self.activation = ACT2FN[config.speech_encoder_hidden_act]
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.transpose(1, 2)
@@ -507,10 +507,10 @@ class SeamlessM4TConformerFeedForward(nn.Module):
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)
 
         self.intermediate_dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+        if isinstance(config.speech_encoder_hidden_act, str):
+            self.intermediate_act_fn = ACT2FN[config.speech_encoder_hidden_act]
         else:
-            self.intermediate_act_fn = config.hidden_act
+            self.intermediate_act_fn = config.speech_encoder_hidden_act
 
         self.output_dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.output_dropout = nn.Dropout(config.hidden_dropout)
@@ -553,7 +553,7 @@ class SeamlessM4TConformerConvolutionModule(nn.Module):
             bias=False,
         )
         self.batch_norm = torch.nn.BatchNorm1d(config.hidden_size)
-        self.activation = ACT2FN[config.hidden_act]
+        self.activation = ACT2FN[config.speech_encoder_hidden_act]
         self.pointwise_conv2 = torch.nn.Conv1d(
             config.hidden_size,
             config.hidden_size,
@@ -1111,53 +1111,6 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TConformerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
-    def _mask_hidden_states(
-        self,
-        hidden_states: torch.FloatTensor,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-    ):
-        """
-        Masks extracted features along time axis and/or along feature axis according to
-        [SpecAugment](https://arxiv.org/abs/1904.08779).
-        """
-
-        # `config.apply_spec_augment` can set masking to False
-        if not getattr(self.config, "apply_spec_augment", True):
-            return hidden_states
-
-        # generate indices & apply SpecAugment along time axis
-        batch_size, sequence_length, hidden_size = hidden_states.size()
-
-        if mask_time_indices is not None:
-            # apply SpecAugment along time axis with given mask_time_indices
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
-        elif self.config.mask_time_prob > 0 and self.training:
-            mask_time_indices = _compute_mask_indices(
-                (batch_size, sequence_length),
-                mask_prob=self.config.mask_time_prob,
-                mask_length=self.config.mask_time_length,
-                attention_mask=attention_mask,
-                min_masks=self.config.mask_time_min_masks,
-            )
-            mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.bool)
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
-
-        if self.config.mask_feature_prob > 0 and self.training:
-            # generate indices & apply SpecAugment along feature axis
-            mask_feature_indices = _compute_mask_indices(
-                (batch_size, hidden_size),
-                mask_prob=self.config.mask_feature_prob,
-                mask_length=self.config.mask_feature_length,
-                min_masks=self.config.mask_feature_min_masks,
-            )
-            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
-            mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
-            hidden_states[mask_feature_indices] = 0
-
-        return hidden_states
-
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model.forward with wav2vec2->wav2vec2_conformer
     def forward(
         self,
@@ -1176,9 +1129,7 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TConformerPreTrainedModel):
 
         # TODO: might be an intermediate step here
 
-        hidden_states = self._mask_hidden_states(
-            input_values, mask_time_indices=mask_time_indices, attention_mask=attention_mask
-        )
+        hidden_states = input_values
 
         encoder_outputs = self.encoder(
             hidden_states,
@@ -1444,8 +1395,8 @@ class SeamlessM4TAttention(nn.Module):
 class SeamlessM4TFeedForwardNetwork(nn.Module):
     def __init__(self, config: SeamlessM4TConfig, ffn_dim: int):
         super().__init__()
-        self.fc1 = nn.Linear(config.d_model, ffn_dim)
-        self.fc2 = nn.Linear(ffn_dim, config.d_model)
+        self.fc1 = nn.Linear(config.hidden_size, ffn_dim)
+        self.fc2 = nn.Linear(ffn_dim, config.hidden_size)
         self.dropout = nn.Dropout(config.activation_dropout)
         self.act = ACT2FN[config.activation_function]
 
@@ -1466,7 +1417,7 @@ class SeamlessM4TFeedForwardNetwork(nn.Module):
 class SeamlessM4TEncoderLayer(nn.Module):
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__()
-        self.embed_dim = config.d_model
+        self.embed_dim = config.hidden_size
         self.self_attn = SeamlessM4TAttention(
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
@@ -1477,7 +1428,7 @@ class SeamlessM4TEncoderLayer(nn.Module):
 
         self.ffn = SeamlessM4TFeedForwardNetwork(config, ffn_dim=config.encoder_ffn_dim)
 
-        self.ff_layer_norm = nn.LayerNorm(config.d_model)
+        self.ff_layer_norm = nn.LayerNorm(config.hidden_size)
         self.ff_dropout = nn.Dropout(config.activation_dropout)
 
     def forward(
@@ -1534,7 +1485,7 @@ class SeamlessM4TEncoderLayer(nn.Module):
 class SeamlessM4TDecoderLayer(nn.Module):
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__()
-        self.embed_dim = config.d_model
+        self.embed_dim = config.hidden_size
         self.self_attn = SeamlessM4TAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
@@ -1553,7 +1504,7 @@ class SeamlessM4TDecoderLayer(nn.Module):
 
         self.ffn = SeamlessM4TFeedForwardNetwork(config, ffn_dim=config.decoder_ffn_dim)
 
-        self.ff_layer_norm = nn.LayerNorm(config.d_model)
+        self.ff_layer_norm = nn.LayerNorm(config.hidden_size)
         self.ff_dropout = nn.Dropout(config.activation_dropout)
 
     def forward(
@@ -1684,7 +1635,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
     [`SeamlessM4TEncoderLayer`].
 
     Args:
-        config: MBartConfig
+        config: SeamlessM4TConfig
         embed_tokens (nn.Embedding): output embedding
     """
 
@@ -1694,7 +1645,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
 
-        embed_dim = config.d_model
+        embed_dim = config.hidden_size
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
@@ -1712,7 +1663,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
 
         self.layers = nn.ModuleList([SeamlessM4TEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
-        self.layer_norm = nn.LayerNorm(config.d_model)
+        self.layer_norm = nn.LayerNorm(config.hidden_size)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -1878,22 +1829,22 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
 
         if embed_tokens is not None:
             self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = SeamlessM4TSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
-            config.d_model,
+            config.hidden_size,
             self.padding_idx,
         )
 
         self.layers = nn.ModuleList([SeamlessM4TDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.layernorm_embedding = nn.LayerNorm(config.d_model)
-        self.layer_norm = nn.LayerNorm(config.d_model)
+        self.layernorm_embedding = nn.LayerNorm(config.hidden_size)
+        self.layer_norm = nn.LayerNorm(config.hidden_size)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -2274,10 +2225,10 @@ class SeamlessM4TModel(nn.Module):
         self.config = config
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
-        self.shared_text = nn.Embedding(vocab_size, config.d_model, padding_idx)
-        self.shared_units = nn.Embedding(vocab_size, config.d_model, padding_idx)
+        self.shared_text = nn.Embedding(vocab_size, config.hidden_size, padding_idx)
+        self.shared_units = nn.Embedding(vocab_size, config.hidden_size, padding_idx)
 
-        self.speech_encoder = ...  # unity_encoder_adaptor - wav2vec2 encoder
+        self.speech_encoder = SeamlessM4TSpeechEncoder(config)
 
         if self.config.use_text_encoder:
             self.text_encoder = SeamlessM4TEncoder(config, self.shared_text)

@@ -26,6 +26,9 @@ from seamless_communication.models.inference.translator import Translator
 from transformers import Wav2Vec2ConformerConfig, Wav2Vec2ConformerModel
 from transformers.utils import logging
 
+from .modeling_seamless_m4t import SeamlessM4TModel
+from .configuration_seamless_m4t import SeamlessM4TConfig
+
 
 api = HfApi()
 
@@ -165,13 +168,19 @@ def _convert_model(
 def load_model(pytorch_dump_folder_path):
     device = _grab_best_device()
     original_model = _load_original_model(device)
+    
+    hf_config = SeamlessM4TConfig()
+    hf_model = SeamlessM4TModel(hf_config)
 
-    wav2vec = _load_hf_wav2vec(device)
-    _convert_model(
+    wav2vec = hf_model.speech_encoder
+    
+    hf_model.speech_encoder = _convert_model(
         original_model, wav2vec, wav2vec_convert_dict, device, unwanted_prefix="model.", filter_state_dict="speech"
     )
 
-    new_model = ...
+
+
+    new_model = hf_model
 
     if original_model.num_parameters(exclude_embeddings=True) != new_model.get_num_params():
         raise ValueError("initial and new models don't have the same number of parameters")

@@ -25,7 +25,7 @@ SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     # See all SeamlessM4T models at https://huggingface.co/models?filter=seamless_m4t
 }
 
-
+# TODO: docstrings is a mix of wav2vec2_conformer, mBart, nllb
 class SeamlessM4TConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`~SeamlessM4TModel`].
@@ -86,7 +86,7 @@ class SeamlessM4TConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
     model_type = "seamless_m4t"
-
+    
     def __init__(
         self,
         vocab_size=30522,
@@ -94,44 +94,144 @@ class SeamlessM4TConfig(PretrainedConfig):
         hidden_size=1024,
         use_text_encoder=True,
         use_conformer_adaptor=True,
-        num_adaptor_layers=1,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        intermediate_size=3072,
+        initializer_range=0.02,
+        layer_norm_eps=1e-5,
+        max_position_embeddings=1024,
+        use_cache=True,
+
+
+        # text|unit encoder|decoder
+        encoder_layers=12,
+        encoder_ffn_dim=4096,
+        encoder_attention_heads=16,
+        decoder_layers=12,
+        decoder_ffn_dim=4096,
+        decoder_attention_heads=16,
+        encoder_layerdrop=0.05,
+        decoder_layerdrop=0.05,
+        activation_function="relu",
+        d_model=1024,
+        dropout=0.1,
+        attention_dropout=0.1,
+        activation_dropout=0.0,
+        init_std=0.02,
+        decoder_start_token_id=2,
+        scale_embedding=True,
+        
+        # speech_encoder
+        speech_encoder_hidden_act="swish",
+        hidden_dropout=0.1,
+        feat_proj_dropout=0.0,
+        feat_quantizer_dropout=0.0,
+        final_dropout=0.1,
+        layerdrop=0.1,
+        conv_dim=(512, 512, 512, 512, 512, 512, 512),
+        conv_stride=(5, 2, 2, 2, 2, 2, 2),
+        conv_kernel=(10, 3, 3, 3, 3, 2, 2),
+        conv_bias=False,
+        num_conv_pos_embeddings=128,
+        num_conv_pos_embedding_groups=16,
         adaptor_kernel_size=8,
         adaptor_stride=8,
         adaptor_layer_norm=True,
         adaptor_dropout_p=0.1,
+        num_adaptor_layers=1,
+        output_hidden_size=None,
+        position_embeddings_type="relative",
+        rotary_embedding_base=10000,
+        max_source_positions=5000,
+        conv_depthwise_kernel_size=31,
+        conformer_conv_dropout=0.1,
+        
         # t2u config
         unit_vocabulary_size=10082,
         unit_pad_idx=1,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
         type_vocab_size=2,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        use_cache=True,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
         **kwargs,
     ):
+        
+        # overall_config
         self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
+        self.use_text_encoder = use_text_encoder
+        self.use_conformer_adaptor = use_conformer_adaptor
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.max_position_embeddings = max_position_embeddings
+        self.use_cache = use_cache
+        
+        
+        # text|unit encoder|decoder
+        self.encoder_layers = encoder_layers
+        self.encoder_ffn_dim = encoder_ffn_dim
+        self.encoder_attention_heads = encoder_attention_heads
+        self.decoder_layers = decoder_layers
+        self.decoder_ffn_dim = decoder_ffn_dim
+        self.decoder_attention_heads = decoder_attention_heads
+        self.encoder_layerdrop = encoder_layerdrop
+        self.decoder_layerdrop = decoder_layerdrop
+        self.activation_function = activation_function
+        self.d_model = d_model
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
+        self.activation_dropout = activation_dropout
+        self.init_std = init_std
+        self.scale_embedding = scale_embedding
+        
+        # speech_encoder
+        self.speech_encoder_hidden_act = speech_encoder_hidden_act 
+        self.hidden_dropout = hidden_dropout 
+        self.feat_proj_dropout = feat_proj_dropout 
+        self.feat_quantizer_dropout = feat_quantizer_dropout 
+        self.final_dropout = final_dropout 
+        self.layerdrop = layerdrop 
+        self.conv_dim = conv_dim 
+        self.conv_stride = conv_stride 
+        self.conv_kernel = conv_kernel 
+        self.conv_bias = conv_bias 
+        self.num_conv_pos_embeddings = num_conv_pos_embeddings 
+        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups 
+        self.adaptor_kernel_size = adaptor_kernel_size 
+        self.adaptor_stride = adaptor_stride 
+        self.adaptor_layer_norm = adaptor_layer_norm 
+        self.adaptor_dropout_p = adaptor_dropout_p 
+        self.num_adaptor_layers = num_adaptor_layers 
+        self.output_hidden_size = output_hidden_size 
+        self.position_embeddings_type = position_embeddings_type 
+        self.rotary_embedding_base = rotary_embedding_base 
+        self.max_source_positions = max_source_positions 
+        self.conv_depthwise_kernel_size = conv_depthwise_kernel_size 
+        self.conformer_conv_dropout = conformer_conv_dropout 
+        
+        
+        # t2u config
+        self.unit_vocabulary_size = unit_vocabulary_size
+        self.unit_pad_idx = unit_pad_idx
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        
+        
+        super().__init__(
+                pad_token_id=pad_token_id,
+                bos_token_id=bos_token_id,
+                eos_token_id=eos_token_id,
+                decoder_start_token_id=decoder_start_token_id,
+                **kwargs,
+            )
 
 
 ###################
