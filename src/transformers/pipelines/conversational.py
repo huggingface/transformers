@@ -16,13 +16,35 @@ logger = logging.get_logger(__name__)
 
 
 class Conversation:
-    def __init__(self, messages: Union[str, List[Dict[str, str]]] = None, conversation_id: uuid.UUID = None):
+    def __init__(
+        self,
+        messages: Union[str, List[Dict[str, str]]] = None,
+        conversation_id: uuid.UUID = None,
+        past_user_inputs=None,
+        generated_responses=None,
+    ):
         if not conversation_id:
             conversation_id = uuid.uuid4()
         if messages is None:
             messages = []
         elif isinstance(messages, str):
             messages = [{"role": "user", "content": messages}]
+
+        # This block deals with the legacy args - new code should just totally
+        # avoid past_user_inputs and generated_responses
+        if generated_responses is not None and past_user_inputs is None:
+            raise ValueError("generated_responses cannot be passed without past_user_inputs!")
+        if past_user_inputs is not None:
+            legacy_messages = []
+            if generated_responses is None:
+                generated_responses = []
+            # We structure it this way instead of using zip() because the lengths may differ by 1
+            for i in range(max([len(past_user_inputs), len(generated_responses)])):
+                if i < len(past_user_inputs):
+                    legacy_messages.append({"role": "user", "content": past_user_inputs[i]})
+                if i < len(generated_responses):
+                    legacy_messages.append({"role": "assistant", "content": generated_responses[i]})
+            messages = legacy_messages + messages
 
         self.uuid = conversation_id
         self.messages = messages
