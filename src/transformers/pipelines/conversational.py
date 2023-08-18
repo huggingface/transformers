@@ -171,7 +171,7 @@ class ConversationalPipeline(Pipeline):
 
     def preprocess(self, conversation: Conversation, min_length_for_response=32) -> Dict[str, Any]:
         if not isinstance(conversation, Conversation):
-            raise ValueError("ConversationalPipeline, expects Conversation as inputs")
+            raise ValueError("ConversationalPipeline expects Conversation as inputs")
         if hasattr(self.tokenizer, "_build_conversation_input_ids"):
             input_ids = self.tokenizer._build_conversation_input_ids(conversation)
         else:
@@ -211,8 +211,7 @@ class ConversationalPipeline(Pipeline):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
         )
         conversation = model_outputs["conversation"]
-        conversation.mark_processed()
-        conversation.append_response(answer)
+        conversation.add_message({"role": "assistant", "content": answer})
         return conversation
 
     def _legacy_parse_and_tokenize(self, conversation: Conversation) -> Dict:
