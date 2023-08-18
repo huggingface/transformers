@@ -95,6 +95,7 @@ if is_accelerate_available():
         save_offload_index,
         set_module_tensor_to_device,
     )
+    from accelerate.hooks import add_hook_to_module
 
 if is_safetensors_available():
     from safetensors import safe_open
@@ -1435,12 +1436,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None):
         old_embeddings = self.get_input_embeddings()
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens, pad_to_multiple_of)
+        if hasattr(old_embeddings, "_hf_hook"):
+            hook = old_embeddings._hf_hook
+            add_hook_to_module(new_embeddings, hook)
         self.set_input_embeddings(new_embeddings)
 
         # if word embeddings are not tied, make sure that lm head is resized as well
         if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
             old_lm_head = self.get_output_embeddings()
             new_lm_head = self._get_resized_lm_head(old_lm_head, new_embeddings.weight.shape[0])
+            if hasattr(old_lm_head, "_hf_hook"):
+                hook = old_lm_head._hf_hook
+                add_hook_to_module(new_lm_head, hook)
             self.set_output_embeddings(new_lm_head)
 
         return self.get_input_embeddings()
