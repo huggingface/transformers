@@ -450,12 +450,8 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         input_sentence = ["I enjoy walking with my cute dog", "I enjoy walking with my cute dog"]
 
         input_ids = tokenizer.batch_encode_plus(input_sentence, return_tensors="pt", padding=True)
-        greedy_output = model.generate(
-            input_ids["input_ids"].to(torch_device),
-            attention_mask=input_ids["attention_mask"],
-            max_length=50,
-            do_sample=False,
-        )
+        input_ids, attention_mask = input_ids["input_ids"].to(torch_device), input_ids["attention_mask"],
+        greedy_output = model.generate(input_ids, attention_mask=attention_mask, max_length=50, do_sample=False)
 
         self.assertEqual(
             tokenizer.decode(greedy_output[0], skip_special_tokens=True),
