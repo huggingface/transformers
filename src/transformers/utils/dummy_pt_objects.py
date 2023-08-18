@@ -742,6 +742,20 @@ class AutoModelForTextEncoding(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class AutoModelForTextToSpectrogram(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForTextToWaveform(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class AutoModelForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
