@@ -19,6 +19,8 @@
     title: Train with a script
   - local: accelerate
     title: Set up distributed training with 🤗 Accelerate
+  - local: peft
+    title: Load and train adapters with 🤗 PEFT
   - local: model_sharing
     title: Share your model
   - local: transformers_agents
