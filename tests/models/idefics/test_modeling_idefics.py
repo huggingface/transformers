@@ -258,7 +258,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         self.model_tester = IdeficsModelTester(self)
         self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
 
-    @unittest.skip("unbreak #25237 - to be fixed in follow up PRs")
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -424,10 +423,6 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, unittest.TestCase):
 
     @unittest.skip(reason="""IDEFICS does not support retaining the gradients of the hidden states and attention""")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip("unbreak #25237 - to be fixed in follow up PRs")
-    def test_config(self):
         pass
 
 

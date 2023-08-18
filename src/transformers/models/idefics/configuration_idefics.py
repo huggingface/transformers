@@ -238,7 +238,7 @@ class IdeficsConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
     model_type = "idefics"
-    is_composition = True
+    is_composition = False
 
     def __init__(
         self,
