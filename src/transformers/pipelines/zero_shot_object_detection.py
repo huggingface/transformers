@@ -111,6 +111,10 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
                 The number of top predictions that will be returned by the pipeline. If the provided number is `None`
                 or higher than the number of predictions available, it will default to the number of predictions.
 
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
+
 
         Return:
             A list of lists containing prediction results, one list per input image. Each list contains dictionaries
@@ -132,15 +136,18 @@ class ZeroShotObjectDetectionPipeline(ChunkPipeline):
         return results
 
     def _sanitize_parameters(self, **kwargs):
+        preprocess_params = {}
+        if "timeout" in kwargs:
+            preprocess_params["timeout"] = kwargs["timeout"]
         postprocess_params = {}
         if "threshold" in kwargs:
             postprocess_params["threshold"] = kwargs["threshold"]
         if "top_k" in kwargs:
             postprocess_params["top_k"] = kwargs["top_k"]
-        return {}, {}, postprocess_params
+        return preprocess_params, {}, postprocess_params
 
-    def preprocess(self, inputs):
-        image = load_image(inputs["image"])
+    def preprocess(self, inputs, timeout=None):
+        image = load_image(inputs["image"], timeout=timeout)
         candidate_labels = inputs["candidate_labels"]
         if isinstance(candidate_labels, str):
             candidate_labels = candidate_labels.split(",")

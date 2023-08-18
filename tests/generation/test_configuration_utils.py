@@ -14,8 +14,10 @@
 # limitations under the License.
 
 import copy
+import os
 import tempfile
 import unittest
+import warnings
 
 from huggingface_hub import HfFolder, delete_repo
 from parameterized import parameterized
@@ -117,6 +119,39 @@ class GenerationConfigTest(unittest.TestCase):
         self.assertEqual(loaded_config.temperature, 1.0)
         self.assertEqual(loaded_config.do_sample, True)
         self.assertEqual(loaded_config.num_beams, 1)  # default value
+
+    def test_refuse_to_save(self):
+        """Tests that we refuse to save a generation config that fails validation."""
+
+        # setting the temperature alone is invalid, as we also need to set do_sample to True -> throws a warning that
+        # is caught, doesn't save, and raises a warning
+        config = GenerationConfig()
+        config.temperature = 0.5
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with warnings.catch_warnings(record=True) as captured_warnings:
+                config.save_pretrained(tmp_dir)
+            self.assertEqual(len(captured_warnings), 1)
+            self.assertTrue("Fix these issues to save the configuration." in str(captured_warnings[0].message))
+            self.assertTrue(len(os.listdir(tmp_dir)) == 0)
+
+        # greedy decoding throws an exception if we try to return multiple sequences -> throws an exception that is
+        # caught, doesn't save, and raises a warning
+        config = GenerationConfig()
+        config.num_return_sequences = 2
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with warnings.catch_warnings(record=True) as captured_warnings:
+                config.save_pretrained(tmp_dir)
+            self.assertEqual(len(captured_warnings), 1)
+            self.assertTrue("Fix these issues to save the configuration." in str(captured_warnings[0].message))
+            self.assertTrue(len(os.listdir(tmp_dir)) == 0)
+
+        # final check: no warnings thrown if it is correct, and file is saved
+        config = GenerationConfig()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with warnings.catch_warnings(record=True) as captured_warnings:
+                config.save_pretrained(tmp_dir)
+            self.assertEqual(len(captured_warnings), 0)
+            self.assertTrue(len(os.listdir(tmp_dir)) == 1)
 
 
 @is_staging_test
