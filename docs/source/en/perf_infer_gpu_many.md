@@ -26,7 +26,7 @@ Note: A multi GPU setup can use the majority of the strategies described in the 
 
 [BetterTransformer](https://huggingface.co/docs/optimum/bettertransformer/overview) converts 🤗 Transformers models to use the PyTorch-native fastpath execution, which calls optimized kernels like Flash Attention under the hood.  
 
-BetterTransformer is also supported for faster inference on multi-GPU for text, image, and audio models.
+BetterTransformer is also supported for faster inference on single and multi-GPU for text, image, and audio models.
 
 <Tip>
 
@@ -81,7 +81,7 @@ try using the PyTorch nightly version, which may have a broader coverage for Fla
 
 ```bash
 pip3 install -U --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu118
-
+```
 
 Have a look at this [blog post](https://pytorch.org/blog/out-of-the-box-acceleration/) to learn more about what is possible with the BetterTransformer + SDPA API.
 

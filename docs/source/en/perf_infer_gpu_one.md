@@ -19,11 +19,13 @@ In addition to this guide, relevant information can be found as well in [the gui
 
 ## BetterTransformer
 
-BetterTransformer API converts 🤗 transformers models to make them use PyTorch-native transformer fastpath that calls optimized kernels such as Flash Attention under the hood.  
+[BetterTransformer](https://huggingface.co/docs/optimum/bettertransformer/overview) converts 🤗 Transformers models to use the PyTorch-native fastpath execution, which calls optimized kernels like Flash Attention under the hood.  
+
+BetterTransformer is also supported for faster inference on single and multi-GPU for text, image, and audio models.
 
 <Tip>
 
-Flash Attention can only be used for models using fp16 or bf16 dtype. Make sure to cast your model before using BetterTransformer.
+Flash Attention can only be used for models using fp16 or bf16 dtype. Make sure to cast your model to the appropriate dtype before using BetterTransformer.
   
 </Tip>
 
@@ -50,11 +52,9 @@ Have a look at this [blog post](https://medium.com/pytorch/bettertransformer-out
 
 ### Decoder models
 
-As of PyTorch 2.0, the attention fastpath is supported for both encoders and decoders. The list of supported architectures can be found [here](https://huggingface.co/docs/optimum/bettertransformer/overview#supported-models).
+For text models, especially decoder-based models (GPT, T5, Llama, etc.), the BetterTransformer API converts all attention operations to use the [`torch.nn.functional.scaled_dot_product_attention` operator](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention) (SDPA) that is only available in PyTorch 2.0 and onwards. 
 
-For decoder-based models (e.g. GPT, T5, Llama, etc.), the `BetterTransformer` API will convert all attention operations to use the [`torch.nn.functional.scaled_dot_product_attention` method](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention) (SDPA), that is available only from PyTorch 2.0 and onwards. 
-
-An example usage of the `BetterTransformer` API is shown below:
+To convert a model to BetterTransformer:
 
 ```python
 from transformers import AutoModelForCausalLM
@@ -66,10 +66,10 @@ model.to_bettertransformer()
 # Use it for training or inference
 ```
 
-The operator `torch.nn.functional.scaled_dot_product_attention` can also call [Flash-Attention](https://arxiv.org/abs/2205.14135) kernels under the hood. If you want to force the usage of Flash Attention or check that Flash Attention is available in your setting (hardware, problem size), you can use the [`torch.backends.cuda.sdp_kernel(enable_flash=True)`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as below:
+SDPA can also call [Flash Attention](https://arxiv.org/abs/2205.14135) kernels under the hood. To enable Flash Attention or to check that it is available in a given setting (hardware, problem size), use [`torch.backends.cuda.sdp_kernel`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as a context manager:
 
 
-```python
+```diff
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -81,7 +81,7 @@ model.to_bettertransformer()
 input_text = "Hello my dog is cute and"
 inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
 
-with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
++ with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
     outputs = model.generate(**inputs)
 
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
@@ -93,7 +93,7 @@ If you see a bug with a traceback saying
 RuntimeError: No available kernel.  Aborting execution.
 ```
 
-you may try to use the PyTorch nightly version, which may have a larger coverage for Flash Attention:
+try using the PyTorch nightly version, which may have a broader coverage for Flash Attention:
 
 ```bash
 pip3 install -U --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu118
