@@ -68,17 +68,17 @@ This model was contributed by [jinho8345](https://huggingface.co/jinho8345). The
 
 ## BrosForTokenClassification
 
-[[autodoc]] transformers.BrosForTokenClassification
+[[autodoc]] BrosForTokenClassification
     - forward
 
 
 ## BrosSpadeEEForTokenClassification
 
-[[autodoc]] transformers.BrosSpadeEEForTokenClassification
+[[autodoc]] BrosSpadeEEForTokenClassification
     - forward
 
 
 ## BrosSpadeELForTokenClassification
 
-[[autodoc]] transformers.BrosSpadeELForTokenClassification
+[[autodoc]] BrosSpadeELForTokenClassification
     - forward
