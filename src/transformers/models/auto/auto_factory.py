@@ -477,7 +477,7 @@ class _BaseAutoModelClass:
             maybe_adapter_path = find_adapter_config_file(
                 pretrained_model_name_or_path,
                 revision=revision,
-                use_auth_token=use_auth_token,
+                token=use_auth_token,
                 subfolder=subfolder,
             )
 

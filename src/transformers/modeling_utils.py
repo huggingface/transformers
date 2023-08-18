@@ -2366,7 +2366,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 pretrained_model_name_or_path,
                 revision=revision,
                 subfolder=subfolder,
-                use_auth_token=use_auth_token,
+                token=token,
                 commit_hash=commit_hash,
             )
         elif is_peft_available() and _adapter_model_path is not None:
@@ -3219,7 +3219,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 adapter_model_id,
                 adapter_name=adapter_name,
                 revision=revision,
-                use_auth_token=use_auth_token,
+                token=token,
             )
 
         if output_loading_info:
