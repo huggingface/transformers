@@ -1248,6 +1248,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "Flash Attention 2.0 is not available. Please refer to the documentation of https://github.com/Dao-AILab/flash-attention for"
                 " installing it."
             )
+        else:
+            is_flash_greater_than_2 = version.parse(importlib.metadata.version("flash_attn")) > version.parse("2.0.0")
+            if not is_flash_greater_than_2:
+                raise ValueError(
+                    "You need flash_attn package version to be greater than 2.0. Make sure to have that version installed."
+                )
 
         _is_bettertransformer = getattr(self, "use_bettertransformer", False)
 

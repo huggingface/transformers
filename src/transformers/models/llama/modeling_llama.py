@@ -35,8 +35,12 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    is_flash_attn_available,
 )
 from .configuration_llama import LlamaConfig
+
+if is_flash_attn_available():
+    from flash_attn import flash_attn_func
 
 
 logger = logging.get_logger(__name__)
@@ -323,11 +327,20 @@ class LlamaAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
+
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
+        if self._is_using_flash_attn_2:
+            # Flash attention requires the input to have the shape
+            # batch_size x seq_length x head_dime x hidden_dim
+            # therefore we need to transpose-back the qkv states to their original shape
+            query_states = query_states.transpose(1, 2)
+            key_states = key_states.transpose(1, 2)
+            value_states = value_states.transpose(1, 2)
 
         if past_key_value is not None:
             # reuse k, v, self_attention
@@ -336,11 +349,11 @@ class LlamaAttention(nn.Module):
 
         past_key_value = (key_states, value_states) if use_cache else None
 
-        # repeat k/v heads if n_kv_heads < n_heads
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-
         if not self._is_using_flash_attn_2:
+            # repeat k/v heads if n_kv_heads < n_heads
+            key_states = repeat_kv(key_states, self.num_key_value_groups)
+            value_states = repeat_kv(value_states, self.num_key_value_groups)
+
             attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
             if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
@@ -365,13 +378,16 @@ class LlamaAttention(nn.Module):
                     f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
                     f" {attn_output.size()}"
                 )
-
+            
             attn_output = attn_output.transpose(1, 2).contiguous()
-            attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
         else:
-            # TODO: here
-            pass
+            attn_output = flash_attn_func(
+                query_states, key_states, value_states, 0.0, causal=True
+            )
+            attn_weights = None
 
+        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+        
         if self.config.pretraining_tp > 1:
             attn_output = attn_output.split(self.hidden_size // self.config.pretraining_tp, dim=2)
             o_proj_slices = self.o_proj.weight.split(self.hidden_size // self.config.pretraining_tp, dim=1)
@@ -496,12 +512,12 @@ class LlamaPreTrainedModel(PreTrainedModel):
     def _enable_flash_attn_2(self):
         for module in self.modules():
             if isinstance(module, LlamaAttention):
-                module.is_using_flash_attn2 = True
+                module._is_using_flash_attn_2 = True
 
     def _disable_flash_attn_2(self):
         for module in self.modules():
             if isinstance(module, LlamaAttention):
-                module.is_using_flash_attn2 = False
+                module._is_using_flash_attn_2 = False
 
 
 LLAMA_INPUTS_DOCSTRING = r"""
