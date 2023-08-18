@@ -1538,6 +1538,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         is_multilingual=None,
         prompt_ids: Optional[torch.Tensor] = None,
         return_token_timestamps=None,
+        num_frames=None,
         **kwargs,
     ):
         """
@@ -1604,6 +1605,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 Whether to return token-level timestamps with the text. This can be used with or without the
                 `return_timestamps` option. To get word-level timestamps, use the tokenizer to group the tokens into
                 words.
+            num_frames (`float`, *optional*):
+                The number of audio frames available in this chunk. This is only used generating word-level timestamps.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1765,7 +1768,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         )
 
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
-            outputs["token_timestamps"] = self._extract_token_timestamps(outputs, generation_config.alignment_heads)
+            outputs["token_timestamps"] = self._extract_token_timestamps(outputs, generation_config.alignment_heads, num_frames=num_frames)
 
         return outputs
 
@@ -1797,7 +1800,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 
-    def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02):
+    def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None):
         """
         Calculates token-level timestamps using the encoder-decoder cross-attentions and dynamic time-warping (DTW) to
         map each output token to a position in the input audio.
@@ -1815,6 +1818,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         # of shape (batch size, num selected, output length, input length).
         weights = torch.stack([cross_attentions[l][:, h] for l, h in alignment_heads])
         weights = weights.permute([1, 0, 2, 3])
+        if num_frames is not None:
+            weights = weights[..., :num_frames // 2]
 
         # Normalize and smoothen the weights.
         std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)

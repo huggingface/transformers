@@ -527,6 +527,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             generate_kwargs["return_timestamps"] = return_timestamps
             if return_timestamps == "word":
                 generate_kwargs["return_token_timestamps"] = True
+
+                stride = model_inputs.get("stride")
+                if stride is not None:
+                    generate_kwargs["num_frames"] = stride[0] // self.feature_extractor.hop_length
+
         is_last = model_inputs.pop("is_last")
 
         if self.type in {"seq2seq", "seq2seq_whisper"}:
