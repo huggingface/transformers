@@ -13,10 +13,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import  _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
-from ...utils import is_torch_available
-
-
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -53,8 +50,6 @@ else:
     ]
 
 
-
-
 if TYPE_CHECKING:
     from .configuration_seamless_m4t import SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP, SeamlessM4TConfig
     from .tokenization_seamless_m4t import SeamlessM4TTokenizer
@@ -75,8 +70,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SeamlessM4TForMaskedLM,
             SeamlessM4TForCausalLM,
+            SeamlessM4TForMaskedLM,
             SeamlessM4TForMultipleChoice,
             SeamlessM4TForQuestionAnswering,
             SeamlessM4TForSequenceClassification,
@@ -86,7 +81,6 @@ if TYPE_CHECKING:
             SeamlessM4TPreTrainedModel,
             load_tf_weights_in_seamless_m4t,
         )
-
 
 
 else:

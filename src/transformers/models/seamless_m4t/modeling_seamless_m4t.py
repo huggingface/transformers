@@ -15,39 +15,33 @@
 """ PyTorch SeamlessM4T model. """
 
 
-
-
 import math
-import os
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from torch import nn, Tensor
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from typing import Optional, Tuple, Union
+from torch import nn
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     Seq2SeqModelOutput,
+    Wav2Vec2BaseModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import (
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
 )
-from ...utils import logging
 from .configuration_seamless_m4t import SeamlessM4TConfig
 
 
@@ -62,6 +56,7 @@ SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 ############ UTILS ################
+
 
 # Copied from transformers.models.roberta.modeling_roberta.create_position_ids_from_input_ids
 def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
@@ -78,6 +73,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
 
 # Copied from transformers.models.bart.modeling_mbart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
@@ -290,10 +286,7 @@ def _sample_negative_indices(
     return sampled_negative_indices
 
 
-
 ############ SPEECH ENCODER related code ################
-
-
 
 
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->SeamlessM4TConformer
@@ -410,6 +403,7 @@ class SeamlessM4TConformerPositionalConvEmbedding(nn.Module):
         hidden_states = hidden_states.transpose(1, 2)
         return hidden_states
 
+
 # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerRotaryPositionalEmbedding with Wav2Vec2->SeamlessM4T
 class SeamlessM4TConformerRotaryPositionalEmbedding(nn.Module):
     """Rotary positional embedding
@@ -441,6 +435,7 @@ class SeamlessM4TConformerRotaryPositionalEmbedding(nn.Module):
         sin_embeddings = embeddings.sin()[:, None, None, :]
         self.cached_rotary_positional_embedding = torch.stack([cos_embeddings, sin_embeddings])
         return self.cached_rotary_positional_embedding
+
 
 # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerRelPositionalEmbedding with Wav2Vec2->SeamlessM4T
 class SeamlessM4TConformerRelPositionalEmbedding(nn.Module):
@@ -519,7 +514,8 @@ class SeamlessM4TConformerFeatureEncoder(nn.Module):
             ]
         elif config.feat_extract_norm == "layer":
             conv_layers = [
-                SeamlessM4TConformerLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)
+                SeamlessM4TConformerLayerNormConvLayer(config, layer_id=i)
+                for i in range(config.num_feat_extract_layers)
             ]
         else:
             raise ValueError(
@@ -600,6 +596,7 @@ class SeamlessM4TConformerFeedForward(nn.Module):
         hidden_states = self.output_dropout(hidden_states)
         return hidden_states
 
+
 # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerConvolutionModule with Wav2Vec2->SeamlessM4T
 class SeamlessM4TConformerConvolutionModule(nn.Module):
     """Convolution block used in the conformer block"""
@@ -659,6 +656,7 @@ class SeamlessM4TConformerConvolutionModule(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = hidden_states.transpose(1, 2)
         return hidden_states
+
 
 # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerSelfAttention with Wav2Vec2->SeamlessM4T
 class SeamlessM4TConformerSelfAttention(nn.Module):
@@ -808,6 +806,7 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
 
         return scores
 
+
 # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerEncoderLayer with Wav2Vec2->SeamlessM4T
 class SeamlessM4TConformerEncoderLayer(nn.Module):
     """Conformer block based on https://arxiv.org/abs/2005.08100."""
@@ -875,6 +874,7 @@ class SeamlessM4TConformerEncoderLayer(nn.Module):
 
         return hidden_states, attn_weigts
 
+
 # not exactly the same as Wav2Vec2ConformerEncoderLayer
 class SeamlessM4TConformerEncoder(nn.Module):
     def __init__(self, config):
@@ -890,7 +890,9 @@ class SeamlessM4TConformerEncoder(nn.Module):
 
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList([SeamlessM4TConformerEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [SeamlessM4TConformerEncoderLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -1103,28 +1105,23 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
 
         return hidden_states
 
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerPreTrainedModel with Wav2Vec2->SeamlessM4T
+
+# not exactly the same as Wav2Vec2ConformerPreTrainedModel
 class SeamlessM4TConformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = Wav2Vec2ConformerConfig
+    config_class = SeamlessM4TConfig
     base_model_prefix = "wav2vec2_conformer"
     main_input_name = "input_values"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        # Wav2Vec2ForPreTraining last 2 linear layers need standard Linear init.
-        if isinstance(module, Wav2Vec2ConformerForPreTraining):
-            module.project_hid.reset_parameters()
-            module.project_q.reset_parameters()
-            module.project_hid._is_hf_initialized = True
-            module.project_q._is_hf_initialized = True
         # gumbel softmax requires special init
-        elif isinstance(module, SeamlessM4TConformerGumbelVectorQuantizer):
+        if isinstance(module, SeamlessM4TConformerGumbelVectorQuantizer):
             module.weight_proj.weight.data.normal_(mean=0.0, std=1)
             module.weight_proj.bias.data.zero_()
             nn.init.uniform_(module.codevectors)
@@ -1209,7 +1206,7 @@ class SeamlessM4TConformerPreTrainedModel(PreTrainedModel):
 
 # not exactly the same as Wav2Vec2ConformerModel
 class SeamlessM4TSpeechEncoder(SeamlessM4TConformerPreTrainedModel):
-    def __init__(self, config: Wav2Vec2ConformerConfig):
+    def __init__(self, config: SeamlessM4TConfig):
         super().__init__(config)
         self.config = config
         self.feature_extractor = SeamlessM4TConformerFeatureEncoder(config)
@@ -1281,14 +1278,6 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TConformerPreTrainedModel):
 
         return hidden_states
 
-    @add_start_docstrings_to_model_forward(WAV2VEC2_CONFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Wav2Vec2BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-        modality="audio",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model.forward with wav2vec2->wav2vec2_conformer
     def forward(
         self,
@@ -1423,8 +1412,7 @@ class SeamlessM4TSinusoidalPositionalEmbedding(nn.Module):
             self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
         )
         return position_ids.unsqueeze(0).expand(input_shape).contiguous() + past_key_values_length
-    
-    
+
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->SeamlessM4T,key_value_states->encoder_hidden_states
 class SeamlessM4TAttention(nn.Module):
@@ -1581,8 +1569,6 @@ class SeamlessM4TAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-
-
 # Copied from transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeDenseActDense with NllbMoe->SeamlessM4T,DenseActDense->FeedForwardNetwork
 class SeamlessM4TFeedForwardNetwork(nn.Module):
     def __init__(self, config: SeamlessM4TConfig, ffn_dim: int):
@@ -1606,7 +1592,6 @@ class SeamlessM4TFeedForwardNetwork(nn.Module):
         return hidden_states
 
 
-
 class SeamlessM4TEncoderLayer(nn.Module):
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__()
@@ -1618,7 +1603,7 @@ class SeamlessM4TEncoderLayer(nn.Module):
         )
         self.attn_dropout = nn.Dropout(config.dropout)
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        
+
         self.ffn = SeamlessM4TFeedForwardNetwork(config, ffn_dim=config.encoder_ffn_dim)
 
         self.ff_layer_norm = nn.LayerNorm(config.d_model)
@@ -1694,7 +1679,7 @@ class SeamlessM4TDecoderLayer(nn.Module):
             self.embed_dim, config.decoder_attention_heads, config.attention_dropout, is_decoder=True
         )
         self.cross_attention_layer_norm = nn.LayerNorm(self.embed_dim)
-        
+
         self.ffn = SeamlessM4TFeedForwardNetwork(config, ffn_dim=config.decoder_ffn_dim)
 
         self.ff_layer_norm = nn.LayerNorm(config.d_model)
@@ -1794,7 +1779,6 @@ class SeamlessM4TDecoderLayer(nn.Module):
         if output_attentions:
             outputs += (self_attn_weights, cross_attn_weights)
 
-
         return outputs
 
 
@@ -1820,6 +1804,7 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (SeamlessM4TDecoder, SeamlessM4TEncoder)):
             module.gradient_checkpointing = value
+
 
 # inspired from MBart and NllbMoe
 class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
@@ -1853,7 +1838,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
             embed_dim,
             self.padding_idx,
         )
-        
+
         self.layers = nn.ModuleList([SeamlessM4TEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
         self.layer_norm = nn.LayerNorm(config.d_model)
@@ -2007,7 +1992,6 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
         )
 
 
-
 class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`SeamlessM4TDecoderLayer`]
@@ -2035,7 +2019,7 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
             config.d_model,
             self.padding_idx,
         )
-        
+
         self.layers = nn.ModuleList([SeamlessM4TDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
         self.layer_norm = nn.LayerNorm(config.d_model)
@@ -2295,28 +2279,27 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         )
 
 
-
-
-        
 class SeamlessM4TTextToUnitModel(nn.Module):
     """
     TODO: copy SeamlessM4TEncoder
     """
-    def __init__(self, config: SeamlessM4TConfig, embed_tokens_encoder: Optional[nn.Embedding] = None,
-                 embed_tokens_decoder: Optional[nn.Embedding] = None,):
-        super().__init__()
-        
-                
-        self.encoder = SeamlessM4TEncoder(config, embed_tokens_encoder)
-        
 
-        self.decoder = SeamlessM4TDecoder(config, embed_tokens_decoder) 
-        
+    def __init__(
+        self,
+        config: SeamlessM4TConfig,
+        embed_tokens_encoder: Optional[nn.Embedding] = None,
+        embed_tokens_decoder: Optional[nn.Embedding] = None,
+    ):
+        super().__init__()
+
+        self.encoder = SeamlessM4TEncoder(config, embed_tokens_encoder)
+
+        self.decoder = SeamlessM4TDecoder(config, embed_tokens_decoder)
+
         self.final_proj = embed_tokens_decoder
-        
+
         # Initialize weights and apply final processing
         self.post_init()
-        
 
     def get_input_embeddings(self):
         return self.shared
@@ -2410,35 +2393,31 @@ class SeamlessM4TTextToUnitModel(nn.Module):
             encoder_attentions=encoder_outputs.attentions,
         )
 
-        
-        
+
 ############ WHOLE MODEL related code ################
-        
+
 
 class SeamlessM4TModel(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        
-        
+
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         self.shared_text = nn.Embedding(vocab_size, config.d_model, padding_idx)
         self.shared_units = nn.Embedding(vocab_size, config.d_model, padding_idx)
-        
-        
-        self.speech_encoder = ... # unity_encoder_adaptor - wav2vec2 encoder
-        
 
-        if self.config.use_text_encoder:            
+        self.speech_encoder = ...  # unity_encoder_adaptor - wav2vec2 encoder
+
+        if self.config.use_text_encoder:
             self.text_encoder = SeamlessM4TEncoder(config, self.shared_text)
-        
+
         self.text_decoder = SeamlessM4TDecoder(config, self.shared_text)
-                
+
         self.t2u_model = SeamlessM4TTextToUnitModel(config)
-        
+
         # Initialize weights and apply final processing
         self.post_init()
-        
+
 
 ############ VOCODER related code ################
 
@@ -2447,27 +2426,26 @@ class SeamlessM4TVariancePredictor(nn.Module):
     def __init__(self, config):
         super().__init__()
 
+
 class SeamlessM4TVocoder(nn.Module):
     def __init__(self, config):
         super().__init__()
-        
-        self.conv_pre = ... # Conv1d(...)
-        
 
-        self.ups = nn.ModuleList([]) #... ConvTranspose1d
-        self.resblocks = nn.ModuleList([]) #... RESBLOCKS
-        
-        self.conv_post = ... # Conv1d(...)
-        
-        self.dict_embeds_layer = nn.Embedding(...) #
-        self.spkr_embeds_layer = nn.Embedding(...) #
-        self.lang_embeds_layer = nn.Embedding(...) #
-        
+        self.conv_pre = ...  # Conv1d(...)
+
+        self.ups = nn.ModuleList([])  # ... ConvTranspose1d
+        self.resblocks = nn.ModuleList([])  # ... RESBLOCKS
+
+        self.conv_post = ...  # Conv1d(...)
+
+        self.dict_embeds_layer = nn.Embedding(...)  #
+        self.spkr_embeds_layer = nn.Embedding(...)  #
+        self.lang_embeds_layer = nn.Embedding(...)  #
+
         self.dur_predictor = SeamlessM4TVariancePredictor()
 
 
 # TODO: model with vocoder head
- 
 
 
 SEAMLESS_M4T_START_DOCSTRING = r"""
@@ -2644,7 +2622,6 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
-
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
 
@@ -2816,7 +2793,6 @@ class SeamlessM4TForMaskedLM(SeamlessM4TPreTrainedModel):
     """SeamlessM4T Model with a `language modeling` head on top for CLM fine-tuning. """, SEAMLESS_M4T_START_DOCSTRING
 )
 class SeamlessM4TForCausalLM(SeamlessM4TPreTrainedModel):
-
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
     def __init__(self, config):
@@ -2840,22 +2816,22 @@ class SeamlessM4TForCausalLM(SeamlessM4TPreTrainedModel):
     @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            inputs_embeds=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            head_mask=None,
-            cross_attn_head_mask=None,
-            past_key_values=None,
-            labels=None,
-            use_cache=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        head_mask=None,
+        cross_attn_head_mask=None,
+        past_key_values=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -2906,8 +2882,7 @@ class SeamlessM4TForCausalLM(SeamlessM4TPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.logits
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.seamless_m4t(
@@ -2966,8 +2941,11 @@ class SeamlessM4TForCausalLM(SeamlessM4TPreTrainedModel):
     def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],)
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
         return reordered_past
+
 
 class SeamlessM4TClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""

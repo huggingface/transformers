@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from . import (
-    seamless_m4t,
     albert,
     align,
     altclip,
@@ -172,6 +171,7 @@ from . import (
     roformer,
     rwkv,
     sam,
+    seamless_m4t,
     segformer,
     sew,
     sew_d,

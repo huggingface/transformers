@@ -20,19 +20,21 @@ import os
 from pathlib import Path
 
 import torch
-
-from transformers.utils import logging
-from transformers import set_seed, Wav2Vec2ConformerModel, Wav2Vec2ConformerConfig
-
+from huggingface_hub import HfApi
 from seamless_communication.models.inference.translator import Translator
 
-from huggingface_hub import HfApi, login
+from transformers import Wav2Vec2ConformerConfig, Wav2Vec2ConformerModel
+from transformers.utils import logging
+
+
 api = HfApi()
+
 
 def assert_param_count(model_1, model_2):
     count_1 = sum(p.numel() for p in model_1.parameters())
     count_2 = sum(p.numel() for p in model_2.parameters())
     assert count_1 == count_2, f"{model_1.__class__}: {count_1} != {model_2.__class__}: {count_2}"
+
 
 def _grab_best_device(use_gpu=True):
     if torch.cuda.device_count() > 0 and use_gpu:
@@ -63,36 +65,27 @@ wav2vec_convert_dict = [
     ("speech_encoder_frontend.model_dim_proj", "feature_projection.projection"),
     ("speech_encoder_frontend.post_extract_layer_norm", "feature_projection.layer_norm"),
     ("speech_encoder_frontend.pos_encoder.conv", "encoder.pos_conv_embed.conv"),
-
     ("speech_encoder.inner.layers", "encoder.layers"),
     ("speech_encoder.inner_layer_norm", "encoder.layer_norm"),
-    
     ("speech_encoder.adaptor_layers", "adapter.layers"),
-    
     ("inner_proj", "intermediate_dense"),
-    
     ("self_attn.output_proj", "self_attn.linear_out"),
     ("self_attn.output_dense", "self_attn.linear_out"),
-
     ("output_proj", "output_dense"),
-
     ("self_attn.k_proj", "self_attn.linear_k"),
     ("self_attn.v_proj", "self_attn.linear_v"),
     ("self_attn.q_proj", "self_attn.linear_q"),
-
     ("self_attn.sdpa.u_bias", "self_attn.pos_bias_u"),
     ("self_attn.sdpa.v_bias", "self_attn.pos_bias_v"),
     ("self_attn.output_proj", "self_attn.linear_out"),
     ("self_attn.sdpa.r_proj", "self_attn.linear_pos"),
-
     ("conv.pointwise_conv1", "conv_module.pointwise_conv1"),
     ("conv.pointwise_conv2", "conv_module.pointwise_conv2"),
     ("conv.depthwise_conv", "conv_module.depthwise_conv"),
     ("conv.batch_norm", "conv_module.batch_norm"),
     ("conv_layer_norm", "conv_module.layer_norm"),
-    
-    #"layer_norm", "encoder.layers.*.final_layer_norm",
-    #"inner.layer_norm", "encoder.layer_norm",
+    # "layer_norm", "encoder.layers.*.final_layer_norm",
+    # "inner.layer_norm", "encoder.layer_norm",
 ]
 
 
@@ -102,22 +95,18 @@ CACHE_DIR = os.path.join(os.getenv("XDG_CACHE_HOME", default_cache_dir), "suno",
 
 
 def _load_original_model(device):
+    unity_hub = Translator("multitask_unity", "vocoder_36langs", device)
 
-
-    unity_hub = Translator(
-        "multitask_unity", "vocoder_36langs", device
-    )
-    
     return unity_hub
 
 
-def _load_hf_wav2vec(device, config_dict = None):
+def _load_hf_wav2vec(device, config_dict=None):
     if config_dict is None:
         config_dict = {
-            "attention_dropout": 0.,
-            "hidden_dropout": 0.,
-            "final_dropout": 0.,
-            "layerdrop": 0.,
+            "attention_dropout": 0.0,
+            "hidden_dropout": 0.0,
+            "final_dropout": 0.0,
+            "layerdrop": 0.0,
             "hidden_size": 1024,
             "num_hidden_layers": 24,
             "intermediate_size": 4096,
@@ -125,44 +114,38 @@ def _load_hf_wav2vec(device, config_dict = None):
             "add_adapter": True,
             "num_adapter_layers": 1,
         }
-        
-    
-    config = Wav2Vec2ConformerConfig(
-        **config_dict,
-        hidden_act="swish"
-    )
 
+    config = Wav2Vec2ConformerConfig(**config_dict, hidden_act="swish")
 
     hf_wav2vec = Wav2Vec2ConformerModel(config).to(device)
-    
+
     return hf_wav2vec
 
 
-def _convert_model(original_model, hf_model, convert_list, device, unwanted_prefix="model.", filter_state_dict="speech"):
-    
+def _convert_model(
+    original_model, hf_model, convert_list, device, unwanted_prefix="model.", filter_state_dict="speech"
+):
     state_dict = original_model.state_dict()
-    
+
     # filter
     state_dict = dict(filter(lambda x: filter_state_dict in x[0], state_dict.items()))
-    
 
     for k, v in list(state_dict.items()):
         new_k = k[len(unwanted_prefix) :]
         for old_layer_name, new_layer_name in convert_list:
             if old_layer_name in new_k:
                 new_k = new_k.replace(old_layer_name, new_layer_name)
-                
+
         # must do it by hand
         if ".layer_norm" in new_k and new_k.split(".layer_norm")[0][-1].isnumeric():
             new_k = new_k.replace("layer_norm", "final_layer_norm")
 
         state_dict[new_k] = state_dict.pop(k)
-        
 
     extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
-    extra_keys = {k for k in extra_keys}
+    extra_keys = set(extra_keys)
     missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
-    missing_keys = {k for k in missing_keys}
+    missing_keys = set(missing_keys)
     if len(extra_keys) != 0:
         raise ValueError(f"extra keys found: {extra_keys}")
     if len(missing_keys) != 0:
@@ -171,35 +154,29 @@ def _convert_model(original_model, hf_model, convert_list, device, unwanted_pref
     n_params = hf_model.num_parameters(exclude_embeddings=True)
 
     logger.info(f"model loaded: {round(n_params/1e6,1)}M params")
-    
+
     hf_model.eval()
     hf_model.to(device)
     del state_dict
 
-    return hf_model 
-
+    return hf_model
 
 
 def load_model(pytorch_dump_folder_path):
-
-
     device = _grab_best_device()
     original_model = _load_original_model(device)
-    
-    wav2vec =  _load_hf_wav2vec(device)
-    new_wav2vec = _convert_model(original_model, wav2vec, wav2vec_convert_dict, device, unwanted_prefix="model.", filter_state_dict="speech")
-    
-    
-    
-    new_model = ...
 
+    wav2vec = _load_hf_wav2vec(device)
+    _convert_model(
+        original_model, wav2vec, wav2vec_convert_dict, device, unwanted_prefix="model.", filter_state_dict="speech"
+    )
+
+    new_model = ...
 
     if original_model.num_parameters(exclude_embeddings=True) != new_model.get_num_params():
         raise ValueError("initial and new models don't have the same number of parameters")
 
     # check if same output as the bark model
-    batch_size = 5
-    sequence_length = 10
 
     output_new_model = ...
     output_old_model = ...
@@ -212,12 +189,18 @@ def load_model(pytorch_dump_folder_path):
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     new_model.save_pretrained(pytorch_dump_folder_path)
-    
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
 
-    parser.add_argument("--pytorch_dump_folder_path", default="/home/yoach/m4t_weights", type=str, help="Path to the output PyTorch model.")
+    parser.add_argument(
+        "--pytorch_dump_folder_path",
+        default="/home/yoach/m4t_weights",
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
 
     args = parser.parse_args()
 

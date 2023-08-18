@@ -84,10 +84,8 @@ class SeamlessM4TConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "seamless_m4t"
-    
 
     def __init__(
         self,
@@ -101,12 +99,9 @@ class SeamlessM4TConfig(PretrainedConfig):
         adaptor_stride=8,
         adaptor_layer_norm=True,
         adaptor_dropout_p=0.1,
-        
         # t2u config
         unit_vocabulary_size=10082,
         unit_pad_idx=1,
-        
-        
         num_hidden_layers=12,
         num_attention_heads=12,
         intermediate_size=3072,
@@ -121,7 +116,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        **kwargs
+        **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -136,16 +131,12 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs
-        )
+        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
-    
+
 ###################
-    
+
+
 class NllbMoeConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NllbMoeModel`]. It is used to instantiate an
