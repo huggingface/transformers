@@ -35,7 +35,7 @@ from torch.nn import CrossEntropyLoss
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
-from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
+from .lib_integrations.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, GenerationMixin
 from .lib_integrations import PeftAdapterMixin

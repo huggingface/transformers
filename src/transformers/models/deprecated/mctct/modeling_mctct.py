@@ -23,7 +23,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ....activations import ACT2FN
-from ....deepspeed import is_deepspeed_zero3_enabled
+from ....lib_integrations.deepspeed import is_deepspeed_zero3_enabled
 from ....file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ....modeling_outputs import BaseModelOutput, CausalLMOutput
 from ....modeling_utils import (
