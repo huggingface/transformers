@@ -11,3 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from .deepspeed import (
+    HfDeepSpeedConfig,
+    HfTrainerDeepSpeedConfig,
+    deepspeed_config,
+    deepspeed_init,
+    deepspeed_load_checkpoint,
+    deepspeed_optim_sched,
+    is_deepspeed_available,
+    is_deepspeed_zero3_enabled,
+    set_hf_deepspeed_config,
+    unset_hf_deepspeed_config,
+)

@@ -112,6 +112,8 @@ _import_structure = {
         "is_wandb_available",
     ],
     "lib_integrations": [],
+    "lib_integrations.bitsandbytes": [],
+    "lib_integrations.deepspeed": [],
     "lib_integrations.peft": [],
     "modelcard": ["ModelCard"],
     "modeling_tf_pytorch_utils": [
@@ -733,7 +735,6 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
-    "utils.bitsandbytes": [],
     "utils.quantization_config": ["BitsAndBytesConfig", "GPTQConfig"],
 }
 
@@ -989,7 +990,6 @@ else:
         "TextDataset",
         "TextDatasetForNextSentencePrediction",
     ]
-    _import_structure["deepspeed"] = []
     _import_structure["generation"].extend(
         [
             "BeamScorer",
