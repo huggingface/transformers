@@ -22,7 +22,7 @@ The abstract from the paper is the following:
 
 Tips:
 
-- [`~transformers.BrosModel.forward`] requires *input_ids* and `bbox` (bounding box). Each bounding box should be in (x0, y0, x1, y0, x1, y1, x0, y1) format represented by four clockwise points starting from top-left corner. Obtaining of Bounding boxes depends on external OCR system. The `x` coordinate should be normalized by document image width, and the `y` coordinate should be normalized by document image height. Since most OCR systems output bounding boxes with two points (x0, y0, x1, y1), you can expand and normalize bboxes with following code,
+- [`~transformers.BrosModel.forward`] requires `input_ids` and `bbox` (bounding box). Each bounding box should be in (x0, y0, x1, y0, x1, y1, x0, y1) format represented by four clockwise points starting from top-left corner. Obtaining of Bounding boxes depends on external OCR system. The `x` coordinate should be normalized by document image width, and the `y` coordinate should be normalized by document image height. Since most OCR systems output bounding boxes with two points (x0, y0, x1, y1), you can expand and normalize bboxes with following code,
 
 ```python
 def expand_and_normalize_bbox(bboxes, doc_width, doc_height):
@@ -36,7 +36,7 @@ def expand_and_normalize_bbox(bboxes, doc_width, doc_height):
     bboxes[:, [1, 3, 5, 7]] = bboxes[:, [1, 3, 5, 7]] / doc_height
 ```
 
-- [`~transformers.BrosForTokenClassification.forward`, `~transformers.BrosSpadeEEForTokenClassification.forward`, `~transformers.BrosSpadeEEForTokenClassification.forward`] require not only *input_ids* and *bbox* but also `box_first_token_mask` for loss calculation. It is a mask to filter out non-first tokens of each box. You can obtain this mask by saving start token indices of bounding boxes when creating *input_ids* from words. Detailed instructions for this process can be found in Demo scripts or notebooks provided below.
+- [`~transformers.BrosForTokenClassification.forward`, `~transformers.BrosSpadeEEForTokenClassification.forward`, `~transformers.BrosSpadeEEForTokenClassification.forward`] require not only `input_ids` and `bbox` but also `box_first_token_mask` for loss calculation. It is a mask to filter out non-first tokens of each box. You can obtain this mask by saving start token indices of bounding boxes when creating `input_ids` from words. Detailed instructions for this process can be found in Demo scripts or notebooks provided below.
 
 - Demo scripts can be found [here](https://github.com/clovaai/bros).
 
