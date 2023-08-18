@@ -80,10 +80,26 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
             max_length=10,
             return_attention_mask=True,
         )
+
+        # check the output type
         self.assertTrue(isinstance(output, BatchEncoding))
+
+        # check the values
+        expected_output_token_ids = torch.tensor(
+            [[134, 133, 74, 135, 77, 132, 77, 133, 77, 82], [134, 133, 74, 136, 132, 74, 134, 134, 134, 134]]
+        )
+        expected_output_attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 0, 0, 0, 0]])
+
+        self.assertTrue(torch.allclose(output["token_ids"], expected_output_token_ids, atol=1e-4))
+        self.assertTrue(torch.allclose(output["attention_mask"], expected_output_attention_mask, atol=1e-4))
 
     def test_batch_decode(self):
         # test batch decode with model, feature-extractor outputs(beatsteps, extrapolated_beatstep)
+
+        # Please note that this test does not test the accuracy of the outputs, instead it is designed to make sure that
+        # the tokenizer's batch_decode can deal with attention_mask in feature-extractor outputs. For the accuracy check
+        # please see the `test_batch_decode_outputs` test.
+
         model_output = torch.concatenate(
             [
                 torch.randint(size=[120, 96], low=0, high=70, dtype=torch.long),
@@ -121,6 +137,60 @@ class Pop2PianoTokenizerTest(unittest.TestCase):
         # check object type
         self.assertTrue(isinstance(output[0], pretty_midi.pretty_midi.PrettyMIDI))
         self.assertTrue(isinstance(output[1], pretty_midi.pretty_midi.PrettyMIDI))
+
+    def test_batch_decode_outputs(self):
+        # test batch decode with model, feature-extractor outputs(beatsteps, extrapolated_beatstep)
+
+        # Please note that this test tests the accuracy of the outputs of the tokenizer's `batch_decode` method.
+
+        model_output = torch.tensor(
+            [
+                [134, 133, 74, 135, 77, 82, 84, 136, 132, 74, 77, 82, 84],
+                [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            ]
+        )
+        input_features = BatchEncoding(
+            {
+                "beatsteps": torch.tensor([[0.0697, 0.1103, 0.1509, 0.1916]]),
+                "extrapolated_beatstep": torch.tensor([[0.0000, 0.0406, 0.0813, 0.1219]]),
+            }
+        )
+
+        output = self.tokenizer.batch_decode(token_ids=model_output, feature_extractor_output=input_features)
+
+        # check outputs
+        self.assertEqual(len(output["notes"]), 4)
+
+        predicted_start_timings, predicted_end_timings = [], []
+        for i in output["notes"]:
+            predicted_start_timings.append(i.start)
+            predicted_end_timings.append(i.end)
+
+        # Checking note start timings
+        expected_start_timings = torch.tensor(
+            [
+                0.069700,
+                0.110300,
+                0.110300,
+                0.110300,
+            ]
+        )
+        predicted_start_timings = torch.tensor(predicted_start_timings)
+
+        self.assertTrue(torch.allclose(expected_start_timings, predicted_start_timings, atol=1e-4))
+
+        # Checking note end timings
+        expected_end_timings = torch.tensor(
+            [
+                0.191600,
+                0.191600,
+                0.191600,
+                0.191600,
+            ]
+        )
+        predicted_end_timings = torch.tensor(predicted_end_timings)
+
+        self.assertTrue(torch.allclose(expected_end_timings, predicted_end_timings, atol=1e-4))
 
     def test_get_vocab(self):
         vocab_dict = self.tokenizer.get_vocab()
