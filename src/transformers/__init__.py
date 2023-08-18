@@ -5206,8 +5206,6 @@ if TYPE_CHECKING:
             BridgeTowerModel,
             BridgeTowerPreTrainedModel,
         )
-
-        # PyTorch model imports
         from .models.bros import (
             BROS_PRETRAINED_MODEL_ARCHIVE_LIST,
             BrosForTokenClassification,
