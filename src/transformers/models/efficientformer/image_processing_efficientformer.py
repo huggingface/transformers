@@ -30,6 +30,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    infer_channel_dimension_format,
     is_batched,
     to_numpy_array,
     valid_images,
@@ -116,6 +117,7 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -133,6 +135,8 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
                 image is used. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
 
         Returns:
             `np.ndarray`: The resized image.
@@ -140,13 +144,17 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         size = get_size_dict(size)
 
         if "shortest_edge" in size:
-            size = get_resize_output_image_size(image, size=size["shortest_edge"], default_to_square=False)
+            size = get_resize_output_image_size(
+                image, size=size["shortest_edge"], default_to_square=False, input_data_format=input_data_format
+            )
             # size = get_resize_output_image_size(image, size["shortest_edge"], size["longest_edge"])
         elif "height" in size and "width" in size:
             size = (size["height"], size["width"])
         else:
             raise ValueError(f"Size must contain 'height' and 'width' keys or 'shortest_edge' key. Got {size.keys()}")
-        return resize(image, size=size, resample=resample, data_format=data_format, **kwargs)
+        return resize(
+            image, size=size, resample=resample, data_format=data_format, input_data_format=input_data_format, **kwargs
+        )
 
     def preprocess(
         self,
@@ -163,6 +171,7 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -205,6 +214,12 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - Unset: Use the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
@@ -241,19 +256,36 @@ class EfficientFormerImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
         if do_resize:
-            images = [self.resize(image=image, size=size_dict, resample=resample) for image in images]
+            images = [
+                self.resize(image=image, size=size_dict, resample=resample, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_center_crop:
-            images = [self.center_crop(image=image, size=crop_size) for image in images]
+            images = [
+                self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) for image in images
+            ]
 
         if do_rescale:
-            images = [self.rescale(image=image, scale=rescale_factor) for image in images]
+            images = [
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_normalize:
-            images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
+            images = [
+                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                for image in images
+            ]
 
-        images = [to_channel_dimension_format(image, data_format) for image in images]
+        images = [
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+        ]
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)

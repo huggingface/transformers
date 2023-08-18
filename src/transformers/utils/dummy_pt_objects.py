@@ -527,6 +527,12 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = None
 MODEL_FOR_TEXT_ENCODING_MAPPING = None
 
 
+MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING = None
+
+
+MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING = None
+
+
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 
 
@@ -893,6 +899,13 @@ class BartForSequenceClassification(metaclass=DummyObject):
 
 
 class BartModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class BartPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

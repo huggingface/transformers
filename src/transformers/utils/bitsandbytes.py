@@ -265,17 +265,16 @@ def get_keys_to_not_convert(model):
         tied_keys = sum(tied_params, [])
     has_tied_params = len(tied_keys) > 0
 
-    # Check if it is a base model
-    is_base_model = not hasattr(model, model.base_model_prefix)
+    # If there is not tied weights, we want to keep the lm_head（output_embedding) in full precision
+    if not has_tied_params:
+        output_emb = model.get_output_embeddings()
+        if output_emb is not None:
+            list_last_module = [name for name, module in model.named_modules() if id(module) == id(output_emb)]
+            return list_last_module
 
-    # Ignore this for base models (BertModel, GPT2Model, etc.)
-    if (not has_tied_params) and is_base_model:
-        return []
-
-    # otherwise they have an attached head
+    # otherwise, no tied weights, no output embedding defined, simply keep the last module in full precision
     list_modules = list(model.named_parameters())
     list_last_module = [list_modules[-1][0]]
-
     # add last module together with tied weights
     intersection = set(list_last_module) - set(tied_keys)
     list_untouched = list(set(tied_keys)) + list(intersection)

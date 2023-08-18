@@ -210,6 +210,13 @@ class ConfigTestUtils(unittest.TestCase):
                 f" {', '.join(keys_with_defaults)}."
             )
 
+    def test_nested_config_load_from_dict(self):
+        config = AutoConfig.from_pretrained(
+            "hf-internal-testing/tiny-random-CLIPModel", text_config={"num_hidden_layers": 2}
+        )
+        self.assertNotIsInstance(config.text_config, dict)
+        self.assertEqual(config.text_config.__class__.__name__, "CLIPTextConfig")
+
     def test_from_pretrained_subfolder(self):
         with self.assertRaises(OSError):
             # config is in subfolder, the following should not work without specifying the subfolder
