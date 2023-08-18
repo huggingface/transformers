@@ -489,3 +489,4 @@ src/transformers/models/yolos/image_processing_yolos.py
 src/transformers/models/yolos/modeling_yolos.py
 src/transformers/models/yoso/configuration_yoso.py
 src/transformers/pipelines/
+src/transformers/pipelines/text_to_audio.py
