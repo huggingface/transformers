@@ -224,3 +224,13 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 # dummy generation
                 _ = peft_model.generate(input_ids=torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device))
+
+    def test_peft_pipeline(self):
+        """
+        Simple test that tests the basic usage of PEFT model + pipeline
+        """
+        from transformers import pipeline
+
+        for model_id in self.peft_test_model_ids:
+            pipe = pipeline("text-generation", model_id)
+            _ = pipe("Hello")
