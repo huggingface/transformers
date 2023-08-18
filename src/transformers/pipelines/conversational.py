@@ -16,11 +16,13 @@ logger = logging.get_logger(__name__)
 
 
 class Conversation:
-    def __init__(self, messages: List[Dict[str, str]] = None, conversation_id: uuid.UUID = None):
+    def __init__(self, messages: Union[str, List[Dict[str, str]]] = None, conversation_id: uuid.UUID = None):
         if not conversation_id:
             conversation_id = uuid.uuid4()
         if messages is None:
             messages = []
+        elif isinstance(messages, str):
+            messages = [{"role": "user", "content": messages}]
 
         self.uuid = conversation_id
         self.messages = messages
