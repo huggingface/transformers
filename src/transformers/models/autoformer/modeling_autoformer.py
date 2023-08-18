@@ -1920,7 +1920,6 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         ...     past_time_features=batch["past_time_features"],
         ...     past_observed_mask=batch["past_observed_mask"],
         ...     static_categorical_features=batch["static_categorical_features"],
-        ...     static_real_features=batch["static_real_features"],
         ...     future_values=batch["future_values"],
         ...     future_time_features=batch["future_time_features"],
         ... )
@@ -1936,7 +1935,6 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         ...     past_time_features=batch["past_time_features"],
         ...     past_observed_mask=batch["past_observed_mask"],
         ...     static_categorical_features=batch["static_categorical_features"],
-        ...     static_real_features=batch["static_real_features"],
         ...     future_time_features=batch["future_time_features"],
         ... )
 
