@@ -62,7 +62,7 @@ class PeftAdapterMixin:
         peft_model_id: str,
         adapter_name: Optional[str] = None,
         revision: Optional[str] = None,
-        use_auth_token: Optional[str] = None,
+        token: Optional[str] = None,
         device_map: Optional[str] = "auto",
         max_memory: Optional[str] = None,
         offload_folder: Optional[str] = None,
@@ -91,7 +91,7 @@ class PeftAdapterMixin:
 
                 </Tip>
 
-            use_auth_token (`str`, `optional`):
+            token (`str`, `optional`):
                 Whether to use authentication token to load the remote folder. Userful to load private repositories
                 that are on HuggingFace Hub. You might need to call `huggingface-cli login` and paste your tokens to
                 cache it.
@@ -128,7 +128,7 @@ class PeftAdapterMixin:
         adapter_config_file = find_adapter_config_file(
             peft_model_id,
             revision=revision,
-            use_auth_token=use_auth_token,
+            token=token,
         )
 
         if adapter_config_file is None:
@@ -140,13 +140,13 @@ class PeftAdapterMixin:
         loaded_peft_config = PeftConfig.from_pretrained(
             peft_model_id,
             revision=revision,
-            use_auth_token=use_auth_token,
+            use_auth_token=token,
         )
 
         # Create and add fresh new adapters into the model.
         inject_adapter_in_model(loaded_peft_config, self, adapter_name)
 
-        adapter_state_dict = load_peft_weights(peft_model_id, revision=revision, use_auth_token=use_auth_token)
+        adapter_state_dict = load_peft_weights(peft_model_id, revision=revision, use_auth_token=token)
 
         # We need to pre-process the state dict to remove unneeded prefixes - for backward compatibility
         processed_adapter_state_dict = {}

@@ -1859,14 +1859,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if self._auto_class is not None:
             custom_object_save(self, save_directory, config=self.config)
 
+        _hf_peft_config_loaded = getattr(model_to_save, "_hf_peft_config_loaded", False)
+
         # Save the config
         if is_main_process:
-            if not getattr(model_to_save, "_hf_peft_config_loaded", False):
+            if not _hf_peft_config_loaded:
                 model_to_save.config.save_pretrained(save_directory)
             if self.can_generate():
                 model_to_save.generation_config.save_pretrained(save_directory)
 
-            if model_to_save._hf_peft_config_loaded:
+            if _hf_peft_config_loaded:
                 logger.info(
                     "Detected adapters on the model, saving the model in the PEFT format, only adapter weights will be saved."
                 )
@@ -1938,7 +1940,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
         # Shard the model if it is too big.
-        if not model_to_save._hf_peft_config_loaded:
+        if not _hf_peft_config_loaded:
             weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
             weights_name = _add_variant(weights_name, variant)
         else:

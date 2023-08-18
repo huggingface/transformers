@@ -30,7 +30,7 @@ def find_adapter_config_file(
     model_id: str,
     revision: str = None,
     subfolder: str = None,
-    use_auth_token: Optional[str] = None,
+    token: Optional[str] = None,
     commit_hash: Optional[str] = None,
 ) -> Optional[str]:
     r"""
@@ -54,7 +54,7 @@ def find_adapter_config_file(
         subfolder (`str`, *optional*, defaults to `""`):
             In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
             specify the folder name here.
-        use_auth_token (`str`, `optional`):
+        token (`str`, `optional`):
             Whether to use authentication token to load the remote folder. Userful to load private repositories that
             are on HuggingFace Hub. You might need to call `huggingface-cli login` and paste your tokens to cache it.
     """
@@ -68,7 +68,7 @@ def find_adapter_config_file(
             model_id,
             ADAPTER_CONFIG_NAME,
             revision=revision,
-            use_auth_token=use_auth_token,
+            token=token,
             _commit_hash=commit_hash,
             subfolder=subfolder,
             _raise_exceptions_for_missing_entries=False,
