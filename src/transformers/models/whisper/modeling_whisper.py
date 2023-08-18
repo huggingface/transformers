@@ -1768,7 +1768,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         )
 
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
-            outputs["token_timestamps"] = self._extract_token_timestamps(outputs, generation_config.alignment_heads, num_frames=num_frames)
+            outputs["token_timestamps"] = self._extract_token_timestamps(
+                outputs, generation_config.alignment_heads, num_frames=num_frames
+            )
 
         return outputs
 
@@ -1819,7 +1821,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         weights = torch.stack([cross_attentions[l][:, h] for l, h in alignment_heads])
         weights = weights.permute([1, 0, 2, 3])
         if num_frames is not None:
-            weights = weights[..., :num_frames // 2]
+            weights = weights[..., : num_frames // 2]
 
         # Normalize and smoothen the weights.
         std, mean = torch.std_mean(weights, dim=-2, keepdim=True, unbiased=False)
