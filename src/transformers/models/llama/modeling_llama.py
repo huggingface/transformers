@@ -42,7 +42,7 @@ from .configuration_llama import LlamaConfig
 
 if is_flash_attn_available():
     from flash_attn import flash_attn_func
-    from flash_attn.bert_padding import unpad_input, pad_input # noqa
+    from flash_attn.bert_padding import pad_input, unpad_input  # noqa
 
 
 logger = logging.get_logger(__name__)
@@ -385,12 +385,10 @@ class LlamaAttention(nn.Module):
             # TODO: llama does not have dropout in the config??
             # It is recommended to use dropout with FA according to the docs
             # when training.
-            dropout_rate = 0.0 # if not self.training else self.attn_dropout
+            dropout_rate = 0.0  # if not self.training else self.attn_dropout
 
             # TODO: support padding using `unpad_input` and `pad_input`
-            attn_output = flash_attn_func(
-                query_states, key_states, value_states, dropout_rate, causal=True
-            )
+            attn_output = flash_attn_func(query_states, key_states, value_states, dropout_rate, causal=True)
 
             attn_weights = None
 
