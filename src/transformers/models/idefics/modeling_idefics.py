@@ -1231,16 +1231,15 @@ class IdeficsModel(IdeficsPreTrainedModel):
 
         if self.config.use_resampler:
             if perceiver_embeddings is None:
-                image_hidden_states = self.perceiver_resampler(image_hidden_states)
-                image_seq_len, image_hidden_size = image_hidden_states.size(1), image_hidden_states.size(2)
+                perceiver_embeddings = self.perceiver_resampler(image_hidden_states)
+                image_seq_len, image_hidden_size = perceiver_embeddings.size(1), perceiver_embeddings.size(2)
             else:
                 batch_size, num_images, image_seq_len, image_hidden_size = perceiver_embeddings.size()
-                image_hidden_states = perceiver_embeddings
+            image_hidden_states = perceiver_embeddings
+        elif perceiver_embeddings is None:
+            image_seq_len, image_hidden_size = image_hidden_states.size(1), image_hidden_states.size(2)
         else:
-            if perceiver_embeddings is None:
-                image_seq_len, image_hidden_size = image_hidden_states.size(1), image_hidden_states.size(2)
-            else:
-                raise ValueError("If perceiver_embeddings are passed, use_resampler should be True")
+            raise ValueError("If `perceiver_embeddings` are passed, use_resampler should be True")
 
         image_hidden_states = image_hidden_states.view(batch_size, num_images * image_seq_len, image_hidden_size)
         # # Hack to use the model in full language modeling mode
