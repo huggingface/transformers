@@ -1326,20 +1326,34 @@ class ExponentialDecayLengthPenalty(LogitsProcessor):
     >>> # see that the answer tends to end abruptly
     >>> outputs = model.generate(**inputs, do_sample=True, temperature=0.9, max_length=30, pad_token_id=50256)
     >>> print(tokenizer.batch_decode(outputs)[0])
-    'Just wanted to let you know, I'm doing great, but my plan of getting to the bottom of this is to start with the data that we'
+    Just wanted to let you know, I'm doing great, but my plan of getting to the bottom of this is to start with the data that we
 
     >>> # Generate sequences with exponential penalty, we add the exponential_decay_length_penalty=(start_index, decay_factor)
     >>> # We see that instead of cutting at max_tokens, the output comes to an end before (at 25 tokens) and with more meaning
     >>> # What happens is that starting from `start_index` the EOS token score will be increased by decay_factor exponentially
-    >>> outputs = model.generate(**inputs, do_sample=True, temperature=0.9, max_length=30, pad_token_id=50256, exponential_decay_length_penalty=(15, 1.5))
+    >>> outputs = model.generate(
+    ...     **inputs,
+    ...     do_sample=True,
+    ...     temperature=0.9,
+    ...     max_length=30,
+    ...     pad_token_id=50256,
+    ...     exponential_decay_length_penalty=(15, 1.5),
+    ... )
     >>> print(tokenizer.batch_decode(outputs)[0])
-    'Just wanted to let you know, I can't guarantee it is a "proper" version, but it works fine<|endoftext|>'
+    Just wanted to let you know, I can't guarantee it is a "proper" version, but it works fine<|endoftext|>
 
     >>> # Generate sequences with smaller decay_factor
     >>> # We see that this allows the output to be longer, but still improves the hard cutoff mid-sentence
-    >>> outputs = model.generate(**inputs, do_sample=True, temperature=0.9, max_length=30, pad_token_id=50256, exponential_decay_length_penalty=(15, 1.01))
+    >>> outputs = model.generate(
+    ...     **inputs,
+    ...     do_sample=True,
+    ...     temperature=0.9,
+    ...     max_length=30,
+    ...     pad_token_id=50256,
+    ...     exponential_decay_length_penalty=(15, 1.01),
+    ... )
     >>> print(tokenizer.batch_decode(outputs)[0])
-    'Just wanted to let you know, I've done a bunch of research into this, and you should check out the new page for more details.<|endoftext|>'
+    Just wanted to let you know, I've done a bunch of research into this, and you should check out the new page for more details.<|endoftext|>
     ```
     """
 
