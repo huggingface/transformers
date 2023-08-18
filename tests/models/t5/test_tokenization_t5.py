@@ -425,7 +425,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode(". Hello", add_special_tokens=False)
         self.assertEqual(input_ids, [7, 4, 156, 86, 20])
         sp_encode = self.tokenizer.sp_model.encode(". Hello")
-        self.assertEqual(input_ids, sp_encode)
+        self.assertEqual(input_ids, [7] + sp_encode)
         tokens = self.tokenizer.tokenize(". Hello")
         self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
 
@@ -435,7 +435,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         input_ids = self.tokenizer.encode("       . Hello", add_special_tokens=False)
         self.assertEqual(input_ids, [7, 4, 156, 86, 20])
         sp_encode = self.tokenizer.sp_model.encode("       . Hello")
-        self.assertEqual(input_ids, sp_encode)
+        self.assertEqual(input_ids, [7] + sp_encode)
         tokens = self.tokenizer.tokenize(" . Hello")
         self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
 
@@ -505,7 +505,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
 
         ds = load_dataset("xnli", "all_languages", split="train+test+validation")
 
-        # TODO ArthurZucker fix the 3 commented tests with #23909
+        # TODO @ArthurZucker fix the 3 commented tests with #23909
         input_texts = [
             "Bonjour <extra_id_0>.",
             # "Bonjour<extra_id_0>.",  # this will fail. In T5 the special token has to be at the end.

@@ -753,6 +753,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
             model_8bit = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
                 device_map=device_map,
+                load_in_8bit=True,
                 llm_int8_enable_fp32_cpu_offload=True,
                 offload_folder=tmpdirname,
             )

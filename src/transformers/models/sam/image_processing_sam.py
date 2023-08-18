@@ -143,6 +143,7 @@ class SamImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         pad_size: Dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -156,14 +157,22 @@ class SamImageProcessor(BaseImageProcessor):
             data_format (`str` or `ChannelDimension`, *optional*):
                 The data format of the image. Can be either "channels_first" or "channels_last". If `None`, the
                 `data_format` of the `image` will be used.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
         """
         output_height, output_width = pad_size["height"], pad_size["width"]
-        input_height, input_width = get_image_size(image)
+        input_height, input_width = get_image_size(image, channel_dim=input_data_format)
 
         pad_width = output_width - input_width
         pad_height = output_height - input_height
 
-        padded_image = pad(image, ((0, pad_height), (0, pad_width)), data_format=data_format, **kwargs)
+        padded_image = pad(
+            image,
+            ((0, pad_height), (0, pad_width)),
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
         return padded_image
 
     def _get_preprocess_shape(self, old_shape: Tuple[int, int], longest_edge: int):
@@ -183,6 +192,7 @@ class SamImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -202,15 +212,28 @@ class SamImageProcessor(BaseImageProcessor):
                 image is used. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+
         Returns:
             `np.ndarray`: The resized image.
         """
         size = get_size_dict(size)
         if "longest_edge" not in size:
             raise ValueError(f"The `size` dictionary must contain the key `longest_edge`. Got {size.keys()}")
-        input_size = get_image_size(image)
+        input_size = get_image_size(image, channel_dim=input_data_format)
         output_height, output_width = self._get_preprocess_shape(input_size, size["longest_edge"])
-        return resize(image, size=(output_height, output_width), resample=resample, data_format=data_format, **kwargs)
+        return resize(
+            image,
+            size=(output_height, output_width),
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
 
     def preprocess(
         self,
@@ -228,6 +251,7 @@ class SamImageProcessor(BaseImageProcessor):
         do_convert_rgb: bool = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ):
         """
@@ -272,6 +296,12 @@ class SamImageProcessor(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - Unset: Use the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -314,23 +344,40 @@ class SamImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        original_sizes = [get_image_size(image) for image in images]
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
+        original_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
 
         if do_resize:
-            images = [self.resize(image=image, size=size, resample=resample) for image in images]
+            images = [
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                for image in images
+            ]
 
-        reshaped_input_sizes = [get_image_size(image) for image in images]
+        reshaped_input_sizes = [get_image_size(image, channel_dim=input_data_format) for image in images]
 
         if do_rescale:
-            images = [self.rescale(image=image, scale=rescale_factor) for image in images]
+            images = [
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_normalize:
-            images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
+            images = [
+                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_pad:
-            images = [self.pad_image(image=image, pad_size=pad_size) for image in images]
+            images = [
+                self.pad_image(image=image, pad_size=pad_size, input_data_format=input_data_format) for image in images
+            ]
 
-        images = [to_channel_dimension_format(image, data_format) for image in images]
+        images = [
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+        ]
         encoded_outputs = BatchFeature(
             data={
                 "pixel_values": images,
@@ -517,6 +564,7 @@ class SamImageProcessor(BaseImageProcessor):
         points_per_crop: Optional[int] = 32,
         crop_n_points_downscale_factor: Optional[List[int]] = 1,
         device: Optional["torch.device"] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         return_tensors: str = "pt",
     ):
         """
@@ -539,6 +587,8 @@ class SamImageProcessor(BaseImageProcessor):
                 The number of points-per-side sampled in layer n is scaled down by crop_n_points_downscale_factor**n.
             device (`torch.device`, *optional*, defaults to None):
                 Device to use for the computation. If None, cpu will be used.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
             return_tensors (`str`, *optional*, defaults to `pt`):
                 If `pt`, returns `torch.Tensor`. If `tf`, returns `tf.Tensor`.
         """
@@ -549,6 +599,7 @@ class SamImageProcessor(BaseImageProcessor):
             overlap_ratio,
             points_per_crop,
             crop_n_points_downscale_factor,
+            input_data_format,
         )
         if return_tensors == "pt":
             if device is None:
@@ -855,6 +906,7 @@ def _generate_crop_boxes(
     overlap_ratio: float = 512 / 1500,
     points_per_crop: Optional[int] = 32,
     crop_n_points_downscale_factor: Optional[List[int]] = 1,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> Tuple[List[List[int]], List[int]]:
     """
     Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
@@ -874,12 +926,14 @@ def _generate_crop_boxes(
             Number of points to sample per crop.
         crop_n_points_downscale_factor (`int`, *optional*):
             The number of points-per-side sampled in layer n is scaled down by crop_n_points_downscale_factor**n.
+        input_data_format (`str` or `ChannelDimension`, *optional*):
+            The channel dimension format of the input image. If not provided, it will be inferred.
     """
 
     if isinstance(image, list):
         raise ValueError("Only one image is allowed for crop generation.")
     image = to_numpy_array(image)
-    original_size = get_image_size(image)
+    original_size = get_image_size(image, input_data_format)
 
     points_grid = []
     for i in range(crop_n_layers + 1):
@@ -889,7 +943,7 @@ def _generate_crop_boxes(
     crop_boxes, layer_idxs = _generate_per_layer_crops(crop_n_layers, overlap_ratio, original_size)
 
     cropped_images, point_grid_per_crop = _generate_crop_images(
-        crop_boxes, image, points_grid, layer_idxs, target_size, original_size
+        crop_boxes, image, points_grid, layer_idxs, target_size, original_size, input_data_format
     )
     crop_boxes = np.array(crop_boxes)
     crop_boxes = crop_boxes.astype(np.float32)
@@ -935,7 +989,9 @@ def _generate_per_layer_crops(crop_n_layers, overlap_ratio, original_size):
     return crop_boxes, layer_idxs
 
 
-def _generate_crop_images(crop_boxes, image, points_grid, layer_idxs, target_size, original_size):
+def _generate_crop_images(
+    crop_boxes, image, points_grid, layer_idxs, target_size, original_size, input_data_format=None
+):
     """
     Takes as an input bounding boxes that are used to crop the image. Based in the crops, the corresponding points are
     also passed.
@@ -945,7 +1001,7 @@ def _generate_crop_images(crop_boxes, image, points_grid, layer_idxs, target_siz
     for i, crop_box in enumerate(crop_boxes):
         left, top, right, bottom = crop_box
 
-        channel_dim = infer_channel_dimension_format(image)
+        channel_dim = infer_channel_dimension_format(image, input_data_format)
         if channel_dim == ChannelDimension.LAST:
             cropped_im = image[top:bottom, left:right, :]
         else:
@@ -953,7 +1009,7 @@ def _generate_crop_images(crop_boxes, image, points_grid, layer_idxs, target_siz
 
         cropped_images.append(cropped_im)
 
-        cropped_im_size = get_image_size(cropped_im)
+        cropped_im_size = get_image_size(cropped_im, channel_dim)
         points_scale = np.array(cropped_im_size)[None, ::-1]
 
         points = points_grid[layer_idxs[i]] * points_scale
