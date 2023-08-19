@@ -1198,7 +1198,7 @@ class SEWDEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -1295,6 +1295,7 @@ class SEWDPreTrainedModel(PreTrainedModel):
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
 
+    # Copied from transformers.models.hubert.modeling_hubert.HubertPreTrainedModel._get_feat_extract_output_lengths
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
         """
         Computes the output length of the convolutional layers
@@ -1310,6 +1311,7 @@ class SEWDPreTrainedModel(PreTrainedModel):
 
         return input_lengths
 
+    # Copied from transformers.models.hubert.modeling_hubert.HubertPreTrainedModel._get_feature_vector_attention_mask
     def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
         output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
         batch_size = attention_mask.shape[0]
@@ -1319,7 +1321,7 @@ class SEWDPreTrainedModel(PreTrainedModel):
         )
         # these two operations makes sure that all values before the output lengths idxs are attended to
         attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
-        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
+        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1])
         return attention_mask
 
     def _set_gradient_checkpointing(self, module, value=False):

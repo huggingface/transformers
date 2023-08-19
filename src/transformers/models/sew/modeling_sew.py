@@ -628,7 +628,7 @@ class SEWEncoder(nn.Module):
 
         if attention_mask is not None:
             # make sure padded tokens output 0
-            hidden_states[~attention_mask] = 0.0
+            hidden_states[~attention_mask.bool()] = 0.0
 
             input_lengths = (attention_mask.long()).sum(-1)
             # apply pooling formula to get real output_lengths
@@ -760,6 +760,7 @@ class SEWPreTrainedModel(PreTrainedModel):
         if isinstance(module, (SEWEncoder, SEWFeatureEncoder)):
             module.gradient_checkpointing = value
 
+    # Copied from transformers.models.hubert.modeling_hubert.HubertPreTrainedModel._get_feat_extract_output_lengths
     def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
         """
         Computes the output length of the convolutional layers
@@ -775,6 +776,7 @@ class SEWPreTrainedModel(PreTrainedModel):
 
         return input_lengths
 
+    # Copied from transformers.models.hubert.modeling_hubert.HubertPreTrainedModel._get_feature_vector_attention_mask
     def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
         output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
         batch_size = attention_mask.shape[0]
@@ -784,7 +786,7 @@ class SEWPreTrainedModel(PreTrainedModel):
         )
         # these two operations makes sure that all values before the output lengths idxs are attended to
         attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
-        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
+        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1])
         return attention_mask
 
 
