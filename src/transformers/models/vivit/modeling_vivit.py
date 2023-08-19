@@ -568,7 +568,7 @@ class VivitModel(VivitPreTrainedModel):
         >>> # forward pass
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
-        >>> print(list(last_hidden_states.shape))
+        >>> list(last_hidden_states.shape)
         [1, 3137, 768]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
