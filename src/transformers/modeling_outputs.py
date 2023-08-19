@@ -1303,7 +1303,7 @@ class Wav2Vec2BaseModelOutput(ModelOutput):
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        attention_mask (`torch.Tensor`, *optional*, returned when `attention_mask` is passed):
+        attention_mask (`torch.LongTensor`, *optional*, returned when `attention_mask` is passed):
             Effective attention mask after feature extraction.
     """
 
@@ -1311,7 +1311,7 @@ class Wav2Vec2BaseModelOutput(ModelOutput):
     extract_features: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    attention_mask: Optional[torch.Tensor] = None
+    attention_mask: Optional[torch.LongTensor] = None
 
 
 @dataclass
