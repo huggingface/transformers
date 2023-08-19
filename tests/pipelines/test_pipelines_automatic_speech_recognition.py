@@ -337,7 +337,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                     {"text": " place", "timestamp": (2.02, 2.28)},
                     {"text": " amidst", "timestamp": (2.28, 2.78)},
                     {"text": " the", "timestamp": (2.78, 2.96)},
-                    {"text": " tents.", "timestamp": (2.96, 3.48)}],
+                    {"text": " tents.", "timestamp": (2.96, 3.48)},
                 ],
             },
         )
