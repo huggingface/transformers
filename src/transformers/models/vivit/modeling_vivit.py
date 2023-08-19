@@ -681,9 +681,13 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         ...     '''
         ...     Sample frames from the video.
         ...     Args:
-        ...         clip_len (`int`): Total number of frames to sample
-        ...         frame_sample_rate (`int`): Frame sample rate
-        ...         seg_len (`int`):  Number of frames in a sample segment
+        ...         clip_len (`int`):
+        ...             Total number of frames to sample
+        ...         frame_sample_rate (`int`):
+        ...             Frame sample rate
+        ...         seg_len (`int`):
+        ...             Number of frames in a sample segment
+        ...     
         ...     Returns:
         ...         result (`List[int]`): List of sampled video frame indices
         ...     '''
