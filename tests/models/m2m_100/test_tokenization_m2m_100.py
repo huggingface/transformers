@@ -17,7 +17,11 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-from transformers import M2M100Tokenizer, is_torch_available
+from transformers import (
+    M2M100Tokenizer,
+    M2M100TokenizerFast,
+    is_torch_available,
+)
 from transformers.testing_utils import (
     get_tests_dir,
     nested_simplify,
@@ -47,9 +51,11 @@ FR_CODE = 128028
 
 
 @require_sentencepiece
+@require_tokenizers
 class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = M2M100Tokenizer
-    test_rust_tokenizer = False
+    rust_tokenizer_class = M2M100TokenizerFast
+    test_rust_tokenizer = True
     test_seq2seq = False
     test_sentencepiece = True
 
