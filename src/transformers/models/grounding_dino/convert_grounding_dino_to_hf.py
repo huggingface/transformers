@@ -154,35 +154,6 @@ def prepare_img():
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     return image
 
-def image_processor(image: Image.Image) -> torch.Tensor:
-    def resize(image, size, max_size=None):
-        def get_size_with_aspect_ratio(image_size, size, max_size=None):
-            w, h = image_size
-            if max_size is not None:
-                min_original_size = float(min((w, h)))
-                max_original_size = float(max((w, h)))
-                if max_original_size / min_original_size * size > max_size:
-                    size = int(round(max_size * min_original_size / max_original_size))
-
-            if (w <= h and w == size) or (h <= w and h == size):
-                return (h, w)
-
-            if w < h:
-                ow = size
-                oh = int(size * h / w)
-            else:
-                oh = size
-                ow = int(size * w / h)
-
-            return (oh, ow)
-
-        size = get_size_with_aspect_ratio(image.size, size, max_size)
-        return F.resize(image, size)
-    
-    transform = T.Compose([T.ToTensor(), T.Normalize(IMAGENET_MEAN, IMAGENET_STD)])
-    image_resized = resize(image, 800, 1333)
-    return transform(image_resized)
-
 @torch.no_grad()
 def convert_grounding_dino_checkpoint(model_name, checkpoint_path):
     #Define default GroundingDINO configuation
@@ -204,11 +175,18 @@ def convert_grounding_dino_checkpoint(model_name, checkpoint_path):
 
     # Load and process test image
     image = prepare_img()
+    image_processor = T.Compose(
+        [
+            T.Resize(size=800, max_size=1333),
+            T.ToTensor(), 
+            T.Normalize(IMAGENET_MEAN, IMAGENET_STD)
+        ]
+    )
     inputs = image_processor(image)
-    print(inputs[:, :5, :5])
     output = model(pixel_values=inputs.unsqueeze(0))
     for feature_map in output.feature_maps:
-        print(f"{feature_map.shape=}, {feature_map[0, :5, 0, 0]=}")
+        print(f"{feature_map.shape}")
+        print(f"\t {feature_map[:, :5, 0, 0].cpu().numpy()}")
 
     # outputs = model(**inputs).logits
 
