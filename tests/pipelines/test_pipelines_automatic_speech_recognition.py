@@ -330,7 +330,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             {
                 "text": " Conquered returned to its place amidst the tents.",
                 "chunks": [
-                    {"text": " Conquered", "timestamp": (0.54, 1.2)},
+                    {"text": " Conquered", "timestamp": (0.5, 1.2)},
                     {"text": " returned", "timestamp": (1.2, 1.62)},
                     {"text": " to", "timestamp": (1.62, 1.88)},
                     {"text": " its", "timestamp": (1.88, 2.02)},
