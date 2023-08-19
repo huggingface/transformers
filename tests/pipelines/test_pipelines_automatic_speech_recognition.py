@@ -324,6 +324,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         pipe.model.generation_config.alignment_heads = [[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]]
         res = pipe(sample["audio"]["array"], return_timestamps="word")
 
+        print(f'{res=}')
         # fmt: off
         self.assertEqual(
             res,
