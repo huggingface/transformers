@@ -835,7 +835,7 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         rewards: Optional[torch.FloatTensor] = None,
         returns_to_go: Optional[torch.FloatTensor] = None,
         timesteps: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
