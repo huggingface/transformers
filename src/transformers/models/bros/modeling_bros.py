@@ -16,14 +16,14 @@
 
 
 import math
-
+from dataclasses import dataclass
 import torch
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from transformers.modeling_outputs import BrosSpadeOutput
+from ...utils import ModelOutput
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -35,6 +35,8 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_bros import BrosConfig
+
+from typing import Optional, Tuple
 
 
 logger = logging.get_logger(__name__)
@@ -123,6 +125,38 @@ BROS_INPUTS_DOCSTRING = r"""
 """
 
 
+@dataclass
+class BrosSpadeOutput(ModelOutput):
+    """
+    Base class for outputs of token classification models.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided) :
+            Classification loss.
+        itc_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+            Classification scores for entity initial tokens (before SoftMax).
+        stc_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, sequence_length+1)`):
+            Classification scores for entity sequence tokens (before SoftMax).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    itc_logits: torch.FloatTensor = None
+    stc_logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
 class PositionalEmbedding1D(nn.Module):
     # Reference: https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py#L15
 
@@ -181,8 +215,6 @@ class BrosEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-
-        assert config.hidden_size >= 64, "hidden_size of the model must be large or equal to 64"
 
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
