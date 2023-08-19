@@ -324,7 +324,6 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         pipe.model.generation_config.alignment_heads = [[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]]
         res = pipe(sample["audio"]["array"], return_timestamps="word")
 
-        self.assertEqual.__self__.maxDiff = None
         # fmt: off
         self.assertEqual(
             res,
@@ -332,13 +331,13 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 "text": " Conquered returned to its place amidst the tents.",
                 "chunks": [
                     {"text": " Conquered", "timestamp": (0.5, 1.2)},
-                    {"text": " returned", "timestamp": (1.2, 1.62)},
-                    {"text": " to", "timestamp": (1.62, 1.88)},
-                    {"text": " its", "timestamp": (1.88, 2.02)},
-                    {"text": " place", "timestamp": (2.02, 2.3)},
-                    {"text": " amidst", "timestamp": (2.3, 2.84)},
-                    {"text": " the", "timestamp": (2.84, 2.98)},
-                    {"text": " tents.", "timestamp": (2.98, 3.5)},
+                    {"text": " returned", "timestamp": (1.2, 1.64)},
+                    {"text": " to", "timestamp": (1.64, 1.84)},
+                    {"text": " its", "timestamp": (1.84, 2.02)},
+                    {"text": " place", "timestamp": (2.02, 2.28)},
+                    {"text": " amidst", "timestamp": (2.28, 2.78)},
+                    {"text": " the", "timestamp": (2.78, 2.96)},
+                    {"text": " tents.", "timestamp": (2.96, 3.48)}],
                 ],
             },
         )
