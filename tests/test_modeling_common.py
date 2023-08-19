@@ -1729,10 +1729,6 @@ class ModelTesterMixin:
                     elif tuple_object is None:
                         return
                     else:
-                        # bool tensors do not support subtraction `-`
-                        if tuple_object.dtype == torch.bool:
-                            tuple_object = tuple_object.float()
-                            dict_object = dict_object.float()
                         self.assertTrue(
                             torch.allclose(
                                 set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
@@ -2069,10 +2065,6 @@ class ModelTesterMixin:
                 self.check_pt_tf_models(tf_model, pt_model, pt_inputs_dict_with_labels)
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
-        # bool do not support subtraction
-        if a.dtype == bool:
-            a = a.astype(float)
-            b = b.astype(float)
         diff = np.abs((a - b)).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
@@ -2158,11 +2150,6 @@ class ModelTesterMixin:
             fx_outputs[fx_nans] = 0
             pt_outputs[pt_nans] = 0
             fx_outputs[pt_nans] = 0
-
-            # bool do not support subtraction
-            if fx_outputs.dtype == bool:
-                fx_outputs = fx_outputs.astype(float)
-                pt_outputs = pt_outputs.astype(float)
 
             max_diff = np.amax(np.abs(fx_outputs - pt_outputs))
             self.assertLessEqual(
