@@ -2359,10 +2359,6 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         """
         self.get_encoder().prenet.freeze_feature_encoder()
 
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        return new_embeddings
-
     def get_output_embeddings(self):
         return self.text_decoder_postnet.get_output_embeddings()
 

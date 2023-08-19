@@ -101,6 +101,7 @@ from . import (
     herbert,
     hubert,
     ibert,
+    idefics,
     imagegpt,
     informer,
     instructblip,

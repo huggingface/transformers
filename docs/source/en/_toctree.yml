@@ -19,6 +19,8 @@
     title: Train with a script
   - local: accelerate
     title: Set up distributed training with 🤗 Accelerate
+  - local: peft
+    title: Load and train adapters with 🤗 PEFT
   - local: model_sharing
     title: Share your model
   - local: transformers_agents
@@ -692,6 +694,8 @@
       sections:
       - local: model_doc/decision_transformer
         title: Decision Transformer
+      - local: model_doc/idefics
+        title: IDEFICS
       - local: model_doc/trajectory_transformer
         title: Trajectory Transformer
       title: Reinforcement learning models
