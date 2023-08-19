@@ -17,13 +17,13 @@
 
 import math
 from dataclasses import dataclass
+from typing import Optional, Tuple
+
 import torch
 import torch.utils.checkpoint
 from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss
-
-from ...utils import ModelOutput
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -33,10 +33,14 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+)
 from .configuration_bros import BrosConfig
-
-from typing import Optional, Tuple
 
 
 logger = logging.get_logger(__name__)

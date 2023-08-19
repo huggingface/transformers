@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -337,7 +337,7 @@ class BrosModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_multi_gpu_data_parallel_forward(self):
-        pass
+        super().test_multi_gpu_data_parallel_forward()
 
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
