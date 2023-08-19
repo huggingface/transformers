@@ -535,13 +535,13 @@ class VivitModel(VivitPreTrainedModel):
         ...     '''
         ...     Sample frames from the video.
         ...     Args:
-        ...         n_frames (`int`): 
+        ...         n_frames (`int`):
         ...             Total number of frames to sample
         ...         frame_sample_rate (`int`):
         ...             Sample every n-th frame
         ...         max_frame_idx (`int`):
         ...             Largest allowed frame index. Used for adjusting sample position within the video.
-        ...    
+        ...
         ...     Returns:
         ...         indices (`List[int]`): List of sampled video frame indices
         ...     '''
@@ -687,13 +687,13 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         ...     '''
         ...     Sample frames from the video.
         ...     Args:
-        ...         n_frames (`int`): 
+        ...         n_frames (`int`):
         ...             Total number of frames to sample
         ...         frame_sample_rate (`int`):
         ...             Sample every n-th frame
         ...         max_frame_idx (`int`):
         ...             Largest allowed frame index. Used for adjusting sample position within the video.
-        ...    
+        ...
         ...     Returns:
         ...         indices (`List[int]`): List of sampled video frame indices
         ...     '''
