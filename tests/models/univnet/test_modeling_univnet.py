@@ -14,6 +14,7 @@
 
 import gc
 import inspect
+import random
 import unittest
 
 import numpy as np
@@ -211,26 +212,34 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         torch.cuda.empty_cache()
 
     def get_inputs(
-        self, device, num_samples: int = 3, noise_length: int = 64, spectrogram_seq_len: int = 32, seed: int = 0
+        self, device, num_samples: int = 3, noise_length: int = 10, seed: int = 0
     ):
         generator = torch.manual_seed(seed)
-        # Note: hardcode model_in_channels
+        # Note: hardcode model_in_channels -> 64
         if num_samples == 1:
-            noise_waveform_shape = (noise_length, 64)
+            noise_waveform_shape = (64, noise_length)
         else:
-            noise_waveform_shape = (num_samples, noise_length, 64)
+            noise_waveform_shape = (num_samples, 64, noise_length)
         # Explicity generate noise waveform on CPU for consistency.
         noise_waveform = torch.randn(noise_waveform_shape, generator=generator, dtype=torch.float32, device="cpu")
         # Put noise_waveform on the desired device.
         noise_waveform = noise_waveform.to(device)
 
-        # Note: hardcode num_mel_channels
+        # Note: hardcode num_mel_channels -> 100
         if num_samples == 1:
-            spectrogram_shape = [spectrogram_seq_len, 100]
+            spectrogram_shape = [100, noise_length]
         else:
-            spectrogram_shape = [num_samples, spectrogram_seq_len, 100]
-        spectrogram = floats_tensor(spectrogram_shape, scale=1.0)
+            spectrogram_shape = [num_samples, 100, noise_length]
+        spectrogram = floats_tensor(spectrogram_shape, scale=1.0, rng=random.Random(seed))
         # Note: spectrogram should already be on torch_device
+
+        # Permute to match diffusers implementation
+        if num_samples == 1:
+            noise_waveform = noise_waveform.transpose(1, 0)
+            spectrogram = spectrogram.transpose(1, 0)
+        else:
+            noise_waveform = noise_waveform.transpose(2, 1)
+            spectrogram = spectrogram.transpose(2, 1)
 
         inputs = {
             "spectrogram": spectrogram,
@@ -240,34 +249,34 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
 
         return inputs
 
+    @torch.no_grad()
     def test_generation_tortoise_tts_batched(self):
         # Load sample checkpoint from Tortoise TTS
         model = UnivNetGan.from_pretrained("dg845/univnet-dev")
         model.to(torch_device)
 
         # Get batched noise and spectrogram inputs.
-        input_speech = self.get_inputs(torch_device, 3)
+        input_speech = self.get_inputs(torch_device, num_samples=3)
 
         waveform = model(**input_speech)
-        waveform_slice = waveform[-1, -9:]
+        waveform_slice = waveform[-1, -9:].cpu().flatten().numpy()
 
-        # TODO: get expected waveform slice from reference implementation
-        expected_slice = np.array([0.0] * 9)
+        expected_slice = np.array([-0.3408, -0.6045, -0.5052, 0.1160, -0.1556, -0.0405, -0.3024, -0.5290, -0.5019])
 
-        assert np.abs(waveform_slice.flatten() - expected_slice).max() < 1e-3
+        assert np.abs(waveform_slice - expected_slice).max() < 1e-3
 
+    @torch.no_grad()
     def test_generation_tortoise_tts_unbatched(self):
         # Load sample checkpoint from Tortoise TTS
         model = UnivNetGan.from_pretrained("dg845/univnet-dev")
         model.to(torch_device)
 
         # Get unbatched noise and spectrogram inputs.
-        input_speech = self.get_inputs(torch_device, 1)
+        input_speech = self.get_inputs(torch_device, num_samples=1)
 
         waveform = model(**input_speech)
-        waveform_slice = waveform[-9:]
+        waveform_slice = waveform[-9:].cpu().flatten().numpy()
 
-        # TODO: get expected waveform slice from reference implementation
-        expected_slice = np.array([0.0] * 9)
+        expected_slice = np.array([[-0.3276, -0.5504, -0.3484, 0.3574, -0.0373, -0.1826, -0.4880, -0.6431, -0.5162]])
 
-        assert np.abs(waveform_slice.flatten() - expected_slice).max() < 1e-3
+        assert np.abs(waveform_slice - expected_slice).max() < 1e-3

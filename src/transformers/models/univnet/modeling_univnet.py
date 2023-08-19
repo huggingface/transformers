@@ -581,7 +581,6 @@ class UnivNetGan(PreTrainedModel):
         self,
         spectrogram: torch.FloatTensor,
         noise_waveform: Optional[torch.FloatTensor] = None,
-        noise_length: int = 10,
         generator: Optional[torch.Generator] = None,
     ):
         r"""
@@ -597,8 +596,6 @@ class UnivNetGan(PreTrainedModel):
                 Tensor containing a noise waveform sequence of standard Gaussian noise. Can be batched and of shape
                 `(batch_size, sequence_length, config.model_in_channels)`, or un-batched and of shape (sequence_length,
                 config.model_in_channels)`. If not supplied, will be randomly generated.
-            noise_length (`int`, *optional*, defaults to 10):
-                The sequence length of the noise waveform. Used only when generating a noise waveform.
             generator (`torch.Generator`, *optional*):
                 A [torch generator](https://pytorch.org/docs/stable/generated/torch.Generator.html) to make generation
                 deterministic.
@@ -611,7 +608,7 @@ class UnivNetGan(PreTrainedModel):
         spectrogram_batched = spectrogram.dim() == 3
         if not spectrogram_batched:
             spectrogram = spectrogram.unsqueeze(0)
-        spectrogram_batch_size = spectrogram.shape[0]
+        spectrogram_batch_size, _, spectrogram_length = spectrogram.shape
 
         if noise_waveform is not None:
             noise_waveform_batched = noise_waveform.dim() == 3
@@ -619,7 +616,7 @@ class UnivNetGan(PreTrainedModel):
                 noise_waveform = noise_waveform.unsqueeze(0)
         else:
             # Randomly generate noise_waveform
-            noise_waveform_shape = (spectrogram_batch_size, noise_length, self.config.model_in_channels)
+            noise_waveform_shape = (spectrogram_batch_size, spectrogram_length, self.config.model_in_channels)
             noise_waveform = torch.randn(
                 noise_waveform_shape, generator=generator, dtype=spectrogram.dtype, device=spectrogram.device
             )
