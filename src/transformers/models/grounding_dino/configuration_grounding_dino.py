@@ -130,7 +130,7 @@ class GroundingDINOConfig(BackboneConfigMixin, PretrainedConfig):
         layer_norm_eps=1e-5,
         encoder_stride=32,
         out_features=None,
-        out_indices=[1, 2, 3],
+        out_indices=[2, 3, 4],
         **kwargs,
     ):
         super().__init__(**kwargs)

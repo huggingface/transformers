@@ -25,7 +25,7 @@ from torchvision import transforms as T
 import torchvision.transforms.functional as F
 
 from transformers import (
-    GroundingDINOConfig, GroundingDINOModel, GroundingDINOForObjectDetection, ViTImageProcessor
+    GroundingDINOConfig, GroundingDINOModel, GroundingDINOForObjectDetection, ViTImageProcessor, GroundingDINOBackbone
 )
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
@@ -36,10 +36,10 @@ def get_grounding_dino_config(model_name):
     config = GroundingDINOConfig()
 
     if "tiny" in model_name:
-        window_size = 6
+        window_size = 7
         embed_dim = 96
-        depths = (2, 2, 18, 2)
-        num_heads = (4, 8, 16, 32)
+        depths = (2, 2, 6, 2)
+        num_heads = (3, 6, 12, 24)
     elif "base" in model_name:
         window_size = 12
         embed_dim = 128
@@ -59,6 +59,7 @@ def get_grounding_dino_config(model_name):
 def create_rename_keys(config):
     rename_keys = []
     # fmt: off
+    #TODO names might change after modifing GroundingDINOModel class
     ########################################## VISION BACKBONE - START
     # patch embedding layer
     rename_keys.append(("module.backbone.0.patch_embed.proj.weight", "embeddings.patch_embeddings.projection.weight"))
@@ -100,10 +101,20 @@ def create_rename_keys(config):
                             f"encoder.layers.{layer}.blocks.{block}.output.dense.bias"))
             
         # downsample
-        rename_keys.append((f"module.backbone.0.layers.{layer}.downsample.reduction.weight", 
-                            f"encoder.layers.{layer}.downsample.reduction.weight"))
-        rename_keys.append((f"module.backbone.0.layers.{layer}.downsample.reduction.bias", 
-                            f"encoder.layers.{layer}.downsample.reduction.bias"))
+        if layer!=len(config.depths)-1:
+            rename_keys.append((f"module.backbone.0.layers.{layer}.downsample.reduction.weight", 
+                                f"encoder.layers.{layer}.downsample.reduction.weight"))
+            rename_keys.append((f"module.backbone.0.layers.{layer}.downsample.norm.weight", 
+                                f"encoder.layers.{layer}.downsample.norm.weight"))
+            rename_keys.append((f"module.backbone.0.layers.{layer}.downsample.norm.bias", 
+                                f"encoder.layers.{layer}.downsample.norm.bias"))
+    
+    for out_indice in config.out_indices:
+        # Grounding DINO implementation of out_indices isn't aligned with transformers
+        rename_keys.append((f"module.backbone.0.norm{out_indice-1}.weight", 
+                        f"hidden_states_norms.stage{out_indice}.weight"))
+        rename_keys.append((f"module.backbone.0.norm{out_indice-1}.bias", 
+                        f"hidden_states_norms.stage{out_indice}.bias"))
         
     ########################################## VISION BACKBONE - END
 
@@ -118,22 +129,22 @@ def rename_key(dct, old, new):
 # we split up the matrix of each encoder layer into queries, keys and values
 def read_in_q_k_v(state_dict, config):
     ########################################## VISION BACKBONE - START
+    embed_dim = config.embed_dim
     for layer, depth in enumerate(config.depths):
+        hidden_size = embed_dim * 2**layer
         for block in range(depth):
             # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
             in_proj_weight = state_dict.pop(f"module.backbone.0.layers.{layer}.blocks.{block}.attn.qkv.weight")
             in_proj_bias = state_dict.pop(f"module.backbone.0.layers.{layer}.blocks.{block}.attn.qkv.bias")
             # next, add query, keys and values (in that order) to the state dict
-            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.query.weight"] = in_proj_weight[: config.hidden_size, :]
-            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.query.bias"] = in_proj_bias[: config.hidden_size]
-            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.key.weight"] = in_proj_weight[
-                config.hidden_size : config.hidden_size * 2, :
-            ]
-            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.key.bias"] = in_proj_bias[
-                config.hidden_size : config.hidden_size * 2
-            ]
-            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.value.weight"] = in_proj_weight[-config.hidden_size :, :]
-            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.value.bias"] = in_proj_bias[-config.hidden_size :]
+            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.query.weight"] = in_proj_weight[: hidden_size, :]
+            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.query.bias"] = in_proj_bias[: hidden_size]
+
+            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.key.weight"] = in_proj_weight[hidden_size : hidden_size * 2, :]
+            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.key.bias"] = in_proj_bias[hidden_size : hidden_size * 2]
+
+            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.value.weight"] = in_proj_weight[-hidden_size :, :]
+            state_dict[f"encoder.layers.{layer}.blocks.{block}.attention.self.value.bias"] = in_proj_bias[-hidden_size :]
     ########################################## VISION BACKBONE - END
 
 
@@ -185,16 +196,19 @@ def convert_grounding_dino_checkpoint(model_name, checkpoint_path):
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
         rename_key(new_state_dict, src, dest)
-    # read_in_q_k_v(new_state_dict, config)
+    read_in_q_k_v(new_state_dict, config)
 
     # Load HF implementation with default config and converted state dict
-    model = GroundingDINOModel(config).eval()
+    model = GroundingDINOBackbone(config).eval()
     model.load_state_dict(new_state_dict, strict=False)
 
     # Load and process test image
     image = prepare_img()
     inputs = image_processor(image)
-    model(pixel_values=inputs.unsqueeze(0))
+    print(inputs[:, :5, :5])
+    output = model(pixel_values=inputs.unsqueeze(0))
+    for feature_map in output.feature_maps:
+        print(f"{feature_map.shape=}, {feature_map[0, :5, 0, 0]=}")
 
     # outputs = model(**inputs).logits
 
