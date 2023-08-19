@@ -22,6 +22,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
+from torch.nn.functional import normalize
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
@@ -84,6 +85,50 @@ class Blip2ForConditionalGenerationModelOutput(ModelOutput):
             else getattr(self, k).to_tuple()
             for k in self.keys()
         )
+
+
+@dataclass
+# Copied from transformers.models.blip.modeling_blip.BlipImageTextMatchingModelOutput with Blip->Blip2
+class Blip2ImageTextMatchingModelOutput(ModelOutput):
+    """
+    Adapted from the base class for vision model's outputs that also contains image embeddings of the pooling of the
+    last hidden states. This class also adds the loss term from the text decoder as well as the image-text similarity
+    scores.
+
+    Args:
+        itm_score (`torch.FloatTensor`):
+            The image-text similarity scores.
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Languge modeling loss from the text decoder.
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+            The image embeddings obtained by applying the projection layer to the pooler_output.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        vision_pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
+            Last layer hidden-state of the vision of the vision-only branch of the model.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+        question_embeds (`torch.FloatTensor`):
+            The question embeddings obtained by the text projection layer.
+    """
+
+    itm_score: Optional[torch.FloatTensor] = None
+    loss: Optional[torch.FloatTensor] = None
+    image_embeds: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    vision_pooler_output: Optional[torch.FloatTensor] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    question_embeds: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # Copied from transformers.models.blip.modeling_blip.BlipVisionEmbeddings with Blip->Blip2
@@ -816,6 +861,10 @@ class Blip2QFormerLayer(nn.Module):
         else:
             self.has_cross_attention = False
 
+        if config.qformer_text_input:
+            self.intermediate = Blip2QFormerIntermediate(config)
+            self.output = Blip2QFormerOutput(config)
+
         self.intermediate_query = Blip2QFormerIntermediate(config)
         self.output_query = Blip2QFormerOutput(config)
 
@@ -1003,6 +1052,59 @@ class Blip2QFormerEncoder(nn.Module):
         )
 
 
+# Adapted from https://github.com/salesforce/LAVIS/blob/main/lavis/models/blip2_models/Qformer.py#L51
+class Blip2TextEmbeddings(nn.Module):
+    """Construct the embeddings from word and position embeddings."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
+
+        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
+        # any TensorFlow checkpoint file
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
+        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+
+        self.config = config
+
+    def forward(
+        self,
+        input_ids: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        query_embeds: Optional[torch.FloatTensor] = None,
+        past_key_values_length: int = 0,
+    ) -> torch.Tensor:
+        if input_ids is not None:
+            seq_length = input_ids.size()[1]
+        else:
+            seq_length = 0
+
+        if position_ids is None:
+            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
+
+        if input_ids is not None:
+            input_ids = input_ids.to(self.word_embeddings.weight.device)
+            embeddings = self.word_embeddings(input_ids)
+            if self.position_embedding_type == "absolute":
+                position_embeddings = self.position_embeddings(position_ids)
+                embeddings += position_embeddings
+
+            if query_embeds is not None:
+                embeddings = torch.cat((query_embeds, embeddings), dim=1)
+        else:
+            embeddings = query_embeds
+        embeddings = self.LayerNorm(embeddings)
+        embeddings = self.dropout(embeddings)
+        return embeddings
+
+
 class Blip2QFormerModel(Blip2PreTrainedModel):
     """
     Querying Transformer (Q-Former), used in BLIP-2.
@@ -1012,8 +1114,11 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        if config.qformer_text_input:
+            self.embeddings = Blip2TextEmbeddings(config)
+        else:
+            self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+            self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         self.encoder = Blip2QFormerEncoder(config)
 
@@ -1080,7 +1185,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
 
     def forward(
         self,
-        query_embeds: torch.FloatTensor,
+        query_embeds: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
@@ -1090,6 +1195,8 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        input_ids: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, `optional`):
@@ -1116,6 +1223,9 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if input_ids is None and query_embeds is None:
+            raise ValueError("You have to specify query_embeds when input_ids is None")
+
         # past_key_values_length
         past_key_values_length = (
             past_key_values[0][0].shape[2] - self.config.query_length if past_key_values is not None else 0
@@ -1123,15 +1233,25 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
 
         query_length = query_embeds.shape[1] if query_embeds is not None else 0
 
-        embedding_output = self.layernorm(query_embeds)
-        embedding_output = self.dropout(embedding_output)
+        if hasattr(self, "embeddings"):
+            embedding_output = self.embeddings(
+                input_ids=input_ids,
+                position_ids=position_ids,
+                query_embeds=query_embeds,
+                past_key_values_length=past_key_values_length,
+            )
+        else:
+            embedding_output = self.layernorm(query_embeds)
+            embedding_output = self.dropout(embedding_output)
 
         input_shape = embedding_output.size()[:-1]
         batch_size, seq_length = input_shape
         device = embedding_output.device
 
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
+            attention_mask = torch.ones(
+                ((batch_size, seq_length + past_key_values_length)), device=device, dtype=torch.long
+            )
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
@@ -1149,7 +1269,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
             if type(encoder_attention_mask) == list:
                 encoder_extended_attention_mask = [self.invert_attention_mask(mask) for mask in encoder_attention_mask]
             elif encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device, dtype=torch.long)
                 encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
             else:
                 encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
@@ -1192,6 +1312,56 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         )
 
 
+# Copied from transformers.models.blip.modeling_blip_text.BlipTextPredictionHeadTransform with Blip->Blip2
+class Blip2TextPredictionHeadTransform(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        if isinstance(config.hidden_act, str):
+            self.transform_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.transform_act_fn = config.hidden_act
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states
+
+
+# Copied from transformers.models.blip.modeling_blip_text.BlipTextLMPredictionHead with Blip->Blip2
+class Blip2TextLMPredictionHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.transform = Blip2TextPredictionHeadTransform(config)
+
+        # The output weights are the same as the input embeddings, but there is
+        # an output-only bias for each token.
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+
+        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def forward(self, hidden_states):
+        hidden_states = self.transform(hidden_states)
+        hidden_states = self.decoder(hidden_states)
+        return hidden_states
+
+
+# Copied from transformers.models.blip.modeling_blip_text.BlipTextOnlyMLMHead with Blip->Blip2
+class Blip2TextOnlyMLMHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.predictions = Blip2TextLMPredictionHead(config)
+
+    def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
+        prediction_scores = self.predictions(sequence_output)
+        return prediction_scores
+
+
 @add_start_docstrings(
     """
     BLIP-2 Model for generating text and image features. The model consists of a vision encoder, Querying Transformer
@@ -1211,17 +1381,27 @@ class Blip2Model(Blip2PreTrainedModel):
         self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
         self.qformer = Blip2QFormerModel(config.qformer_config)
 
-        self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
-        if config.use_decoder_only_language_model:
-            language_model = AutoModelForCausalLM.from_config(config.text_config)
+        if self.config.qformer_config.qformer_text_input:
+            self._keep_in_fp32_modules = []  # fp16 compatibility
+
+            # vision projection layer
+            self.vision_proj = nn.Linear(config.qformer_config.hidden_size, config.image_text_hidden_size)
+
+            # text projection layer
+            self.text_proj = nn.Linear(config.qformer_config.hidden_size, config.image_text_hidden_size)
+
         else:
-            language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
+            self.language_projection = nn.Linear(config.qformer_config.hidden_size, config.text_config.hidden_size)
+            if config.use_decoder_only_language_model:
+                language_model = AutoModelForCausalLM.from_config(config.text_config)
+            else:
+                language_model = AutoModelForSeq2SeqLM.from_config(config.text_config)
 
-        # Update _tied_weights_keys using the base model used.
-        if language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"language_model.{k}" for k in language_model._tied_weights_keys]
+            # Update _tied_weights_keys using the base model used.
+            if language_model._tied_weights_keys is not None:
+                self._tied_weights_keys = [f"language_model.{k}" for k in language_model._tied_weights_keys]
 
-        self.language_model = language_model
+            self.language_model = language_model
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1236,7 +1416,10 @@ class Blip2Model(Blip2PreTrainedModel):
         self.language_model.set_output_embeddings(new_embeddings)
 
     def get_output_embeddings(self) -> nn.Module:
-        return self.language_model.get_output_embeddings()
+        if hasattr(self, "language_model"):
+            return self.language_model.get_output_embeddings()
+        else:
+            return self.qformer.get_output_embeddings()
 
     def get_encoder(self):
         return self.language_model.get_encoder()
@@ -1245,7 +1428,7 @@ class Blip2Model(Blip2PreTrainedModel):
         return self.language_model.get_decoder()
 
     def _tie_weights(self):
-        if not self.config.use_decoder_only_language_model:
+        if not self.config.use_decoder_only_language_model and hasattr(self, "language_model"):
             self.language_model.encoder.embed_tokens = self.language_model.shared
             self.language_model.decoder.embed_tokens = self.language_model.shared
 
@@ -1288,29 +1471,42 @@ class Blip2Model(Blip2PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if self.config.use_decoder_only_language_model:
-            text_outputs = self.language_model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
+        if hasattr(self, "language_model"):
+            if self.config.use_decoder_only_language_model:
+                text_outputs = self.language_model(
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                )
+            else:
+                inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
+
+                text_outputs = self.language_model(
+                    inputs_embeds=inputs_embeds,
+                    attention_mask=attention_mask,
+                    decoder_input_ids=decoder_input_ids,
+                    decoder_attention_mask=decoder_attention_mask,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                    labels=labels,
+                )
+
+            return text_outputs
         else:
-            inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-
-            text_outputs = self.language_model(
-                inputs_embeds=inputs_embeds,
+            query_outputs = self.qformer(
+                input_ids=input_ids,
+                # query_embeds=query_tokens,
                 attention_mask=attention_mask,
-                decoder_input_ids=decoder_input_ids,
-                decoder_attention_mask=decoder_attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
-                labels=labels,
             )
+            embeds = query_outputs.last_hidden_state
+            text_features = self.text_proj(embeds)
+            text_features = normalize(text_features, dim=-1)
 
-        return text_outputs
+            return text_features
 
     @add_start_docstrings_to_model_forward(BLIP_2_VISION_INPUTS_DOCSTRING)
     def get_image_features(
@@ -1358,7 +1554,26 @@ class Blip2Model(Blip2PreTrainedModel):
             return_dict=return_dict,
         )
 
-        return vision_outputs
+        if not hasattr(self, "vision_proj"):
+            return vision_outputs
+
+        else:
+            image_embeds = vision_outputs[0]
+
+            image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
+
+            query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+            query_outputs = self.qformer(
+                query_embeds=query_tokens,
+                encoder_hidden_states=image_embeds,
+                encoder_attention_mask=image_attention_mask,
+                return_dict=return_dict,
+            )
+
+            embeds = query_outputs.last_hidden_state
+            image_features = normalize(self.vision_proj(embeds), dim=-1)
+
+            return image_features
 
     @add_start_docstrings_to_model_forward(BLIP_2_INPUTS_DOCSTRING)
     def get_qformer_features(
@@ -1884,3 +2099,141 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
         )
 
         return outputs
+
+
+@add_start_docstrings(
+    """
+    BLIP-2 Model with a vision and text projector, and a classification head on top. The model is used in the context
+    of image-text retrieval. Given an image and a text, the model returns the probability of the text being relevant to
+    the image.
+    """,
+    BLIP_2_START_DOCSTRING,
+)
+class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
+    main_input_name = "pixel_values"
+    config_class = Blip2Config
+
+    def __init__(self, config: Blip2Config):
+        super().__init__(config)
+
+        self.vision_model = Blip2VisionModel(config.vision_config)
+
+        self.query_tokens = nn.Parameter(torch.zeros(1, config.num_query_tokens, config.qformer_config.hidden_size))
+
+        self.qformer = Blip2QFormerModel(config.qformer_config)
+        self.cls = Blip2TextOnlyMLMHead(config.qformer_config)
+
+        # vision projection layer
+        self.vision_proj = nn.Linear(config.qformer_config.hidden_size, config.image_text_hidden_size)
+
+        # text projection layer
+        self.text_proj = nn.Linear(config.qformer_config.hidden_size, config.image_text_hidden_size)
+
+        # image text matching head
+        self.itm_head = nn.Linear(config.qformer_config.hidden_size, 2)
+
+        self.temp = nn.Parameter(0.07 * torch.ones([]))
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(BLIP_2_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Blip2ImageTextMatchingModelOutput, config_class=Blip2VisionConfig)
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        input_ids: torch.LongTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
+        use_itm_head: Optional[bool] = True,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Blip2ImageTextMatchingModelOutput]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, Blip2ForImageTextRetrieval
+
+        >>> model = Blip2ForImageTextRetrieval.from_pretrained("jpizarrom/blip2-itm-vit-g")
+        >>> processor = AutoProcessor.from_pretrained("jpizarrom/blip2-itm-vit-g")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> text = "an image of a cat"
+
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        ```
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        vision_outputs = self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        image_embeds = vision_outputs[0]
+        image_attention_mask = torch.ones(image_embeds.size()[:-1], dtype=torch.long, device=image_embeds.device)
+
+        if use_itm_head:
+            query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+            query_attention_mask = torch.ones(query_tokens.size()[:-1], dtype=torch.long).to(query_tokens.device)
+            attention_mask = torch.cat([query_attention_mask, attention_mask], dim=1)
+
+            question_embeds = self.qformer(
+                input_ids=input_ids,
+                query_embeds=query_tokens,
+                attention_mask=attention_mask,
+                encoder_hidden_states=image_embeds,
+                encoder_attention_mask=image_attention_mask,
+                return_dict=return_dict,
+            )
+            question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
+
+            output = self.itm_head(question_embeds[:, : query_tokens.size(1), :])
+            output = output.mean(dim=1)
+        else:
+            query_tokens = self.query_tokens.expand(image_embeds.shape[0], -1, -1)
+            query_outputs = self.qformer(
+                query_embeds=query_tokens,
+                encoder_hidden_states=image_embeds,
+                encoder_attention_mask=image_attention_mask,
+                return_dict=return_dict,
+            )
+            image_embeds = query_outputs[0] if not return_dict else query_outputs.last_hidden_state
+
+            question_embeds = self.qformer(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                return_dict=return_dict,
+            )
+            question_embeds = question_embeds[0] if not return_dict else question_embeds.last_hidden_state
+
+            image_feat = normalize(self.vision_proj(image_embeds), dim=-1)
+            text_feat = normalize(self.text_proj(question_embeds[:, 0, :]), dim=-1)
+
+            outputs = torch.bmm(image_feat, text_feat.unsqueeze(-1))
+            output, _ = torch.max(outputs, dim=1)
+
+        if not return_dict:
+            outputs = (output, vision_outputs[0]) + vision_outputs[2:] + (question_embeds,)
+            return tuple(output for output in outputs if output is not None)
+
+        return Blip2ImageTextMatchingModelOutput(
+            itm_score=output,
+            last_hidden_state=vision_outputs.last_hidden_state,
+            hidden_states=vision_outputs.hidden_states,
+            attentions=vision_outputs.attentions,
+            question_embeds=question_embeds,
+        )

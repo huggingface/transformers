@@ -23,7 +23,14 @@ import numpy as np
 import requests
 
 from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
+from transformers.testing_utils import (
+    require_torch,
+    require_torch_gpu,
+    require_torch_multi_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -41,7 +48,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import Blip2ForConditionalGeneration, Blip2Model, Blip2VisionModel
+    from transformers import Blip2ForConditionalGeneration, Blip2ForImageTextRetrieval, Blip2Model, Blip2VisionModel
     from transformers.models.blip_2.modeling_blip_2 import BLIP_2_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -224,6 +231,7 @@ class Blip2QFormerModelTester:
         initializer_range=0.02,
         bos_token_id=0,
         scope=None,
+        qformer_text_input=False,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -243,6 +251,7 @@ class Blip2QFormerModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
         self.bos_token_id = bos_token_id
+        self.qformer_text_input = qformer_text_input
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -275,6 +284,7 @@ class Blip2QFormerModelTester:
             max_position_embeddings=self.max_position_embeddings,
             initializer_range=self.initializer_range,
             bos_token_id=self.bos_token_id,
+            qformer_text_input=self.qformer_text_input,
         )
 
 
@@ -817,6 +827,211 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     )
 
 
+class Blip2TextRetrievalModelTester:
+    def __init__(self, parent, vision_kwargs=None, qformer_kwargs=None, is_training=True):
+        if vision_kwargs is None:
+            vision_kwargs = {}
+        if qformer_kwargs is None:
+            qformer_kwargs = {"qformer_text_input": True}
+        text_kwargs = {}
+
+        self.parent = parent
+        self.vision_model_tester = Blip2VisionModelTester(parent, **vision_kwargs)
+        self.qformer_model_tester = Blip2QFormerModelTester(parent, **qformer_kwargs)
+        self.text_model_tester = Blip2TextModelTester(parent, **text_kwargs)
+        self.is_training = is_training
+
+    def prepare_config_and_inputs(self):
+        _, input_ids, attention_mask = self.qformer_model_tester.prepare_config_and_inputs()
+        _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
+
+        config = self.get_config()
+
+        return config, input_ids, attention_mask, pixel_values
+
+    def get_config(self):
+        return Blip2Config.from_vision_qformer_text_configs(
+            vision_config=self.vision_model_tester.get_config(),
+            qformer_config=self.qformer_model_tester.get_config(),
+            text_config=self.text_model_tester.get_config(),
+        )
+
+    def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
+        model = Blip2ForImageTextRetrieval(config).to(torch_device).eval()
+        with torch.no_grad():
+            result = model(pixel_values, input_ids, attention_mask)
+
+        image_size = (self.vision_model_tester.image_size, self.vision_model_tester.image_size)
+        patch_size = (self.vision_model_tester.patch_size, self.vision_model_tester.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+
+        self.parent.assertEqual(
+            result.itm_score.shape,
+            (self.vision_model_tester.batch_size, 2),
+        )
+        self.parent.assertEqual(
+            result.last_hidden_state.shape,
+            (self.vision_model_tester.batch_size, num_patches + 1, self.qformer_model_tester.hidden_size),
+        )
+        self.parent.assertEqual(
+            result.question_embeds.shape,
+            (
+                self.text_model_tester.batch_size,
+                self.vision_model_tester.hidden_size + input_ids.shape[1],
+                self.qformer_model_tester.hidden_size,
+            ),
+        )
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, input_ids, attention_mask, pixel_values = config_and_inputs
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "pixel_values": pixel_values,
+        }
+        return config, inputs_dict
+
+
+@require_torch
+class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (Blip2ForImageTextRetrieval,) if is_torch_available() else ()
+    fx_compatible = False
+    test_head_masking = False
+    test_pruning = False
+    test_resize_embeddings = False
+    test_attention_outputs = False
+    test_torchscript = False
+
+    # TODO add or skip tests
+    test_model_outputs_equivalence = False
+    test_tied_weights_keys = False
+    test_hidden_states_output = False
+    test_inputs_embeds = False
+    test_model_common_attributes = False
+    test_retain_grad_hidden_states_attentions = False
+
+    def setUp(self):
+        self.model_tester = Blip2TextRetrievalModelTester(self)
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            if model.config.is_encoder_decoder:
+                expected_arg_names = [
+                    "pixel_values",
+                    "input_ids",
+                    "attention_mask",
+                ]
+
+                expected_arg_names.extend(["use_itm_head"] if "use_itm_head" in arg_names else ["decoder_input_ids"])
+                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+            else:
+                # TODO
+                raise NotImplementedError
+
+    def test_load_vision_qformer_text_config(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Save Blip2Config and check if we can load Blip2VisionConfig from it
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            config.save_pretrained(tmp_dir_name)
+            vision_config = Blip2VisionConfig.from_pretrained(tmp_dir_name)
+            self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
+
+        # Save Blip2Config and check if we can load Blip2QFormerConfig from it
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            config.save_pretrained(tmp_dir_name)
+            qformer_config = Blip2QFormerConfig.from_pretrained(tmp_dir_name)
+            self.assertDictEqual(config.qformer_config.to_dict(), qformer_config.to_dict())
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in ["jpizarrom/blip2-itm-vit-g"]:
+            for model_class in self.all_model_classes + (Blip2Model,):
+                model = model_class.from_pretrained(model_name)
+                self.assertIsNotNone(model)
+
+    def test_get_text_features(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        inputs_dict = {
+            "input_ids": torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]).to(torch_device),
+            "attention_mask": torch.LongTensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]).to(torch_device),
+        }
+
+        model = Blip2Model(config).to(torch_device)
+        model.eval()
+        text_features = model.get_text_features(**inputs_dict)
+        self.assertEqual(text_features[0].shape, (10, config.image_text_hidden_size))
+
+    def test_get_image_features(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        keys_to_pop = ["input_ids", "attention_mask"]
+
+        for key in keys_to_pop:
+            inputs_dict.pop(key)
+
+        model = Blip2Model(config).to(torch_device)
+        model.eval()
+        image_features = model.get_image_features(**inputs_dict)
+        self.assertEqual(
+            image_features.shape,  # [12, 32, 256]
+            (
+                self.model_tester.vision_model_tester.batch_size,
+                config.vision_config.hidden_size,
+                config.image_text_hidden_size,
+            ),
+        )
+
+    def test_training(self):
+        pass
+
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    # check if `logit_scale` is initilized as per the original implementation
+                    if name == "logit_scale":
+                        self.assertAlmostEqual(
+                            param.data.item(),
+                            np.log(1 / 0.07),
+                            delta=1e-3,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    elif name == "temp":
+                        self.assertAlmostEqual(
+                            param.data.item(),
+                            0.07,
+                            delta=1e-3,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+
+
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "https://huggingface.co/hf-internal-testing/blip-test-image/resolve/main/demo.jpg"
@@ -993,3 +1208,87 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
             [0, 3, 7, 152, 67, 839, 1],
         )
         self.assertEqual(generated_text, "san diego")
+
+    @require_torch_gpu
+    def test_inference_itm_features(self):
+        processor = Blip2Processor.from_pretrained("jpizarrom/blip2-itm-vit-g")
+        model = Blip2Model.from_pretrained(
+            "jpizarrom/blip2-itm-vit-g",
+        ).to(torch_device)
+
+        # image features
+        image = prepare_img()
+        image_inputs = processor(images=image, return_tensors="pt").to(torch_device)
+        image_features = model.get_image_features(**image_inputs)
+        expected_image_features = torch.tensor(
+            [
+                -0.0946953147649765,
+                -0.07541415840387344,
+                0.03312666341662407,
+                0.053536128252744675,
+                0.03368198126554489,
+                -0.013867943547666073,
+            ]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(image_features[0][0][:6], expected_image_features, atol=1e-4))
+
+        # text features
+        text_inputs = processor(text="a woman sitting on the beach with a dog", padding=True, return_tensors="pt").to(
+            torch_device
+        )
+        text_features = model.get_text_features(**text_inputs)
+        expected_text_features = torch.tensor(
+            [
+                -0.10836730897426605,
+                0.05315554141998291,
+                -0.028310950845479965,
+                0.016979066655039787,
+                0.0865054652094841,
+                -0.046645939350128174,
+            ]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(text_features[0][0][:6], expected_text_features, atol=1e-4))
+
+        # check similarity
+        similarity = (image_features @ text_features[:, 0, :].t()).max()
+        expected_similarity = torch.tensor(0.44385525584220886).to(torch_device)
+        self.assertTrue(torch.allclose(similarity, expected_similarity, atol=1e-4))
+
+    @require_torch_gpu
+    def test_inference_itm_features_fp16(self):
+        processor = Blip2Processor.from_pretrained("jpizarrom/blip2-itm-vit-g")
+        model = Blip2Model.from_pretrained("jpizarrom/blip2-itm-vit-g", torch_dtype=torch.float16).to(torch_device)
+
+        # image features
+        image = prepare_img()
+        image_inputs = processor(images=image, return_tensors="pt").to(torch_device, dtype=torch.float16)
+        image_features = model.get_image_features(**image_inputs)
+        expected_image_features = [
+            -0.093994140625,
+            -0.075927734375,
+            0.031890869140625,
+            0.053009033203125,
+            0.0352783203125,
+            -0.01190185546875,
+        ]
+        self.assertTrue(np.allclose(image_features[0][0][:6].tolist(), expected_image_features, atol=1e-4))
+
+        # text features
+        text_inputs = processor(text="a woman sitting on the beach with a dog", padding=True, return_tensors="pt").to(
+            torch_device
+        )
+        text_features = model.get_text_features(**text_inputs)
+        expected_text_features = [
+            -0.1082763671875,
+            0.053192138671875,
+            -0.02825927734375,
+            0.0169830322265625,
+            0.08648681640625,
+            -0.04656982421875,
+        ]
+        self.assertTrue(np.allclose(text_features[0][0][:6].tolist(), expected_text_features, atol=1e-4))
+
+        # check similarity
+        similarity = (image_features @ text_features[:, 0, :].t()).max()
+        expected_similarity = 0.44384765625
+        self.assertTrue(np.allclose(similarity.item(), expected_similarity, atol=1e-4))

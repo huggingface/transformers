@@ -209,6 +209,7 @@ class Blip2QFormerConfig(PretrainedConfig):
         position_embedding_type="absolute",
         cross_attention_frequency=2,
         encoder_hidden_size=1408,
+        qformer_text_input=False,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -227,6 +228,7 @@ class Blip2QFormerConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.cross_attention_frequency = cross_attention_frequency
         self.encoder_hidden_size = encoder_hidden_size
+        self.qformer_text_input = qformer_text_input
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -302,7 +304,15 @@ class Blip2Config(PretrainedConfig):
 
     model_type = "blip-2"
 
-    def __init__(self, vision_config=None, qformer_config=None, text_config=None, num_query_tokens=32, **kwargs):
+    def __init__(
+        self,
+        vision_config=None,
+        qformer_config=None,
+        text_config=None,
+        num_query_tokens=32,
+        image_text_hidden_size=256,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
 
         if vision_config is None:
@@ -326,6 +336,7 @@ class Blip2Config(PretrainedConfig):
         self.is_encoder_decoder = self.text_config.is_encoder_decoder
 
         self.num_query_tokens = num_query_tokens
+        self.image_text_hidden_size = image_text_hidden_size
         self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
         self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         self.initializer_factor = 1.0
