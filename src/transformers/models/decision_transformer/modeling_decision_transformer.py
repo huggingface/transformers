@@ -787,7 +787,7 @@ DECISION_TRANSFORMER_INPUTS_DOCSTRING = r"""
             The returns for each state in the trajectory
         timesteps (`torch.LongTensor` of shape `(batch_size, episode_length)`):
             The timestep for each step in the trajectory
-        attention_mask (`torch.LongTensor` of shape `(batch_size, episode_length)`):
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, episode_length)`):
             Masking, used to mask the actions when performing autoregressive prediction
 """
 

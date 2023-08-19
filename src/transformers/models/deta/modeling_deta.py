@@ -1013,7 +1013,7 @@ DETA_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
 
-        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, num_queries)`, *optional*):
+        decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Not used by default. Can be used to mask object queries.
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
             Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
