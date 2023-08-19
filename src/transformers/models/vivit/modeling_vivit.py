@@ -531,24 +531,24 @@ class VivitModel(VivitPreTrainedModel):
         ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 
-        >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
-        ...     """
+        >>> def sample_frame_indices(n_frames, frame_sample_rate, max_frame_idx):
+        ...     '''
         ...     Sample frames from the video.
         ...     Args:
-        ...         clip_len (`int`): 
-        ...             Number of frames to sample
+        ...         n_frames (`int`): 
+        ...             Total number of frames to sample
         ...         frame_sample_rate (`int`):
-        ...             Frame sample rate
-        ...         seg_len (`int`):
-        ...             Total number of frames in a sample segment
+        ...             Sample every n-th frame
+        ...         max_frame_idx (`int`):
+        ...             Largest allowed frame index. Used for adjusting sample position within the video.
         ...    
         ...     Returns:
         ...         indices (`List[int]`): List of sampled video frame indices
-        ...     """
-        ...     converted_len = int(clip_len * frame_sample_rate)
-        ...     end_idx = np.random.randint(converted_len, converted_len + seg_len)
+        ...     '''
+        ...     converted_len = int(n_frames * frame_sample_rate)
+        ...     end_idx = np.random.randint(converted_len, max_frame_idx)
         ...     start_idx = end_idx - converted_len
-        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
+        ...     indices = np.linspace(start_idx, end_idx, num=n_frames)
         ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
         ...     return indices
 
@@ -559,8 +559,10 @@ class VivitModel(VivitPreTrainedModel):
         ... )
         >>> container = av.open(file_path)
 
-        >>> # sample 32 frames
-        >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=2, seg_len=2)
+        >>> # get the number of frames in the video
+        >>> max_frame_idx = container.streams.video[0].frames
+        >>> # sample 32 frames from the whole video
+        >>> indices = sample_frame_indices(n_frames=32, frame_sample_rate=4, max_frame_idx=max_frame_idx)
         >>> video = read_video_pyav(container=container, indices=indices)
 
         >>> image_processor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2-kinetics400")
@@ -681,24 +683,24 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         ...     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 
-        >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
+        >>> def sample_frame_indices(n_frames, frame_sample_rate, max_frame_idx):
         ...     '''
         ...     Sample frames from the video.
         ...     Args:
-        ...         clip_len (`int`):
+        ...         n_frames (`int`): 
         ...             Total number of frames to sample
         ...         frame_sample_rate (`int`):
-        ...             Frame sample rate
-        ...         seg_len (`int`):
-        ...             Number of frames in a sample segment
-        ...     
+        ...             Sample every n-th frame
+        ...         max_frame_idx (`int`):
+        ...             Largest allowed frame index. Used for adjusting sample position within the video.
+        ...    
         ...     Returns:
-        ...         result (`List[int]`): List of sampled video frame indices
+        ...         indices (`List[int]`): List of sampled video frame indices
         ...     '''
-        ...     converted_len = int(clip_len * frame_sample_rate)
-        ...     end_idx = np.random.randint(converted_len, converted_len + seg_len)
+        ...     converted_len = int(n_frames * frame_sample_rate)
+        ...     end_idx = np.random.randint(converted_len, max_frame_idx)
         ...     start_idx = end_idx - converted_len
-        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
+        ...     indices = np.linspace(start_idx, end_idx, num=n_frames)
         ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
         ...     return indices
 
@@ -709,8 +711,10 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         ... )
         >>> container = av.open(file_path)
 
-        >>> # sample 32 frames
-        >>> indices = sample_frame_indices(clip_len=32, frame_sample_rate=2, seg_len=2)
+        >>> # get the total number of frames in the video
+        >>> max_frame_idx = container.streams.video[0].frames
+        >>> # sample every 4th frame from the whole video. 32 frames in total.
+        >>> indices = sample_frame_indices(n_frames=32, frame_sample_rate=4, max_frame_idx=max_frame_idx)
         >>> video = read_video_pyav(container=container, indices=indices)
 
         >>> image_processor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2-kinetics400")
@@ -726,7 +730,7 @@ class VivitForVideoClassification(VivitPreTrainedModel):
         >>> predicted_label = logits.argmax(-1).item()
         >>> # Output class label. LABEL_116 corresponds to eating spaghetti
         >>> print(model.config.id2label[predicted_label])
-        eating spaghetti
+        LABEL_116
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
