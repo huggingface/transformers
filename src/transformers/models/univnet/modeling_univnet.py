@@ -608,7 +608,7 @@ class UnivNetGan(PreTrainedModel):
         spectrogram_batched = spectrogram.dim() == 3
         if not spectrogram_batched:
             spectrogram = spectrogram.unsqueeze(0)
-        spectrogram_batch_size, _, spectrogram_length = spectrogram.shape
+        spectrogram_batch_size, spectrogram_length, _ = spectrogram.shape
 
         if noise_waveform is not None:
             noise_waveform_batched = noise_waveform.dim() == 3

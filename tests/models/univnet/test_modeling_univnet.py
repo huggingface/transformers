@@ -211,9 +211,7 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         gc.collect()
         torch.cuda.empty_cache()
 
-    def get_inputs(
-        self, device, num_samples: int = 3, noise_length: int = 10, seed: int = 0
-    ):
+    def get_inputs(self, device, num_samples: int = 3, noise_length: int = 10, seed: int = 0):
         generator = torch.manual_seed(seed)
         # Note: hardcode model_in_channels -> 64
         if num_samples == 1:
