@@ -1764,7 +1764,7 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
     def forward(
         self,
         input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1801,7 +1801,7 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
             pooled_output = hidden_states.mean(dim=1)
         else:
             padding_mask = outputs.attention_mask
-            hidden_states[~padding_mask] = 0.0
+            hidden_states[~padding_mask.bool()] = 0.0
             pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
 
         logits = self.classifier(pooled_output)
