@@ -21,7 +21,7 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.utils.checkpoint
-from torch import nn
+from torch import nn, Tensor
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
@@ -114,6 +114,7 @@ def _make_causal_mask(
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
+
 # Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
@@ -128,6 +129,55 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
+
+def to_padding_mask(seqs: Tensor, seq_lens: Optional[Tensor]) -> Optional[Tensor]:
+    """Convert a sequence length array to a float padding mask.
+
+    :param seqs:
+        The sequences to mask. *Shape:* :math:`(N,S,*)`, where :math:`N` is the
+        batch size, :math:`S` is the sequence length, and :math:`*` is any
+        number of sequence-specific dimensions including none.
+    :param seq_lens:
+        An array where each element represents the length of the sequence at the
+        same index in ``seqs``. *Shape:* :math:`(N)`, where :math:`N` is the
+        batch size.
+
+    :returns:
+        The float padding mask. *Shape:* :math:`(N,S)`, where :math:`N` is the
+        batch size and :math:`S` is the sequence length.
+    """
+    if seq_lens is None:
+        return None
+
+    batch_size, mask_seq_len = seqs.shape[:2]
+
+    # No need to construct a mask if all sequences have the same length.
+    if (seq_lens == mask_seq_len).all():
+        return None
+
+    indices = torch.arange(mask_seq_len, device=seq_lens.device).expand(batch_size, -1)
+
+    bool_mask = indices >= seq_lens.unsqueeze(1).expand(-1, mask_seq_len)
+
+    mask = seqs.new_zeros((batch_size, mask_seq_len))
+
+    mask.masked_fill_(bool_mask, -torch.inf)
+
+    return mask
+
+def _compute_new_attention_mask(
+    seqs: Tensor, padding_mask: Optional[Tensor], kernel_size: int, stride: int
+) -> Optional[Tensor]:
+    if padding_mask is None:
+        return padding_mask
+
+    pad = kernel_size // 2
+
+    seq_lens = padding_mask.size(1) - torch.nan_to_num(padding_mask, neginf=1.0).sum(1)
+
+    seq_lens = ((seq_lens + 2 * pad - kernel_size) / stride) + 1
+
+    return to_padding_mask(seqs, seq_lens.floor())
 
 ############ SPEECH ENCODER related code ################
 
@@ -278,6 +328,8 @@ class SeamlessM4TConformerFeatureProjection(nn.Module):
         self.dropout = nn.Dropout(config.feat_proj_dropout)
 
     def forward(self, hidden_states):
+        # input hidden_states are supposed to be processed by a FBankFeatureExtractor
+        
         # non-projected hidden states are needed for quantization
         norm_hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.projection(norm_hidden_states)
@@ -703,12 +755,10 @@ class SeamlessM4TConformerAdapter(nn.Module):
     def forward(self, hidden_states):
         # down project hidden_states if necessary
 
-        hidden_states = hidden_states.transpose(1, 2)
 
         for layer in self.layers:
             hidden_states = layer(hidden_states)
 
-        hidden_states = hidden_states.transpose(1, 2)
         return hidden_states
 
 
@@ -727,9 +777,8 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
             stride=config.adaptor_stride,
             padding=config.adaptor_kernel_size // 2,
         )
-        self.glu = torch.nn.GLU(dim=1)
+        self.activation = torch.nn.GLU(dim=1)
 
-        # TODO: change attention so that it it standards attention with no positional encoder
         # Self-Attention
         self.self_attn_layer_norm = nn.LayerNorm(embed_dim)
         self.self_attn_conv = nn.Conv1d(
@@ -745,49 +794,57 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
         # Feed-forward 2
         self.ffn_layer_norm = nn.LayerNorm(embed_dim)
         self.ffn = SeamlessM4TConformerFeedForward(config)
+        self.ffn_dropout = torch.nn.Dropout(dropout)
 
     def forward(
         self,
         hidden_states,
         attention_mask: Optional[torch.Tensor] = None,
-        relative_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
         # TODO: define this function - https://vscode.dev/github/ylacombe/transformers/blob/add-S2S-model/fairseq2/models/unity/adaptor_block.py#L236
 
-        hidden_states = hidden_states
+        residual = self.residual_layer_norm(hidden_states)
 
-        return hidden_states
-
-        # 1. Feed-Forward 1 layer
-        residual = hidden_states
-        hidden_states = self.ffn1_layer_norm(hidden_states)
-        hidden_states = self.ffn1(hidden_states)
-        hidden_states = hidden_states * 0.5 + residual
-        residual = hidden_states
-
-        # 2. Self-Attention layer
+        # Apply pooling to the residual to match the sequence length of the
+        # multi-head attention output.
+        # (batch, seq_len, feature_dim) -> (batch, feature_dim, seq_len)
+        residual = residual.transpose(1, 2)
+        residual = self.residual_conv(residual)
+        residual = self.activation(residual)
+        # (batch, feature_dim, seq_len) -> (batch, seq_len, feature_dim)
+        residual = residual.transpose(1, 2)
+        
+        
         hidden_states = self.self_attn_layer_norm(hidden_states)
+        # Apply pooling before feeding to the multihead-attention layer.
+        # (batch, seq_len, feature_dim) -> (batch, feature_dim, seq_len)
+        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = self.self_attn_conv(hidden_states)  
+        hidden_states = self.self_attn_activation(hidden_states)
+        # (batch, feature_dim, seq_len) -> (batch, seq_len, feature_dim)
+        hidden_states = hidden_states.transpose(1, 2)
+
+        attention_mask = _compute_new_attention_mask(
+                    hidden_states, attention_mask, self.kernel_size, self.stride
+                )
+
+        # The rest of the computation is identical to a vanilla Transformer
+        # encoder layer.
         hidden_states, attn_weigts = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            relative_position_embeddings=relative_position_embeddings,
+            hidden_states,
+            attention_mask = attention_mask,
             output_attentions=output_attentions,
         )
         hidden_states = self.self_attn_dropout(hidden_states)
         hidden_states = hidden_states + residual
-
-        # 3. Convolutional Layer
+        
+        
         residual = hidden_states
-        hidden_states = self.conv_module(hidden_states)
-        hidden_states = residual + hidden_states
-
-        # 4. Feed-Forward 2 Layer
-        residual = hidden_states
-        hidden_states = self.ffn2_layer_norm(hidden_states)
-        hidden_states = self.ffn2(hidden_states)
-        hidden_states = hidden_states * 0.5 + residual
-        hidden_states = self.final_layer_norm(hidden_states)
+        
+        hidden_states = self.ffn_layer_norm(hidden_states)
+        hidden_states = self.ffn(hidden_states)
+        hidden_states = self.ffn_dropout(hidden_states) + residual
 
         return hidden_states, attn_weigts
 
@@ -892,11 +949,11 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TConformerPreTrainedModel):
 
         self.encoder = SeamlessM4TConformerEncoder(config)
 
-        self.inner_layer_norm = nn.LayerNorm(config.hidden_size)
         self.proj1 = nn.Linear(config.hidden_size, config.hidden_size * 4, bias=True)
         self.activation = ACT2FN["relu"]
         self.proj2 = nn.Linear(4 * config.hidden_size, config.hidden_size, bias=True)
 
+        self.inner_layer_norm = nn.LayerNorm(config.hidden_size)
         self.adapter = SeamlessM4TConformerAdapter(config) if config.add_adapter else None
 
         # Initialize weights and apply final processing
@@ -916,8 +973,6 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TConformerPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # TODO: might be an intermediate step here
-
         hidden_states, _ = self.feature_projection(input_values)
 
         encoder_outputs = self.encoder(
@@ -929,11 +984,16 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TConformerPreTrainedModel):
         )
 
         hidden_states = encoder_outputs[0]
-
+        
+        # corresponds to UnitYEncoderAdaptor._expand_contract
+        expanded_hidden_states = self.proj1(hidden_states)
+        expanded_hidden_states = self.activation(expanded_hidden_states)
+        expanded_hidden_states = self.proj2(expanded_hidden_states)
+        
+        hidden_states = hidden_states + 0.5* expanded_hidden_states
+        
         hidden_states = self.inner_layer_norm(hidden_states)
-        hidden_states = self.proj1(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        hidden_states = self.proj2(hidden_states)
+
 
         if self.adapter is not None:
             hidden_states = self.adapter(hidden_states)
