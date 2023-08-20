@@ -32,6 +32,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     Seq2SeqModelOutput,
+    Seq2SeqLMOutput,
     Wav2Vec2BaseModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
@@ -849,165 +850,6 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
         return hidden_states, attn_weigts
 
 
-# not exactly the same as Wav2Vec2ConformerPreTrainedModel
-class SeamlessM4TConformerPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = SeamlessM4TConfig
-    base_model_prefix = "wav2vec2_conformer"
-    main_input_name = "input_values"
-    supports_gradient_checkpointing = True
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-
-        if isinstance(module, SeamlessM4TConformerSelfAttention):
-            if hasattr(module, "pos_bias_u"):
-                nn.init.xavier_uniform_(module.pos_bias_u)
-            if hasattr(module, "pos_bias_v"):
-                nn.init.xavier_uniform_(module.pos_bias_v)
-        elif isinstance(module, SeamlessM4TConformerPositionalConvEmbedding):
-            nn.init.normal_(
-                module.conv.weight,
-                mean=0,
-                std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
-            )
-            nn.init.constant_(module.conv.bias, 0)
-        elif isinstance(module, SeamlessM4TConformerFeatureProjection):
-            k = math.sqrt(1 / module.projection.in_features)
-            nn.init.uniform_(module.projection.weight, a=-k, b=k)
-            nn.init.uniform_(module.projection.bias, a=-k, b=k)
-        elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
-
-            if module.bias is not None:
-                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
-
-    def _get_feat_extract_output_lengths(
-        self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
-    ):
-        """
-        Computes the output length of the convolutional layers
-        """
-
-        add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
-
-        def _conv_out_length(input_length, kernel_size, stride):
-            # 1D convolutional layer output length formula taken
-            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
-
-        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
-            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
-
-        if add_adapter:
-            for _ in range(self.config.num_adapter_layers):
-                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
-
-        return input_lengths
-
-    def _get_feature_vector_attention_mask(
-        self, feature_vector_length: int, attention_mask: torch.LongTensor, add_adapter=None
-    ):
-        # Effectively attention_mask.sum(-1), but not inplace to be able to run
-        # on inference mode.
-        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
-
-        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
-        output_lengths = output_lengths.to(torch.long)
-
-        batch_size = attention_mask.shape[0]
-
-        attention_mask = torch.zeros(
-            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
-        )
-        # these two operations makes sure that all values before the output lengths idxs are attended to
-        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
-        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
-        return attention_mask
-
-
-# not exactly the same as Wav2Vec2ConformerModel
-class SeamlessM4TSpeechEncoder(SeamlessM4TConformerPreTrainedModel):
-    def __init__(self, config: SeamlessM4TConfig):
-        super().__init__(config)
-        self.config = config
-
-        self.feature_projection = SeamlessM4TConformerFeatureProjection(config)
-
-        self.encoder = SeamlessM4TConformerEncoder(config)
-
-        self.proj1 = nn.Linear(config.hidden_size, config.hidden_size * 4, bias=True)
-        self.activation = ACT2FN["relu"]
-        self.proj2 = nn.Linear(4 * config.hidden_size, config.hidden_size, bias=True)
-
-        self.inner_layer_norm = nn.LayerNorm(config.hidden_size)
-        self.adapter = SeamlessM4TConformerAdapter(config) if config.add_adapter else None
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def forward(
-        self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        hidden_states, _ = self.feature_projection(input_values)
-
-        encoder_outputs = self.encoder(
-            hidden_states,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        hidden_states = encoder_outputs[0]
-        
-        # corresponds to UnitYEncoderAdaptor._expand_contract
-        expanded_hidden_states = self.proj1(hidden_states)
-        expanded_hidden_states = self.activation(expanded_hidden_states)
-        expanded_hidden_states = self.proj2(expanded_hidden_states)
-        
-        hidden_states = hidden_states + 0.5* expanded_hidden_states
-        
-        hidden_states = self.inner_layer_norm(hidden_states)
-
-
-        if self.adapter is not None:
-            hidden_states = self.adapter(hidden_states)
-
-        if not return_dict:
-            return (hidden_states,) + encoder_outputs[1:]
-
-        return Wav2Vec2BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-        )
-
-
 ############ TEXT / UNITS related code ################
 
 
@@ -1468,16 +1310,24 @@ class SeamlessM4TDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.nllb_moe.modeling_nllb_moe.NllbMoePreTrainedModel with NllbMoe->SeamlessM4T
-class SeamlessM4TPreTrainedModel(PreTrainedModel):
-    config_class = SeamlessM4TConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["SeamlessM4TEncoderLayer", "SeamlessM4TDecoderLayer"]
+############ SUB-MODELS related code ################
 
+
+class SeamlessM4TPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = SeamlessM4TConfig
+    base_model_prefix = "seamless_m4t"
+    supports_gradient_checkpointing = True
+    main_input_name = "input_values"
+    _no_split_modules = ["SeamlessM4TEncoderLayer", "SeamlessM4TDecoderLayer"]
+    
     def _init_weights(self, module):
         """Initialize the weights"""
-        std = self.config.init_std
+        std = self.config.initializer_range
         if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
@@ -1486,11 +1336,148 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, SeamlessM4TConformerSelfAttention):
+            if hasattr(module, "pos_bias_u"):
+                nn.init.xavier_uniform_(module.pos_bias_u)
+            if hasattr(module, "pos_bias_v"):
+                nn.init.xavier_uniform_(module.pos_bias_v)
+        elif isinstance(module, SeamlessM4TConformerPositionalConvEmbedding):
+            nn.init.normal_(
+                module.conv.weight,
+                mean=0,
+                std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
+            )
+            nn.init.constant_(module.conv.bias, 0)
+        elif isinstance(module, SeamlessM4TConformerFeatureProjection):
+            k = math.sqrt(1 / module.projection.in_features)
+            nn.init.uniform_(module.projection.weight, a=-k, b=k)
+            nn.init.uniform_(module.projection.bias, a=-k, b=k)
+        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.Conv1d):
+            nn.init.kaiming_normal_(module.weight)
+            if module.bias is not None:
+                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
+                nn.init.uniform_(module.bias, a=-k, b=k)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (SeamlessM4TDecoder, SeamlessM4TEncoder)):
             module.gradient_checkpointing = value
 
+
+    def _get_feat_extract_output_lengths(
+        self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
+    ):
+        """
+        Computes the output length of the convolutional layers
+        """
+
+        add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
+
+        def _conv_out_length(input_length, kernel_size, stride):
+            # 1D convolutional layer output length formula taken
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
+
+        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
+
+        if add_adapter:
+            for _ in range(self.config.num_adapter_layers):
+                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
+
+        return input_lengths
+
+    def _get_feature_vector_attention_mask(
+        self, feature_vector_length: int, attention_mask: torch.LongTensor, add_adapter=None
+    ):
+        # Effectively attention_mask.sum(-1), but not inplace to be able to run
+        # on inference mode.
+        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
+
+        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
+        output_lengths = output_lengths.to(torch.long)
+
+        batch_size = attention_mask.shape[0]
+
+        attention_mask = torch.zeros(
+            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+        )
+        # these two operations makes sure that all values before the output lengths idxs are attended to
+        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
+        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
+        return attention_mask
+
+
+
+# not exactly the same as Wav2Vec2ConformerModel
+class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
+    def __init__(self, config: SeamlessM4TConfig):
+        super().__init__(config)
+
+        self.feature_projection = SeamlessM4TConformerFeatureProjection(config)
+
+        self.encoder = SeamlessM4TConformerEncoder(config)
+
+        self.proj1 = nn.Linear(config.hidden_size, config.hidden_size * 4, bias=True)
+        self.activation = ACT2FN["relu"]
+        self.proj2 = nn.Linear(4 * config.hidden_size, config.hidden_size, bias=True)
+
+        self.inner_layer_norm = nn.LayerNorm(config.hidden_size)
+        self.adapter = SeamlessM4TConformerAdapter(config) if config.add_adapter else None
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        input_values: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, Wav2Vec2BaseModelOutput]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        hidden_states, _ = self.feature_projection(input_values)
+
+        encoder_outputs = self.encoder(
+            hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = encoder_outputs[0]
+        
+        # corresponds to UnitYEncoderAdaptor._expand_contract
+        expanded_hidden_states = self.proj1(hidden_states)
+        expanded_hidden_states = self.activation(expanded_hidden_states)
+        expanded_hidden_states = self.proj2(expanded_hidden_states)
+        
+        hidden_states = hidden_states + 0.5* expanded_hidden_states
+        
+        hidden_states = self.inner_layer_norm(hidden_states)
+
+
+        if self.adapter is not None:
+            hidden_states = self.adapter(hidden_states)
+
+        if not return_dict:
+            return (hidden_states,) + encoder_outputs[1:]
+
+        return Wav2Vec2BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+    
 
 # inspired from MBart and NllbMoe
 class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
@@ -1517,7 +1504,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
 
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
-        self.padding_idx = config.pad_token_id
+        self.padding_idx = config.unit_pad_token_id if is_t2u_encoder else config.pad_token_id
         embed_dim = config.hidden_size
         encoder_layers = config.encoder_layers if encoder_layers is None else encoder_layers
         encoder_attention_heads = (
@@ -1722,6 +1709,7 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         self,
         config: SeamlessM4TConfig,
         embed_tokens: Optional[nn.Embedding] = None,
+        is_t2u_decoder: Optional[bool] = False,
         decoder_layers: Optional[int] = None,
         decoder_attention_heads: Optional[int] = None,
         decoder_ffn_dim: Optional[int] = None,
@@ -1729,7 +1717,7 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-        self.padding_idx = config.pad_token_id
+        self.padding_idx = config.unit_pad_token_id if is_t2u_decoder else config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
         decoder_layers = config.decoder_layers if decoder_layers is None else decoder_layers
@@ -2017,21 +2005,18 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         )
 
 
-class SeamlessM4TTextToUnitModel(nn.Module):
+class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
     """
     TODO: copy SeamlessM4TEncoder
     """
-
-    _tied_weights_keys = ["lm_head.weight", "decoder.embed_tokens.weight"]
 
     def __init__(
         self,
         config: SeamlessM4TConfig,
         embed_tokens_decoder: Optional[nn.Embedding] = None,
     ):
-        super().__init__()
-
-        # TODO: find a way to pass unit pad idx for that and no pad idx for the other
+        super().__init__(config)
+        
         self.encoder = SeamlessM4TEncoder(
             config,
             is_t2u_encoder=True,
@@ -2039,33 +2024,18 @@ class SeamlessM4TTextToUnitModel(nn.Module):
             encoder_attention_heads=config.t2u_encoder_attention_heads,
             encoder_ffn_dim=config.encoder_ffn_dim,
         )
-
         self.decoder = SeamlessM4TDecoder(
             config,
             embed_tokens_decoder,
+            is_t2u_decoder=True,
             decoder_layers=config.t2u_decoder_layers,
             decoder_attention_heads=config.t2u_decoder_attention_heads,
             decoder_ffn_dim=config.t2u_decoder_ffn_dim,
         )
 
-        # TODO: find a way to tie!
-        self.lm_head = nn.Linear(config.hidden_size, config.unit_vocab_size, bias=False)
-
         # TODO: take proper care of init
         # Initialize weights and apply final processing
-        # self.post_init()
-
-    def get_input_embeddings(self):
-        return self.decoder.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.decoder.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
+        self.post_init()
 
     def set_decoder(self, decoder):
         self.model.decoder = decoder
@@ -2101,7 +2071,7 @@ class SeamlessM4TTextToUnitModel(nn.Module):
         # different to other models, MBart automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
         if decoder_input_ids is None and decoder_inputs_embeds is None and input_ids is not None:
-            decoder_input_ids = shift_tokens_right(input_ids, self.config.pad_token_id)
+            decoder_input_ids = shift_tokens_right(input_ids, self.config.unit_pad_token_id)
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -2140,8 +2110,6 @@ class SeamlessM4TTextToUnitModel(nn.Module):
         if not return_dict:
             return decoder_outputs + encoder_outputs
 
-        # TODO: add lm_head usage, get inspiration from MBart
-
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
@@ -2153,6 +2121,176 @@ class SeamlessM4TTextToUnitModel(nn.Module):
             encoder_attentions=encoder_outputs.attentions,
         )
 
+
+
+class SeamlessM4TTextToUnitModelForConditionalGeneration(SeamlessM4TPreTrainedModel):
+    #base_model_prefix = ""
+    _keys_to_ignore_on_load_missing = ["final_logits_bias"]
+    _tied_weights_keys = ["decoder.embed_tokens.weight", "lm_head.weight"]
+
+    def __init__(self, config: SeamlessM4TConfig, embed_tokens_decoder: Optional[nn.Embedding] = None,):
+        super().__init__(config)
+        self.model = SeamlessM4TTextToUnitModel(config, embed_tokens_decoder)
+        self.register_buffer("final_logits_bias", torch.zeros((1, config.unit_vocab_size)))
+        
+        self.lm_head = nn.Linear(config.hidden_size, config.unit_vocab_size, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_encoder(self):
+        return self.model.get_encoder()
+
+    def get_decoder(self):
+        return self.model.get_decoder()
+
+    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
+        new_embeddings = super().resize_token_embeddings(new_num_tokens)
+        self._resize_final_logits_bias(new_num_tokens)
+        return new_embeddings
+
+    def _resize_final_logits_bias(self, new_num_tokens: int) -> None:
+        old_num_tokens = self.final_logits_bias.shape[-1]
+        if new_num_tokens <= old_num_tokens:
+            new_bias = self.final_logits_bias[:, :new_num_tokens]
+        else:
+            extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
+            new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
+        self.register_buffer("final_logits_bias", new_bias)
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+        
+
+    def get_input_embeddings(self):
+        return self.model.decoder.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.decoder.embed_tokens = value
+
+    #@add_start_docstrings_to_model_forward(MBART_INPUTS_DOCSTRING)
+    #@replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    #@add_end_docstrings(MBART_GENERATION_EXAMPLE)
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+
+        Returns:
+
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if labels is not None:
+            if use_cache:
+                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+            use_cache = False
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
+                decoder_input_ids = shift_tokens_right(labels, self.config.unit_pad_token_id)
+
+        outputs = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            encoder_outputs=encoder_outputs,
+            decoder_attention_mask=decoder_attention_mask,
+            head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        lm_logits = self.lm_head(outputs[0]) + self.final_logits_bias
+
+        masked_lm_loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
+
+        if not return_dict:
+            output = (lm_logits,) + outputs[1:]
+            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+
+        return Seq2SeqLMOutput(
+            loss=masked_lm_loss,
+            logits=lm_logits,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
+
+    def prepare_inputs_for_generation(
+        self,
+        decoder_input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        cross_attn_head_mask=None,
+        use_cache=None,
+        encoder_outputs=None,
+        **kwargs,
+    ):
+        # cut decoder_input_ids if past is used
+        if past_key_values is not None:
+            decoder_input_ids = decoder_input_ids[:, -1:]
+
+        return {
+            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
+            "encoder_outputs": encoder_outputs,
+            "past_key_values": past_key_values,
+            "decoder_input_ids": decoder_input_ids,
+            "attention_mask": attention_mask,
+            "head_mask": head_mask,
+            "decoder_head_mask": decoder_head_mask,
+            "cross_attn_head_mask": cross_attn_head_mask,
+            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
+        }
+
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
+        return shift_tokens_right(labels, self.config.pad_token_id)
+
+    @staticmethod
+    def _reorder_cache(past_key_values, beam_idx):
+        reordered_past = ()
+        for layer_past in past_key_values:
+            # cached cross_attention states don't have to be reordered -> they are always the same
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
+        return reordered_past
 
 ############ VOCODER related code ################
 
@@ -2248,10 +2386,11 @@ SEAMLESS_M4T_INPUTS_DOCSTRING = r"""
 
 
 # TODO: pretrained class
-class SeamlessM4TModel(nn.Module):
+class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
+    
+    _tied_weights_keys = ["lm_head.weight", "text_encoder.embed_tokens.weight", "text_decoder.embed_tokens.weight"]
     def __init__(self, config):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         self.shared_text = nn.Embedding(vocab_size, config.hidden_size, padding_idx)
@@ -2267,11 +2406,10 @@ class SeamlessM4TModel(nn.Module):
         # text decoder lm_head
         self.lm_head = nn.Linear(config.hidden_size, vocab_size, bias=False)
 
-        self.t2u_model = SeamlessM4TTextToUnitModel(config, self.shared_units)
+        self.t2u_model = SeamlessM4TTextToUnitModelForConditionalGeneration(config, self.shared_units)
 
-        # TODO: take proper care of init
         # Initialize weights and apply final processing
-        # self.post_init()
+        self.post_init()
 
 
 @add_start_docstrings(

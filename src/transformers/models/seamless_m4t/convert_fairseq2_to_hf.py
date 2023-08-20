@@ -32,13 +32,13 @@ api = HfApi()
 
 
 def assert_param_count(model_1, model_2):
-    count_1 = sum(p.numel() for p in model_1.parameters())
-    count_2 = sum(p.numel() for p in model_2.parameters())
+    count_1 = sum(p[1].numel() for p in model_1.named_parameters() if "final_proj" not in p[0])
+    count_2 = sum(p[1].numel() for p in model_2.named_parameters() if "final_proj" not in p[0])
     assert count_1 == count_2, f"{model_1.__class__}: {count_1} != {model_2.__class__}: {count_2}"
 
 
 def param_count(model):
-    return sum(p.numel() for p in model.parameters())
+    return sum(p[1].numel() for p in model.named_parameters() if "final_proj" not in p[0])
 
 
 def _grab_best_device(use_gpu=True):
@@ -84,6 +84,8 @@ wav2vec_convert_list = [
 ]
 
 t2u_convert_list = [
+    ("t2u_model.final_proj", "lm_head"),
+    ("t2u_model.", "model."),
     ("encoder_decoder_attn_layer_norm", "cross_attention_layer_norm"),
     ("encoder_decoder_attn", "cross_attention"),
     ("linear_k", "k_proj"),
@@ -93,7 +95,6 @@ t2u_convert_list = [
     ("ffn.output_proj", "ffn.fc2"),
     ("output_proj", "out_proj"),
     ("decoder_frontend.embed", "decoder.embed_tokens"),
-    ("final_proj", "lm_head"),
 ]
 
 text_convert_list = [
@@ -166,7 +167,7 @@ def _convert_model(
     extra_keys = set(state_dict.keys()) - set(hf_model.state_dict().keys())
     extra_keys = set(extra_keys)
     missing_keys = set(hf_model.state_dict().keys()) - set(state_dict.keys())
-    missing_keys = set(missing_keys)
+    missing_keys = set({k for k in missing_keys if "final_logits_bias" not in k})
     if len(extra_keys) != 0:
         raise ValueError(f"extra keys found: {extra_keys}")
     if len(missing_keys) != 0:
@@ -232,7 +233,7 @@ def load_model(pytorch_dump_folder_path):
         hf_model.t2u_model,
         t2u_convert_list,
         device,
-        unwanted_prefix="model.t2u_model.",
+        unwanted_prefix="model.",
         filter_state_dict="t2u_model",
     )
 

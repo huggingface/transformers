@@ -145,7 +145,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         conformer_conv_dropout=0.1,
         # t2u config
         unit_vocabulary_size=10082,
-        unit_pad_idx=1,
+        unit_pad_token_id=1,
         t2u_encoder_layers=6,  # works
         t2u_encoder_ffn_dim=8192,  # works
         t2u_encoder_attention_heads=16,  # works
@@ -217,7 +217,7 @@ class SeamlessM4TConfig(PretrainedConfig):
 
         # t2u config
         self.unit_vocabulary_size = unit_vocabulary_size
-        self.unit_pad_idx = unit_pad_idx
+        self.unit_pad_token_id = unit_pad_token_id
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
