@@ -272,7 +272,7 @@ def _sample_negative_indices(
     sampled_negative_indices = np.zeros(shape=(batch_size, sequence_length, num_negatives), dtype=np.int32)
 
     mask_time_indices = (
-        mask_time_indices.astype(bool) if mask_time_indices is not None else np.ones(features_shape, dtype=bool)
+        mask_time_indices.to(bool) if mask_time_indices is not None else np.ones(features_shape, dtype=bool)
     )
 
     for batch_idx in range(batch_size):
@@ -776,7 +776,7 @@ class Wav2Vec2Encoder(nn.Module):
         if attention_mask is not None:
             # make sure padded tokens output 0
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            hidden_states[~expand_attention_mask] = 0
+            hidden_states = torch.where(~expand_attention_mask, 0, hidden_states)
 
             # extend attention_mask
             attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
@@ -865,7 +865,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
         if attention_mask is not None:
             # make sure padded tokens are not attended to
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            hidden_states[~expand_attention_mask] = 0
+            hidden_states = torch.where(~expand_attention_mask, 0, hidden_states)
 
             # extend attention_mask
             attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
@@ -1502,7 +1502,9 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         if mask_time_indices is not None:
             # apply SpecAugment along time axis with given mask_time_indices
-            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+            mask_time_indices = mask_time_indices.to(device=hidden_states.device)
+            expand_masked_spec_embed = self.masked_spec_embed.unsqueeze(0).unsqueeze(0)
+            hidden_states = torch.where(mask_time_indices.unsqueeze(-1), expand_masked_spec_embed, hidden_states)
 
         elif self.config.mask_time_prob > 0 and self.training:
             mask_time_indices = _compute_mask_indices(
@@ -1513,8 +1515,8 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                 min_masks=self.config.mask_time_min_masks,
             )
             mask_time_indices = mask_time_indices.to(device=hidden_states.device)
-            expanded_embed = self.masked_spec_embed.unsqueeze(0).unsqueeze(0)
-            hidden_states = torch.where(mask_time_indices.unsqueeze(-1), expanded_embed, hidden_states)
+            expand_masked_spec_embed = self.masked_spec_embed.unsqueeze(0).unsqueeze(0)
+            hidden_states = torch.where(mask_time_indices.unsqueeze(-1), expand_masked_spec_embed, hidden_states)
 
         if self.config.mask_feature_prob > 0 and self.training:
             # generate indices & apply SpecAugment along feature axis
@@ -1779,9 +1781,9 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
             # 5. if a negative vector is identical to the positive (i.e. when codebook utilization is low),
             # its cosine similarity will be masked
             neg_is_pos = (quantized_features == negative_quantized_features).all(-1)
-
-            if neg_is_pos.any():
-                logits[1:][neg_is_pos] = float("-inf")
+            if neg_is_pos.sum() > 0:
+                neg_is_pos_resize = torch.cat((torch.full((1, neg_is_pos.shape[-2], neg_is_pos.shape[-1]), False, dtype=torch.bool).to(device=neg_is_pos.device), neg_is_pos), dim=0)
+                logits = torch.where(neg_is_pos_resize, float("-inf"), logits)
 
             # 6. compute contrastive loss \mathbf{L}_m = cross_entropy(logs) =
             # -log(exp(sim(c_t, q_t)/\kappa) / \sum_{\sim{q}} exp(sim(c_t, \sim{q})/\kappa))

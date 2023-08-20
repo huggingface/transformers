@@ -1015,7 +1015,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         )
         sampled_negative_indices = _sample_negative_indices(features_shape, 10, mask_time_indices)
 
-        mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
+        mask_time_indices = mask_time_indices.to(torch_device)
         sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(torch_device)
 
         loss = model(
@@ -1028,7 +1028,52 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         # more losses
         mask_time_indices[:, : mask_time_indices.shape[-1] // 2] = True
 
-        sampled_negative_indices = _sample_negative_indices(features_shape, 10, mask_time_indices.cpu().numpy())
+        sampled_negative_indices = _sample_negative_indices(features_shape, 10, mask_time_indices.cpu())
+        sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(torch_device)
+        loss_more_masked = model(
+            inputs_dict["input_values"],
+            attention_mask=inputs_dict["attention_mask"],
+            mask_time_indices=mask_time_indices,
+            sampled_negative_indices=sampled_negative_indices,
+        ).loss
+
+        # loss_more_masked has to be bigger or equal loss since more masked inputs have to be predicted
+        self.assertTrue(loss.detach().item() <= loss_more_masked.detach().item())
+
+    def test_torch_compiled_model_for_pretraining(self):
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Wav2Vec2ForPreTraining(config).to(torch_device)
+        model = torch.compile(model)
+        
+        batch_size = inputs_dict["input_values"].shape[0]
+        feature_seq_length = int(model._get_feat_extract_output_lengths(inputs_dict["input_values"].shape[1]))
+
+        features_shape = (batch_size, feature_seq_length)
+
+        
+        mask_time_indices = _compute_mask_indices(
+            features_shape,
+            model.config.mask_time_prob,
+            model.config.mask_time_length,
+            min_masks=2,
+        )
+        sampled_negative_indices = _sample_negative_indices(features_shape, 10, mask_time_indices)
+
+        mask_time_indices = (mask_time_indices).to(torch_device)
+        sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(torch_device)
+
+        loss = model(
+            inputs_dict["input_values"],
+            attention_mask=inputs_dict["attention_mask"],
+            mask_time_indices=mask_time_indices,
+            sampled_negative_indices=sampled_negative_indices,
+        ).loss
+
+        # more losses
+        mask_time_indices[:, : mask_time_indices.shape[-1] // 2] = True
+
+        sampled_negative_indices = _sample_negative_indices(features_shape, 10, mask_time_indices.cpu())
         sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(torch_device)
         loss_more_masked = model(
             inputs_dict["input_values"],
@@ -1387,7 +1432,7 @@ class Wav2Vec2UtilsTest(unittest.TestCase):
 
         # sample negative indices
         sampled_negative_indices = _sample_negative_indices(
-            (batch_size, sequence_length), num_negatives, mask.cpu().numpy()
+            (batch_size, sequence_length), num_negatives, mask.cpu()
         )
         sampled_negative_indices = torch.from_numpy(sampled_negative_indices).to(torch_device)
         negatives = features.view(-1, hidden_size)[sampled_negative_indices.long().view(-1)]
