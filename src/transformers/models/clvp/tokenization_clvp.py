@@ -149,7 +149,7 @@ def number_to_words(num: int) -> str:
         return "number out of range"
 
 
-def convert_to_ascii(text):
+def convert_to_ascii(text: str) -> str:
     """Converts unicode to ascii"""
     return text.encode("ascii", "ignore").decode("utf-8")
 
@@ -203,7 +203,7 @@ def _expand_number(m):
         return number_to_words(num)
 
 
-def normalize_numbers(text):
+def normalize_numbers(text: str) -> str:
     """
     This method is used to normalize numbers within a text such as converting the numbers to words, removing commas,
     etc.
@@ -225,7 +225,7 @@ def normalize_numbers(text):
     return text
 
 
-def expand_abbreviations(text):
+def expand_abbreviations(text: str) -> str:
     """
     Expands the abbreviate words.
 
@@ -242,7 +242,7 @@ def expand_abbreviations(text):
     return text
 
 
-def collapse_whitespace(text):
+def collapse_whitespace(text: str) -> str:
     """Removes multiple whitespaces"""
     return re.sub(re.compile(r"\s+"), " ", text)
 
@@ -273,6 +273,7 @@ def bytes_to_unicode():
     return dict(zip(bs, cs))
 
 
+# Copied from transformers.models.gpt2.tokenization_gpt2.get_pairs
 def get_pairs(word):
     """
     Return set of symbol pairs in a word.

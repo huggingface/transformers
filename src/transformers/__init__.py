@@ -260,6 +260,7 @@ _import_structure = {
     "models.clvp": [
         "CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLVPConfig",
+        "CLVPFeatureExtractor",
         "CLVPSpeechConfig",
         "CLVPTextConfig",
         "CLVPTokenizer",
@@ -4467,6 +4468,7 @@ if TYPE_CHECKING:
     from .models.clvp import (
         CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLVPConfig,
+        CLVPFeatureExtractor,
         CLVPSpeechConfig,
         CLVPTextConfig,
         CLVPTokenizer,

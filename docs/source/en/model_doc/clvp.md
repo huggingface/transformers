@@ -58,6 +58,11 @@ The original code can be found [here](https://github.com/neonbjb/tortoise-tts).
 [[autodoc]] CLVPTokenizer
     - save_vocabulary
 
+## CLVPFeatureExtractor
+
+[[autodoc]] CLVPFeatureExtractor
+    - __call__
+
 ## CLVPModel
 
 [[autodoc]] CLVPModel
