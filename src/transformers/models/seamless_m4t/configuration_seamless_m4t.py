@@ -89,7 +89,9 @@ class SeamlessM4TConfig(PretrainedConfig):
     
     def __init__(
         self,
-        vocab_size=30522,
+        vocab_size=256102,
+        unit_vocab_size=10082,
+        
         # overall_config
         hidden_size=1024, # works for speech encoder
         use_text_encoder=True,
@@ -99,21 +101,20 @@ class SeamlessM4TConfig(PretrainedConfig):
         intermediate_size=3072,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
-        max_position_embeddings=1024,
+        max_position_embeddings=2048,
         use_cache=True,
 
-
         # text|unit encoder|decoder
-        encoder_layers=12,
-        encoder_ffn_dim=4096,
+        encoder_layers=24,
+        encoder_ffn_dim=8192,
         encoder_attention_heads=16,
-        decoder_layers=12,
-        decoder_ffn_dim=4096,
+        decoder_layers=24,
+        decoder_ffn_dim=8192,
         decoder_attention_heads=16,
+        
         encoder_layerdrop=0.05,
         decoder_layerdrop=0.05,
         activation_function="relu",
-        d_model=1024,
         dropout=0.1,
         attention_dropout=0.1,
         activation_dropout=0.0,
@@ -149,6 +150,13 @@ class SeamlessM4TConfig(PretrainedConfig):
         # t2u config
         unit_vocabulary_size=10082,
         unit_pad_idx=1,
+        t2u_encoder_layers=6, # works
+        t2u_encoder_ffn_dim=8192, # works
+        t2u_encoder_attention_heads=16, # works
+        t2u_decoder_layers=6, # works
+        t2u_decoder_ffn_dim=8192, # works
+        t2u_decoder_attention_heads=16, # works
+        
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -161,6 +169,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         
         # overall_config
         self.vocab_size = vocab_size
+        self.unit_vocab_size = unit_vocab_size
         self.hidden_size = hidden_size
         self.use_text_encoder = use_text_encoder
         self.use_conformer_adaptor = use_conformer_adaptor
@@ -183,7 +192,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
         self.activation_function = activation_function
-        self.d_model = d_model
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
@@ -222,6 +230,12 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.type_vocab_size = type_vocab_size
+        self.t2u_encoder_layers = t2u_encoder_layers
+        self.t2u_encoder_ffn_dim = t2u_encoder_ffn_dim
+        self.t2u_encoder_attention_heads = t2u_encoder_attention_heads
+        self.t2u_decoder_layers = t2u_decoder_layers
+        self.t2u_decoder_ffn_dim = t2u_decoder_ffn_dim
+        self.t2u_decoder_attention_heads = t2u_decoder_attention_heads
         
         
         super().__init__(
@@ -339,7 +353,7 @@ class NllbMoeConfig(PretrainedConfig):
     ```"""
     model_type = "nllb-moe"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
+    attribute_map = {"num_attention_heads": "encoder_attention_heads"}
 
     def __init__(
         self,
