@@ -25,6 +25,7 @@ SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     # See all SeamlessM4T models at https://huggingface.co/models?filter=seamless_m4t
 }
 
+
 # TODO: docstrings is a mix of wav2vec2_conformer, mBart, nllb
 class SeamlessM4TConfig(PretrainedConfig):
     r"""
@@ -86,24 +87,22 @@ class SeamlessM4TConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
     model_type = "seamless_m4t"
-    
+
     def __init__(
         self,
         vocab_size=256102,
         unit_vocab_size=10082,
-        
         # overall_config
-        hidden_size=1024, # works for speech encoder
+        hidden_size=1024,  # works for speech encoder
         use_text_encoder=True,
         use_conformer_adaptor=True,
-        num_hidden_layers=24, # works for speech encoder
-        num_attention_heads=16, # works for speech encoder
+        num_hidden_layers=24,  # works for speech encoder
+        num_attention_heads=16,  # works for speech encoder
         intermediate_size=3072,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         max_position_embeddings=2048,
         use_cache=True,
-
         # text|unit encoder|decoder
         encoder_layers=24,
         encoder_ffn_dim=8192,
@@ -111,7 +110,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         decoder_layers=24,
         decoder_ffn_dim=8192,
         decoder_attention_heads=16,
-        
         encoder_layerdrop=0.05,
         decoder_layerdrop=0.05,
         activation_function="relu",
@@ -121,7 +119,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         init_std=0.02,
         decoder_start_token_id=2,
         scale_embedding=True,
-        
         # speech_encoder
         speech_encoder_hidden_act="swish",
         hidden_dropout=0.1,
@@ -146,17 +143,15 @@ class SeamlessM4TConfig(PretrainedConfig):
         max_source_positions=5000,
         conv_depthwise_kernel_size=31,
         conformer_conv_dropout=0.1,
-        
         # t2u config
         unit_vocabulary_size=10082,
         unit_pad_idx=1,
-        t2u_encoder_layers=6, # works
-        t2u_encoder_ffn_dim=8192, # works
-        t2u_encoder_attention_heads=16, # works
-        t2u_decoder_layers=6, # works
-        t2u_decoder_ffn_dim=8192, # works
-        t2u_decoder_attention_heads=16, # works
-        
+        t2u_encoder_layers=6,  # works
+        t2u_encoder_ffn_dim=8192,  # works
+        t2u_encoder_attention_heads=16,  # works
+        t2u_decoder_layers=6,  # works
+        t2u_decoder_ffn_dim=8192,  # works
+        t2u_decoder_attention_heads=16,  # works
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -166,7 +161,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         eos_token_id=2,
         **kwargs,
     ):
-        
         # overall_config
         self.vocab_size = vocab_size
         self.unit_vocab_size = unit_vocab_size
@@ -180,8 +174,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.max_position_embeddings = max_position_embeddings
         self.use_cache = use_cache
-        
-        
+
         # text|unit encoder|decoder
         self.encoder_layers = encoder_layers
         self.encoder_ffn_dim = encoder_ffn_dim
@@ -197,32 +190,31 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.activation_dropout = activation_dropout
         self.init_std = init_std
         self.scale_embedding = scale_embedding
-        
+
         # speech_encoder
-        self.speech_encoder_hidden_act = speech_encoder_hidden_act 
-        self.hidden_dropout = hidden_dropout 
-        self.feat_proj_dropout = feat_proj_dropout 
-        self.feat_quantizer_dropout = feat_quantizer_dropout 
-        self.final_dropout = final_dropout 
-        self.conv_dim = conv_dim 
-        self.conv_stride = conv_stride 
-        self.conv_kernel = conv_kernel 
-        self.conv_bias = conv_bias 
-        self.num_conv_pos_embeddings = num_conv_pos_embeddings 
-        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups 
-        self.adaptor_kernel_size = adaptor_kernel_size 
-        self.adaptor_stride = adaptor_stride 
-        self.adaptor_layer_norm = adaptor_layer_norm 
-        self.adaptor_dropout_p = adaptor_dropout_p 
-        self.num_adaptor_layers = num_adaptor_layers 
-        self.output_hidden_size = output_hidden_size 
-        self.position_embeddings_type = position_embeddings_type 
-        self.rotary_embedding_base = rotary_embedding_base 
-        self.max_source_positions = max_source_positions 
-        self.conv_depthwise_kernel_size = conv_depthwise_kernel_size 
-        self.conformer_conv_dropout = conformer_conv_dropout 
-        
-        
+        self.speech_encoder_hidden_act = speech_encoder_hidden_act
+        self.hidden_dropout = hidden_dropout
+        self.feat_proj_dropout = feat_proj_dropout
+        self.feat_quantizer_dropout = feat_quantizer_dropout
+        self.final_dropout = final_dropout
+        self.conv_dim = conv_dim
+        self.conv_stride = conv_stride
+        self.conv_kernel = conv_kernel
+        self.conv_bias = conv_bias
+        self.num_conv_pos_embeddings = num_conv_pos_embeddings
+        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
+        self.adaptor_kernel_size = adaptor_kernel_size
+        self.adaptor_stride = adaptor_stride
+        self.adaptor_layer_norm = adaptor_layer_norm
+        self.adaptor_dropout_p = adaptor_dropout_p
+        self.num_adaptor_layers = num_adaptor_layers
+        self.output_hidden_size = output_hidden_size
+        self.position_embeddings_type = position_embeddings_type
+        self.rotary_embedding_base = rotary_embedding_base
+        self.max_source_positions = max_source_positions
+        self.conv_depthwise_kernel_size = conv_depthwise_kernel_size
+        self.conformer_conv_dropout = conformer_conv_dropout
+
         # t2u config
         self.unit_vocabulary_size = unit_vocabulary_size
         self.unit_pad_idx = unit_pad_idx
@@ -236,15 +228,14 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.t2u_decoder_layers = t2u_decoder_layers
         self.t2u_decoder_ffn_dim = t2u_decoder_ffn_dim
         self.t2u_decoder_attention_heads = t2u_decoder_attention_heads
-        
-        
+
         super().__init__(
-                pad_token_id=pad_token_id,
-                bos_token_id=bos_token_id,
-                eos_token_id=eos_token_id,
-                decoder_start_token_id=decoder_start_token_id,
-                **kwargs,
-            )
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            decoder_start_token_id=decoder_start_token_id,
+            **kwargs,
+        )
 
 
 ###################

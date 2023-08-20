@@ -23,11 +23,9 @@ import torch
 from huggingface_hub import HfApi
 from seamless_communication.models.inference.translator import Translator
 
-from transformers import Wav2Vec2ConformerConfig, Wav2Vec2ConformerModel
-from transformers.utils import logging
-
-from transformers.models.seamless_m4t.modeling_seamless_m4t import SeamlessM4TModel
 from transformers.models.seamless_m4t.configuration_seamless_m4t import SeamlessM4TConfig
+from transformers.models.seamless_m4t.modeling_seamless_m4t import SeamlessM4TModel
+from transformers.utils import logging
 
 
 api = HfApi()
@@ -37,6 +35,7 @@ def assert_param_count(model_1, model_2):
     count_1 = sum(p.numel() for p in model_1.parameters())
     count_2 = sum(p.numel() for p in model_2.parameters())
     assert count_1 == count_2, f"{model_1.__class__}: {count_1} != {model_2.__class__}: {count_2}"
+
 
 def param_count(model):
     return sum(p.numel() for p in model.parameters())
@@ -94,7 +93,7 @@ t2u_convert_list = [
     ("ffn.output_proj", "ffn.fc2"),
     ("output_proj", "out_proj"),
     ("decoder_frontend.embed", "decoder.embed_tokens"),
-    ("final_proj", "lm_head")
+    ("final_proj", "lm_head"),
 ]
 
 text_convert_list = [
@@ -110,7 +109,7 @@ text_convert_list = [
     ("ffn.inner_proj", "ffn.fc1"),
     ("ffn.output_proj", "ffn.fc2"),
     ("output_proj", "out_proj"),
-    ("final_proj", "lm_head")
+    ("final_proj", "lm_head"),
 ]
 
 CUR_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -124,27 +123,32 @@ def _load_original_model(device):
     return unity_hub
 
 
-
-
 def _convert_model(
-    original_model, hf_model, convert_list, device, unwanted_prefix="model.", filter_state_dict="speech",
+    original_model,
+    hf_model,
+    convert_list,
+    device,
+    unwanted_prefix="model.",
+    filter_state_dict="speech",
     exclude_state_dict=None,
 ):
     state_dict = original_model.state_dict()
 
     # filter func
     if isinstance(filter_state_dict, str):
-        filter_func = lambda x: filter_state_dict in x[0]
+        def filter_func(x):
+            return filter_state_dict in x[0]
     else:
+
         def filter_func(item):
             if exclude_state_dict is not None and exclude_state_dict in item[0]:
                 return False
             for filter_el in filter_state_dict:
                 if filter_el in item[0]:
                     return True
-                
+
             return False
-        
+
     state_dict = dict(filter(filter_func, state_dict.items()))
 
     for k, v in list(state_dict.items()):
@@ -184,16 +188,16 @@ def load_model(pytorch_dump_folder_path):
     Meta SeamlessM4T is made of 7 main components:
     - speech_encoder (#1) and speech_encoder_frontend (#2)
     - t2u_model (#3)
-    - text_encoder (#4) and text_encoder_frontend (#5)    
+    - text_encoder (#4) and text_encoder_frontend (#5)
     - text_decoder (#6) [and text_decoder_frontend (#5) = equals to text_encoder_frontend]
     - final_proj (#7)
     """
     device = _grab_best_device()
     original_model = _load_original_model(device)
-    
+
     # init model
-    hf_config = SeamlessM4TConfig(**{
-        
+    hf_config = SeamlessM4TConfig(
+        **{
             "attention_dropout": 0.0,
             "hidden_dropout": 0.0,
             "final_dropout": 0.0,
@@ -203,95 +207,105 @@ def load_model(pytorch_dump_folder_path):
             "max_seq_len": 4096,
             "add_adapter": True,
             "num_adapter_layers": 1,
-        
-    })
+        }
+    )
     hf_model = SeamlessM4TModel(hf_config)
-
 
     # 1. take care of speech encoder
     wav2vec = hf_model.speech_encoder
     hf_model.speech_encoder = _convert_model(
         original_model, wav2vec, wav2vec_convert_list, device, unwanted_prefix="model.", filter_state_dict="speech"
     )
-    
+
     # verify same number of parameters speech encoder
     count_1 = param_count(hf_model.speech_encoder)
-    count_2 = param_count(original_model.model.speech_encoder_frontend) + param_count(original_model.model.speech_encoder)
-    
+    count_2 = param_count(original_model.model.speech_encoder_frontend) + param_count(
+        original_model.model.speech_encoder
+    )
+
     assert count_1 == count_2, f"Speech Encoder --- Count HF: {count_1} != Count Seamless: {count_2}"
 
     # 2. take care of t2u
-    
+
     hf_model.t2u_model = _convert_model(
-        original_model, hf_model.t2u_model, t2u_convert_list, device, unwanted_prefix="model.t2u_model.", filter_state_dict="t2u_model"
+        original_model,
+        hf_model.t2u_model,
+        t2u_convert_list,
+        device,
+        unwanted_prefix="model.t2u_model.",
+        filter_state_dict="t2u_model",
     )
 
     # verify same number of parameters t2u model
     count_1 = param_count(hf_model.t2u_model)
     count_2 = param_count(original_model.model.t2u_model)
-    
+
     assert count_1 == count_2, f"T2U model --- Count HF: {count_1} != Count Seamless: {count_2}"
-    
+
     # 3. take care of text encoder
     hf_model.text_encoder = _convert_model(
-        original_model, hf_model.text_encoder, text_convert_list, device, unwanted_prefix="model.", filter_state_dict=["model.text_encoder"],
-        exclude_state_dict="t2u_model"
+        original_model,
+        hf_model.text_encoder,
+        text_convert_list,
+        device,
+        unwanted_prefix="model.",
+        filter_state_dict=["model.text_encoder"],
+        exclude_state_dict="t2u_model",
     )
-    
 
     # verify same number of parameters text_encoder
     count_1 = param_count(hf_model.text_encoder)
     count_2 = param_count(original_model.model.text_encoder) + param_count(original_model.model.text_encoder_frontend)
-    
+
     assert count_1 == count_2, f"Text encoder model --- Count HF: {count_1} != Count Seamless: {count_2}"
-    
-    
+
     # 4. take care of text decoder
     hf_model.text_decoder = _convert_model(
-        original_model, hf_model.text_decoder, text_convert_list, device, unwanted_prefix="model.", filter_state_dict=["model.text_decoder"],
-        exclude_state_dict="t2u_model"
+        original_model,
+        hf_model.text_decoder,
+        text_convert_list,
+        device,
+        unwanted_prefix="model.",
+        filter_state_dict=["model.text_decoder"],
+        exclude_state_dict="t2u_model",
     )
 
     # verify same number of parameters text_decoder
     count_1 = param_count(hf_model.text_decoder)
     count_2 = param_count(original_model.model.text_decoder) + param_count(original_model.model.text_decoder_frontend)
-    
+
     assert count_1 == count_2, f"Text decoder model --- Count HF: {count_1} != Count Seamless: {count_2}"
-    
-    
+
     # 5. take care of final proj
     hf_model.lm_head = _convert_model(
-        original_model, hf_model.lm_head, [("final_proj.", "")], device, unwanted_prefix="model.", filter_state_dict=["model.final_proj"],
-        exclude_state_dict="t2u_model"
+        original_model,
+        hf_model.lm_head,
+        [("final_proj.", "")],
+        device,
+        unwanted_prefix="model.",
+        filter_state_dict=["model.final_proj"],
+        exclude_state_dict="t2u_model",
     )
 
     # verify same number of parameters final proj
     count_1 = param_count(hf_model.lm_head)
-    count_2 = param_count(original_model.model.final_proj) 
-    
+    count_2 = param_count(original_model.model.final_proj)
+
     assert count_1 == count_2, f"final proj --- Count HF: {count_1} != Count Seamless: {count_2}"
-    
-    
-    
+
     new_model = hf_model
-    
+
     # verify that base model have same number of parameters
     assert_param_count(original_model.model, new_model)
 
-
-
-    #if not assert_param_count(original_model, new_model):
+    # if not assert_param_count(original_model, new_model):
     #    raise ValueError("initial and new models don't have the same number of parameters")
-
-
-
-
 
     # check if same output as the bark model
 
     # TODO
     hf_model.num_parameters(exclude_embeddings=True)
-    
+
     output_new_model = ...
     output_old_model = ...
 
