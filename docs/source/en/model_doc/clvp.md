@@ -63,6 +63,13 @@ The original code can be found [here](https://github.com/neonbjb/tortoise-tts).
 [[autodoc]] CLVPFeatureExtractor
     - __call__
 
+## CLVPProcessor
+
+[[autodoc]] CLVPProcessor
+    - __call__
+    - decode
+    - batch_decode
+
 ## CLVPModel
 
 [[autodoc]] CLVPModel

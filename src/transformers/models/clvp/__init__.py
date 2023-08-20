@@ -28,6 +28,7 @@ _import_structure = {
         "CLVPTextConfig",
     ],
     "feature_extraction_clvp": ["CLVPFeatureExtractor"],
+    "processing_clvp": ["CLVPProcessor"],
     "tokenization_clvp": ["CLVPTokenizer"],
 }
 
@@ -57,6 +58,7 @@ if TYPE_CHECKING:
         CLVPTextConfig,
     )
     from .feature_extraction_clvp import CLVPFeatureExtractor
+    from .processing_clvp import CLVPProcessor
     from .tokenization_clvp import CLVPTokenizer
 
     try:

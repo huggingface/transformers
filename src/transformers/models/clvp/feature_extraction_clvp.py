@@ -121,13 +121,13 @@ class CLVPFeatureExtractor(SequenceFeatureExtractor):
     def __call__(
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        sampling_rate: Optional[int] = None,
         truncation: bool = True,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_attention_mask: Optional[bool] = True,
         padding: Optional[str] = "max_length",
         max_length: Optional[int] = None,
-        sampling_rate: Optional[int] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -144,6 +144,10 @@ class CLVPFeatureExtractor(SequenceFeatureExtractor):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
                 stereo, i.e. single float per timestep.
+            sampling_rate (`int`, *optional*):
+                The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
+                `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
+                pipeline.
             truncation (`bool`, *optional*, default to `True`):
                 Activates truncation to cut input sequences longer than *max_length* to *max_length*.
             pad_to_multiple_of (`int`, *optional*, defaults to None):
@@ -169,10 +173,6 @@ class CLVPFeatureExtractor(SequenceFeatureExtractor):
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
-            sampling_rate (`int`, *optional*):
-                The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
-                `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
-                pipeline.
             padding_value (`float`, defaults to 0.0):
                 The value that is used to fill the padding values / vectors.
         """
