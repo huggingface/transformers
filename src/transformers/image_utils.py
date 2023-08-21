@@ -13,14 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
 import os
+from io import BytesIO
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import requests
-import base64
-
-from io import BytesIO
 from packaging import version
 
 from .utils import (
