@@ -500,6 +500,16 @@ class LoadImageTester(unittest.TestCase):
             (480, 640, 3),
         )
 
+    def test_load_img_base64(self):
+        with open("./tests/fixtures/base64_image.txt", encoding="utf-8") as b64:
+            img = load_image(b64.read())
+        img_arr = np.array(img)
+
+        self.assertEqual(
+            img_arr.shape,
+            (64, 32, 3),
+        )
+
     def test_load_img_rgba(self):
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
 
