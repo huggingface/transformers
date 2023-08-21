@@ -1216,7 +1216,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
             config.classifier_dropout if hasattr(config, "classifier_dropout") else config.hidden_dropout_prob
         )
 
-        self.relation_net = RelationExtractor(
+        self.entity_linker = RelationExtractor(
             n_relations=config.n_relations,
             backbone_hidden_size=config.hidden_size,
             head_hidden_size=config.hidden_size,
@@ -1269,7 +1269,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
         last_hidden_states = outputs[0]
         last_hidden_states = last_hidden_states.transpose(0, 1).contiguous()
 
-        logits = self.relation_net(last_hidden_states, last_hidden_states).squeeze(0)
+        logits = self.entity_linker(last_hidden_states, last_hidden_states).squeeze(0)
 
         loss = None
         if labels is not None:
