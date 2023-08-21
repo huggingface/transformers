@@ -95,7 +95,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         # overall_config
         hidden_size=1024,  # works for speech encoder
         use_text_encoder=True,
-        use_conformer_adaptor=True,
         num_hidden_layers=24,  # works for speech encoder
         num_attention_heads=16,  # works for speech encoder
         intermediate_size=3072,
@@ -125,6 +124,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         feat_proj_dropout=0.0,
         feat_quantizer_dropout=0.0,
         final_dropout=0.1,
+        add_adapter=True,
         layerdrop=0.1,
         conv_dim=(512, 512, 512, 512, 512, 512, 160),
         conv_stride=(5, 2, 2, 2, 2, 2, 2),
@@ -136,7 +136,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         adaptor_stride=8,
         adaptor_layer_norm=True,
         adaptor_dropout_p=0.1,
-        num_adaptor_layers=1,
+        num_adapter_layers=1,
         output_hidden_size=None,
         position_embeddings_type="relative",
         rotary_embedding_base=10000,
@@ -144,7 +144,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         conv_depthwise_kernel_size=31,
         conformer_conv_dropout=0.1,
         # t2u config
-        unit_vocabulary_size=10082,
         unit_pad_token_id=1,
         t2u_encoder_layers=6,  # works
         t2u_encoder_ffn_dim=8192,  # works
@@ -166,7 +165,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.unit_vocab_size = unit_vocab_size
         self.hidden_size = hidden_size
         self.use_text_encoder = use_text_encoder
-        self.use_conformer_adaptor = use_conformer_adaptor
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -174,6 +172,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.max_position_embeddings = max_position_embeddings
         self.use_cache = use_cache
+        self.layerdrop = layerdrop
 
         # text|unit encoder|decoder
         self.encoder_layers = encoder_layers
@@ -207,16 +206,16 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.adaptor_stride = adaptor_stride
         self.adaptor_layer_norm = adaptor_layer_norm
         self.adaptor_dropout_p = adaptor_dropout_p
-        self.num_adaptor_layers = num_adaptor_layers
+        self.num_adapter_layers = num_adapter_layers
         self.output_hidden_size = output_hidden_size
         self.position_embeddings_type = position_embeddings_type
         self.rotary_embedding_base = rotary_embedding_base
         self.max_source_positions = max_source_positions
         self.conv_depthwise_kernel_size = conv_depthwise_kernel_size
         self.conformer_conv_dropout = conformer_conv_dropout
-
+        self.add_adapter = add_adapter
+    
         # t2u config
-        self.unit_vocabulary_size = unit_vocabulary_size
         self.unit_pad_token_id = unit_pad_token_id
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob

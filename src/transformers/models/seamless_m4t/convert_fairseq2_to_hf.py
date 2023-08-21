@@ -27,6 +27,7 @@ from transformers.models.seamless_m4t.configuration_seamless_m4t import Seamless
 from transformers.models.seamless_m4t.modeling_seamless_m4t import SeamlessM4TModel
 from transformers.utils import logging
 
+import tempfile
 
 api = HfApi()
 
@@ -198,17 +199,6 @@ def load_model(pytorch_dump_folder_path):
 
     # init model
     hf_config = SeamlessM4TConfig(
-        **{
-            "attention_dropout": 0.0,
-            "hidden_dropout": 0.0,
-            "final_dropout": 0.0,
-            "hidden_size": 1024,
-            "num_hidden_layers": 24,
-            "intermediate_size": 4096,
-            "max_seq_len": 4096,
-            "add_adapter": True,
-            "num_adapter_layers": 1,
-        }
     )
     hf_model = SeamlessM4TModel(hf_config)
 
@@ -274,6 +264,11 @@ def load_model(pytorch_dump_folder_path):
     # verify same number of parameters text_decoder
     count_1 = param_count(hf_model.text_decoder)
     count_2 = param_count(original_model.model.text_decoder) + param_count(original_model.model.text_decoder_frontend)
+    
+    with tempfile.TemporaryDirectory() as tmpdirname:
+
+        hf_model.save_pretrained(tmpdirname)
+        hf_model = SeamlessM4TModel.from_pretrained(tmpdirname)
 
     assert count_1 == count_2, f"Text decoder model --- Count HF: {count_1} != Count Seamless: {count_2}"
 
