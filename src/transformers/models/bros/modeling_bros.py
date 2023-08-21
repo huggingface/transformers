@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022-present NAVER Corp, The Microsoft Research Asia LayoutLM Team Authors and the HuggingFace Inc. team.
+# Copyright 2023-present NAVER Corp, The Microsoft Research Asia LayoutLM Team Authors and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -104,9 +104,8 @@ BROS_INPUTS_DOCSTRING = r"""
 
             [What are position IDs?](../glossary#position-ids)
 
-        head_mask (:
-            obj:*torch.FloatTensor* of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*): Mask to nullify
-            selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -161,15 +160,17 @@ class BrosSpadeOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class PositionalEmbedding1D(nn.Module):
+class BrosPositionalEmbedding1D(nn.Module):
     # Reference: https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py#L15
 
-    def __init__(self, demb):
-        super(PositionalEmbedding1D, self).__init__()
+    def __init__(self, config):
+        super(BrosPositionalEmbedding1D, self).__init__()
 
-        self.demb = demb
+        self.dim_bbox_sinusoid_emb_1d = config.dim_bbox_sinusoid_emb_1d
 
-        inv_freq = 1 / (10000 ** (torch.arange(0.0, demb, 2.0) / demb))
+        inv_freq = 1 / (
+            10000 ** (torch.arange(0.0, self.dim_bbox_sinusoid_emb_1d, 2.0) / self.dim_bbox_sinusoid_emb_1d)
+        )
         self.register_buffer("inv_freq", inv_freq)
 
     def forward(self, pos_seq, bsz=None):
@@ -177,10 +178,12 @@ class PositionalEmbedding1D(nn.Module):
 
         if len(seq_size) == 2:
             b1, b2 = seq_size
-            sinusoid_inp = pos_seq.view(b1, b2, 1) * self.inv_freq.view(1, 1, self.demb // 2)
+            sinusoid_inp = pos_seq.view(b1, b2, 1) * self.inv_freq.view(1, 1, self.dim_bbox_sinusoid_emb_1d // 2)
         elif len(seq_size) == 3:
             b1, b2, b3 = seq_size
-            sinusoid_inp = pos_seq.view(b1, b2, b3, 1) * self.inv_freq.view(1, 1, 1, self.demb // 2)
+            sinusoid_inp = pos_seq.view(b1, b2, b3, 1) * self.inv_freq.view(
+                1, 1, 1, self.dim_bbox_sinusoid_emb_1d // 2
+            )
         else:
             raise ValueError(f"Invalid seq_size={len(seq_size)}")
 
@@ -189,17 +192,19 @@ class PositionalEmbedding1D(nn.Module):
         return pos_emb
 
 
-class PositionalEmbedding2D(nn.Module):
-    def __init__(self, demb, dim_bbox=8):
-        super(PositionalEmbedding2D, self).__init__()
+class BrosPositionalEmbedding2D(nn.Module):
+    def __init__(self, config):
+        super(BrosPositionalEmbedding2D, self).__init__()
 
-        self.demb = demb
-        self.dim_bbox = dim_bbox
+        self.dim_bbox_sinusoid_emb_2d = config.dim_bbox_sinusoid_emb_2d
+        self.dim_bbox = config.dim_bbox
 
-        self.x_pos_emb = PositionalEmbedding1D(demb // dim_bbox)
-        self.y_pos_emb = PositionalEmbedding1D(demb // dim_bbox)
+        self.x_pos_emb = BrosPositionalEmbedding1D(config)
+        self.y_pos_emb = BrosPositionalEmbedding1D(config)
 
-        inv_freq = 1 / (10000 ** (torch.arange(0.0, demb, 2.0) / demb))
+        inv_freq = 1 / (
+            10000 ** (torch.arange(0.0, self.dim_bbox_sinusoid_emb_2d, 2.0) / self.dim_bbox_sinusoid_emb_2d)
+        )
         self.register_buffer("inv_freq", inv_freq)
 
     def forward(self, bbox):
@@ -242,11 +247,8 @@ class BrosEmbeddings(nn.Module):
                 persistent=False,
             )
 
-        dim_bbox_sinusoid_emb = config.hidden_size // 4
-        dim_bbox_projection = config.hidden_size // config.num_attention_heads
-
-        self.bbox_sinusoid_emb = PositionalEmbedding2D(dim_bbox_sinusoid_emb, dim_bbox=8)
-        self.bbox_projection = nn.Linear(dim_bbox_sinusoid_emb, dim_bbox_projection, bias=False)
+        self.bbox_sinusoid_emb = BrosPositionalEmbedding2D(config)
+        self.bbox_projection = nn.Linear(config.dim_bbox_sinusoid_emb_2d, config.dim_bbox_projection, bias=False)
 
     def forward(
         self,
@@ -855,19 +857,19 @@ class BrosModel(BrosPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        encoder_hidden_states  (:
-            obj:*torch.FloatTensor* of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model is
-            configured as a decoder.
+        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
         encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        past_key_values (:
-            obj:*tuple(tuple(torch.FloatTensor))* of length `config.n_layers` with each tuple having 4 tensors of shape
-            `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`): Contains precomputed key and value
+        past_key_values (`Tuple[Tuple[torch.FloatTensor]]` of length `config.n_layers` with each tuple having 4 tensors of shape:
+            `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+                Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up
+                decoding.
             hidden states of the attention blocks. Can be used to speed up decoding.
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
@@ -921,11 +923,7 @@ class BrosModel(BrosPreTrainedModel):
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
-            (
-                encoder_batch_size,
-                encoder_sequence_length,
-                _,
-            ) = encoder_hidden_states.size()
+            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
@@ -949,7 +947,7 @@ class BrosModel(BrosPreTrainedModel):
         )
 
         scaled_bbox = bbox * self.config.bbox_scale
-        bbox_pos_emb = self.embeddings.calc_bbox_pos_emb(scaled_bbox)
+        bbox_position_embeddings = self.embeddings.calc_bbox_pos_emb(scaled_bbox)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -962,7 +960,7 @@ class BrosModel(BrosPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            bbox_pos_emb=bbox_pos_emb,
+            bbox_pos_emb=bbox_position_embeddings,
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
@@ -1095,7 +1093,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         )
 
         # Initial token classification for Entity Extraction (NER)
-        self.itc_layer = nn.Sequential(
+        self.initial_token_classifier = nn.Sequential(
             nn.Dropout(classifier_dropout),
             nn.Linear(config.hidden_size, config.hidden_size),
             nn.Dropout(classifier_dropout),
@@ -1103,7 +1101,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         )
 
         # Subsequent token classification for Entity Extraction (NER)
-        self.stc_layer = RelationExtractor(
+        self.subsequent_token_classifier = RelationExtractor(
             n_relations=config.n_relations,
             backbone_hidden_size=config.hidden_size,
             head_hidden_size=config.hidden_size,
@@ -1156,17 +1154,17 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
 
         last_hidden_states = outputs[0]
         last_hidden_states = last_hidden_states.transpose(0, 1).contiguous()
-        itc_logits = self.itc_layer(last_hidden_states).transpose(0, 1).contiguous()
-        stc_logits = self.stc_layer(last_hidden_states, last_hidden_states).squeeze(0)
+        initial_token_logits = self.initial_token_classifier(last_hidden_states).transpose(0, 1).contiguous()
+        subsequent_token_logits = self.subsequent_token_classifier(last_hidden_states, last_hidden_states).squeeze(0)
 
         # make stc(sequence token classification) mask
         inv_attention_mask = 1 - attention_mask
-        bsz, max_seq_length = inv_attention_mask.shape
+        batch_size, max_seq_length = inv_attention_mask.shape
         device = inv_attention_mask.device
-        invalid_token_mask = torch.cat([inv_attention_mask, torch.zeros([bsz, 1]).to(device)], axis=1).bool()
-        stc_logits.masked_fill_(invalid_token_mask[:, None, :], -10000.0)
+        invalid_token_mask = torch.cat([inv_attention_mask, torch.zeros([batch_size, 1]).to(device)], axis=1).bool()
+        subsequent_token_logits.masked_fill_(invalid_token_mask[:, None, :], -10000.0)
         self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device).bool()
-        stc_logits.masked_fill_(self_token_mask[None, :, :], -10000.0)
+        subsequent_token_logits.masked_fill_(self_token_mask[None, :, :], -10000.0)
         stc_mask = attention_mask.view(-1).bool()
 
         loss = None
@@ -1178,24 +1176,25 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
             if box_first_token_mask is not None:
                 box_first_token_mask = box_first_token_mask.view(-1)
                 itc_loss = loss_fct(
-                    itc_logits.view(-1, self.num_labels)[box_first_token_mask], itc_labels[box_first_token_mask]
+                    initial_token_logits.view(-1, self.num_labels)[box_first_token_mask],
+                    itc_labels[box_first_token_mask],
                 )
             else:
-                itc_loss = loss_fct(itc_logits.view(-1, self.num_labels), itc_labels)
+                itc_loss = loss_fct(initial_token_logits.view(-1, self.num_labels), itc_labels)
 
             stc_labels = stc_labels.view(-1)
-            stc_loss = loss_fct(stc_logits.view(-1, max_seq_length + 1)[stc_mask], stc_labels[stc_mask])
+            stc_loss = loss_fct(subsequent_token_logits.view(-1, max_seq_length + 1)[stc_mask], stc_labels[stc_mask])
 
             loss = itc_loss + stc_loss
 
         if not return_dict:
-            output = (itc_logits, stc_logits) + outputs[2:]
+            output = (initial_token_logits, subsequent_token_logits) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return BrosSpadeOutput(
             loss=loss,
-            itc_logits=itc_logits,
-            stc_logits=stc_logits,
+            itc_logits=initial_token_logits,
+            stc_logits=subsequent_token_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -1282,7 +1281,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
 
-            bsz, max_seq_length = attention_mask.shape
+            batch_size, max_seq_length = attention_mask.shape
             device = attention_mask.device
 
             self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device).bool()
@@ -1291,12 +1290,12 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
             box_first_token_mask = torch.cat(
                 [
                     ~box_first_token_mask,
-                    torch.zeros([bsz, 1], dtype=torch.bool).to(device),
+                    torch.zeros([batch_size, 1], dtype=torch.bool).to(device),
                 ],
                 axis=1,
             )
-            logits.masked_fill_(box_first_token_mask[:, None, :], -10000.0)
-            logits.masked_fill_(self_token_mask[None, :, :], -10000.0)
+            logits = logits.masked_fill_(box_first_token_mask[:, None, :], -10000.0)
+            logits = logits.masked_fill_(self_token_mask[None, :, :], -10000.0)
 
             loss = loss_fct(logits.view(-1, max_seq_length + 1)[mask], labels.view(-1)[mask])
 

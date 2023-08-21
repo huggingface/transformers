@@ -64,9 +64,12 @@ class BrosConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            The index of the padding token in the token vocabulary.
+        bbox_scale (`float`, *optional*, defaults to 100.0):
+            The scale factor of the bounding box coordinates.
+        n_relations (`int`, *optional*, defaults to 1):
+            The number of relations for SpadeEE(entity extraction), SpadeEL(entity linking) head.
 
     Examples:
 
@@ -120,5 +123,10 @@ class BrosConfig(PretrainedConfig):
             **kwargs,
         )
 
+        # dimension of boudning box, 8 means (x1, y1, x2, y2, x3, y3, x4, y4)
+        self.dim_bbox = 8
+        self.dim_bbox_sinusoid_emb_2d = hidden_size // 4
+        self.dim_bbox_sinusoid_emb_1d = self.dim_bbox_sinusoid_emb_2d // self.dim_bbox
+        self.dim_bbox_projection = hidden_size // num_attention_heads
         self.bbox_scale = bbox_scale
         self.n_relations = n_relations
