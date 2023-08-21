@@ -1103,7 +1103,7 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
 
     This logits processor can be resource-intensive, especially when using large models or long sequences.
 
-    </Warning>
+    </Tip>
 
     Traditional beam search often generates very similar sequences across different beams.
 
