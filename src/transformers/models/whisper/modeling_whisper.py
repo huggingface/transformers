@@ -1742,6 +1742,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_decoder_ids)]
             generation_config.forced_decoder_ids = forced_decoder_ids
 
+        if num_frames is not None:
+            generation_config.num_frames = num_frames
+
         if generation_config.return_timestamps:
             logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
 
@@ -1768,6 +1771,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         )
 
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
+            num_frames = getattr(generation_config, "num_frames", None)
             outputs["token_timestamps"] = self._extract_token_timestamps(
                 outputs, generation_config.alignment_heads, num_frames=num_frames
             )
