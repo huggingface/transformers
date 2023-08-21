@@ -268,16 +268,13 @@ class VitDetAttention(nn.Module):
         hidden_state = hidden_state.reshape(batch_size, height, width, -1)
         hidden_state = self.proj(hidden_state)
 
-        outputs = (
-            (
-                hidden_state,
-                attention_probs.reshape(
-                    batch_size, self.num_heads, attention_probs.shape[-2], attention_probs.shape[-1]
-                ),
+        if output_attentions:
+            attention_probs = attention_probs.reshape(
+                batch_size, self.num_heads, attention_probs.shape[-2], attention_probs.shape[-1]
             )
-            if output_attentions
-            else (hidden_state,)
-        )
+            outputs = (hidden_state, attention_probs)
+        else:
+            outputs = (hidden_state,)
 
         return outputs
 
@@ -402,14 +399,15 @@ def window_partition(hidden_state, window_size):
     Partition into non-overlapping windows with padding if needed.
 
     Args:
-        hidden_state (tensor):
+        hidden_state (`torch.Tensor`):
             Input tokens with [batch_size, height, width, num_channels].
-        window_size (int):
+        window_size (`int`):
             Window size.
 
     Returns:
-        windows: windows after partition with [B * num_windows, window_size, window_size, C]. (patch_height,
-        patch_width): padded height and width before partition
+        `tuple(torch.FloatTensor)` comprising various elements:
+        - windows: windows after partition with [batch_size * num_windows, window_size, window_size, num_channels].
+        - (patch_height, patch_width): padded height and width before partition
     """
     batch_size, height, width, num_channels = hidden_state.shape
 
