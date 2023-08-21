@@ -473,7 +473,7 @@ class Pop2PianoModelTester:
                     )
                 )
 
-    def check_resize_embeddings_Pop2Piano_v1_1(
+    def check_resize_embeddings_pop2piano_v1_1(
         self,
         config,
     ):
@@ -603,7 +603,7 @@ class Pop2PianoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
 
     def test_v1_1_resize_embeddings(self):
         config = self.model_tester.prepare_config_and_inputs()[0]
-        self.model_tester.check_resize_embeddings_Pop2Piano_v1_1(config)
+        self.model_tester.check_resize_embeddings_pop2piano_v1_1(config)
 
     @slow
     def test_model_from_pretrained(self):
