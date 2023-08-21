@@ -358,7 +358,6 @@ src/transformers/data/processors/squad.py
 src/transformers/data/processors/utils.py
 src/transformers/data/processors/xnli.py
 src/transformers/debug_utils.py
-src/transformers/deepspeed.py
 src/transformers/dependency_versions_check.py
 src/transformers/dependency_versions_table.py
 src/transformers/dynamic_module_utils.py
@@ -381,7 +380,10 @@ src/transformers/hyperparameter_search.py
 src/transformers/image_processing_utils.py
 src/transformers/image_transforms.py
 src/transformers/image_utils.py
-src/transformers/integrations.py
+src/transformers/integrations/bitsandbytes.py
+src/transformers/integrations/deepspeed.py
+src/transformers/integrations/integration_utils.py
+src/transformers/integrations/peft.py
 src/transformers/keras_callbacks.py
 src/transformers/modelcard.py
 src/transformers/modeling_flax_outputs.py
@@ -957,7 +959,6 @@ src/transformers/training_args.py
 src/transformers/training_args_seq2seq.py
 src/transformers/training_args_tf.py
 src/transformers/utils/backbone_utils.py
-src/transformers/utils/bitsandbytes.py
 src/transformers/utils/constants.py
 src/transformers/utils/doc.py
 src/transformers/utils/dummy_detectron2_objects.py
