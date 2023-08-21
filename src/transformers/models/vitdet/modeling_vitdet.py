@@ -81,16 +81,16 @@ class VitDetEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def get_absolute_positions(self, abs_pos, has_cls_token, height, width):
+    def get_absolute_positions(self, abs_pos_embeddings, has_cls_token, height, width):
         """
         Calculate absolute positional embeddings. If needed, resize embeddings and remove cls_token dimension for the
         original embeddings.
 
         Args:
-            abs_pos (`torch.Tensor`):
+            abs_pos_embeddings (`torch.Tensor`):
                 Absolute positional embeddings with (1, num_position, num_channels).
             has_cls_token (`bool`):
-                If true, has 1 embedding in abs_pos for cls token.
+                If true, has 1 embedding in abs_pos_embeddings for cls token.
             height (`int`):
                 Height of input image tokens.
             width (`int`):
@@ -100,23 +100,23 @@ class VitDetEmbeddings(nn.Module):
             Absolute positional embeddings after processing with shape (1, height, width, num_channels)
         """
         if has_cls_token:
-            abs_pos = abs_pos[:, 1:]
-        xy_num = abs_pos.shape[1]
-        size = int(math.sqrt(xy_num))
-        if size * size != xy_num:
+            abs_pos_embeddings = abs_pos_embeddings[:, 1:]
+        num_position = abs_pos_embeddings.shape[1]
+        size = int(math.sqrt(num_position))
+        if size * size != num_position:
             raise ValueError("Absolute position embeddings must be a square number.")
 
         if size != height or size != width:
-            new_abs_pos = nn.functional.interpolate(
-                abs_pos.reshape(1, size, size, -1).permute(0, 3, 1, 2),
+            new_abs_pos_embeddings = nn.functional.interpolate(
+                abs_pos_embeddings.reshape(1, size, size, -1).permute(0, 3, 1, 2),
                 size=(height, width),
                 mode="bicubic",
                 align_corners=False,
             )
 
-            return new_abs_pos.permute(0, 2, 3, 1)
+            return new_abs_pos_embeddings.permute(0, 2, 3, 1)
         else:
-            return abs_pos.reshape(1, height, width, -1)
+            return abs_pos_embeddings.reshape(1, height, width, -1)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         num_channels = pixel_values.shape[1]
@@ -205,13 +205,13 @@ def add_decomposed_relative_positions(attn, queries, rel_pos_h, rel_pos_w, q_siz
 
     batch_size, _, dim = queries.shape
     r_q = queries.reshape(batch_size, queries_height, queries_width, dim)
-    rel_h = torch.einsum("bhwc,hkc->bhwk", r_q, relative_height)
-    rel_w = torch.einsum("bhwc,wkc->bhwk", r_q, relative_width)
+    relative_height = torch.einsum("bhwc,hkc->bhwk", r_q, relative_height)
+    relative_weight = torch.einsum("bhwc,wkc->bhwk", r_q, relative_width)
 
     attn = (
         attn.view(batch_size, queries_height, queries_width, keys_height, keys_width)
-        + rel_h[:, :, :, :, None]
-        + rel_w[:, :, :, None, :]
+        + relative_height[:, :, :, :, None]
+        + relative_weight[:, :, :, None, :]
     ).view(batch_size, queries_height * queries_width, keys_height * keys_width)
 
     return attn
@@ -262,12 +262,10 @@ class VitDetAttention(nn.Module):
 
         attention_probs = attention_scores.softmax(dim=-1)
 
-        hidden_state = (
-            (attention_probs @ values)
-            .view(batch_size, self.num_heads, height, width, -1)
-            .permute(0, 2, 3, 1, 4)
-            .reshape(batch_size, height, width, -1)
-        )
+        hidden_state = attention_probs @ values
+        hidden_state = hidden_state.view(batch_size, self.num_heads, height, width, -1)
+        hidden_state = hidden_state.permute(0, 2, 3, 1, 4)
+        hidden_state = hidden_state.reshape(batch_size, height, width, -1)
         hidden_state = self.proj(hidden_state)
 
         outputs = (
@@ -348,15 +346,11 @@ class VitDetResBottleneckBlock(nn.Module):
     1x1, 3x3, 1x1.
     """
 
-    def __init__(
-        self,
-        config,
-        in_channels,
-        out_channels,
-        bottleneck_channels,
-    ):
+    def __init__(self, config, in_channels, out_channels, bottleneck_channels):
         """
         Args:
+            config (`VitDetConfig`):
+                Model configuration.
             in_channels (int):
                 Number of input channels.
             out_channels (int):
@@ -369,13 +363,7 @@ class VitDetResBottleneckBlock(nn.Module):
         self.norm1 = VitDetLayerNorm(bottleneck_channels)
         self.act1 = ACT2FN[config.hidden_act]
 
-        self.conv2 = nn.Conv2d(
-            bottleneck_channels,
-            bottleneck_channels,
-            3,
-            padding=1,
-            bias=False,
-        )
+        self.conv2 = nn.Conv2d(bottleneck_channels, bottleneck_channels, 3, padding=1, bias=False)
         self.norm2 = VitDetLayerNorm(bottleneck_channels)
         self.act2 = ACT2FN[config.hidden_act]
 
@@ -438,7 +426,7 @@ def window_partition(hidden_state, window_size):
     return windows, (patch_height, patch_width)
 
 
-def window_unpartition(windows, window_size, pad_hw, hw):
+def window_unpartition(windows, window_size, pad_height_width, height_width):
     """
     Window unpartition into original sequences and removing padding.
 
@@ -447,16 +435,16 @@ def window_unpartition(windows, window_size, pad_hw, hw):
             Input tokens with [batch_size * num_windows, window_size, window_size, num_channels].
         window_size (`int`):
             Window size.
-        pad_hw (`Tuple[int]`):
+        pad_height_width (`Tuple[int]`):
             Padded height and width (patch_height, patch_width).
-        hw (`Tuple[int]`):
+        height_width (`Tuple[int]`):
             Original height and width before padding.
 
     Returns:
         hidden_state: unpartitioned sequences with [batch_size, height, width, num_channels].
     """
-    patch_height, patch_width = pad_hw
-    height, width = hw
+    patch_height, patch_width = pad_height_width
+    height, width = height_width
     batch_size = windows.shape[0] // (patch_height * patch_width // window_size // window_size)
     hidden_state = windows.view(
         batch_size, patch_height // window_size, patch_width // window_size, window_size, window_size, -1
@@ -515,7 +503,7 @@ class VitDetLayer(nn.Module):
         # Window partition
         if self.window_size > 0:
             height, width = hidden_states.shape[1], hidden_states.shape[2]
-            hidden_states, pad_hw = window_partition(hidden_states, self.window_size)
+            hidden_states, pad_height_width = window_partition(hidden_states, self.window_size)
 
         self_attention_outputs = self.attention(
             hidden_states,
@@ -526,7 +514,7 @@ class VitDetLayer(nn.Module):
 
         # Reverse window partition
         if self.window_size > 0:
-            hidden_states = window_unpartition(hidden_states, self.window_size, pad_hw, (height, width))
+            hidden_states = window_unpartition(hidden_states, self.window_size, pad_height_width, (height, width))
 
         # first residual connection
         hidden_states = shortcut + self.drop_path(hidden_states)
@@ -550,14 +538,14 @@ class VitDetEncoder(nn.Module):
         depth = config.num_hidden_layers
 
         # stochastic depth decay rule
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, depth)]
+        drop_path_rate = [x.item() for x in torch.linspace(0, config.drop_path_rate, depth)]
 
         layers = []
         for i in range(depth):
             layers.append(
                 VitDetLayer(
                     config,
-                    drop_path_rate=dpr[i],
+                    drop_path_rate=drop_path_rate[i],
                     window_size=config.window_size if i in config.window_block_indices else 0,
                     use_residual_block=i in config.residual_block_indices,
                 )
