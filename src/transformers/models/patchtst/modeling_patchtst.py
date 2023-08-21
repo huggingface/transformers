@@ -42,14 +42,15 @@ class PatchTSTAttention(nn.Module):
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
 
-        self.self_attn = MultiheadAttention(embed_dim=config.d_model,
-                                                 num_heads=config.encoder_attention_heads,
-                                                 dropout=config.attention_dropout,
-                                                 bias=config.bias,
-                                                 add_bias_kv=True,
-                                                 add_zero_attn=False,
-                                                 batch_first=True
-                                                 )
+        self.self_attn = MultiheadAttention(
+            embed_dim=config.d_model,
+            num_heads=config.encoder_attention_heads,
+            dropout=config.attention_dropout,
+            bias=config.bias,
+            add_bias_kv=True,
+            add_zero_attn=False,
+            batch_first=True,
+        )
 
     def forward(self, src: torch.Tensor) -> torch.Tensor:
         """
@@ -60,9 +61,12 @@ class PatchTSTAttention(nn.Module):
 
 
 def get_activation_fn(activation):
-    if callable(activation): return activation()
-    elif activation.lower() == "relu": return nn.ReLU()
-    elif activation.lower() == "gelu": return nn.GELU()
+    if callable(activation):
+        return activation()
+    elif activation.lower() == "relu":
+        return nn.ReLU()
+    elif activation.lower() == "gelu":
+        return nn.GELU()
     raise ValueError(f'{activation} is not available. You can use "relu", "gelu", or a callable')
 
 
@@ -72,33 +76,39 @@ class Transpose(nn.Module):
         self.dims, self.contiguous = dims, contiguous
 
     def forward(self, x):
-        if self.contiguous: return x.transpose(*self.dims).contiguous()
-        else: return x.transpose(*self.dims)
+        if self.contiguous:
+            return x.transpose(*self.dims).contiguous()
+        else:
+            return x.transpose(*self.dims)
 
 
 def positional_encoding(pe, learn_pe, q_len, d_model):
     # Positional encoding
     if pe == None:
-        w_pos = torch.empty((q_len, d_model)) # pe = None and learn_pe = False can be used to measure impact of pe
+        w_pos = torch.empty((q_len, d_model))  # pe = None and learn_pe = False can be used to measure impact of pe
         nn.init.uniform_(w_pos, -0.02, 0.02)
         learn_pe = False
-    elif pe == 'zero':
+    elif pe == "zero":
         w_pos = torch.empty((q_len, 1))
         nn.init.uniform_(w_pos, -0.02, 0.02)
-    elif pe == 'zeros':
+    elif pe == "zeros":
         w_pos = torch.empty((q_len, d_model))
         nn.init.uniform_(w_pos, -0.02, 0.02)
-    elif pe == 'normal' or pe == 'gauss':
+    elif pe == "normal" or pe == "gauss":
         w_pos = torch.zeros((q_len, 1))
         torch.nn.init.normal_(w_pos, mean=0.0, std=0.1)
-    elif pe == 'uniform':
+    elif pe == "uniform":
         w_pos = torch.zeros((q_len, 1))
         nn.init.uniform_(w_pos, a=0.0, b=0.1)
-    elif pe == 'lin1d': w_pos = coord1d_pos_encoding(q_len, exponential=False, normalize=True)
-    elif pe == 'exp1d': w_pos = coord1d_pos_encoding(q_len, exponential=True, normalize=True)
-    elif pe == 'lin2d': w_pos = coord2d_pos_encoding(q_len, d_model, exponential=False, normalize=True)
-    elif pe == 'exp2d': w_pos = coord2d_pos_encoding(q_len, d_model, exponential=True, normalize=True)
-    elif pe == 'sincos':
+    elif pe == "lin1d":
+        w_pos = coord1d_pos_encoding(q_len, exponential=False, normalize=True)
+    elif pe == "exp1d":
+        w_pos = coord1d_pos_encoding(q_len, exponential=True, normalize=True)
+    elif pe == "lin2d":
+        w_pos = coord2d_pos_encoding(q_len, d_model, exponential=False, normalize=True)
+    elif pe == "exp2d":
+        w_pos = coord2d_pos_encoding(q_len, d_model, exponential=True, normalize=True)
+    elif pe == "sincos":
         pos_enc = torch.zeros(q_len, d_model)
         position = torch.arange(0, q_len).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model))
@@ -107,20 +117,29 @@ def positional_encoding(pe, learn_pe, q_len, d_model):
         pos_enc = pos_enc - pos_enc.mean()
         pos_enc = pos_enc / (pos_enc.std() * 10)
         w_pos = pos_enc
-    else: raise ValueError(f"{pe} is not a valid pe (positional encoder. Available types: 'gauss'=='normal', \
-        'zeros', 'zero', uniform', 'lin1d', 'exp1d', 'lin2d', 'exp2d', 'sincos', None.)")
+    else:
+        raise ValueError(
+            f"{pe} is not a valid pe (positional encoder. Available types: 'gauss'=='normal', \
+        'zeros', 'zero', uniform', 'lin1d', 'exp1d', 'lin2d', 'exp2d', 'sincos', None.)"
+        )
     return nn.Parameter(w_pos, requires_grad=learn_pe)
 
 
 def coord2d_pos_encoding(q_len, d_model, exponential=False, normalize=True, eps=1e-3, verbose=False):
-    x = .5 if exponential else 1
+    x = 0.5 if exponential else 1
     i = 0
     for i in range(100):
-        cpe = 2 * (torch.linspace(0, 1, q_len).reshape(-1, 1) ** x) * (torch.linspace(0, 1, d_model).reshape(1, -1) ** x) - 1
+        cpe = (
+            2 * (torch.linspace(0, 1, q_len).reshape(-1, 1) ** x) * (torch.linspace(0, 1, d_model).reshape(1, -1) ** x)
+            - 1
+        )
         # pv(f'{i:4.0f}  {x:5.3f}  {cpe.mean():+6.3f}', verbose)
-        if abs(cpe.mean()) <= eps: break
-        elif cpe.mean() > eps: x += .001
-        else: x -= .001
+        if abs(cpe.mean()) <= eps:
+            break
+        elif cpe.mean() > eps:
+            x += 0.001
+        else:
+            x -= 0.001
         i += 1
     if normalize:
         cpe = cpe - cpe.mean()
@@ -129,7 +148,7 @@ def coord2d_pos_encoding(q_len, d_model, exponential=False, normalize=True, eps=
 
 
 def coord1d_pos_encoding(q_len, exponential=False, normalize=True):
-    cpe = (2 * (torch.linspace(0, 1, q_len).reshape(-1, 1)**(.5 if exponential else 1)) - 1)
+    cpe = 2 * (torch.linspace(0, 1, q_len).reshape(-1, 1) ** (0.5 if exponential else 1)) - 1
     if normalize:
         cpe = cpe - cpe.mean()
         cpe = cpe / (cpe.std() * 10)
@@ -141,7 +160,9 @@ class TSTEncoderLayer(nn.Module):
         super().__init__()
         self.pre_norm = config.pre_norm
 
-        assert not config.d_model % config.encoder_attention_heads, f"d_model ({config.d_model}) must be divisible by n_heads ({config.encoder_attention_heads})"
+        assert (
+            not config.d_model % config.encoder_attention_heads
+        ), f"d_model ({config.d_model}) must be divisible by n_heads ({config.encoder_attention_heads})"
 
         # Multi-Head attention
         self.self_attn = PatchTSTAttention(config)
@@ -178,7 +199,8 @@ class TSTEncoderLayer(nn.Module):
         if self.pre_norm:
             ## Norm and Multi-Head attention and Add residual connection
             src = src + self.dropout_path1(
-                self.self_attn(self.norm_sublayer1(src)))  # Add: residual connection with residual dropout
+                self.self_attn(self.norm_sublayer1(src))
+            )  # Add: residual connection with residual dropout
         else:
             ## Multi-Head attention and Add residual connection and Norm - Standard Transformer from BERT
             src = self.norm_sublayer1(src + self.dropout_path1(self.self_attn(src)))
@@ -187,11 +209,13 @@ class TSTEncoderLayer(nn.Module):
         if self.pre_norm:
             ## Norm and Position-wise Feed-Forward and Add residual connection
             src = src + self.dropout_path2(
-                self.ff(self.norm_sublayer2(src)))  # Add: residual connection with residual dropout
+                self.ff(self.norm_sublayer2(src))
+            )  # Add: residual connection with residual dropout
         else:
             ## Position-wise Feed-Forward and Add residual connection and Norm - Standard Transformer from BERT
             src = self.norm_sublayer2(
-                src + self.dropout_path2(self.ff(src)))  # Add: residual connection with residual dropout
+                src + self.dropout_path2(self.ff(src))
+            )  # Add: residual connection with residual dropout
 
         return src
 
@@ -200,17 +224,11 @@ class TSTEncoder(nn.Module):
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
 
-        self.layers = nn.ModuleList(
-            [
-                TSTEncoderLayer(config)
-                for i in range(config.encoder_layers)
-            ]
-        )
+        self.layers = nn.ModuleList([TSTEncoderLayer(config) for i in range(config.encoder_layers)])
 
-    def forward(self, src: torch.Tensor,
-                output_hidden_states: Optional[bool] = False,
-                output_attention: Optional[bool] = False
-                ) -> torch.Tensor:
+    def forward(
+        self, src: torch.Tensor, output_hidden_states: Optional[bool] = False, output_attention: Optional[bool] = False
+    ) -> torch.Tensor:
         """
         src: tensor [bs x seq_len x d_model]
         Return:
@@ -221,9 +239,10 @@ class TSTEncoder(nn.Module):
             if output_hidden_states:
                 src = mod(src)
                 all_hidden_states.append(src)
-        if output_hidden_states: return src, all_hidden_states
+        if output_hidden_states:
+            return src, all_hidden_states
         return src
-    
+
 
 class PatchTSTPreTrainedModel(PreTrainedModel):
     config_class = PatchTSTConfig
@@ -234,12 +253,12 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize weights"""
         if self.config.use_cls_token:
-            torch.nn.init.normal_(self.config.cls_token, std=.02)
+            torch.nn.init.normal_(self.config.cls_token, std=0.02)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (PatchTSTEncoder)):
             module.gradient_checkpointing = value
-            
+
 
 class PatchTSTEncoder(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
@@ -265,9 +284,13 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
         # Positional encoding
         if self.use_cls_token:
             self.cls_token = nn.Parameter(torch.zeros(1, 1, config.d_model))
-            self.W_pos = positional_encoding(config.positional_encoding, config.learn_pe, self.num_patch + 1, config.d_model)
+            self.W_pos = positional_encoding(
+                config.positional_encoding, config.learn_pe, self.num_patch + 1, config.d_model
+            )
         else:
-            self.W_pos = positional_encoding(config.positional_encoding, config.learn_pe, self.num_patch, config.d_model)
+            self.W_pos = positional_encoding(
+                config.positional_encoding, config.learn_pe, self.num_patch, config.d_model
+            )
 
         # Positional dropout
         self.dropout = nn.Dropout(config.positional_dropout) if config.positional_dropout > 0 else nn.Identity()
@@ -313,8 +336,12 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
             x = self.dropout(x + self.W_pos)  # x: [bs * nvars x num_patch x d_model]
 
         # Encoder
-        x = self.encoder(x)  # x: [bs * nvars x num_patch x d_model] or [bs * nvars x (num_patch+1) x d_model] if use cls_token
-        x = torch.reshape(x, (bs, n_vars, -1, self.d_model))  # x: [bs x nvars x num_patch x d_model] or [bs x nvars x (num_patch+1) x d_model] if use cls_token
+        x = self.encoder(
+            x
+        )  # x: [bs * nvars x num_patch x d_model] or [bs * nvars x (num_patch+1) x d_model] if use cls_token
+        x = torch.reshape(
+            x, (bs, n_vars, -1, self.d_model)
+        )  # x: [bs x nvars x num_patch x d_model] or [bs x nvars x (num_patch+1) x d_model] if use cls_token
         return x
 
 
@@ -521,9 +548,13 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
         # Positional encoding
         if self.use_cls_token:
             self.cls_token = nn.Parameter(torch.zeros(1, 1, config.d_model))
-            self.w_pos = positional_encoding(config.positional_encoding, config.learn_pe, self.num_patch + 1, config.d_model)
+            self.w_pos = positional_encoding(
+                config.positional_encoding, config.learn_pe, self.num_patch + 1, config.d_model
+            )
         else:
-            self.w_pos = positional_encoding(config.positional_encoding, config.learn_pe, self.num_patch, config.d_model)
+            self.w_pos = positional_encoding(
+                config.positional_encoding, config.learn_pe, self.num_patch, config.d_model
+            )
 
         # Positional dropout
         self.dropout = nn.Dropout(config.positional_dropout) if config.positional_dropout > 0 else nn.Identity()
@@ -570,9 +601,11 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
 
         # Encoder
         x = self.encoder(
-            x)  # x: [bs * nvars x num_patch x d_model] or [bs * nvars x (num_patch+1) x d_model] if use cls_token
-        x = torch.reshape(x, (bs, n_vars, -1,
-                              self.d_model))  # x: [bs x nvars x num_patch x d_model] or [bs x nvars x (num_patch+1) x d_model] if use cls_token
+            x
+        )  # x: [bs * nvars x num_patch x d_model] or [bs * nvars x (num_patch+1) x d_model] if use cls_token
+        x = torch.reshape(
+            x, (bs, n_vars, -1, self.d_model)
+        )  # x: [bs x nvars x num_patch x d_model] or [bs x nvars x (num_patch+1) x d_model] if use cls_token
         return x
 
 
@@ -588,10 +621,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
 
     def forward(self, x: torch.Tensor):
         encoder_output = self.encoder(x)
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=encoder_output,
-            hidden_states=None
-        )
+        return BaseModelOutputWithNoAttention(last_hidden_state=encoder_output, hidden_states=None)
 
 
 class PretrainHead(nn.Module):
@@ -608,16 +638,19 @@ class PretrainHead(nn.Module):
         output: tensor [bs x nvars x num_patch x patch_len]
         """
         x = self.linear(self.dropout(x))  # [bs x nvars x num_patch x patch_len]
-        if self.use_cls_token: x = x[:, :, 1:, :]  # remove the first cls token
+        if self.use_cls_token:
+            x = x[:, :, 1:, :]  # remove the first cls token
         return x
 
 
-def cv_random_masking(xb: torch.Tensor,
-                      mask_ratio: float,
-                      cv_channel_indices: list = None,
-                      channel_consistent_masking: bool = True,
-                      d_size="4D",
-                      mask_value=0):
+def cv_random_masking(
+    xb: torch.Tensor,
+    mask_ratio: float,
+    cv_channel_indices: list = None,
+    channel_consistent_masking: bool = True,
+    d_size="4D",
+    mask_value=0,
+):
     """cv_random_masking: Mask the input considering the control variables.
 
     Args:
@@ -662,15 +695,17 @@ def cv_random_masking(xb: torch.Tensor,
 
 
 class PatchMasking(nn.Module):
-    def __init__(self,
-                 mask_type: str = "random",
-                 mask_ratio=0.5,
-                 mask_patches: list = [2, 3],
-                 mask_patch_ratios: list = [1, 1],
-                 channel_consistent_masking: bool = True,
-                 d_size: str = "4D",
-                 cv_channel_indices: list = None,
-                 mask_value=0, ):
+    def __init__(
+        self,
+        mask_type: str = "random",
+        mask_ratio=0.5,
+        mask_patches: list = [2, 3],
+        mask_patch_ratios: list = [1, 1],
+        channel_consistent_masking: bool = True,
+        d_size: str = "4D",
+        cv_channel_indices: list = None,
+        mask_value=0,
+    ):
         """PatchMasking: Class to random or forcast masking.
 
         Args:
@@ -699,7 +734,6 @@ class PatchMasking(nn.Module):
         super().__init__()
 
     def forward(self, x: torch.Tensor):
-
         """
         Input:
             x: patched input
@@ -713,12 +747,14 @@ class PatchMasking(nn.Module):
         """
 
         if self.mask_type == "random":
-            x_mask, mask = cv_random_masking(xb=x,
-                                             mask_ratio=self.mask_ratio,
-                                             cv_channel_indices=self.cv_channel_indices,
-                                             channel_consistent_masking=self.channel_consistent_masking,
-                                             d_size=self.d_size,
-                                             mask_value=self.mask_value)
+            x_mask, mask = cv_random_masking(
+                xb=x,
+                mask_ratio=self.mask_ratio,
+                cv_channel_indices=self.cv_channel_indices,
+                channel_consistent_masking=self.channel_consistent_masking,
+                d_size=self.d_size,
+                mask_value=self.mask_value,
+            )
 
         else:
             raise Exception("Invalid mask type")
@@ -732,15 +768,19 @@ class Patch(nn.Module):
     """
     A class to patchify the time series sequence into different patches
     """
-    def __init__(self,
-                 seq_len: int,
-                 patch_len: int,
-                 stride: int,
-                 padding: bool = False  # TODO: use this to set whether we want to pad zeros to the sequence
-                 ):
+
+    def __init__(
+        self,
+        seq_len: int,
+        patch_len: int,
+        stride: int,
+        padding: bool = False,  # TODO: use this to set whether we want to pad zeros to the sequence
+    ):
         super().__init__()
 
-        assert (seq_len > patch_len), f'Sequence length ({seq_len}) has to be greater than the patch length ({patch_len})'
+        assert (
+            seq_len > patch_len
+        ), f"Sequence length ({seq_len}) has to be greater than the patch length ({patch_len})"
 
         self.seq_len = seq_len
         self.patch_len = patch_len
@@ -760,12 +800,14 @@ class Patch(nn.Module):
             z: output tensor data [bs x ... x n_vars x num_patch x patch_len]
         """
         seq_len = x.shape[-2]
-        assert (seq_len == self.seq_len), f"Input sequence length ({seq_len}) doesn't match model ({self.seq_len})."
+        assert seq_len == self.seq_len, f"Input sequence length ({seq_len}) doesn't match model ({self.seq_len})."
 
         # x = x[:, :, self.s_begin:, :]  # xb: [bs x ... x tgt_len x nvars]
-        z = x.transpose(0, -2)[self.s_begin:]    # z: [tgt_len x ... x bs x n_vars]
-        z = z.transpose(0, -2).contiguous()     # z: [bs x ... x tgt_len x n_vars]  # TODO: need a better solution
-        z = z.unfold(dimension=-2, size=self.patch_len, step=self.stride)  # xb: [bs x ... x num_patch x n_vars x patch_len]
+        z = x.transpose(0, -2)[self.s_begin :]  # z: [tgt_len x ... x bs x n_vars]
+        z = z.transpose(0, -2).contiguous()  # z: [bs x ... x tgt_len x n_vars]  # TODO: need a better solution
+        z = z.unfold(
+            dimension=-2, size=self.patch_len, step=self.stride
+        )  # xb: [bs x ... x num_patch x n_vars x patch_len]
         z = z.transpose(-2, -3).contiguous()  # xb: [bs x ... x n_vars x num_patch x patch_len]
         return z
 
@@ -808,25 +850,24 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
-        self.patching = Patch(config.context_length,
-                              patch_len=config.patch_length,
-                              stride=config.stride)
-        self.masking = PatchMasking(mask_type=config.mask_type,
-                                    mask_ratio=config.mask_ratio,
-                                    mask_patches=config.mask_patches,
-                                    mask_patch_ratios=config.mask_patch_ratios,
-                                    channel_consistent_masking=config.channel_consistent_masking,
-                                    d_size=config.d_size,
-                                    cv_channel_indices=config.cv_channel_indices,
-                                    mask_value=config.mask_value)
+        self.patching = Patch(config.context_length, patch_len=config.patch_length, stride=config.stride)
+        self.masking = PatchMasking(
+            mask_type=config.mask_type,
+            mask_ratio=config.mask_ratio,
+            mask_patches=config.mask_patches,
+            mask_patch_ratios=config.mask_patch_ratios,
+            channel_consistent_masking=config.channel_consistent_masking,
+            d_size=config.d_size,
+            cv_channel_indices=config.cv_channel_indices,
+            mask_value=config.mask_value,
+        )
         self.model = PatchTSTModel(config)
         self.head = PretrainHead(config)
-        self.loss = torch.nn.MSELoss(reduction='mean')
+        self.loss = torch.nn.MSELoss(reduction="mean")
 
-    def forward(self,
-                past_values: torch.Tensor,
-                future_values: Optional[torch.Tensor] = None
-                ) -> PatchTSTForPreTrainingOutput:
+    def forward(
+        self, past_values: torch.Tensor, future_values: Optional[torch.Tensor] = None
+    ) -> PatchTSTForPreTrainingOutput:
         """
         past_values (x): tensor [bs x n_vars x num_patch x patch_len]
         future_values (y): labels
@@ -838,7 +879,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         masked_x, masked = self.masking(patched_x)
         model_output = self.model(masked_x)  # x: [bs x nvars x num_patch x d_model]
         #  or [bs x nvars x (num_patch+1) x d_model] if use cls_token
-        x_hat = self.head(model_output[0]) # tensor [bs x nvars x num_patch x patch_len]
+        x_hat = self.head(model_output[0])  # tensor [bs x nvars x num_patch x patch_len]
 
         loss_val = self.loss(x_hat, patched_x)
         return PatchTSTForPreTrainingOutput(
@@ -847,4 +888,87 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         )
 
 
+class PatchTSTForClassification(PatchTSTPretrainedModel):
+    # PatchTST model + classification head
+    def __init__(self, config: PatchTSTConfig):
+        super().__init__(config)
 
+        self.patching = Patch(config.seq_len, patch_len=config.patch_len, stride=config.stride)
+
+        self.model = PatchTSTModel(config)
+        self.head = ClassificationHead(config)
+        self.loss = nn.CrossEntropyLoss()
+
+    def forward(self, x, y=None):
+        patched_x = self.patching(x)
+        model_output = self.model(patched_x)
+        y_hat = self.head(model_output[0])
+
+        loss_val = None
+        if y is not None:
+            loss_val = self.loss(y_hat, y)
+        return PatchTSTForClassificationOutput(
+            loss=loss_val,
+            prediction_logits=y_hat,
+        )
+
+
+class ClassificationHead(nn.Module):
+    def __init__(self, config: PatchTSTConfig):
+        super().__init__()
+        self.use_cls_token = config.use_cls_token
+        self.pooling = config.pooling
+        self.flatten = nn.Flatten(start_dim=1)
+        self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
+        self.linear = nn.Linear(config.n_vars * config.d_model, config.n_classes)
+
+    def forward(self, x):
+        """
+        x: [bs x nvars x num_patch x d_model] or [bs x nvars x (num_patch+1) x d_model] if use cls_token
+        output: [bs x n_classes]
+        """
+        if self.use_cls_token:
+            x = x[:, :, 0, :]  # use the first output token, x: bs x nvars x d_model
+        elif self.pooling == "mean":
+            x = x.mean(dim=2)  # x: [bs x nvars x d_model]
+        elif self.pooling == "max":
+            x = x.max(dim=2)  # x: [bs x nvars x d_model]
+        else:
+            raise Exception(f"pooling operator {self.pooling} is not implemented yet")
+
+        x = self.flatten(x)  # x: bs x nvars * d_model
+        y = self.linear(self.dropout(x))  # y: bs x n_classes
+        return y
+
+
+class PatchTSTForClassificationOutput(ModelOutput):
+    """
+    Output type of [`PatchTSTForClassification`].
+
+    Args:
+        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+            Total loss as the sum of the masked language modeling loss and the next sequence prediction
+            (classification) loss.
+        prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
+            Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
+            before SoftMax).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    prediction_logits: torch.FloatTensor = None
+    seq_relationship_logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
