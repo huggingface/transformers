@@ -57,6 +57,7 @@ from .utils import (
     is_cython_available,
     is_decord_available,
     is_detectron2_available,
+    is_essentia_available,
     is_faiss_available,
     is_flax_available,
     is_ftfy_available,
@@ -69,7 +70,9 @@ from .utils import (
     is_onnx_available,
     is_optimum_available,
     is_pandas_available,
+    is_peft_available,
     is_phonemizer_available,
+    is_pretty_midi_available,
     is_pyctcdecode_available,
     is_pytesseract_available,
     is_pytest_available,
@@ -369,6 +372,16 @@ def require_torch(test_case):
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
 
 
+def require_peft(test_case):
+    """
+    Decorator marking a test that requires PEFT.
+
+    These tests are skipped when PEFT isn't installed.
+
+    """
+    return unittest.skipUnless(is_peft_available(), "test requires PEFT")(test_case)
+
+
 def require_torchvision(test_case):
     """
     Decorator marking a test that requires Torchvision.
@@ -614,7 +627,16 @@ if is_torch_available():
     # Set env var CUDA_VISIBLE_DEVICES="" to force cpu-mode
     import torch
 
-    if torch.cuda.is_available():
+    if "TRANSFORMERS_TEST_DEVICE" in os.environ:
+        torch_device = os.environ["TRANSFORMERS_TEST_DEVICE"]
+        try:
+            # try creating device to see if provided device is valid
+            _ = torch.device(torch_device)
+        except RuntimeError as e:
+            raise RuntimeError(
+                f"Unknown testing device specified by environment variable `TRANSFORMERS_TEST_DEVICE`: {torch_device}"
+            ) from e
+    elif torch.cuda.is_available():
         torch_device = "cuda"
     elif _run_third_party_device_tests and is_torch_npu_available():
         torch_device = "npu"
@@ -803,6 +825,20 @@ def require_librosa(test_case):
     Decorator marking a test that requires librosa
     """
     return unittest.skipUnless(is_librosa_available(), "test requires librosa")(test_case)
+
+
+def require_essentia(test_case):
+    """
+    Decorator marking a test that requires essentia
+    """
+    return unittest.skipUnless(is_essentia_available(), "test requires essentia")(test_case)
+
+
+def require_pretty_midi(test_case):
+    """
+    Decorator marking a test that requires pretty_midi
+    """
+    return unittest.skipUnless(is_pretty_midi_available(), "test requires pretty_midi")(test_case)
 
 
 def cmd_exists(cmd):

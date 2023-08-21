@@ -330,6 +330,14 @@ The following auto classes are available for the following audio tasks.
 
 [[autodoc]] AutoModelForAudioXVector
 
+### AutoModelForTextToSpectrogram
+
+[[autodoc]] AutoModelForTextToSpectrogram
+
+### AutoModelForTextToWaveform
+
+[[autodoc]] AutoModelForTextToWaveform
+
 ## Multimodal
 
 The following auto classes are available for the following multimodal tasks.
