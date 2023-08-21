@@ -75,16 +75,26 @@ class VitDetConfig(BackboneConfigMixin, PretrainedConfig):
             Whether to add absolute position embeddings to the patch embeddings.
         use_relative_position_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to add relative position embeddings to the attention maps.
+        window_size (`int`, *optional*, defaults to 0):
+            The size of the attention window.
+        out_features (`List[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage.
 
     Example:
 
     ```python
     >>> from transformers import VitDetConfig, VitDetModel
 
-    >>> # Initializing a VitDet vitdet-base-patch16-224 style configuration
+    >>> # Initializing a VitDet configuration
     >>> configuration = VitDetConfig()
 
-    >>> # Initializing a model (with random weights) from the vitdet-base-patch16-224 style configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = VitDetModel(configuration)
 
     >>> # Accessing the model configuration
