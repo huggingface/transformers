@@ -47,18 +47,17 @@ class PromptConfig(PushToHubMixin):
 
     # TODO Fill in docstring
     def __init__(self, **kwargs):
-        self.role_prefixes = kwargs.pop("chat_role_prefixes", {})
-        self.role_token_prefixes = kwargs.pop("chat_role_token_prefixes", {})
-        self.role_suffixes = kwargs.pop("chat_role_suffixes", {})
-        self.role_token_suffixes = kwargs.pop("chat_role_token_suffixes", {})
+        # TODO Matt It is critical that tokenization does not blend across message boundaries, because this will
+        #           cause past tokenizations to change when new messages are added. This will invalidate past cache
+        #           values. It's tricky to enforce this - should we look at either requiring at least one special
+        #           token to be inserted between messages one way or another? It's hard to scan for this issue
+        #           automatically, since the special token might be inserted in the Jinja template, which means we'd
+        #           have to parse the template, so we might just have to add a stern warning to the docs.
         self.add_special_tokens = kwargs.pop("chat_add_special_tokens", None)
         self.default_system_prompt = kwargs.pop("chat_default_system_prompt", None)
-        # TODO Matt: If we want past key-values to be consistent across multiple generation calls,
-        #            then we will probably need to force something like this in all cases so that
-        #            we don't change tokens we've already computed key-values for.
         self.tokenize_separately = kwargs.pop("chat_tokenize_separately", None)
-        self.join_string = kwargs.pop("chat_join_string", None)
         self.max_length = kwargs.pop("chat_max_length", None)
+        self.template = kwargs.pop("chat_template", None)
 
     def __eq__(self, other):
         if not isinstance(other, PromptConfig):
@@ -425,35 +424,6 @@ class PromptConfig(PushToHubMixin):
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
             writer.write(self.to_json_string(use_diff=use_diff))
-
-    @classmethod
-    def from_model_config(cls, model_config: PretrainedConfig) -> "PromptConfig":
-        """
-        Instantiates a [`PromptConfig`] from a [`PretrainedConfig`]. This function is useful to convert legacy
-        [`PretrainedConfig`] objects, which may contain generation parameters, into a stand-alone [`GenerationConfig`].
-
-        Args:
-            model_config (`PretrainedConfig`):
-                The model config that will be used to instantiate the generation config.
-
-        Returns:
-            [`PromptConfig`]: The configuration object instantiated from those parameters.
-        """
-        config_dict = model_config.to_dict()
-        config_dict.pop("_from_model_config", None)
-        config = cls.from_dict(config_dict, return_unused_kwargs=False, _from_model_config=True)
-
-        # Special case: some models have generation attributes set in the decoder. Use them if still unset in the
-        # generation config.
-        for decoder_name in ("decoder", "generator", "text_config"):
-            if decoder_name in config_dict:
-                default_generation_config = PromptConfig()
-                decoder_config = config_dict[decoder_name]
-                for attr in config.to_dict().keys():
-                    if attr in decoder_config and getattr(config, attr) == getattr(default_generation_config, attr):
-                        setattr(config, attr, decoder_config[attr])
-
-        return config
 
     def update(self, **kwargs):
         """
