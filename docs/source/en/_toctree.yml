@@ -694,6 +694,8 @@
       sections:
       - local: model_doc/decision_transformer
         title: Decision Transformer
+      - local: model_doc/idefics
+        title: IDEFICS
       - local: model_doc/trajectory_transformer
         title: Trajectory Transformer
       title: Reinforcement learning models
