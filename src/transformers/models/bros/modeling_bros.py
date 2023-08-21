@@ -21,7 +21,6 @@ from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
-from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -173,7 +172,7 @@ class BrosPositionalEmbedding1D(nn.Module):
         )
         self.register_buffer("inv_freq", inv_freq)
 
-    def forward(self, pos_seq, bsz=None):
+    def forward(self, pos_seq):
         seq_size = pos_seq.size()
 
         if len(seq_size) == 2:
@@ -196,16 +195,9 @@ class BrosPositionalEmbedding2D(nn.Module):
     def __init__(self, config):
         super(BrosPositionalEmbedding2D, self).__init__()
 
-        self.dim_bbox_sinusoid_emb_2d = config.dim_bbox_sinusoid_emb_2d
         self.dim_bbox = config.dim_bbox
-
         self.x_pos_emb = BrosPositionalEmbedding1D(config)
         self.y_pos_emb = BrosPositionalEmbedding1D(config)
-
-        inv_freq = 1 / (
-            10000 ** (torch.arange(0.0, self.dim_bbox_sinusoid_emb_2d, 2.0) / self.dim_bbox_sinusoid_emb_2d)
-        )
-        self.register_buffer("inv_freq", inv_freq)
 
     def forward(self, bbox):
         # bbox: [seq_length, batch_size, dim_bbox]
@@ -236,19 +228,20 @@ class BrosEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        if version.parse(torch.__version__) > version.parse("1.6.0"):
-            self.register_buffer(
-                "token_type_ids",
-                torch.zeros(
-                    self.position_ids.size(),
-                    dtype=torch.long,
-                    device=self.position_ids.device,
-                ),
-                persistent=False,
-            )
+        self.register_buffer(
+            "token_type_ids",
+            torch.zeros(
+                self.position_ids.size(),
+                dtype=torch.long,
+                device=self.position_ids.device,
+            ),
+            persistent=False,
+        )
 
         self.bbox_sinusoid_emb = BrosPositionalEmbedding2D(config)
-        self.bbox_projection = nn.Linear(config.dim_bbox_sinusoid_emb_2d, config.dim_bbox_projection, bias=False)
+        self.bbox_projection = nn.Linear(
+            config.dim_bbox_sinusoid_emb_2d, config.hidden_size // config.num_attention_heads, bias=False
+        )
 
     def forward(
         self,
@@ -268,9 +261,6 @@ class BrosEmbeddings(nn.Module):
         if position_ids is None:
             position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
-        # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
-        # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
-        # issue #5664
         if token_type_ids is None:
             if hasattr(self, "token_type_ids"):
                 buffered_token_type_ids = self.token_type_ids[:, :seq_length]
@@ -543,9 +533,12 @@ class BrosLayer(nn.Module):
         self.attention = BrosAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
+
         if self.add_cross_attention:
-            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
+            if not self.is_decoder:
+                raise Exception(f"{self} should be used as a decoder model if cross attention is added")
             self.crossattention = BrosAttention(config)
+
         self.intermediate = BrosIntermediate(config)
         self.output = BrosOutput(config)
 
@@ -581,9 +574,10 @@ class BrosLayer(nn.Module):
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
-            assert hasattr(
-                self, "crossattention"
-            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+            if hasattr(self, "crossattention"):
+                raise Exception(
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+                )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
