@@ -127,7 +127,7 @@ class MaskRCNNConfig(PretrainedConfig):
             Number of samples for the Region Proposal Network (RPN) sampler at training time.
         rpn_sampler_pos_fraction (`float`, *optional*, defaults to 0.5):
             Fraction of positive samples for the Region Proposal Network (RPN) sampler at training time.
-        rpn_sampler_neg_pos_ub (`int`, *optional*, defaults to -1):
+        rpn_sampler_num_samples_upper_bound (`int`, *optional*, defaults to -1):
             Upper bound of negative/positive ratio for the Region Proposal Network (RPN) sampler at training time.
         rpn_sampler_add_gt_as_proposals (`bool`, *optional*, defaults to `False`):
             Whether to add ground truth boxes as proposals for the Region Proposal Network (RPN) sampler at training
@@ -150,7 +150,7 @@ class MaskRCNNConfig(PretrainedConfig):
             Number of samples for the Region of Interest (RoI) heads sampler at training time.
         rcnn_sampler_pos_fraction (`float`, *optional*, defaults to 0.25):
             Fraction of positive samples for the Region of Interest (RoI) heads sampler at training time.
-        rcnn_sampler_neg_pos_ub (`int`, *optional*, defaults to -1):
+        rcnn_sampler_num_samples_upper_bound (`int`, *optional*, defaults to -1):
             Upper bound of negative/positive ratio for the Region of Interest (RoI) heads sampler at training time.
         rcnn_sampler_add_gt_as_proposals (`bool`, *optional*, defaults to `True`):
             Whether to add ground truth boxes as proposals for the Region of Interest (RoI) heads sampler at training
@@ -229,7 +229,7 @@ class MaskRCNNConfig(PretrainedConfig):
         rpn_assigner_ignore_iof_thr=-1,
         rpn_sampler_num=256,
         rpn_sampler_pos_fraction=0.5,
-        rpn_sampler_neg_pos_ub=-1,
+        rpn_sampler_num_samples_upper_bound=-1,
         rpn_sampler_add_gt_as_proposals=False,
         rpn_proposal={
             "nms_pre": 2000,
@@ -246,7 +246,7 @@ class MaskRCNNConfig(PretrainedConfig):
         rcnn_assigner_ignore_iof_thr=-1,
         rcnn_sampler_num=512,
         rcnn_sampler_pos_fraction=0.25,
-        rcnn_sampler_neg_pos_ub=-1,
+        rcnn_sampler_num_samples_upper_bound=-1,
         rcnn_sampler_add_gt_as_proposals=True,
         **kwargs,
     ):
@@ -305,7 +305,7 @@ class MaskRCNNConfig(PretrainedConfig):
         self.rpn_assigner_ignore_iof_thr = rpn_assigner_ignore_iof_thr
         self.rpn_sampler_num = rpn_sampler_num
         self.rpn_sampler_pos_fraction = rpn_sampler_pos_fraction
-        self.rpn_sampler_neg_pos_ub = rpn_sampler_neg_pos_ub
+        self.rpn_sampler_num_samples_upper_bound = rpn_sampler_num_samples_upper_bound
         self.rpn_sampler_add_gt_as_proposals = rpn_sampler_add_gt_as_proposals
         self.rpn_proposal = rpn_proposal
         # Training configurations: RCNN
@@ -317,7 +317,7 @@ class MaskRCNNConfig(PretrainedConfig):
         self.rcnn_assigner_ignore_iof_thr = rcnn_assigner_ignore_iof_thr
         self.rcnn_sampler_num = rcnn_sampler_num
         self.rcnn_sampler_pos_fraction = rcnn_sampler_pos_fraction
-        self.rcnn_sampler_neg_pos_ub = rcnn_sampler_neg_pos_ub
+        self.rcnn_sampler_num_samples_upper_bound = rcnn_sampler_num_samples_upper_bound
         self.rcnn_sampler_add_gt_as_proposals = rcnn_sampler_add_gt_as_proposals
 
     def to_dict(self) -> Dict[str, any]:

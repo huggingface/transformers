@@ -1205,7 +1205,7 @@ class MaskRCNNAnchorGenerator(nn.Module):
         else:
             return yy, xx
 
-    def grid_priors(self, featmap_sizes, dtype=torch.float32, device="cuda"):
+    def grid_priors(self, featmap_sizes, dtype=torch.float32, device=None):
         """Generate grid anchors in multiple feature levels.
 
         Args:
@@ -1230,7 +1230,7 @@ class MaskRCNNAnchorGenerator(nn.Module):
             multi_level_anchors.append(anchors)
         return multi_level_anchors
 
-    def single_level_grid_priors(self, featmap_size, level_idx, dtype=torch.float32, device="cuda"):
+    def single_level_grid_priors(self, featmap_size, level_idx, dtype=torch.float32, device=None):
         """Generate grid anchors of a single level.
         Note:
             This function is usually called by method `self.grid_priors`.
@@ -1269,7 +1269,7 @@ class MaskRCNNAnchorGenerator(nn.Module):
         # then (0, 1), (0, 2), ...
         return all_anchors
 
-    def valid_flags(self, featmap_sizes, pad_shape, device="cuda"):
+    def valid_flags(self, featmap_sizes, pad_shape, device=None):
         """Generate valid flags of anchors in multiple feature levels.
 
         Args:
@@ -1301,7 +1301,7 @@ class MaskRCNNAnchorGenerator(nn.Module):
             multi_level_flags.append(flags)
         return multi_level_flags
 
-    def single_level_valid_flags(self, featmap_size, valid_size, num_base_anchors, device="cuda"):
+    def single_level_valid_flags(self, featmap_size, valid_size, num_base_anchors, device=None):
         """Generate the valid flags of anchor in a single feature map.
 
         Args:
@@ -1798,7 +1798,7 @@ class MaskRCNNRandomSampler:
     Source: https://github.com/open-mmlab/mmdetection/blob/master/mmdet/core/bbox/samplers/random_sampler.py
 
     Args:
-        num (`int`):
+        num_samples (`int`):
             Number of samples.
         pos_fraction (`float`):
             Fraction of positive samples
@@ -1808,10 +1808,10 @@ class MaskRCNNRandomSampler:
             Whether to add ground truth boxes as proposals.
     """
 
-    def __init__(self, num, pos_fraction, neg_pos_ub=-1, add_gt_as_proposals=True):
-        self.num = num
+    def __init__(self, num_samples, pos_fraction, num_samples_upper_bound=-1, add_gt_as_proposals=True):
+        self.num_samples = num_samples
         self.pos_fraction = pos_fraction
-        self.neg_pos_ub = neg_pos_ub
+        self.num_samples_upper_bound = num_samples_upper_bound
         self.add_gt_as_proposals = add_gt_as_proposals
         self.pos_sampler = self
         self.neg_sampler = self
@@ -1901,16 +1901,16 @@ class MaskRCNNRandomSampler:
             gt_ones = bboxes.new_ones(gt_bboxes.shape[0], dtype=torch.uint8)
             gt_flags = torch.cat([gt_ones, gt_flags])
 
-        num_expected_pos = int(self.num * self.pos_fraction)
+        num_expected_pos = int(self.num_samples * self.pos_fraction)
         pos_indices = self.pos_sampler._sample_pos(assign_result, num_expected_pos, bboxes=bboxes, **kwargs)
         # We found that sampled indices have duplicated items occasionally.
         # (may be a bug of PyTorch)
         pos_indices = pos_indices.unique()
         num_sampled_pos = pos_indices.numel()
-        num_expected_neg = self.num - num_sampled_pos
-        if self.neg_pos_ub >= 0:
+        num_expected_neg = self.num_samples- num_sampled_pos
+        if self.num_samples_upper_bound >= 0:
             _pos = max(1, num_sampled_pos)
-            neg_upper_bound = int(self.neg_pos_ub * _pos)
+            neg_upper_bound = int(self.num_samples_upper_bound * _pos)
             if num_expected_neg > neg_upper_bound:
                 num_expected_neg = neg_upper_bound
         neg_indices = self.neg_sampler._sample_neg(assign_result, num_expected_neg, bboxes=bboxes, **kwargs)
@@ -1976,9 +1976,9 @@ class MaskRCNNRPN(nn.Module):
         )
         # Sampler (during training, one samples a subset of anchors for each image to train on)
         self.sampler = MaskRCNNRandomSampler(
-            num=config.rpn_sampler_num,
+            num_samples=config.rpn_sampler_num,
             pos_fraction=config.rpn_sampler_pos_fraction,
-            neg_pos_ub=config.rpn_sampler_neg_pos_ub,
+            num_samples_upper_bound=config.rpn_sampler_num_samples_upper_bound,
             add_gt_as_proposals=config.rpn_sampler_add_gt_as_proposals,
         )
         # TODO support PseudoSampler in the future
@@ -2054,15 +2054,12 @@ class MaskRCNNRPN(nn.Module):
         proposal_list = self.get_bboxes(*outs, img_metas=img_metas, cfg=proposal_cfg)
 
         if not return_dict:
-            output = (
-                proposal_list,
-                outs,
-            )
+            output = (proposal_list, outs)
             return ((losses,) + output) if losses is not None else output
 
         return MaskRCNNRPNOutput(losses=losses, proposal_list=proposal_list, outs=outs)
 
-    def get_anchors(self, featmap_sizes, img_metas, device="cuda"):
+    def get_anchors(self, featmap_sizes, img_metas, device=None):
         """Get anchors according to feature map sizes.
 
         Args:
@@ -3122,9 +3119,9 @@ class MaskRCNNRoIHead(nn.Module):
         )
         # sampler
         self.bbox_sampler = MaskRCNNRandomSampler(
-            num=config.rcnn_sampler_num,
+            num_samples=config.rcnn_sampler_num,
             pos_fraction=config.rcnn_sampler_pos_fraction,
-            neg_pos_ub=config.rcnn_sampler_neg_pos_ub,
+            num_samples_upper_bound=config.rcnn_sampler_num_samples_upper_bound,
             add_gt_as_proposals=config.rcnn_sampler_add_gt_as_proposals,
         )
 
