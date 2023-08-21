@@ -135,6 +135,7 @@ docs/source/en/model_doc/groupvit.md
 docs/source/en/model_doc/herbert.md
 docs/source/en/model_doc/hubert.md
 docs/source/en/model_doc/ibert.md
+docs/source/en/model_doc/idefics.md
 docs/source/en/model_doc/imagegpt.md
 docs/source/en/model_doc/informer.md
 docs/source/en/model_doc/instructblip.md
@@ -269,6 +270,7 @@ docs/source/en/model_summary.md
 docs/source/en/multilingual.md
 docs/source/en/notebooks.md
 docs/source/en/pad_truncation.md
+docs/source/en/peft.md
 docs/source/en/perf_hardware.md
 docs/source/en/perf_infer_cpu.md
 docs/source/en/perf_infer_gpu_many.md
@@ -383,6 +385,7 @@ src/transformers/image_transforms.py
 src/transformers/image_utils.py
 src/transformers/integrations.py
 src/transformers/keras_callbacks.py
+src/transformers/lib_integrations/peft/peft_mixin.py
 src/transformers/modelcard.py
 src/transformers/modeling_flax_outputs.py
 src/transformers/modeling_flax_pytorch_utils.py
@@ -611,6 +614,12 @@ src/transformers/models/hubert/modeling_tf_hubert.py
 src/transformers/models/ibert/configuration_ibert.py
 src/transformers/models/ibert/modeling_ibert.py
 src/transformers/models/ibert/quant_modules.py
+src/transformers/models/idefics/configuration_idefics.py
+src/transformers/models/idefics/image_processing_idefics.py
+src/transformers/models/idefics/modeling_idefics.py
+src/transformers/models/idefics/perceiver.py
+src/transformers/models/idefics/processing_idefics.py
+src/transformers/models/idefics/vision.py
 src/transformers/models/imagegpt/convert_imagegpt_original_tf2_to_pytorch.py
 src/transformers/models/informer/configuration_informer.py
 src/transformers/models/informer/modeling_informer.py
@@ -913,7 +922,6 @@ src/transformers/pipelines/table_question_answering.py
 src/transformers/pipelines/text2text_generation.py
 src/transformers/pipelines/text_classification.py
 src/transformers/pipelines/text_generation.py
-src/transformers/pipelines/text_to_audio.py
 src/transformers/pipelines/token_classification.py
 src/transformers/pipelines/video_classification.py
 src/transformers/pipelines/visual_question_answering.py
@@ -979,6 +987,7 @@ src/transformers/utils/import_utils.py
 src/transformers/utils/logging.py
 src/transformers/utils/model_parallel_utils.py
 src/transformers/utils/notebook.py
+src/transformers/utils/peft_utils.py
 src/transformers/utils/quantization_config.py
 src/transformers/utils/sentencepiece_model_pb2.py
 src/transformers/utils/sentencepiece_model_pb2_new.py
