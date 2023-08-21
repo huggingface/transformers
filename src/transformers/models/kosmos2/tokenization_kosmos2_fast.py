@@ -19,9 +19,9 @@ import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
-from ...tokenization_utils import AddedToken
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import is_sentencepiece_available, logging
+from transformers.tokenization_utils import AddedToken
+from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
+from transformers.utils import is_sentencepiece_available, logging
 
 
 if is_sentencepiece_available():

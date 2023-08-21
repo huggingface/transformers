@@ -21,11 +21,11 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, is_batched
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, TextInput, TruncationStrategy
-from ...utils import TensorType, is_tf_available, is_torch_available
+from transformers.image_processing_utils import BatchFeature
+from transformers.image_utils import ImageInput, is_batched
+from transformers.processing_utils import ProcessorMixin
+from transformers.tokenization_utils_base import PaddingStrategy, TextInput, TruncationStrategy
+from transformers.utils import TensorType, is_tf_available, is_torch_available
 
 
 if is_torch_available():
