@@ -59,7 +59,9 @@ def find_adapter_config_file(
             are on HuggingFace Hub. You might need to call `huggingface-cli login` and paste your tokens to cache it.
     """
     adapter_cached_filename = None
-    if os.path.isdir(model_id):
+    if model_id is None:
+        return None
+    elif os.path.isdir(model_id):
         list_remote_files = os.listdir(model_id)
         if ADAPTER_CONFIG_NAME in list_remote_files:
             adapter_cached_filename = os.path.join(model_id, ADAPTER_CONFIG_NAME)
