@@ -239,9 +239,7 @@ class BrosEmbeddings(nn.Module):
         )
 
         self.bbox_sinusoid_emb = BrosPositionalEmbedding2D(config)
-        self.bbox_projection = nn.Linear(
-            config.dim_bbox_sinusoid_emb_2d, config.hidden_size // config.num_attention_heads, bias=False
-        )
+        self.bbox_projection = nn.Linear(config.dim_bbox_sinusoid_emb_2d, config.dim_bbox_projection, bias=False)
 
     def forward(
         self,

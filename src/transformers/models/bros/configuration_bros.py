@@ -66,10 +66,13 @@ class BrosConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 0):
             The index of the padding token in the token vocabulary.
+        dim_bbox (`int`, *optional*, defaults to 8):
+            The dimension of the bounding box coordinates. (x0, y1, x1, y0, x1, y1, x0, y1)
         bbox_scale (`float`, *optional*, defaults to 100.0):
             The scale factor of the bounding box coordinates.
         n_relations (`int`, *optional*, defaults to 1):
             The number of relations for SpadeEE(entity extraction), SpadeEL(entity linking) head.
+
 
     Examples:
 
@@ -102,6 +105,7 @@ class BrosConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        dim_bbox=8,
         bbox_scale=100.0,
         n_relations=1,
         **kwargs,
@@ -123,10 +127,9 @@ class BrosConfig(PretrainedConfig):
             **kwargs,
         )
 
-        # dimension of boudning box, 8 means (x1, y1, x2, y2, x3, y3, x4, y4)
-        self.dim_bbox = 8
-        self.dim_bbox_sinusoid_emb_2d = hidden_size // 4
-        self.dim_bbox_sinusoid_emb_1d = self.dim_bbox_sinusoid_emb_2d // self.dim_bbox
-        self.dim_bbox_projection = hidden_size // num_attention_heads
+        self.dim_bbox = dim_bbox
         self.bbox_scale = bbox_scale
         self.n_relations = n_relations
+        self.dim_bbox_sinusoid_emb_2d = self.hidden_size // 4
+        self.dim_bbox_sinusoid_emb_1d = self.dim_bbox_sinusoid_emb_2d // self.dim_bbox
+        self.dim_bbox_projection = self.hidden_size // self.num_attention_heads
