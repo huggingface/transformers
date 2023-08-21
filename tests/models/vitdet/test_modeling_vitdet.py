@@ -246,6 +246,7 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    # overwrite since VitDet only supports retraining gradients of hidden states
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
@@ -266,16 +267,9 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         hidden_states = outputs.hidden_states[0]
         hidden_states.retain_grad()
 
-        if self.has_attentions:
-            attentions = outputs.attentions[0]
-            attentions.retain_grad()
-
         output.flatten()[0].backward(retain_graph=True)
 
         self.assertIsNotNone(hidden_states.grad)
-
-        if self.has_attentions:
-            self.assertIsNotNone(attentions.grad)
 
     @unittest.skip(reason="VitDet does not support feedforward chunking")
     def test_feed_forward_chunking(self):
