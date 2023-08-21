@@ -297,10 +297,6 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
             # We need to actually check for a real protocol, otherwise it's impossible to use a local file
             # like http_huggingface_co.png
             image = PIL.Image.open(requests.get(image, stream=True, timeout=timeout).raw)
-        elif image.startswith("data:image/"):
-            # Try to load as base64
-            b64 = base64.b64decode(image.split(",")[1])
-            image = PIL.Image.open(BytesIO(b64))
         elif os.path.isfile(image):
             image = PIL.Image.open(image)
         else:
