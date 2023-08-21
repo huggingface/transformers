@@ -433,10 +433,14 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
     @property
     def default_prompt_config(self):
         # BlenderBot actually tokenizes messages together with a "  " separator between them, so we try to imitate that
+        template = ("{% for message in messages %}"
+                    "{% if message.role == 'user' %}{{ ' ' }}{% endif %}"
+                    "{{ message.content }}"
+                    "{% if not loop.last %}{{ '  ' }}{% endif %}"
+                    "{% endfor %}")
         return {
-            "role_prefixes": {"user": " "},
+            "template": template,
             "tokenize_separately": False,
-            "join_string": "  ",
             "add_special_tokens": True,
             "max_length": self.model_max_length,
         }

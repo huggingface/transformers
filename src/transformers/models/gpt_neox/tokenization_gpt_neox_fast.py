@@ -145,12 +145,9 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
 
     @property
     def default_prompt_config(self):
+        template = "{{ message.content }}{{ special_tokens['eos_token'] }}"
         return {
-            "role_token_suffixes": {
-                "user": [self.eos_token_id],
-                "assistant": [self.eos_token_id],
-                "system": [self.eos_token_id],
-            },
+            "template": template,
             "tokenize_separately": True,
             "add_special_tokens": False,
             "max_length": self.model_max_length,

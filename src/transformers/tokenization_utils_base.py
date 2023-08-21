@@ -28,6 +28,7 @@ from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
+from jinja2.sandbox import ImmutableSandboxedEnvironment
 
 import numpy as np
 from packaging import version
@@ -1570,20 +1571,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     @property
     def default_prompt_config(self):
-        role_prefixes = {
-            "system": "[SYS]",
-            "user": "[USER_MSG]",
-            "assistant": "[ASST_MSG]",
-        }
-        role_suffixes = {
-            "system": "[/SYS]",
-            "user": "[/USER_MSG]",
-            "assistant": "[/ASST_MSG]",
-        }
+        template = ("{% for message in messages %}"
+                    "{% if message.role == 'system' %}{{[SYS]}} {{message.text }} {{ [/SYS]] }}"
+                    "{% elif message.role == 'user' %}{{ [USER_MSG] }} {{ message.text }} {{ [/USER_MSG] }}"
+                    "{% elif message.role == 'assistant' %}{{ [ASST_MSG] }} {{ message.text }} {{ [/ASST_MSG] }}"
+                    "{% endif %}"
+                    "{% endfor %}")
         return {
-            "role_prefixes": role_prefixes,
-            "role_suffixes": role_suffixes,
-            "tokenize_separately": True,
+            "template": template,
+            "tokenize_separately": False,
             "add_special_tokens": False,
         }
 
@@ -1685,7 +1681,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if prompt_config is None:
             prompt_config = self.prompt_config
 
-        # TODO How will this handle partial updates, such as when the kwargs only cover one role?
         prompt_config.update(**kwargs)
 
         if prompt_config.default_system_prompt is not None and (
@@ -1693,48 +1688,29 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         ):
             conversation = [{"role": "system", "content": prompt_config.default_system_prompt}] + conversation.messages
 
-        dialog_tokens: List[int] = []
-
         tokenize_separately = prompt_config.tokenize_separately
         if tokenize_separately is None:
             tokenize_separately = self.default_prompt_config.get("tokenize_separately", True)
         add_special_tokens = prompt_config.add_special_tokens
         if add_special_tokens is None:
             add_special_tokens = self.default_prompt_config.get("add_special_tokens", False)
-        if not tokenize_separately:
-            messages = []
-            join_string = prompt_config.join_string
-            if join_string is None:
-                join_string = self.default_prompt_config.get("join_string", None)
-            if join_string is None:
-                raise ValueError("Tokenizing chat messages jointly but no join_string specified in prompt_config!")
-        for message in conversation:
-            role = message["role"]
-            message_prefix = prompt_config.role_prefixes.get(role, None)
-            if message_prefix is None:
-                default_prefixes = self.default_prompt_config.get("role_prefixes", {})
-                message_prefix = default_prefixes.get(role, "")
-            message_suffix = prompt_config.role_suffixes.get(role, None)
-            if message_suffix is None:
-                default_suffixes = self.default_prompt_config.get("role_suffixes", {})
-                message_suffix = default_suffixes.get(role, "")
-            message_prefix_tokens = prompt_config.role_token_prefixes.get(role, None)
-            if message_prefix_tokens is None:
-                default_prefix_tokens = self.default_prompt_config.get("role_token_prefixes", {})
-                message_prefix_tokens = default_prefix_tokens.get(role, [])
-            message_suffix_tokens = prompt_config.role_token_suffixes.get(role, None)
-            if message_suffix_tokens is None:
-                default_suffix_tokens = self.default_prompt_config.get("role_token_suffixes", {})
-                message_suffix_tokens = default_suffix_tokens.get(role, [])
-            message = "".join([message_prefix, message["content"].strip(), message_suffix])
-            if tokenize_separately:
-                tokenized_message = self.encode(message, add_special_tokens=add_special_tokens)
-                tokenized_message = message_prefix_tokens + tokenized_message + message_suffix_tokens
-                dialog_tokens.extend(tokenized_message)
-            else:
-                messages.append(message)
-        if not tokenize_separately:
-            dialog_tokens = self.encode(join_string.join(messages), add_special_tokens=add_special_tokens)
+        template = prompt_config.template
+        if template is None:
+            template = self.default_prompt_config.get("template", None)
+            if template is None:
+                raise ValueError("No template specified in either PromptConfig or default_prompt_config!")
+        jinja_env = ImmutableSandboxedEnvironment()
+        template = jinja_env.from_string(template)
+        if tokenize_separately:
+            dialog_tokens = []
+            for message in conversation:
+                rendered = template.render(message=message, special_tokens=self.special_tokens_map)
+                tokenized = self.encode(rendered, add_special_tokens=add_special_tokens)
+                dialog_tokens.extend(tokenized)
+        else:
+
+            rendered = template.render(messages=conversation, special_tokens=self.special_tokens_map)
+            dialog_tokens = self.encode(rendered, add_special_tokens=add_special_tokens)
         return dialog_tokens
 
     @classmethod
