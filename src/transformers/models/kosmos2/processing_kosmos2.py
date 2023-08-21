@@ -59,7 +59,10 @@ class Kosmos2Processor(ProcessorMixin):
     """
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "CLIPImageProcessor"
-    tokenizer_class = ("Kosmos2Tokenizer", "Kosmos2TokenizerFast")
+    # Better to use explicit classes if local code works
+    # tokenizer_class = ("Kosmos2Tokenizer", "Kosmos2TokenizerFast")
+    # To make remote code work
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer):
         tokenizer.return_token_type_ids = False
@@ -331,8 +334,12 @@ class Kosmos2Processor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    def post_processor_generation(self, text):
-        return text.split("</image>")[-1]
+    def post_processor_generation(self, text, cleanup_and_extract=True):
+
+        caption = text.split("</image>")[-1]
+        if cleanup_and_extract:
+            return clean_text_and_extract_entities_with_bboxes(caption)
+        return caption
 
     @property
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.model_input_names
@@ -455,6 +462,7 @@ def coordinate_to_patch_index(bbox: Tuple[float, float, float, float], num_patch
 
 
 # copied from https://github.com/microsoft/unilm/blob/97e4923e97d3ee10b57e97013556e3fd0d207a9b/kosmos-2/demo/decode_string.py#L35C1-L75C38
+# (with format modifications)
 def patch_index_to_coordinate(ul_idx: int, lr_idx: int, num_patches_per_side: int):
     """
     Given a grid of length `num_patches_per_side` and the indices of the upper-left and lower-right corners of a
@@ -496,3 +504,99 @@ def patch_index_to_coordinate(ul_idx: int, lr_idx: int, num_patches_per_side: in
         y2 = lr_y * cell_size + cell_size / 2
 
     return x1, y1, x2, y2
+
+
+# copied from https://github.com/microsoft/unilm/blob/97e4923e97d3ee10b57e97013556e3fd0d207a9b/kosmos-2/demo/decode_string.py#L4-L33
+# (with format modifications)
+def extract_entities_with_patch_indices(text):
+    # The regular expression pattern for matching the required formats
+    pattern = r'(?:(<phrase>([^<]+)</phrase>))?<object>((?:<patch_index_\d+><patch_index_\d+></delimiter_of_multi_objects/>)*<patch_index_\d+><patch_index_\d+>)</object>'
+
+    # Find all matches in the given string
+    matches = re.finditer(pattern, text)
+
+    # Initialize an empty list to store the valid patch_index combinations
+    entities_with_patch_indices = []
+
+    for match in matches:
+        # span of a `phrase` that is between <phrase> and </phrase>
+        span = match.span(2)
+        phrase_tag, phrase, match_content = match.groups()
+        if not phrase_tag:
+            phrase = None
+            span = (None, None)
+
+        # Split the match_content by the delimiter to get individual patch_index pairs
+        patch_index_pairs = match_content.split('</delimiter_of_multi_objects/>')
+
+        entity_bboxes = []
+        for pair in patch_index_pairs:
+            # Extract the xxxx and yyyy values from the patch_index pair
+            x = re.search(r'<patch_index_(\d+)>', pair)
+            y = re.search(r'<patch_index_(\d+)>', pair[1:])
+
+            if x and y:
+                if phrase:
+                    entity_bboxes.append((int(x.group(1)), int(y.group(1))))
+                else:
+                    entity_bboxes.append((int(x.group(1)), int(y.group(1))))
+
+        if phrase:
+            entities_with_patch_indices.append((phrase, span, entity_bboxes))
+        else:
+            for bbox in entity_bboxes:
+                # fake entity name
+                entity = f"<patch_index_{bbox[0]}><patch_index_{bbox[1]}>"
+                entities_with_patch_indices.append((entity, span, [bbox]))
+
+    return entities_with_patch_indices
+
+
+# TODO: Be careful
+def remove_special_fields(text):
+    return re.sub('<.*?>', '', text)
+
+
+def adjust_entity_positions(entity, text):
+
+    entity_name, (start, end) = entity
+    adjusted_start = len(remove_special_fields(text[:start]))
+    adjusted_end = len(remove_special_fields(text[:end]))
+    adjusted_entity = (entity_name, (adjusted_start, adjusted_end))
+    return adjusted_entity
+
+
+# copied from https://github.com/microsoft/unilm/blob/97e4923e97d3ee10b57e97013556e3fd0d207a9b/kosmos-2/demo/decode_string.py#L77-L87
+# (with format modifications)
+def clean_text_and_extract_entities_with_bboxes(text, num_patches_per_side=32):
+
+    processed_text = remove_special_fields(text)
+
+    entities_with_patch_indices = extract_entities_with_patch_indices(text)
+    entities = []
+    for item in entities_with_patch_indices:
+        entity, bboxes = item[0:2], item[2]
+        adjusted_entity = adjust_entity_positions(entity, text)
+        bboxes_in_coords = list(map(lambda bbox: patch_index_to_coordinate(bbox[0], bbox[1], num_patches_per_side), bboxes))
+
+        entities.append(adjusted_entity + (bboxes_in_coords,))
+
+    def cleanup_spaces(text, entities):
+        new_text = text.strip()
+        leading_spaces = len(text) - len(text.lstrip())
+
+        new_entities = []
+        for entity_name, (start, end), bboxes in entities:
+
+            entity_name_leading_spaces = len(entity_name) - len(entity_name.lstrip())
+            entity_name_trailing_spaces = len(entity_name) - len(entity_name.rstrip())
+
+            start = start - leading_spaces + entity_name_leading_spaces
+            end = end - leading_spaces - entity_name_trailing_spaces
+            entity_name = entity_name.strip()
+
+            new_entities.append((entity_name, (start, end), bboxes))
+
+        return new_text, new_entities
+
+    return cleanup_spaces(processed_text, entities)
