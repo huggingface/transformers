@@ -1538,7 +1538,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         is_multilingual=None,
         prompt_ids: Optional[torch.Tensor] = None,
         return_token_timestamps=None,
-        num_frames=None,
         **kwargs,
     ):
         """
@@ -1605,9 +1604,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 Whether to return token-level timestamps with the text. This can be used with or without the
                 `return_timestamps` option. To get word-level timestamps, use the tokenizer to group the tokens into
                 words.
-            num_frames (`float`, *optional*):
-                The number of audio frames available in this chunk. This is only used when generating word-level
-                timestamps.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -1743,9 +1739,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             forced_decoder_ids = [(rank + 1, token) for rank, token in enumerate(forced_decoder_ids)]
             generation_config.forced_decoder_ids = forced_decoder_ids
 
-        if num_frames is not None:
-            generation_config.num_frames = num_frames
-
         if generation_config.return_timestamps:
             logits_processor = [WhisperTimeStampLogitsProcessor(generation_config)]
 
@@ -1760,6 +1753,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                     "Model generation config has no `alignment_heads`, token-level timestamps not available. "
                     "See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the generation config."
                 )
+
+            if kwargs.get("num_frames") is not None:
+                generation_config.num_frames = kwargs.pop("num_frames")
 
         outputs = super().generate(
             inputs,
@@ -1810,7 +1806,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
     def _extract_token_timestamps(self, generate_outputs, alignment_heads, time_precision=0.02, num_frames=None):
         """
         Calculates token-level timestamps using the encoder-decoder cross-attentions and dynamic time-warping (DTW) to
-        map each output token to a position in the input audio.
+        map each output token to a position in the input audio. If `num_frames` is specified, the encoder-decoder
+        cross-attentions will be cropped before applying DTW.
 
         Returns:
             tensor containing the timestamps in seconds for each predicted token
