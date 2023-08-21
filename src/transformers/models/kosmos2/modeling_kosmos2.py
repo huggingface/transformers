@@ -1429,7 +1429,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel):
             batch_size, seq_len = input_ids.size()
             mask_len = img_attn_mask.size()[-1]
             img_attn_mask = torch.cat(
-                (img_attn_mask, torch.zeros(size=(batch_size, seq_len - mask_len), dtype=torch.bool)), dim=1
+                (img_attn_mask, torch.zeros(size=(batch_size, seq_len - mask_len), dtype=torch.bool, device=input_ids.device)), dim=1
             )
 
         return {
