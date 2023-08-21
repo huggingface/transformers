@@ -91,8 +91,9 @@ DINOV2_INPUTS_DOCSTRING = r"""
 """
 
 
+# Copied from transformers.models.vit.modeling_flax_vit.FlaxViTEmbeddings with ViT->Dinov2
 class FlaxDinov2Embeddings(nn.Module):
-    """Construct the CLS token, mask token, position and patch embeddings."""
+    """Construct the CLS token, position and patch embeddings."""
 
     config: Dinov2Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -233,6 +234,7 @@ class FlaxDinov2SelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_flax_vit.FlaxViTSelfOutput with ViT->Dinov2
 class FlaxDinov2SelfOutput(nn.Module):
     config: Dinov2Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -253,6 +255,7 @@ class FlaxDinov2SelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_flax_vit.FlaxViTAttention with ViT->Dinov2
 class FlaxDinov2Attention(nn.Module):
     config: Dinov2Config
     dtype: jnp.dtype = jnp.float32
