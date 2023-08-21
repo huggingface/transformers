@@ -300,7 +300,6 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
             image = PIL.Image.open(requests.get(image, stream=True, timeout=timeout).raw)
         elif image.startswith("data:image/"):
             # Try to load as base64
-            print(image.split(",")[1])
             b64 = base64.b64decode(image.split(",")[1])
             image = PIL.Image.open(BytesIO(b64))
         elif os.path.isfile(image):
