@@ -348,11 +348,11 @@ class VitDetResBottleneckBlock(nn.Module):
         Args:
             config (`VitDetConfig`):
                 Model configuration.
-            in_channels (int):
+            in_channels (`int`):
                 Number of input channels.
-            out_channels (int):
+            out_channels (`int`):
                 Number of output channels.
-            bottleneck_channels (int):
+            bottleneck_channels (`int`):
                 Number of output channels for the 3x3 "bottleneck" conv layers.
         """
         super().__init__()
