@@ -1406,13 +1406,13 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
       Max_initial_timestamp change:
       Please note that the example below is theoretical and is highly dependent on the input data.
       The code above to change this value remains valid; however, the exact value of max_initial_timestamp depends heavily on the input dataset.
-      Adjusting the Max_initial_timestamp will alter the prediction window for the first value. 
+      Adjusting the Max_initial_timestamp will alter the prediction window for the first value.
 
       "Lonny's pictures are a sort of up-guards and atom paintings, and Mason's exquisite idles are as national as a jingo poem."
 
       No_time_stamp_token_id change:
       The no_timestamps_token_id denotes that the associated token should not have a timestamp in the transcription.
-      This could imply that there might be background noise or other artifacts that are undesirable. 
+      This could imply that there might be background noise or other artifacts that are undesirable.
       To identify the tokens that should be omitted, one would need to examine the transcribed output and list the token IDs corresponding to specific words.
 
       Note: Use this setting with caution. Suppressing crucial tokens can result in transcriptions that diverge from the original audio.
