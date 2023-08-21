@@ -279,7 +279,7 @@ class BrosEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings
 
-    def calc_bbox_pos_emb(self, bbox):
+    def calculate_bbox_pos_emb(self, bbox):
         # bbox_t: [seq_length, batch_size, dim_bbox]
         bbox_t = bbox.transpose(0, 1)
         bbox_pos = bbox_t[None, :, :, :] - bbox_t[:, None, :, :]
@@ -729,7 +729,7 @@ class BrosPooler(nn.Module):
         return pooled_output
 
 
-class RelationExtractor(nn.Module):
+class BrosRelationExtractor(nn.Module):
     def __init__(
         self,
         n_relations,
@@ -939,7 +939,7 @@ class BrosModel(BrosPreTrainedModel):
         )
 
         scaled_bbox = bbox * self.config.bbox_scale
-        bbox_position_embeddings = self.embeddings.calc_bbox_pos_emb(scaled_bbox)
+        bbox_position_embeddings = self.embeddings.calculate_bbox_pos_emb(scaled_bbox)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -1093,7 +1093,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         )
 
         # Subsequent token classification for Entity Extraction (NER)
-        self.subsequent_token_classifier = RelationExtractor(
+        self.subsequent_token_classifier = BrosRelationExtractor(
             n_relations=config.n_relations,
             backbone_hidden_size=config.hidden_size,
             head_hidden_size=config.hidden_size,
@@ -1214,7 +1214,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
             config.classifier_dropout if hasattr(config, "classifier_dropout") else config.hidden_dropout_prob
         )
 
-        self.entity_linker = RelationExtractor(
+        self.entity_linker = BrosRelationExtractor(
             n_relations=config.n_relations,
             backbone_hidden_size=config.hidden_size,
             head_hidden_size=config.hidden_size,
