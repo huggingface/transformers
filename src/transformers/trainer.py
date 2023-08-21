@@ -60,7 +60,7 @@ from .data.data_collator import DataCollator, DataCollatorWithPadding, default_d
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .dependency_versions_check import dep_version_check
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
-from .lib_integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint
+from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
@@ -1197,7 +1197,7 @@ class Trainer:
             # Rebuild the deepspeed config to reflect the updated training parameters
             from accelerate.utils import DeepSpeedPlugin
 
-            from transformers.lib_integrations.deepspeed import HfTrainerDeepSpeedConfig
+            from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
             self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
             self.args.hf_deepspeed_config.trainer_config_process(self.args)
@@ -3899,7 +3899,7 @@ class Trainer:
 
         if self.is_deepspeed_enabled:
             if getattr(self.args, "hf_deepspeed_config", None) is None:
-                from transformers.lib_integrations.deepspeed import HfTrainerDeepSpeedConfig
+                from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
                 ds_plugin = self.accelerator.state.deepspeed_plugin
 

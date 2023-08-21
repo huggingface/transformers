@@ -47,7 +47,7 @@ from .integrations import (
     is_sigopt_available,
     is_wandb_available,
 )
-from .lib_integrations.deepspeed import is_deepspeed_available
+from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     is_accelerate_available,
     is_apex_available,

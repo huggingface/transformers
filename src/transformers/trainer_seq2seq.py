@@ -21,7 +21,7 @@ from torch import nn
 from torch.utils.data import Dataset
 
 from .generation.configuration_utils import GenerationConfig
-from .lib_integrations.deepspeed import is_deepspeed_zero3_enabled
+from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .trainer import Trainer
 from .utils import logging
 

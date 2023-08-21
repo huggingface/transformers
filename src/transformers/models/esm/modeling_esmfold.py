@@ -23,7 +23,7 @@ import torch
 import torch.nn as nn
 from torch.nn import LayerNorm
 
-from ...lib_integrations.deepspeed import is_deepspeed_available
+from ...integrations.deepspeed import is_deepspeed_available
 from ...modeling_outputs import ModelOutput
 from ...utils import (
     ContextManagers,

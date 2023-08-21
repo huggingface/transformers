@@ -27,7 +27,7 @@ from parameterized import parameterized
 import tests.trainer.test_trainer
 from tests.trainer.test_trainer import TrainerIntegrationCommon  # noqa
 from transformers import AutoModel, TrainingArguments, is_torch_available, logging
-from transformers.lib_integrations.deepspeed import (
+from transformers.integrations.deepspeed import (
     HfDeepSpeedConfig,
     is_deepspeed_available,
     unset_hf_deepspeed_config,
@@ -117,7 +117,7 @@ def require_deepspeed_aio(test_case):
 if is_deepspeed_available():
     from deepspeed.utils import logger as deepspeed_logger  # noqa
     from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
-    from transformers.lib_integrations.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
+    from transformers.integrations.deepspeed import deepspeed_config, is_deepspeed_zero3_enabled  # noqa
 
 
 def get_launcher(distributed=False):
