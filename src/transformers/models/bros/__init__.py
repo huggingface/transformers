@@ -27,7 +27,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_bros_fast"] = ["BrosTokenizerFast"]
+    _import_structure["processing_bros"] = ["BrosProcessor"]
 
 try:
     if not is_torch_available():
@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_bros_fast import BrosTokenizerFast
+        from .processing_bros import BrosProcessor
 
     try:
         if not is_torch_available():
