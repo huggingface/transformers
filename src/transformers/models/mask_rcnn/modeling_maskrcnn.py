@@ -3269,7 +3269,7 @@ class MaskRCNNRoIHead(nn.Module):
             feature_maps (`List[torch.Tensor]`):
                 List of multi-level image features.
             img_metas (`List[Dict]`):
-                List of image info dict where each dict. Has: 'img_shape', 'scale_factor', 'flip', and may also contain
+                List of image info dict where each dict has: 'img_shape', 'scale_factor', 'flip', and may also contain
                 'filename', 'ori_shape', 'pad_shape', and 'img_norm_cfg'. For details on the values of these keys see
                 `mmdet/datasets/pipelines/formatting.py:Collect`.
             proposals (`List[torch.Tensor]`):
@@ -3459,12 +3459,12 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, MaskRCNNModelOutput]:
         r"""
-        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
+        labels (`List[Dict]` of length `batch_size`, *optional*):
             Labels for computing the loss. List of dicts, each dictionary containing at least the following 4 keys:
             'class_labels', 'boxes' (the class labels, bounding boxes and masks of an image in the batch respectively).
             The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes in the
             image,)`, the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)` and the
-            `masks` a `torch.FloatTensor` of shape .
+            `masks` a `torch.FloatTensor` of shape `(number of bounding boxes in the image, height, width)`.
 
         Returns:
 

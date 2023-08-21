@@ -193,8 +193,7 @@ class MaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
-        if return_labels:
-            if model_class.__name__ in ["MaskRCNNForObjectDetection"]:
+        if return_labels and model_class.__name__ in ["MaskRCNNForObjectDetection"]:
                 labels = []
                 for _ in range(self.model_tester.batch_size):
                     target = {}

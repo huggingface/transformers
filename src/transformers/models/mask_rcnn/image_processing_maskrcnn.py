@@ -602,7 +602,6 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays
         images = [to_numpy_array(image) for image in images]
-        [image.shape for image in images]
 
         # prepare (COCO annotations as a list of Dict -> target as a single Dict per image)
         if annotations is not None:
@@ -696,33 +695,26 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         """Get segmentation masks from mask_pred and bboxes.
 
         Args:
-            mask_pred (Tensor or ndarray): shape (n, #class, h, w).
-                For single-scale testing, mask_pred is the direct output of model, whose type is Tensor, while for
+            mask_pred (`torch.Tensor or ndarray` of shape `(n, #class, height, width)`).
+                For single-scale testing, mask_pred is the direct output of model, whose type is `torch.Tensor`, while for
                 multi-scale testing, it will be converted to numpy array outside of this method.
-            det_bboxes (Tensor): shape (n, 4/5)
-            det_labels (Tensor): shape (n, )
-            rcnn_test_cfg (dict): rcnn testing config
-            ori_shape (Tuple): original image height and width, shape (2,)
-            scale_factor(ndarray | Tensor): If `rescale is True`, box
-                coordinates are divided by this scale factor to fit `ori_shape`.
-            rescale (bool): If True, the resulting masks will be rescaled to
-                `ori_shape`.
+            det_bboxes (`torch.Tensor` of shape `(n, 4/5)`):
+                Tensor containing detected bounding boxes.
+            det_labels (`torch.Tensor` of shape `(n,)`):
+                Tensor containing corresponding labels.
+            rcnn_test_cfg (dict):
+                R-CNN testing config.
+            ori_shape (Tuple):
+                Original image height and width, shape (2,)
+            scale_factor(ndarray | Tensor):
+                If `rescale is True`, box coordinates are divided by this scale factor to fit `ori_shape`.
+            rescale (bool):
+                If True, the resulting masks will be rescaled to `ori_shape`.
 
         Returns:
             list[list]: encoded masks. The c-th item in the outer list
                 corresponds to the c-th class. Given the c-th outer list, the i-th item in that inner list is the mask
                 for the i-th box with class label c.
-        Example:
-            >>> import mmcv >>> from mmdet.models.roi_heads.mask_heads.fcn_mask_head import * # NOQA >>> N = 7 # N =
-            number of extracted ROIs >>> C, H, W = 11, 32, 32 >>> # Create example instance of FCN Mask Head. >>> self
-            = FCNMaskHead(num_classes=C, num_convs=0) >>> inputs = torch.rand(N, self.in_channels, H, W) >>> mask_pred
-            = self.forward(inputs) >>> # Each input is associated with some bounding box >>> det_bboxes =
-            torch.Tensor([[1, 1, 42, 42 ]] * N) >>> det_labels = torch.randint(0, C, size=(N,)) >>> rcnn_test_cfg =
-            mmcv.Config({'mask_thr_binary': 0, }) >>> ori_shape = (H * 4, W * 4) >>> scale_factor =
-            torch.FloatTensor((1, 1)) >>> rescale = False >>> # Encoded masks are a list for each category. >>>
-            encoded_masks = self.get_seg_masks( >>> mask_pred, det_bboxes, det_labels, rcnn_test_cfg, ori_shape, >>>
-            scale_factor, rescale >>> ) >>> assert len(encoded_masks) == C >>> assert sum(list(map(len,
-            encoded_masks))) == N
         """
         if isinstance(mask_pred, torch.Tensor):
             mask_pred = mask_pred.sigmoid()
@@ -744,14 +736,14 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
             img_h = np.round(ori_shape[0] * h_scale.item()).astype(np.int32)
             img_w = np.round(ori_shape[1] * w_scale.item()).astype(np.int32)
 
-        N = len(mask_pred)
+        num_masks = len(mask_pred)
         # The actual implementation split the input into chunks,
         # and paste them chunk by chunk.
         if device.type == "cpu":
             # CPU is most efficient when they are pasted one by one with
             # skip_empty=True, so that it performs minimal number of
             # operations.
-            num_chunks = N
+            num_chunks = num_masks
         else:
             # GPU benefits from parallelism for larger chunks,
             # but may have memory issue
@@ -760,16 +752,16 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
             # the calculation of num_chunks will overflow.
             # so we need to change the types of img_w and img_h to int.
             # See https://github.com/open-mmlab/mmdetection/pull/5191
-            num_chunks = int(np.ceil(N * int(img_h) * int(img_w) * BYTES_PER_FLOAT / GPU_MEM_LIMIT))
-            if num_chunks > N:
+            num_chunks = int(np.ceil(num_masks * int(img_h) * int(img_w) * BYTES_PER_FLOAT / GPU_MEM_LIMIT))
+            if num_chunks > num_masks:
                 raise ValueError("Default GPU_MEM_LIMIT is too small; try increasing it")
-        chunks = torch.chunk(torch.arange(N, device=device), num_chunks)
+        chunks = torch.chunk(torch.arange(num_masks, device=device), num_chunks)
 
         threshold = rcnn_test_cfg["mask_thr_binary"]
-        im_mask = torch.zeros(N, img_h, img_w, device=device, dtype=torch.bool if threshold >= 0 else torch.uint8)
+        im_mask = torch.zeros(num_masks, img_h, img_w, device=device, dtype=torch.bool if threshold >= 0 else torch.uint8)
 
         if not self.class_agnostic:
-            mask_pred = mask_pred[range(N), labels][:, None]
+            mask_pred = mask_pred[range(num_masks), labels][:, None]
 
         for inds in chunks:
             masks_chunk, spatial_inds = _do_paste_mask(
@@ -784,7 +776,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
 
             im_mask[(inds,) + spatial_inds] = masks_chunk
 
-        for i in range(N):
+        for i in range(num_masks):
             cls_segms[labels[i]].append(im_mask[i].detach().cpu().numpy())
         return cls_segms
 
@@ -804,7 +796,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
                 Raw outputs of the model.
             threshold (`float`, *optional*):
                 Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*, defaults to `None`):
+            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
 
