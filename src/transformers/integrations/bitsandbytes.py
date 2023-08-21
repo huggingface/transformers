@@ -4,8 +4,8 @@ from copy import deepcopy
 
 from packaging import version
 
-from ...utils import logging
-from ...utils.import_utils import is_accelerate_available, is_bitsandbytes_available
+from ..utils import logging
+from ..utils.import_utils import is_accelerate_available, is_bitsandbytes_available
 
 
 if is_bitsandbytes_available():
@@ -13,7 +13,7 @@ if is_bitsandbytes_available():
     import torch
     import torch.nn as nn
 
-    from ...pytorch_utils import Conv1D
+    from ..pytorch_utils import Conv1D
 
 if is_accelerate_available():
     from accelerate import init_empty_weights

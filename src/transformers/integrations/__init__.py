@@ -11,8 +11,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .bitsandbytes import bitsandbytes
-from .deepspeed import deepspeed
+from .bitsandbytes import (
+    get_keys_to_not_convert,
+    replace_8bit_linear,
+    replace_with_bnb_linear,
+    set_module_8bit_tensor_to_device,
+    set_module_quantized_tensor_to_device,
+)
+from .deepspeed import (
+    HfDeepSpeedConfig,
+    HfTrainerDeepSpeedConfig,
+    deepspeed_config,
+    deepspeed_init,
+    deepspeed_load_checkpoint,
+    deepspeed_optim_sched,
+    is_deepspeed_available,
+    is_deepspeed_zero3_enabled,
+    set_hf_deepspeed_config,
+    unset_hf_deepspeed_config,
+)
 from .integration_utils import (
     INTEGRATION_TO_CALLBACK,
     AzureMLCallback,
