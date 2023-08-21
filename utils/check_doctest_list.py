@@ -37,7 +37,7 @@ import os
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_doctest_list.py
 REPO_PATH = "."
-DOCTEST_FILE_PATHS = ["documentation_tests.txt", "slow_documentation_tests.txt"]
+DOCTEST_FILE_PATHS = ["not_doctested.txt", "slow_documentation_tests.txt"]
 
 
 def clean_doctest_list(doctest_file: str, overwrite: bool = False):
@@ -62,7 +62,7 @@ def clean_doctest_list(doctest_file: str, overwrite: bool = False):
 
     if len(non_existent_paths) > 0:
         non_existent_paths = "\n".join([f"- {f}" for f in non_existent_paths])
-        raise ValueError(f"`utils/documentation_tests.txt` contains non-existent paths:\n{non_existent_paths}")
+        raise ValueError(f"`{doctest_file}` contains non-existent paths:\n{non_existent_paths}")
 
     sorted_paths = sorted(all_paths)
     if all_paths != sorted_paths:
