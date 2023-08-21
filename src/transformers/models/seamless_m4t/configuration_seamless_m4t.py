@@ -102,6 +102,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         max_position_embeddings=2048,
         use_cache=True,
+        is_encoder_decoder=True,
         # text|unit encoder|decoder
         encoder_layers=24,
         encoder_ffn_dim=8192,
@@ -233,6 +234,7 @@ class SeamlessM4TConfig(PretrainedConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             decoder_start_token_id=decoder_start_token_id,
+            is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
 
