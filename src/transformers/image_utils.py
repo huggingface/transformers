@@ -20,9 +20,6 @@ from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import requests
-import base64
-
-from io import BytesIO
 from packaging import version
 
 from .utils import (
