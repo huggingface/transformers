@@ -1606,7 +1606,8 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
                 `return_timestamps` option. To get word-level timestamps, use the tokenizer to group the tokens into
                 words.
             num_frames (`float`, *optional*):
-                The number of audio frames available in this chunk. This is only used when generating word-level timestamps.
+                The number of audio frames available in this chunk. This is only used when generating word-level
+                timestamps.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
