@@ -179,20 +179,9 @@ class BrosPositionalEmbedding1D(nn.Module):
 
     def forward(self, pos_seq: torch.Tensor) -> torch.Tensor:
         seq_size = pos_seq.size()
-
-        if len(seq_size) == 2:
-            b1, b2 = seq_size
-            sinusoid_inp = pos_seq.view(b1, b2, 1) * self.inv_freq.view(1, 1, self.dim_bbox_sinusoid_emb_1d // 2)
-        elif len(seq_size) == 3:
-            b1, b2, b3 = seq_size
-            sinusoid_inp = pos_seq.view(b1, b2, b3, 1) * self.inv_freq.view(
-                1, 1, 1, self.dim_bbox_sinusoid_emb_1d // 2
-            )
-        else:
-            raise ValueError(f"Invalid seq_size={len(seq_size)}")
-
+        b1, b2, b3 = seq_size
+        sinusoid_inp = pos_seq.view(b1, b2, b3, 1) * self.inv_freq.view(1, 1, 1, self.dim_bbox_sinusoid_emb_1d // 2)
         pos_emb = torch.cat([sinusoid_inp.sin(), sinusoid_inp.cos()], dim=-1)
-
         return pos_emb
 
 
