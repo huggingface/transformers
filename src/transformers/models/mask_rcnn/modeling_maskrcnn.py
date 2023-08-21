@@ -60,6 +60,8 @@ MASK_RCNN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all MaskRCNN models at https://huggingface.co/models?filter=convnext_maskrcnn
 ]
 
+ArrayType = Union[torch.Tensor, np.ndarray]
+
 
 @dataclass
 class MaskRCNNRPNOutput(ModelOutput):
@@ -69,7 +71,7 @@ class MaskRCNNRPNOutput(ModelOutput):
     Args:
         losses (`torch.FloatTensor`):
             Losses of the RPN head.
-        proposal_list (`list[`torch.FloatTensor`]`):
+        proposal_list (list[`torch.FloatTensor`]):
             List of proposals, for each example in the batch. Each proposal is a `torch.FloatTensor` of shape
             (num_proposals, 5). Each proposal is of the format (top_left_x, top_left_y, bottom_right_x, bottom_right_y,
             objectness_score).
@@ -107,7 +109,7 @@ class MaskRCNNModelOutput(ModelOutput):
             Hidden states of the FPN (Feature Pyramid Network).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden states of
             the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
@@ -146,6 +148,8 @@ def reduce_loss(loss, reduction):
         return loss.mean()
     elif reduction_enum == 2:
         return loss.sum()
+    else:
+        raise ValueError(f"Reduction {reduction} not supported.")
 
 
 def weight_reduce_loss(loss, weight=None, reduction="mean", avg_factor=None):
@@ -178,9 +182,10 @@ def weight_reduce_loss(loss, weight=None, reduction="mean", avg_factor=None):
             # i.e., all labels of an image belong to ignore index.
             eps = torch.finfo(torch.float32).eps
             loss = loss.sum() / (avg_factor + eps)
-        # if reduction is 'none', then do nothing, otherwise raise an error
-        elif reduction != "none":
-            raise ValueError('avg_factor can not be used with reduction="sum"')
+        elif reduction == "none":
+            pass
+        else:
+            raise ValueError(f'avg_factor can not be used with {reduction=}')
     return loss
 
 
@@ -1095,14 +1100,17 @@ class MaskRCNNAnchorGenerator(nn.Module):
 
     @property
     def num_base_anchors(self):
-        """list[int]: total number of base anchors in a feature grid"""
+        """
+        Returns:
+            List[`int`]: total number of base anchors in a feature grid.
+        """
         return self.num_base_priors
 
     @property
     def num_base_priors(self):
         """
-        Returns;:
-            `List[int]`: The number of priors (anchors) at a point on the feature grid
+        Returns:
+            List[`int`]: The number of priors (anchors) at a point on the feature grid.
         """
         return [base_anchors.size(0) for base_anchors in self.base_anchors]
 
@@ -1110,7 +1118,8 @@ class MaskRCNNAnchorGenerator(nn.Module):
     def num_levels(self):
         """
         Returns:
-            `int`: number of feature levels that the generator will be applied"""
+            `int`: number of feature levels that the generator will be applied.
+        """
         return len(self.strides)
 
     def gen_base_anchors(self):
@@ -3202,8 +3211,6 @@ class MaskRCNNRoIHead(nn.Module):
         if rois is not None:
             mask_feats = self.mask_roi_extractor(x[: self.mask_roi_extractor.num_inputs], rois)
         else:
-            if bbox_feats is None:
-                raise ValueError("bbox_feats must be specified when pos_indices is specified")
             mask_feats = bbox_feats[pos_indices]
 
         mask_pred = self.mask_head(mask_feats)
@@ -3241,7 +3248,6 @@ class MaskRCNNRoIHead(nn.Module):
         if rescale:
             scale_factors = [scale_factor.to(det_bboxes[0].device) for scale_factor in scale_factors]
         _bboxes = [
-            # det_bboxes[i][:, :4] * scale_factors[i] if rescale else det_bboxes[i][:, :4]
             det_bboxes[i] * scale_factors[i] if rescale else det_bboxes[i]
             for i in range(len(det_bboxes))
         ]
@@ -3387,6 +3393,9 @@ MASK_RCNN_INPUTS_DOCSTRING = r"""
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
             [`AutoImageProcessor.__call__`] for details.
 
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers in case the backbone has them. See
+            `attentions` under returned tensors for more detail.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -3416,7 +3425,7 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def parse_losses(self, losses):
+    def aggregate_loss(self, losses):
         """Parse the raw outputs (losses) of the network.
 
         Source:
@@ -3540,7 +3549,7 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
             )
             loss_dict.update(roi_losses)
             # compute final loss
-            loss = self.parse_losses(loss_dict)
+            loss = self.aggregate_loss(loss_dict)
         else:
             rpn_outputs = self.rpn_head(hidden_states, img_metas)
             rois, proposals, logits, pred_boxes = self.roi_head.forward_test(hidden_states, rpn_outputs.proposal_list)
@@ -3560,9 +3569,6 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
-ArrayType = Union[torch.Tensor, np.ndarray]
 
 
 def nms(
