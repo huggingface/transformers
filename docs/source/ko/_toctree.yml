@@ -119,8 +119,8 @@
       title: 다중 CPU에서 훈련하기
     - local: in_translation
       title: (번역중) Training on TPUs
-    - local: in_translation
-      title: (번역중) Training on TPU with TensorFlow
+    - local: perf_train_tpu_tf
+      title: TensorFlow로 TPU에서 훈련하기
     - local: in_translation
       title: (번역중) Training on Specialized Hardware
     - local: perf_infer_cpu
@@ -153,8 +153,8 @@
       title: (번역중) How to add a pipeline to 🤗 Transformers?
     - local: testing
       title: 테스트
-    - local: in_translation
-      title: (번역중) Checks on a Pull Request
+    - local: pr_checks
+      title: Pull Request에 대한 검사
   title: (번역중) 기여하기
 
 - sections:

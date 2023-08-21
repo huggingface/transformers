@@ -31,6 +31,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    infer_channel_dimension_format,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -118,6 +119,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
         crop_pct: float,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -137,6 +139,9 @@ class ConvNextImageProcessor(BaseImageProcessor):
                 Resampling filter to use when resizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred from the input
+                image.
         """
         size = get_size_dict(size, default_to_square=False)
         if "shortest_edge" not in size:
@@ -146,14 +151,34 @@ class ConvNextImageProcessor(BaseImageProcessor):
         if shortest_edge < 384:
             # maintain same ratio, resizing shortest edge to shortest_edge/crop_pct
             resize_shortest_edge = int(shortest_edge / crop_pct)
-            resize_size = get_resize_output_image_size(image, size=resize_shortest_edge, default_to_square=False)
-            image = resize(image=image, size=resize_size, resample=resample, data_format=data_format, **kwargs)
+            resize_size = get_resize_output_image_size(
+                image, size=resize_shortest_edge, default_to_square=False, input_data_format=input_data_format
+            )
+            image = resize(
+                image=image,
+                size=resize_size,
+                resample=resample,
+                data_format=data_format,
+                input_data_format=input_data_format,
+                **kwargs,
+            )
             # then crop to (shortest_edge, shortest_edge)
-            return center_crop(image=image, size=(shortest_edge, shortest_edge), data_format=data_format, **kwargs)
+            return center_crop(
+                image=image,
+                size=(shortest_edge, shortest_edge),
+                data_format=data_format,
+                input_data_format=input_data_format,
+                **kwargs,
+            )
         else:
             # warping (no cropping) when evaluated at 384 or larger
             return resize(
-                image, size=(shortest_edge, shortest_edge), resample=resample, data_format=data_format, **kwargs
+                image,
+                size=(shortest_edge, shortest_edge),
+                resample=resample,
+                data_format=data_format,
+                input_data_format=input_data_format,
+                **kwargs,
             )
 
     def preprocess(
@@ -170,6 +195,7 @@ class ConvNextImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -209,8 +235,15 @@ class ConvNextImageProcessor(BaseImageProcessor):
                     - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
-                    - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                    - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - Unset: Use the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         crop_pct = crop_pct if crop_pct is not None else self.crop_pct
@@ -247,16 +280,33 @@ class ConvNextImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
         if do_resize:
-            images = [self.resize(image=image, size=size, crop_pct=crop_pct, resample=resample) for image in images]
+            images = [
+                self.resize(
+                    image=image, size=size, crop_pct=crop_pct, resample=resample, input_data_format=input_data_format
+                )
+                for image in images
+            ]
 
         if do_rescale:
-            images = [self.rescale(image=image, scale=rescale_factor) for image in images]
+            images = [
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_normalize:
-            images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
+            images = [
+                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                for image in images
+            ]
 
-        images = [to_channel_dimension_format(image, data_format) for image in images]
+        images = [
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+        ]
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)

@@ -1001,6 +1001,11 @@ JIEBA_IMPORT_ERROR = """
 jieba`. Please note that you may need to restart your runtime after installation.
 """
 
+PEFT_IMPORT_ERROR = """
+{0} requires the peft library but it was not found in your environment. You can install it with pip: `pip install
+peft`. Please note that you may need to restart your runtime after installation.
+"""
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
@@ -1034,6 +1039,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("decord", (is_decord_available, DECORD_IMPORT_ERROR)),
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
         ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),
+        ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
     ]
 )
 

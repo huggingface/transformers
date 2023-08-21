@@ -33,6 +33,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    infer_channel_dimension_format,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -169,36 +170,79 @@ class OwlViTImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
         Resize an image to a certain size.
+
+        Args:
+            image (`np.ndarray`):
+                Image to resize.
+            size (`Dict[str, int]`):
+                The size to resize the image to. Must contain height and width keys.
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
+                The resampling filter to use when resizing the input.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
         """
         size = get_size_dict(size, default_to_square=True)
         if "height" not in size or "width" not in size:
             raise ValueError("size dictionary must contain height and width keys")
 
-        return resize(image, (size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs)
+        return resize(
+            image,
+            (size["height"], size["width"]),
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
 
     def center_crop(
         self,
         image: np.ndarray,
         crop_size: Dict[str, int],
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
         Center crop an image to a certain size.
+
+        Args:
+            image (`np.ndarray`):
+                Image to center crop.
+            crop_size (`Dict[str, int]`):
+                The size to center crop the image to. Must contain height and width keys.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
         """
         crop_size = get_size_dict(crop_size, default_to_square=True)
         if "height" not in crop_size or "width" not in crop_size:
             raise ValueError("crop_size dictionary must contain height and width keys")
 
-        return center_crop(image, (crop_size["height"], crop_size["width"]), data_format=data_format, **kwargs)
+        return center_crop(
+            image,
+            (crop_size["height"], crop_size["width"]),
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.rescale
     def rescale(
-        self, image: np.ndarray, rescale_factor: float, data_format: Optional[Union[str, ChannelDimension]] = None
+        self,
+        image: np.ndarray,
+        rescale_factor: float,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """
         Rescale the image by the given factor. image = image * rescale_factor.
@@ -213,8 +257,13 @@ class OwlViTImageProcessor(BaseImageProcessor):
                 image is used. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the input image. If unset, is inferred from the input image. Can be
+                one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
-        return rescale(image, rescale_factor, data_format=data_format)
+        return rescale(image, rescale_factor, data_format=data_format, input_data_format=input_data_format)
 
     def preprocess(
         self,
@@ -231,6 +280,7 @@ class OwlViTImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -277,6 +327,12 @@ class OwlViTImageProcessor(BaseImageProcessor):
                 - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - Unset: defaults to the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -312,19 +368,36 @@ class OwlViTImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays
         images = [to_numpy_array(image) for image in images]
 
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
         if do_resize:
-            images = [self.resize(image, size=size, resample=resample) for image in images]
+            images = [
+                self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_center_crop:
-            images = [self.center_crop(image, crop_size=crop_size) for image in images]
+            images = [
+                self.center_crop(image, crop_size=crop_size, input_data_format=input_data_format) for image in images
+            ]
 
         if do_rescale:
-            images = [self.rescale(image, rescale_factor=rescale_factor) for image in images]
+            images = [
+                self.rescale(image, rescale_factor=rescale_factor, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_normalize:
-            images = [self.normalize(image, mean=image_mean, std=image_std) for image in images]
+            images = [
+                self.normalize(image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                for image in images
+            ]
 
-        images = [to_channel_dimension_format(image, data_format) for image in images]
+        images = [
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+        ]
         encoded_inputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
         return encoded_inputs
 

@@ -220,7 +220,7 @@ class ConversationalPipelineTests(unittest.TestCase):
     @require_torch
     @slow
     def test_integration_torch_conversation_llama2_input_ids(self):
-        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf", use_default_system_prompt=True)
 
         conversation = Conversation(
             "What is so great about #1?",
