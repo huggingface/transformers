@@ -55,7 +55,6 @@ _EXPECTED_OUTPUT_SHAPE = [1, 257, 768]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "facebook/dinov2-base"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "LABEL_0"
 
 
 DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -694,7 +693,6 @@ class Dinov2ForImageClassification(Dinov2PreTrainedModel):
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
         output_type=ImageClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
     def forward(
         self,
