@@ -1330,8 +1330,13 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
 
 class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     r"""
-    Whisper specific Processor. This processor can be used to force a list of tokens. The processor will set their log
-    probs to `inf` so that they are sampled at their corresponding index.
+    [LogitsProcessor]Whisper specific Processor. This processor is specifically designed for the Whisper Automatic Speech Recognition model.
+    It facilitates the manipulation of log probabilities for a predefined list of tokens during text generation.
+    By using this processor, you can effectively "force" certain tokens to be selected at specific positions in the generated sequence.
+    When tokens are passed to this processor, their log probabilities are set to `inf` (infinity),ensuring that they are chosen at their corresponding indices.
+    This is particularly useful in scenarios where you want to have deterministic control over parts of the generated output.
+
+
 
     See [the paper](https://arxiv.org/abs/2212.04356) for more information.
 
@@ -1347,77 +1352,69 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                     predicting timestamps that are too far in the future.
 
 
-      "This code demonstrates how to use the Whisper ASR model with various configuration options to transcribe audio."
+    <Tip>
+    Make sure you set the sampling_rate` argument to this function below for the whisper model
+    </Tip>
 
-      Examples:
-      ```python
-      >>> import torch
-      >>> from transformers import AutoProcessor, WhisperForConditionalGeneration,GenerationConfig
-      >>> from datasets import load_dataset
+    #"This code demonstrates how to use the Whisper ASR model with various configuration options to transcribe audio."
 
-      >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
-      >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+    #Examples:
+    ``` py
+    >>> import torch
+    >>> from transformers import AutoProcessor, WhisperForConditionalGeneration,GenerationConfig
+    >>> from datasets import load_dataset
 
-      >>> generation_config = GenerationConfig.from_pretrained("openai/whisper-tiny.en")
-      >>> model.generation_config = generation_config
+    >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
+    >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
 
-      >>> #Downloading an example audio file to process
-      >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-      >>> file_index =4
+    >>> generation_config = GenerationConfig.from_pretrained("openai/whisper-tiny.en")
+    >>> model.generation_config = generation_config
 
-
-      >>> #Default
-      >>> #No changes to the model config file, initialized values are predefined.
-
-      >>> #Change EOS:
-      >>> #model.generation_config.eos_token_id = 21247
-
-      >>> #Change Max_initial_timestamp
-      >>> #model.generation_config.max_initial_timestamp_index= 100
-
-      >>> #Change No_timestamps_token_id
-      >>> model.generation_config.no_timestamps_token_id =4
+    >>> #Downloading an example audio file to process
+    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    >>> file_index =4
 
 
-      >>> inputs = processor(ds[file_index]["audio"]["array"], return_tensors="pt")
-      >>> input_features = inputs.input_features
-
-      >>> #this comment calls the code for the logits processor
-      >>> generated_ids = model.generate(inputs=input_features,return_timestamps=True)
-
-      >>> #Running the transcriptions after generating the logit scores
-      >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-      ```
+    >>> inputs = processor(ds[file_index]["audio"]["array"], return_tensors="pt")
+    >>> input_features = inputs.input_features
 
 
+    >>> #Default
+    >>> generated_ids = model.generate(inputs=input_features,return_timestamps=True)
+    >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    >>> print(transcription)
+    Linnell's pictures are a sort of up-guards and atom paintings, and Mason's exquisite idles are as national as a jingo poem. Mr. Birkett Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. And Mr. John Collier gives his sitter a cheerful slap in the back, before he says, like
 
-      Default output:
-      The output for the default values is as follows:
 
-      "Linnell's pictures are a sort of up-guards and atom paintings, and Mason's exquisite idles are as national as a jingo poem.
-      Mr. Birkett Foster's landscapes smile at one in much the same way that Mr. Carker used to flash his teeth."
+    >>> #Change EOS:
+    >>> #This allows the user to select a specific token to terminate the sequence on, in this case it's the word poem(21247)
+    >>> model.generation_config.eos_token_id = 21247
+    >>> generated_ids = model.generate(inputs=input_features,return_timestamps=True)
+    >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    >>> print(transcription)
+    Linnell's pictures are a sort of up-guards and atom paintings, and Mason's exquisite idles are as national as a jingo poem
 
-      EOS change:
-      For this change, the EOS (End of Sequence) token can be set to a specific value of interest.
-      In this example, the EOS token is set to the word "poem", thus terminating the transcription once the token ID for "poem" (21247) is detected:
 
-      "Linnell's pictures are a sort of up-guards and atom paintings, and Mason's exquisite idles are as national as a jingo poem."
+    >>> #Change Max_initial_timestamp
+    >>> #Changing the max initial timestamp only impacts the start of predictions for the first set of tokens
+    >>> #when this value is changed you're selecting the window of predictions for the first tokens.
+    >>> #Please note that there is not change from the previous code, since this paramter is highly based on input data.
+    >>> model.generation_config.max_initial_timestamp_index= 800
+    >>> generated_ids = model.generate(inputs=input_features,return_timestamps=True)
+    >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    >>> print(transcription)
+    Linnell's pictures are a sort of up-guards and atom paintings, and Mason's exquisite idles are as national as a jingo poem
 
-      Max_initial_timestamp change:
-      Please note that the example below is theoretical and is highly dependent on the input data.
-      The code above to change this value remains valid; however, the exact value of max_initial_timestamp depends heavily on the input dataset.
-      Adjusting the Max_initial_timestamp will alter the prediction window for the first value.
-
-      "Lonny's pictures are a sort of up-guards and atom paintings, and Mason's exquisite idles are as national as a jingo poem."
-
-      No_time_stamp_token_id change:
-      The no_timestamps_token_id denotes that the associated token should not have a timestamp in the transcription.
-      This could imply that there might be background noise or other artifacts that are undesirable.
-      To identify the tokens that should be omitted, one would need to examine the transcribed output and list the token IDs corresponding to specific words.
-
-      Note: Use this setting with caution. Suppressing crucial tokens can result in transcriptions that diverge from the original audio.
-
-      The resulting transcription will be a cleaned version of the audio, devoid of undesired artifacts.
+    >>> #Change No_timestamps_token_id
+    >>> #This ID represents tokens that shouldn't have timestamps in the transcription output.
+    >>> #Such tokens might be unwanted artifacts, special characters, or noise.
+    >>> #In this example, any token with ID '4' will be treated as a 'no timestamp' token.
+    >>> model.generation_config.no_timestamps_token_id =4
+    >>> generated_ids = model.generate(inputs=input_features,return_timestamps=True)
+    >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+    >>> print(transcription)
+    &L!s scriptures! are assorted! upguards! and atom! paintings!?! and Macy!s exquisite! itolls! are arsenal! as ding!o poem
+    ```
     """
 
     def __init__(self, generate_config):  # support for the kwargs
