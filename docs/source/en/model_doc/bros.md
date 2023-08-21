@@ -89,19 +89,10 @@ This model was contributed by [jinho8345](https://huggingface.co/jinho8345). The
 
 [[autodoc]] BrosConfig
 
+## BrosProcessor
 
-## BrosTokenizer
-
-[[autodoc]] BrosTokenizer
+[[autodoc]] BrosProcessor
     - __call__
-    - save_vocabulary
-
-
-## BrosTokenizerFast
-
-[[autodoc]] BrosTokenizerFast
-    - __call__
-
 
 ## BrosModel
 

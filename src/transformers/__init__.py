@@ -798,7 +798,6 @@ else:
     _import_structure["models.blenderbot"].append("BlenderbotTokenizerFast")
     _import_structure["models.blenderbot_small"].append("BlenderbotSmallTokenizerFast")
     _import_structure["models.bloom"].append("BloomTokenizerFast")
-    _import_structure["models.bros"].append("BrosTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
     _import_structure["models.codegen"].append("CodeGenTokenizerFast")

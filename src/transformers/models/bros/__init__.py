@@ -18,7 +18,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 _import_structure = {
     "configuration_bros": ["BROS_PRETRAINED_CONFIG_ARCHIVE_MAP", "BrosConfig"],
-    "tokenization_bros": ["BrosTokenizer"],
 }
 
 try:
@@ -47,7 +46,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_bros import BROS_PRETRAINED_CONFIG_ARCHIVE_MAP, BrosConfig
-    from .tokenization_bros import BrosTokenizer
 
     try:
         if not is_tokenizers_available():
