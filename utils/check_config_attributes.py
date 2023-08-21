@@ -58,6 +58,8 @@ SPECIAL_CASES_TO_ALLOW = {
     # used internally in the configuration class file
     "LongT5Config": ["feed_forward_proj"],
     # used internally in the configuration class file
+    "Pop2PianoConfig": ["feed_forward_proj"],
+    # used internally in the configuration class file
     "SwitchTransformersConfig": ["feed_forward_proj"],
     # having default values other than `1e-5` - we can't fix them without breaking
     "BioGptConfig": ["layer_norm_eps"],

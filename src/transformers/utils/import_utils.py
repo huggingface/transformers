@@ -185,6 +185,22 @@ else:
         logger.info("Disabling Tensorflow because USE_TORCH is set")
 
 
+_essentia_available = importlib.util.find_spec("essentia") is not None
+try:
+    _essentia_version = importlib.metadata.version("essentia")
+    logger.debug(f"Successfully imported essentia version {_essentia_version}")
+except importlib.metadata.PackageNotFoundError:
+    _essentia_version = False
+
+
+_pretty_midi_available = importlib.util.find_spec("pretty_midi") is not None
+try:
+    _pretty_midi_version = importlib.metadata.version("pretty_midi")
+    logger.debug(f"Successfully imported pretty_midi version {_pretty_midi_version}")
+except importlib.metadata.PackageNotFoundError:
+    _pretty_midi_available = False
+
+
 ccl_version = "N/A"
 _is_ccl_available = (
     importlib.util.find_spec("torch_ccl") is not None
@@ -240,6 +256,14 @@ def is_pyctcdecode_available():
 
 def is_librosa_available():
     return _librosa_available
+
+
+def is_essentia_available():
+    return _essentia_available
+
+
+def is_pretty_midi_available():
+    return _pretty_midi_available
 
 
 def is_torch_cuda_available():
@@ -986,6 +1010,27 @@ CCL_IMPORT_ERROR = """
 Please note that you may need to restart your runtime after installation.
 """
 
+# docstyle-ignore
+ESSENTIA_IMPORT_ERROR = """
+{0} requires essentia library. But that was not found in your environment. You can install them with pip:
+`pip install essentia==2.1b6.dev1034`
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+LIBROSA_IMPORT_ERROR = """
+{0} requires thes librosa library. But that was not found in your environment. You can install them with pip:
+`pip install librosa`
+Please note that you may need to restart your runtime after installation.
+"""
+
+# docstyle-ignore
+PRETTY_MIDI_IMPORT_ERROR = """
+{0} requires thes pretty_midi library. But that was not found in your environment. You can install them with pip:
+`pip install pretty_midi`
+Please note that you may need to restart your runtime after installation.
+"""
+
 DECORD_IMPORT_ERROR = """
 {0} requires the decord library but it was not found in your environment. You can install it with pip: `pip install
 decord`. Please note that you may need to restart your runtime after installation.
@@ -1011,11 +1056,14 @@ BACKENDS_MAPPING = OrderedDict(
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
+        ("essentia", (is_essentia_available, ESSENTIA_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
         ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
         ("ftfy", (is_ftfy_available, FTFY_IMPORT_ERROR)),
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
+        ("pretty_midi", (is_pretty_midi_available, PRETTY_MIDI_IMPORT_ERROR)),
+        ("librosa", (is_librosa_available, LIBROSA_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
