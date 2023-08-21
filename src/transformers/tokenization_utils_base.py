@@ -2134,6 +2134,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens!
         # TODO 3 models are still failing because they need to have from_slow = True but still read the added_tokens file
         slow_to_fast = slow_tokenizer is not None and added_tokens_file is not None and "Fast" in cls.__name__
+        slow_to_fast = from_slow and added_tokens_file is not None and "Fast" in cls.__name__
         init_kwargs["slow_to_fast"] = slow_to_fast
 
         if len(additional_special_tokens) > 0:
