@@ -201,7 +201,7 @@ def prepare_video():
 
     def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
         """
-        Decode the video with PyAV decoder.
+        Sample a given number of frame indices from the video.
         Args:
             clip_len (`int`): Total number of frames to sample.
             frame_sample_rate (`int`): Sample every n-th frame.
