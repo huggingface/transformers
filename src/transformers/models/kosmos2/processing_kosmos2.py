@@ -58,10 +58,12 @@ class Kosmos2Processor(ProcessorMixin):
             An instance of ['Kosmos2TokenizerFast`]. The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "CLIPImageProcessor"
     # Better to use explicit classes if local code works
+    # image_processor_class = "Kosmos2ImageProcessor"
     # tokenizer_class = ("Kosmos2Tokenizer", "Kosmos2TokenizerFast")
+
     # To make remote code work
+    image_processor_class = "AutoImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer):
