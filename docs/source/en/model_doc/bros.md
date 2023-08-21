@@ -14,12 +14,12 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The Bros model was proposed in [BROS: A Pre-trained Language Model Focusing on Text and Layout for Better Key Information Extraction from Documents](https://arxiv.org/abs/2108.04539) by Teakgyu Hong, Donghyun Kim, Mingi Ji, Wonseok Hwang, Daehyun Nam, Sungrae Park. 
+The Bros model was proposed in [BROS: A Pre-trained Language Model Focusing on Text and Layout for Better Key Information Extraction from Documents](https://arxiv.org/abs/2108.04539) by Teakgyu Hong, Donghyun Kim, Mingi Ji, Wonseok Hwang, Daehyun Nam, Sungrae Park.
 
-Bros stands for *BERT Relying On Spatiality*. It is an encoder-only Transformer model that takes a sequence of tokens and their bounding boxes as inputs and outputs a sequence of hidden states. Bros encode relative spatial information instead of using absolute spatial information. 
+Bros stands for *BERT Relying On Spatiality*. It is an encoder-only Transformer model that takes a sequence of tokens and their bounding boxes as inputs and outputs a sequence of hidden states. Bros encode relative spatial information instead of using absolute spatial information.
 
 It is pre-trained with two objectivess: a token-masked LM (TMLM) used in BERT, and a novel area-masked LM (AMLM)
-In TMLM, tokens are randomly masked, and the model predicts the masked tokens using spatial information and other unmasked tokens. 
+In TMLM, tokens are randomly masked, and the model predicts the masked tokens using spatial information and other unmasked tokens.
 AMLM is a 2D version of TMLM. It randomly masks text tokens and predicts with the same information as TMLM, but it masks text blocks (areas).
 
 `BrosForTokenClassification` has a simple linear layer on top of BrosModel. It predicts the label of each token.
@@ -52,7 +52,34 @@ def expand_and_normalize_bbox(bboxes, doc_width, doc_height):
     bboxes[:, [1, 3, 5, 7]] = bboxes[:, [1, 3, 5, 7]] / doc_height
 ```
 
-- [`~transformers.BrosForTokenClassification.forward`, `~transformers.BrosSpadeEEForTokenClassification.forward`, `~transformers.BrosSpadeEEForTokenClassification.forward`] require not only `input_ids` and `bbox` but also `box_first_token_mask` for loss calculation. It is a mask to filter out non-first tokens of each box. You can obtain this mask by saving start token indices of bounding boxes when creating `input_ids` from words. Detailed instructions for this process can be found in Demo scripts or notebooks provided below.
+- [`~transformers.BrosForTokenClassification.forward`, `~transformers.BrosSpadeEEForTokenClassification.forward`, `~transformers.BrosSpadeEEForTokenClassification.forward`] require not only `input_ids` and `bbox` but also `box_first_token_mask` for loss calculation. It is a mask to filter out non-first tokens of each box. You can obtain this mask by saving start token indices of bounding boxes when creating `input_ids` from words. You can make `box_first_token_mask` with following code,
+
+
+```python
+def make_box_first_token_mask(bboxes, words, tokenizer, max_seq_length=512):
+
+    box_first_token_mask = np.zeros(max_seq_length, dtype=np.bool_)
+
+    # encode(tokenize) each word from words (List[str])
+    input_ids_list: List[List[int]] = [tokenizer.encode(e, add_special_tokens=False) for e in words]
+
+    # get the length of each box
+    tokens_length_list: List[int] = [len(l) for l in input_ids_list]
+
+    box_end_token_indices = np.array(list(itertools.accumulate(tokens_length_list)))
+    box_start_token_indices = box_end_token_indices - np.array(tokens_length_list)
+
+    # filter out the indices that are out of max_seq_length
+    box_end_token_indices = box_end_token_indices[box_end_token_indices < max_seq_length - 1]
+    if len(box_start_token_indices) > len(box_end_token_indices):
+        box_start_token_indices = box_start_token_indices[: len(box_end_token_indices)]
+
+    # set box_start_token_indices to True
+    box_first_token_mask[box_start_token_indices] = True
+
+    return box_first_token_mask
+
+```
 
 - Demo scripts can be found [here](https://github.com/clovaai/bros).
 

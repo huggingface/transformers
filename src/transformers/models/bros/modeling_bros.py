@@ -1199,9 +1199,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
         self.backbone_hidden_size = config.hidden_size
 
         self.bros = BrosModel(config)
-        (
-            config.classifier_dropout if hasattr(config, "classifier_dropout") else config.hidden_dropout_prob
-        )
+        (config.classifier_dropout if hasattr(config, "classifier_dropout") else config.hidden_dropout_prob)
 
         self.entity_linker = BrosRelationExtractor(config)
 
