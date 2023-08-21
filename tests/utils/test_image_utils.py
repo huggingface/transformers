@@ -505,10 +505,7 @@ class LoadImageTester(unittest.TestCase):
             img = load_image(b64.read())
         img_arr = np.array(img)
 
-        self.assertEqual(
-            img_arr.shape,
-            (64, 32, 3),
-        )
+        self.assertEqual(img_arr.shape, (64, 32, 3))
 
     def test_load_img_rgba(self):
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
