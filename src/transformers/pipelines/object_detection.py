@@ -105,7 +105,7 @@ class ObjectDetectionPipeline(Pipeline):
 
     def preprocess(self, image, timeout=None):
         image = load_image(image, timeout=timeout)
-        self.image = image
+        self.width, self.height = image.size
         target_size = torch.IntTensor([[image.height, image.width]])
         inputs = self.image_processor(images=[image], return_tensors="pt")
         if self.tokenizer is not None:
@@ -115,7 +115,7 @@ class ObjectDetectionPipeline(Pipeline):
 
     def _forward(self, model_inputs):
         target_size = model_inputs.pop("target_size")
-        self.model_inputs = model_inputs
+        self.pixel_values_height, self.pixel_values_width = self.model_inputs["pixel_values"].shape[-2:]
         outputs = self.model(**model_inputs)
         model_outputs = outputs.__class__({"target_size": target_size, **outputs})
         if self.tokenizer is not None:
@@ -148,10 +148,8 @@ class ObjectDetectionPipeline(Pipeline):
             annotation = [dict(zip(keys, vals)) for vals in zip(scores.tolist(), labels, boxes) if vals[0] > threshold]
         else:
             # This is a regular ForObjectDetectionModel
-            width, height = self.image.size
-            pixel_values_height, pixel_values_width = self.model_inputs["pixel_values"].shape[-2:]
-            width_scale = pixel_values_width / width
-            height_scale = pixel_values_height / height
+            width_scale = self.pixel_values_width / self.width
+            height_scale = self.pixel_values_height / self.height
             scale_factors = [torch.tensor([width_scale, height_scale, width_scale, height_scale])]
             # TODO either add kwargs to each post_process_object_detection method or make separation for Mask R-CNN to support scale_factors
             raw_annotations = self.image_processor.post_process_object_detection(

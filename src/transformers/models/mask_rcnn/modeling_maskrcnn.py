@@ -185,7 +185,7 @@ def weight_reduce_loss(loss, weight=None, reduction="mean", avg_factor=None):
         elif reduction == "none":
             pass
         else:
-            raise ValueError(f'avg_factor can not be used with {reduction=}')
+            raise ValueError(f"avg_factor can not be used with {reduction=}")
     return loss
 
 
@@ -1907,7 +1907,7 @@ class MaskRCNNRandomSampler:
         # (may be a bug of PyTorch)
         pos_indices = pos_indices.unique()
         num_sampled_pos = pos_indices.numel()
-        num_expected_neg = self.num_samples- num_sampled_pos
+        num_expected_neg = self.num_samples - num_sampled_pos
         if self.num_samples_upper_bound >= 0:
             _pos = max(1, num_sampled_pos)
             neg_upper_bound = int(self.num_samples_upper_bound * _pos)
@@ -3244,10 +3244,7 @@ class MaskRCNNRoIHead(nn.Module):
         # rescale it back to the testing scale to obtain RoIs.
         if rescale:
             scale_factors = [scale_factor.to(det_bboxes[0].device) for scale_factor in scale_factors]
-        _bboxes = [
-            det_bboxes[i] * scale_factors[i] if rescale else det_bboxes[i]
-            for i in range(len(det_bboxes))
-        ]
+        _bboxes = [det_bboxes[i] * scale_factors[i] if rescale else det_bboxes[i] for i in range(len(det_bboxes))]
         mask_rois = bbox2roi(_bboxes)
         mask_results = self._mask_forward(hidden_states, mask_rois)
         mask_pred = mask_results["mask_pred"]

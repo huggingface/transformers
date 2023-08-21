@@ -696,8 +696,8 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
 
         Args:
             mask_pred (`torch.Tensor or ndarray` of shape `(n, #class, height, width)`).
-                For single-scale testing, mask_pred is the direct output of model, whose type is `torch.Tensor`, while for
-                multi-scale testing, it will be converted to numpy array outside of this method.
+                For single-scale testing, mask_pred is the direct output of model, whose type is `torch.Tensor`, while
+                for multi-scale testing, it will be converted to numpy array outside of this method.
             det_bboxes (`torch.Tensor` of shape `(n, 4/5)`):
                 Tensor containing detected bounding boxes.
             det_labels (`torch.Tensor` of shape `(n,)`):
@@ -758,7 +758,9 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         chunks = torch.chunk(torch.arange(num_masks, device=device), num_chunks)
 
         threshold = rcnn_test_cfg["mask_thr_binary"]
-        im_mask = torch.zeros(num_masks, img_h, img_w, device=device, dtype=torch.bool if threshold >= 0 else torch.uint8)
+        im_mask = torch.zeros(
+            num_masks, img_h, img_w, device=device, dtype=torch.bool if threshold >= 0 else torch.uint8
+        )
 
         if not self.class_agnostic:
             mask_pred = mask_pred[range(num_masks), labels][:, None]

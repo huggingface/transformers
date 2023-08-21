@@ -105,8 +105,9 @@ class MaskRCNNConfig(PretrainedConfig):
             Number of input channels of the mask head.
         mask_head_conv_out_channels (`int`, *optional*, defaults to 256):
             Number of output channels (feature dimension) of the convolutional layers of the mask head.
-        mask_roi_extractor_roi_layer (`Dict`, *optional*, defaults to `{"type": "RoIAlign", "output_size": 14, "sampling_ratio": 0}`):
-            Configuration of the RoI layer used by the mask head.
+        mask_roi_extractor_roi_layer (`Dict`, *optional*, defaults to `{"type":
+            "RoIAlign", "output_size": 14, "sampling_ratio": 0}`): Configuration of the RoI layer used by the mask
+            head.
         mask_roi_extractor_out_channels (`int`, *optional*, defaults to 256):
             Number of output channels (feature dimension) of the RoI layer used by the mask head.
         mask_roi_extractor_featmap_strides (`List[int]`, *optional*, defaults to `[4, 8, 16, 32]`):
@@ -132,7 +133,8 @@ class MaskRCNNConfig(PretrainedConfig):
         rpn_sampler_add_gt_as_proposals (`bool`, *optional*, defaults to `False`):
             Whether to add ground truth boxes as proposals for the Region Proposal Network (RPN) sampler at training
             time.
-        rpn_proposal (`Dict`, *optional*, defaults to `{"nms_pre": 2000, "max_per_img": 1000, "nms": {"type": "nms", "iou_threshold": 0.7}, "min_bbox_size": 0}`):
+        rpn_proposal (`Dict`, *optional*, defaults to `{"nms_pre":
+            2000, "max_per_img": 1000, "nms": {"type": "nms", "iou_threshold": 0.7}, "min_bbox_size": 0}`):
             Configuration of the Region Proposal Network (RPN) proposals at training time.
         rcnn_train_cfg (`Dict`, *optional*, defaults to `{"mask_size": 28, "pos_weight": -1, "debug": False}`):
             Configuration of the Region of Interest (RoI) heads at training time.

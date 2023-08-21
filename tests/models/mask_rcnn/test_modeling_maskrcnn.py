@@ -194,25 +194,23 @@ class MaskRCNNModelTest(ModelTesterMixin, unittest.TestCase):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels and model_class.__name__ in ["MaskRCNNForObjectDetection"]:
-                labels = []
-                for _ in range(self.model_tester.batch_size):
-                    target = {}
-                    target["class_labels"] = torch.ones(
-                        size=(self.model_tester.num_labels,), device=torch_device, dtype=torch.long
-                    )
-                    target["boxes"] = torch.ones(
-                        self.model_tester.num_labels, 4, device=torch_device, dtype=torch.float
-                    )
-                    target["masks"] = torch.ones(
-                        self.model_tester.num_labels,
-                        self.model_tester.image_size,
-                        self.model_tester.image_size,
-                        device=torch_device,
-                        dtype=torch.float,
-                    )
-                    target["size"] = torch.tensor((self.model_tester.image_size, self.model_tester.image_size))
-                    labels.append(target)
-                inputs_dict["labels"] = labels
+            labels = []
+            for _ in range(self.model_tester.batch_size):
+                target = {}
+                target["class_labels"] = torch.ones(
+                    size=(self.model_tester.num_labels,), device=torch_device, dtype=torch.long
+                )
+                target["boxes"] = torch.ones(self.model_tester.num_labels, 4, device=torch_device, dtype=torch.float)
+                target["masks"] = torch.ones(
+                    self.model_tester.num_labels,
+                    self.model_tester.image_size,
+                    self.model_tester.image_size,
+                    device=torch_device,
+                    dtype=torch.float,
+                )
+                target["size"] = torch.tensor((self.model_tester.image_size, self.model_tester.image_size))
+                labels.append(target)
+            inputs_dict["labels"] = labels
 
         return inputs_dict
 
