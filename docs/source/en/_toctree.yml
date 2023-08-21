@@ -584,6 +584,8 @@
         title: MMS
       - local: model_doc/musicgen
         title: MusicGen
+      - local: model_doc/pop2piano
+        title: Pop2Piano
       - local: model_doc/sew
         title: SEW
       - local: model_doc/sew-d
