@@ -1294,7 +1294,7 @@ def check_real_model_with_snowman_detail_sample_end_to_end():
 
     slow_tokenizer = Kosmos2Tokenizer.from_pretrained(ckpt)
     fast_tokenizer = Kosmos2TokenizerFast.from_pretrained(ckpt)
-    image_processor = Kosmos2ImageProcessor(ckpt)
+    image_processor = Kosmos2ImageProcessor.from_pretrained(ckpt)
     # TODO: change to use `from_pretrained` once ready
     slow_processor = Kosmos2Processor(tokenizer=slow_tokenizer, image_processor=image_processor)
     fast_processor = Kosmos2Processor(tokenizer=fast_tokenizer, image_processor=image_processor)
