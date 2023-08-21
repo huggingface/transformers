@@ -19,11 +19,8 @@ import inspect
 import unittest
 
 from transformers import VitDetConfig
-from transformers.testing_utils import (
-    require_torch,
-    torch_device,
-)
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, torch_device
+from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -36,10 +33,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import VitDetBackbone, VitDetModel
-
-
-if is_vision_available():
-    pass
 
 
 class VitDetModelTester:
@@ -262,8 +255,6 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model_class = self.all_model_classes[0]
         model = model_class(config)
         model.to(torch_device)
-
-        print("Model class: ", model_class)
 
         inputs = self._prepare_for_class(inputs_dict, model_class)
 
