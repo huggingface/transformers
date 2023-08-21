@@ -1294,7 +1294,7 @@ def check_real_model_with_snowman_detail_sample_end_to_end():
 
     slow_tokenizer = Kosmos2Tokenizer.from_pretrained(ckpt)
     fast_tokenizer = Kosmos2TokenizerFast.from_pretrained(ckpt)
-    image_processor = CLIPImageProcessor(ckpt)
+    image_processor = Kosmos2ImageProcessor(ckpt)
     # TODO: change to use `from_pretrained` once ready
     slow_processor = Kosmos2Processor(tokenizer=slow_tokenizer, image_processor=image_processor)
     fast_processor = Kosmos2Processor(tokenizer=fast_tokenizer, image_processor=image_processor)
@@ -1415,11 +1415,11 @@ if __name__ == "__main__":
     from src.transformers.models.kosmos2.processing_kosmos2 import Kosmos2Processor
     from src.transformers.models.kosmos2.tokenization_kosmos2 import Kosmos2Tokenizer
     from src.transformers.models.kosmos2.tokenization_kosmos2_fast import Kosmos2TokenizerFast
-    from transformers import CLIPImageProcessor
+    from src.transformers.models.kosmos2.image_processing_kosmos2 import Kosmos2ImageProcessor
 
     slow_tokenizer = Kosmos2Tokenizer(vocab_file="sentencepiece.bpe.model", add_tag_and_patch_index_tokens=True)
     fast_tokenizer = Kosmos2TokenizerFast(__slow_tokenizer=slow_tokenizer, add_tag_and_patch_index_tokens=True)
-    image_processor = CLIPImageProcessor()
+    image_processor = Kosmos2ImageProcessor()
     slow_processor = Kosmos2Processor(tokenizer=slow_tokenizer, image_processor=image_processor)
     fast_processor = Kosmos2Processor(tokenizer=fast_tokenizer, image_processor=image_processor)
     print(slow_processor)
