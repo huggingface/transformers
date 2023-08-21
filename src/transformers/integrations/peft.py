@@ -14,7 +14,7 @@
 import inspect
 from typing import Optional
 
-from ...utils import (
+from ..utils import (
     check_peft_version,
     find_adapter_config_file,
     is_accelerate_available,
