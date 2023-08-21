@@ -919,7 +919,6 @@ else:
     _import_structure["models.bit"].extend(["BitImageProcessor"])
     _import_structure["models.blip"].extend(["BlipImageProcessor"])
     _import_structure["models.bridgetower"].append("BridgeTowerImageProcessor")
-    _import_structure["models.bros"].extend(["BrosProcessor"])
     _import_structure["models.chinese_clip"].extend(["ChineseCLIPFeatureExtractor", "ChineseCLIPImageProcessor"])
     _import_structure["models.clip"].extend(["CLIPFeatureExtractor", "CLIPImageProcessor"])
     _import_structure["models.conditional_detr"].extend(
@@ -1322,6 +1321,7 @@ else:
             "BrosForTokenClassification",
             "BrosModel",
             "BrosPreTrainedModel",
+            "BrosProcessor",
             "BrosSpadeEEForTokenClassification",
             "BrosSpadeELForTokenClassification",
         ]
@@ -4770,7 +4770,6 @@ if TYPE_CHECKING:
         from .models.blenderbot import BlenderbotTokenizerFast
         from .models.blenderbot_small import BlenderbotSmallTokenizerFast
         from .models.bloom import BloomTokenizerFast
-        from .models.bros import BrosProcessor
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast
         from .models.codegen import CodeGenTokenizerFast
@@ -5212,6 +5211,7 @@ if TYPE_CHECKING:
             BrosForTokenClassification,
             BrosModel,
             BrosPreTrainedModel,
+            BrosProcessor,
             BrosSpadeEEForTokenClassification,
             BrosSpadeELForTokenClassification,
         )

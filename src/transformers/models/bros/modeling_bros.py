@@ -87,6 +87,12 @@ BROS_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
 
+        box_first_token_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+            Mask to indicate the first token of each bounding box. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
         token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
             1]`:
@@ -134,9 +140,9 @@ class BrosSpadeOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided) :
             Classification loss.
-        itc_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+        initial_token_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
             Classification scores for entity initial tokens (before SoftMax).
-        stc_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, sequence_length+1)`):
+        subsequent_token_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, sequence_length+1)`):
             Classification scores for entity sequence tokens (before SoftMax).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
@@ -152,8 +158,8 @@ class BrosSpadeOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    itc_logits: torch.FloatTensor = None
-    stc_logits: torch.FloatTensor = None
+    initial_token_logits: torch.FloatTensor = None
+    subsequent_token_logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1104,8 +1110,8 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        itc_labels=None,
-        stc_labels=None,
+        initial_token_labels=None,
+        subsequent_token_labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1134,7 +1140,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         initial_token_logits = self.initial_token_classifier(last_hidden_states).transpose(0, 1).contiguous()
         subsequent_token_logits = self.subsequent_token_classifier(last_hidden_states, last_hidden_states).squeeze(0)
 
-        # make stc(sequence token classification) mask
+        # make subsequent token (sequence token classification) mask
         inv_attention_mask = 1 - attention_mask
         batch_size, max_seq_length = inv_attention_mask.shape
         device = inv_attention_mask.device
@@ -1142,27 +1148,30 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         subsequent_token_logits.masked_fill_(invalid_token_mask[:, None, :], -10000.0)
         self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device).bool()
         subsequent_token_logits.masked_fill_(self_token_mask[None, :, :], -10000.0)
-        stc_mask = attention_mask.view(-1).bool()
+        subsequent_token_mask = attention_mask.view(-1).bool()
 
         loss = None
-        if itc_labels is not None and stc_labels is not None:
+        if initial_token_labels is not None and subsequent_token_labels is not None:
             loss_fct = CrossEntropyLoss()
 
-            # get itc loss
-            itc_labels = itc_labels.view(-1)
+            # get initial token loss
+            initial_token_labels = initial_token_labels.view(-1)
             if box_first_token_mask is not None:
                 box_first_token_mask = box_first_token_mask.view(-1)
-                itc_loss = loss_fct(
+                initial_token_loss = loss_fct(
                     initial_token_logits.view(-1, self.num_labels)[box_first_token_mask],
-                    itc_labels[box_first_token_mask],
+                    initial_token_labels[box_first_token_mask],
                 )
             else:
-                itc_loss = loss_fct(initial_token_logits.view(-1, self.num_labels), itc_labels)
+                initial_token_loss = loss_fct(initial_token_logits.view(-1, self.num_labels), initial_token_labels)
 
-            stc_labels = stc_labels.view(-1)
-            stc_loss = loss_fct(subsequent_token_logits.view(-1, max_seq_length + 1)[stc_mask], stc_labels[stc_mask])
+            subsequent_token_labels = subsequent_token_labels.view(-1)
+            subsequent_token_loss = loss_fct(
+                subsequent_token_logits.view(-1, max_seq_length + 1)[subsequent_token_mask],
+                subsequent_token_labels[subsequent_token_mask],
+            )
 
-            loss = itc_loss + stc_loss
+            loss = initial_token_loss + subsequent_token_loss
 
         if not return_dict:
             output = (initial_token_logits, subsequent_token_logits) + outputs[2:]
@@ -1170,8 +1179,8 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
 
         return BrosSpadeOutput(
             loss=loss,
-            itc_logits=initial_token_logits,
-            stc_logits=subsequent_token_logits,
+            initial_token_logits=initial_token_logits,
+            subsequent_token_logits=subsequent_token_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
