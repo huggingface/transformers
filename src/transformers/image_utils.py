@@ -305,7 +305,7 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
             image = PIL.Image.open(image)
         else:
             raise ValueError(
-                f"Incorrect path or url, URLs must start with `http://` or `https://`, and {image} is not a valid path"
+                f"Incorrect image path, URLs must start with `http://` or `https://`, base64 images must start with `data:image/<format>;base64,`, and {image} is not a valid path"
             )
     elif isinstance(image, PIL.Image.Image):
         image = image
