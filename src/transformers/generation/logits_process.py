@@ -1350,43 +1350,44 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
       "This code demonstrates how to use the Whisper ASR model with various configuration options to transcribe audio."
 
       Examples:
-      import torch
-      from transformers import AutoProcessor, WhisperForConditionalGeneration,GenerationConfig
-      from datasets import load_dataset
+      ```python
+      >>> import torch
+      >>> from transformers import AutoProcessor, WhisperForConditionalGeneration,GenerationConfig
+      >>> from datasets import load_dataset
 
-      processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
-      model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+      >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
+      >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
 
-      generation_config = GenerationConfig.from_pretrained("openai/whisper-tiny.en")
-      model.generation_config = generation_config
+      >>> generation_config = GenerationConfig.from_pretrained("openai/whisper-tiny.en")
+      >>> model.generation_config = generation_config
 
-      #Downloading an example audio file to process
-      ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-      file_index =4
-
-
-      #Default
-      #No changes to the model config file, initialized values are predefined.
-
-      #Change EOS:
-      #model.generation_config.eos_token_id = 21247
-
-      #Change Max_initial_timestamp
-      #model.generation_config.max_initial_timestamp_index= 100
-
-      #Change No_timestamps_token_id
-      model.generation_config.no_timestamps_token_id =4
+      >>> #Downloading an example audio file to process
+      >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+      >>> file_index =4
 
 
-      inputs = processor(ds[file_index]["audio"]["array"], return_tensors="pt")
-      input_features = inputs.input_features
+      >>> #Default
+      >>> #No changes to the model config file, initialized values are predefined.
 
-      #this comment calls the code for the logits processor
-      generated_ids = model.generate(inputs=input_features,return_timestamps=True)
+      >>> #Change EOS:
+      >>> #model.generation_config.eos_token_id = 21247
 
-      #Running the transcriptions after generating the logit scores
-      transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-      print(transcription)
+      >>> #Change Max_initial_timestamp
+      >>> #model.generation_config.max_initial_timestamp_index= 100
+
+      >>> #Change No_timestamps_token_id
+      >>> model.generation_config.no_timestamps_token_id =4
+
+
+      >>> inputs = processor(ds[file_index]["audio"]["array"], return_tensors="pt")
+      >>> input_features = inputs.input_features
+
+      >>> #this comment calls the code for the logits processor
+      >>> generated_ids = model.generate(inputs=input_features,return_timestamps=True)
+
+      >>> #Running the transcriptions after generating the logit scores
+      >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+      ```
 
 
 
@@ -1405,21 +1406,18 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
       Max_initial_timestamp change:
       Please note that the example below is theoretical and is highly dependent on the input data.
       The code above to change this value remains valid; however, the exact value of max_initial_timestamp depends heavily on the input dataset.
-      Adjusting the Max_initial_timestamp will alter the prediction window for the first value.
-      For instance, if the model is incorrectly predicting the initial value, you can limit the potential predictions for that first value:
+      Adjusting the Max_initial_timestamp will alter the prediction window for the first value. 
 
       "Lonny's pictures are a sort of up-guards and atom paintings, and Mason's exquisite idles are as national as a jingo poem."
 
       No_time_stamp_token_id change:
       The no_timestamps_token_id denotes that the associated token should not have a timestamp in the transcription.
-      This could imply that there might be background noise or other artifacts that are undesirable.
+      This could imply that there might be background noise or other artifacts that are undesirable. 
       To identify the tokens that should be omitted, one would need to examine the transcribed output and list the token IDs corresponding to specific words.
 
       Note: Use this setting with caution. Suppressing crucial tokens can result in transcriptions that diverge from the original audio.
 
       The resulting transcription will be a cleaned version of the audio, devoid of undesired artifacts.
-
-
     """
 
     def __init__(self, generate_config):  # support for the kwargs
