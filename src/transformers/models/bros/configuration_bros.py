@@ -72,6 +72,8 @@ class BrosConfig(PretrainedConfig):
             The scale factor of the bounding box coordinates.
         n_relations (`int`, *optional*, defaults to 1):
             The number of relations for SpadeEE(entity extraction), SpadeEL(entity linking) head.
+        classifier_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the classifier head.
 
 
     Examples:
@@ -108,6 +110,7 @@ class BrosConfig(PretrainedConfig):
         dim_bbox=8,
         bbox_scale=100.0,
         n_relations=1,
+        classifier_dropout_prob=0.1,
         **kwargs,
     ):
         super().__init__(
@@ -133,3 +136,4 @@ class BrosConfig(PretrainedConfig):
         self.dim_bbox_sinusoid_emb_2d = self.hidden_size // 4
         self.dim_bbox_sinusoid_emb_1d = self.dim_bbox_sinusoid_emb_2d // self.dim_bbox
         self.dim_bbox_projection = self.hidden_size // self.num_attention_heads
+        self.classifier_dropout_prob = classifier_dropout_prob

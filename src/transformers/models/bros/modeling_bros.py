@@ -732,19 +732,15 @@ class BrosPooler(nn.Module):
 class BrosRelationExtractor(nn.Module):
     def __init__(
         self,
-        n_relations,
-        backbone_hidden_size,
-        head_hidden_size,
-        head_p_dropout=0.1,
+        config,
     ):
         super().__init__()
+        self.n_relations = config.n_relations
+        self.backbone_hidden_size = config.hidden_size
+        self.head_hidden_size = config.hidden_size
+        self.classifier_dropout_prob = config.classifier_dropout_prob
 
-        self.n_relations = n_relations
-        self.backbone_hidden_size = backbone_hidden_size
-        self.head_hidden_size = head_hidden_size
-        self.head_p_dropout = head_p_dropout
-
-        self.drop = nn.Dropout(head_p_dropout)
+        self.drop = nn.Dropout(self.classifier_dropout_prob)
         self.q_net = nn.Linear(self.backbone_hidden_size, self.n_relations * self.head_hidden_size)
 
         self.k_net = nn.Linear(self.backbone_hidden_size, self.n_relations * self.head_hidden_size)
@@ -1091,12 +1087,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         )
 
         # Subsequent token classification for Entity Extraction (NER)
-        self.subsequent_token_classifier = BrosRelationExtractor(
-            n_relations=config.n_relations,
-            backbone_hidden_size=config.hidden_size,
-            head_hidden_size=config.hidden_size,
-            head_p_dropout=classifier_dropout,
-        )
+        self.subsequent_token_classifier = BrosRelationExtractor(config)
 
         self.init_weights()
 
@@ -1212,12 +1203,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
             config.classifier_dropout if hasattr(config, "classifier_dropout") else config.hidden_dropout_prob
         )
 
-        self.entity_linker = BrosRelationExtractor(
-            n_relations=config.n_relations,
-            backbone_hidden_size=config.hidden_size,
-            head_hidden_size=config.hidden_size,
-            head_p_dropout=classifier_dropout,
-        )
+        self.entity_linker = BrosRelationExtractor(config)
 
         self.init_weights()
 
