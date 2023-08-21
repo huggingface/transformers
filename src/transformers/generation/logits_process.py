@@ -1099,7 +1099,7 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
 
     </Tip>
 
-    <Warning>
+    <Tip warning={true}>
 
     This logits processor can be resource-intensive, especially when using large models or long sequences.
 
