@@ -17,8 +17,6 @@ import unittest
 from dataclasses import dataclass
 from typing import Optional
 
-import pytest
-
 from transformers.testing_utils import require_torch
 from transformers.utils import ModelOutput
 
@@ -163,5 +161,5 @@ class ModelOutputSubclassTester(unittest.TestCase):
     def test_subclass_no_dataclass(self):
         # Check that a subclass of ModelOutput without @dataclass is invalid
         # A valid subclass is inherently tested other unit tests above.
-        with pytest.raises(TypeError):
+        with self.assertRaises(TypeError):
             ModelOutputTestNoDataclass(a=1.1, b=2.2, c=3.3)
