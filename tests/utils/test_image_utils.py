@@ -16,9 +16,12 @@
 import unittest
 
 import datasets
+from huggingface_hub.file_download import http_get
 import numpy as np
+import os
 import pytest
 from requests import ReadTimeout
+import tempfile
 
 from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
 from transformers import is_torch_available, is_vision_available
@@ -500,10 +503,33 @@ class LoadImageTester(unittest.TestCase):
             (480, 640, 3),
         )
 
+    def test_load_img_base64_prefix(self):
+        try:
+            tmp_file = tempfile.mktemp()
+            with open(tmp_file, "wb") as f:
+                http_get("https://huggingface.co/datasets/hf-internal-testing/dummy-base64-images/raw/main/image_0.txt", f)
+
+            with open(tmp_file, encoding="utf-8") as b64:
+                img = load_image(b64.read())
+                img_arr = np.array(img)
+
+        finally:
+            os.remove(tmp_file)
+
+        self.assertEqual(img_arr.shape, (64, 32, 3))
+
     def test_load_img_base64(self):
-        with open("./tests/fixtures/base64_image.txt", encoding="utf-8") as b64:
-            img = load_image(b64.read())
-        img_arr = np.array(img)
+        try:
+            tmp_file = tempfile.mktemp()
+            with open(tmp_file, "wb") as f:
+                http_get("https://huggingface.co/datasets/hf-internal-testing/dummy-base64-images/raw/main/image_1.txt", f)
+
+            with open(tmp_file, encoding="utf-8") as b64:
+                img = load_image(b64.read())
+                img_arr = np.array(img)
+
+        finally:
+            os.remove(tmp_file)
 
         self.assertEqual(img_arr.shape, (64, 32, 3))
 
