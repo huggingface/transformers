@@ -139,7 +139,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         output_hidden_size=None,
         position_embeddings_type="relative",
         rotary_embedding_base=10000,
-        max_source_positions=4096, # works
+        max_source_positions=4096,  # works
         conv_depthwise_kernel_size=31,
         conformer_conv_dropout=0.1,
         # t2u config
@@ -156,7 +156,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=3,
-        #unk_token_id=1, TODO
+        # unk_token_id=1, TODO
         **kwargs,
     ):
         # overall_config
@@ -210,7 +210,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.max_source_positions = max_source_positions
         self.conv_depthwise_kernel_size = conv_depthwise_kernel_size
         self.add_adapter = add_adapter
-    
+
         # t2u config
         self.unit_pad_token_id = unit_pad_token_id
         self.hidden_act = hidden_act

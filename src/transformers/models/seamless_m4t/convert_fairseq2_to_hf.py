@@ -17,9 +17,11 @@
 
 import argparse
 import os
+import tempfile
 from pathlib import Path
 
 import torch
+from accelerate.utils.modeling import find_tied_parameters
 from huggingface_hub import HfApi
 from seamless_communication.models.inference.translator import Translator
 
@@ -27,9 +29,6 @@ from transformers.models.seamless_m4t.configuration_seamless_m4t import Seamless
 from transformers.models.seamless_m4t.modeling_seamless_m4t import SeamlessM4TModel
 from transformers.utils import logging
 
-from accelerate.utils.modeling import find_tied_parameters
-
-import tempfile
 
 api = HfApi()
 
@@ -66,7 +65,7 @@ wav2vec_convert_list = [
     ("speech_encoder.adaptor_layers", "adapter.layers"),
     ("inner_proj", "intermediate_dense"),
     ("self_attn.output_proj", "self_attn.linear_out"),
-    #("self_attn.output_dense", "self_attn.linear_out"),
+    # ("self_attn.output_dense", "self_attn.linear_out"),
     ("output_proj", "output_dense"),
     ("self_attn.k_proj", "self_attn.linear_k"),
     ("self_attn.v_proj", "self_attn.linear_v"),
@@ -139,8 +138,10 @@ def _convert_model(
 
     # filter func
     if isinstance(filter_state_dict, str):
+
         def filter_func(x):
             return filter_state_dict in x[0]
+
     else:
 
         def filter_func(item):
@@ -199,8 +200,7 @@ def load_model(pytorch_dump_folder_path):
     original_model = _load_original_model(device)
 
     # init model
-    hf_config = SeamlessM4TConfig(
-    )
+    hf_config = SeamlessM4TConfig()
     hf_model = SeamlessM4TModel(hf_config)
 
     # 1. take care of speech encoder
@@ -265,9 +265,8 @@ def load_model(pytorch_dump_folder_path):
     # verify same number of parameters text_decoder
     count_1 = param_count(hf_model.text_decoder)
     count_2 = param_count(original_model.model.text_decoder) + param_count(original_model.model.text_decoder_frontend)
-    
-    with tempfile.TemporaryDirectory() as tmpdirname:
 
+    with tempfile.TemporaryDirectory() as tmpdirname:
         hf_model.save_pretrained(tmpdirname)
         hf_model = SeamlessM4TModel.from_pretrained(tmpdirname)
 
@@ -292,11 +291,8 @@ def load_model(pytorch_dump_folder_path):
 
     # sanity check
     print(find_tied_parameters(hf_model))
-    
-    
+
     new_model = hf_model
-    
-    
 
     # verify that base model have same number of parameters
     assert_param_count(original_model.model, new_model)
