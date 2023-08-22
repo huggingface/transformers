@@ -2071,14 +2071,14 @@ functionality, when [`Trainer`] is not used. The only thing that it does is hand
 When using [`Trainer`] everything is automatically taken care of.
 
 When not using [`Trainer`], to efficiently deploy DeepSpeed ZeRO-3, you must instantiate the
-[`~integrations.deepspeed.HfDeepSpeedConfig`] object before instantiating the model and keep that object alive.
+[`~integrations.HfDeepSpeedConfig`] object before instantiating the model and keep that object alive.
 
 If you're using Deepspeed ZeRO-1 or ZeRO-2 you don't need to use `HfDeepSpeedConfig` at all.
 
 For example for a pretrained model:
 
 ```python
-from transformers.integrations.deepspeed import HfDeepSpeedConfig
+from transformers.integrations import HfDeepSpeedConfig
 from transformers import AutoModel
 import deepspeed
 
@@ -2092,7 +2092,7 @@ engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 or for non-pretrained model:
 
 ```python
-from transformers.integrations.deepspeed import HfDeepSpeedConfig
+from transformers.integrations import HfDeepSpeedConfig
 from transformers import AutoModel, AutoConfig
 import deepspeed
 
@@ -2108,7 +2108,7 @@ Please note that if you're not using the [`Trainer`] integration, you're complet
 
 ## HfDeepSpeedConfig
 
-[[autodoc]] integrations.deepspeed.HfDeepSpeedConfig
+[[autodoc]] integrations.HfDeepSpeedConfig
     - all
 
 ### Custom DeepSpeed ZeRO Inference
@@ -2161,7 +2161,7 @@ Make sure to:
 
 
 from transformers import AutoTokenizer, AutoConfig, AutoModelForSeq2SeqLM
-from transformers.integrations.deepspeed import HfDeepSpeedConfig
+from transformers.integrations import HfDeepSpeedConfig
 import deepspeed
 import os
 import torch
