@@ -303,6 +303,13 @@ class StoppingCriteriaList(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class SuppressTokensAtBeginLogitsProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class TemperatureLogitsWarper(metaclass=DummyObject):
     _backends = ["torch"]
 
