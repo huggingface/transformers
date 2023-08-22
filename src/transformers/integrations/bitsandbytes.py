@@ -4,8 +4,7 @@ from copy import deepcopy
 
 from packaging import version
 
-from ..utils import logging
-from ..utils.import_utils import is_accelerate_available, is_bitsandbytes_available
+from ..utils import is_accelerate_available, is_bitsandbytes_available, logging
 
 
 if is_bitsandbytes_available():

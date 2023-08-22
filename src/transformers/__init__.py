@@ -111,10 +111,6 @@ _import_structure = {
         "is_tensorboard_available",
         "is_wandb_available",
     ],
-    "integrations.bitsandbytes": [],
-    "integrations.deepspeed": [],
-    "integrations.integration_utils": [],
-    "integrations.peft": [],
     "modelcard": ["ModelCard"],
     "modeling_tf_pytorch_utils": [
         "convert_tf_weight_name_to_pt_weight_name",
