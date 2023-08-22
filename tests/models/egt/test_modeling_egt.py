@@ -20,32 +20,37 @@ import inspect
 import os
 import tempfile
 import unittest
-import torch.nn as nn
+from typing import List
 
 # from transformers import EGTConfig, is_torch_available
 from transformers import is_torch_available
+from transformers.configuration_utils import PretrainedConfig
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask, floats_tensor
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
-
-from transformers.configuration_utils import PretrainedConfig
-from typing import List
 
 
 if is_torch_available():
     import torch
     from torch import tensor
 
-    from transformers.models.egt.modeling_egt import EGTForGraphClassification, EGTModel
-    # from transformers import EGTForGraphClassification, EGTModel
+    from transformers import EGTForGraphClassification, EGTModel
+
     # from transformers.models.egt.modeling_egt import EGT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 NODE_FEATURES_OFFSET = 128
 NUM_NODE_FEATURES = 9
 EDGE_FEATURES_OFFSET = 8
 NUM_EDGE_FEATURES = 3
+
 
 class EGTConfig(PretrainedConfig):
     r"""
@@ -113,12 +118,12 @@ class EGTConfig(PretrainedConfig):
         edge_feat_size: int = 64,
         num_heads: int = 32,
         num_layers: int = 30,
-        dropout: float = 0.,
+        dropout: float = 0.0,
         attn_dropout: float = 0.3,
-        activation: str = 'ELU',
+        activation: str = "ELU",
         egt_simple: bool = False,
         upto_hop: int = 16,
-        mlp_ratios: List[float] = [1., 1.],
+        mlp_ratios: List[float] = [1.0, 1.0],
         num_virtual_nodes: int = 4,
         svd_pe_size: int = 8,
         num_classes: int = 1,
@@ -157,12 +162,12 @@ class EGTModelTester:
         edge_feat_size=32,
         num_heads=8,
         num_layers=4,
-        dropout=0.,
-        attn_dropout=0.,
-        activation='ELU',
+        dropout=0.0,
+        attn_dropout=0.0,
+        activation="ELU",
         egt_simple=False,
         upto_hop=16,
-        mlp_ratios=[1., 1.],
+        mlp_ratios=[1.0, 1.0],
         num_virtual_nodes=4,
         svd_pe_size=8,
         num_classes=1,
@@ -189,10 +194,12 @@ class EGTModelTester:
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
-        featm = ids_tensor([self.batch_size, self.graph_size, self.graph_size, 1], NUM_EDGE_FEATURES*EDGE_FEATURES_OFFSET+1)
-        dm = ids_tensor([self.batch_size, self.graph_size, self.graph_size], self.upto_hop+2)
-        node_feat = ids_tensor([self.batch_size, self.graph_size, 1], NUM_NODE_FEATURES*NODE_FEATURES_OFFSET+1)
-        svd_pe = floats_tensor([self.batch_size, self.graph_size, self.svd_pe_size*2])
+        featm = ids_tensor(
+            [self.batch_size, self.graph_size, self.graph_size, 1], NUM_EDGE_FEATURES * EDGE_FEATURES_OFFSET + 1
+        )
+        dm = ids_tensor([self.batch_size, self.graph_size, self.graph_size], self.upto_hop + 2)
+        node_feat = ids_tensor([self.batch_size, self.graph_size, 1], NUM_NODE_FEATURES * NODE_FEATURES_OFFSET + 1)
+        svd_pe = floats_tensor([self.batch_size, self.graph_size, self.svd_pe_size * 2])
         attn_mask = random_attention_mask([self.batch_size, self.graph_size])
         labels = ids_tensor([self.batch_size], self.num_classes)
 
@@ -217,9 +224,7 @@ class EGTModelTester:
             num_classes=self.num_classes,
         )
 
-    def create_and_check_model(
-        self, config, featm, dm, node_feat, svd_pe, attn_mask, labels
-    ):
+    def create_and_check_model(self, config, featm, dm, node_feat, svd_pe, attn_mask, labels):
         model = EGTModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -231,13 +236,9 @@ class EGTModelTester:
             svd_pe=svd_pe,
             labels=labels,
         )
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, self.num_classes)
-        )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.num_classes))
 
-    def create_and_check_for_graph_classification(
-        self, config, featm, dm, node_feat, svd_pe, attn_mask, labels
-    ):
+    def create_and_check_for_graph_classification(self, config, featm, dm, node_feat, svd_pe, attn_mask, labels):
         model = EGTForGraphClassification(config)
         model.to(torch_device)
         model.eval()
@@ -287,7 +288,12 @@ class EGTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = EGTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=EGTConfig, common_properties=["feat_size", "edge_feat_size", "num_heads", "num_layers"], has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=EGTConfig,
+            common_properties=["feat_size", "edge_feat_size", "num_heads", "num_layers"],
+            has_text_modality=False,
+        )
 
     # overwrite from common as `EGT` requires more input arguments
     def _create_and_check_torchscript(self, config, inputs_dict):

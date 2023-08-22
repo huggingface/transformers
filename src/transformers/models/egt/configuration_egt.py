@@ -1,9 +1,7 @@
-# from ...configuration_utils import PretrainedConfig
-# from ...utils import logging
-from transformers.configuration_utils import PretrainedConfig
-from transformers.utils import logging
 from typing import List
-import torch.nn as nn
+
+from ...configuration_utils import PretrainedConfig
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -81,12 +79,12 @@ class EGTConfig(PretrainedConfig):
         edge_feat_size: int = 64,
         num_heads: int = 32,
         num_layers: int = 30,
-        dropout: float = 0.,
+        dropout: float = 0.0,
         attn_dropout: float = 0.3,
-        activation: str = 'ELU',
+        activation: str = "ELU",
         egt_simple: bool = False,
         upto_hop: int = 16,
-        mlp_ratios: List[float] = [1., 1.],
+        mlp_ratios: List[float] = [1.0, 1.0],
         num_virtual_nodes: int = 4,
         svd_pe_size: int = 8,
         num_classes: int = 1,

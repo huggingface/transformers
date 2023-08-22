@@ -4375,6 +4375,7 @@ if TYPE_CHECKING:
     from .models.dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
     from .models.efficientformer import EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientFormerConfig
     from .models.efficientnet import EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP, EfficientNetConfig
+    from .models.egt import EGT_PRETRAINED_CONFIG_ARCHIVE_MAP, EGTConfig
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encodec import (
         ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4413,7 +4414,6 @@ if TYPE_CHECKING:
         GPTSanJapaneseTokenizer,
     )
     from .models.graphormer import GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, GraphormerConfig
-    from .models.egt import EGT_PRETRAINED_CONFIG_ARCHIVE_MAP, EGTConfig
     from .models.groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroupViTConfig,
@@ -5551,6 +5551,12 @@ if TYPE_CHECKING:
             EfficientNetModel,
             EfficientNetPreTrainedModel,
         )
+        from .models.egt import (
+            EGT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            EGTForGraphClassification,
+            EGTModel,
+            EGTPreTrainedModel,
+        )
         from .models.electra import (
             ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
             ElectraForCausalLM,
@@ -5746,12 +5752,6 @@ if TYPE_CHECKING:
             GraphormerForGraphClassification,
             GraphormerModel,
             GraphormerPreTrainedModel,
-        )
-        from .models.egt import (
-            EGT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            EGTForGraphClassification,
-            EGTModel,
-            EGTPreTrainedModel,
         )
         from .models.groupvit import (
             GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST,

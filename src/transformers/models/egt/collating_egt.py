@@ -1,10 +1,9 @@
-
 from typing import Any, Dict, List, Mapping
 
+import dgl
 import numpy as np
 import torch
 
-import dgl
 
 def convert_to_single_node_emb(x, offset: int = 128):
     feature_num = x.shape[1] if len(x.shape) > 1 else 1
@@ -12,11 +11,13 @@ def convert_to_single_node_emb(x, offset: int = 128):
     x = x + feature_offset
     return x
 
+
 def convert_to_single_edge_emb(x, offset: int = 8):
     feature_num = x.shape[1] if len(x.shape) > 1 else 1
     feature_offset = 1 + np.arange(0, feature_num * offset, offset, dtype=np.int64)
     x = x + feature_offset
     return x
+
 
 def preprocess_item(item, keep_features=True):
     if keep_features and "edge_attr" in item.keys():  # edge_attr
@@ -55,6 +56,7 @@ def preprocess_item(item, keep_features=True):
 
     return item
 
+
 class EGTDataCollator:
     def __init__(self, on_the_fly_processing=False):
         self.on_the_fly_processing = on_the_fly_processing
@@ -76,16 +78,14 @@ class EGTDataCollator:
         batch["featm"] = torch.zeros(batch_size, max_node_num, max_node_num, edge_feat_size, dtype=torch.long)
         batch["dm"] = torch.zeros(batch_size, max_node_num, max_node_num, dtype=torch.long)
         batch["node_feat"] = torch.zeros(batch_size, max_node_num, node_feat_size, dtype=torch.long)
-        batch["svd_pe"] = torch.zeros(batch_size, max_node_num, svd_pe_size*2, dtype=torch.float)
+        batch["svd_pe"] = torch.zeros(batch_size, max_node_num, svd_pe_size * 2, dtype=torch.float)
         batch["attn_mask"] = torch.zeros(batch_size, max_node_num, dtype=torch.long)
 
         for ix, f in enumerate(features):
             for k in ["attn_edge_type", "spatial_pos", "input_nodes", "svd_pe"]:
                 f[k] = torch.tensor(f[k])
 
-            batch["featm"][ix, : f["attn_edge_type"].shape[0], : f["attn_edge_type"].shape[1], :] = f[
-                "attn_edge_type"
-            ]
+            batch["featm"][ix, : f["attn_edge_type"].shape[0], : f["attn_edge_type"].shape[1], :] = f["attn_edge_type"]
             batch["dm"][ix, : f["spatial_pos"].shape[0], : f["spatial_pos"].shape[1]] = f["spatial_pos"]
             batch["node_feat"][ix, : f["input_nodes"].shape[0], :] = f["input_nodes"]
             batch["svd_pe"][ix, : f["svd_pe"].shape[0], :] = f["svd_pe"]
