@@ -1,5 +1,4 @@
-## TBD
-<!--Copyright 2022 The HuggingFace Team and Microsoft. All rights reserved.
+<!--Copyright 2022 The HuggingFace Team, the DGL Team, Rensselaer Polytechnic Institute and IBM T. J. Watson Research Center. All rights reserved.
 
 Licensed under the MIT License; you may not use this file except in compliance with
 the License. 
@@ -32,7 +31,7 @@ You can reduce the batch size, or increase your RAM, but it will be hard to go a
 This model does not use a tokenizer, but instead a special collator during training.
 
 ## TBD
-This model was contributed by [clefourrier](https://huggingface.co/clefourrier). The original code can be found [here](https://github.com/shamim-hussain/egt).
+This model was contributed by [Zhiteng](https://github.com/ZHITENGLI). The original code can be found [here](https://github.com/shamim-hussain/egt).
 
 ## EGTConfig
 
