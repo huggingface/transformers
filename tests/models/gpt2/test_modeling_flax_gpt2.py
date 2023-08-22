@@ -335,3 +335,42 @@ class FlaxGPT2ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittes
             model = model_class_name.from_pretrained("gpt2", from_pt=True)
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
+
+    def test_bool_attention_mask_in_generation(self):
+        model = FlaxGPT2LMHeadModel.from_pretrained("gpt2")
+
+        pad_token_id = 0
+        input_ids = jnp.array(
+            [
+                [pad_token_id, pad_token_id, 1],
+            ]
+        )
+
+        generation_config = transformers.GenerationConfig(
+            max_length=5,
+            pad_token_id=pad_token_id,
+        )
+
+        # boolean attention mask
+        attention_mask_bool = input_ids != pad_token_id
+
+        # integer attention mask
+        attention_mask_int = attention_mask_bool.astype("i4")
+
+        output_bool_att_mask = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask_bool,
+            generation_config=generation_config,
+        )
+
+        output_int_att_mask = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask_int,
+            generation_config=generation_config,
+        )
+
+        np.testing.assert_array_equal(
+            output_bool_att_mask.sequences,
+            output_int_att_mask.sequences,
+            "Generated response differ between boolean and integer attention mask",
+        )
