@@ -34,8 +34,8 @@ class TextToAudioPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> classifier = pipeline(model="suno/bark")
-    >>> output = pipeline("Hey it's HuggingFace on the phone!")
+    >>> pipe = pipeline(model="suno/bark-small")
+    >>> output = pipe("Hey it's HuggingFace on the phone!")
 
     >>> audio = output["audio"]
     >>> sampling_rate = output["sampling_rate"]
