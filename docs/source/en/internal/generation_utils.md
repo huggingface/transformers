@@ -129,6 +129,9 @@ generation.
 [[autodoc]] RepetitionPenaltyLogitsProcessor
     - __call__
 
+[[autodoc]] EncoderRepetitionPenaltyLogitsProcessor
+    - __call__
+
 [[autodoc]] TopPLogitsWarper
     - __call__
 
@@ -138,7 +141,16 @@ generation.
 [[autodoc]] TypicalLogitsWarper
     - __call__
 
+[[autodoc]] EpsilonLogitsWarper
+    - __call__
+
+[[autodoc]] EtaLogitsWarper
+    - __call__
+
 [[autodoc]] NoRepeatNGramLogitsProcessor
+    - __call__
+
+[[autodoc]] EncoderNoRepeatNGramLogitsProcessor
     - __call__
 
 [[autodoc]] SequenceBiasLogitsProcessor
@@ -160,6 +172,33 @@ generation.
     - __call__
 
 [[autodoc]] InfNanRemoveLogitsProcessor
+    - __call__
+
+[[autodoc]] ExponentialDecayLengthPenalty
+    - __call__
+
+[[autodoc]] LogitNormalization
+    - __call__
+
+[[autodoc]] SuppressTokensAtBeginLogitsProcessor
+    - __call__
+
+[[autodoc]] SuppressTokensLogitsProcessor
+    - __call__
+
+[[autodoc]] ForceTokensLogitsProcessor
+    - __call__
+
+[[autodoc]] WhisperTimeStampLogitsProcessor
+    - __call__
+
+[[autodoc]] ClassifierFreeGuidanceLogitsProcessor
+    - __call__
+
+[[autodoc]] AlternatingCodebooksLogitsProcessor
+    - __call__
+
+[[autodoc]] UnbatchedClassifierFreeGuidanceLogitsProcessor
     - __call__
 
 [[autodoc]] TFLogitsProcessor
@@ -198,6 +237,15 @@ generation.
 [[autodoc]] TFForcedEOSTokenLogitsProcessor
     - __call__
 
+[[autodoc]] TFSuppressTokensAtBeginLogitsProcessor
+    - __call__
+
+[[autodoc]] TFSuppressTokensLogitsProcessor
+    - __call__
+
+[[autodoc]] TFForceTokensLogitsProcessor
+    - __call__
+
 [[autodoc]] FlaxLogitsProcessor
     - __call__
 
@@ -223,6 +271,18 @@ generation.
     - __call__
 
 [[autodoc]] FlaxMinLengthLogitsProcessor
+    - __call__
+
+[[autodoc]] FlaxSuppressTokensAtBeginLogitsProcessor
+    - __call__
+
+[[autodoc]] FlaxSuppressTokensLogitsProcessor
+    - __call__
+
+[[autodoc]] FlaxForceTokensLogitsProcessor
+    - __call__
+
+[[autodoc]] FlaxWhisperTimeStampLogitsProcessor
     - __call__
 
 ## StoppingCriteria
