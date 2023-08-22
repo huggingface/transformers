@@ -18,10 +18,13 @@ import tempfile
 import unittest
 
 import datasets
+from huggingface_hub.file_download import http_get
 import numpy as np
+import os
 import pytest
 from huggingface_hub.file_download import http_get
 from requests import ReadTimeout
+import tempfile
 
 from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
 from transformers import is_torch_available, is_vision_available
