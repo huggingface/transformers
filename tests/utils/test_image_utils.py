@@ -28,6 +28,7 @@ from transformers import is_torch_available, is_vision_available
 from transformers.image_utils import ChannelDimension, get_channel_dimension_axis, make_list_of_images
 from transformers.testing_utils import is_flaky, require_torch, require_vision
 
+
 if is_torch_available():
     import torch
 
