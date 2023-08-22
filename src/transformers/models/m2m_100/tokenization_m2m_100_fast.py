@@ -36,22 +36,24 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
 
+# TODO: Add m2m models
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/nllb-200-distilled-600M": (
-            "https://huggingface.co/facebook/nllb-200-distilled-600M/resolve/main/sentencepiece.bpe.model"
-        ),
-    },
-    "tokenizer_file": {
-        "facebook/nllb-200-distilled-600M": (
-            "https://huggingface.co/facebook/nllb-200-distilled-600M/resolve/main/tokenizer.json"
-        ),
-    },
+    # "vocab_file": {
+    #     "facebook/nllb-200-distilled-600M": (
+    #         "https://huggingface.co/facebook/nllb-200-distilled-600M/resolve/main/sentencepiece.bpe.model"
+    #     ),
+    # },
+    # "tokenizer_file": {
+    #     "facebook/nllb-200-distilled-600M": (
+    #         "https://huggingface.co/facebook/nllb-200-distilled-600M/resolve/main/tokenizer.json"
+    #     ),
+    # },
 }
 
+# TODO: Add m2m models
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/nllb-large-en-ro": 1024,
-    "facebook/nllb-200-distilled-600M": 1024,
+    # "facebook/nllb-large-en-ro": 1024,
+    # "facebook/nllb-200-distilled-600M": 1024,
 }
 
 # fmt: off
@@ -201,6 +203,7 @@ class M2M100TokenizerFast(PreTrainedTokenizerFast):
         self._src_lang = new_src_lang
         self.set_src_lang_special_tokens(self._src_lang)
 
+    # Copied from transformers.models.nllb.tokenization_nllb_fast.NllbTokenizerFast.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -208,7 +211,7 @@ class M2M100TokenizerFast(PreTrainedTokenizerFast):
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. The special tokens depend on calling set_lang.
 
-        An NLLB sequence has the following format, where `X` represents the sequence:
+        An M2M100 sequence has the following format, where `X` represents the sequence:
 
         - `input_ids` (for encoder) `X [eos, src_lang_code]`
         - `decoder_input_ids`: (for decoder) `X [eos, tgt_lang_code]`
@@ -230,6 +233,7 @@ class M2M100TokenizerFast(PreTrainedTokenizerFast):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
+    # Copied from transformers.models.nllb.tokenization_nllb_fast.NllbTokenizerFast._build_translation_inputs
     def _build_translation_inputs(
         self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
     ):
@@ -242,6 +246,7 @@ class M2M100TokenizerFast(PreTrainedTokenizerFast):
         inputs["forced_bos_token_id"] = tgt_lang_id
         return inputs
 
+    # Copied from transformers.models.nllb.tokenization_nllb_fast.NllbTokenizerFast.prepare_seq2seq_batch
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
@@ -254,12 +259,15 @@ class M2M100TokenizerFast(PreTrainedTokenizerFast):
         self.tgt_lang = tgt_lang
         return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
 
+    # Copied from transformers.models.nllb.tokenization_nllb_fast.NllbTokenizerFast._switch_to_input_mode
     def _switch_to_input_mode(self):
         return self.set_src_lang_special_tokens(self.src_lang)
 
+    # Copied from transformers.models.nllb.tokenization_nllb_fast.NllbTokenizerFast._switch_to_target_mode
     def _switch_to_target_mode(self):
         return self.set_tgt_lang_special_tokens(self.tgt_lang)
 
+    # Copied from transformers.models.m2m_100.tokenization_m2m_100.M2M100Tokenizer.set_src_lang_special_tokens
     def set_src_lang_special_tokens(self, src_lang: str) -> None:
         """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, src_lang_code]."""
         lang_token = self.get_lang_token(src_lang)
@@ -276,6 +284,7 @@ class M2M100TokenizerFast(PreTrainedTokenizerFast):
             special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
         )
 
+    # Copied from transformers.models.m2m_100.tokenization_m2m_100.M2M100Tokenizer.set_tgt_lang_special_tokens
     def set_tgt_lang_special_tokens(self, tgt_lang: str) -> None:
         """Reset the special tokens to the target language setting. No prefix and suffix=[eos, tgt_lang_code]."""
         lang_token = self.get_lang_token(tgt_lang)
@@ -292,13 +301,16 @@ class M2M100TokenizerFast(PreTrainedTokenizerFast):
             special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
         )
 
+    # Copied from transformers.models.m2m_100.tokenization_m2m_100.M2M100Tokenizer.get_lang_token
     def get_lang_token(self, lang: str) -> str:
         return self.lang_code_to_token[lang]
 
+    # Copied from transformers.models.m2m_100.tokenization_m2m_100.M2M100Tokenizer.get_lang_id
     def get_lang_id(self, lang: str) -> int:
         lang_token = self.get_lang_token(lang)
         return self.lang_token_to_id[lang_token]
 
+    # Copied from transformers.models.nllb.tokenization_nllb_fast.NllbTokenizerFast.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
