@@ -1011,11 +1011,17 @@ else:
             "Constraint",
             "ConstraintListState",
             "DisjunctiveConstraint",
+            "EncoderNoRepeatNGramLogitsProcessor",
+            "EncoderRepetitionPenaltyLogitsProcessor",
+            "EpsilonLogitsWarper",
+            "EtaLogitsWarper",
+            "ExponentialDecayLengthPenalty",
             "ForcedBOSTokenLogitsProcessor",
             "ForcedEOSTokenLogitsProcessor",
             "GenerationMixin",
             "HammingDiversityLogitsProcessor",
             "InfNanRemoveLogitsProcessor",
+            "LogitNormalization",
             "LogitsProcessor",
             "LogitsProcessorList",
             "LogitsWarper",
@@ -1035,6 +1041,7 @@ else:
             "TopKLogitsWarper",
             "TopPLogitsWarper",
             "TypicalLogitsWarper",
+            "UnbatchedClassifierFreeGuidanceLogitsProcessor",
             "top_k_top_p_filtering",
         ]
     )
@@ -3115,6 +3122,7 @@ else:
         [
             "TFForcedBOSTokenLogitsProcessor",
             "TFForcedEOSTokenLogitsProcessor",
+            "TFForceTokensLogitsProcessor",
             "TFGenerationMixin",
             "TFLogitsProcessor",
             "TFLogitsProcessorList",
@@ -3123,6 +3131,8 @@ else:
             "TFNoBadWordsLogitsProcessor",
             "TFNoRepeatNGramLogitsProcessor",
             "TFRepetitionPenaltyLogitsProcessor",
+            "TFSuppressTokensAtBeginLogitsProcessor",
+            "TFSuppressTokensLogitsProcessor",
             "TFTemperatureLogitsWarper",
             "TFTopKLogitsWarper",
             "TFTopPLogitsWarper",
@@ -3836,14 +3846,18 @@ else:
         [
             "FlaxForcedBOSTokenLogitsProcessor",
             "FlaxForcedEOSTokenLogitsProcessor",
+            "FlaxForceTokensLogitsProcessor",
             "FlaxGenerationMixin",
             "FlaxLogitsProcessor",
             "FlaxLogitsProcessorList",
             "FlaxLogitsWarper",
             "FlaxMinLengthLogitsProcessor",
             "FlaxTemperatureLogitsWarper",
+            "FlaxSuppressTokensAtBeginLogitsProcessor",
+            "FlaxSuppressTokensLogitsProcessor",
             "FlaxTopKLogitsWarper",
             "FlaxTopPLogitsWarper",
+            "FlaxWhisperTimeStampLogitsProcessor",
         ]
     )
     _import_structure["generation_flax_utils"] = []
@@ -4988,11 +5002,17 @@ if TYPE_CHECKING:
             Constraint,
             ConstraintListState,
             DisjunctiveConstraint,
+            EncoderNoRepeatNGramLogitsProcessor,
+            EncoderRepetitionPenaltyLogitsProcessor,
+            EpsilonLogitsWarper,
+            EtaLogitsWarper,
+            ExponentialDecayLengthPenalty,
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
             GenerationMixin,
             HammingDiversityLogitsProcessor,
             InfNanRemoveLogitsProcessor,
+            LogitNormalization,
             LogitsProcessor,
             LogitsProcessorList,
             LogitsWarper,
@@ -5012,6 +5032,7 @@ if TYPE_CHECKING:
             TopKLogitsWarper,
             TopPLogitsWarper,
             TypicalLogitsWarper,
+            UnbatchedClassifierFreeGuidanceLogitsProcessor,
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
@@ -6711,6 +6732,7 @@ if TYPE_CHECKING:
         from .generation import (
             TFForcedBOSTokenLogitsProcessor,
             TFForcedEOSTokenLogitsProcessor,
+            TFForceTokensLogitsProcessor,
             TFGenerationMixin,
             TFLogitsProcessor,
             TFLogitsProcessorList,
@@ -6719,6 +6741,8 @@ if TYPE_CHECKING:
             TFNoBadWordsLogitsProcessor,
             TFNoRepeatNGramLogitsProcessor,
             TFRepetitionPenaltyLogitsProcessor,
+            TFSuppressTokensAtBeginLogitsProcessor,
+            TFSuppressTokensLogitsProcessor,
             TFTemperatureLogitsWarper,
             TFTopKLogitsWarper,
             TFTopPLogitsWarper,
@@ -7284,14 +7308,18 @@ if TYPE_CHECKING:
         from .generation import (
             FlaxForcedBOSTokenLogitsProcessor,
             FlaxForcedEOSTokenLogitsProcessor,
+            FlaxForceTokensLogitsProcessor,
             FlaxGenerationMixin,
             FlaxLogitsProcessor,
             FlaxLogitsProcessorList,
             FlaxLogitsWarper,
             FlaxMinLengthLogitsProcessor,
+            FlaxSuppressTokensAtBeginLogitsProcessor,
+            FlaxSuppressTokensLogitsProcessor,
             FlaxTemperatureLogitsWarper,
             FlaxTopKLogitsWarper,
             FlaxTopPLogitsWarper,
+            FlaxWhisperTimeStampLogitsProcessor,
         )
         from .modeling_flax_utils import FlaxPreTrainedModel
 

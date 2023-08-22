@@ -41,12 +41,16 @@ else:
         "ConstrainedBeamSearchScorer",
     ]
     _import_structure["logits_process"] = [
+        "EncoderNoRepeatNGramLogitsProcessor",
+        "EncoderRepetitionPenaltyLogitsProcessor",
         "EpsilonLogitsWarper",
         "EtaLogitsWarper",
+        "ExponentialDecayLengthPenalty",
         "ForcedBOSTokenLogitsProcessor",
         "ForcedEOSTokenLogitsProcessor",
         "HammingDiversityLogitsProcessor",
         "InfNanRemoveLogitsProcessor",
+        "LogitNormalization",
         "LogitsProcessor",
         "LogitsProcessorList",
         "LogitsWarper",
@@ -57,14 +61,10 @@ else:
         "PrefixConstrainedLogitsProcessor",
         "RepetitionPenaltyLogitsProcessor",
         "SequenceBiasLogitsProcessor",
-        "EncoderRepetitionPenaltyLogitsProcessor",
         "TemperatureLogitsWarper",
         "TopKLogitsWarper",
         "TopPLogitsWarper",
         "TypicalLogitsWarper",
-        "EncoderNoRepeatNGramLogitsProcessor",
-        "ExponentialDecayLengthPenalty",
-        "LogitNormalization",
         "UnbatchedClassifierFreeGuidanceLogitsProcessor",
     ]
     _import_structure["stopping_criteria"] = [
@@ -99,6 +99,7 @@ else:
     _import_structure["tf_logits_process"] = [
         "TFForcedBOSTokenLogitsProcessor",
         "TFForcedEOSTokenLogitsProcessor",
+        "TFForceTokensLogitsProcessor",
         "TFLogitsProcessor",
         "TFLogitsProcessorList",
         "TFLogitsWarper",
@@ -106,12 +107,11 @@ else:
         "TFNoBadWordsLogitsProcessor",
         "TFNoRepeatNGramLogitsProcessor",
         "TFRepetitionPenaltyLogitsProcessor",
+        "TFSuppressTokensAtBeginLogitsProcessor",
+        "TFSuppressTokensLogitsProcessor",
         "TFTemperatureLogitsWarper",
         "TFTopKLogitsWarper",
         "TFTopPLogitsWarper",
-        "TFForceTokensLogitsProcessor",
-        "TFSuppressTokensAtBeginLogitsProcessor",
-        "TFSuppressTokensLogitsProcessor",
     ]
     _import_structure["tf_utils"] = [
         "TFGenerationMixin",
@@ -137,13 +137,17 @@ else:
     _import_structure["flax_logits_process"] = [
         "FlaxForcedBOSTokenLogitsProcessor",
         "FlaxForcedEOSTokenLogitsProcessor",
+        "FlaxForceTokensLogitsProcessor",
         "FlaxLogitsProcessor",
         "FlaxLogitsProcessorList",
         "FlaxLogitsWarper",
         "FlaxMinLengthLogitsProcessor",
         "FlaxTemperatureLogitsWarper",
+        "FlaxSuppressTokensAtBeginLogitsProcessor",
+        "FlaxSuppressTokensLogitsProcessor",
         "FlaxTopKLogitsWarper",
         "FlaxTopPLogitsWarper",
+        "FlaxWhisperTimeStampLogitsProcessor",
     ]
     _import_structure["flax_utils"] = [
         "FlaxGenerationMixin",
@@ -261,13 +265,17 @@ if TYPE_CHECKING:
         from .flax_logits_process import (
             FlaxForcedBOSTokenLogitsProcessor,
             FlaxForcedEOSTokenLogitsProcessor,
+            FlaxForceTokensLogitsProcessor,
             FlaxLogitsProcessor,
             FlaxLogitsProcessorList,
             FlaxLogitsWarper,
             FlaxMinLengthLogitsProcessor,
+            FlaxSuppressTokensAtBeginLogitsProcessor,
+            FlaxSuppressTokensLogitsProcessor,
             FlaxTemperatureLogitsWarper,
             FlaxTopKLogitsWarper,
             FlaxTopPLogitsWarper,
+            FlaxWhisperTimeStampLogitsProcessor,
         )
         from .flax_utils import FlaxBeamSearchOutput, FlaxGenerationMixin, FlaxGreedySearchOutput, FlaxSampleOutput
 else:
