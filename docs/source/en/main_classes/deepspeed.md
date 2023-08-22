@@ -2065,7 +2065,7 @@ In this case you usually need to raise the value of `initial_scale_power`. Setti
 
 ## Non-Trainer Deepspeed Integration
 
-The [`~integrations.deepspeed.HfDeepSpeedConfig`] is used to integrate Deepspeed into the 🤗 Transformers core
+The [`~integrations.HfDeepSpeedConfig`] is used to integrate Deepspeed into the 🤗 Transformers core
 functionality, when [`Trainer`] is not used. The only thing that it does is handling Deepspeed ZeRO-3 param gathering and automatically splitting the model onto multiple gpus during `from_pretrained` call. Everything else you have to do by yourself.
 
 When using [`Trainer`] everything is automatically taken care of.
