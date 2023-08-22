@@ -637,7 +637,8 @@ if is_torch_available():
             _ = importlib.import_module(backend)
         except ModuleNotFoundError as e:
             raise ModuleNotFoundError(
-                f"Failed to import `TRANSFORMERS_TEST_BACKEND` '{backend}'! This should be the name of an installed module."
+                f"Failed to import `TRANSFORMERS_TEST_BACKEND` '{backend}'! This should be the name of an installed module. The original error (look up to see its"
+                f" traceback):\n{e}"
             ) from e
 
 else:
