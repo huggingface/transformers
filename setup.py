@@ -166,9 +166,9 @@ _deps = [
     "sudachipy>=0.6.6",
     "sudachidict_core>=20220729",
     # TensorFlow pin. When changing this value, update examples/tensorflow/_tests_requirements.txt accordingly
-    "tensorflow-cpu>=2.6,<2.14",
-    "tensorflow>=2.6,<2.14",
-    "tensorflow-text<2.14",
+    "tensorflow-cpu>=2.6,<2.15",
+    "tensorflow>=2.6,<2.15",
+    "tensorflow-text<2.15",
     "tf2onnx",
     "timeout-decorator",
     "timm",
