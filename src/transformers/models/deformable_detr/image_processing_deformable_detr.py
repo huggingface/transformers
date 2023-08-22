@@ -1312,9 +1312,7 @@ class DeformableDetrImageProcessor(BaseImageProcessor):
             ]
             if annotations is not None:
                 annotations = [
-                    self.normalize_annotation(
-                        annotation, get_image_size(image, input_data_format), input_data_format=input_data_format
-                    )
+                    self.normalize_annotation(annotation, get_image_size(image, input_data_format))
                     for annotation, image in zip(annotations, images)
                 ]
 
