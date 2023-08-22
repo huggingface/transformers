@@ -59,26 +59,26 @@ This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ) wi
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with LLaMA2. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
-- A blog on how to [understand Llama 2's features and its collaboration with Hugging Face](https://huggingface.co/blog/llama2).
-- A blog on [an introduction to Llama 2](https://www.philschmid.de/llama-2) by Phil Schmid.
+- [Llama 2 is here - get it on Hugging Face](https://huggingface.co/blog/llama2), a blog post about Llama 2 and how to use it with 🤗 Transformers and 🤗 PEFT.
+- [LLaMA 2 - Every Resource you need](https://www.philschmid.de/llama-2), a compilation of relevant resources to learn about LLaMA 2 and how to get started quickly.
 
 <PipelineTag pipeline="text-generation"/>
 
-- A notebook on how to [fine-tune Llama 2 in Google Colab using QLoRA and 4-bit precision](https://colab.research.google.com/drive/1PEQyJO1-f6j0S_XJ8DV50NkpzasXkrzd?usp=sharing). 🌎
-- A notebook on how to [fine-tune the "Llama-v2-7b-guanaco" model with 4-bit qlora and generate Q&A datasets from PDFs](https://colab.research.google.com/drive/134o_cXcMe_lsvl15ZE_4Y75Kstepsntu?usp=sharing). 🌎
+- A [notebook](https://colab.research.google.com/drive/1PEQyJO1-f6j0S_XJ8DV50NkpzasXkrzd?usp=sharing) on how to fine-tune Llama 2 in Google Colab using QLoRA and 4-bit precision. 🌎
+- A [notebook](https://colab.research.google.com/drive/134o_cXcMe_lsvl15ZE_4Y75Kstepsntu?usp=sharing) on how to fine-tune the "Llama-v2-7b-guanaco" model with 4-bit QLoRA and generate Q&A datasets from PDFs. 🌎
 
 ⚗️ Optimization
-- A blog on how to [fine-tune Llama 2 using the Direct Preference Optimization (DPO) method](https://huggingface.co/blog/dpo-trl).
-- A blog on how to [instruction-tune Llama 2 for optimized performance](https://www.philschmid.de/instruction-tune-llama-2) by Phil Schmid.
-- A notebook on how to [fine-tune the Llama 2 model on a personal computer using QLoRa and TRL](https://colab.research.google.com/drive/1SYpgFpcmtIUzdE7pxqknrM4ArCASfkFQ?usp=sharing). 🌎
+- [Fine-tune Llama 2 with DPO](https://huggingface.co/blog/dpo-trl), a guide to using the TRL library's DPO method to fine tune Llama 2 on a specific dataset.
+- [Extended Guide: Instruction-tune Llama 2](https://www.philschmid.de/instruction-tune-llama-2), a guide to training Llama 2 to generate instructions from inputs, transforming the model from instruction-following to instruction-giving.
+- A [notebook](https://colab.research.google.com/drive/1SYpgFpcmtIUzdE7pxqknrM4ArCASfkFQ?usp=sharing) on how to fine-tune the Llama 2 model on a personal computer using QLoRa and TRL. 🌎
 
 ⚡️ Inference
-- A notebook on how to [quantize the Llama 2 model using GPTQ and the AutoGPTQ library](https://colab.research.google.com/drive/1TC56ArKerXUpbgRy5vM3woRsbTEVNq7h?usp=sharing). 🌎
-- A notebook on how to [run the Llama 2 Chat Model with 4-bit quantization on a local computer or Google Colab](https://colab.research.google.com/drive/1X1z9Q6domMKl2CnEM0QGHNwidLfR4dW2?usp=sharing). 🌎
+- A [notebook]((https://colab.research.google.com/drive/1TC56ArKerXUpbgRy5vM3woRsbTEVNq7h?usp=sharing) on how to quantize the Llama 2 model using GPTQ from the AutoGPTQ library. 🌎
+- A [notebook](https://colab.research.google.com/drive/1X1z9Q6domMKl2CnEM0QGHNwidLfR4dW2?usp=sharing) on how to run the Llama 2 Chat Model with 4-bit quantization on a local computer or Google Colab. 🌎
 
 🚀 Deploy
-- A blog on how to [use SageMaker with Llama2 and QLora for efficient model deployment](https://www.philschmid.de/sagemaker-llama2-qlora) by Phil Schmid.
-- A blog on how to [deploy Llama models using SageMaker for scalable applications](https://www.philschmid.de/sagemaker-llama-llm) by Phil Schmid.
+- [Fine-tune LLaMA 2 (7-70B) on Amazon SageMaker](https://www.philschmid.de/sagemaker-llama2-qlora), a complete guide from setup to QLoRA fine-tuning and deployment on Amazon SageMaker.
+- [Deploy Llama 2 7B/13B/70B on Amazon SageMaker](https://www.philschmid.de/sagemaker-llama-llm), a guide on using Hugging Face's LLM DLC container for secure and scalable deployment.
 
 
 ## LlamaConfig
