@@ -475,10 +475,7 @@ class _BaseAutoModelClass:
             subfolder = kwargs.get("subfolder", None)
 
             maybe_adapter_path = find_adapter_config_file(
-                pretrained_model_name_or_path,
-                revision=revision,
-                token=use_auth_token,
-                subfolder=subfolder,
+                pretrained_model_name_or_path, revision=revision, token=token, subfolder=subfolder
             )
 
             if maybe_adapter_path is not None:
