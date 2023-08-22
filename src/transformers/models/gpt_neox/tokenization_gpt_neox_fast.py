@@ -145,7 +145,7 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
 
     @property
     def default_prompt_config(self):
-        template = "{{ message.content }}{{ special_tokens['eos_token'] }}"
+        template = "{{ message.content }}{{ eos_token }}"
         return {
             "template": template,
             "tokenize_separately": True,

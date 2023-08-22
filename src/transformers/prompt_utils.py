@@ -21,7 +21,6 @@ import warnings
 from typing import Any, Dict, Optional, Union
 
 from . import __version__
-from .configuration_utils import PretrainedConfig
 from .utils import (
     PROMPT_CONFIG_NAME,
     PushToHubMixin,
@@ -58,6 +57,7 @@ class PromptConfig(PushToHubMixin):
         self.tokenize_separately = kwargs.pop("chat_tokenize_separately", None)
         self.max_length = kwargs.pop("chat_max_length", None)
         self.template = kwargs.pop("chat_template", None)
+        self.template_args = kwargs.pop("chat_template_args", None)
 
     def __eq__(self, other):
         if not isinstance(other, PromptConfig):

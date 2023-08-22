@@ -28,9 +28,9 @@ from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
-from jinja2.sandbox import ImmutableSandboxedEnvironment
 
 import numpy as np
+from jinja2.sandbox import ImmutableSandboxedEnvironment
 from packaging import version
 
 from . import __version__
@@ -1571,12 +1571,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     @property
     def default_prompt_config(self):
-        template = ("{% for message in messages %}"
-                    "{% if message.role == 'system' %}{{[SYS]}} {{message.text }} {{ [/SYS]] }}"
-                    "{% elif message.role == 'user' %}{{ [USER_MSG] }} {{ message.text }} {{ [/USER_MSG] }}"
-                    "{% elif message.role == 'assistant' %}{{ [ASST_MSG] }} {{ message.text }} {{ [/ASST_MSG] }}"
-                    "{% endif %}"
-                    "{% endfor %}")
+        template = (
+            "{% for message in messages %}"
+            "{% if message.role == 'system' %}{{[SYS]}} {{message.text }} {{ [/SYS]] }}"
+            "{% elif message.role == 'user' %}{{ [USER_MSG] }} {{ message.text }} {{ [/USER_MSG] }}"
+            "{% elif message.role == 'assistant' %}{{ [ASST_MSG] }} {{ message.text }} {{ [/ASST_MSG] }}"
+            "{% endif %}"
+            "{% endfor %}"
+        )
         return {
             "template": template,
             "tokenize_separately": False,
@@ -1657,10 +1659,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         **kwargs,
     ) -> List[int]:
         """
-        Converts a Conversation object or a list of {"role", "content"} dictionaries to a list of token ids.
-        This method is intended for use with chat models, and will read the model's PromptConfig object to determine
-        the format and control tokens to use when converting. When the PromptConfig is not present, it may fall back
-        to the default_prompt_config specified at the class level.
+        Converts a Conversation object or a list of {"role", "content"} dictionaries to a list of token ids. This
+        method is intended for use with chat models, and will read the model's PromptConfig object to determine the
+        format and control tokens to use when converting. When the PromptConfig is not present, it may fall back to the
+        default_prompt_config specified at the class level.
 
         Args:
             conversation (Union[List[Dict[str, str]], "Conversation"]): A Conversation object or list of dicts
@@ -1699,17 +1701,23 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             template = self.default_prompt_config.get("template", None)
             if template is None:
                 raise ValueError("No template specified in either PromptConfig or default_prompt_config!")
+        template_args = prompt_config.template_args
+        if template_args is None:
+            template_args = self.default_prompt_config.get("template_args", {})
         jinja_env = ImmutableSandboxedEnvironment()
         template = jinja_env.from_string(template)
         if tokenize_separately:
             dialog_tokens = []
-            for message in conversation:
-                rendered = template.render(message=message, special_tokens=self.special_tokens_map)
+            for idx, message in enumerate(conversation):
+                # TODO Should we just always pass the whole conversation? Do we need the option to tokenize separately
+                #      at all?
+                rendered = template.render(
+                    message=message, message_idx=idx, **template_args, **self.special_tokens_map
+                )
                 tokenized = self.encode(rendered, add_special_tokens=add_special_tokens)
                 dialog_tokens.extend(tokenized)
         else:
-
-            rendered = template.render(messages=conversation, special_tokens=self.special_tokens_map)
+            rendered = template.render(messages=conversation, **template_args, **self.special_tokens_map)
             dialog_tokens = self.encode(rendered, add_special_tokens=add_special_tokens)
         return dialog_tokens
 

@@ -348,4 +348,18 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         )
         return self.encode(text=prompt)
 
-        # TODO This is the weird one - what chat properties do we write?
+    @property
+    def default_prompt_config(self):
+        template = (
+            "{{ eos_token }}{{ bos_token }}"
+            "{% for message in messages %}"
+            "{% if message['role'] == 'user' %}{{ 'User: '}}"
+            "{% else %}{{ 'Bot: '}}{% endif %}"
+            "{{ message['text'] }}{{ bos_token }}"
+            "{% endfor %}"
+        )
+        return {
+            "template": template,
+            "tokenize_separately": False,
+            "add_special_tokens": True,
+        }

@@ -368,34 +368,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         return output
 
-    @property
-    def default_prompt_config(self):
-        role_prefixes = {
-            "user": "[INST] ",
-            "system": "<<SYS>>\n",
-            "assistant": " ",
-        }
-        role_suffixes = {
-            "user": " [/INST]",
-            "system": "\n<</SYS>>\n\n",
-            "assistant": " ",
-        }
-        role_token_prefixes = {
-            "user": [self.bos_token_id],
-        }
-        role_token_suffixes = {
-            "assistant": [self.eos_token_id],
-        }
-        return {
-            "default_system_message": DEFAULT_SYSTEM_PROMPT,
-            "role_prefixes": role_prefixes,
-            "role_suffixes": role_suffixes,
-            "role_token_prefixes": role_token_prefixes,
-            "role_token_suffixes": role_token_suffixes,
-            "tokenize_separately": True,
-            "add_special_tokens": False,
-        }
-
     def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         r"""Builds the input ids for a conversation.
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
@@ -460,3 +432,25 @@ class LlamaTokenizer(PreTrainedTokenizer):
             f"{B_INST} {(dialogue[-1][1]).strip()} {E_INST}", add_special_tokens=False
         )
         return dialog_tokens
+
+    @property
+    def default_prompt_config(self):
+        template_args = {"default_system_prompt": DEFAULT_SYSTEM_PROMPT}
+        template = (
+            "{% if message_idx == 0 and message['role'] != 'system' %}"
+            "{{ '<<SYS>>\\n' + default_system_prompt + '\\n<</SYS>>\\n\\n' }}"  # Insert a default sys message
+            "{% endif %}"
+            "{% if message['role'] == 'user' %}"
+            "{{ bos_token + '[INST]' + message['content'] + '[/INST]' }}"
+            "{% elif message['role'] == 'system' %}"
+            "{{ '<<SYS>>\\n' + message['content'] + '\\n<</SYS>>\\n\\n' }}"
+            "{% elif message['role'] == 'assistant' %}"
+            "{{ ' '  + message['content'] + ' ' + eos_token }}"
+            "{% endif %}"
+        )
+        return {
+            "template": template,
+            "template_args": template_args,
+            "tokenize_separately": True,
+            "add_special_tokens": False,
+        }
