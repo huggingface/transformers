@@ -830,6 +830,15 @@ class M2M100Converter(SpmConverter):
             raise Exception(
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
             )
+        
+        tokenizer.add_special_tokens(
+            [
+                AddedToken(token)
+                for token, score in vocab_scores
+                if score == 0 or token in ("<s>", "<pad>", "</s>", "<unk>")
+            ]
+        )
+        
         return tokenizer
 
     def extract(self, vocab_scores=None) -> Tuple[Dict[str, int], List[Tuple]]:
