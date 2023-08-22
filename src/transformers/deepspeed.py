@@ -17,6 +17,7 @@ in `integrations/deepspeed` instead.
 
 Check: https://github.com/huggingface/transformers/pull/25599
 """
+import warnings
 
 # Backward compatibility imports, to make sure all those objects can be found in integrations/deepspeed
 from .integrations.deepspeed import (  # noqa
@@ -30,4 +31,10 @@ from .integrations.deepspeed import (  # noqa
     is_deepspeed_zero3_enabled,
     set_hf_deepspeed_config,
     unset_hf_deepspeed_config,
+)
+
+
+warnings.warn(
+    "transformers.deepspeed module is deprecated and will be removed in a future version. Please import deepspeed modules directly from transformers.integrations",
+    DeprecationWarning,
 )
