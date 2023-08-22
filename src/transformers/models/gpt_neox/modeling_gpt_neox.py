@@ -100,7 +100,7 @@ class GPTNeoXAttention(nn.Module):
         self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
         self._init_rope()
 
-        self.norm_factor = self.head_size ** -0.5
+        self.norm_factor = self.head_size**-0.5
         self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
