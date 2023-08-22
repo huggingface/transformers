@@ -522,7 +522,7 @@ This variable is useful for testing custom or less common PyTorch backends such 
 
 Certain devices will require an additional import after importing `torch` for the first time. This can be specified using the environment variable `TRANSFORMERS_TEST_BACKEND`:
 ```bash
-TRANSFORMERS_TEST_BACKEND="torch_X" pytest tests/test_logging.py
+TRANSFORMERS_TEST_BACKEND="torch_npu" pytest tests/test_logging.py
 ```
 
 
