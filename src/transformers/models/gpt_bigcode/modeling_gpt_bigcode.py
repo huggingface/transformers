@@ -514,7 +514,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 
         max_positions = config.max_position_embeddings
         self.register_buffer(
-            "bias", torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)), persistent=False
+            "bias", torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)), persistent=False
         )
 
         self.gradient_checkpointing = False
