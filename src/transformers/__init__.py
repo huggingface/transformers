@@ -275,6 +275,7 @@ _import_structure = {
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
     "models.decision_transformer": ["DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "DecisionTransformerConfig"],
     "models.deformable_detr": ["DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeformableDetrConfig"],
+    "models.grounding_dino": ["GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GroundingDINOConfig"],
     "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
     "models.deprecated": [],
     "models.deprecated.bort": [],
@@ -1589,6 +1590,14 @@ else:
             "DeformableDetrForObjectDetection",
             "DeformableDetrModel",
             "DeformableDetrPreTrainedModel",
+        ]
+    )
+    _import_structure["models.grounding_dino"].extend(
+        [
+            "GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GroundingDINOForObjectDetection",
+            "GroundingDINOModel",
+            "GroundingDINOPreTrainedModel",
         ]
     )
     _import_structure["models.deit"].extend(
@@ -4428,6 +4437,7 @@ if TYPE_CHECKING:
         DecisionTransformerConfig,
     )
     from .models.deformable_detr import DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DeformableDetrConfig
+    from .models.grounding_dino import GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP, GroundingDINOConfig
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
     from .models.deprecated.mctct import (
         MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5582,6 +5592,12 @@ if TYPE_CHECKING:
             DeformableDetrForObjectDetection,
             DeformableDetrModel,
             DeformableDetrPreTrainedModel,
+        )
+        from .models.grounding_dino import (
+            GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GroundingDINOForObjectDetection,
+            GroundingDINOModel,
+            GroundingDINOPreTrainedModel,
         )
         from .models.deit import (
             DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,

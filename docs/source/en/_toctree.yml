@@ -523,6 +523,8 @@
         title: FocalNet
       - local: model_doc/glpn
         title: GLPN
+      - local: model_doc/grounding-dino
+        title: Grounding DINO
       - local: model_doc/imagegpt
         title: ImageGPT
       - local: model_doc/levit

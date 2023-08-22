@@ -61,6 +61,7 @@ from . import (
     deberta_v2,
     decision_transformer,
     deformable_detr,
+    grounding_dino,
     deit,
     deprecated,
     deta,
