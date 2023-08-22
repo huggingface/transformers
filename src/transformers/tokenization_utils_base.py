@@ -1675,6 +1675,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             List[int]: A list of token ids representing the tokenized chat so far, including control tokens. This
             output is ready to pass to the model, either directly or via methods like `generate()`.
         """
+
+        class IncrediblySandboxedEnvironment(ImmutableSandboxedEnvironment):
+            def is_safe_callable(self, obj):
+                return False
+
         if hasattr(conversation, "messages"):
             # Indicates it's a Conversation object
             conversation = conversation.messages
@@ -1704,13 +1709,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         template_args = prompt_config.template_args
         if template_args is None:
             template_args = self.default_prompt_config.get("template_args", {})
-        jinja_env = ImmutableSandboxedEnvironment()
+        jinja_env = IncrediblySandboxedEnvironment()
         template = jinja_env.from_string(template)
         if tokenize_separately:
             dialog_tokens = []
             for idx, message in enumerate(conversation):
                 # TODO Should we just always pass the whole conversation? Do we need the option to tokenize separately
                 #      at all?
+                # TODO Can a malicious value be injected in the saved template_args value? What limitations are there?
                 rendered = template.render(
                     message=message, message_idx=idx, **template_args, **self.special_tokens_map
                 )
@@ -2188,6 +2194,20 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 " fine-tuned or trained."
             )
 
+        # If it is a model with generation capabilities, attempt to load the generation config
+        if tokenizer.can_generate and pretrained_model_name_or_path is not None:
+            try:
+                tokenizer.PromptConfig = PromptConfig.from_pretrained(
+                    pretrained_model_name_or_path,
+                    cache_dir=cache_dir,
+                    local_files_only=local_files_only,
+                    token=token,
+                    **kwargs,
+                )
+            except OSError:
+                logger.info("Prompt config file not found, using default prompt config.")
+                pass
+
         return tokenizer
 
     @staticmethod
@@ -2343,6 +2363,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             legacy_format=legacy_format,
             filename_prefix=filename_prefix,
         )
+
+        if self.can_generate:
+            self.prompt_config.save_pretrained(save_directory)
 
         if push_to_hub:
             self._upload_modified_files(
