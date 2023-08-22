@@ -79,6 +79,13 @@ class TextDatasetForNextSentencePrediction(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class AlternatingCodebooksLogitsProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class BeamScorer(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -87,6 +94,13 @@ class BeamScorer(metaclass=DummyObject):
 
 
 class BeamSearchScorer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ClassifierFreeGuidanceLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -164,6 +178,13 @@ class ForcedBOSTokenLogitsProcessor(metaclass=DummyObject):
 
 
 class ForcedEOSTokenLogitsProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ForceTokensLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -310,6 +331,13 @@ class SuppressTokensAtBeginLogitsProcessor(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class SuppressTokensLogitsProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class TemperatureLogitsWarper(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -339,6 +367,13 @@ class TypicalLogitsWarper(metaclass=DummyObject):
 
 
 class UnbatchedClassifierFreeGuidanceLogitsProcessor(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class WhisperTimeStampLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

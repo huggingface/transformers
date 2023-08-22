@@ -1005,8 +1005,10 @@ else:
     _import_structure["deepspeed"] = []
     _import_structure["generation"].extend(
         [
+            "AlternatingCodebooksLogitsProcessor",
             "BeamScorer",
             "BeamSearchScorer",
+            "ClassifierFreeGuidanceLogitsProcessor",
             "ConstrainedBeamSearchScorer",
             "Constraint",
             "ConstraintListState",
@@ -1018,6 +1020,7 @@ else:
             "ExponentialDecayLengthPenalty",
             "ForcedBOSTokenLogitsProcessor",
             "ForcedEOSTokenLogitsProcessor",
+            "ForceTokensLogitsProcessor",
             "GenerationMixin",
             "HammingDiversityLogitsProcessor",
             "InfNanRemoveLogitsProcessor",
@@ -1038,11 +1041,13 @@ else:
             "StoppingCriteria",
             "StoppingCriteriaList",
             "SuppressTokensAtBeginLogitsProcessor",
+            "SuppressTokensLogitsProcessor",
             "TemperatureLogitsWarper",
             "TopKLogitsWarper",
             "TopPLogitsWarper",
             "TypicalLogitsWarper",
             "UnbatchedClassifierFreeGuidanceLogitsProcessor",
+            "WhisperTimeStampLogitsProcessor",
             "top_k_top_p_filtering",
         ]
     )
@@ -4997,8 +5002,10 @@ if TYPE_CHECKING:
             TextDatasetForNextSentencePrediction,
         )
         from .generation import (
+            AlternatingCodebooksLogitsProcessor,
             BeamScorer,
             BeamSearchScorer,
+            ClassifierFreeGuidanceLogitsProcessor,
             ConstrainedBeamSearchScorer,
             Constraint,
             ConstraintListState,
@@ -5010,6 +5017,7 @@ if TYPE_CHECKING:
             ExponentialDecayLengthPenalty,
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
+            ForceTokensLogitsProcessor,
             GenerationMixin,
             HammingDiversityLogitsProcessor,
             InfNanRemoveLogitsProcessor,
@@ -5030,11 +5038,13 @@ if TYPE_CHECKING:
             StoppingCriteria,
             StoppingCriteriaList,
             SuppressTokensAtBeginLogitsProcessor,
+            SuppressTokensLogitsProcessor,
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
             TypicalLogitsWarper,
             UnbatchedClassifierFreeGuidanceLogitsProcessor,
+            WhisperTimeStampLogitsProcessor,
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel

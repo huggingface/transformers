@@ -41,6 +41,8 @@ else:
         "ConstrainedBeamSearchScorer",
     ]
     _import_structure["logits_process"] = [
+        "AlternatingCodebooksLogitsProcessor",
+        "ClassifierFreeGuidanceLogitsProcessor",
         "EncoderNoRepeatNGramLogitsProcessor",
         "EncoderRepetitionPenaltyLogitsProcessor",
         "EpsilonLogitsWarper",
@@ -48,6 +50,7 @@ else:
         "ExponentialDecayLengthPenalty",
         "ForcedBOSTokenLogitsProcessor",
         "ForcedEOSTokenLogitsProcessor",
+        "ForceTokensLogitsProcessor",
         "HammingDiversityLogitsProcessor",
         "InfNanRemoveLogitsProcessor",
         "LogitNormalization",
@@ -61,12 +64,14 @@ else:
         "PrefixConstrainedLogitsProcessor",
         "RepetitionPenaltyLogitsProcessor",
         "SequenceBiasLogitsProcessor",
+        "SuppressTokensLogitsProcessor",
         "SuppressTokensAtBeginLogitsProcessor",
         "TemperatureLogitsWarper",
         "TopKLogitsWarper",
         "TopPLogitsWarper",
         "TypicalLogitsWarper",
         "UnbatchedClassifierFreeGuidanceLogitsProcessor",
+        "WhisperTimeStampLogitsProcessor",
     ]
     _import_structure["stopping_criteria"] = [
         "MaxNewTokensCriteria",
@@ -170,6 +175,8 @@ if TYPE_CHECKING:
         from .beam_constraints import Constraint, ConstraintListState, DisjunctiveConstraint, PhrasalConstraint
         from .beam_search import BeamHypotheses, BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
         from .logits_process import (
+            AlternatingCodebooksLogitsProcessor,
+            ClassifierFreeGuidanceLogitsProcessor,
             EncoderNoRepeatNGramLogitsProcessor,
             EncoderRepetitionPenaltyLogitsProcessor,
             EpsilonLogitsWarper,
@@ -177,6 +184,7 @@ if TYPE_CHECKING:
             ExponentialDecayLengthPenalty,
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
+            ForceTokensLogitsProcessor,
             HammingDiversityLogitsProcessor,
             InfNanRemoveLogitsProcessor,
             LogitNormalization,
@@ -191,11 +199,13 @@ if TYPE_CHECKING:
             RepetitionPenaltyLogitsProcessor,
             SequenceBiasLogitsProcessor,
             SuppressTokensAtBeginLogitsProcessor,
+            SuppressTokensLogitsProcessor,
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
             TypicalLogitsWarper,
             UnbatchedClassifierFreeGuidanceLogitsProcessor,
+            WhisperTimeStampLogitsProcessor,
         )
         from .stopping_criteria import (
             MaxLengthCriteria,
