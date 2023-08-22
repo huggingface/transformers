@@ -574,7 +574,7 @@ class AutoTokenizer:
             inputs (additional positional arguments, *optional*):
                 Will be passed along to the Tokenizer `__init__()` method.
             config ([`PretrainedConfig`], *optional*)
-                The configuration object used to dertermine the tokenizer class to instantiate.
+                The configuration object used to determine the tokenizer class to instantiate.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
