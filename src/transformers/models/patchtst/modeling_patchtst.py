@@ -14,12 +14,11 @@
 # limitations under the License.
 """ PyTorch PatchTST model."""
 
-from typing import List, Optional, Tuple, Union
-
-import numpy as np
+from typing import Optional, Tuple
 import torch
 from torch import nn
 import math
+
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, logging
 from ...modeling_outputs import BaseModelOutputWithNoAttention
@@ -155,14 +154,30 @@ def coord1d_pos_encoding(q_len, exponential=False, normalize=True):
     return cpe
 
 
-class TSTEncoderLayer(nn.Module):
+class ChannelAttentionTSTEncoder(nn.Module):
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
-        self.pre_norm = config.pre_norm
 
-        assert (
-            not config.d_model % config.encoder_attention_heads
-        ), f"d_model ({config.d_model}) must be divisible by n_heads ({config.encoder_attention_heads})"
+        self.layers = nn.ModuleList(
+            [
+                ChannelAttentionTSTEncoderLayer(config)
+                for i in range(config.encoder_layers)
+            ]
+        )
+
+    def forward(self, src: torch.Tensor):
+        """
+        src: tensor [bs x nvars x seq_len x d_model]
+        Return:
+            Tensor [bs x nvars x seq_len x d_model]
+        """
+        for mod in self.layers: src = mod(src)
+        return src
+
+
+class ChannelAttentionTSTEncoderLayer(nn.Module):
+    def __init__(self, config: PatchTSTConfig):
+        super().__init__()
 
         # Multi-Head attention
         self.self_attn = PatchTSTAttention(config)
@@ -174,6 +189,13 @@ class TSTEncoderLayer(nn.Module):
         else:
             self.norm_sublayer1 = nn.LayerNorm(config.d_model)
 
+        # Add & Norm of the sublayer 2
+        self.dropout_path2 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
+        if "batch" in config.norm.lower():
+            self.norm_sublayer2 = nn.Sequential(Transpose(1, 2), nn.BatchNorm1d(config.d_model), Transpose(1, 2))
+        else:
+            self.norm_sublayer2 = nn.LayerNorm(config.d_model)
+
         # Position-wise Feed-Forward
         self.ff = nn.Sequential(
             nn.Linear(config.d_model, config.encoder_ffn_dim, bias=config.bias),
@@ -182,65 +204,55 @@ class TSTEncoderLayer(nn.Module):
             nn.Linear(config.encoder_ffn_dim, config.d_model, bias=config.bias),
         )
 
-        # Add & Norm of sublayer 2
-        self.dropout_path2 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
+        # Add & Norm of sublayer 3
+        self.dropout_path3 = nn.Dropout(config.dropout_path) if config.dropout_path > 0 else nn.Identity()
         if "batch" in config.norm.lower():
-            self.norm_sublayer2 = nn.Sequential(Transpose(1, 2), nn.BatchNorm1d(config.d_model), Transpose(1, 2))
+            self.norm_sublayer3 = nn.Sequential(Transpose(1, 2), nn.BatchNorm1d(config.d_model), Transpose(1, 2))
         else:
-            self.norm_sublayer2 = nn.LayerNorm(config.d_model)
+            self.norm_sublayer3 = nn.LayerNorm(config.d_model)
+
+        self.pre_norm = config.pre_norm
+        self.store_attn = config.store_attention
 
     def forward(self, src: torch.Tensor):
         """
-        src: tensor [bs x seq_len x d_model]
+        src: tensor [bs x nvars x seq_len x d_model]
         Return:
-            Tensor [bs x seq_len x d_model]
+            Tensor [bs x nvars x seq_len x d_model]
         """
-        # First sublayer: mixing across time
+        bs, n_vars, seq_len, d_model = src.shape
+
+        # First sublayer: attention across time
+        src = src.view(bs*n_vars, seq_len, d_model)      # src: [(bs*nvars) x seq_len x d_model]
         if self.pre_norm:
             ## Norm and Multi-Head attention and Add residual connection
-            src = src + self.dropout_path1(
-                self.self_attn(self.norm_sublayer1(src))
-            )  # Add: residual connection with residual dropout
+            src = src + self.dropout_path1(self.self_attn(self.norm_sublayer1(src)) )  # Add: residual connection with residual dropout
         else:
             ## Multi-Head attention and Add residual connection and Norm - Standard Transformer from BERT
-            src = self.norm_sublayer1(src + self.dropout_path1(self.self_attn(src)))
+            src = self.norm_sublayer1( src + self.dropout_path1(self.self_attn(src) ) )     # src: [(bs*nvars) x seq_len x d_model]
+        src = src.reshape(bs, n_vars, seq_len, d_model)     # [bs x nvars x seq_len x d_model]
 
-        # Second sublayer: mixing across hidden dimension
+        # second sublayer: attention across variable at any given time
+        # [bs x nvars x seq_len x d_model] -> [bs x seq_len x nvars x d_model] -> [(bs*seq_len) x nvars x d_model]
+        src = src.transpose(2, 1).contiguous().view(bs*seq_len, n_vars, d_model)        # [(bs*seq_len) x nvars x d_model]
+        if self.pre_norm:
+            ## Norm and Multi-Head attention and Add residual connection
+            src = src + self.dropout_path2(self.self_attn(self.norm_sublayer2(src)) )  # Add: residual connection with residual dropout
+        else:
+            ## Multi-Head attention and Add residual connection and Norm - Standard Transformer from BERT
+            src = self.norm_sublayer2( src + self.dropout_path2(self.self_attn(src) ) )     # src: [(bs*seq_len) x nvars x d_model]
+        src = src.reshape(bs, seq_len, n_vars, d_model).transpose(1,2).contiguous()         # src: [bs x nvars x seq_len x d_model]
+
+        # Third sublayer: mixing across hidden
+        src = src.view(bs*n_vars, seq_len, d_model)      # src: [(bs*nvars) x seq_len x d_model]
         if self.pre_norm:
             ## Norm and Position-wise Feed-Forward and Add residual connection
-            src = src + self.dropout_path2(
-                self.ff(self.norm_sublayer2(src))
-            )  # Add: residual connection with residual dropout
+            src = src + self.dropout_path3(self.ff( self.norm_sublayer3(src) ))  # Add: residual connection with residual dropout
         else:
             ## Position-wise Feed-Forward and Add residual connection and Norm - Standard Transformer from BERT
-            src = self.norm_sublayer2(
-                src + self.dropout_path2(self.ff(src))
-            )  # Add: residual connection with residual dropout
+            src = self.norm_sublayer3( src + self.dropout_path3(self.ff(src)) ) # Add: residual connection with residual dropout
+        src = src.reshape(bs, n_vars, seq_len, d_model)     # [bs x nvars x seq_len x d_model]
 
-        return src
-
-
-class TSTEncoder(nn.Module):
-    def __init__(self, config: PatchTSTConfig):
-        super().__init__()
-
-        self.layers = nn.ModuleList([TSTEncoderLayer(config) for i in range(config.encoder_layers)])
-
-    def forward(
-        self, src: torch.Tensor, output_hidden_states: Optional[bool] = False, output_attention: Optional[bool] = False
-    ) -> torch.Tensor:
-        """
-        src: tensor [bs x seq_len x d_model]
-        Return:
-            Tensor [bs x seq_len x d_model]
-        """
-        all_hidden_states = []
-        for mod in self.layers:
-            if output_hidden_states:
-                src = mod(src)
-                all_hidden_states.append(src)
-        if output_hidden_states:
-            return src, all_hidden_states
         return src
 
 
@@ -256,92 +268,75 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
             torch.nn.init.normal_(self.config.cls_token, std=0.02)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (PatchTSTEncoder)):
+        if isinstance(module, (ChannelAttentionPatchTSTEncoder)):
             module.gradient_checkpointing = value
 
 
-class PatchTSTEncoder(PatchTSTPreTrainedModel):
+class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
-        # self.n_vars = c_in
-        self.num_patch = (max(config.context_length, config.patch_length) - config.patch_length) // config.stride + 1
+        self.n_vars = config.input_size
+        self.num_patch = config.num_patch
+        self.patch_length = config.patch_length
         self.d_model = config.d_model
         self.shared_embedding = config.shared_embedding
         self.use_cls_token = config.use_cls_token
 
-        # Added params for patching
-        self.patch_last = config.patch_last
-        self.mask_ratio = config.mask_ratio
-
         # Input encoding: projection of feature vectors onto a d-dim vector space
-        if not self.shared_embedding:
-            self.W_P = nn.ModuleList()
-            for _ in range(config.input_size):
-                self.W_P.append(nn.Linear(config.patch_length, self.d_model))
+        if not config.shared_embedding:
+            self.w_p = nn.ModuleList()
+            for _ in range(self.n_vars):
+                self.w_p.append(nn.Linear(config.patch_length, config.d_model))
         else:
-            self.W_P = nn.Linear(config.patch_length, config.d_model)
+            self.w_p = nn.Linear(config.patch_length, config.d_model)
 
         # Positional encoding
-        if self.use_cls_token:
-            self.cls_token = nn.Parameter(torch.zeros(1, 1, config.d_model))
-            self.W_pos = positional_encoding(
-                config.positional_encoding, config.learn_pe, self.num_patch + 1, config.d_model
-            )
+        if config.use_cls_token:
+            self.cls_token = nn.Parameter(torch.zeros(1, 1, 1, config.d_model))
+            self.w_pos = positional_encoding(config.positional_encoding, config.learn_pe, config.num_patch + 1, config.d_model)
         else:
-            self.W_pos = positional_encoding(
-                config.positional_encoding, config.learn_pe, self.num_patch, config.d_model
-            )
+            self.w_pos = positional_encoding(config.positional_encoding, config.learn_pe, config.num_patch, config.d_model)
 
         # Positional dropout
         self.dropout = nn.Dropout(config.positional_dropout) if config.positional_dropout > 0 else nn.Identity()
 
         # Encoder
-        self.encoder = TSTEncoder(config)
+        self.encoder = ChannelAttentionTSTEncoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        x: tensor [bs x nvars x num_patch x patch_len]    #[bs x num_patch x nvars x patch_len]
+        x: tensor [bs x nvars x num_patch x patch_len]
         return:
             tensor [bs x nvars x num_patch x d_model]
                 or [bs x nvars x (num_patch+1) x d_model] if use cls_token
         """
-
         # bs, num_patch, n_vars, patch_len = x.shape
         bs, n_vars, num_patch, patch_len = x.shape
         # Input encoding
         if not self.shared_embedding:
             x_out = []
             for i in range(n_vars):
-                z = self.W_P[i](x[:, i, :, :])
+                z = self.w_p[i](x[:, i, :, :])
                 x_out.append(z)
             x = torch.stack(x_out, dim=1)
         else:
-            x = self.W_P(x)  # x: [bs x nvars  x num_patch x d_model]
-
-        # x: [bs x nvars x num_patch x d_model] -> [bs * nvars x num_patch x d_model]
-        x = x.view(bs * n_vars, num_patch, self.d_model)  # x: [bs * nvars x num_patch x d_model]
+            x = self.w_p(x)  # x: [bs x nvars  x num_patch x d_model]
 
         if self.use_cls_token:
-            # print(f'x and W_pos shapes: {x.shape}, {self.W_pos.shape}')
-            x = self.dropout(x + self.W_pos[1:, :])  # x: [bs * nvars x num_patch x d_model]
+            x = self.dropout(x + self.w_pos[1:, :])  # x: [bs x nvars x num_patch x d_model]
             # append cls token
-            cls_token = self.cls_token + self.W_pos[:1, :]  # cls_token: [1 x 1 x d_model]
+            cls_token = self.cls_token + self.w_pos[:1, :]  # cls_token: [1 x 1 x 1 x d_model]
             cls_tokens = cls_token.expand(x.shape[0], -1, -1)  # get the same copy for all the batch samples
-            x = torch.cat((cls_tokens, x), dim=1)  # x: [bs * nvars x (num_patch+1) x d_model]
+            x = torch.cat((cls_tokens, x), dim=1)  # x: [bs x nvars x (num_patch+1) x d_model]
         else:
-            # print(f'x and W_pos shapes: {x.shape}, {self.W_pos.shape}')
-            x = self.dropout(x + self.W_pos)  # x: [bs * nvars x num_patch x d_model]
+            x = self.dropout(x + self.w_pos)  # x: [bs x nvars x num_patch x d_model]
 
         # Encoder
         x = self.encoder(
-            x
-        )  # x: [bs * nvars x num_patch x d_model] or [bs * nvars x (num_patch+1) x d_model] if use cls_token
-        x = torch.reshape(
-            x, (bs, n_vars, -1, self.d_model)
-        )  # x: [bs x nvars x num_patch x d_model] or [bs x nvars x (num_patch+1) x d_model] if use cls_token
+            x)  # x: [bs x nvars x num_patch x d_model] or [bs x nvars x (num_patch+1) x d_model] if use cls_token
         return x
 
 
@@ -516,99 +511,6 @@ PATCHTST_INPUTS_DOCSTRING = r"""
 """
 
 
-class PatchTSTEncoder(PatchTSTPreTrainedModel):
-    """
-    PatchTST encoder consisting of *config.encoder_layers* self attention layers with distillation layers. Each
-    attention layer is an [`PatchTSTEncoderLayer`].
-
-    Args:
-        config: PatchTSTConfig
-    """
-
-    def __init__(self, config: PatchTSTConfig):
-        super().__init__(config)
-        # self.n_vars = c_in
-        self.num_patch = (max(config.context_length, config.patch_length) - config.patch_length) // config.stride + 1
-        self.d_model = config.d_model
-        self.shared_embedding = config.shared_embedding
-        self.use_cls_token = config.use_cls_token
-
-        # Added params for patching
-        self.patch_last = config.patch_last
-        self.mask_ratio = config.mask_ratio
-
-        # Input encoding: projection of feature vectors onto a d-dim vector space
-        if not self.shared_embedding:
-            self.w_p = nn.ModuleList()
-            for _ in range(config.input_size):
-                self.w_p.append(nn.Linear(config.patch_length, self.d_model))
-        else:
-            self.w_p = nn.Linear(config.patch_length, config.d_model)
-
-        # Positional encoding
-        if self.use_cls_token:
-            self.cls_token = nn.Parameter(torch.zeros(1, 1, config.d_model))
-            self.w_pos = positional_encoding(
-                config.positional_encoding, config.learn_pe, self.num_patch + 1, config.d_model
-            )
-        else:
-            self.w_pos = positional_encoding(
-                config.positional_encoding, config.learn_pe, self.num_patch, config.d_model
-            )
-
-        # Positional dropout
-        self.dropout = nn.Dropout(config.positional_dropout) if config.positional_dropout > 0 else nn.Identity()
-
-        # Encoder
-        self.encoder = TSTEncoder(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        x: tensor [bs x nvars x num_patch x patch_len]    #[bs x num_patch x nvars x patch_len]
-        return:
-            tensor [bs x nvars x num_patch x d_model]
-                or [bs x nvars x (num_patch+1) x d_model] if use cls_token
-        """
-
-        # bs, num_patch, n_vars, patch_len = x.shape
-        bs, n_vars, num_patch, patch_len = x.shape
-        # Input encoding
-        if not self.shared_embedding:
-            x_out = []
-            for i in range(n_vars):
-                z = self.w_p[i](x[:, i, :, :])
-                x_out.append(z)
-            x = torch.stack(x_out, dim=1)
-        else:
-            x = self.w_p(x)  # x: [bs x nvars  x num_patch x d_model]
-
-        # x: [bs x nvars x num_patch x d_model] -> [bs * nvars x num_patch x d_model]
-        x = x.view(bs * n_vars, num_patch, self.d_model)  # x: [bs * nvars x num_patch x d_model]
-
-        if self.use_cls_token:
-            # print(f'x and W_pos shapes: {x.shape}, {self.W_pos.shape}')
-            x = self.dropout(x + self.w_pos[1:, :])  # x: [bs * nvars x num_patch x d_model]
-            # append cls token
-            cls_token = self.cls_token + self.w_pos[:1, :]  # cls_token: [1 x 1 x d_model]
-            cls_tokens = cls_token.expand(x.shape[0], -1, -1)  # get the same copy for all the batch samples
-            x = torch.cat((cls_tokens, x), dim=1)  # x: [bs * nvars x (num_patch+1) x d_model]
-        else:
-            # print(f'x and W_pos shapes: {x.shape}, {self.W_pos.shape}')
-            x = self.dropout(x + self.w_pos)  # x: [bs * nvars x num_patch x d_model]
-
-        # Encoder
-        x = self.encoder(
-            x
-        )  # x: [bs * nvars x num_patch x d_model] or [bs * nvars x (num_patch+1) x d_model] if use cls_token
-        x = torch.reshape(
-            x, (bs, n_vars, -1, self.d_model)
-        )  # x: [bs x nvars x num_patch x d_model] or [bs x nvars x (num_patch+1) x d_model] if use cls_token
-        return x
-
-
 @add_start_docstrings(
     "The bare PatchTST Model outputting raw hidden-states without any specific head on top.",
     PATCHTST_START_DOCSTRING,
@@ -617,7 +519,7 @@ class PatchTSTEncoder(PatchTSTPreTrainedModel):
 class PatchTSTModel(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
-        self.encoder = PatchTSTEncoder(config)
+        self.encoder = ChannelAttentionPatchTSTEncoder(config)
 
     def forward(self, x: torch.Tensor):
         encoder_output = self.encoder(x)
