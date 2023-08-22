@@ -136,7 +136,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         else:
             # Non CTC models cannot use return_timestamps
             with self.assertRaisesRegex(
-                ValueError, "^We cannot return_timestamps yet on non-ctc models apart from Whisper !$"
+                ValueError, "^We cannot return_timestamps yet on non-CTC models apart from Whisper!$"
             ):
                 outputs = speech_recognizer(audio, return_timestamps="char")
 
@@ -161,7 +161,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         # Non CTC models cannot use return_timestamps
         with self.assertRaisesRegex(
-            ValueError, "^We cannot return_timestamps yet on non-ctc models apart from Whisper !$"
+            ValueError, "^We cannot return_timestamps yet on non-CTC models apart from Whisper!$"
         ):
             _ = speech_recognizer(waveform, return_timestamps="char")
 
@@ -261,6 +261,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 ],
             },
         )
+        # CTC + LM models cannot use return_timestamps="char"
+        with self.assertRaisesRegex(
+            ValueError, "^CTC with LM can only predict word level timestamps, set `return_timestamps='word'`$"
+        ):
+            _ = speech_recognizer(filename, return_timestamps="char")
 
     @require_tf
     def test_small_model_tf(self):
@@ -337,6 +342,58 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             }
         )
         # fmt: on
+
+    @require_torch
+    def test_return_timestamps_in_init(self):
+        # segment-level timestamps are accepted
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        tokenizer = AutoTokenizer.from_pretrained("openai/whisper-tiny")
+        feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-tiny")
+
+        dummy_speech = np.ones(100)
+
+        pipe = pipeline(
+            task="automatic-speech-recognition",
+            model=model,
+            feature_extractor=feature_extractor,
+            tokenizer=tokenizer,
+            chunk_length_s=8,
+            stride_length_s=1,
+            return_timestamps=True,
+        )
+
+        _ = pipe(dummy_speech)
+
+        # word-level timestamps are accepted
+        pipe = pipeline(
+            task="automatic-speech-recognition",
+            model=model,
+            feature_extractor=feature_extractor,
+            tokenizer=tokenizer,
+            chunk_length_s=8,
+            stride_length_s=1,
+            return_timestamps="word",
+        )
+
+        _ = pipe(dummy_speech)
+
+        # char-level timestamps are not accepted
+        with self.assertRaisesRegex(
+            ValueError,
+            "^Whisper cannot return `char` timestamps, only word level or segment level timestamps. "
+            "Use `return_timestamps='word'` or `return_timestamps=True` respectively.$",
+        ):
+            pipe = pipeline(
+                task="automatic-speech-recognition",
+                model=model,
+                feature_extractor=feature_extractor,
+                tokenizer=tokenizer,
+                chunk_length_s=8,
+                stride_length_s=1,
+                return_timestamps="char",
+            )
+
+            _ = pipe(dummy_speech)
 
     @require_torch
     @slow
@@ -750,6 +807,14 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         )
         # fmt: on
 
+        # Whisper can only predict segment level timestamps or word level, not character level
+        with self.assertRaisesRegex(
+            ValueError,
+            "^Whisper cannot return `char` timestamps, only word level or segment level timestamps. "
+            "Use `return_timestamps='word'` or `return_timestamps=True` respectively.$",
+        ):
+            _ = speech_recognizer(filename, return_timestamps="char")
+
     @slow
     @require_torch
     @require_torchaudio
@@ -1082,6 +1147,13 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 ],
             },
         )
+        # CTC models must specify return_timestamps type - cannot set `return_timestamps=True` blindly
+        with self.assertRaisesRegex(
+            ValueError,
+            "^CTC can either predict character (char) level timestamps, or word level timestamps."
+            "Set `return_timestamps='char'` or `return_timestamps='word'` as required.$",
+        ):
+            _ = speech_recognizer(audio, return_timestamps=True)
 
     @require_torch
     @slow

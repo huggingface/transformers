@@ -3909,6 +3909,7 @@ class TokenizerTesterMixin:
                     # Should not raise an error
                     self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
 
+    # TODO This is ran for all models but only tests bert...
     def test_clean_up_tokenization_spaces(self):
         tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         assert tokenizer.clean_up_tokenization_spaces is True
@@ -3953,3 +3954,29 @@ class TokenizerTesterMixin:
         tokenizer.clean_up_tokenization_spaces = True
         decoded = tokenizer.decode(tokens)
         assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
+
+    def test_split_special_tokens(self):
+        if not self.test_slow_tokenizer:
+            return
+
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            special_token = "[SPECIAL_TOKEN]"
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+
+                if not tokenizer.is_fast:
+                    # bloom, gptneox etc only have a fast
+                    tokenizer.add_special_tokens({"additional_special_tokens": [special_token]})
+                    encoded_special_token = tokenizer.encode(special_token, add_special_tokens=False)
+                    self.assertEqual(len(encoded_special_token), 1)
+
+                    encoded_split_special_token = tokenizer.encode(
+                        special_token, add_special_tokens=False, split_special_tokens=True
+                    )
+                    if len(encoded_split_special_token) == 1:
+                        # if we have subword tokenization or special vocab
+                        self.assertTrue(
+                            encoded_split_special_token[0] != tokenizer.convert_tokens_to_ids(special_token)
+                        )
+                    else:
+                        self.assertTrue(len(encoded_split_special_token) > 1)

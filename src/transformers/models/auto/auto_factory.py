@@ -15,12 +15,14 @@
 """Factory function to build auto-model classes."""
 import copy
 import importlib
+import json
 import os
+import warnings
 from collections import OrderedDict
 
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...utils import copy_func, logging, requires_backends
+from ...utils import copy_func, find_adapter_config_file, is_peft_available, logging, requires_backends
 from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
 
 
@@ -449,14 +451,49 @@ class _BaseAutoModelClass:
             "revision",
             "subfolder",
             "use_auth_token",
+            "token",
         ]
         hub_kwargs = {name: kwargs.pop(name) for name in hub_kwargs_names if name in kwargs}
+
+        token = hub_kwargs.pop("token", None)
+        use_auth_token = hub_kwargs.pop("use_auth_token", None)
+        if use_auth_token is not None:
+            warnings.warn(
+                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
+            )
+            if token is not None:
+                raise ValueError(
+                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
+                )
+            token = use_auth_token
+
+        if token is not None:
+            hub_kwargs["token"] = token
+
+        if is_peft_available():
+            revision = kwargs.get("revision", None)
+            subfolder = kwargs.get("subfolder", None)
+
+            maybe_adapter_path = find_adapter_config_file(
+                pretrained_model_name_or_path, revision=revision, token=token, subfolder=subfolder
+            )
+
+            if maybe_adapter_path is not None:
+                with open(maybe_adapter_path, "r", encoding="utf-8") as f:
+                    adapter_config = json.load(f)
+
+                    kwargs["_adapter_model_path"] = pretrained_model_name_or_path
+                    pretrained_model_name_or_path = adapter_config["base_model_name_or_path"]
+
         if not isinstance(config, PretrainedConfig):
             kwargs_orig = copy.deepcopy(kwargs)
             # ensure not to pollute the config object with torch_dtype="auto" - since it's
             # meaningless in the context of the config object - torch.dtype values are acceptable
             if kwargs.get("torch_dtype", None) == "auto":
                 _ = kwargs.pop("torch_dtype")
+            # to not overwrite the quantization_config if config has a quantization_config
+            if kwargs.get("quantization_config", None) is not None:
+                _ = kwargs.pop("quantization_config")
 
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path,
@@ -469,6 +506,8 @@ class _BaseAutoModelClass:
             # if torch_dtype=auto was passed here, ensure to pass it on
             if kwargs_orig.get("torch_dtype", None) == "auto":
                 kwargs["torch_dtype"] = "auto"
+            if kwargs_orig.get("quantization_config", None) is not None:
+                kwargs["quantization_config"] = kwargs_orig["quantization_config"]
 
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping.keys()
@@ -650,6 +689,7 @@ class _LazyAutoMapping(OrderedDict):
         self._config_mapping = config_mapping
         self._reverse_config_mapping = {v: k for k, v in config_mapping.items()}
         self._model_mapping = model_mapping
+        self._model_mapping._model_mapping = self
         self._extra_content = {}
         self._modules = {}
 

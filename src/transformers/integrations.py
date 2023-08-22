@@ -716,7 +716,7 @@ class WandbCallback(TrainerCallback):
             logger.info(
                 'Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"'
             )
-            combined_dict = {**args.to_sanitized_dict()}
+            combined_dict = {**args.to_dict()}
 
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config.to_dict()
@@ -746,7 +746,7 @@ class WandbCallback(TrainerCallback):
             # keep track of model topology and gradients, unsupported on TPU
             _watch_model = os.getenv("WANDB_WATCH", "false")
             if not is_torch_tpu_available() and _watch_model in ("all", "parameters", "gradients"):
-                self._wandb.watch(model, log=_watch_model, log_freq=max(100, args.logging_steps))
+                self._wandb.watch(model, log=_watch_model, log_freq=max(100, state.logging_steps))
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         if self._wandb is None:
