@@ -697,13 +697,13 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values:
                 position_ids = position_ids[:, -1].unsqueeze(-1)
-                
-        #if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
-        
+
         model_inputs.update(
             {
                 "input_ids": input_ids,
@@ -712,13 +712,11 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
                 "position_ids": position_ids,
                 "attention_mask": attention_mask,
                 "token_type_ids": token_type_ids,
-                "position_ids": position_ids,
             }
         )
-            
+
         return model_inputs
-    
-    
+
     @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
