@@ -20,12 +20,12 @@ import numpy as np
 import torch
 from torch import nn
 import math
-from transformers.modeling_utils import PreTrainedModel
-from transformers.utils import add_start_docstrings, logging
-from transformers.modeling_outputs import BaseModelOutputWithNoAttention
-from transformers.models.patchtst.configuration_patchtst import PatchTSTConfig
+from ...modeling_utils import PreTrainedModel
+from ...utils import add_start_docstrings, logging
+from ...modeling_outputs import BaseModelOutputWithNoAttention
+from .configuration_patchtst import PatchTSTConfig
 from torch.nn.modules.activation import MultiheadAttention
-from transformers.utils import ModelOutput
+from ...utils import ModelOutput
 
 logger = logging.get_logger(__name__)
 
