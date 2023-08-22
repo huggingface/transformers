@@ -16,7 +16,7 @@ import math
 from collections import OrderedDict
 
 import torch
-from packaging import version
+from packaging.version import Version
 from torch import Tensor, nn
 
 from .utils import logging
@@ -36,7 +36,7 @@ class PytorchGELUTanh(nn.Module):
 
     def __init__(self):
         super().__init__()
-        if version.parse(torch.__version__) < version.parse("1.12.0"):
+        if Version(torch.__version__) < Version("1.12.0"):
             raise ImportError(
                 f"You are using torch=={torch.__version__}, but torch>=1.12.0 is required to use "
                 "PytorchGELUTanh. Please upgrade torch."
@@ -158,7 +158,7 @@ class MishActivation(nn.Module):
 
     def __init__(self):
         super().__init__()
-        if version.parse(torch.__version__) < version.parse("1.9.0"):
+        if Version(torch.__version__) < Version("1.9.0"):
             self.act = self._mish_python
         else:
             self.act = nn.functional.mish
