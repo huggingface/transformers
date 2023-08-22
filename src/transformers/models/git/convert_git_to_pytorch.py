@@ -202,10 +202,12 @@ def prepare_video():
     def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
         """
         Sample a given number of frame indices from the video.
+
         Args:
             clip_len (`int`): Total number of frames to sample.
             frame_sample_rate (`int`): Sample every n-th frame.
             seg_len (`int`): Maximum allowed index of sample's last frame.
+
         Returns:
             indices (`List[int]`): List of sampled frame indices
         """
