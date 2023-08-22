@@ -1356,9 +1356,8 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     Make sure you set the sampling_rate` argument to this function below for the whisper model
     </Tip>
 
-    #"This code demonstrates how to use the Whisper ASR model with various configuration options to transcribe audio."
 
-    #Examples:
+    Examples:
     ``` py
     >>> import torch
     >>> from transformers import AutoProcessor, WhisperForConditionalGeneration,GenerationConfig
