@@ -57,7 +57,7 @@ from transformers.utils.versions import require_version
 
 # region Dependencies and constants
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.32.0.dev0")
+check_min_version("4.33.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
 
@@ -107,6 +107,16 @@ class ModelArguments:
         default=None,
         metadata={
             "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
+        },
+    )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+                "execute code present on the Hub on your local machine."
+            )
         },
     )
 
@@ -366,6 +376,7 @@ def main():
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
@@ -373,6 +384,7 @@ def main():
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
         token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
 
     prefix = data_args.source_prefix if data_args.source_prefix is not None else ""
@@ -480,6 +492,7 @@ def main():
             cache_dir=model_args.cache_dir,
             revision=model_args.model_revision,
             token=model_args.token,
+            trust_remote_code=model_args.trust_remote_code,
         )
 
         # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch

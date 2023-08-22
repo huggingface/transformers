@@ -12,12 +12,28 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+Utility that updates the metadata of the Transformers library in the repository `huggingface/transformers-metadata`.
 
+Usage for an update (as used by the GitHub action `update_metadata`):
+
+```bash
+python utils/update_metadata.py --token <token> --commit_sha <commit_sha>
+```
+
+Usage to check all pipelines are properly defined in the constant `PIPELINE_TAGS_AND_AUTO_MODELS` of this script, so
+that new pipelines are properly added as metadata (as used in `make repo-consistency`):
+
+```bash
+python utils/update_metadata.py --check-only
+```
+"""
 import argparse
 import collections
 import os
 import re
 import tempfile
+from typing import Dict, List, Tuple
 
 import pandas as pd
 from datasets import Dataset
@@ -99,17 +115,34 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("depth-estimation", "MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES", "AutoModelForDepthEstimation"),
     ("video-classification", "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES", "AutoModelForVideoClassification"),
     ("mask-generation", "MODEL_FOR_MASK_GENERATION_MAPPING_NAMES", "AutoModelForMaskGeneration"),
+    ("text-to-audio", "MODEL_FOR_TEXT_TO_SPECTROGRAM_NAMES", "AutoModelForTextToSpectrogram"),
+    ("text-to-audio", "MODEL_FOR_TEXT_TO_WAVEFORM_NAMES", "AutoModelForTextToWaveform"),
 ]
 
 
-# Thanks to https://stackoverflow.com/questions/29916065/how-to-do-camelcase-split-in-python
-def camel_case_split(identifier):
-    "Split a camelcased `identifier` into words."
+def camel_case_split(identifier: str) -> List[str]:
+    """
+    Split a camel-cased name into words.
+
+    Args:
+        identifier (`str`): The camel-cased name to parse.
+
+    Returns:
+        `List[str]`: The list of words in the identifier (as seprated by capital letters).
+
+    Example:
+
+    ```py
+    >>> camel_case_split("CamelCasedClass")
+    ["Camel", "Cased", "Class"]
+    ```
+    """
+    # Regex thanks to https://stackoverflow.com/questions/29916065/how-to-do-camelcase-split-in-python
     matches = re.finditer(".+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)", identifier)
     return [m.group(0) for m in matches]
 
 
-def get_frameworks_table():
+def get_frameworks_table() -> pd.DataFrame:
     """
     Generates a dataframe containing the supported auto classes for each model type, using the content of the auto
     modules.
@@ -155,7 +188,8 @@ def get_frameworks_table():
     data["tensorflow"] = [tf_models[t] for t in all_models]
     data["flax"] = [flax_models[t] for t in all_models]
 
-    # Now let's use the auto-mapping names to make sure
+    # Now let's find the right processing class for each model. In order we check if there is a Processor, then a
+    # Tokenizer, then a FeatureExtractor, then an ImageProcessor
     processors = {}
     for t in all_models:
         if t in transformers_module.models.auto.processing_auto.PROCESSOR_MAPPING_NAMES:
@@ -163,6 +197,8 @@ def get_frameworks_table():
         elif t in transformers_module.models.auto.tokenization_auto.TOKENIZER_MAPPING_NAMES:
             processors[t] = "AutoTokenizer"
         elif t in transformers_module.models.auto.feature_extraction_auto.FEATURE_EXTRACTOR_MAPPING_NAMES:
+            processors[t] = "AutoFeatureExtractor"
+        elif t in transformers_module.models.auto.image_processing_auto.IMAGE_PROCESSOR_MAPPING_NAMES:
             processors[t] = "AutoFeatureExtractor"
         else:
             # Default to AutoTokenizer if a model has nothing, for backward compatibility.
@@ -173,10 +209,17 @@ def get_frameworks_table():
     return pd.DataFrame(data)
 
 
-def update_pipeline_and_auto_class_table(table):
+def update_pipeline_and_auto_class_table(table: Dict[str, Tuple[str, str]]) -> Dict[str, Tuple[str, str]]:
     """
-    Update the table of model class to (pipeline_tag, auto_class) without removing old keys if they don't exist
-    anymore.
+    Update the table maping models to pipelines and auto classes without removing old keys if they don't exist anymore.
+
+    Args:
+        table (`Dict[str, Tuple[str, str]]`):
+            The existing table mapping model names to a tuple containing the pipeline tag and the auto-class name with
+            which they should be used.
+
+    Returns:
+        `Dict[str, Tuple[str, str]]`: The updated table in the same format.
     """
     auto_modules = [
         transformers_module.models.auto.modeling_auto,
@@ -205,9 +248,13 @@ def update_pipeline_and_auto_class_table(table):
     return table
 
 
-def update_metadata(token, commit_sha):
+def update_metadata(token: str, commit_sha: str):
     """
-    Update the metadata for the Transformers repo.
+    Update the metadata for the Transformers repo in `huggingface/transformers-metadata`.
+
+    Args:
+        token (`str`): A valid token giving write access to `huggingface/transformers-metadata`.
+        commit_sha (`str`): The commit SHA on Transformers corresponding to this update.
     """
     frameworks_table = get_frameworks_table()
     frameworks_dataset = Dataset.from_pandas(frameworks_table)
@@ -255,6 +302,9 @@ def update_metadata(token, commit_sha):
 
 
 def check_pipeline_tags():
+    """
+    Check all pipeline tags are properly defined in the `PIPELINE_TAGS_AND_AUTO_MODELS` constant of this script.
+    """
     in_table = {tag: cls for tag, _, cls in PIPELINE_TAGS_AND_AUTO_MODELS}
     pipeline_tasks = transformers_module.pipelines.SUPPORTED_TASKS
     missing = []

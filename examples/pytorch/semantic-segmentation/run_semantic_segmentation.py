@@ -52,7 +52,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.32.0.dev0")
+check_min_version("4.33.0.dev0")
 
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/semantic-segmentation/requirements.txt")
 
@@ -257,6 +257,16 @@ class ModelArguments:
             "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
         },
     )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+                "execute code present on the Hub on your local machine."
+            )
+        },
+    )
 
 
 def main():
@@ -393,6 +403,7 @@ def main():
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     model = AutoModelForSemanticSegmentation.from_pretrained(
         model_args.model_name_or_path,
@@ -401,12 +412,14 @@ def main():
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     image_processor = AutoImageProcessor.from_pretrained(
         model_args.image_processor_name or model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
 
     # Define torchvision transforms to be applied to each image + target.

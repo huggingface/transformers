@@ -55,7 +55,7 @@ from transformers.utils import check_min_version, send_example_telemetry
 
 logger = logging.getLogger(__name__)
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.32.0.dev0")
+check_min_version("4.33.0.dev0")
 
 Array = Any
 Dataset = datasets.arrow_dataset.Dataset
@@ -115,6 +115,16 @@ class ModelArguments:
         default=None,
         metadata={
             "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
+        },
+    )
+    trust_remote_code: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+                "execute code present on the Hub on your local machine."
+            )
         },
     )
 
@@ -425,16 +435,19 @@ def main():
         num_labels=num_labels,
         finetuning_task=data_args.task_name,
         token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
         use_fast=not model_args.use_slow_tokenizer,
         token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
     model = FlaxAutoModelForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
         config=config,
         token=model_args.token,
+        trust_remote_code=model_args.trust_remote_code,
     )
 
     # Preprocessing the datasets

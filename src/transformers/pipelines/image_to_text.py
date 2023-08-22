@@ -58,12 +58,14 @@ class ImageToTextPipeline(Pipeline):
             TF_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES if self.framework == "tf" else MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES
         )
 
-    def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, prompt=None):
+    def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, prompt=None, timeout=None):
         forward_kwargs = {}
         preprocess_params = {}
 
         if prompt is not None:
             preprocess_params["prompt"] = prompt
+        if timeout is not None:
+            preprocess_params["timeout"] = timeout
 
         if generate_kwargs is not None:
             forward_kwargs["generate_kwargs"] = generate_kwargs
@@ -97,6 +99,9 @@ class ImageToTextPipeline(Pipeline):
 
             generate_kwargs (`Dict`, *optional*):
                 Pass it to send all of these arguments directly to `generate` allowing full control of this function.
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
 
         Return:
             A list or a list of list of `dict`: Each result comes as a dictionary with the following key:
@@ -105,8 +110,8 @@ class ImageToTextPipeline(Pipeline):
         """
         return super().__call__(images, **kwargs)
 
-    def preprocess(self, image, prompt=None):
-        image = load_image(image)
+    def preprocess(self, image, prompt=None, timeout=None):
+        image = load_image(image, timeout=timeout)
 
         if prompt is not None:
             if not isinstance(prompt, str):

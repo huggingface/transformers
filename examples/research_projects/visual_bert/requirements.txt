@@ -86,7 +86,7 @@ testpath==0.4.4
 tokenizers==0.8.1rc2
 torch==1.6.0
 torchvision==0.7.0
-tornado==6.3.2
+tornado==6.3.3
 tqdm==4.48.2
 traitlets
 git+https://github.com/huggingface/transformers.git
