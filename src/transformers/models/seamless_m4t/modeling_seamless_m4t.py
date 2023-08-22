@@ -404,8 +404,15 @@ class SeamlessM4TConformerConvolutionModule(nn.Module):
         )
         self.dropout = torch.nn.Dropout(config.speech_encoder_dropout)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, attention_mask=None):
         hidden_states = self.layer_norm(hidden_states)
+        
+        
+        # Ensure that we do not leak padded positions in depthwise convolution.
+        # Put 0 where necessary
+        if attention_mask is not None:
+            hidden_states[~attention_mask] = 0.0
+
         # exchange the temporal dimension and the feature dimension
         hidden_states = hidden_states.transpose(1, 2)
 
@@ -610,6 +617,7 @@ class SeamlessM4TConformerEncoderLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         relative_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        conformer_attention_mask: Optional[torch.Tensor] = None,
     ):
         hidden_states = hidden_states
 
@@ -633,7 +641,7 @@ class SeamlessM4TConformerEncoderLayer(nn.Module):
 
         # 3. Convolutional Layer
         residual = hidden_states
-        hidden_states = self.conv_module(hidden_states)
+        hidden_states = self.conv_module(hidden_states, attention_mask=conformer_attention_mask) # TODO: make sure attention mask is passed and apply
         hidden_states = residual + hidden_states
 
         # 4. Feed-Forward 2 Layer
@@ -684,10 +692,10 @@ class SeamlessM4TConformerEncoder(nn.Module):
             hidden_states[~attention_mask] = 0.0
 
             # extend attention_mask
-            attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
-            attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
-            attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+            new_attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
+            new_attention_mask = new_attention_mask * torch.finfo(hidden_states.dtype).min
+            new_attention_mask = new_attention_mask.expand(
+                new_attention_mask.shape[0], 1, new_attention_mask.shape[-1], new_attention_mask.shape[-1]
             )
 
         hidden_states = self.dropout(hidden_states)
@@ -726,9 +734,10 @@ class SeamlessM4TConformerEncoder(nn.Module):
                 else:
                     layer_outputs = layer(
                         hidden_states,
-                        attention_mask=attention_mask,
+                        attention_mask=new_attention_mask,
                         relative_position_embeddings=relative_position_embeddings,
                         output_attentions=output_attentions,
+                        conformer_attention_mask=attention_mask,
                     )
                 hidden_states = layer_outputs[0]
 
@@ -835,7 +844,7 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
 
         # The rest of the computation is identical to a vanilla Transformer
         # encoder layer.
-        hidden_states, attn_weigts = self.self_attn(
+        hidden_states, attn_weigths = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
@@ -849,7 +858,8 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
         hidden_states = self.ffn(hidden_states)
         hidden_states = self.ffn_dropout(hidden_states) + residual
 
-        return hidden_states, attn_weigts
+        # TODO: return attention_weights ?
+        return hidden_states
 
 
 ############ TEXT / UNITS related code ################
@@ -1465,7 +1475,7 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
         if self.adapter is not None:
             hidden_states = self.adapter(hidden_states)
 
-        hidden_states = self.inner_layer_norm(hidden_states)
+        hidden_states[0] = self.inner_layer_norm(hidden_states[0])
 
         if not return_dict:
             return (hidden_states,) + encoder_outputs[1:]
