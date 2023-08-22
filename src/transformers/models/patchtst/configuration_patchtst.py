@@ -173,6 +173,7 @@ class PatchTSTConfig(PretrainedConfig):
         num_time_features: int = 0,
         is_encoder_decoder: bool = False,
         encoder_layerdrop: float = 0.1,
+        prediction_length: int = 24,
 
         # PatchTST arguments
         attention_type: str = "prob",
@@ -183,7 +184,7 @@ class PatchTSTConfig(PretrainedConfig):
 
         # time series specific configuration
         self.context_length = context_length
-        self.input_size = input_size
+        self.input_size = input_size # n_vars
         self.num_time_features = num_time_features
         self.num_dynamic_real_features = num_dynamic_real_features
         self.num_static_real_features = num_static_real_features
@@ -216,6 +217,7 @@ class PatchTSTConfig(PretrainedConfig):
         # PatchTST
         self.patch_length = patch_length
         self.stride = stride
+        self.num_patch = self._num_patches()
         self.attention_type = attention_type
         self.sampling_factor = sampling_factor
         self.distil = distil
@@ -237,5 +239,11 @@ class PatchTSTConfig(PretrainedConfig):
         self.proj_dropout = proj_dropout
         self.qkv_bias = qkv_bias
 
+        # Forcasting
+        self.prediction_length = prediction_length
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+
+    def _num_patches(self):
+        return (max(self.context_length, self.patch_length) - self.patch_length) // self.stride + 1
 

@@ -20,12 +20,12 @@ import numpy as np
 import torch
 from torch import nn
 import math
-from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, logging
-from ...modeling_outputs import BaseModelOutputWithNoAttention
-from .configuration_patchtst import PatchTSTConfig
+from transformers.modeling_utils import PreTrainedModel
+from transformers.utils import add_start_docstrings, logging
+from transformers.modeling_outputs import BaseModelOutputWithNoAttention
+from transformers.models.patchtst.configuration_patchtst import PatchTSTConfig
 from torch.nn.modules.activation import MultiheadAttention
-from ...utils import ModelOutput
+from transformers.utils import ModelOutput
 
 logger = logging.get_logger(__name__)
 
@@ -869,13 +869,10 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         self, past_values: torch.Tensor, future_values: Optional[torch.Tensor] = None
     ) -> PatchTSTForPreTrainingOutput:
         """
-        past_values (x): tensor [bs x n_vars x num_patch x patch_len]
+        past_values (x): tensor [bs x seq_len x n_vars ]
         future_values (y): labels
         """
-
-        # x: [bs x n_vars x num_patch x patch_len] for pretrain
-
-        patched_x = self.patching(past_values)
+        patched_x = self.patching(past_values) # patched_x: [bs x n_vars x num_patch x patch_len] for pretrain
         masked_x, masked = self.masking(patched_x)
         model_output = self.model(masked_x)  # x: [bs x nvars x num_patch x d_model]
         #  or [bs x nvars x (num_patch+1) x d_model] if use cls_token
@@ -888,25 +885,25 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         )
 
 
-class PatchTSTForClassification(PatchTSTPretrainedModel):
+class PatchTSTForClassification(PatchTSTPreTrainedModel):
     # PatchTST model + classification head
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
-        self.patching = Patch(config.seq_len, patch_len=config.patch_len, stride=config.stride)
+        self.patching = Patch(config.context_length, patch_len=config.patch_length, stride=config.stride)
 
         self.model = PatchTSTModel(config)
         self.head = ClassificationHead(config)
         self.loss = nn.CrossEntropyLoss()
 
-    def forward(self, x, y=None):
-        patched_x = self.patching(x)
+    def forward(self, past_values, future_values=None):
+        patched_x = self.patching(past_values)
         model_output = self.model(patched_x)
         y_hat = self.head(model_output[0])
 
         loss_val = None
-        if y is not None:
-            loss_val = self.loss(y_hat, y)
+        if future_values is not None:
+            loss_val = self.loss(y_hat, future_values)
         return PatchTSTForClassificationOutput(
             loss=loss_val,
             prediction_logits=y_hat,
@@ -920,7 +917,7 @@ class ClassificationHead(nn.Module):
         self.pooling = config.pooling
         self.flatten = nn.Flatten(start_dim=1)
         self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
-        self.linear = nn.Linear(config.n_vars * config.d_model, config.n_classes)
+        self.linear = nn.Linear(config.input_size * config.d_model, config.num_classes)
 
     def forward(self, x):
         """
@@ -972,3 +969,120 @@ class PatchTSTForClassificationOutput(ModelOutput):
     seq_relationship_logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+class PredictionHead(nn.Module):
+    def __init__(self, config: PatchTSTConfig):
+        super().__init__()
+        self.individual = config.individual
+        self.n_vars = config.input_size
+        self.use_cls_token = config.use_cls_token
+        self.pooling = config.pooling
+        head_dimension = config.d_model if config.pooling else config.d_model * config.num_patch
+
+        if self.individual:
+            self.linears = nn.ModuleList()
+            self.dropouts = nn.ModuleList()
+            self.flattens = nn.ModuleList()
+            for i in range(self.n_vars):
+                self.flattens.append(nn.Flatten(start_dim=2))
+                self.linears.append(nn.Linear(head_dimension, config.prediction_length))
+                self.dropouts.append(nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
+                                     )
+        else:
+            self.flatten = nn.Flatten(start_dim=2)
+            self.linear = nn.Linear(head_dimension, config.prediction_length)
+            self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
+
+    def forward(self, x: torch.Tensor):
+        """
+        x: [bs x nvars x num_patch x d_model]
+            or [bs x nvars x (num_patch+1) x d_model] if use cls_token
+        output: [bs x forecast_len x nvars]
+        """
+
+        if self.use_cls_token:
+            y = x[:, :, 0, :]      # y: [bs x nvars x d_model]
+        else:
+            if self.pooling == 'mean':
+                y = x.mean(dim=2)  # y: [bs x nvars x d_model]
+            elif self.pooling == 'max':
+                y = x.max(dim=2)  # y: [bs x nvars x d_model]
+            else:
+                y = x       # y: [bs x nvars x num_patch x d_model]
+
+        if self.individual:
+            x_out = []
+            for i in range(self.n_vars):
+                z = self.flattens[i](y[:, i, :])  # y: [bs x (d_model * num_patch)] or [bs x d_model)]
+                z = self.linears[i](z)  # z: [bs x forecast_len]
+                z = self.dropouts[i](z)
+                x_out.append(z)
+            x = torch.stack(x_out, dim=1)  # x: [bs x nvars x forecast_len]
+        else:
+            z = self.flatten(y)         # z: [bs x nvars x (d_model * num_patch)] or [bs x nvars x d_model)]
+            z = self.dropout(z)
+            x = self.linear(z)  # x: [bs x nvars x forecast_len]
+
+        x = x.transpose(2, 1)  # [bs x forecast_len x nvars]
+
+        return x
+
+
+class PatchTSTForPredictionOutput(ModelOutput):
+    """
+    Output type of [`PatchTSTForPredictiontion`].
+
+    Args:
+        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
+            Total loss as the sum of the masked language modeling loss and the next sequence prediction
+            (classification) loss.
+        prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
+            Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
+            before SoftMax).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    prediction_logits: torch.FloatTensor = None
+    seq_relationship_logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+class PatchTSTForPrediction(PatchTSTPreTrainedModel):
+    # PatchTST model + classification head
+    def __init__(self, config: PatchTSTConfig):
+        super().__init__(config)
+
+        self.patching = Patch(config.context_length, patch_len=config.patch_length, stride=config.stride)
+
+        self.model = PatchTSTModel(config)
+        self.head = PredictionHead(config)
+        self.loss = nn.MSELoss(reduction='mean')
+
+    def forward(self, past_values: torch.Tensor, future_values: Optional[torch.Tensor]):
+        patched_x = self.patching(past_values)
+        model_output = self.model(patched_x)
+        y_hat = self.head(model_output[0])
+
+        loss_val = None
+        if future_values is not None:
+            loss_val = self.loss(y_hat, future_values)
+        return PatchTSTForPredictionOutput(
+            loss=loss_val,
+            prediction_logits=y_hat,
+        )
+
