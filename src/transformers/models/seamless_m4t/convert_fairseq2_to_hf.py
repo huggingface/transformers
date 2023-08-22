@@ -27,6 +27,8 @@ from transformers.models.seamless_m4t.configuration_seamless_m4t import Seamless
 from transformers.models.seamless_m4t.modeling_seamless_m4t import SeamlessM4TModel
 from transformers.utils import logging
 
+from accelerate.utils.modeling import find_tied_parameters
+
 import tempfile
 
 api = HfApi()
@@ -64,14 +66,13 @@ wav2vec_convert_list = [
     ("speech_encoder.adaptor_layers", "adapter.layers"),
     ("inner_proj", "intermediate_dense"),
     ("self_attn.output_proj", "self_attn.linear_out"),
-    ("self_attn.output_dense", "self_attn.linear_out"),
+    #("self_attn.output_dense", "self_attn.linear_out"),
     ("output_proj", "output_dense"),
     ("self_attn.k_proj", "self_attn.linear_k"),
     ("self_attn.v_proj", "self_attn.linear_v"),
     ("self_attn.q_proj", "self_attn.linear_q"),
     ("self_attn.sdpa.u_bias", "self_attn.pos_bias_u"),
     ("self_attn.sdpa.v_bias", "self_attn.pos_bias_v"),
-    ("self_attn.output_proj", "self_attn.linear_out"),
     ("self_attn.sdpa.r_proj", "self_attn.linear_pos"),
     ("conv.pointwise_conv1", "conv_module.pointwise_conv1"),
     ("conv.pointwise_conv2", "conv_module.pointwise_conv2"),
@@ -289,7 +290,13 @@ def load_model(pytorch_dump_folder_path):
 
     assert count_1 == count_2, f"final proj --- Count HF: {count_1} != Count Seamless: {count_2}"
 
+    # sanity check
+    print(find_tied_parameters(hf_model))
+    
+    
     new_model = hf_model
+    
+    
 
     # verify that base model have same number of parameters
     assert_param_count(original_model.model, new_model)

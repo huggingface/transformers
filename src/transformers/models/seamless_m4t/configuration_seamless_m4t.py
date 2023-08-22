@@ -139,7 +139,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         output_hidden_size=None,
         position_embeddings_type="relative",
         rotary_embedding_base=10000,
-        max_source_positions=5000,
+        max_source_positions=4096, # works
         conv_depthwise_kernel_size=31,
         conformer_conv_dropout=0.1,
         # t2u config
