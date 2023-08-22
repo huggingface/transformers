@@ -396,7 +396,7 @@ class Trainer:
                 )
 
         # At this stage the model is already loaded
-        if getattr(model, "is_quantized", False):
+        if getattr(model, "is_quantized", False) and not getattr(model, "_hf_peft_config_loaded", False):
             if getattr(model, "_is_quantized_training_enabled", False):
                 logger.info(
                     "The model is quantized. To train this model you need to add additional modules"

@@ -34,8 +34,10 @@ from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..utils import (
     HUGGINGFACE_CO_RESOLVE_ENDPOINT,
+    find_adapter_config_file,
     is_kenlm_available,
     is_offline_mode,
+    is_peft_available,
     is_pyctcdecode_available,
     is_tf_available,
     is_torch_available,
@@ -721,6 +723,21 @@ def pipeline(
         config = AutoConfig.from_pretrained(config, _from_pipeline=task, **hub_kwargs, **model_kwargs)
         hub_kwargs["_commit_hash"] = config._commit_hash
     elif config is None and isinstance(model, str):
+        # Check for an adapter file in the model path if PEFT is available
+        if is_peft_available():
+            subfolder = hub_kwargs.get("subfolder", None)
+            maybe_adapter_path = find_adapter_config_file(
+                model,
+                revision=revision,
+                token=use_auth_token,
+                subfolder=subfolder,
+            )
+
+            if maybe_adapter_path is not None:
+                with open(maybe_adapter_path, "r", encoding="utf-8") as f:
+                    adapter_config = json.load(f)
+                    model = adapter_config["base_model_name_or_path"]
+
         config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
         hub_kwargs["_commit_hash"] = config._commit_hash
 

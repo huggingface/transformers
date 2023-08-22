@@ -19,6 +19,8 @@
     title: Train with a script
   - local: accelerate
     title: Set up distributed training with 🤗 Accelerate
+  - local: peft
+    title: Load and train adapters with 🤗 PEFT
   - local: model_sharing
     title: Share your model
   - local: transformers_agents
@@ -582,6 +584,8 @@
         title: MMS
       - local: model_doc/musicgen
         title: MusicGen
+      - local: model_doc/pop2piano
+        title: Pop2Piano
       - local: model_doc/sew
         title: SEW
       - local: model_doc/sew-d
@@ -641,6 +645,8 @@
         title: GIT
       - local: model_doc/groupvit
         title: GroupViT
+      - local: model_doc/idefics
+        title: IDEFICS
       - local: model_doc/instructblip
         title: InstructBLIP
       - local: model_doc/layoutlm
