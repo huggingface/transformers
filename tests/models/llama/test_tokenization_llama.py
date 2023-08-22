@@ -545,16 +545,15 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(tokens, ["▁▁", "<s>", "▁Hello", "<s>", "▁how"])
         decoded_tokens = tokenizer.decode(input_ids)
         self.assertEqual(decoded_tokens, " <s> Hello<s> how")
-        
+
     def test_some_edge_cases(self):
         tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)
-        
+
         sp_tokens = tokenizer.sp_model.encode("<s>>", out_type=str)
-        self.assertEqual(sp_tokens, ['<', 's', '>>'])
+        self.assertEqual(sp_tokens, ["<", "s", ">>"])
         tokens = tokenizer.tokenize("<s>>")
         self.assertNotEqual(sp_tokens, tokens)
-        self.assertEqual(tokens, ['<s>', '>'])
-
+        self.assertEqual(tokens, ["<s>", ">"])
 
 
 @require_sentencepiece
