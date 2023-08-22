@@ -219,34 +219,15 @@ class LlamaTokenizer(PreTrainedTokenizer):
         `['H', 'e', 'y']` instead of `['▁He', 'y']`. Thus we always encode `f"{unk_token}text"` and strip the
         `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
-        
-        For some models, encoding `"<unk>  Hey"` can give the same output as  `"<unk> Hey"`. Also encoding `"<unk>>"` will break the
-        tokenization as if `unk_token` is not part of the vocabulary, `'>>'` could be split. We need a reliable way to always get the
-        correct output
-        
-        An example for T5
-        ```python 
-        >>> tokenizer.sp_model.encode("<unk> Hey", out_type=str)
-        >>> ['<', 'unk', '>', '▁Hey']
-        ```
-        but if we add two spaces:
-        ```python 
-        >>> tokenizer.sp_model.encode("<unk>  Hey", out_type=str)
-        >>> ['<', 'unk', '>', '▁Hey'] # the extra space is not taken into account. 
-        ```
-        For llama:
-        
         """
-        if self.legacy:
-            return self.sp_model.encode(text, out_type=str)
+        tokens = self.sp_model.encode(text, out_type=str)
+        if self.legacy or not text.startswith((SPIECE_UNDERLINE, " ")):
+            return tokens
 
-        unk_token_length = len(self.sp_model.encode(str(self.unk_token))) 
-        spice_len = len(self.sp_model.encode(SPIECE_UNDERLINE))
-
-        tokens = self.sp_model.encode(self.unk_token + SPIECE_UNDERLINE + text, out_type=str)
-        tokens = tokens[unk_token_length:]
-        tokens[0] = tokens[0][spice_len:]
-        return tokens if tokens[0] != '' else tokens[1:]
+        # 1. Encode string + prefix ex: "<unk> Hey"
+        tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
+        # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
+        return tokens[self.unk_token_length:] if len(tokens) >= self.unk_token_length else tokens
 
 
     def _convert_token_to_id(self, token):
