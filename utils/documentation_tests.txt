@@ -346,6 +346,8 @@ src/transformers/models/poolformer/configuration_poolformer.py
 src/transformers/models/poolformer/feature_extraction_poolformer.py
 src/transformers/models/poolformer/image_processing_poolformer.py
 src/transformers/models/poolformer/modeling_poolformer.py
+src/transformers/models/pop2piano/configuration_pop2piano.py
+src/transformers/models/pop2piano/modeling_pop2piano.py
 src/transformers/models/prophetnet/tokenization_prophetnet.py
 src/transformers/models/rag/tokenization_rag.py
 src/transformers/models/realm/configuration_realm.py

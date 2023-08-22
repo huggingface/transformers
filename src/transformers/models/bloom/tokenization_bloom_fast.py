@@ -135,7 +135,7 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
 
         if add_prefix_space:
             pre_tok_state = pre_tok_state.replace(b'"add_prefix_space":false', b'"add_prefix_space": true')
-            decoder_state = pre_tok_state.replace(b'"add_prefix_space":false', b'"add_prefix_space": true')
+            decoder_state = decoder_state.replace(b'"add_prefix_space":false', b'"add_prefix_space": true')
         self.backend_tokenizer.pre_tokenizer = pickle.loads(pre_tok_state)
         self.backend_tokenizer.decoder = pickle.loads(decoder_state)
 

@@ -28,8 +28,12 @@ from .utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_bitsandbytes_available,
+    is_essentia_available,
     is_flax_available,
     is_keras_nlp_available,
+    is_librosa_available,
+    is_pretty_midi_available,
+    is_scipy_available,
     is_sentencepiece_available,
     is_speech_available,
     is_tensorflow_text_available,
@@ -474,6 +478,10 @@ _import_structure = {
     ],
     "models.plbart": ["PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "PLBartConfig"],
     "models.poolformer": ["POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PoolFormerConfig"],
+    "models.pop2piano": [
+        "POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Pop2PianoConfig",
+    ],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtConfig"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
@@ -2427,6 +2435,13 @@ else:
             "PoolFormerPreTrainedModel",
         ]
     )
+    _import_structure["models.pop2piano"].extend(
+        [
+            "POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Pop2PianoForConditionalGeneration",
+            "Pop2PianoPreTrainedModel",
+        ]
+    )
     _import_structure["models.prophetnet"].extend(
         [
             "PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3780,6 +3795,29 @@ else:
     _import_structure["trainer_tf"] = ["TFTrainer"]
 
 
+try:
+    if not (
+        is_librosa_available()
+        and is_essentia_available()
+        and is_scipy_available()
+        and is_torch_available()
+        and is_pretty_midi_available()
+    ):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects
+
+    _import_structure["utils.dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects"] = [
+        name
+        for name in dir(dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects)
+        if not name.startswith("_")
+    ]
+else:
+    _import_structure["models.pop2piano"].append("Pop2PianoFeatureExtractor")
+    _import_structure["models.pop2piano"].append("Pop2PianoTokenizer")
+    _import_structure["models.pop2piano"].append("Pop2PianoProcessor")
+
+
 # FLAX-backed objects
 try:
     if not is_flax_available():
@@ -4475,6 +4513,10 @@ if TYPE_CHECKING:
     )
     from .models.plbart import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP, PLBartConfig
     from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
+    from .models.pop2piano import (
+        POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Pop2PianoConfig,
+    )
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
@@ -6119,6 +6161,11 @@ if TYPE_CHECKING:
             PoolFormerModel,
             PoolFormerPreTrainedModel,
         )
+        from .models.pop2piano import (
+            POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Pop2PianoForConditionalGeneration,
+            Pop2PianoPreTrainedModel,
+        )
         from .models.prophetnet import (
             PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             ProphetNetDecoder,
@@ -7208,6 +7255,20 @@ if TYPE_CHECKING:
 
         # Trainer
         from .trainer_tf import TFTrainer
+
+    try:
+        if not (
+            is_librosa_available()
+            and is_essentia_available()
+            and is_scipy_available()
+            and is_torch_available()
+            and is_pretty_midi_available()
+        ):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects import *
+    else:
+        from .models.pop2piano import Pop2PianoFeatureExtractor, Pop2PianoProcessor, Pop2PianoTokenizer
 
     try:
         if not is_flax_available():
