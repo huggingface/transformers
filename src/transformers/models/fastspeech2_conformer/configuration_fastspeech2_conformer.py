@@ -14,7 +14,6 @@
 # limitations under the License.
 """ FastSpeech2Conformer model configuration"""
 
-import copy
 from typing import Dict
 
 from ...configuration_utils import PretrainedConfig
@@ -271,25 +270,39 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         self.hidden_size = hidden_size
         self.vocab_size = vocab_size
         self.num_mel_bins = num_mel_bins
+        self.encoder_config = {
+            "num_attention_heads": encoder_num_attention_heads,
+            "layers": encoder_layers,
+            "kernel_size": encoder_kernel_size,
+            "attention_dropout_rate": encoder_attention_dropout_rate,
+            "dropout_rate": encoder_dropout_rate,
+            "positional_dropout_rate": encoder_positional_dropout_rate,
+            "linear_units": encoder_linear_units,
+            "normalize_before": encoder_normalize_before,
+            "concat_after": encoder_concat_after,
+        }
+        self.decoder_config = {
+            "num_attention_heads": decoder_num_attention_heads,
+            "layers": decoder_layers,
+            "kernel_size": decoder_kernel_size,
+            "attention_dropout_rate": decoder_attention_dropout_rate,
+            "dropout_rate": decoder_dropout_rate,
+            "positional_dropout_rate": decoder_positional_dropout_rate,
+            "linear_units": decoder_linear_units,
+            "normalize_before": decoder_normalize_before,
+            "concat_after": decoder_concat_after,
+        }
         self.encoder_num_attention_heads = encoder_num_attention_heads
-        self.decoder_kernel_size = decoder_kernel_size
-        self.encoder_kernel_size = encoder_kernel_size
-        self.decoder_num_attention_heads = decoder_num_attention_heads
-        self.decoder_layers = decoder_layers
-        self.decoder_normalize_before = decoder_normalize_before
-        self.decoder_linear_units = decoder_linear_units
+        self.encoder_layers = encoder_layers
         self.duration_predictor_channels = duration_predictor_channels
         self.duration_predictor_kernel_size = duration_predictor_kernel_size
         self.duration_predictor_layers = duration_predictor_layers
-        self.encoder_layers = encoder_layers
-        self.encoder_normalize_before = encoder_normalize_before
         self.energy_embed_dropout = energy_embed_dropout
         self.energy_embed_kernel_size = energy_embed_kernel_size
         self.energy_predictor_channels = energy_predictor_channels
         self.energy_predictor_dropout = energy_predictor_dropout
         self.energy_predictor_kernel_size = energy_predictor_kernel_size
         self.energy_predictor_layers = energy_predictor_layers
-        self.encoder_linear_units = encoder_linear_units
         self.pitch_embed_dropout = pitch_embed_dropout
         self.pitch_embed_kernel_size = pitch_embed_kernel_size
         self.pitch_predictor_channels = pitch_predictor_channels
@@ -305,12 +318,6 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         self.speaking_speed = speaking_speed
         self.stop_gradient_from_energy_predictor = stop_gradient_from_energy_predictor
         self.stop_gradient_from_pitch_predictor = stop_gradient_from_pitch_predictor
-        self.decoder_attention_dropout_rate = decoder_attention_dropout_rate
-        self.decoder_dropout_rate = decoder_dropout_rate
-        self.decoder_positional_dropout_rate = decoder_positional_dropout_rate
-        self.encoder_attention_dropout_rate = encoder_attention_dropout_rate
-        self.encoder_dropout_rate = encoder_dropout_rate
-        self.encoder_positional_dropout_rate = encoder_positional_dropout_rate
         self.max_source_positions = max_source_positions
         self.use_cnn_in_conformer = use_cnn_in_conformer
         self.use_macaron_style_in_conformer = use_macaron_style_in_conformer
@@ -319,8 +326,6 @@ class FastSpeech2ConformerConfig(PretrainedConfig):
         self.num_speakers = num_speakers
         self.num_languages = num_languages
         self.speaker_embed_dim = speaker_embed_dim
-        self.encoder_concat_after = encoder_concat_after
-        self.decoder_concat_after = decoder_concat_after
         self.duration_predictor_dropout_rate = duration_predictor_dropout_rate
         self.is_encoder_decoder = is_encoder_decoder
 
@@ -497,18 +502,3 @@ class FastSpeech2ConformerWithHifiGanConfig(PretrainedConfig):
             vocoder_config=vocoder_config.to_dict(),
             **kwargs,
         )
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-
-        output["model_config"] = self.model_config.to_dict()
-        output["vocoder_config"] = self.vocoder_config.to_dict()
-
-        output["model_type"] = self.__class__.model_type
-        return output

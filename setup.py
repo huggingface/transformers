@@ -115,7 +115,6 @@ _deps = [
     "fsspec<2023.10.0",
     "ftfy",
     "fugashi>=1.0",
-    "g2p-en>=2.1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
     "huggingface-hub>=0.19.3,<1.0",
@@ -297,8 +296,6 @@ extras["torch-vision"] = deps_list("torchvision") + extras["vision"]
 extras["natten"] = deps_list("natten")
 extras["codecarbon"] = deps_list("codecarbon")
 extras["video"] = deps_list("decord", "av")
-
-extras["g2p-en"] = deps_list("g2p-en")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (

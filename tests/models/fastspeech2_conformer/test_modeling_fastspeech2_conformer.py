@@ -769,7 +769,7 @@ class FastSpeech2ConformerWithHifiGanIntegrationTest(unittest.TestCase):
         text = "Test that this generates speech"
         input_ids = tokenizer(text, return_tensors="pt").to(torch_device)["input_ids"]
 
-        waveform = model.generate_speech(input_ids)
+        waveform = model(input_ids)
 
         # waveform is too large (1, 52480), so only check first 100 elements
         # fmt: off

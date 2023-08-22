@@ -191,24 +191,28 @@ class FastSpeech2ConformerDurationPredictorLayer(nn.Module):
         num_chans = config.duration_predictor_channels
         kernel_size = config.duration_predictor_kernel_size
         input_channels = config.hidden_size if layer_idx == 0 else num_chans
-        self.layer = nn.ModuleList(
-            [
-                nn.Conv1d(
-                    input_channels,
-                    num_chans,
-                    kernel_size,
-                    stride=1,
-                    padding=(kernel_size - 1) // 2,
-                ),
-                nn.ReLU(),
-                FastSpeech2ConformerDimensionalLayerNorm(num_chans),
-                nn.Dropout(config.duration_predictor_dropout_rate),
-            ]
+        self.conv = nn.Conv1d(
+            input_channels,
+            num_chans,
+            kernel_size,
+            stride=1,
+            padding=(kernel_size - 1) // 2,
         )
+        self.activation = nn.ReLU()
+        self.layer_norm = nn.LayerNorm(num_chans)
+        self.dropout = nn.Dropout(config.duration_predictor_dropout_rate)
 
     def forward(self, hidden_states):
-        for module in self.layer:
-            hidden_states = module(hidden_states)
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.activation(hidden_states)
+
+        # Perform layer norm on dimension 1
+        hidden_states = hidden_states.transpose(1, -1)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = hidden_states.transpose(1, -1)
+
+        hidden_states = self.dropout(hidden_states)
+
         return hidden_states
 
 
@@ -244,7 +248,7 @@ class FastSpeech2ConformerDurationPredictor(nn.Module):
                 Batch of input sequences.
             padding_masks (`torch.ByteTensor` of shape `(batch_size, max_text_length)`, *optional*):
                 Batch of masks indicating padded part.
-            is_inference (`bool`, *optional*): Whether or not the model is running inference.
+            is_inference (`bool`, *optional*, defaults to `False`): Whether or not the model is running inference.
 
         Returns:
             `torch.Tensor`: Batch of predicted durations in log domain `(batch_size, max_text_length)`.
@@ -383,41 +387,32 @@ class FastSpeech2ConformerSpeechDecoderPostnet(nn.Module):
         return hidden_states + layer_output.transpose(1, 2)
 
 
-class FastSpeech2ConformerDimensionalLayerNorm(nn.Module):
-    def __init__(self, output_dim, dim=1):
-        super().__init__()
-        self.layer_norm = nn.LayerNorm(output_dim)
-        self.dim = dim
-
-    def forward(self, predictor_activations):
-        normalized_predictor_activations = predictor_activations.transpose(self.dim, -1)
-        normalized_predictor_activations = self.layer_norm(normalized_predictor_activations)
-        normalized_predictor_activations = normalized_predictor_activations.transpose(self.dim, -1)
-        return normalized_predictor_activations
-
-
 class FastSpeech2ConformerVariancePredictorLayer(nn.Module):
     def __init__(self, input_channels, num_chans, kernel_size, dropout_rate):
         super().__init__()
-        self.layer = nn.ModuleList(
-            [
-                nn.Conv1d(
-                    input_channels,
-                    num_chans,
-                    kernel_size,
-                    stride=1,
-                    padding=(kernel_size - 1) // 2,
-                    bias=True,
-                ),
-                nn.ReLU(),
-                FastSpeech2ConformerDimensionalLayerNorm(num_chans),
-                nn.Dropout(dropout_rate),
-            ]
+        self.conv = nn.Conv1d(
+            input_channels,
+            num_chans,
+            kernel_size,
+            stride=1,
+            padding=(kernel_size - 1) // 2,
+            bias=True,
         )
+        self.activation = nn.ReLU()
+        self.layer_norm = nn.LayerNorm(num_chans)
+        self.dropout = nn.Dropout(dropout_rate)
 
     def forward(self, hidden_states):
-        for module in self.layer:
-            hidden_states = module(hidden_states)
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.activation(hidden_states)
+
+        # Perform layer norm on dimension 1
+        hidden_states = hidden_states.transpose(1, -1)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = hidden_states.transpose(1, -1)
+
+        hidden_states = self.dropout(hidden_states)
+
         return hidden_states
 
 
@@ -506,17 +501,19 @@ class FastSpeech2ConformerAttention(nn.Module):
     https://github.com/espnet/espnet/pull/2816. Paper: https://arxiv.org/abs/1901.02860.
     """
 
-    def __init__(self, num_attention_heads, num_feat, dropout_rate):
+    def __init__(self, config: FastSpeech2ConformerConfig, module_config):
         """Construct an FastSpeech2ConformerAttention object."""
-        super().__init__()  # num_head, num_feat, dropout_rate
+        super().__init__()
         # We assume d_v always equals dim_key
+        num_attention_heads = module_config["num_attention_heads"]
+        num_feat = config.hidden_size
         self.dim_key = num_feat // num_attention_heads
         self.num_attention_heads = num_attention_heads
         self.linear_q = nn.Linear(num_feat, num_feat)
         self.linear_k = nn.Linear(num_feat, num_feat)
         self.linear_v = nn.Linear(num_feat, num_feat)
         self.linear_out = nn.Linear(num_feat, num_feat)
-        self.dropout = nn.Dropout(p=dropout_rate)
+        self.dropout = nn.Dropout(p=module_config["attention_dropout_rate"])
 
         # linear transformation for positional encoding
         self.linear_pos = nn.Linear(num_feat, num_feat, bias=False)
@@ -617,10 +614,11 @@ class FastSpeech2ConformerAttention(nn.Module):
 
 
 class FastSpeech2ConformerConvolutionModule(nn.Module):
-    def __init__(self, config: FastSpeech2ConformerConfig, kernel_size):
+    def __init__(self, config: FastSpeech2ConformerConfig, module_config):
         super().__init__()
         # kernel_size should be an odd number for 'SAME' padding
         channels = config.hidden_size
+        kernel_size = module_config["kernel_size"]
         self.pointwise_conv1 = nn.Conv1d(
             channels,
             2 * channels,
@@ -679,32 +677,18 @@ class FastSpeech2ConformerConvolutionModule(nn.Module):
 
 
 class FastSpeech2ConformerEncoderLayer(nn.Module):
-    def __init__(
-        self,
-        config: FastSpeech2ConformerConfig,
-        attention_heads=4,
-        linear_units=2048,
-        dropout_rate=0.1,
-        attention_dropout_rate=0.0,
-        normalize_before=True,
-        concat_after=False,
-        cnn_module_kernel=31,
-    ):
+    def __init__(self, config: FastSpeech2ConformerConfig, module_config):
         super().__init__()
 
         # self-attention module definition
-        self.self_attn = FastSpeech2ConformerAttention(attention_heads, config.hidden_size, attention_dropout_rate)
+        self.self_attn = FastSpeech2ConformerAttention(config, module_config)
 
         # feed-forward module definition
-        self.feed_forward = FastSpeech2ConformerMultiLayeredConv1d(
-            config.hidden_size, linear_units, config.positionwise_conv_kernel_size, dropout_rate
-        )
+        self.feed_forward = FastSpeech2ConformerMultiLayeredConv1d(config, module_config)
 
         self.macaron_style = config.use_macaron_style_in_conformer
         if self.macaron_style:
-            self.feed_forward_macaron = FastSpeech2ConformerMultiLayeredConv1d(
-                config.hidden_size, linear_units, config.positionwise_conv_kernel_size, dropout_rate
-            )
+            self.feed_forward_macaron = FastSpeech2ConformerMultiLayeredConv1d(config, module_config)
             self.ff_macaron_layer_norm = nn.LayerNorm(config.hidden_size)
             self.ff_scale = 0.5
         else:
@@ -713,7 +697,7 @@ class FastSpeech2ConformerEncoderLayer(nn.Module):
         # convolution module definition
         self.use_cnn_module = config.use_cnn_in_conformer
         if self.use_cnn_module:
-            self.conv_module = FastSpeech2ConformerConvolutionModule(config, cnn_module_kernel)
+            self.conv_module = FastSpeech2ConformerConvolutionModule(config, module_config)
             self.conv_layer_norm = nn.LayerNorm(config.hidden_size)
             self.final_layer_norm = nn.LayerNorm(config.hidden_size)
 
@@ -723,10 +707,10 @@ class FastSpeech2ConformerEncoderLayer(nn.Module):
         # for the MHA module
         self.self_attn_layer_norm = nn.LayerNorm(config.hidden_size)
 
-        self.dropout = nn.Dropout(dropout_rate)
+        self.dropout = nn.Dropout(module_config["dropout_rate"])
         self.size = config.hidden_size
-        self.normalize_before = normalize_before
-        self.concat_after = concat_after
+        self.normalize_before = module_config["normalize_before"]
+        self.concat_after = module_config["concat_after"]
         if self.concat_after:
             self.concat_linear = nn.Linear(config.hidden_size + config.hidden_size, config.hidden_size)
 
@@ -759,7 +743,6 @@ class FastSpeech2ConformerEncoderLayer(nn.Module):
             hidden_states = residual + self.ff_scale * self.dropout(self.feed_forward_macaron(hidden_states))
             if not self.normalize_before:
                 hidden_states = self.ff_macaron_layer_norm(hidden_states)
-
         # multi-headed self-attention module
         residual = hidden_states
         if self.normalize_before:
@@ -820,7 +803,7 @@ class FastSpeech2ConformerMultiLayeredConv1d(nn.Module):
     https://arxiv.org/pdf/1905.09263.pdf
     """
 
-    def __init__(self, input_channels, hidden_channels, kernel_size, dropout_rate):
+    def __init__(self, config: FastSpeech2ConformerConfig, module_config):
         """
         Initialize FastSpeech2ConformerMultiLayeredConv1d module.
 
@@ -831,6 +814,9 @@ class FastSpeech2ConformerMultiLayeredConv1d(nn.Module):
             dropout_rate (`float`): Dropout rate.
         """
         super().__init__()
+        input_channels = config.hidden_size
+        hidden_channels = module_config["linear_units"]
+        kernel_size = config.positionwise_conv_kernel_size
         self.conv1 = nn.Conv1d(
             input_channels,
             hidden_channels,
@@ -845,7 +831,7 @@ class FastSpeech2ConformerMultiLayeredConv1d(nn.Module):
             stride=1,
             padding=(kernel_size - 1) // 2,
         )
-        self.dropout = nn.Dropout(dropout_rate)
+        self.dropout = nn.Dropout(module_config["dropout_rate"])
 
     def forward(self, hidden_states):
         """
@@ -857,8 +843,17 @@ class FastSpeech2ConformerMultiLayeredConv1d(nn.Module):
         Returns:
             torch.Tensor: Batch of output tensors (batch_size, T, hidden_channels).
         """
-        hidden_states = torch.relu(self.conv1(hidden_states.transpose(-1, 1))).transpose(-1, 1)
-        return self.conv2(self.dropout(hidden_states).transpose(-1, 1)).transpose(-1, 1)
+        hidden_states = hidden_states.transpose(-1, 1)
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = torch.relu(hidden_states)
+        hidden_states = hidden_states.transpose(-1, 1)
+        hidden_states = self.dropout(hidden_states)
+
+        hidden_states = hidden_states.transpose(-1, 1)
+        hidden_states = self.conv2(hidden_states)
+        hidden_states = hidden_states.transpose(-1, 1)
+
+        return hidden_states
 
 
 class FastSpeech2ConformerRelPositionalEncoding(nn.Module):
@@ -866,20 +861,23 @@ class FastSpeech2ConformerRelPositionalEncoding(nn.Module):
     Args:
     Relative positional encoding module (new implementation). Details can be found in
     https://github.com/espnet/espnet/pull/2816. See : Appendix Batch in https://arxiv.org/abs/1901.02860
-        embed_dim (`int`): Embedding dimension. dropout_rate (`float`): Dropout rate. max_len (`int`, *optional*,
-        defaults to 5000): Maximum input length.
+        config (`FastSpeech2ConformerConfig`):
+            FastSpeech2ConformerConfig instance.
+        module_config (`dict`):
+            Dictionary containing the encoder or decoder module configuration from the `FastSpeech2ConformerConfig`.
     """
 
-    def __init__(self, embed_dim, dropout_rate, max_len=5000):
+    def __init__(self, config: FastSpeech2ConformerConfig, module_config):
         """
         Construct an PositionalEncoding object.
         """
         super().__init__()
-        self.embed_dim = embed_dim
+        self.embed_dim = config.hidden_size
         self.input_scale = math.sqrt(self.embed_dim)
-        self.dropout = nn.Dropout(p=dropout_rate)
+        self.dropout = nn.Dropout(p=module_config["positional_dropout_rate"])
         self.pos_enc = None
-        self.extend_pos_enc(torch.tensor(0.0).expand(1, max_len))
+        self.max_len = 5000
+        self.extend_pos_enc(torch.tensor(0.0).expand(1, self.max_len))
 
     def extend_pos_enc(self, x):
         """Reset the positional encodings."""
@@ -915,7 +913,8 @@ class FastSpeech2ConformerRelPositionalEncoding(nn.Module):
     def forward(self, feature_representation):
         """
         Args:
-            feature_representation (`torch.Tensor` of shape (batch_size, time, `*`)): Input tensor.
+            feature_representation (`torch.Tensor` of shape (batch_size, time, `*`)):
+                Input tensor.
 
         Returns:
             `torch.Tensor`: Encoded tensor (batch_size, time, `*`).
@@ -932,34 +931,19 @@ class FastSpeech2ConformerEncoder(nn.Module):
     FastSpeech2ConformerEncoder encoder module.
 
     Args:
-        config (`FastSpeech2ConformerConfig`): FastSpeech2ConformerConfig instance.
-        linear_units (`int`, *optional*, defaults to 2048): The number of units of position-wise feed forward.
-        num_blocks (`int`, *optional*, defaults to 6): The number of decoder blocks.
-        dropout_rate (`float`, *optional*, defaults to 0.1): Dropout rate.
-        positional_dropout_rate (`float`, *optional*, defaults to 0.1): Dropout rate after adding positional encoding.
-        attention_dropout_rate (`float`, *optional*, defaults to 0.0): Dropout rate in attention.
-        use_encoderinput_layer (`bool`, *optional*, defaults to `False`): Input layer type.
-        normalize_before (`bool`, *optional*, defaults to `True`): Whether to use layer_norm before the first block.
-        concat_after (`bool`, *optional*, defaults to `False`): Whether to concat attention layer's input and output.
-            if True, additional linear will be applied. i.e. x -> x + linear(concat(x, att(x))) if False, no additional
-            linear will be applied. i.e. x -> x + att(x)
-        cnn_module_kernel (int, *optional*, defaults to 31): Kernel size of convolution module.
-
+        config (`FastSpeech2ConformerConfig`):
+            FastSpeech2ConformerConfig instance.
+        module_config (`dict`):
+            Dictionary containing the encoder or decoder module configuration from the `FastSpeech2ConformerConfig`.
+        use_encoder_input_layer (`bool`, *optional*, defaults to `False`):
+            Input layer type.
     """
 
     def __init__(
         self,
         config: FastSpeech2ConformerConfig,
-        attention_heads=4,
-        linear_units=2048,
-        num_blocks=6,
-        dropout_rate=0.1,
-        positional_dropout_rate=0.1,
-        attention_dropout_rate=0.0,
+        module_config,
         use_encoder_input_layer=False,
-        normalize_before=True,
-        concat_after=False,
-        cnn_module_kernel=31,
     ):
         super().__init__()
 
@@ -968,22 +952,11 @@ class FastSpeech2ConformerEncoder(nn.Module):
             self.embed = nn.Embedding(
                 num_embeddings=config.vocab_size, embedding_dim=config.hidden_size, padding_idx=0
             )
-        self.pos_enc = FastSpeech2ConformerRelPositionalEncoding(config.hidden_size, positional_dropout_rate)
+
+        self.pos_enc = FastSpeech2ConformerRelPositionalEncoding(config, module_config)
 
         self.conformer_layers = nn.ModuleList(
-            [
-                FastSpeech2ConformerEncoderLayer(
-                    config,
-                    attention_heads=attention_heads,
-                    attention_dropout_rate=attention_dropout_rate,
-                    linear_units=linear_units,
-                    dropout_rate=dropout_rate,
-                    cnn_module_kernel=cnn_module_kernel,
-                    normalize_before=normalize_before,
-                    concat_after=concat_after,
-                )
-                for _ in range(num_blocks)
-            ]
+            [FastSpeech2ConformerEncoderLayer(config, module_config) for _ in range(module_config["layers"])]
         )
 
     def forward(
@@ -1235,19 +1208,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         if self.speaker_embed_dim:
             self.projection = nn.Linear(config.hidden_size + self.speaker_embed_dim, config.hidden_size)
 
-        self.encoder = FastSpeech2ConformerEncoder(
-            config,
-            attention_heads=config.encoder_num_attention_heads,
-            linear_units=config.encoder_linear_units,
-            num_blocks=config.encoder_layers,
-            use_encoder_input_layer=True,
-            dropout_rate=config.encoder_dropout_rate,
-            positional_dropout_rate=config.encoder_positional_dropout_rate,
-            attention_dropout_rate=config.encoder_attention_dropout_rate,
-            normalize_before=config.encoder_normalize_before,
-            concat_after=config.encoder_concat_after,
-            cnn_module_kernel=config.encoder_kernel_size,
-        )
+        self.encoder = FastSpeech2ConformerEncoder(config, config.encoder_config, use_encoder_input_layer=True)
 
         self.duration_predictor = FastSpeech2ConformerDurationPredictor(config)
 
@@ -1284,19 +1245,7 @@ class FastSpeech2ConformerModel(FastSpeech2ConformerPreTrainedModel):
         self.length_regulator = FastSpeech2ConformerLengthRegulator()
 
         # The decoder is an encoder
-        self.decoder = FastSpeech2ConformerEncoder(
-            config,
-            attention_heads=config.decoder_num_attention_heads,
-            linear_units=config.decoder_linear_units,
-            num_blocks=config.decoder_layers,
-            use_encoder_input_layer=False,
-            dropout_rate=config.decoder_dropout_rate,
-            positional_dropout_rate=config.decoder_positional_dropout_rate,
-            attention_dropout_rate=config.decoder_attention_dropout_rate,
-            normalize_before=config.decoder_normalize_before,
-            concat_after=config.decoder_concat_after,
-            cnn_module_kernel=config.decoder_kernel_size,
-        )
+        self.decoder = FastSpeech2ConformerEncoder(config, config.decoder_config, use_encoder_input_layer=False)
 
         self.speech_decoder_postnet = FastSpeech2ConformerSpeechDecoderPostnet(config)
 

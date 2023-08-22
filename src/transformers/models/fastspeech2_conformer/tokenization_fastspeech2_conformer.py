@@ -19,7 +19,6 @@ from typing import Optional, Tuple
 
 import regex
 
-from ...file_utils import requires_backends
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
@@ -76,8 +75,6 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
         should_strip_spaces=False,
         **kwargs,
     ):
-        self.init_backend()
-
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -86,20 +83,21 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
             should_strip_spaces=should_strip_spaces,
             **kwargs,
         )
+
+        try:
+            import g2p_en
+        except ImportError:
+            raise ImportError(
+                "You need to install g2p-en to use FastSpeech2ConformerTokenizer. "
+                "See https://pypi.org/project/g2p-en/ for installation."
+            )
+        self.g2p = g2p_en.G2p()
+
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
 
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.should_strip_spaces = should_strip_spaces
-
-    def init_backend(self):
-        """Initializes the backend."""
-        requires_backends(self, "g2p_en")
-
-        import g2p_en
-
-        # Not immediately instantiated to keep the tokenizer pickleable
-        self.G2p = g2p_en.G2p
 
     @property
     def vocab_size(self):
@@ -111,20 +109,6 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
 
     def _tokenize(self, text):
         """Returns a tokenized string."""
-        text = self._clean_text(text)
-
-        # phonemize
-        g2p = self.G2p()
-        tokens = g2p(text)
-
-        if self.should_strip_spaces:
-            tokens = list(filter(lambda s: s != " ", tokens))
-
-        tokens.append(self.eos_token)
-
-        return tokens
-
-    def _clean_text(self, text):
         # expand symbols
         text = regex.sub(";", ",", text)
         text = regex.sub(":", ",", text)
@@ -139,7 +123,15 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
 
         text = text.upper()
 
-        return text
+        # phonemize
+        tokens = self.g2p(text)
+
+        if self.should_strip_spaces:
+            tokens = list(filter(lambda s: s != " ", tokens))
+
+        tokens.append(self.eos_token)
+
+        return tokens
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
@@ -185,3 +177,21 @@ class FastSpeech2ConformerTokenizer(PreTrainedTokenizer):
             f.write(json.dumps(self.get_vocab(), ensure_ascii=False))
 
         return (vocab_file,)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["g2p_en"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+
+        try:
+            import g2p_en
+        except ImportError:
+            raise ImportError(
+                "You need to install g2p-en to use FastSpeech2ConformerTokenizer. "
+                "See https://pypi.org/project/g2p-en/ for installation."
+            )
+
+        self.g2p = g2p_en.G2p()
