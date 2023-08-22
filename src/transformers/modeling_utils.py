@@ -2485,8 +2485,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "Setting device_map to {'':torch.cuda.current_device()}."
                     "If you want to use the model for inference, please set device_map ='auto' "
                 )
-                if low_cpu_mem_usage is None:
-                    low_cpu_mem_usage = True
+
+            if low_cpu_mem_usage is not True:
+                low_cpu_mem_usage = True
+                logger.warning("Changed `low_cpu_mem_usage` from `False` to  `True` as it is required to load in 4bit and 8bit")
 
             if from_tf or from_flax:
                 raise ValueError(
