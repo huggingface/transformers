@@ -261,18 +261,34 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             image_size = vision_config.image_size
         else:
             image_size = vision_config.input_size
-        return {
-            "pixel_values": tf.TensorSpec(
-                shape=(
-                    None,
-                    vision_config.num_channels,
-                    image_size,
-                    image_size,
+
+        if isinstance(image_size, list):
+            return {
+                "pixel_values": tf.TensorSpec(
+                    shape=(
+                        None,
+                        vision_config.num_channels,
+                        image_size[0],
+                        image_size[1],
+                    ),
+                    dtype=tf.float32,
                 ),
-                dtype=tf.float32,
-            ),
-            "decoder_input_ids": tf.TensorSpec(shape=(None, None), dtype=tf.int32, name="decoder_input_ids"),
-        }
+                "decoder_input_ids": tf.TensorSpec(shape=(None, None), dtype=tf.int32, name="decoder_input_ids"),
+            }
+
+        else: 
+            return {
+                "pixel_values": tf.TensorSpec(
+                    shape=(
+                        None,
+                        vision_config.num_channels,
+                        image_size,
+                        image_size,
+                    ),
+                    dtype=tf.float32,
+                ),
+                "decoder_input_ids": tf.TensorSpec(shape=(None, None), dtype=tf.int32, name="decoder_input_ids"),
+            }
 
     def get_encoder(self):
         return self.encoder
@@ -328,7 +344,12 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
             def tf_to_pt_weight_rename(tf_weight):
                 if "encoder" in tf_weight and "decoder" not in tf_weight:
+                    #if encoder_model_type == "donut-swin":
+                    #    encoder_model_type = "swin"
+                    #can also do encoder_model_type..replace('donut-swin','swin')
                     return re.sub(rf"encoder\.{encoder_model_type}\.", "encoder.", tf_weight)
+                elif 'decoder.model.lm_head.weight' == tf_weight:
+                    return "decoder.lm_head.weight"
                 else:
                     return tf_weight
 

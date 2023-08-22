@@ -68,6 +68,8 @@ else:
         "TFMBartForConditionalGeneration",
         "TFMBartModel",
         "TFMBartPreTrainedModel",
+        "TFMBartForCausalLM",
+
     ]
 
 try:
@@ -126,7 +128,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_tf_mbart import TFMBartForConditionalGeneration, TFMBartModel, TFMBartPreTrainedModel
+        from .modeling_tf_mbart import TFMBartForConditionalGeneration, TFMBartModel, TFMBartPreTrainedModel, TFMBartForCausalLM
 
     try:
         if not is_flax_available():

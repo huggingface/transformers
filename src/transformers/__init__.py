@@ -1617,6 +1617,16 @@ else:
             "DonutSwinPreTrainedModel",
         ]
     )
+
+
+    _import_structure["models.donut"].extend(
+        [
+            "TF_DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFDonutSwinModel",
+            "TFDonutSwinPreTrainedModel",
+        ]
+    )
+
     _import_structure["models.dpr"].extend(
         [
             "DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3475,7 +3485,7 @@ else:
     )
     _import_structure["models.marian"].extend(["TFMarianModel", "TFMarianMTModel", "TFMarianPreTrainedModel"])
     _import_structure["models.mbart"].extend(
-        ["TFMBartForConditionalGeneration", "TFMBartModel", "TFMBartPreTrainedModel"]
+        ["TFMBartForConditionalGeneration", "TFMBartModel", "TFMBartPreTrainedModel", "TFMBartForCausalLM"]
     )
     _import_structure["models.mobilebert"].extend(
         [
@@ -5442,6 +5452,8 @@ if TYPE_CHECKING:
             DistilBertPreTrainedModel,
         )
         from .models.donut import DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST, DonutSwinModel, DonutSwinPreTrainedModel
+        from .models.donut import TF_DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST, TFDonutSwinModel, TFDonutSwinPreTrainedModel
+
         from .models.dpr import (
             DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
             DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -6962,7 +6974,8 @@ if TYPE_CHECKING:
             TFLxmertVisualFeatureEncoder,
         )
         from .models.marian import TFMarianModel, TFMarianMTModel, TFMarianPreTrainedModel
-        from .models.mbart import TFMBartForConditionalGeneration, TFMBartModel, TFMBartPreTrainedModel
+        from .models.mbart import TFMBartForConditionalGeneration, TFMBartModel, TFMBartPreTrainedModel,TFMBartForCausalLM
+
         from .models.mobilebert import (
             TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFMobileBertForMaskedLM,

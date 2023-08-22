@@ -34,6 +34,7 @@ alt="drawing" width="600"/>
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found
 [here](https://github.com/clovaai/donut).
 
+The model can now also be loaded in Tensorflow, contributed by [FrancescOpinto](https://huggingface.co/FrancescOpinto)
 Tips:
 
 - The quickest way to get started with Donut is by checking the [tutorial

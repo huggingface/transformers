@@ -55,6 +55,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("gpt-sw3", "TFGPT2Model"),
         ("gpt2", "TFGPT2Model"),
         ("gptj", "TFGPTJModel"),
+        ("donut-swin", "TFDonutSwinModel"),
         ("groupvit", "TFGroupViTModel"),
         ("hubert", "TFHubertModel"),
         ("layoutlm", "TFLayoutLMModel"),
@@ -186,6 +187,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xlm", "TFXLMWithLMHeadModel"),
         ("xlm-roberta", "TFXLMRobertaForCausalLM"),
         ("xlnet", "TFXLNetLMHeadModel"),
+        ("mbart", "TFMBartForCausalLM"),
     ]
 )
 

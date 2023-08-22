@@ -329,7 +329,7 @@ Flax), PyTorch, and/or TensorFlow.
 |             DiNAT             |       ✅        |         ❌         |      ❌      |
 |            DINOv2             |       ✅        |         ❌         |      ❌      |
 |          DistilBERT           |       ✅        |         ✅         |      ✅      |
-|           DonutSwin           |       ✅        |         ❌         |      ❌      |
+|           DonutSwin           |       ✅        |         ✅         |      ❌      |
 |              DPR              |       ✅        |         ✅         |      ❌      |
 |              DPT              |       ✅        |         ❌         |      ❌      |
 |        EfficientFormer        |       ✅        |         ✅         |      ❌      |

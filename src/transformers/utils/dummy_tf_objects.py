@@ -735,6 +735,24 @@ class TFCLIPVisionModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+
+TF_DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFDonutSwinModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFDonutSwinPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1754,6 +1772,12 @@ class TFMarianPreTrainedModel(metaclass=DummyObject):
 
 
 class TFMBartForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+class TFMBartForCausalLM(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
@@ -2951,3 +2975,5 @@ class TFTrainer(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
+
+

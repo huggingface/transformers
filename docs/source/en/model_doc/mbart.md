@@ -38,7 +38,7 @@ corpora in many languages using the BART objective. mBART is one of the first me
 sequence-to-sequence model by denoising full texts in multiple languages, while previous approaches have focused only
 on the encoder, decoder, or reconstructing parts of the text.
 
-This model was contributed by [valhalla](https://huggingface.co/valhalla). The Authors' code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/mbart)
+This model was contributed by [valhalla](https://huggingface.co/valhalla). The Authors' code can be found [here](https://github.com/pytorch/fairseq/tree/master/examples/mbart). The MBartForCausalLM can now also be loaded in Tensorflow, contributed by [FrancescOpinto](https://huggingface.co/FrancescOpinto)
 
 ### Training of MBart
 
@@ -215,6 +215,11 @@ tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
 ## TFMBartForConditionalGeneration
 
 [[autodoc]] TFMBartForConditionalGeneration
+    - call
+
+## TFMBartForCausalLM
+
+[[autodoc]] TFMBartForCausalLM
     - call
 
 ## FlaxMBartModel

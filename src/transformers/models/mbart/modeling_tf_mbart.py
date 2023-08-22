@@ -28,6 +28,7 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPastAndCrossAttentions,
     TFSeq2SeqLMOutput,
     TFSeq2SeqModelOutput,
+    TFCausalLMOutputWithCrossAttentions,
 )
 
 # Public API
@@ -376,7 +377,7 @@ class TFMBartDecoderLayer(tf.keras.layers.Layer):
             dropout=config.attention_dropout,
             name="encoder_attn",
             is_decoder=True,
-        )
+        ) 
         self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
         self.fc1 = tf.keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
@@ -660,7 +661,7 @@ class TFMBartEncoder(tf.keras.layers.Layer):
             config.d_model,
             name="embed_positions",
         )
-        self.layers = [TFMBartEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
+        self.layers = [TFMBartEncoderLayer(config,name=f"layers.{i}") for i in range(config.encoder_layers)] 
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
@@ -817,7 +818,22 @@ class TFMBartDecoder(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.config = config
         self.padding_idx = config.pad_token_id
+        #if embed_tokens is not None: 
+        #    self.embed_tokens = embed_tokens
+        #else:
         self.embed_tokens = embed_tokens
+
+        if embed_tokens is None:
+            self.embed_tokens = tf.keras.layers.Embedding(
+            input_dim=config.vocab_size,
+            output_dim=config.d_model,
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.init_std),
+            name="embed_tokens",
+        )
+
+        # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
+        #self.shared.load_weight_prefix = "decoder.embed_tokens"
+
         self.layerdrop = config.decoder_layerdrop
         self.embed_positions = TFMBartLearnedPositionalEmbedding(
             config.max_position_embeddings,
@@ -825,7 +841,7 @@ class TFMBartDecoder(tf.keras.layers.Layer):
             name="embed_positions",
         )
         self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
-        self.layers = [TFMBartDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
+        self.layers = [TFMBartDecoderLayer(config,name=f"layers.{i}") for i in range(config.decoder_layers)] #
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
@@ -1446,3 +1462,279 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
 
     def prepare_decoder_input_ids_from_labels(self, labels: tf.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id)
+
+
+
+################
+# Copied from transformers.models.bart.modeling_bart.MBartDecoderWrapper with MBart->TFMBart
+class TFMBartDecoderWrapper(TFMBartPreTrainedModel):
+    """
+    This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
+    used in combination with the [`EncoderDecoderModel`] framework.
+    """
+
+    def __init__(self, config, name):
+        super().__init__(config, name)
+        #self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+
+
+        self.decoder = TFMBartDecoder(config, name="decoder")
+
+
+    @unpack_inputs
+    def call(self, *args, **kwargs):
+        return self.decoder(*args, **kwargs)
+
+import copy 
+import json
+
+# Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->MBart, facebook/bart-base->facebook/mbart-large-cc25
+class TFMBartForCausalLM(TFMBartPreTrainedModel, TFCausalLanguageModelingLoss):
+    _tied_weights_keys = ["lm_head.weights"]
+    #TODO: understand whether this tied_ should be changed (see generative model above and compare to pytorch)
+
+    def __init__(self, config, name="model"):
+        config = copy.deepcopy(config)
+        config.is_decoder = True
+        config.is_encoder_decoder = False
+        #config.decoder_layers=4
+        #config.decoder_attention_heads=16
+        #config = json.loads("/usr/local/google/home/francescopinto/.cache/huggingface/hub/models--naver-clova-ix--donut-base/snapshots/a959cf33c20e09215873e338299c900f57047c61/config.json")["decoder"]
+
+        super().__init__(config, name=name+".model")
+        self.use_cache = config.use_cache
+        self.model = TFMBartDecoderWrapper(config, name=name+".model") # name="model") #TFMBartMainLayer(config, name="model")
+
+        #self.model = TFMBartDecoderWrapper(config, name="model")
+
+        #self.shared = tf.keras.layers.Embedding(
+        #    input_dim=config.vocab_size,
+        #    output_dim=config.d_model,
+        #    embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.init_std),
+        #    name="model.shared",
+        #)
+        # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
+        #self.shared.load_weight_prefix = "model.shared"
+
+        self.lm_head = tf.keras.layers.Dense(config.vocab_size, use_bias=False, name="lm_head")
+
+        self.lm_head.load_weight_prefix = "lm_head"
+
+        #TODO: establish if you need a lienar layer or not
+        #the Generative one in pytorch has a linear layer, but this seems not to
+
+
+        #self.model.decoder.lm_head = 
+        # nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        # Initialize weights and apply final processing
+        #self.post_init()
+        #shouldn't need post_init(), but if you really want you can check BartPreTrainedModel and implementa  similar initialisation to _init_weights
+        #post_init() presumably just calls that 
+
+    def get_input_embeddings(self): #TODO: ok 
+        return self.model.decoder.embed_tokens
+
+    def set_input_embeddings(self, value): #TODO ok
+        #, it implements the
+        #set_input_embeddings identical to the one implied by the generative model
+        #with the difference that having only the decoder, the call to the MainLayer
+        #is not made (as no encoder would be found), and it sets it manually
+        self.model.decoder.embed_tokens = value
+
+    def get_output_embeddings(self): #TODO: check which of the two 
+        return self.lm_head #self.get_input_embeddings() #return self.lm_head 
+
+    def set_output_embeddings(self, new_embeddings): 
+         #TODO: based on get_output_embeddings decide to change this or not
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder): #TODO: ok
+        self.model.decoder = decoder
+
+    def get_decoder(self): #TODO: ok
+        return self.model.decoder
+
+    #TODO: this should become call()
+    #you should change the annotation (see generative above)
+    #should change the types of output_type etc. and should also change types of arguments
+
+    #@replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    #take care of documentation if you push to hub
+    @unpack_inputs
+    def call(
+        self,
+        input_ids: TFModelInputType = None,
+        attention_mask: Optional[tf.Tensor] | None = None,
+        encoder_hidden_states: tf.Tensor | None = None,
+        encoder_attention_mask: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        cross_attn_head_mask: tf.Tensor | None = None,
+        past_key_values: Tuple[Tuple[tf.Tensor]] | None = None,
+        inputs_embeds: tf.Tensor | None = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, TFCausalLMOutputWithCrossAttentions]:
+        r"""
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
+                provide it.
+
+                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+                [`PreTrainedTokenizer.__call__`] for details.
+
+                [What are input IDs?](../glossary#input-ids)
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+                if the model is configured as a decoder.
+            encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used
+                in the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
+            head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
+
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the head is **masked**.
+
+            cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+                Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
+
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the head is **masked**.
+
+            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
+                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two additional
+                tensors are only required when the model is used as a decoder in a Sequence to Sequence model.
+
+                Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
+                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+
+                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, MBartForCausalLM
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
+        >>> model = MBartForCausalLM.from_pretrained("facebook/mbart-large-cc25", add_cross_attention=False)
+        >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> logits = outputs.logits
+        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
+        >>> list(logits.shape) == expected_shape
+        True
+        ```"""
+        #TODO until next todo, things should be ok (just setting booleans and calling decoder)
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        outputs = self.model.decoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            head_mask=head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        #TODO: check the computation of the logits (depending on whether these)
+        #shared layers are actually there or not (to do the dnese layer)
+        #logits = #tf.matmul(outputs.last_hidden_state, self.model.shared.weights, transpose_b=True)
+        logits = self.lm_head(outputs[0]) #self.bias_layer(logits) 
+
+        #logits = self.lm_head(outputs[0])
+
+        #TODO: stuff below should be ok
+        loss = None
+        if labels is not None:
+            loss = self.hf_compute_loss(labels, logits)
+            #labels = labels.to(logits.device)
+            #loss_fct = CrossEntropyLoss()
+            #loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
+
+        return TFCausalLMOutputWithCrossAttentions(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
+        )
+
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, attention_mask=None, use_cache=None, **kwargs
+    ):
+        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
+        if attention_mask is None:
+            attention_mask = tf.ones_like(input_ids) #input_ids.new_ones(input_ids.shape)
+
+        if past_key_values:
+            input_ids = input_ids[:, -1:]
+
+        # first step, decoder_cached_states are empty
+        return {
+            "input_ids": input_ids,  # encoder_outputs is defined. input_ids not needed
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "use_cache": use_cache,
+        }
+
+    #doesn't seem to be in tf implementations, removing it 
+    #@staticmethod
+    #def _reorder_cache(past_key_values, beam_idx):
+    #    reordered_past = ()
+    #    for layer_past in past_key_values:
+    #        reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+    #    return reordered_past
