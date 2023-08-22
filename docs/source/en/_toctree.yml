@@ -584,6 +584,8 @@
         title: MMS
       - local: model_doc/musicgen
         title: MusicGen
+      - local: model_doc/pop2piano
+        title: Pop2Piano
       - local: model_doc/sew
         title: SEW
       - local: model_doc/sew-d
@@ -643,6 +645,8 @@
         title: GIT
       - local: model_doc/groupvit
         title: GroupViT
+      - local: model_doc/idefics
+        title: IDEFICS
       - local: model_doc/instructblip
         title: InstructBLIP
       - local: model_doc/layoutlm
@@ -694,8 +698,6 @@
       sections:
       - local: model_doc/decision_transformer
         title: Decision Transformer
-      - local: model_doc/idefics
-        title: IDEFICS
       - local: model_doc/trajectory_transformer
         title: Trajectory Transformer
       title: Reinforcement learning models
