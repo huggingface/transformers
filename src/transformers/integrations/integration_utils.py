@@ -30,8 +30,8 @@ from typing import TYPE_CHECKING, Dict, Optional
 
 import numpy as np
 
-from . import __version__ as version
-from .utils import flatten_dict, is_datasets_available, is_pandas_available, is_torch_available, logging
+from .. import __version__ as version
+from ..utils import flatten_dict, is_datasets_available, is_pandas_available, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
