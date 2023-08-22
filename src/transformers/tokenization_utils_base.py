@@ -1139,7 +1139,7 @@ class SpecialTokensMixin:
         `Optional[int]`: Id of the beginning of sentence token in the vocabulary. Returns `None` if the token has not
         been set.
         """
-        if getattr(self, "_bos_token", None) is None:
+        if self._bos_token is None:
             return None
         return self.convert_tokens_to_ids(self.bos_token)
 
@@ -1149,7 +1149,7 @@ class SpecialTokensMixin:
         `Optional[int]`: Id of the end of sentence token in the vocabulary. Returns `None` if the token has not been
         set.
         """
-        if getattr(self, "_eos_token", None) is None:
+        if self._eos_token is None:
             return None
         return self.convert_tokens_to_ids(self.eos_token)
 
@@ -1158,7 +1158,7 @@ class SpecialTokensMixin:
         """
         `Optional[int]`: Id of the unknown token in the vocabulary. Returns `None` if the token has not been set.
         """
-        if getattr(self, "_unk_token", None) is None:
+        if self._unk_token is None:
             return None
         return self.convert_tokens_to_ids(self.unk_token)
 
@@ -1168,7 +1168,7 @@ class SpecialTokensMixin:
         `Optional[int]`: Id of the separation token in the vocabulary, to separate context and query in an input
         sequence. Returns `None` if the token has not been set.
         """
-        if getattr(self, "_sep_token", None) is None:
+        if self._sep_token is None:
             return None
         return self.convert_tokens_to_ids(self.sep_token)
 
@@ -1177,7 +1177,7 @@ class SpecialTokensMixin:
         """
         `Optional[int]`: Id of the padding token in the vocabulary. Returns `None` if the token has not been set.
         """
-        if getattr(self, "_pad_token", None) is None:
+        if self._pad_token is None:
             return None
         return self.convert_tokens_to_ids(self.pad_token)
 
@@ -1196,7 +1196,7 @@ class SpecialTokensMixin:
 
         Returns `None` if the token has not been set.
         """
-        if getattr(self, "_cls_token", None) is None:
+        if self._cls_token is None:
             return None
         return self.convert_tokens_to_ids(self.cls_token)
 
@@ -1206,7 +1206,7 @@ class SpecialTokensMixin:
         `Optional[int]`: Id of the mask token in the vocabulary, used when training a model with masked-language
         modeling. Returns `None` if the token has not been set.
         """
-        if getattr(self, "_mask_token", None) is None:
+        if self._mask_token is None:
             return None
         return self.convert_tokens_to_ids(self.mask_token)
 
