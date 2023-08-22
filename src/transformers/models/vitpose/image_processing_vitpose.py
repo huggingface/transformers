@@ -269,18 +269,15 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         img = np.asarray(img)
 
         for kpts in pose_results:
-            print("in")
             kpts = np.array(kpts, copy=False)
 
             # draw each point on image
             if pose_kpt_color is not None:
                 assert len(pose_kpt_color) == len(kpts)
                 for kid, kpt in enumerate(kpts):
-                    print("asdfadf")
                     x_coord, y_coord, kpt_score = int(kpt[0]), int(kpt[1]), kpt[2]
                     if kpt_score > kpt_score_thr:
                         color = tuple(int(c) for c in pose_kpt_color[kid])
-                        print(x_coord, y_coord)
                         img = cv2.circle(img, (int(x_coord), int(y_coord)), radius,
                                        color, -1)
 
@@ -375,7 +372,6 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                 bbox_result.append(res["bbox"])
             pose_results.append(res['keypoints'])
 
-        print(pose_results)
         if pose_results:
             img = self.imshow_keypoints(img, pose_results, skeleton, kpt_score_thr,
                             pose_kpt_color, pose_link_color, radius, thickness)

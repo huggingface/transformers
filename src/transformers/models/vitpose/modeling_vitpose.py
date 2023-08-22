@@ -35,7 +35,6 @@ from ...modeling_outputs import (
     ImageClassifierOutput,
     MaskedImageModelingOutput,
 )
-from ..detr import DetrImageProcessor, DetrForObjectDetection
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
@@ -299,7 +298,6 @@ class ViTPoseBackbone(nn.Module):
         for blk in self.blocks:
             embeddings = blk(embeddings)
 
-
         embeddings = self.last_norm(embeddings)
 
         return embeddings.permute(0,2,1).reshape(batch_size, -1, Hp, Wp).contiguous()
@@ -355,9 +353,9 @@ class ViTPoseTopDownHeatMap(nn.Module):
         B, K, H, W = batch_heatmaps.shape
         N = coords.shape[0]
         assert (B == 1 or B == N)
-        #for heatmaps in batch_heatmaps:
-        #    for heatmap in heatmaps:
-        #        cv2.GaussianBlur(heatmap, (kernel, kernel), 0, heatmap)
+        for heatmaps in batch_heatmaps:
+            for heatmap in heatmaps:
+                cv2.GaussianBlur(heatmap.numpy(), (kernel, kernel), 0, heatmap.numpy())
         torch.clamp(batch_heatmaps, min=0.001, max=50., out=batch_heatmaps)
         torch.log(batch_heatmaps, out=batch_heatmaps)
 
@@ -496,12 +494,12 @@ class ViTPosePreTrainedModel(PreTrainedModel):
     config_class = ViTPoseConfig
     base_model_prefix = "vitpose"
     main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
     _no_split_modules = []
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm, nn.ConvTranspose2d, nn.BatchNorm2d]) -> None:
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
             module.weight.data = nn.init.trunc_normal_(
@@ -509,34 +507,22 @@ class ViTPosePreTrainedModel(PreTrainedModel):
             ).to(module.weight.dtype)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, ViTPoseBlock):
-            nn.init.zeros_(module.norm1.weight)
-            nn.init.zeros_(module.norm1.bias)
-            nn.init.zeros_(module.norm2.weight)
-            nn.init.zeros_(module.norm2.bias)
-        elif isinstance(module, ViTPoseAttention):
-            module.qkv.weight.data = nn.init.trunc_normal_(
-                module.qkv.weight.data.to(torch.float32), mean=0.0, std=1.0
-            ).to(module.qkv.weight.dtype)
-            if module.qkv.bias is not None:
-                module.qkv.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
+        elif isinstance(module, nn.LayerNorm):
+            print("ai i in")
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, ViTPosePatchEmbed):
-            nn.init.uniform_(module.projection.weight)
-            nn.init.uniform_(module.projection.bias)
-           # module.projection.data = nn.init.trunc_normal_(
-           #     module.projection.data.to(torch.float32),
-           #     mean=0.0,
-           #     std=self.config.initializer_range,
-           # ).to(module.projection.dtype)
+            module.patch_embeddings.data = nn.init.trunc_normal_(
+                module.patch_embeddings.data.to(torch.float32),
+                mean=0.0,
+                std=self.config.initializer_range,
+            ).to(module.patch_embeddings.dtype)
 
-           # module.cls_token.data = nn.init.trunc_normal_(
-           #     module.cls_token.data.to(torch.float32),
-           #     mean=0.0,
-           #     std=self.config.initializer_range,
-           # ).to(module.cls_token.dtype)
+            module.cls_token.data = nn.init.trunc_normal_(
+                module.cls_token.data.to(torch.float32),
+                mean=0.0,
+                std=self.config.initializer_range,
+            ).to(module.cls_token.dtype)
 
    # def _set_gradient_checkpointing(self, module: ViTEncoder, value: bool = False) -> None:
    #     if isinstance(module, ViTEncoder):
@@ -586,8 +572,6 @@ VITPOSE_INPUTS_DOCSTRING = r"""
     "The bare ViTPose Model transformer outputting raw hidden-states without any specific head on top.",
     VITPOSE_START_DOCSTRING,
 )
-
-
 
 class ViTPoseModel(ViTPosePreTrainedModel):
     def __init__(self, config: ViTPoseConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
@@ -848,11 +832,11 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
 
         poses, heatmap = self._inference_pose_model(self.vitpose,
             pixel_values,
-            bboxes,
+            bboxes_xyxy,
             return_heatmap = False)
 
         pose_results.append(pixel_values)
-        for pose, person_result, bbox in zip(poses, person_results, bboxes):
+        for pose, person_result, bbox in zip(poses, person_results, bboxes_xyxy):
             pose_result = person_result.copy()
             pose_result['keypoints'] = pose
             pose_result['bbox'] = bbox
