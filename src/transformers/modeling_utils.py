@@ -2488,7 +2488,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if low_cpu_mem_usage is not True:
                 low_cpu_mem_usage = True
-                logger.warning("Changed `low_cpu_mem_usage` from `False` to  `True` as it is required to load in 4bit and 8bit")
+                logger.warning(
+                    "Changed `low_cpu_mem_usage` from `False` to  `True` as it is required to load in 4bit and 8bit"
+                )
 
             if from_tf or from_flax:
                 raise ValueError(
