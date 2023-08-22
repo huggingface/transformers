@@ -53,6 +53,7 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("cvt", "ConvNextImageProcessor"),
         ("data2vec-vision", "BeitImageProcessor"),
         ("deformable_detr", "DeformableDetrImageProcessor"),
+        ("grounding-dino", "GroundingDINOImageProcessor"),
         ("deit", "DeiTImageProcessor"),
         ("deta", "DetaImageProcessor"),
         ("detr", "DetrImageProcessor"),
