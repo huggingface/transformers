@@ -353,10 +353,11 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
         template = (
             "{{ eos_token }}{{ bos_token }}"
             "{% for message in messages %}"
-            "{% if message['role'] == 'user' %}{{ 'User: '}}"
-            "{% else %}{{ 'Bot: '}}{% endif %}"
+            "{% if message['role'] == 'user' %}{{ 'User: ' + message['content']}}"
+            "{% else %}{{ 'Bot: ' + message['content']}}{% endif %}"
             "{{ message['text'] }}{{ bos_token }}"
             "{% endfor %}"
+            "Bot:"
         )
         return {
             "template": template,

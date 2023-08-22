@@ -394,7 +394,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
                 Input ids for the conversation.
         """
         if self.use_default_system_prompt:
-            if len(conversation.past_user_inputs) > 0:
+            if len(conversation) > 0:
                 if (
                     not conversation.past_user_inputs[0].startswith(B_SYS)
                     or E_SYS not in conversation.past_user_inputs[0]
@@ -435,9 +435,9 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
     @property
     def default_prompt_config(self):
-        template_args = {"default_system_prompt": DEFAULT_SYSTEM_PROMPT}
+        template_args = {"default_system_prompt": None}
         template = (
-            "{% if message_idx == 0 and message['role'] != 'system' %}"
+            "{% if message_idx == 0 and message['role'] != 'system' and default_system_prompt is not none %}"
             "{{ '<<SYS>>\\n' + default_system_prompt + '\\n<</SYS>>\\n\\n' }}"  # Insert a default sys message
             "{% endif %}"
             "{% if message['role'] == 'user' %}"
