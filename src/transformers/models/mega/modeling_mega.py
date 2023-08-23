@@ -1341,7 +1341,7 @@ class MegaPreTrainedModel(PreTrainedModel):
     config_class = MegaConfig
     base_model_prefix = "mega"
     supports_gradient_checkpointing = False
-    _no_split_modules = []
+    _no_split_modules = ["MegaMovingAverageGatedAttention"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
