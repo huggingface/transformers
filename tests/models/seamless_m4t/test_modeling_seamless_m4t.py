@@ -29,11 +29,11 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        SeamlessM4TModel,
         SeamlessM4TForSpeechToSpeech,
         SeamlessM4TForSpeechToText,
         SeamlessM4TForTextToSpeech,
         SeamlessM4TForTextToText,
+        SeamlessM4TModel,
     )
     from transformers.models.seamless_m4t.modeling_seamless_m4t import (
         SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -51,7 +51,6 @@ class SeamlessM4TModelTester:
         use_input_mask=True,
         use_token_type_ids=True,
         use_labels=True,
-
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -59,26 +58,25 @@ class SeamlessM4TModelTester:
         num_labels=3,
         num_choices=4,
         scope=None,
-        
-        vocab_size = 24,
-        unit_vocab_size = 24,
-        hidden_size = 24,
-        num_hidden_layers = 2,
-        intermediate_size = 24,
-        max_position_embeddings = 2048,
-        encoder_layers = 2,
-        decoder_layers = 2,
-        encoder_ffn_dim = 24,
-        decoder_ffn_dim = 24,
-        t2u_encoder_layers = 2,
-        t2u_decoder_layers = 2,
-        t2u_encoder_ffn_dim = 24,
-        t2u_decoder_ffn_dim = 24,
+        vocab_size=24,
+        unit_vocab_size=24,
+        hidden_size=24,
+        num_hidden_layers=2,
+        intermediate_size=24,
+        max_position_embeddings=2048,
+        encoder_layers=2,
+        decoder_layers=2,
+        encoder_ffn_dim=24,
+        decoder_ffn_dim=24,
+        t2u_encoder_layers=2,
+        t2u_decoder_layers=2,
+        t2u_encoder_ffn_dim=24,
+        t2u_decoder_ffn_dim=24,
         num_heads=6,
     ):
         self.parent = parent
         self.input_modality = input_modality
-        
+
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
@@ -91,8 +89,7 @@ class SeamlessM4TModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.scope = scope
-        
-        
+
         self.vocab_size = vocab_size
         self.unit_vocab_size = unit_vocab_size
         self.hidden_size = hidden_size
@@ -107,15 +104,14 @@ class SeamlessM4TModelTester:
         self.t2u_decoder_layers = t2u_decoder_layers
         self.t2u_encoder_ffn_dim = t2u_encoder_ffn_dim
         self.t2u_decoder_ffn_dim = t2u_decoder_ffn_dim
-        self.num_heads=num_heads
-        self.num_attention_heads=num_heads
+        self.num_heads = num_heads
+        self.num_attention_heads = num_heads
 
     def prepare_config_and_inputs(self):
         if self.input_modality == "text":
             inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         else:
             inputs = ids_tensor([self.batch_size, self.seq_length, 160], self.vocab_size)
-            
 
         input_mask = None
         if self.use_input_mask:
@@ -123,12 +119,8 @@ class SeamlessM4TModelTester:
 
         lm_labels = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        
         # TODO: keep?
-        #if self.use_labels:
+        # if self.use_labels:
         #    sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
         #    token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
         #    choice_labels = ids_tensor([self.batch_size], self.num_choices)
@@ -143,21 +135,20 @@ class SeamlessM4TModelTester:
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             initializer_range=self.initializer_range,
-            
-            vocab_size = self.vocab_size,
-            unit_vocab_size = self.unit_vocab_size,
-            hidden_size = self.hidden_size,
-            num_hidden_layers = self.num_hidden_layers,
-            intermediate_size = self.intermediate_size,
-            max_position_embeddings = self.max_position_embeddings,
-            encoder_layers = self.encoder_layers,
-            decoder_layers = self.decoder_layers,
-            encoder_ffn_dim = self.encoder_ffn_dim,
-            decoder_ffn_dim = self.decoder_ffn_dim,
-            t2u_encoder_layers = self.t2u_encoder_layers,
-            t2u_decoder_layers = self.t2u_decoder_layers,
-            t2u_encoder_ffn_dim = self.t2u_encoder_ffn_dim,
-            t2u_decoder_ffn_dim = self.t2u_decoder_ffn_dim,
+            vocab_size=self.vocab_size,
+            unit_vocab_size=self.unit_vocab_size,
+            hidden_size=self.hidden_size,
+            num_hidden_layers=self.num_hidden_layers,
+            intermediate_size=self.intermediate_size,
+            max_position_embeddings=self.max_position_embeddings,
+            encoder_layers=self.encoder_layers,
+            decoder_layers=self.decoder_layers,
+            encoder_ffn_dim=self.encoder_ffn_dim,
+            decoder_ffn_dim=self.decoder_ffn_dim,
+            t2u_encoder_layers=self.t2u_encoder_layers,
+            t2u_decoder_layers=self.t2u_decoder_layers,
+            t2u_encoder_ffn_dim=self.t2u_encoder_ffn_dim,
+            t2u_decoder_ffn_dim=self.t2u_decoder_ffn_dim,
             num_attention_heads=self.num_heads,
             encoder_attention_heads=self.num_heads,
             decoder_attention_heads=self.num_heads,
@@ -174,7 +165,7 @@ class SeamlessM4TModelTester:
         ) = self.prepare_config_and_inputs()
 
         config.is_decoder = True
-        
+
         encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
         encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
 
@@ -192,22 +183,23 @@ class SeamlessM4TModelTester:
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
-        result = model(input_ids, )
+        result = model(
+            input_ids,
+        )
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-
-    #def create_and_check_for_causal_lm(
+    # def create_and_check_for_causal_lm(
     #    self,
     #    config,
     #    input_ids,
     #    input_mask,
-    #):
+    # ):
     #    model = SeamlessM4TForCausalLM(config=config)
     #    model.to(torch_device)
     #    model.eval()
     #    result = model(input_ids, attention_mask=input_mask, , labels=token_labels)
     #    self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        
+
     def create_and_check_decoder_model_past_large_inputs(
         self,
         config,
@@ -274,23 +266,22 @@ class SeamlessM4TModelTester:
             input_mask,
             lm_labels,
         ) = config_and_inputs
-        
-        input_name = "input_ids" if self.input_modality== "text" else "input_values"
-        
-        inputs_dict = {input_name: input_ids,  "attention_mask": input_mask, "labels": lm_labels}
+
+        input_name = "input_ids" if self.input_modality == "text" else "input_values"
+
+        inputs_dict = {input_name: input_ids, "attention_mask": input_mask, "labels": lm_labels}
         return config, inputs_dict
 
 
 @require_torch
 class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     is_encoder_decoder = True
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False
     test_model_parallel = True
     test_resize_embeddings = True
-    
+
     all_model_classes = (
         (
             SeamlessM4TModel,
@@ -301,9 +292,14 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, GenerationTesterMixi
         else ()
     )
     all_generative_model_classes = (
-        SeamlessM4TForSpeechToSpeech,
-        SeamlessM4TForSpeechToText,) if is_torch_available() else ()
-    
+        (
+            SeamlessM4TForSpeechToSpeech,
+            SeamlessM4TForSpeechToText,
+        )
+        if is_torch_available()
+        else ()
+    )
+
     input_name = "input_values"
 
     def setUp(self):
@@ -321,26 +317,22 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, GenerationTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = SeamlessM4TModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-            
-            
+
 
 @require_torch
 class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    
-
     is_encoder_decoder = True
     fx_compatible = False
     test_missing_keys = False
     test_pruning = False
     test_model_parallel = True
     test_resize_embeddings = True
-    
+
     all_model_classes = (
         (
             SeamlessM4TModel,
@@ -351,9 +343,14 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
         else ()
     )
     all_generative_model_classes = (
-        SeamlessM4TModel,
-        SeamlessM4TForTextToSpeech,
-        SeamlessM4TForTextToText,) if is_torch_available() else ()
+        (
+            SeamlessM4TModel,
+            SeamlessM4TForTextToSpeech,
+            SeamlessM4TForTextToText,
+        )
+        if is_torch_available()
+        else ()
+    )
 
     def setUp(self):
         self.model_tester = SeamlessM4TModelTester(self, input_modality="text")
@@ -371,8 +368,6 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
         for model_name in SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = SeamlessM4TModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-
 
 
 @require_torch

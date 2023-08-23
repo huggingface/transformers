@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch SeamlessM4T model. """
+""" PyTorch SeamlessM4T model."""
 
 
 import math
@@ -57,14 +57,14 @@ SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 SEAMLESS_M4T_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config ([`~SeamlessM4TConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 
@@ -73,8 +73,7 @@ SEAMLESS_M4T_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`SeamlessM4TTokenizer`].
-            See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`SeamlessM4TTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -86,15 +85,16 @@ SEAMLESS_M4T_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0, 1]`:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
 
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range `[0, config.max_position_embeddings - 1]`.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
@@ -104,9 +104,9 @@ SEAMLESS_M4T_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert *input_ids* indices into associated vectors
-            than the model's internal embedding lookup matrix.
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
+            model's internal embedding lookup matrix.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -194,17 +194,15 @@ def to_attention_mask(seqs: Tensor, seq_lens: Optional[Tensor]) -> Optional[Tens
     """Convert a sequence length array to a float attention mask.
 
     :param seqs:
-        The sequences to mask. *Shape:* :math:`(N,S,*)`, where :math:`N` is the
-        batch size, :math:`S` is the sequence length, and :math:`*` is any
-        number of sequence-specific dimensions including none.
+        The sequences to mask. *Shape:* :math:`(N,S,*)`, where :math:`N` is the batch size, :math:`S` is the sequence
+        length, and :math:`*` is any number of sequence-specific dimensions including none.
     :param seq_lens:
-        An array where each element represents the length of the sequence at the
-        same index in ``seqs``. *Shape:* :math:`(N)`, where :math:`N` is the
-        batch size.
+        An array where each element represents the length of the sequence at the same index in ``seqs``. *Shape:*
+        :math:`(N)`, where :math:`N` is the batch size.
 
     :returns:
-        The float attention mask. *Shape:* :math:`(N,S)`, where :math:`N` is the
-        batch size and :math:`S` is the sequence length.
+        The float attention mask. *Shape:* :math:`(N,S)`, where :math:`N` is the batch size and :math:`S` is the
+        sequence length.
     """
     if seq_lens is None:
         return None
@@ -1482,8 +1480,8 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
 # not exactly the same as Wav2Vec2ConformerModel
 class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
     """
-    Transformer speech encoder consisting of *config.num_hidden_layers* conformer self attention layers. Each layer is a
-    [`SeamlessM4TConformerEncoderLayer`].
+    Transformer speech encoder consisting of *config.num_hidden_layers* conformer self attention layers. Each layer is
+    a [`SeamlessM4TConformerEncoderLayer`].
 
     Args:
         config: (`SeamlessM4TConfig`)
@@ -1574,7 +1572,8 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
     Args:
         config: (`SeamlessM4TConfig`)
         embed_tokens (`nn.Embedding`, *optional*): output embedding
-        is_t2u_encoder (`bool`, *optional*, defaults to `False`): indicates if it belongs to the text-to-units model, in which case it won't have input embeddings
+        is_t2u_encoder (`bool`, *optional*, defaults to `False`):
+            indicates if it belongs to the text-to-units model, in which case it won't have input embeddings
     """
 
     def __init__(
@@ -2090,7 +2089,8 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
 
 class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
     """
-    Transformer bare text-to-unit encoder-decoder. The encoder is a [`SeamlessM4TEncoder`] without embeddings and the decoder is a [`SeamlessM4TDecoder`].
+    Transformer bare text-to-unit encoder-decoder. The encoder is a [`SeamlessM4TEncoder`] without embeddings and the
+    decoder is a [`SeamlessM4TDecoder`].
 
     Args:
         config: (`SeamlessM4TConfig`)
@@ -2205,7 +2205,8 @@ class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
 
 class SeamlessM4TTextToUnitWithLMHead(SeamlessM4TPreTrainedModel):
     """
-    Transformer text-to-unit encoder-decoder with a language model head. The base encoder-decoder model is a [`SeamlessM4TTextToUnit`].
+    Transformer text-to-unit encoder-decoder with a language model head. The base encoder-decoder model is a
+    [`SeamlessM4TTextToUnit`].
 
     Args:
         config: (`SeamlessM4TConfig`)
@@ -2385,9 +2386,8 @@ class SeamlessM4TTextToUnitWithLMHead(SeamlessM4TPreTrainedModel):
 
 class SeamlessM4TMultiModalToTextModel(SeamlessM4TPreTrainedModel):
     """
-    Bare Transformer (text or speech)-to-text model.
-    If defined, the text encoder is a [`SeamlessM4TEncoder`] and the speech encoder is a [`SeamlessM4TSpeechEncoder`].
-    The decoder is a [`SeamlessM4TDecoder`]
+    Bare Transformer (text or speech)-to-text model. If defined, the text encoder is a [`SeamlessM4TEncoder`] and the
+    speech encoder is a [`SeamlessM4TSpeechEncoder`]. The decoder is a [`SeamlessM4TDecoder`]
 
     Args:
         config: (`SeamlessM4TConfig`)
@@ -2539,9 +2539,9 @@ class SeamlessM4TMultiModalToTextModel(SeamlessM4TPreTrainedModel):
 
 class SeamlessM4TMultiModalToTextModelWithLMHead(SeamlessM4TPreTrainedModel):
     """
-    Transformer (text or speech)-to-text model with a language modeling head.
-    If defined, the text encoder is a [`SeamlessM4TEncoder`] and the speech encoder is a [`SeamlessM4TSpeechEncoder`].
-    The decoder is a [`SeamlessM4TDecoder`].
+    Transformer (text or speech)-to-text model with a language modeling head. If defined, the text encoder is a
+    [`SeamlessM4TEncoder`] and the speech encoder is a [`SeamlessM4TSpeechEncoder`]. The decoder is a
+    [`SeamlessM4TDecoder`].
 
     Args:
         config: (`SeamlessM4TConfig`)
@@ -2761,7 +2761,7 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
 
     def get_decoder(self):
         return self.input_model.get_decoder()
-    
+
     def get_input_embeddings(self):
         return self.input_model.get_input_embeddings()
 
@@ -2885,7 +2885,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
 
     def get_decoder(self):
         return self.input_model.get_decoder()
-    
+
     def get_input_embeddings(self):
         return self.input_model.get_input_embeddings()
 
@@ -3010,7 +3010,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
 
     def get_decoder(self):
         return self.input_model.get_decoder()
-    
+
     def get_input_embeddings(self):
         return self.input_model.get_input_embeddings()
 
@@ -3098,14 +3098,12 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
                     kwargs_speech_generation[key] = value
 
         # TODO: take care of multiple same parameters
-        
+
         kwargs_text_generation["output_hidden_states"] = True
         kwargs_text_generation["return_dict_in_generate"] = True
         kwargs_text_generation["output_scores"] = True
-        
-        output_text = self.input_model.generate(
-            input_ids, **kwargs_text_generation
-        )
+
+        output_text = self.input_model.generate(input_ids, **kwargs_text_generation)
 
         t2u_input_embeds = torch.concat(
             [hidden_states[-1] for hidden_states in output_text.decoder_hidden_states], dim=1
@@ -3183,7 +3181,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
 
     def get_decoder(self):
         return self.input_model.get_decoder()
-    
+
     def get_input_embeddings(self):
         return self.input_model.get_input_embeddings()
 
@@ -3273,11 +3271,8 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         kwargs_text_generation["output_hidden_states"] = True
         kwargs_text_generation["return_dict_in_generate"] = True
         kwargs_text_generation["output_scores"] = True
-        
-        output_text = self.input_model.generate(
-            input_ids, **kwargs_text_generation
-        )
 
+        output_text = self.input_model.generate(input_values, **kwargs_text_generation)
 
         t2u_input_embeds = torch.concat(
             [hidden_states[-1] for hidden_states in output_text.decoder_hidden_states], dim=1
@@ -3357,7 +3352,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
     def get_decoder(self):
         return self.input_model.get_decoder()
-    
+
     def get_input_embeddings(self):
         return self.input_model.get_input_embeddings()
 
@@ -3460,7 +3455,6 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         kwargs_text_generation["return_dict_in_generate"] = True
         kwargs_text_generation["output_scores"] = True
 
-
         # TODO: take care of multiple same paramteres
         if input_values is not None:
             if input_ids is not None:
@@ -3469,10 +3463,12 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                     "Make sure `input_values=None` if you want to use the text encoder."
                 )
             self.input_model.set_modality("speech")
-            output_text = self.input_model.generate(input_ids=None,input_values=input_values,**kwargs_text_generation)
+            output_text = self.input_model.generate(
+                input_ids=None, input_values=input_values, **kwargs_text_generation
+            )
         else:
             self.input_model.set_modality("text")
-            output_text = self.input_model.generate(input_ids=input_ids,input_values=None,**kwargs_text_generation)
+            output_text = self.input_model.generate(input_ids=input_ids, input_values=None, **kwargs_text_generation)
 
         # TODO: pb - if beam seach decoding, this has too many dimensions, needs a way to get last-hidden-states
         t2u_input_embeds = torch.concat(
@@ -3484,7 +3480,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         )  # TODO: is it the proper way, what's the priority with generation config and so on?
 
         # Compute new attention mask
-        seq_lens = (output_text.sequences != pad_token_id).int().sum(1) 
+        seq_lens = (output_text.sequences != pad_token_id).int().sum(1)
         t2u_model_attention_mask = to_attention_mask(t2u_input_embeds, seq_lens)
 
         kwargs_speech_generation["attention_mask"] = t2u_model_attention_mask
@@ -3562,17 +3558,14 @@ class SeamlessM4TVocoder(nn.Module):
 class SeamlessM4TModelOld(SeamlessM4TPreTrainedModel):
     """
 
-    The model can behave as an encoder (with only self-attention) as well
-    as a decoder, in which case a layer of cross-attention is added between
-    the self-attention layers, following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani,
-    Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
+    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
+    cross-attention is added between the self-attention layers, following the architecture described in [Attention is
+    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
-    To behave as an decoder the model needs to be initialized with the
-    `is_decoder` argument of the configuration set to `True`.
-    To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder`
-    argument and `add_cross_attention` set to `True`; an
-    `encoder_hidden_states` is then expected as an input to the forward pass.
+    To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
+    to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
+    `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
     def __init__(self, config):
@@ -3592,8 +3585,7 @@ class SeamlessM4TModelOld(SeamlessM4TPreTrainedModel):
 
     def _prune_heads(self, heads_to_prune):
         """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        See base class PreTrainedModel
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
@@ -3622,23 +3614,22 @@ class SeamlessM4TModelOld(SeamlessM4TPreTrainedModel):
     ):
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-            if the model is configured as a decoder.
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
         encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
-            is used in the cross-attention if the model is configured as a decoder.
-            Mask values selected in `[0, 1]`:
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
         past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-            decoding (see `past_key_values`).
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -3733,7 +3724,7 @@ class SeamlessM4TModelOld(SeamlessM4TPreTrainedModel):
         )
 
 
-@add_start_docstrings("""SeamlessM4T Model with a `language modeling` head on top. """, SEAMLESS_M4T_START_DOCSTRING)
+@add_start_docstrings("""SeamlessM4T Model with a `language modeling` head on top.""", SEAMLESS_M4T_START_DOCSTRING)
 class SeamlessM4TForMaskedLM(SeamlessM4TPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -3778,10 +3769,9 @@ class SeamlessM4TForMaskedLM(SeamlessM4TPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss.
-            Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring)
-            Tokens with indices set to `-100` are ignored (masked), the loss is only computed for the tokens with labels
-            in `[0, ..., config.vocab_size]`.
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -3834,7 +3824,7 @@ class SeamlessM4TForMaskedLM(SeamlessM4TPreTrainedModel):
 
 
 @add_start_docstrings(
-    """SeamlessM4T Model with a `language modeling` head on top for CLM fine-tuning. """, SEAMLESS_M4T_START_DOCSTRING
+    """SeamlessM4T Model with a `language modeling` head on top for CLM fine-tuning.""", SEAMLESS_M4T_START_DOCSTRING
 )
 class SeamlessM4TForCausalLM(SeamlessM4TPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
@@ -3887,26 +3877,24 @@ class SeamlessM4TForCausalLM(SeamlessM4TPreTrainedModel):
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2
-            tensors of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional
-            tensors of shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two
-            additional tensors are only required when the model is used as a decoder in a Sequence to Sequence
-            model.
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two additional tensors are
+            only required when the model is used as a decoder in a Sequence to Sequence model.
 
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-            cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential
-            decoding.
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
 
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`.
         use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-            decoding (see `past_key_values`).
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
 
         Returns:
 
@@ -3916,10 +3904,10 @@ class SeamlessM4TForCausalLM(SeamlessM4TPreTrainedModel):
         >>> from transformers import SeamlessM4TTokenizer, SeamlessM4TForCausalLM, SeamlessM4TConfig
         >>> import torch
 
-        >>> tokenizer = SeamlessM4TTokenizer.from_pretrained('meta-private/m4t_large')
+        >>> tokenizer = SeamlessM4TTokenizer.from_pretrained("meta-private/m4t_large")
         >>> config = SeamlessM4TConfig.from_pretrained("meta-private/m4t_large")
         >>> config.is_decoder = True
-        >>> model = SeamlessM4TForCausalLM.from_pretrained('meta-private/m4t_large', config=config)
+        >>> model = SeamlessM4TForCausalLM.from_pretrained("meta-private/m4t_large", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

@@ -30,7 +30,6 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
-        ("seamless_m4t", "SeamlessM4TConfig"),
         ("albert", "AlbertConfig"),
         ("align", "AlignConfig"),
         ("altclip", "AltCLIPConfig"),
@@ -178,6 +177,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("roformer", "RoFormerConfig"),
         ("rwkv", "RwkvConfig"),
         ("sam", "SamConfig"),
+        ("seamless_m4t", "SeamlessM4TConfig"),
         ("segformer", "SegformerConfig"),
         ("sew", "SEWConfig"),
         ("sew-d", "SEWDConfig"),
@@ -237,7 +237,6 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
-        ("seamless_m4t", "SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("align", "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("altclip", "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -375,6 +374,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("roformer", "ROFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("rwkv", "RWKV_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sam", "SAM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("seamless_m4t", "SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("segformer", "SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew", "SEW_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("sew-d", "SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -424,7 +424,6 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("seamless_m4t", "SeamlessM4T"),
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),
@@ -594,6 +593,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("roformer", "RoFormer"),
         ("rwkv", "RWKV"),
         ("sam", "SAM"),
+        ("seamless_m4t", "SeamlessM4T"),
         ("segformer", "SegFormer"),
         ("sew", "SEW"),
         ("sew-d", "SEW-D"),

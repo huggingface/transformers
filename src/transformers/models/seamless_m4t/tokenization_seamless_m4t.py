@@ -59,7 +59,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         super().__init__(bos_token=bos_token, eos_token=eos_token, unk_token=unk_token, **kwargs)
 
-        """ Initialisation """
+        """ Initialisation"""
 
     @property
     def vocab_size(self):
@@ -96,9 +96,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
-        A SeamlessM4T sequence has the following format:
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A SeamlessM4T sequence has the following format:
 
         - single sequence: `<s> X </s>`
         - pair of sequences: `<s> A </s></s> B </s>`
@@ -149,8 +148,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
-        SeamlessM4T does not make use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. SeamlessM4T does
+        not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (`List[int]`):
@@ -159,7 +158,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`:  List of zeros.
+            `List[int]`: List of zeros.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]
@@ -225,8 +224,8 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
-        SeamlessM4T does not make use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. SeamlessM4T does
+        not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (`List[int]`):
@@ -235,7 +234,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            `List[int]`:  List of zeros.
+            `List[int]`: List of zeros.
         """
         sep = [self.sep_token_id]
         cls = [self.cls_token_id]

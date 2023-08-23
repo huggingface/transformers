@@ -123,7 +123,6 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.seamless_m4t": ["SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP", "SeamlessM4TConfig", "SeamlessM4TTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -492,6 +491,7 @@ _import_structure = {
         "SamPromptEncoderConfig",
         "SamVisionConfig",
     ],
+    "models.seamless_m4t": ["SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP", "SeamlessM4TConfig", "SeamlessM4TTokenizer"],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
     "models.sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"],
@@ -790,7 +790,6 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
-    _import_structure["models.seamless_m4t"].append("SeamlessM4TTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -841,6 +840,7 @@ else:
     _import_structure["models.rembert"].append("RemBertTokenizerFast")
     _import_structure["models.roberta"].append("RobertaTokenizerFast")
     _import_structure["models.roformer"].append("RoFormerTokenizerFast")
+    _import_structure["models.seamless_m4t"].append("SeamlessM4TTokenizerFast")
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
@@ -1030,17 +1030,6 @@ else:
 
     # PyTorch models structure
 
-    _import_structure["models.seamless_m4t"].extend(
-        [
-            "SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SeamlessM4TForTextToSpeech",
-            "SeamlessM4TForTextToText",
-            "SeamlessM4TForSpeechToText",
-            "SeamlessM4TForSpeechToSpeech",
-            "SeamlessM4TModel",
-            "SeamlessM4TPreTrainedModel",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2589,6 +2578,17 @@ else:
             "SAM_PRETRAINED_MODEL_ARCHIVE_LIST",
             "SamModel",
             "SamPreTrainedModel",
+        ]
+    )
+    _import_structure["models.seamless_m4t"].extend(
+        [
+            "SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SeamlessM4TForSpeechToSpeech",
+            "SeamlessM4TForSpeechToText",
+            "SeamlessM4TForTextToSpeech",
+            "SeamlessM4TForTextToText",
+            "SeamlessM4TModel",
+            "SeamlessM4TPreTrainedModel",
         ]
     )
     _import_structure["models.segformer"].extend(
