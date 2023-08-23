@@ -16,11 +16,20 @@ specific language governing permissions and limitations under the License.
 
 The VITS model was proposed in [Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech](https://arxiv.org/abs/2106.06103) by Jaehyeon Kim, Jungil Kong, Juhee Son.
 
+
+VITS (Variational Inference with adversarial learning for end-to-end Text-to-Speech) is a conditional variational 
+autoencoder (VAE) comprised of a posterior encoder, decoder, and conditional prior. The use of a conditional VAE allows
+for efficient end-to-end learning through latent variables. To improve the expressiveness of the model, normalizing flows
+are applied to the conditional prior distribution. Motivated by the one-to-many nature of the TTS problem (the same text 
+can be spoken in multiple ways, all of which are valid), the model also includes a stochastic duration predictor, 
+which allows the model to synthesise speech with different rhythms from the same input text.
+
 The abstract from the paper is the following:
 
 *Several recent end-to-end text-to-speech (TTS) models enabling single-stage training and parallel sampling have been proposed, but their sample quality does not match that of two-stage TTS systems. In this work, we present a parallel end-to-end TTS method that generates more natural sounding audio than current two-stage models. Our method adopts variational inference augmented with normalizing flows and an adversarial training process, which improves the expressive power of generative modeling. We also propose a stochastic duration predictor to synthesize speech with diverse rhythms from input text. With the uncertainty modeling over latent variables and the stochastic duration predictor, our method expresses the natural one-to-many relationship in which a text input can be spoken in multiple ways with different pitches and rhythms. A subjective human evaluation (mean opinion score, or MOS) on the LJ Speech, a single speaker dataset, shows that our method outperforms the best publicly available TTS systems and achieves a MOS comparable to ground truth.*
 
-This model can also be used with MMS-TTS checkpoints as those use the same architecture (but a different tokenizer).
+This model can also be used with TTS checkpoints from [Massively Multilingual Speech (MMS)](https://arxiv.org/abs/2305.13516) 
+as these checkpoints use the same architecture and a slightly modified tokenizer.
 
 This model was contributed by [Matthijs](https://huggingface.co/Matthijs). The original code can be found [here](https://github.com/jaywalnut310/vits).
 
