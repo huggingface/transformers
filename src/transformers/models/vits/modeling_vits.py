@@ -1371,6 +1371,15 @@ class VitsModel(VitsPreTrainedModel):
         else:
             input_padding_mask = torch.ones_like(input_ids).unsqueeze(-1).float()
 
+        if self.config.num_speakers > 1:
+            if speaker_id is None:
+                raise ValueError(
+                    f"Expected input `speaker_id` for a multispeaker model, set `speaker_id` in the range 0-{self.config.num_speakers - 1}."
+                )
+            speaker_embeddings = self.embed_speaker(torch.tensor([speaker_id])).unsqueeze(-1)
+        else:
+            speaker_embeddings = None
+
         text_encoder_output = self.text_encoder(
             input_ids=input_ids,
             padding_mask=input_padding_mask,
@@ -1383,15 +1392,6 @@ class VitsModel(VitsPreTrainedModel):
         input_padding_mask = input_padding_mask.transpose(1, 2)
         prior_means = text_encoder_output[1]
         prior_log_variances = text_encoder_output[2]
-
-        if self.config.num_speakers > 1:
-            if speaker_id is None:
-                raise ValueError(
-                    f"Expected input `speaker_id` for a multispeaker model, set `speaker_id` in the range 0-{self.config.num_speakers - 1}."
-                )
-            speaker_embeddings = self.embed_speaker(torch.tensor([speaker_id])).unsqueeze(-1)
-        else:
-            speaker_embeddings = None
 
         if labels is not None:
             raise NotImplementedError("Training of VITS is not supported yet.")
