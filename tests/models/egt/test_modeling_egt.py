@@ -20,10 +20,8 @@ import inspect
 import os
 import tempfile
 import unittest
-from typing import List
 
 from transformers import EGTConfig, is_torch_available
-from transformers.configuration_utils import PretrainedConfig
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester

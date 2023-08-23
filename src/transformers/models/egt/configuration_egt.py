@@ -15,9 +15,9 @@ EGT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class EGTConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~EGTModel`]. It is used to instantiate an
-    EGT model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the EGT
+    This is the configuration class to store the configuration of a [`~EGTModel`]. It is used to instantiate an EGT
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the EGT
     [graphormer-base-pcqm4mv1](https://huggingface.co/graphormer-base-pcqm4mv1) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the

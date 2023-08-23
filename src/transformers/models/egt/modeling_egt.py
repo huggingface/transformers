@@ -28,10 +28,10 @@ EGT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Zhiteng/dgl-egt",
 ]
 
+
 class VirtualNodes(nn.Module):
     """
-    Generate node and edge features for virtual nodes in the graph
-    and pad the corresponding matrices.
+    Generate node and edge features for virtual nodes in the graph and pad the corresponding matrices.
     """
 
     def __init__(self, feat_size, edge_feat_size, num_virtual_nodes=1):
@@ -87,8 +87,8 @@ class EGTModel(EGTPreTrainedModel):
     """The EGT model is a graph-encoder model.
 
     It goes from a graph to its representation. If you want to use the model for a downstream classification task, use
-    EGTForGraphClassification instead. For any other downstream task, feel free to add a new class, or combine
-    this model with a downstream model of your choice, following the example in EGTForGraphClassification.
+    EGTForGraphClassification instead. For any other downstream task, feel free to add a new class, or combine this
+    model with a downstream model of your choice, following the example in EGTForGraphClassification.
     """
 
     def __init__(self, config: EGTConfig):

@@ -315,6 +315,7 @@ _import_structure = {
     "models.dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
     "models.efficientformer": ["EFFICIENTFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "EfficientFormerConfig"],
     "models.efficientnet": ["EFFICIENTNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "EfficientNetConfig"],
+    "models.egt": ["EGT_PRETRAINED_CONFIG_ARCHIVE_MAP", "EGTConfig"],
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
     "models.encodec": [
         "ENCODEC_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -357,7 +358,6 @@ _import_structure = {
         "GPTSanJapaneseTokenizer",
     ],
     "models.graphormer": ["GRAPHORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "GraphormerConfig"],
-    "models.egt": ["EGT_PRETRAINED_CONFIG_ARCHIVE_MAP", "EGTConfig"],
     "models.groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroupViTConfig",
@@ -1675,6 +1675,14 @@ else:
             "EfficientNetPreTrainedModel",
         ]
     )
+    _import_structure["models.egt"].extend(
+        [
+            "EGT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "EGTForGraphClassification",
+            "EGTModel",
+            "EGTPreTrainedModel",
+        ]
+    )
     _import_structure["models.electra"].extend(
         [
             "ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1911,14 +1919,6 @@ else:
             "GraphormerForGraphClassification",
             "GraphormerModel",
             "GraphormerPreTrainedModel",
-        ]
-    )
-    _import_structure["models.egt"].extend(
-        [
-            "EGT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "EGTForGraphClassification",
-            "EGTModel",
-            "EGTPreTrainedModel",
         ]
     )
     _import_structure["models.groupvit"].extend(
