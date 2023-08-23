@@ -706,7 +706,6 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
 
         model_inputs.update(
             {
-                "input_ids": input_ids,
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "position_ids": position_ids,
