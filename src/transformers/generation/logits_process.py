@@ -1106,15 +1106,12 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
 
     Traditional beam search often generates very similar sequences across different beams.
 
-    The `HammingDiversityLogitsProcessor` addresses this by penalizing beams that generate tokens already chosen by
-    other beams in the same time step.
+    The `HammingDiversityLogitsProcessor` addresses this by penalizing beams that generate tokens already chosen by other beams in the same time step.
 
     How It Works:
     - **Grouping Beams**: Beams are divided into groups. Each group selects tokens independently of the others.
-    - **Penalizing Repeated Tokens**: If a beam in a group selects a token already chosen by another group in the same
-      step, a penalty is applied to that token's score.
-    - **Promoting Diversity**: This penalty discourages beams within a group from selecting the same tokens as beams in
-      other groups.
+    - **Penalizing Repeated Tokens**: If a beam in a group selects a token already chosen by another group in the same step, a penalty is applied to that token's score.
+    - **Promoting Diversity**: This penalty discourages beams within a group from selecting the same tokens as beams in other groups.
 
     Benefits:
     - **Diverse Outputs**: Produces a variety of different sequences.
@@ -1148,68 +1145,79 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
 
     Example: the below example shows a comparison before and after applying Hamming Diversity.
 
-    ```python
-            from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+ ```python
+            >>> from transformers import (
+            ...     AutoTokenizer,
+            ...     AutoModelForSeq2SeqLM,
+            ...     LogitsProcessorList,
+            ...     MinLengthLogitsProcessor,
+            ...     HammingDiversityLogitsProcessor,
+            ...     BeamSearchScorer,
+            ... )
+            >>> import torch
 
-            # Initialize the model and tokenizer
-            tokenizer = AutoTokenizer.from_pretrained("t5-base")
-            model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
+            >>> # Initialize the model and tokenizer
+            >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
+            >>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
 
-            # Input variable is a long text about space:
+            >>> # A long text about the solar system
+            >>> text = "The Solar System is a gravitationally bound system comprising the Sun and the objects that orbit it, either directly or indirectly. Of the objects that orbit the Sun directly, the largest are the eight planets, with the remainder being smaller objects, such as the five dwarf planets and small Solar System bodies. The Solar System formed 4.6 billion years ago from the gravitational collapse of a giant interstellar molecular cloud."
 
-            text = "The Solar System is a gravitationally bound system comprising the Sun and the objects that orbit it, either directly or indirectly. Of the objects that orbit the Sun directly, the largest are the eight planets, with the remainder being smaller objects, such as the five dwarf planets and small Solar System bodies. The Solar System formed 4.6 billion years ago from the gravitational collapse of a giant interstellar molecular cloud."
+            >>> encoder_input_str = "summarize: " + text
+            >>> encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
 
-            # Prepare the input
-            encoder_input_str = "summarize: " + text
-            encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
+            >>> # Set up for diverse beam search
+            >>> num_beams = 6
+            >>> num_beam_groups = 2
 
-            # Set the parameters for diverse beam search
-            num_beams = 8  # higher is more diverse
-            num_beam_groups = 4  # 4 groups of 2 beams will explore 4*2=8 beams (=num_beams). by separating the beams into groups and applying penalties within groups, the model is encouraged to explore different sequence possibilities in each group
-            diversity_penalty = 5.5  # enforces diversity among different groups of beams, discourages beams within a group from selecting the same tokens
+            >>> model_kwargs = {
+            ...     "encoder_outputs": model.get_encoder()(
+            ...         encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True
+            ...     )
+            ... }
 
-            # Generate three diverse summaries using the `generate` method
-            outputs_diverse = model.generate(
-                encoder_input_ids,
-                max_length=100,
-                num_beams=num_beams,
-                num_beam_groups=num_beam_groups,
-                diversity_penalty=diversity_penalty,
-                no_repeat_ngram_size=2,
-                early_stopping=True,
-                num_return_sequences=3,
-            )
+            >>> beam_scorer = BeamSearchScorer(
+            ...     batch_size=1,
+            ...     max_length=model.config.max_length,
+            ...     num_beams=num_beams,
+            ...     device=model.device,
+            ...     num_beam_groups=num_beam_groups,
+            ... )
+            >>> # Initialize the diversity logits processor
+            >>> # set the logits processor list, note that `HammingDiversityLogitsProcessor` is effective only if `group beam search` is enabled
+            >>> logits_processor_diverse = LogitsProcessorList(
+            ...     [
+            ...         HammingDiversityLogitsProcessor(5.5, num_beams=num_beams, num_beam_groups=num_beam_groups),
+            ...         MinLengthLogitsProcessor(10, eos_token_id=model.config.eos_token_id),
+            ...     ]
+            ... )
+            >>> #generate the diverse summary using group_beam_search
+            >>> outputs_diverse = model.group_beam_search(
+            ...     encoder_input_ids.repeat_interleave(num_beams, dim=0), beam_scorer, logits_processor=logits_processor_diverse, **model_kwargs
+            >>> )
 
-            # Generate two non-diverse summaries
-            outputs_non_diverse = model.generate(
-                encoder_input_ids,
-                max_length=100,
-                num_beams=num_beams,
-                no_repeat_ngram_size=2,
-                early_stopping=True,
-                num_return_sequences=2,
-            )
+            >>> # Generate non-diverse summary
+            >>> outputs_non_diverse = model.generate(
+            ...     encoder_input_ids,
+            ...     max_length=100,
+            ...     num_beams=num_beams,
+            ...     no_repeat_ngram_size=2,
+            ...     early_stopping=True,
+            ... )
 
-            # Decode and print the summaries
-            summaries_diverse = tokenizer.batch_decode(outputs_diverse, skip_special_tokens=True)
-            summaries_non_diverse = tokenizer.batch_decode(outputs_non_diverse, skip_special_tokens=True)
+            >>> # Decode and print the summaries
+            >>> summaries_diverse = tokenizer.batch_decode(outputs_diverse, skip_special_tokens=True)
+            >>> summary_non_diverse = tokenizer.decode(outputs_non_diverse[0], skip_special_tokens=True)
 
-            # Print the results
-            print("Diverse Summaries:")
-            for summary in summaries_diverse:
-                print(summary)
-                # summary 1:  the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud
-                # summary 2: the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets, says john mccartney jr.
-                # summary 3: solar system formed 4.6 billion years ago from collapse of interstellar molecular cloud. largest of the eight planets orbit the Sun directly, with the remainder being smaller objects, such as dwarf planet and small solar System bodies - nicolaus mills-simons: the largest are the dwarf worlds and the solar systems' bodies.
+            >>> print("Diverse Summary:")
+            >>> print(summaries_diverse[0])
+            >>> # The Solar System is a gravitationally bound system comprising the Sun and the objects that orbit it, either directly or indirectly. Of the objects that orbit the Sun directly, the largest are the eight planets, with the remainder being smaller objects, such as the five dwarf planets and small Solar System bodies. The Solar System formed 4.6 billion years ago from the gravitational collapse of a giant interstellar molecular cloud.
+            >>> print("\nNon-Diverse Summary:")
+            >>> print(summary_non_diverse)
+            >>> # The Sun and the objects that orbit it directly are the eight planets, with the remainder being smaller objects, such as the five dwarf worlds and small Solar System bodies. It formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud.    ```
+```
 
-            print("\nNon-Diverse Summaries:")
-            for summary in summaries_non_diverse:
-                print(summary)
-                # summary 1:  the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud.
-                # summary 2:  the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud.
-    ```
-                For more details, see [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence
-                Models](https://arxiv.org/pdf/1610.02424.pdf).
+               For more details, see [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models](https://arxiv.org/pdf/1610.02424.pdf).
 
     """
 
