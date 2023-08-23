@@ -229,7 +229,7 @@ classifier = pipeline(model="{your_username}/test-dynamic-pipeline", trust_remot
 그런 다음 테스트를 추가해야 합니다.
 `tests/test_pipelines_MY_PIPELINE.py`라는 새 파일을 만들고 다른 테스트와 예제를 함께 작성합니다.
 
-`run_pipeline_test` 함수는 매우 일반적이며, `model_mapping` 및 `tf_model_mapping`에서 정의된 대로 가능한 모든 아키텍처의 작은 무작위 모델에서 실행됩니다.
+`run_pipeline_test` 함수는 매우 일반적이며, `model_mapping` 및 `tf_model_mapping`에서 정의된 가능한 모든 아키텍처의 작은 무작위 모델에서 실행됩니다.
 
 이는 향후 호환성을 테스트하는 데 매우 중요하며, 누군가 `XXXForQuestionAnswering`을 위한 새 모델을 추가하면 파이프라인 테스트가 해당 모델에서 실행을 시도한다는 의미입니다.
 모델이 무작위이기 때문에 실제 값을 확인하는 것은 불가능하므로, 단순히 파이프라인 출력 `TYPE`과 일치시키기 위한 도우미 `ANY`가 있습니다.
