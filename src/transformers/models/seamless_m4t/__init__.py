@@ -66,10 +66,10 @@ if TYPE_CHECKING:
     else:
         from .modeling_seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SeamlessM4TForTextToSpeech,
             SeamlessM4TForSpeechToSpeech,
-            SeamlessM4TForTextToText,
             SeamlessM4TForSpeechToText,
+            SeamlessM4TForTextToSpeech,
+            SeamlessM4TForTextToText,
             SeamlessM4TModel,
             SeamlessM4TPreTrainedModel,
         )

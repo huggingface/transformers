@@ -1488,6 +1488,7 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
     Args:
         config: (`SeamlessM4TConfig`)
     """
+
     main_input_name = "input_values"
 
     def __init__(self, config: SeamlessM4TConfig):
@@ -2210,6 +2211,7 @@ class SeamlessM4TTextToUnitWithLMHead(SeamlessM4TPreTrainedModel):
         config: (`SeamlessM4TConfig`)
         embed_tokens_decoder (`nn.Embedding`, *optional*): input embedding of the decoder.
     """
+
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
     _tied_weights_keys = ["decoder.embed_tokens.weight", "lm_head.weight"]
 
@@ -2546,7 +2548,7 @@ class SeamlessM4TMultiModalToTextModelWithLMHead(SeamlessM4TPreTrainedModel):
         use_text_encoder: (`str`, *optional*): If `True`, the text encoder is defined.
         use_speech_encoder: (`str`, *optional*): If `True`, the speech encoder is defined.
     """
-    
+
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
 
     def __init__(
@@ -2557,9 +2559,7 @@ class SeamlessM4TMultiModalToTextModelWithLMHead(SeamlessM4TPreTrainedModel):
     ):
         super().__init__(config)
 
-        self.model = SeamlessM4TMultiModalToTextModel(
-            config, use_text_encoder, use_speech_encoder
-        )
+        self.model = SeamlessM4TMultiModalToTextModel(config, use_text_encoder, use_speech_encoder)
         self.register_buffer("final_logits_bias", torch.zeros((1, config.vocab_size)))
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -2737,6 +2737,7 @@ class SeamlessM4TMultiModalToTextModelWithLMHead(SeamlessM4TPreTrainedModel):
             )
         return reordered_past
 
+
 @add_start_docstrings(
     "The text-to-text SeamlessM4T Model transformer which can be used for T2TT.",
     SEAMLESS_M4T_START_DOCSTRING,
@@ -2760,14 +2761,16 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
 
     def get_decoder(self):
         return self.input_model.get_decoder()
+    
+    def get_input_embeddings(self):
+        return self.input_model.get_input_embeddings()
 
-
-    #@add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    #@add_code_sample_docstrings(
+    # @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    # @add_code_sample_docstrings(
     #    checkpoint=_CHECKPOINT_FOR_DOC,
     #    output_type=BaseModelOutputWithPastAndCrossAttentions,
     #    config_class=_CONFIG_FOR_DOC,
-    #)
+    # )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2856,6 +2859,7 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
             )
         return reordered_past
 
+
 @add_start_docstrings(
     "The speech-to-text SeamlessM4T Model transformer which can be used for S2TT.",
     SEAMLESS_M4T_START_DOCSTRING,
@@ -2881,13 +2885,16 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
 
     def get_decoder(self):
         return self.input_model.get_decoder()
+    
+    def get_input_embeddings(self):
+        return self.input_model.get_input_embeddings()
 
-    #@add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    #@add_code_sample_docstrings(
+    # @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    # @add_code_sample_docstrings(
     #    checkpoint=_CHECKPOINT_FOR_DOC,
     #    output_type=BaseModelOutputWithPastAndCrossAttentions,
     #    config_class=_CONFIG_FOR_DOC,
-    #)
+    # )
     def forward(
         self,
         input_values: torch.LongTensor = None,
@@ -3003,14 +3010,16 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
 
     def get_decoder(self):
         return self.input_model.get_decoder()
+    
+    def get_input_embeddings(self):
+        return self.input_model.get_input_embeddings()
 
-
-    #@add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    #@add_code_sample_docstrings(
+    # @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    # @add_code_sample_docstrings(
     #    checkpoint=_CHECKPOINT_FOR_DOC,
     #    output_type=BaseModelOutputWithPastAndCrossAttentions,
     #    config_class=_CONFIG_FOR_DOC,
-    #) 
+    # )
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -3088,12 +3097,19 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
                 if key not in kwargs_speech_generation:
                     kwargs_speech_generation[key] = value
 
-        # TODO: take care of multiple same paramteres
+        # TODO: take care of multiple same parameters
+        
+        kwargs_text_generation["output_hidden_states"] = True
+        kwargs_text_generation["return_dict_in_generate"] = True
+        kwargs_text_generation["output_scores"] = True
+        
         output_text = self.input_model.generate(
-            input_ids, **kwargs_text_generation, output_hidden_states=True, return_dict_in_generate=True
+            input_ids, **kwargs_text_generation
         )
 
-        t2u_input_embeds = torch.concat([hidden_states[-1] for hidden_states in output_text.decoder_hidden_states], dim =1)
+        t2u_input_embeds = torch.concat(
+            [hidden_states[-1] for hidden_states in output_text.decoder_hidden_states], dim=1
+        )
 
         pad_token_id = (
             self.config.pad_token_id
@@ -3167,14 +3183,16 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
 
     def get_decoder(self):
         return self.input_model.get_decoder()
+    
+    def get_input_embeddings(self):
+        return self.input_model.get_input_embeddings()
 
-
-    #@add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    #@add_code_sample_docstrings(
+    # @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    # @add_code_sample_docstrings(
     #    checkpoint=_CHECKPOINT_FOR_DOC,
     #    output_type=BaseModelOutputWithPastAndCrossAttentions,
     #    config_class=_CONFIG_FOR_DOC,
-    #)
+    # )
     def forward(
         self,
         input_values: torch.LongTensor = None,
@@ -3252,11 +3270,18 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
                 if key not in kwargs_speech_generation:
                     kwargs_speech_generation[key] = value
 
+        kwargs_text_generation["output_hidden_states"] = True
+        kwargs_text_generation["return_dict_in_generate"] = True
+        kwargs_text_generation["output_scores"] = True
+        
         output_text = self.input_model.generate(
-            input_values=input_values, **kwargs_text_generation, output_hidden_states=True, return_dict_in_generate=True
+            input_ids, **kwargs_text_generation
         )
 
-        t2u_input_embeds = torch.concat([hidden_states[-1] for hidden_states in output_text.decoder_hidden_states], dim =1)
+
+        t2u_input_embeds = torch.concat(
+            [hidden_states[-1] for hidden_states in output_text.decoder_hidden_states], dim=1
+        )
 
         pad_token_id = (
             self.config.pad_token_id
@@ -3332,14 +3357,16 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
     def get_decoder(self):
         return self.input_model.get_decoder()
+    
+    def get_input_embeddings(self):
+        return self.input_model.get_input_embeddings()
 
-
-    #@add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    #@add_code_sample_docstrings(
+    # @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    # @add_code_sample_docstrings(
     #    checkpoint=_CHECKPOINT_FOR_DOC,
     #    output_type=BaseModelOutputWithPastAndCrossAttentions,
     #    config_class=_CONFIG_FOR_DOC,
-    #) 
+    # )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -3429,6 +3456,11 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                 "`input_ids`,`input_values` and `inputs_embeds` are all empty. Make sure at least one of them is not."
             )
 
+        kwargs_text_generation["output_hidden_states"] = True
+        kwargs_text_generation["return_dict_in_generate"] = True
+        kwargs_text_generation["output_scores"] = True
+
+
         # TODO: take care of multiple same paramteres
         if input_values is not None:
             if input_ids is not None:
@@ -3437,31 +3469,22 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                     "Make sure `input_values=None` if you want to use the text encoder."
                 )
             self.input_model.set_modality("speech")
-            output_text = self.input_model.generate(
-                input_ids=None,
-                input_values=input_values,
-                **kwargs_text_generation,
-                output_hidden_states=True,
-                return_dict_in_generate=True,
-            )
+            output_text = self.input_model.generate(input_ids=None,input_values=input_values,**kwargs_text_generation)
         else:
             self.input_model.set_modality("text")
-            output_text = self.input_model.generate(
-                input_ids=input_ids,
-                input_values=None,
-                **kwargs_text_generation,
-                output_hidden_states=True,
-                return_dict_in_generate=True,
-            )
+            output_text = self.input_model.generate(input_ids=input_ids,input_values=None,**kwargs_text_generation)
 
-        t2u_input_embeds = torch.concat([hidden_states[-1] for hidden_states in output_text.decoder_hidden_states], dim =1)
+        # TODO: pb - if beam seach decoding, this has too many dimensions, needs a way to get last-hidden-states
+        t2u_input_embeds = torch.concat(
+            [hidden_states[-1] for hidden_states in output_text.decoder_hidden_states], dim=1
+        )
 
         pad_token_id = (
             self.config.pad_token_id
         )  # TODO: is it the proper way, what's the priority with generation config and so on?
 
         # Compute new attention mask
-        seq_lens = (output_text.sequences != pad_token_id).int().sum(1)
+        seq_lens = (output_text.sequences != pad_token_id).int().sum(1) 
         t2u_model_attention_mask = to_attention_mask(t2u_input_embeds, seq_lens)
 
         kwargs_speech_generation["attention_mask"] = t2u_model_attention_mask
@@ -3529,7 +3552,6 @@ class SeamlessM4TVocoder(nn.Module):
 # TODO: model with vocoder head
 
 
-
 ############ WHOLE MODEL related code ################
 
 
@@ -3557,7 +3579,6 @@ class SeamlessM4TModelOld(SeamlessM4TPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = SeamlessM4TEmbeddings(config)
         self.encoder = SeamlessM4TEncoder(config)
 
         # Initialize weights and apply final processing
@@ -3724,7 +3745,6 @@ class SeamlessM4TForMaskedLM(SeamlessM4TPreTrainedModel):
             )
 
         self.seamless_m4t = SeamlessM4TModel(config)
-        self.cls = SeamlessM4TOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -3826,7 +3846,6 @@ class SeamlessM4TForCausalLM(SeamlessM4TPreTrainedModel):
             logger.warning("If you want to use `SeamlessM4TForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.seamless_m4t = SeamlessM4TModel(config)
-        self.cls = SeamlessM4TOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -3969,4 +3988,3 @@ class SeamlessM4TForCausalLM(SeamlessM4TPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
             )
         return reordered_past
-

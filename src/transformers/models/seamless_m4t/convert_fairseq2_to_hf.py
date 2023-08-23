@@ -17,7 +17,6 @@
 
 import argparse
 import os
-import tempfile
 from pathlib import Path
 
 import torch
@@ -27,9 +26,10 @@ from seamless_communication.models.inference.translator import Translator
 
 from transformers.models.seamless_m4t.configuration_seamless_m4t import SeamlessM4TConfig
 from transformers.models.seamless_m4t.modeling_seamless_m4t import SeamlessM4TModel
+from transformers.trainer_utils import set_seed
 from transformers.utils import logging
 
-from transformers.trainer_utils import set_seed
+
 api = HfApi()
 
 
@@ -266,7 +266,7 @@ def load_model(pytorch_dump_folder_path):
     count_1 = param_count(hf_model.input_model.model.text_decoder)
     count_2 = param_count(original_model.model.text_decoder) + param_count(original_model.model.text_decoder_frontend)
 
-    #with tempfile.TemporaryDirectory() as tmpdirname:
+    # with tempfile.TemporaryDirectory() as tmpdirname:
     #    hf_model.save_pretrained(tmpdirname)
     #    hf_model = SeamlessM4TModel.from_pretrained(tmpdirname)
 
@@ -293,20 +293,21 @@ def load_model(pytorch_dump_folder_path):
     print(find_tied_parameters(hf_model))
 
     new_model = hf_model
-    
+
     count_1 = param_count(hf_model)
     count_2 = param_count(original_model.model)
-    
+
     print(f"HF MODEL:{count_1}, ORIGINAL_MODEL: {count_2}, diff:{count_1 - count_2}")
     print(f"HF MODEL excluding embeddings:{hf_model.num_parameters(exclude_embeddings=True)}")
-    
+
     del original_model
 
-    hf_model.save_pretrained("/home/ubuntu/weights/seamlessM4T/")#, push_to_hub=True, repo_id="ylacombe/test_seamlessM4T")
+    hf_model.save_pretrained(
+        "/home/ubuntu/weights/seamlessM4T/"
+    )  # , push_to_hub=True, repo_id="ylacombe/test_seamlessM4T")
     hf_model = SeamlessM4TModel.from_pretrained("/home/ubuntu/weights/seamlessM4T/")
-    
-    dummy_speech_encoder_inputs = torch.load("/home/ubuntu/input_speech_encoder.pt")
 
+    dummy_speech_encoder_inputs = torch.load("/home/ubuntu/input_speech_encoder.pt")
 
     set_seed(10)
     attention_mask = torch.ones(dummy_speech_encoder_inputs.shape[:2]).bool()
@@ -316,14 +317,13 @@ def load_model(pytorch_dump_folder_path):
         output_new_model = hf_model.generate(input_values=dummy_speech_encoder_inputs, attention_mask=attention_mask)
 
     del attention_mask
-    
-    
+
     original_model = _load_original_model(device)
-    
+
     text_out, wav, sr = original_model.predict(dummy_speech_encoder_inputs, "eng", synthesize_speech=False)
 
     output_old_model = wav
-    
+
     torch.testing.assert_close(output_new_model, output_old_model)
 
     # output difference should come from the difference of self-attention implementation design

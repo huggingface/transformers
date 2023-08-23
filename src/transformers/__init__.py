@@ -6244,10 +6244,10 @@ if TYPE_CHECKING:
         # PyTorch model imports
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SeamlessM4TForSpeechToSpeech,
+            SeamlessM4TForSpeechToText,
             SeamlessM4TForTextToSpeech,
             SeamlessM4TForTextToText,
-            SeamlessM4TForSpeechToText,
-            SeamlessM4TForSpeechToSpeech,
             SeamlessM4TModel,
             SeamlessM4TPreTrainedModel,
         )
