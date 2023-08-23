@@ -1530,6 +1530,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # For backward compatibility we fallback to set model_max_length from max_len if provided
         model_max_length = kwargs.pop("model_max_length", kwargs.pop("max_len", None))
+
+        # To specify that 'max_length' does not set 'model_max_length',
+        if model_max_length is None and "max_length" in kwargs:
+            warnings.warn(
+                "The parameter 'max_length' is not an inherant input argument when building a tokenizer.
+                "If you wanted to set a length to truncate to, use 'model_max_length' instead.", 
+            )
+            
         self.model_max_length = model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
 
         # Padding and truncation side are right by default and overridden in subclasses. If specified in the kwargs, it
