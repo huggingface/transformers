@@ -213,7 +213,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         # t2u config
         self.unit_pad_token_id = unit_pad_token_id
         self.hidden_act = hidden_act
-        #self.type_vocab_size = type_vocab_size
+        # self.type_vocab_size = type_vocab_size
         self.t2u_encoder_layers = t2u_encoder_layers
         self.t2u_encoder_ffn_dim = t2u_encoder_ffn_dim
         self.t2u_encoder_attention_heads = t2u_encoder_attention_heads
