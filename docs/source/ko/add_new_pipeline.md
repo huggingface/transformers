@@ -84,7 +84,7 @@ class MyPipeline(Pipeline):
 [{"label": "1-star", "score": 0.8}, {"label": "2-star", "score": 0.1}]
 ```
 
-이를 달성하기 위해 우리는 `postprocess` 매소드를 기본 매개변수인 `5`로 업데이트하고 `_sanitize_parameters`를 수정하여 이 새 매개변수를 허용합니다.
+이를 달성하기 위해 우리는 `postprocess` 메소드를 기본 매개변수인 `5`로 업데이트하고 `_sanitize_parameters`를 수정하여 이 새 매개변수를 허용합니다.
 
 
 ```python
