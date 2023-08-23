@@ -22,10 +22,9 @@ rendered properly in your Markdown viewer.
 이 입력을 가능한 한 순수한 Python 형식으로 유지해야 (JSON을 통해 다른 언어와도) 호환성이 좋아집니다.
 이것이 전처리(`preprocess`) 파이프라인의 입력(`inputs`)이 될 것입니다.
 
-그런 다음 `outputs`를 정의합니다.
-`inputs`와 같은 정책을 따릅니다.
-간단할수록 좋습니다.
-이러한 것들이 `postprocess` 메소드의 출력이 될 것입니다.
+그런 다음 `outputs`를 정의하세요.
+`inputs`와 같은 정책을 따르고, 간단할수록 좋습니다.
+이것이 후처리(`postprocess`) 메소드의 출력이 될 것입니다.
 
 먼저 4개의 메소드(`preprocess`, `_forward`, `postprocess` 및 `_sanitize_parameters`)를 구현하기 위해 기본 클래스 `Pipeline`을 상속하여 시작합니다.
 
