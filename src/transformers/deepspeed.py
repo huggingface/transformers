@@ -22,7 +22,7 @@ import warnings
 
 warnings.warn(
     "transformers.deepspeed module is deprecated and will be removed in a future version. Please import deepspeed modules directly from transformers.integrations",
-    DeprecationWarning,
+    FutureWarning,
 )
 
 # Backward compatibility imports, to make sure all those objects can be found in integrations/deepspeed
