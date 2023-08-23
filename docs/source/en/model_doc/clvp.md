@@ -81,19 +81,9 @@ The original code can be found [here](https://github.com/neonbjb/tortoise-tts).
     - get_text_features
     - get_speech_features
 
-## CLVPTextModel
-
-[[autodoc]] CLVPTextModel
-    - forward
-
 ## CLVPTextModelWithProjection
 
 [[autodoc]] CLVPTextModelWithProjection
-    - forward
-
-## CLVPSpeechModel
-
-[[autodoc]] CLVPSpeechModel
     - forward
 
 ## CLVPSpeechModelWithProjection

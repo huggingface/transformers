@@ -147,6 +147,8 @@ class CLVPSpeechModelOutput(ModelOutput):
             The speech embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Pooled output of the `last_hidden_state`.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -162,6 +164,7 @@ class CLVPSpeechModelOutput(ModelOutput):
 
     speech_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
+    pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -177,6 +180,8 @@ class CLVPTextModelOutput(ModelOutput):
             The text embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
+        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            Pooled output of the `last_hidden_state`.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
@@ -192,6 +197,7 @@ class CLVPTextModelOutput(ModelOutput):
 
     text_embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
+    pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -209,14 +215,13 @@ class CLVPOutput(ModelOutput):
             The scaled dot product scores between `text_embeds` and `speech_embeds`. This represents the text-speech
             similarity scores.
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`CLVPTextModel`].
+            The text embeddings obtained by applying the projection layer to the pooled output of the Text Model.
         speech_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The speech embeddings obtained by applying the projection layer to the pooled output of
-            [`CLVPSpeechModel`].
+            The speech embeddings obtained by applying the projection layer to the pooled output of the Speech Model.
         text_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`CLVPTextModel`].
+            The pooled output of the `last_hidden_state` of the Text Model.
         speech_model_output(`BaseModelOutputWithPooling`):
-            The output of the [`CLVPSpeechModel`].
+            The pooled output of the `last_hidden_state` of the Speech Model.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -1087,135 +1092,6 @@ class CLVPTransformer(nn.Module):
         )
 
 
-@add_start_docstrings(
-    """The text model from CLVP without any head or projection on top.""",
-    CLVP_START_DOCSTRING,
-)
-class CLVPTextModel(CLVPPreTrainedModel):
-    config_class = CLVPTextConfig
-
-    _no_split_modules = None
-
-    def __init__(self, config: CLVPTextConfig):
-        super().__init__(config)
-        self.text_model = CLVPTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.text_model.token_embedding
-
-    def set_input_embeddings(self, value):
-        self.text_model.token_embedding = value
-
-    @add_start_docstrings_to_model_forward(CLVP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLVPTextConfig)
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        use_causal_attention_mask: Optional[bool] = False,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import CLVPTextModel, CLVPTokenizer
-
-        >>> model = CLVPTextModel.from_pretrained("susnato/clvp_dev")
-        >>> tokenizer = CLVPTokenizer.from_pretrained("susnato/clvp_dev")
-
-        >>> text = "This is a text."
-        >>> inputs = tokenizer(text, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output
-        ```
-        """
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        return self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            use_causal_attention_mask=use_causal_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-
-@add_start_docstrings(
-    """The speech model from CLVP without any head or projection on top.""",
-    CLVP_START_DOCSTRING,
-)
-class CLVPSpeechModel(CLVPPreTrainedModel):
-    config_class = CLVPSpeechConfig
-    main_input_name = "speech_ids"
-
-    _no_split_modules = None
-
-    def __init__(self, config: CLVPSpeechConfig):
-        super().__init__(config)
-        self.speech_model = CLVPTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.speech_model.token_embedding
-
-    def set_input_embeddings(self, value):
-        self.speech_model.token_embedding = value
-
-    @add_start_docstrings_to_model_forward(CLVP_SPEECH_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=CLVPSpeechConfig)
-    def forward(
-        self,
-        speech_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        use_causal_attention_mask: Optional[bool] = False,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPooling]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> import torch
-        >>> from transformers import CLVPSpeechModel
-
-        >>> model = CLVPSpeechModel.from_pretrained("susnato/clvp_dev")
-
-        >>> # TODO : after FeatureExtractor is implemented we need to change it to something lik FE.__call__(...)
-        >>> inputs = {"speech_ids": torch.tensor([[56, 8, 48, 7, 11, 23]]).long()}
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output
-        ```
-        """
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        return self.speech_model(
-            input_ids=speech_ids,
-            attention_mask=attention_mask,
-            use_causal_attention_mask=use_causal_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-
 @add_start_docstrings(CLVP_START_DOCSTRING)
 class CLVPModel(CLVPPreTrainedModel):
     config_class = CLVPConfig
@@ -1239,14 +1115,9 @@ class CLVPModel(CLVPPreTrainedModel):
         speech_config = config.speech_config
 
         self.projection_dim = config.projection_dim
-        self.text_embed_dim = text_config.hidden_size
-        self.speech_embed_dim = speech_config.hidden_size
 
-        self.text_model = CLVPTransformer(text_config)
-        self.speech_model = CLVPTransformer(speech_config)
-
-        self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
-        self.speech_projection = nn.Linear(self.speech_embed_dim, self.projection_dim, bias=False)
+        self.text_model = CLVPTransformerWithProjection(text_config, self.projection_dim, bias=False)
+        self.speech_model = CLVPTransformerWithProjection(speech_config, self.projection_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
 
         # Initialize weights and apply final processing
@@ -1286,19 +1157,14 @@ class CLVPModel(CLVPPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        text_outputs = self.text_model(
+        return self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             use_causal_attention_mask=use_causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        pooled_output = text_outputs[1]
-        text_features = self.text_projection(pooled_output)
-
-        return text_features
+            return_dict=True, # since we are returning `text_embeds` so we must use `return_dict` as True
+        ).text_embeds
 
     @add_start_docstrings_to_model_forward(CLVP_SPEECH_INPUTS_DOCSTRING)
     def get_speech_features(
@@ -1335,19 +1201,14 @@ class CLVPModel(CLVPPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        speech_outputs = self.speech_model(
+        return self.speech_model(
             input_ids=speech_ids,
             attention_mask=attention_mask,
             use_causal_attention_mask=use_causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        pooled_output = speech_outputs[1]  # pooled_output
-        speech_features = self.speech_projection(pooled_output)
-
-        return speech_features
+            return_dict=True, # since we are returning `speech_embeds` so we must use `return_dict` as True
+        ).speech_embeds
 
     @add_start_docstrings_to_model_forward(CLVP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CLVPOutput, config_class=CLVPConfig)
@@ -1411,11 +1272,8 @@ class CLVPModel(CLVPPreTrainedModel):
             return_dict=return_dict,
         )
 
-        speech_embeds = speech_outputs[1]
-        speech_embeds = self.speech_projection(speech_embeds)
-
-        text_embeds = text_outputs[1]
-        text_embeds = self.text_projection(text_embeds)
+        speech_embeds = speech_outputs[0]
+        text_embeds = text_outputs[0]
 
         # normalized features
         speech_embeds = speech_embeds / speech_embeds.norm(p=2, dim=-1, keepdim=True)
@@ -1431,7 +1289,7 @@ class CLVPModel(CLVPPreTrainedModel):
             loss = clvp_loss(logits_per_text)
 
         if not return_dict:
-            output = (logits_per_speech, logits_per_text, text_embeds, speech_embeds, text_outputs, speech_outputs)
+            output = (logits_per_speech, logits_per_text, text_embeds, speech_embeds, text_outputs[2], speech_outputs[2])
             return ((loss,) + output) if loss is not None else output
 
         return CLVPOutput(
@@ -1440,8 +1298,8 @@ class CLVPModel(CLVPPreTrainedModel):
             logits_per_text=logits_per_text,
             text_embeds=text_embeds,
             speech_embeds=speech_embeds,
-            text_model_output=text_outputs,
-            speech_model_output=speech_outputs,
+            text_model_output=text_outputs[2],
+            speech_model_output=speech_outputs[2],
         )
 
 
@@ -1518,12 +1376,13 @@ class CLVPTextModelWithProjection(CLVPPreTrainedModel):
         text_embeds = self.text_projection(pooled_output)
 
         if not return_dict:
-            outputs = (text_embeds, text_outputs[0]) + text_outputs[2:]
+            outputs = (text_embeds, ) + text_outputs
             return tuple(output for output in outputs if output is not None)
 
         return CLVPTextModelOutput(
             text_embeds=text_embeds,
             last_hidden_state=text_outputs.last_hidden_state,
+            pooler_output=text_outputs.pooler_output,
             hidden_states=text_outputs.hidden_states,
             attentions=text_outputs.attentions,
         )
@@ -1603,12 +1462,13 @@ class CLVPSpeechModelWithProjection(CLVPPreTrainedModel):
         speech_embeds = self.speech_projection(pooled_output)
 
         if not return_dict:
-            outputs = (speech_embeds, speech_outputs[0]) + speech_outputs[2:]
+            outputs = (speech_embeds, ) + speech_outputs
             return tuple(output for output in outputs if output is not None)
 
         return CLVPSpeechModelOutput(
             speech_embeds=speech_embeds,
             last_hidden_state=speech_outputs.last_hidden_state,
+            pooler_output=speech_outputs.pooler_output,
             hidden_states=speech_outputs.hidden_states,
             attentions=speech_outputs.attentions,
         )
