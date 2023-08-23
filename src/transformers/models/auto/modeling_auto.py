@@ -32,6 +32,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("superglue", "SuperGlueModel"),
         ("albert", "AlbertModel"),
         ("align", "AlignModel"),
         ("altclip", "AltCLIPModel"),
@@ -186,6 +187,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("regnet", "RegNetModel"),
         ("rembert", "RemBertModel"),
         ("resnet", "ResNetModel"),
+        ("superglue", "SuperGlueModel"),
         ("retribert", "RetriBertModel"),
         ("roberta", "RobertaModel"),
         ("roberta-prelayernorm", "RobertaPreLayerNormModel"),
@@ -332,6 +334,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
     [
         # Model with LM heads mapping
+("superglue", "SuperGlueForMaskedLM"),
         ("albert", "AlbertForMaskedLM"),
         ("bart", "BartForConditionalGeneration"),
         ("bert", "BertForMaskedLM"),
@@ -416,6 +419,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
+        ("superglue", "SuperGlueForCausalLM"),
         ("bart", "BartForCausalLM"),
         ("bert", "BertLMHeadModel"),
         ("bert-generation", "BertGenerationDecoder"),
@@ -608,6 +612,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("pvt_v2", "PvtV2ForImageClassification"),
         ("regnet", "RegNetForImageClassification"),
         ("resnet", "ResNetForImageClassification"),
+        ("superglue", "SuperGlueForImageClassification"),
         ("segformer", "SegformerForImageClassification"),
         ("siglip", "SiglipForImageClassification"),
         ("swiftformer", "SwiftFormerForImageClassification"),
@@ -686,6 +691,7 @@ MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Masked LM mapping
+("superglue", "SuperGlueForMaskedLM"),
         ("albert", "AlbertForMaskedLM"),
         ("bart", "BartForConditionalGeneration"),
         ("bert", "BertForMaskedLM"),
@@ -808,6 +814,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        ("superglue", "SuperGlueForSequenceClassification"),
         ("albert", "AlbertForSequenceClassification"),
         ("bart", "BartForSequenceClassification"),
         ("bert", "BertForSequenceClassification"),
@@ -896,6 +903,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Question Answering mapping
+        ("superglue", "SuperGlueForQuestionAnswering"),
         ("albert", "AlbertForQuestionAnswering"),
         ("bart", "BartForQuestionAnswering"),
         ("bert", "BertForQuestionAnswering"),
@@ -988,6 +996,7 @@ MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Token Classification mapping
+("superglue", "SuperGlueForTokenClassification"),
         ("albert", "AlbertForTokenClassification"),
         ("bert", "BertForTokenClassification"),
         ("big_bird", "BigBirdForTokenClassification"),
@@ -1053,6 +1062,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Multiple Choice mapping
+("superglue", "SuperGlueForMultipleChoice"),
         ("albert", "AlbertForMultipleChoice"),
         ("bert", "BertForMultipleChoice"),
         ("big_bird", "BigBirdForMultipleChoice"),
@@ -1213,6 +1223,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("nat", "NatBackbone"),
         ("pvt_v2", "PvtV2Backbone"),
         ("resnet", "ResNetBackbone"),
+        ("superglue", "SuperGlueBackbone"),
         ("swin", "SwinBackbone"),
         ("swinv2", "Swinv2Backbone"),
         ("timm_backbone", "TimmBackbone"),

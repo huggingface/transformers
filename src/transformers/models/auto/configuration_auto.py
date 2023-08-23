@@ -30,6 +30,7 @@ logger = logging.get_logger(__name__)
 CONFIG_MAPPING_NAMES = OrderedDict(
     [
         # Add configs here
+        ("superglue", "SuperGlueConfig"),
         ("albert", "AlbertConfig"),
         ("align", "AlignConfig"),
         ("altclip", "AltCLIPConfig"),
@@ -197,6 +198,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("regnet", "RegNetConfig"),
         ("rembert", "RemBertConfig"),
         ("resnet", "ResNetConfig"),
+        ("superglue", "SuperGlueConfig"),
         ("retribert", "RetriBertConfig"),
         ("roberta", "RobertaConfig"),
         ("roberta-prelayernorm", "RobertaPreLayerNormConfig"),
@@ -279,6 +281,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
         # Add archive maps here)
+        ("superglue", "SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("albert", "ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("align", "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("altclip", "ALTCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -432,6 +435,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("regnet", "REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("rembert", "REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("resnet", "RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("superglue", "SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("retribert", "RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("roberta", "ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("roberta-prelayernorm", "ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -503,6 +507,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("superglue", "SuperGlue"),
         ("albert", "ALBERT"),
         ("align", "ALIGN"),
         ("altclip", "AltCLIP"),
@@ -693,6 +698,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("regnet", "RegNet"),
         ("rembert", "RemBERT"),
         ("resnet", "ResNet"),
+        ("superglue", "SuperGlue"),
         ("retribert", "RetriBERT"),
         ("roberta", "RoBERTa"),
         ("roberta-prelayernorm", "RoBERTa-PreLayerNorm"),
