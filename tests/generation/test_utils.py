@@ -1754,14 +1754,21 @@ class GenerationTesterMixin:
         # When supported, tests that the decoder model can generate from `inputs_embeds` instead of `input_ids`
         for model_class in self.all_generative_model_classes:
             config, input_ids, _, _ = self._get_input_ids_and_config()
-            config.pad_token_id = config.eos_token_id = -1  # ignore padding/eos effects in the test
+
+            # Ignore:
+            # a) pad/eos effects (can't detect them after embedding),
+            # b) embedding scaling, the scaling factor applied after embeding from input_ids (requires knowledge of the
+            #   variable that holds the scaling factor, which is model-dependent)
+            config.pad_token_id = config.eos_token_id = -1
+            if hasattr(config, "scale_embedding"):
+                config.scale_embedding = False
 
             # This test is for decoder-only models (encoder-decoder models have native input embeddings support in the
             # decoder)
             if config.is_encoder_decoder:
                 continue
 
-            # Skip models without support
+            # Skip models without explicit support
             model = model_class(config).to(torch_device).eval()
             if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
                 continue
