@@ -137,7 +137,7 @@ PIPELINE_REGISTRY.register_pipeline(
 )
 ```
 
-## 허브에 파이프라인 공유하기 [[share-your-pipeline-on-the-hub]]
+## Hub에 파이프라인 공유하기 [[share-your-pipeline-on-the-hub]]
 
 허브에 사용자 정의 파이프라인을 공유하려면 `Pipeline` 하위 클래스의 사용자 정의 코드를 Python 파일에 저장하기만 하면 됩니다.
 예를 들어, 다음과 같이 문장 쌍 분류를 위한 사용자 정의 파이프라인을 사용한다고 가정해 보겠습니다:
