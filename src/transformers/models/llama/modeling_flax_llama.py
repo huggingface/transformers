@@ -148,22 +148,21 @@ def apply_rotary_pos_emb(tensor, sincos):
 
 class FlaxLlamaRMSNorm(nn.Module):
     config: LlamaConfig
-    dtype: jnp.dtype = jnp.float32
+
     def setup(self):
         self.epsilon = self.config.rms_norm_eps
         self.weight = self.param("weight", lambda _, shape: jnp.ones(shape), self.config.hidden_size)
 
-    @nn.compact
     def __call__(self, hidden_states):
         input_dtype = hidden_states.dtype
-        variance = jnp.asarray(hidden_states, dtype=self.dtype)
+        variance = jnp.asarray(hidden_states, dtype=jnp.float32)
         variance = jnp.power(variance, 2)
         variance = variance.mean(-1, keepdims=True)
         # use `jax.numpy.sqrt` as `jax.lax.rsqrt` does not match `torch.rsqrt`
         # hidden_states = hidden_states * jax.lax.rsqrt(variance + self.epsilon)
         hidden_states = hidden_states / jnp.sqrt(variance + self.epsilon)
 
-        return jnp.asarray(self.weight * hidden_states, dtype=input_dtype)
+        return self.weight * jnp.asarray(hidden_states, dtype=input_dtype)
 
 
 class FlaxLlamaAttention(nn.Module):
@@ -306,7 +305,7 @@ class FlaxLlamaMLP(nn.Module):
 
     def setup(self):
         embed_dim = self.config.hidden_size
-        inner_dim = self.config.intermediate_size if self.config.intermediate_size is not None else 4 * hidden_size
+        inner_dim = self.config.intermediate_size if self.config.intermediate_size is not None else 4 * embed_dim
 
         jax.nn.initializers.normal(self.config.initializer_range)
         self.act = ACT2FN[self.config.hidden_act]
@@ -326,11 +325,9 @@ class FlaxLlamaDecoderLayer(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        hidden_size = self.config.hidden_size
-
-        self.input_layernorm = FlaxLlamaRMSNorm(self.config, dtype=self.dtype)
+        self.input_layernorm = FlaxLlamaRMSNorm(self.config)
         self.self_attn = FlaxLlamaAttention(self.config, dtype=self.dtype)
-        self.post_attention_layernorm = FlaxLlamaRMSNorm(self.config, dtype=self.dtype)
+        self.post_attention_layernorm = FlaxLlamaRMSNorm(self.config)
         self.mlp = FlaxLlamaMLP(self.config, dtype=self.dtype)
 
     def __call__(
@@ -365,6 +362,7 @@ class FlaxLlamaDecoderLayer(nn.Module):
         return (hidden_states,) + outputs[1:]
 
 
+# Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel with GPTNeo->Llama
 class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -504,7 +502,7 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         return outputs
 
 
-class FlaxLlamaBlockCollection(nn.Module):
+class FlaxLlamaLayerCollection(nn.Module):
     config: LlamaConfig
     dtype: jnp.dtype = jnp.float32
 
@@ -563,7 +561,7 @@ class FlaxLlamaModule(nn.Module):
             embedding_init=embedding_init,
             dtype=self.dtype,
         )
-        self.layers = FlaxLlamaBlockCollection(self.config, dtype=self.dtype)
+        self.layers = FlaxLlamaLayerCollection(self.config, dtype=self.dtype)
         self.norm = FlaxLlamaRMSNorm(self.config.rms_norm_eps)
 
     def __call__(

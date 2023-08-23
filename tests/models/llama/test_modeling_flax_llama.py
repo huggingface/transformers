@@ -176,7 +176,7 @@ class FlaxLlamaModelTester:
 
 @require_flax
 class FlaxLlamaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxLlamaModel,) if is_flax_available() else ()
+    all_model_classes = (FlaxLlamaModel, FlaxLlamaForCausalLM) if is_flax_available() else ()
     all_generative_model_classes = (FlaxLlamaForCausalLM,) if is_flax_available() else ()
 
     def setUp(self):
