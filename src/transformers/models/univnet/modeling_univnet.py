@@ -209,10 +209,14 @@ class UnivNetKernelPredictor(nn.Module):
         batch_size, _, seq_length = spectrogram.shape
 
         hidden_states = self.input_conv(spectrogram)
+        hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
+
         for resblock in self.resblocks:
             hidden_states = resblock(hidden_states)
+
         kernel_hidden_states = self.kernel_conv(hidden_states)
         bias_hidden_states = self.bias_conv(hidden_states)
+
         # Reshape kernels and biases to appropriate shape
         kernels = kernel_hidden_states.contiguous().view(
             batch_size,
@@ -228,6 +232,7 @@ class UnivNetKernelPredictor(nn.Module):
             self.conv_out_channels,
             seq_length,
         )
+
         return kernels, biases
 
     def _init_weights(self, module):
@@ -439,6 +444,7 @@ class UnivNetLVCBlock(nn.Module):
     ):
         super().__init__()
         self.cond_hop_length = lvc_hop_size
+        self.leaky_relu_slope = resnet_leaky_relu_slope
 
         self.convt_pre = nn.ConvTranspose1d(
             hidden_channels,
@@ -477,7 +483,9 @@ class UnivNetLVCBlock(nn.Module):
     def forward(self, hidden_states: torch.FloatTensor, spectrogram: torch.FloatTensor):
         # hidden_states: (batch_size, hidden_channels, seq_length)
         # spectrogram: (batch_size, cond_channels, cond_length)
+        hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
         hidden_states = self.convt_pre(hidden_states)
+
         kernels, biases = self.kernel_predictor(spectrogram)
 
         for i, resblock in enumerate(self.resblocks):

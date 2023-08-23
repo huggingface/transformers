@@ -23,6 +23,7 @@ from transformers import UnivNetGanConfig
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -203,7 +204,7 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
             self.assertTrue(outputs.dim() == 1, msg="Got un-batched inputs but batched output")
 
 
-@require_torch
+@require_torch_gpu
 @slow
 class UnivNetGanIntegrationTests(unittest.TestCase):
     def tearDown(self):
@@ -275,6 +276,6 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         waveform = model(**input_speech)
         waveform_slice = waveform[-9:].cpu().flatten().numpy()
 
-        expected_slice = np.array([[-0.3276, -0.5504, -0.3484, 0.3574, -0.0373, -0.1826, -0.4880, -0.6431, -0.5162]])
+        expected_slice = np.array([-0.3276, -0.5504, -0.3484, 0.3574, -0.0373, -0.1826, -0.4880, -0.6431, -0.5162])
 
         assert np.abs(waveform_slice - expected_slice).max() < 1e-3
