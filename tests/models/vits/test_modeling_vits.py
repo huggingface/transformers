@@ -203,11 +203,11 @@ class VitsModelTest(ModelTesterMixin, unittest.TestCase):
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    @unittest.skip("this model has no inputs_embeds")
+    @unittest.skip("VITS has no inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip("this model has no input embeddings")
+    @unittest.skip("VITS has no input embeddings")
     def test_model_common_attributes(self):
         pass
 

@@ -59,15 +59,15 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         ids = tokenizer.encode(txt, add_special_tokens=False)
         return txt, ids
 
-    @unittest.skip("adding multicharacter tokens does not work this tokenizer")
+    @unittest.skip("Adding multicharacter tokens does not work this tokenizer")
     def test_add_tokens_tokenizer(self):
         pass
 
-    @unittest.skip("adding multicharacter tokens does not work this tokenizer")
+    @unittest.skip("Adding multicharacter tokens does not work this tokenizer")
     def test_encode_decode_with_spaces(self):
         pass
 
-    @unittest.skip("this tokenizer does not support is_split_into_words")
+    @unittest.skip("This tokenizer does not support is_split_into_words")
     def test_pretokenized_inputs(self):
         pass
 

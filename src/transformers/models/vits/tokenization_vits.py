@@ -181,15 +181,11 @@ class VitsTokenizer(PreTrainedTokenizer):
 
         filtered_text = self._preprocess_char(text)
 
-        if self.is_uroman and uroman_path is not None:
-            filtered_text = uromanize(filtered_text, uroman_path)
-
-        if has_non_roman_characters(filtered_text) and self.is_uroman:
+        if has_non_roman_characters(filtered_text):
             logger.warning(
                 "Text to the tokenizer contains non-Roman characters. Ensure the `uroman` Romanizer is "
-                "applied to the text prior to passing it to the tokenizer. First clone the uroman package: "
-                "`git clone https://github.com/isi-nlp/uroman.git`. Then, pass the argument `uroman_path` to the tokenizer, "
-                "which specifies the path where the `uroman` package is located."
+                "applied to the text prior to passing it to the tokenizer. See "
+                "`https://github.com/isi-nlp/uroman` for details."
             )
 
         if self.phonemize:
