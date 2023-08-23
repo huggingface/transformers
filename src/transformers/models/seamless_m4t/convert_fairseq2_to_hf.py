@@ -29,7 +29,7 @@ from transformers.models.seamless_m4t.configuration_seamless_m4t import Seamless
 from transformers.models.seamless_m4t.modeling_seamless_m4t import SeamlessM4TModel
 from transformers.utils import logging
 
-
+from transformers.trainer_utils import set_seed
 api = HfApi()
 
 
@@ -204,13 +204,13 @@ def load_model(pytorch_dump_folder_path):
     hf_model = SeamlessM4TModel(hf_config)
 
     # 1. take care of speech encoder
-    wav2vec = hf_model.speech_encoder
-    hf_model.speech_encoder = _convert_model(
+    wav2vec = hf_model.input_model.model.speech_encoder
+    hf_model.input_model.model.speech_encoder = _convert_model(
         original_model, wav2vec, wav2vec_convert_list, device, unwanted_prefix="model.", filter_state_dict="speech"
     )
 
     # verify same number of parameters speech encoder
-    count_1 = param_count(hf_model.speech_encoder)
+    count_1 = param_count(hf_model.input_model.model.speech_encoder)
     count_2 = param_count(original_model.model.speech_encoder_frontend) + param_count(
         original_model.model.speech_encoder
     )
@@ -235,9 +235,9 @@ def load_model(pytorch_dump_folder_path):
     assert count_1 == count_2, f"T2U model --- Count HF: {count_1} != Count Seamless: {count_2}"
 
     # 3. take care of text encoder
-    hf_model.text_encoder = _convert_model(
+    hf_model.input_model.model.text_encoder = _convert_model(
         original_model,
-        hf_model.text_encoder,
+        hf_model.input_model.model.text_encoder,
         text_convert_list,
         device,
         unwanted_prefix="model.",
@@ -246,15 +246,15 @@ def load_model(pytorch_dump_folder_path):
     )
 
     # verify same number of parameters text_encoder
-    count_1 = param_count(hf_model.text_encoder)
+    count_1 = param_count(hf_model.input_model.model.text_encoder)
     count_2 = param_count(original_model.model.text_encoder) + param_count(original_model.model.text_encoder_frontend)
 
     assert count_1 == count_2, f"Text encoder model --- Count HF: {count_1} != Count Seamless: {count_2}"
 
     # 4. take care of text decoder
-    hf_model.text_decoder = _convert_model(
+    hf_model.input_model.model.text_decoder = _convert_model(
         original_model,
-        hf_model.text_decoder,
+        hf_model.input_model.model.text_decoder,
         text_convert_list,
         device,
         unwanted_prefix="model.",
@@ -263,7 +263,7 @@ def load_model(pytorch_dump_folder_path):
     )
 
     # verify same number of parameters text_decoder
-    count_1 = param_count(hf_model.text_decoder)
+    count_1 = param_count(hf_model.input_model.model.text_decoder)
     count_2 = param_count(original_model.model.text_decoder) + param_count(original_model.model.text_decoder_frontend)
 
     with tempfile.TemporaryDirectory() as tmpdirname:
@@ -273,9 +273,9 @@ def load_model(pytorch_dump_folder_path):
     assert count_1 == count_2, f"Text decoder model --- Count HF: {count_1} != Count Seamless: {count_2}"
 
     # 5. take care of final proj
-    hf_model.lm_head = _convert_model(
+    hf_model.input_model.lm_head = _convert_model(
         original_model,
-        hf_model.lm_head,
+        hf_model.input_model.lm_head,
         [("final_proj.", "")],
         device,
         unwanted_prefix="model.",
@@ -284,7 +284,7 @@ def load_model(pytorch_dump_folder_path):
     )
 
     # verify same number of parameters final proj
-    count_1 = param_count(hf_model.lm_head)
+    count_1 = param_count(hf_model.input_model.lm_head)
     count_2 = param_count(original_model.model.final_proj)
 
     assert count_1 == count_2, f"final proj --- Count HF: {count_1} != Count Seamless: {count_2}"
@@ -293,20 +293,37 @@ def load_model(pytorch_dump_folder_path):
     print(find_tied_parameters(hf_model))
 
     new_model = hf_model
+    
+    count_1 = param_count(hf_model)
+    count_2 = param_count(original_model.model)
+    
+    print(f"HF MODEL:{count_1}, ORIGINAL_MODEL: {count_2}, diff:{count_1 - count_2}")
+    print(f"HF MODEL excluding embeddings:{hf_model.num_parameters(exclude_embeddings=True)}")
+    
+    del original_model
 
-    # verify that base model have same number of parameters
-    assert_param_count(original_model.model, new_model)
+    hf_model.save_pretrained("/home/ubuntu/weights/seamlessM4T/", push_to_hub=True, repo_id="ylacombe/test_seamlessM4T")
+    
+    dummy_speech_encoder_inputs = torch.load("/home/ubuntu/input_speech_encoder.pt")
 
-    # if not assert_param_count(original_model, new_model):
-    #    raise ValueError("initial and new models don't have the same number of parameters")
 
-    # check if same output as the bark model
+    set_seed(10)
+    attention_mask = torch.ones(dummy_speech_encoder_inputs.shape[:2]).bool()
 
-    # TODO
-    hf_model.num_parameters(exclude_embeddings=True)
+    attention_mask[:, -1] = False
+    with torch.inference_mode():
+        output_new_model = hf_model.generate(input_values=dummy_speech_encoder_inputs, attention_mask=attention_mask)
 
-    output_new_model = ...
-    output_old_model = ...
+    del attention_mask
+    
+    
+    original_model = _load_original_model(device)
+    
+    text_out, wav, sr = original_model.predict(dummy_speech_encoder_inputs, "eng", synthesize_speech=False)
+
+    output_old_model = wav
+    
+    torch.testing.assert_close(output_new_model, output_old_model)
 
     # output difference should come from the difference of self-attention implementation design
     if output_new_model.shape != output_old_model.shape:

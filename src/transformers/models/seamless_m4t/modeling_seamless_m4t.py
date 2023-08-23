@@ -2761,9 +2761,13 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
     def get_decoder(self):
         return self.input_model.get_decoder()
 
-    # @add_start_docstrings_to_model_forward(MBART_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    # @add_end_docstrings(MBART_GENERATION_EXAMPLE)
+
+    #@add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    #@add_code_sample_docstrings(
+    #    checkpoint=_CHECKPOINT_FOR_DOC,
+    #    output_type=BaseModelOutputWithPastAndCrossAttentions,
+    #    config_class=_CONFIG_FOR_DOC,
+    #)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -2878,12 +2882,12 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
     def get_decoder(self):
         return self.input_model.get_decoder()
 
-    @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    #@add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    #@add_code_sample_docstrings(
+    #    checkpoint=_CHECKPOINT_FOR_DOC,
+    #    output_type=BaseModelOutputWithPastAndCrossAttentions,
+    #    config_class=_CONFIG_FOR_DOC,
+    #)
     def forward(
         self,
         input_values: torch.LongTensor = None,
@@ -3000,12 +3004,13 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
     def get_decoder(self):
         return self.input_model.get_decoder()
 
-    @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-    )    
+
+    #@add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    #@add_code_sample_docstrings(
+    #    checkpoint=_CHECKPOINT_FOR_DOC,
+    #    output_type=BaseModelOutputWithPastAndCrossAttentions,
+    #    config_class=_CONFIG_FOR_DOC,
+    #) 
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -3163,12 +3168,13 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
     def get_decoder(self):
         return self.input_model.get_decoder()
 
-    @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-    )
+
+    #@add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    #@add_code_sample_docstrings(
+    #    checkpoint=_CHECKPOINT_FOR_DOC,
+    #    output_type=BaseModelOutputWithPastAndCrossAttentions,
+    #    config_class=_CONFIG_FOR_DOC,
+    #)
     def forward(
         self,
         input_values: torch.LongTensor = None,
@@ -3327,12 +3333,13 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
     def get_decoder(self):
         return self.input_model.get_decoder()
 
-    @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-    )    
+
+    #@add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    #@add_code_sample_docstrings(
+    #    checkpoint=_CHECKPOINT_FOR_DOC,
+    #    output_type=BaseModelOutputWithPastAndCrossAttentions,
+    #    config_class=_CONFIG_FOR_DOC,
+    #) 
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
