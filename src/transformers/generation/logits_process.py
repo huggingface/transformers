@@ -1099,11 +1099,11 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
 
     </Tip>
 
-    <Tip warning={true}>
+    <Warning>
 
     This logits processor can be resource-intensive, especially when using large models or long sequences.
 
-    </Tip>
+    </Warning>
 
     Traditional beam search often generates very similar sequences across different beams.
 
@@ -1142,10 +1142,12 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
             See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
                     -- Each group of beams will operate independently, selecting tokens without considering the choices
-                    of other groups. -- This division promotes diversity by ensuring that beams within different groups
-                    explore different paths. -- For instance, if `num_beams` is 6 and `num_beam_groups` is 2, there
-                    will be 2 groups each containing 3 beams. -- The choice of `num_beam_groups` should be made
-                    considering the desired level of output diversity and the total number of beams.
+                    of other groups.
+                    -- This division promotes diversity by ensuring that beams within different groups
+                    explore different paths.
+                    -- For instance, if `num_beams` is 6 and `num_beam_groups` is 2, there
+                    will be 2 groups each containing 3 beams.
+                    -- The choice of `num_beam_groups` should be made considering the desired level of output diversity and the total number of beams.
 
 
     Example: the below example shows a comparison before and after applying Hamming Diversity.
@@ -1210,8 +1212,7 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
                 # summary 1:  the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud.
                 # summary 2:  the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud.
     ```
-                For more details, see [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence
-                Models](https://arxiv.org/pdf/1610.02424.pdf).
+                For more details, see [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models](https://arxiv.org/pdf/1610.02424.pdf).
 
     """
 
