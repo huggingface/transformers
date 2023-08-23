@@ -2432,13 +2432,18 @@ class SeamlessM4TMultiModalToTextModel(SeamlessM4TPreTrainedModel):
         ## input_ids if no decoder_input_ids are provided
         # if decoder_input_ids is None and decoder_inputs_embeds is None and input_ids is not None:
         #    decoder_input_ids = shift_tokens_right(input_ids, self.config.unit_pad_token_id)
+        
+        
+        encoder_attention_mask = attention_mask
+        if input_modality == "speech" and attention_mask is not None:
+            encoder_attention_mask = _compute_new_attention_mask(encoder_outputs[0], attention_mask, self.config.adaptor_kernel_size, self.config.adaptor_stride)
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.text_decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=attention_mask,
+            encoder_attention_mask=encoder_attention_mask,
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
@@ -3256,7 +3261,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                 if key not in kwargs_speech_generation:
                     kwargs_speech_generation[key] = value
 
-        output_text = self.input_model.generate(inputs, **kwargs_text_generation)
+        output_text = self.input_model.generate(inputs, input_modality=input_modality, **kwargs_text_generation)
 
         # TODO: do proper generation
         # Know that it won't worj
