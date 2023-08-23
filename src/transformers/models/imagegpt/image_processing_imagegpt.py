@@ -24,6 +24,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    _is_scaled_image,
     infer_channel_dimension_format,
     make_list_of_images,
     to_numpy_array,
@@ -190,7 +191,8 @@ class ImageGPTImageProcessor(BaseImageProcessor):
 
         Args:
             images (`ImageInput`):
-                Image to preprocess.
+                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -249,6 +251,12 @@ class ImageGPTImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
+
+        if _is_scaled_image(images[0]) and do_normalize:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If you wish to do this, "
+                "make sure to set `do_normalize` to `False` and that pixel values are between [-1, 1].",
+            )
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
