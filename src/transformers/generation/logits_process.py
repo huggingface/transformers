@@ -1125,11 +1125,11 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
         diversity_penalty (`float`):
             This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
             particular time. Note that `diversity_penalty` is only effective if `group beam search` is enabled.
-                    -- The penalty applied to a beam's score when it generates a token that has already been chosen
+                    - The penalty applied to a beam's score when it generates a token that has already been chosen
                             by another beam within the same group during the same time step.
-                    -- A higher `diversity_penalty` will enforce greater diversity among the beams,
+                    - A higher `diversity_penalty` will enforce greater diversity among the beams,
                             making it less likely for multiple beams to choose the same token.
-                    -- Conversely, a lower penalty will allow beams to more freely choose similar tokens. -- Adjusting
+                    - Conversely, a lower penalty will allow beams to more freely choose similar tokens. -- Adjusting
                     this value can help strike a balance between diversity and natural likelihood.
         num_beams (`int`):
             Number of beams used for group beam search. See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more
