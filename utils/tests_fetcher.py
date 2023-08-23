@@ -371,7 +371,7 @@ def get_all_doctest_files() -> List[str]:
     """
     Return the complete list of python and Markdown files on which we run doctest.
 
-    At this moment, we restrict the files to in `src/` or `docs/source/en/` that are not in `utils/not_doctested.txt`.
+    At this moment, we restrict this to only take files from `src/` or `docs/source/en/` that are not in `utils/not_doctested.txt`.
 
     Returns:
         `List[str]`: The complete list of Python and Markdown files on which we run doctest.
