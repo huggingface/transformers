@@ -203,7 +203,7 @@ from transformers import pipeline
 classifier = pipeline("pair-classification", model="sgugger/finetuned-bert-mrpc")
 ```
 
-그런 다음 `Repository`의 `save_pretrained` 매소드를 사용하여 허브에 공유할 수 있습니다:
+그런 다음 `Repository`의 `save_pretrained` 메소드를 사용하여 허브에 공유할 수 있습니다:
 
 ```py
 from huggingface_hub import Repository
