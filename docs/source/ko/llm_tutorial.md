@@ -15,30 +15,30 @@ rendered properly in your Markdown viewer.
 -->
 
 
-# Generation with LLMs
+# LLM을 사용한 생성 [[generation-with-llms]]
 
 [[open-in-colab]]
 
-LLMs, or Large Language Models, are the key component behind text generation. In a nutshell, they consist of large pretrained transformer models trained to predict the next word (or, more precisely, token) given some input text. Since they predict one token at a time, you need to do something more elaborate to generate new sentences other than just calling the model -- you need to do autoregressive generation.
+LLM 또는 대형 언어 모델은 텍스트 생성의 핵심 구성 요소입니다. 간단히 말하면, 이것은 주어진 입력 텍스트에 대한 다음 단어(또는 정확하게는 토큰)를 예측하기 위해 훈련된 대형 사전 훈련 변환기 모델로 구성됩니다. 토큰을 한 번에 하나씩 예측하기 때문에 모델을 호출하는 것 외에 새로운 문장을 생성하기 위해 더 복잡한 작업을 수행해야 합니다. -- 자동 회귀 생성을 수행해야 합니다.
 
-Autoregressive generation is the inference-time procedure of iteratively calling a model with its own generated outputs, given a few initial inputs. In 🤗 Transformers, this is handled by the [`~generation.GenerationMixin.generate`] method, which is available to all models with generative capabilities.
+자동 회귀 생성은 초기 입력을 주고 모델을 반복적으로 호출하는 추론 시간 절차입니다. 🤗 Transformers에서 이것은 모든 생성 능력이 있는 모델에 사용 가능한 [`~generation.GenerationMixin.generate`] 메서드에 의해 처리됩니다.
 
-This tutorial will show you how to:
+이 튜토리얼에서는 다음을 보여줍니다:
 
-* Generate text with an LLM
-* Avoid common pitfalls
-* Next steps to help you get the most out your LLM
+* LLM으로 텍스트 생성하기
+* 흔한 함정 피하기
+* LLM에서 최대한 활용하기 위한 다음 단계
 
-Before you begin, make sure you have all the necessary libraries installed:
+시작하기 전에 필요한 모든 라이브러리가 설치되어 있는지 확인하세요.
 
 ```bash
 pip install transformers bitsandbytes>=0.39.0 -q
 ```
 
 
-## Generate text
+## 텍스트 생성 [[generate-text]]
 
-A language model trained for [causal language modeling](tasks/language_modeling) takes a sequence of text tokens as input and returns the probability distribution for the next token.
+[인과 언어 모델링](tasks/language_modeling)을 위해 훈련된 언어 모델은 입력으로 텍스트 토큰의 시퀀스를 받아들이고 다음 토큰에 대한 확률 분포를 반환합니다.
 
 <!-- [GIF 1 -- FWD PASS] -->
 <figure class="image table text-center m-0 w-full">
@@ -47,10 +47,10 @@ A language model trained for [causal language modeling](tasks/language_modeling)
         autoplay loop muted playsinline
         src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/assisted-generation/gif_1_1080p.mov"
     ></video>
-    <figcaption>"Forward pass of an LLM"</figcaption>
+    <figcaption>"LLM의 전방 패스"</figcaption>
 </figure>
 
-A critical aspect of autoregressive generation with LLMs is how to select the next token from this probability distribution. Anything goes in this step as long as you end up with a token for the next iteration. This means it can be as simple as selecting the most likely token from the probability distribution or as complex as applying a dozen transformations before sampling from the resulting distribution.
+LLM과 함께 자동 회귀 생성의 중요한 측면은 이 확률 분포에서 다음 토큰을 어떻게 선택할 것인지입니다. 다음 반복을 위해 토큰을 얻는 한 이 단계에서는 무엇이든 가능합니다. 이것은 확률 분포에서 가장 가능성이 높은 토큰을 선택하는 것처럼 간단할 수도 있고, 결과 분포에서 샘플링하기 전에 수십 가지 변환을 적용하는 것처럼 복잡할 수도 있습니다.
 
 <!-- [GIF 2 -- TEXT GENERATION] -->
 <figure class="image table text-center m-0 w-full">
@@ -59,23 +59,23 @@ A critical aspect of autoregressive generation with LLMs is how to select the ne
         autoplay loop muted playsinline
         src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/assisted-generation/gif_2_1080p.mov"
     ></video>
-    <figcaption>"Autoregressive generation iteratively selects the next token from a probability distribution to generate text"</figcaption>
+    <figcaption>"자동 회귀 생성은 확률 분포에서 다음 토큰을 반복적으로 선택하여 텍스트를 생성합니다."</figcaption>
 </figure>
 
-The process depicted above is repeated iteratively until some stopping condition is reached. Ideally, the stopping condition is dictated by the model, which should learn when to output an end-of-sequence (`EOS`) token. If this is not the case, generation stops when some predefined maximum length is reached.
+위에 표시된 프로세스는 일부 정지 조건에 도달할 때까지 반복적으로 반복됩니다. 이상적으로는 정지 조건이 모델에 의해 지정되어야 하며, 이는 시퀀스 종료 (`EOS`) 토큰을 출력할 때 언제인지 학습해야 합니다. 이 경우가 아니라면, 생성은 미리 정의된 최대 길이에 도달할 때 중지됩니다.
 
-Properly setting up the token selection step and the stopping condition is essential to make your model behave as you'd expect on your task. That is why we have a [`~generation.GenerationConfig`] file associated with each model, which contains a good default generative parameterization and is loaded alongside your model.
+토큰 선택 단계와 정지 조건을 올바르게 설정하는 것은 작업에서 모델이 예상대로 작동하게 만드는 데 필수적입니다. 그래서 우리는 각 모델과 함께 로드되는 좋은 기본 생성 매개 변수화를 포함하는 [`~generation.GenerationConfig`] 파일을 가지고 있습니다.
 
-Let's talk code!
+코드에 대해 이야기해봅시다!
 
 <Tip>
 
-If you're interested in basic LLM usage, our high-level [`Pipeline`](pipeline_tutorial) interface is a great starting point. However, LLMs often require advanced features like quantization and fine control of the token selection step, which is best done through [`~generation.GenerationMixin.generate`]. Autoregressive generation with LLMs is also resource-intensive and should be executed on a GPU for adequate throughput.
+기본 LLM 사용에 관심이 있다면, 우리의 고수준 [`Pipeline`](pipeline_tutorial) 인터페이스는 좋은 시작점입니다. 그러나 LLM은 종종 양자화와 토큰 선택 단계의 세밀한 제어와 같은 고급 기능을 필요로 합니다. 이는 [`~generation.GenerationMixin.generate`]를 통해 가장 잘 수행됩니다. LLM과 함께 자동 회귀 생성은 또한 자원 집약적이므로 적절한 처리량을 위해 GPU에서 실행해야 합니다.
 
 </Tip>
 
 <!-- TODO: update example to llama 2 (or a newer popular baseline) when it becomes ungated -->
-First, you need to load the model.
+먼저 모델을 로드해야 합니다.
 
 ```py
 >>> from transformers import AutoModelForCausalLM
@@ -85,14 +85,14 @@ First, you need to load the model.
 ... )
 ```
 
-You'll notice two flags in the `from_pretrained` call:
+`from_pretrained` 호출에서 두 플래그를 주목하십시오:
 
- - `device_map` ensures the model is moved to your GPU(s)
- - `load_in_4bit` applies [4-bit dynamic quantization](main_classes/quantization) to massively reduce the resource requirements
+- `device_map`은 모델이 GPU로 이동되도록 합니다.
+- `load_in_4bit`는 리소스 요구 사항을 크게 줄이기 위해 [4비트 동적 양자화](main_classes/quantization)를 적용합니다.
 
-There are other ways to initialize a model, but this is a good baseline to begin with an LLM.
+모델을 초기화하는 다른 방법이 있지만, LLM으로 시작하기에 좋은 기준선입니다.
 
-Next, you need to preprocess your text input with a [tokenizer](tokenizer_summary).
+다음으로, [토크나이저](tokenizer_summary)로 텍스트 입력을 전처리해야 합니다.
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -101,9 +101,9 @@ Next, you need to preprocess your text input with a [tokenizer](tokenizer_summar
 >>> model_inputs = tokenizer(["A list of colors: red, blue"], return_tensors="pt").to("cuda")
 ```
 
-The `model_inputs` variable holds the tokenized text input, as well as the attention mask. While [`~generation.GenerationMixin.generate`] does its best effort to infer the attention mask when it is not passed, we recommend passing it whenever possible for optimal results.
+`model_inputs` 변수는 토크나이즈된 텍스트 입력과 주의 마스크를 보유하고 있습니다. [`~generation.GenerationMixin.generate`]는 주의 마스크가 전달되지 않을 때 최선을 다해 주의 마스크를 추론하려고 하지만, 최적의 결과를 위해 가능한 경우에는 항상 전달하는 것이 좋습니다.
 
-Finally, call the [`~generation.GenerationMixin.generate`] method to returns the generated tokens, which should be converted to text before printing.
+마지막으로, [`~generation.GenerationMixin.generate`] 메서드를 호출하여 생성된 토큰을 반환하고, 출력하기 전에 텍스트로 변환해야 합니다.
 
 ```py
 >>> generated_ids = model.generate(**model_inputs)
@@ -111,12 +111,12 @@ Finally, call the [`~generation.GenerationMixin.generate`] method to returns the
 'A list of colors: red, blue, green, yellow, black, white, and brown'
 ```
 
-And that's it! In a few lines of code, you can harness the power of an LLM.
+그게 다에요! 몇 줄의 코드로 LLM의 힘을 활용할 수 있습니다.
 
 
-## Common pitfalls
+## 흔한 함정 [[common-pitfalls]]
 
-There are many [generation strategies](generation_strategies), and sometimes the default values may not be appropriate for your use case. If your outputs aren't aligned with what you're expecting, we've created a list of the most common pitfalls and how to avoid them.
+[생성 전략](generation_strategies)이 많고, 때로는 기본 값이 사용 사례에 적합하지 않을 수 있습니다. 출력이 예상대로 정렬되지 않는 경우, 가장 흔한 함정과 이를 피하는 방법에 대한 목록을 만들었습니다.
 
 ```py
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -128,9 +128,9 @@ There are many [generation strategies](generation_strategies), and sometimes the
 ... )
 ```
 
-### Generated output is too short/long
+### 생성된 출력이 너무 짧거나 길다 [[generated-output-is-too-shortlong]]
 
-If not specified in the [`~generation.GenerationConfig`] file, `generate` returns up to 20 tokens by default. We highly recommend manually setting `max_new_tokens` in your `generate` call to control the maximum number of new tokens it can return. Keep in mind LLMs (more precisely, [decoder-only models](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)) also return the input prompt as part of the output.
+[`~generation.GenerationConfig`] 파일에서 지정되지 않은 경우, `generate`는 기본적으로 최대 20개의 토큰을 반환합니다. `generate` 호출에서 `max_new_tokens`을 수동으로 설정하여 반환할 수 있는 새 토큰의 최대 수를 제어하는 것이 좋습니다. LLM(정확하게는 [디코더 전용 모델](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt))은 출력의 일부로 입력 프롬프트도 반환합니다.
 
 
 ```py
@@ -147,9 +147,9 @@ If not specified in the [`~generation.GenerationConfig`] file, `generate` return
 'A sequence of numbers: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,'
 ```
 
-### Incorrect generation mode
+### 잘못된 생성 모드 [[incorrect-generation-mode]]
 
-By default, and unless specified in the [`~generation.GenerationConfig`] file, `generate` selects the most likely token at each iteration (greedy decoding). Depending on your task, this may be undesirable; creative tasks like chatbots or writing an essay benefit from sampling. On the other hand, input-grounded tasks like audio transcription or translation benefit from greedy decoding. Enable sampling with `do_sample=True`, and you can learn more about this topic in this [blog post](https://huggingface.co/blog/how-to-generate).
+기본적으로, [`~generation.GenerationConfig`] 파일에서 지정되지 않은 경우, `generate`는 각 반복에서 가장 가능성이 높은 토큰을 선택합니다(탐욕스러운 디코딩). 작업에 따라 이것은 바람직하지 않을 수 있습니다. 챗봇이나 에세이 작성과 같은 창의적인 작업은 샘플링에서 이익을 얻습니다. 반면, 오디오 전사나 번역과 같은 입력 기반 작업은 탐욕스러운 디코딩에서 이익을 얻습니다. `do_sample=True`로 샘플링을 활성화하고, 이 주제에 대해 더 알아보려면 이 [블로그 게시물](https://huggingface.co/blog/how-to-generate)을 참조하세요.
 
 ```py
 >>> # Set seed or reproducibility -- you don't need this unless you want full reproducibility
@@ -169,9 +169,9 @@ By default, and unless specified in the [`~generation.GenerationConfig`] file, `
 'I am a cat.\nI just need to be. I am always.\nEvery time'
 ```
 
-### Wrong padding side
+### 잘못된 패딩 측면 [[wrong-padding-side]]
 
-LLMs are [decoder-only](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt) architectures, meaning they continue to iterate on your input prompt. If your inputs do not have the same length, they need to be padded. Since LLMs are not trained to continue from pad tokens, your input needs to be left-padded. Make sure you also don't forget to pass the attention mask to generate!
+LLM은 [디코더 전용](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt) 아키텍처로, 입력 프롬프트에서 계속 반복합니다. 입력이 동일한 길이를 갖지 않는 경우 패딩이 필요합니다. LLM은 패드 토큰에서 계속되도록 훈련되지 않았으므로 입력은 왼쪽 패딩되어야 합니다. 또한 생성에 주의 마스크를 전달하는 것을 잊지 않도록 주의하세요!
 
 ```py
 >>> # The tokenizer initialized above has right-padding active by default: the 1st sequence,
@@ -196,26 +196,26 @@ LLMs are [decoder-only](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt
 
 <!-- TODO: when the prompting guide is ready, mention the importance of setting the right prompt in this section -->
 
-## Further resources
+## 추가 자료 [[further-resources]]
 
-While the autoregressive generation process is relatively straightforward, making the most out of your LLM can be a challenging endeavor because there are many moving parts. For your next steps to help you dive deeper into LLM usage and understanding:
+자동 회귀 생성 프로세스는 상대적으로 간단하지만, LLM에서 최대한 활용하는 것은 많은 움직이는 부분이 있기 때문에 도전적인 과제일 수 있습니다. LLM 사용과 이해에 더 깊게 들어가기 위한 다음 단계:
 
 <!-- TODO: complete with new guides -->
-### Advanced generate usage
+### 고급 생성 사용 [[advanced-generate-usage]]
 
-1. [Guide](generation_strategies) on how to control different generation methods, how to set up the generation configuration file, and how to stream the output;
-2. API reference on [`~generation.GenerationConfig`], [`~generation.GenerationMixin.generate`], and [generate-related classes](internal/generation_utils).
+1. 다른 생성 방법을 제어하는 방법, 생성 구성 파일을 설정하는 방법, 출력을 스트리밍하는 방법에 대한 [가이드](generation_strategies);
+2. [`~generation.GenerationConfig`], [`~generation.GenerationMixin.generate`], [generate-related classes](internal/generation_utils)에 대한 API 참조.
 
-### LLM leaderboards
+### LLM 리더보드 [[llm-leaderboards]]
 
-1. [Open LLM Leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard), which focuses on the quality of the open-source models;
-2. [Open LLM-Perf Leaderboard](https://huggingface.co/spaces/optimum/llm-perf-leaderboard), which focuses on LLM throughput.
+1. 오픈 소스 모델의 품질에 중점을 둔 [Open LLM Leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard);
+2. LLM 처리량에 중점을 둔 [Open LLM-Perf Leaderboard](https://huggingface.co/spaces/optimum/llm-perf-leaderboard).
 
-### Latency and throughput
+### 지연 시간 및 처리량 [[latency-and-throughput]]
 
-1. [Guide](main_classes/quantization) on dynamic quantization, which shows you how to drastically reduce your memory requirements.
+1. 동적 양자화에 대한 [가이드](main_classes/quantization), 이를 통해 메모리 요구 사항을 크게 줄일 수 있습니다.
 
-### Related libraries
+### 관련 라이브러리 [[related-libraries]]
 
-1. [`text-generation-inference`](https://github.com/huggingface/text-generation-inference), a production-ready server for LLMs;
-2. [`optimum`](https://github.com/huggingface/optimum), an extension of 🤗 Transformers that optimizes for specific hardware devices.
+1. LLM을 위한 생산 준비 서버인 [`text-generation-inference`](https://github.com/huggingface/text-generation-inference);
+2. 특정 하드웨어 장치를 위해 최적화하는 🤗 Transformers의 확장인 [`optimum`](https://github.com/huggingface/optimum).
