@@ -30,6 +30,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import reset_and_attach_new_hooks
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -41,7 +42,7 @@ from .configuration_llama import LlamaConfig
 
 
 if is_flash_attn_available():
-    from flash_attn import flash_attn_func
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
     from flash_attn.bert_padding import pad_input, unpad_input  # noqa
 
 
@@ -66,6 +67,59 @@ def _make_causal_mask(
     if past_key_values_length > 0:
         mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype, device=device), mask], dim=-1)
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+
+
+def _convert_to_padding_mask(attention_mask: torch.Tensor, mask_value: float = 0.0):
+    """
+    Convert causal attention mask to key-padding mask
+    """
+    if len(attention_mask.size()) != 4:
+        raise ValueError(
+            "Expecting attention_mask to have 4 dimensions, got tensor of shape: " f"{attention_mask.size()}"
+        )
+
+    batch_size = attention_mask.size(0)
+    key_length = attention_mask.size(-1)
+
+    padding_mask = torch.ones((batch_size, key_length), device=attention_mask.device)
+
+    for i in range(batch_size):
+        mask_slice = attention_mask[i, :, -1, :]
+        padding_mask[i, :] = torch.all(mask_slice == mask_value, dim=0)
+
+    return padding_mask
+
+
+def recursively_replace_module(model, old_class, target_class):
+    """
+    Recursively replace all old_class instances of the model with a target class. The target class should have the same
+    sub-module names than the old class.
+
+    Args:
+        model (`torch.nn.Module`):
+            The model or the child module used for recursion
+        old_class (`class`):
+            The target old class to replace
+        target_class (`class`):
+            The new class that is going to be used in the replaced module.
+    """
+    for name, module in model.named_children():
+        if isinstance(module, old_class):
+            torch_device = module.q_proj.weight.device
+            with torch.device(torch_device):
+                new_module = target_class(module.config)
+
+            for inner_module_name, inner_module in module.named_modules():
+                setattr(new_module, inner_module_name, inner_module)
+
+            if hasattr(module, "_hf_hook"):
+                reset_and_attach_new_hooks(module, new_module, module._hf_hook)
+
+            model._modules[name] = new_module
+            module = None
+
+        if module is not None and len(list(module.children())) > 0:
+            recursively_replace_module(module, old_class, target_class)
 
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
@@ -268,8 +322,6 @@ class LlamaAttention(nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
-        self._is_using_flash_attn_2 = False
-
         self._init_rope()
 
     def _init_rope(self):
@@ -335,14 +387,6 @@ class LlamaAttention(nn.Module):
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
 
-        if self._is_using_flash_attn_2:
-            # Flash attention requires the input to have the shape
-            # batch_size x seq_length x head_dime x hidden_dim
-            # therefore we need to transpose-back the qkv states to their original shape
-            query_states = query_states.transpose(1, 2)
-            key_states = key_states.transpose(1, 2)
-            value_states = value_states.transpose(1, 2)
-
         if past_key_value is not None:
             # reuse k, v, self_attention
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
@@ -350,47 +394,35 @@ class LlamaAttention(nn.Module):
 
         past_key_value = (key_states, value_states) if use_cache else None
 
-        if not self._is_using_flash_attn_2:
-            # repeat k/v heads if n_kv_heads < n_heads
-            key_states = repeat_kv(key_states, self.num_key_value_groups)
-            value_states = repeat_kv(value_states, self.num_key_value_groups)
+        key_states = repeat_kv(key_states, self.num_key_value_groups)
+        value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-            attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
 
-            if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
+        if attn_weights.size() != (bsz, self.num_heads, q_len, kv_seq_len):
+            raise ValueError(
+                f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
+                f" {attn_weights.size()}"
+            )
+
+        if attention_mask is not None:
+            if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
                 raise ValueError(
-                    f"Attention weights should be of size {(bsz, self.num_heads, q_len, kv_seq_len)}, but is"
-                    f" {attn_weights.size()}"
+                    f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
                 )
+            attn_weights = attn_weights + attention_mask
 
-            if attention_mask is not None:
-                if attention_mask.size() != (bsz, 1, q_len, kv_seq_len):
-                    raise ValueError(
-                        f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}"
-                    )
-                attn_weights = attn_weights + attention_mask
+        # upcast attention to fp32
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_output = torch.matmul(attn_weights, value_states)
 
-            # upcast attention to fp32
-            attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-            attn_output = torch.matmul(attn_weights, value_states)
+        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
 
-            if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
-                raise ValueError(
-                    f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                    f" {attn_output.size()}"
-                )
-
-            attn_output = attn_output.transpose(1, 2).contiguous()
-        else:
-            # TODO: llama does not have dropout in the config??
-            # It is recommended to use dropout with FA according to the docs
-            # when training.
-            dropout_rate = 0.0  # if not self.training else self.attn_dropout
-
-            # TODO: support padding using `unpad_input` and `pad_input`
-            attn_output = flash_attn_func(query_states, key_states, value_states, dropout_rate, causal=True)
-
-            attn_weights = None
+        attn_output = attn_output.transpose(1, 2).contiguous()
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
 
@@ -400,6 +432,84 @@ class LlamaAttention(nn.Module):
             attn_output = sum([F.linear(attn_output[i], o_proj_slices[i]) for i in range(self.config.pretraining_tp)])
         else:
             attn_output = self.o_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, past_key_value
+
+
+class LlamaFlashAttention(LlamaAttention):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: bool = False,
+        use_cache: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        # LlamaFlashAttention attention does not support output_attentions
+        output_attentions = False
+
+        bsz, q_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        # Flash attention requires the input to have the shape
+        # batch_size x seq_length x head_dime x hidden_dim
+        # therefore we just need to keep the original shape
+        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        kv_seq_len = key_states.shape[-2]
+        cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
+
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, position_ids)
+
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+
+        past_key_value = None
+
+        # TODO: llama does not have dropout in the config??
+        # It is recommended to use dropout with FA according to the docs
+        # when training.
+        dropout_rate = 0.0  # if not self.training else self.attn_dropout
+
+        padding_mask = _convert_to_padding_mask(attention_mask)
+
+        # contains at least one padding token
+        if padding_mask.sum().item() != bsz * kv_seq_len:
+            query_states, indices, current_query_length, query_max_seqlen = unpad_input(query_states, padding_mask)
+            key_states, _, current_key_length, key_max_seqlen = unpad_input(key_states, padding_mask)
+            value_states, _, _, _ = unpad_input(value_states, padding_mask)
+
+            attn_output_unpad = flash_attn_varlen_func(
+                query_states,
+                key_states,
+                value_states,
+                cu_seqlens_q=current_query_length,
+                cu_seqlens_k=current_key_length,
+                max_seqlen_q=query_max_seqlen,
+                max_seqlen_k=key_max_seqlen,
+                dropout_p=0.0,
+                softmax_scale=None,
+                causal=True,
+            )
+
+            attn_output = pad_input(attn_output_unpad, indices, bsz, kv_seq_len)
+        else:
+            attn_output = flash_attn_func(query_states, key_states, value_states, dropout_rate, causal=True)
+
+        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size)
+        attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
             attn_weights = None
@@ -516,14 +626,14 @@ class LlamaPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
     def _enable_flash_attn_2(self):
-        for module in self.modules():
-            if isinstance(module, LlamaAttention):
-                module._is_using_flash_attn_2 = True
+        for _, module in self.named_children():
+            if len(list(module.children())) > 0:
+                recursively_replace_module(module, LlamaAttention, LlamaFlashAttention)
 
     def _disable_flash_attn_2(self):
-        for module in self.modules():
-            if isinstance(module, LlamaAttention):
-                module._is_using_flash_attn_2 = False
+        for _, module in self.named_children():
+            if len(list(module.children())) > 0:
+                recursively_replace_module(module, LlamaFlashAttention, LlamaAttention)
 
 
 LLAMA_INPUTS_DOCSTRING = r"""
