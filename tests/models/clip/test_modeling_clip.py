@@ -86,7 +86,7 @@ class CLIPVisionModelTester:
         is_training=True,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -261,7 +261,7 @@ class CLIPTextModelTester:
         vocab_size=99,
         hidden_size=32,
         projection_dim=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         dropout=0.1,
@@ -353,6 +353,7 @@ class CLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = True
     test_pruning = False
     test_head_masking = False
+    model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
         self.model_tester = CLIPTextModelTester(self)

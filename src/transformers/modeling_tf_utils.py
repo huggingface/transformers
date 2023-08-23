@@ -1357,21 +1357,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 "Checkpoint loading failed as no optimizer is attached to the model. "
                 "This is most likely caused by the model not being compiled."
             )
-        if not os.path.isdir(repo_path_or_name):
+        if os.path.isdir(repo_path_or_name):
+            local_dir = repo_path_or_name
+        else:
             # If this isn't a local path, check that the remote repo exists and has a checkpoint in it
             repo_files = list_repo_files(repo_path_or_name)
             for file in ("checkpoint/weights.h5", "checkpoint/extra_data.pickle"):
                 if file not in repo_files:
                     raise FileNotFoundError(f"Repo {repo_path_or_name} does not contain checkpoint file {file}!")
-            if "/" not in repo_path_or_name:
-                model_id = repo_path_or_name
-                repo_path_or_name = self.get_full_repo_name(repo_path_or_name)
-            else:
-                model_id = repo_path_or_name.split("/")[-1]
-            repo = Repository(model_id, clone_from=f"https://huggingface.co/{repo_path_or_name}")
+            repo = Repository(repo_path_or_name.split("/")[-1], clone_from=repo_path_or_name)
             local_dir = repo.local_dir
-        else:
-            local_dir = repo_path_or_name
 
         # Now make sure the repo actually has a checkpoint in it.
         checkpoint_dir = os.path.join(local_dir, "checkpoint")

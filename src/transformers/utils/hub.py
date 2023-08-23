@@ -22,6 +22,7 @@ import sys
 import tempfile
 import traceback
 import warnings
+from concurrent import futures
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
@@ -31,12 +32,12 @@ import huggingface_hub
 import requests
 from huggingface_hub import (
     CommitOperationAdd,
+    create_branch,
     create_commit,
     create_repo,
     get_hf_file_metadata,
     hf_hub_download,
     hf_hub_url,
-    whoami,
 )
 from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
 from huggingface_hub.utils import (
@@ -690,6 +691,10 @@ class PushToHubMixin:
                 "The `repo_url` argument is deprecated and will be removed in v5 of Transformers. Use `repo_id` "
                 "instead."
             )
+            if repo_id is not None:
+                raise ValueError(
+                    "`repo_id` and `repo_url` are both specified. Please set only the argument `repo_id`."
+                )
             repo_id = repo_url.replace(f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/", "")
         if organization is not None:
             warnings.warn(
@@ -702,11 +707,7 @@ class PushToHubMixin:
                 repo_id = f"{organization}/{repo_id}"
 
         url = create_repo(repo_id=repo_id, token=token, private=private, exist_ok=True)
-
-        # If the namespace is not there, add it or `upload_file` will complain
-        if "/" not in repo_id and url != f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{repo_id}":
-            repo_id = get_full_repo_name(repo_id, token=token)
-        return repo_id
+        return url.repo_id
 
     def _get_files_timestamps(self, working_dir: Union[str, os.PathLike]):
         """
@@ -722,6 +723,7 @@ class PushToHubMixin:
         commit_message: Optional[str] = None,
         token: Optional[Union[bool, str]] = None,
         create_pr: bool = False,
+        revision: str = None,
     ):
         """
         Uploads all modified files in `working_dir` to `repo_id`, based on `files_timestamps`.
@@ -768,9 +770,17 @@ class PushToHubMixin:
                     CommitOperationAdd(path_or_fileobj=os.path.join(working_dir, file), path_in_repo=file)
                 )
 
+        if revision is not None:
+            create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
+
         logger.info(f"Uploading the following files to {repo_id}: {','.join(modified_files)}")
         return create_commit(
-            repo_id=repo_id, operations=operations, commit_message=commit_message, token=token, create_pr=create_pr
+            repo_id=repo_id,
+            operations=operations,
+            commit_message=commit_message,
+            token=token,
+            create_pr=create_pr,
+            revision=revision,
         )
 
     def push_to_hub(
@@ -783,11 +793,11 @@ class PushToHubMixin:
         max_shard_size: Optional[Union[int, str]] = "10GB",
         create_pr: bool = False,
         safe_serialization: bool = False,
+        revision: str = None,
         **deprecated_kwargs,
     ) -> str:
         """
-        Upload the {object_files} to the 🤗 Model Hub while synchronizing a local clone of the repo in
-        `repo_path_or_name`.
+        Upload the {object_files} to the 🤗 Model Hub.
 
         Parameters:
             repo_id (`str`):
@@ -812,6 +822,8 @@ class PushToHubMixin:
                 Whether or not to create a PR with the uploaded files or directly commit.
             safe_serialization (`bool`, *optional*, defaults to `False`):
                 Whether or not to convert the model weights in safetensors format for safer serialization.
+            revision (`str`, *optional*):
+                Branch to push the uploaded files to.
 
         Examples:
 
@@ -838,21 +850,34 @@ class PushToHubMixin:
                 )
             token = use_auth_token
 
-        if "repo_path_or_name" in deprecated_kwargs:
+        repo_path_or_name = deprecated_kwargs.pop("repo_path_or_name", None)
+        if repo_path_or_name is not None:
+            # Should use `repo_id` instead of `repo_path_or_name`. When using `repo_path_or_name`, we try to infer
+            # repo_id from the folder path, if it exists.
             warnings.warn(
                 "The `repo_path_or_name` argument is deprecated and will be removed in v5 of Transformers. Use "
-                "`repo_id` instead."
+                "`repo_id` instead.",
+                FutureWarning,
             )
-            repo_id = deprecated_kwargs.pop("repo_path_or_name")
+            if repo_id is not None:
+                raise ValueError(
+                    "`repo_id` and `repo_path_or_name` are both specified. Please set only the argument `repo_id`."
+                )
+            if os.path.isdir(repo_path_or_name):
+                # repo_path: infer repo_id from the path
+                repo_id = repo_id.split(os.path.sep)[-1]
+                working_dir = repo_id
+            else:
+                # repo_name: use it as repo_id
+                repo_id = repo_path_or_name
+                working_dir = repo_id.split("/")[-1]
+        else:
+            # Repo_id is passed correctly: infer working_dir from it
+            working_dir = repo_id.split("/")[-1]
+
         # Deprecation warning will be sent after for repo_url and organization
         repo_url = deprecated_kwargs.pop("repo_url", None)
         organization = deprecated_kwargs.pop("organization", None)
-
-        if os.path.isdir(repo_id):
-            working_dir = repo_id
-            repo_id = repo_id.split(os.path.sep)[-1]
-        else:
-            working_dir = repo_id.split("/")[-1]
 
         repo_id = self._create_repo(
             repo_id, private=private, token=token, repo_url=repo_url, organization=organization
@@ -874,15 +899,8 @@ class PushToHubMixin:
                 commit_message=commit_message,
                 token=token,
                 create_pr=create_pr,
+                revision=revision,
             )
-
-
-def get_full_repo_name(model_id: str, organization: Optional[str] = None, token: Optional[str] = None):
-    if organization is None:
-        username = whoami(token)["name"]
-        return f"{username}/{model_id}"
-    else:
-        return f"{organization}/{model_id}"
 
 
 def send_example_telemetry(example_name, *example_args, framework="pytorch"):
@@ -1172,6 +1190,29 @@ def move_cache(cache_dir=None, new_cache_dir=None, token=None):
             etag=etag,
             commit_hash=commit_hash,
         )
+
+
+class PushInProgress:
+    """
+    Internal class to keep track of a push in progress (which might contain multiple `Future` jobs).
+    """
+
+    def __init__(self, jobs: Optional[futures.Future] = None) -> None:
+        self.jobs = [] if jobs is None else jobs
+
+    def is_done(self):
+        return all(job.done() for job in self.jobs)
+
+    def wait_until_done(self):
+        futures.wait(self.jobs)
+
+    def cancel(self) -> None:
+        self.jobs = [
+            job
+            for job in self.jobs
+            # Cancel the job if it wasn't started yet and remove cancelled/done jobs from the list
+            if not (job.cancel() or job.done())
+        ]
 
 
 cache_version_file = os.path.join(TRANSFORMERS_CACHE, "version.txt")

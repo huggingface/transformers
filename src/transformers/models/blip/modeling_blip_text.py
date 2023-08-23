@@ -403,7 +403,7 @@ class BlipTextEncoder(nn.Module):
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         if self.gradient_checkpointing and self.training:
             if use_cache:
-                logger.warn(
+                logger.warning(
                     "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
                 )
                 use_cache = False
@@ -717,6 +717,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
             batch_size, seq_length = input_shape
             device = input_ids.device

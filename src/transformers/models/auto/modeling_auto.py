@@ -106,6 +106,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("groupvit", "GroupViTModel"),
         ("hubert", "HubertModel"),
         ("ibert", "IBertModel"),
+        ("idefics", "IdeficsModel"),
         ("imagegpt", "ImageGPTModel"),
         ("informer", "InformerModel"),
         ("jukebox", "JukeboxModel"),
@@ -247,6 +248,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("gpt_bigcode", "GPTBigCodeForCausalLM"),
         ("gptsan-japanese", "GPTSanJapaneseForConditionalGeneration"),
         ("ibert", "IBertForMaskedLM"),
+        ("idefics", "IdeficsForVisionText2Text"),
         ("layoutlm", "LayoutLMForMaskedLM"),
         ("longformer", "LongformerForMaskedLM"),
         ("luke", "LukeForMaskedLM"),
@@ -345,6 +347,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("openai-gpt", "OpenAIGPTLMHeadModel"),
         ("pegasus_x", "PegasusXForConditionalGeneration"),
         ("plbart", "PLBartForConditionalGeneration"),
+        ("pop2piano", "Pop2PianoForConditionalGeneration"),
         ("qdqbert", "QDQBertForMaskedLM"),
         ("reformer", "ReformerModelWithLMHead"),
         ("rembert", "RemBertForMaskedLM"),
@@ -669,6 +672,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
+        ("pop2piano", "Pop2PianoForConditionalGeneration"),
         ("speech-encoder-decoder", "SpeechEncoderDecoderModel"),
         ("speech_to_text", "Speech2TextForConditionalGeneration"),
         ("speecht5", "SpeechT5ForSpeechToText"),
@@ -1015,6 +1019,21 @@ MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Text-To-Spectrogram mapping
+        ("speecht5", "SpeechT5ForTextToSpeech"),
+    ]
+)
+
+MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
+    [
+        # Model for Text-To-Waveform mapping
+        ("bark", "BarkModel"),
+        ("musicgen", "MusicgenForConditionalGeneration"),
+    ]
+)
+
 MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Zero Shot Image Classification mapping
@@ -1152,6 +1171,12 @@ MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING_NAMES
 )
 MODEL_FOR_AUDIO_XVECTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES)
+
+MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING_NAMES
+)
+
+MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES)
 
 MODEL_FOR_BACKBONE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_BACKBONE_MAPPING_NAMES)
 
@@ -1406,6 +1431,14 @@ AutoModelForAudioFrameClassification = auto_class_update(
 
 class AutoModelForAudioXVector(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_AUDIO_XVECTOR_MAPPING
+
+
+class AutoModelForTextToSpectrogram(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING
+
+
+class AutoModelForTextToWaveform(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING
 
 
 class AutoBackbone(_BaseAutoBackboneClass):

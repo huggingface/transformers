@@ -26,7 +26,7 @@ from transformers.testing_utils import require_torch, slow
 @require_torch
 class BarkProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "ylacombe/bark-small"
+        self.checkpoint = "suno/bark-small"
         self.tmpdirname = tempfile.mkdtemp()
         self.voice_preset = "en_speaker_1"
         self.input_string = "This is a test string"
