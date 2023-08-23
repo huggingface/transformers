@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 GROUNDING_DINO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "idea-research/grg-dino-tiny": "https://huggingface.co/idea-research/grg-dino-tiny/resolve/main/config.json",
+    "idea-research/grounding-dino-tiny": "https://huggingface.co/idea-research/grg-dino-tiny/resolve/main/config.json",
 }
 
 
@@ -151,8 +151,8 @@ class GroundingDINOConfig(PretrainedConfig):
 
     def __init__(
         self,
-        use_timm_backbone=True,
-        backbone_config=None,
+        use_timm_backbone=False,
+        backbone_config={"model_type": "swin"},
         num_channels=3,
         num_queries=300,
         max_position_embeddings=1024,
