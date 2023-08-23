@@ -200,3 +200,28 @@ class FlaxLlamaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
             model = model_class_name.from_pretrained("openlm-research/open_llama_3b_v2", from_pt=True)
             outputs = model(np.ones((1, 1)))
             self.assertIsNotNone(outputs)
+
+    @slow
+    def test_model_logits(self):
+        model_id = "openlm-research/open_llama_3b_v2"
+        model = FlaxLlamaForCausalLM.from_pretrained(model_id, from_pt=True)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        test_batch = [
+            "Aloha, World! ",
+            "2 + 2 = ",
+            "Paris is the capital of ",
+            "我很高興認識"
+        ]
+
+        tokenized_batch = tokenizer(test_batch, padding='max_length', max_length=model.config.max_position_embeddings)
+
+        # TODO: add expected logits here
+        # fmt: off
+        EXPECTED_LOGITS = None
+        # fmt: on
+
+        self.assertTrue(np.allclose())
+
+    @slow
+    def test_generated_text(self):
+        model = FlaxLlamaForCausalLM.from_pretrained("openlm-research/open_llama_3b_f2", from_pt=True)
