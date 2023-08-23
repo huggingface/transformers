@@ -125,7 +125,7 @@ We document here all output types.
 
 [[autodoc]] generation.FlaxGreedySearchOutput
 
-[[autodoc]] generation.FlaxBeamSearchSearchOutput
+[[autodoc]] generation.FlaxBeamSearchOutput
 
 ## LogitsProcessor
 
