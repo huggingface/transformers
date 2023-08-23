@@ -153,3 +153,10 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
             self.assertListEqual(tokenized_chat, expected_tokens)
+
+    def test_add_prefix_space_fast(self):
+        tokenizer_w_prefix = self.get_rust_tokenizer(add_prefix_space=True)
+        tokenizer_wo_prefix = self.get_rust_tokenizer(add_prefix_space=False)
+        tokens_w_prefix = tokenizer_w_prefix.tokenize("Hey")
+        tokens_wo_prefix = tokenizer_wo_prefix.tokenize("Hey")
+        self.assertNotEqual(tokens_w_prefix, tokens_wo_prefix)
