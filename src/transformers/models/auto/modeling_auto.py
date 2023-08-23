@@ -217,6 +217,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("regnet", "RegNetModel"),
         ("rembert", "RemBertModel"),
         ("resnet", "ResNetModel"),
+        ("superglue", "SuperGlueModel"),
         ("retribert", "RetriBertModel"),
         ("roberta", "RobertaModel"),
         ("roberta-prelayernorm", "RobertaPreLayerNormModel"),
