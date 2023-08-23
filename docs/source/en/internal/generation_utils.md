@@ -77,26 +77,47 @@ We document here all output types.
 
 ### PyTorch
 
-[[autodoc]] generation.GreedySearchDecoderOnlyOutput
-
 [[autodoc]] generation.GreedySearchEncoderDecoderOutput
 
-[[autodoc]] generation.SampleDecoderOnlyOutput
+[[autodoc]] generation.GreedySearchDecoderOnlyOutput
 
 [[autodoc]] generation.SampleEncoderDecoderOutput
 
-[[autodoc]] generation.BeamSearchDecoderOnlyOutput
+[[autodoc]] generation.SampleDecoderOnlyOutput
 
 [[autodoc]] generation.BeamSearchEncoderDecoderOutput
 
-[[autodoc]] generation.BeamSampleDecoderOnlyOutput
+[[autodoc]] generation.BeamSearchDecoderOnlyOutput
 
 [[autodoc]] generation.BeamSampleEncoderDecoderOutput
 
+[[autodoc]] generation.BeamSampleDecoderOnlyOutput
+
+[[autodoc]] generation.ContrastiveSearchEncoderDecoderOutput
+
+[[autodoc]] generation.ContrastiveSearchDecoderOnlyOutput
 
 ### TensorFlow
 
+[[autodoc]] generation.TFGreedySearchEncoderDecoderOutput
 
+[[autodoc]] generation.TFGreedySearchDecoderOnlyOutput
+
+[[autodoc]] generation.TFSampleEncoderDecoderOutput
+
+[[autodoc]] generation.TFSampleDecoderOnlyOutput
+
+[[autodoc]] generation.TFBeamSearchEncoderDecoderOutput
+
+[[autodoc]] generation.TFBeamSearchDecoderOnlyOutput
+
+[[autodoc]] generation.TFBeamSampleEncoderDecoderOutput
+
+[[autodoc]] generation.TFBeamSampleDecoderOnlyOutput
+
+[[autodoc]] generation.TFContrastiveSearchEncoderDecoderOutput
+
+[[autodoc]] generation.TFContrastiveSearchDecoderOnlyOutput
 
 ### FLAX
 
@@ -104,7 +125,7 @@ We document here all output types.
 
 [[autodoc]] generation.FlaxGreedySearchOutput
 
-
+[[autodoc]] generation.FlaxBeamSearchSearchOutput
 
 ## LogitsProcessor
 
@@ -112,6 +133,45 @@ A [`LogitsProcessor`] can be used to modify the prediction scores of a language 
 generation.
 
 ### PyTorch
+
+[[autodoc]] AlternatingCodebooksLogitsProcessor
+    - __call__
+
+[[autodoc]] ClassifierFreeGuidanceLogitsProcessor
+    - __call__
+
+[[autodoc]] EncoderNoRepeatNGramLogitsProcessor
+    - __call__
+
+[[autodoc]] EncoderRepetitionPenaltyLogitsProcessor
+    - __call__
+
+[[autodoc]] EpsilonLogitsWarper
+    - __call__
+
+[[autodoc]] EtaLogitsWarper
+    - __call__
+
+[[autodoc]] ExponentialDecayLengthPenalty
+    - __call__
+
+[[autodoc]] ForcedBOSTokenLogitsProcessor
+    - __call__
+
+[[autodoc]] ForcedEOSTokenLogitsProcessor
+    - __call__
+
+[[autodoc]] ForceTokensLogitsProcessor
+    - __call__
+
+[[autodoc]] HammingDiversityLogitsProcessor
+    - __call__
+
+[[autodoc]] InfNanRemoveLogitsProcessor
+    - __call__
+
+[[autodoc]] LogitNormalization
+    - __call__
 
 [[autodoc]] LogitsProcessor
     - __call__
@@ -128,61 +188,19 @@ generation.
 [[autodoc]] MinNewTokensLengthLogitsProcessor
     - __call__
 
-[[autodoc]] TemperatureLogitsWarper
-    - __call__
-
-[[autodoc]] RepetitionPenaltyLogitsProcessor
-    - __call__
-
-[[autodoc]] EncoderRepetitionPenaltyLogitsProcessor
-    - __call__
-
-[[autodoc]] TopPLogitsWarper
-    - __call__
-
-[[autodoc]] TopKLogitsWarper
-    - __call__
-
-[[autodoc]] TypicalLogitsWarper
-    - __call__
-
-[[autodoc]] EpsilonLogitsWarper
-    - __call__
-
-[[autodoc]] EtaLogitsWarper
+[[autodoc]] NoBadWordsLogitsProcessor
     - __call__
 
 [[autodoc]] NoRepeatNGramLogitsProcessor
     - __call__
 
-[[autodoc]] EncoderNoRepeatNGramLogitsProcessor
-    - __call__
-
-[[autodoc]] SequenceBiasLogitsProcessor
-    - __call__
-
-[[autodoc]] NoBadWordsLogitsProcessor
-    - __call__
-
 [[autodoc]] PrefixConstrainedLogitsProcessor
     - __call__
 
-[[autodoc]] HammingDiversityLogitsProcessor
+[[autodoc]] RepetitionPenaltyLogitsProcessor
     - __call__
 
-[[autodoc]] ForcedBOSTokenLogitsProcessor
-    - __call__
-
-[[autodoc]] ForcedEOSTokenLogitsProcessor
-    - __call__
-
-[[autodoc]] InfNanRemoveLogitsProcessor
-    - __call__
-
-[[autodoc]] ExponentialDecayLengthPenalty
-    - __call__
-
-[[autodoc]] LogitNormalization
+[[autodoc]] SequenceBiasLogitsProcessor
     - __call__
 
 [[autodoc]] SuppressTokensAtBeginLogitsProcessor
@@ -191,22 +209,34 @@ generation.
 [[autodoc]] SuppressTokensLogitsProcessor
     - __call__
 
-[[autodoc]] ForceTokensLogitsProcessor
+[[autodoc]] TemperatureLogitsWarper
     - __call__
 
-[[autodoc]] WhisperTimeStampLogitsProcessor
+[[autodoc]] TopKLogitsWarper
     - __call__
 
-[[autodoc]] ClassifierFreeGuidanceLogitsProcessor
+[[autodoc]] TopPLogitsWarper
     - __call__
 
-[[autodoc]] AlternatingCodebooksLogitsProcessor
+[[autodoc]] TypicalLogitsWarper
     - __call__
 
 [[autodoc]] UnbatchedClassifierFreeGuidanceLogitsProcessor
     - __call__
 
+[[autodoc]] WhisperTimeStampLogitsProcessor
+    - __call__
+
 ### TensorFlow
+
+[[autodoc]] TFForcedBOSTokenLogitsProcessor
+    - __call__
+
+[[autodoc]] TFForcedEOSTokenLogitsProcessor
+    - __call__
+
+[[autodoc]] TFForceTokensLogitsProcessor
+    - __call__
 
 [[autodoc]] TFLogitsProcessor
     - __call__
@@ -215,15 +245,6 @@ generation.
     - __call__
 
 [[autodoc]] TFLogitsWarper
-    - __call__
-
-[[autodoc]] TFTemperatureLogitsWarper
-    - __call__
-
-[[autodoc]] TFTopPLogitsWarper
-    - __call__
-
-[[autodoc]] TFTopKLogitsWarper
     - __call__
 
 [[autodoc]] TFMinLengthLogitsProcessor
@@ -238,22 +259,31 @@ generation.
 [[autodoc]] TFRepetitionPenaltyLogitsProcessor
     - __call__
 
-[[autodoc]] TFForcedBOSTokenLogitsProcessor
-    - __call__
-
-[[autodoc]] TFForcedEOSTokenLogitsProcessor
-    - __call__
-
 [[autodoc]] TFSuppressTokensAtBeginLogitsProcessor
     - __call__
 
 [[autodoc]] TFSuppressTokensLogitsProcessor
     - __call__
 
-[[autodoc]] TFForceTokensLogitsProcessor
+[[autodoc]] TFTemperatureLogitsWarper
+    - __call__
+
+[[autodoc]] TFTopKLogitsWarper
+    - __call__
+
+[[autodoc]] TFTopPLogitsWarper
     - __call__
 
 ### FLAX
+
+[[autodoc]] FlaxForcedBOSTokenLogitsProcessor
+    - __call__
+
+[[autodoc]] FlaxForcedEOSTokenLogitsProcessor
+    - __call__
+
+[[autodoc]] FlaxForceTokensLogitsProcessor
+    - __call__
 
 [[autodoc]] FlaxLogitsProcessor
     - __call__
@@ -262,21 +292,6 @@ generation.
     - __call__
 
 [[autodoc]] FlaxLogitsWarper
-    - __call__
-
-[[autodoc]] FlaxTemperatureLogitsWarper
-    - __call__
-
-[[autodoc]] FlaxTopPLogitsWarper
-    - __call__
-
-[[autodoc]] FlaxTopKLogitsWarper
-    - __call__
-
-[[autodoc]] FlaxForcedBOSTokenLogitsProcessor
-    - __call__
-
-[[autodoc]] FlaxForcedEOSTokenLogitsProcessor
     - __call__
 
 [[autodoc]] FlaxMinLengthLogitsProcessor
@@ -288,7 +303,13 @@ generation.
 [[autodoc]] FlaxSuppressTokensLogitsProcessor
     - __call__
 
-[[autodoc]] FlaxForceTokensLogitsProcessor
+[[autodoc]] FlaxTemperatureLogitsWarper
+    - __call__
+
+[[autodoc]] FlaxTopKLogitsWarper
+    - __call__
+
+[[autodoc]] FlaxTopPLogitsWarper
     - __call__
 
 [[autodoc]] FlaxWhisperTimeStampLogitsProcessor
