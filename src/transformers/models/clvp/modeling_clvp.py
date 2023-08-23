@@ -23,6 +23,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from transformers import GPT2LMHeadModel
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel, SequenceSummary
 from ...utils import (
@@ -463,23 +464,26 @@ class CLVPEncoderLayer(nn.Module):
 
 
 # This is mostly ported from T5Attention with some changes to ensure it behaves as expected.
-class CLVPRelativeAttention:
+class CLVPRelativeAttention(nn.Module):
     """
     CLVP Relative Attention is used in `CLVPConditioningEncoder` to process log-mel spectrograms.
     This also uses relative position embeddings.
     """
-    def __init__(self, config: CLVPAutoRegressiveConfig):
+    def __init__(self, config: CLVPAutoRegressiveConfig, has_relative_attention_bias=False):
         super().__init__()
+        self.has_relative_attention_bias = has_relative_attention_bias
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.relative_attention_max_distance = config.relative_attention_max_distance
         self.n_embd = config.n_embd
         self.n_heads = config.n_head
-        self.dropout = config.dropout_rate
+        self.dropout = config.attn_pdrop
         self.q = nn.Linear(self.n_embd, self.n_embd, bias=True)
         self.k = nn.Linear(self.n_embd, self.n_embd, bias=True)
         self.v = nn.Linear(self.n_embd, self.n_embd, bias=True)
         self.o = nn.Linear(self.n_embd, self.n_embd, bias=True)
-        self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
+
+        if self.has_relative_attention_bias:
+            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
         self.pruned_heads = set()
         self.gradient_checkpointing = False
 
@@ -717,7 +721,7 @@ class CLVPConditioningEncoder(nn.Module):
         autoregressive_config = config.autoregressive_config
 
         self.mel_conv = nn.Conv1d(autoregressive_config.feature_size, autoregressive_config.n_embd, kernel_size=1)
-        self.mel_attn_blocks = nn.Sequential([CLVPRelativeAttention(autoregressive_config) for _ in range(6)])
+        self.mel_attn_blocks = nn.Sequential(*[CLVPRelativeAttention(autoregressive_config) for _ in range(6)])
 
         self.text_token_embedding = nn.Embedding(text_config.vocab_size, autoregressive_config.n_embd)
         self.text_position_embedding = nn.Embedding(autoregressive_config.max_text_tokens, autoregressive_config.n_embd)
@@ -769,26 +773,28 @@ class CLVPPreTrainedModel(PreTrainedModel):
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.proj.weight if getattr(module.fc1, "proj") else module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, CLVPModel):
-            nn.init.normal_(
-                module.text_projection.weight,
-                std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
-            )
-            nn.init.normal_(
-                module.speech_projection.weight,
-                std=module.speech_embed_dim**-0.5 * self.config.initializer_factor,
-            )
+        elif isinstance(module, CLVPRelativeAttention):
+            d_model = self.config.autoregressive_config.n_embd
+            key_value_proj_dim = self.config.autoregressive_config.n_embd // self.config.autoregressive_config.n_head
+            n_heads = self.config.autoregressive_config.n_head
+
+            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
+            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
+            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+
+            if module.has_relative_attention_bias:
+                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
         elif isinstance(module, CLVPSpeechModelWithProjection):
             nn.init.normal_(
                 module.speech_projection.weight,
-                std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
+                std=self.config.speech_config.hidden_size**-0.5 * self.config.initializer_factor,
             )
         elif isinstance(module, CLVPTextModelWithProjection):
             nn.init.normal_(
                 module.text_projection.weight,
                 std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
             )
-
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -1111,13 +1117,10 @@ class CLVPModel(CLVPPreTrainedModel):
                 f" {type(config.speech_config)}."
             )
 
-        text_config = config.text_config
-        speech_config = config.speech_config
-
         self.projection_dim = config.projection_dim
 
-        self.text_model = CLVPTransformerWithProjection(text_config, self.projection_dim, bias=False)
-        self.speech_model = CLVPTransformerWithProjection(speech_config, self.projection_dim, bias=False)
+        self.text_model = CLVPTextModelWithProjection(config.text_config)
+        self.speech_model = CLVPSpeechModelWithProjection(config)
         self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
 
         # Initialize weights and apply final processing
@@ -1136,7 +1139,7 @@ class CLVPModel(CLVPPreTrainedModel):
         r"""
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim)`: The text embeddings obtained by
-            applying the projection layer to the pooled output of [`CLVPTextModel`].
+            applying the projection layer to the pooled output of the CLVP Text Model.
 
         Examples:
 
@@ -1157,20 +1160,31 @@ class CLVPModel(CLVPPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if return_dict:
+            return self.text_model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                use_causal_attention_mask=use_causal_attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            ).text_embeds
+
         return self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             use_causal_attention_mask=use_causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True, # since we are returning `text_embeds` so we must use `return_dict` as True
-        ).text_embeds
+            return_dict=return_dict,
+        )[0]
 
     @add_start_docstrings_to_model_forward(CLVP_SPEECH_INPUTS_DOCSTRING)
     def get_speech_features(
         self,
-        speech_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+            input_ids: torch.LongTensor = None,
+            input_features: torch.FloatTensor = None,
+            attention_mask: Optional[torch.Tensor] = None,
         use_causal_attention_mask: Optional[bool] = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1179,7 +1193,7 @@ class CLVPModel(CLVPPreTrainedModel):
         r"""
         Returns:
             speech_features (`torch.FloatTensor` of shape `(batch_size, output_dim)`: The speech embeddings obtained by
-            applying the projection layer to the pooled output of [`CLVPSpeechModel`].
+            applying the projection layer to the pooled output of the CLVP Speech Model.
 
         Examples:
 
@@ -1201,23 +1215,34 @@ class CLVPModel(CLVPPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if return_dict:
+            return self.speech_model(
+                input_features=input_features,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                use_causal_attention_mask=use_causal_attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            ).speech_embeds
+
         return self.speech_model(
-            input_ids=speech_ids,
+            input_features=input_features,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             use_causal_attention_mask=use_causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True, # since we are returning `speech_embeds` so we must use `return_dict` as True
-        ).speech_embeds
+            return_dict=return_dict,
+        )[0]
 
     @add_start_docstrings_to_model_forward(CLVP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CLVPOutput, config_class=CLVPConfig)
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        speech_ids: Optional[torch.FloatTensor] = None,
+        input_ids: torch.LongTensor = None,
+        input_features: torch.FloatTensor = None,
         text_attention_mask: Optional[torch.Tensor] = None,
-        speech_attention_mask: Optional[torch.Tensor] = None,
         use_causal_attention_mask: Optional[bool] = False,
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1255,8 +1280,9 @@ class CLVPModel(CLVPPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         speech_outputs = self.speech_model(
-            input_ids=speech_ids,
-            attention_mask=speech_attention_mask,
+            input_ids=input_ids,
+            input_features=input_features,
+            attention_mask=text_attention_mask,
             use_causal_attention_mask=use_causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1317,7 +1343,7 @@ class CLVPTextModelWithProjection(CLVPPreTrainedModel):
     def __init__(self, config: CLVPTextConfig):
         super().__init__(config)
 
-        self.text_model = CLVPTransformer(config)
+        self.text_transformer = CLVPTransformer(config)
 
         self.text_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
@@ -1362,7 +1388,7 @@ class CLVPTextModelWithProjection(CLVPPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        text_outputs = self.text_model(
+        text_outputs = self.text_transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
             use_causal_attention_mask=use_causal_attention_mask,
@@ -1395,17 +1421,21 @@ class CLVPTextModelWithProjection(CLVPPreTrainedModel):
     CLVP_START_DOCSTRING,
 )
 class CLVPSpeechModelWithProjection(CLVPPreTrainedModel):
-    config_class = CLVPSpeechConfig
-    main_input_name = "speech_ids"
+    config_class = CLVPConfig
 
     _no_split_modules = None
 
-    def __init__(self, config: CLVPSpeechConfig):
+    def __init__(self, config: CLVPConfig):
         super().__init__(config)
 
-        self.speech_model = CLVPTransformer(config)
+        self.conditioning_encoder = CLVPConditioningEncoder(config)
 
-        self.speech_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
+        self.autoregressive_model = GPT2LMHeadModel(config.autoregressive_config)
+        # Set the lm_head bias to True
+        self.autoregressive_model.lm_head = nn.Linear(config.autoregressive_config.n_embd, config.autoregressive_config.vocab_size, bias=True)
+
+        self.speech_transformer = CLVPTransformer(config.speech_config)
+        self.speech_projection = nn.Linear(config.speech_config.hidden_size, config.projection_dim, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1420,7 +1450,8 @@ class CLVPSpeechModelWithProjection(CLVPPreTrainedModel):
     @replace_return_docstrings(output_type=CLVPSpeechModelOutput, config_class=CLVPSpeechConfig)
     def forward(
         self,
-        speech_ids: Optional[torch.Tensor] = None,
+        input_features: torch.FloatTensor,
+        input_ids: torch.LongTensor,
         attention_mask: Optional[torch.Tensor] = None,
         use_causal_attention_mask: Optional[bool] = False,
         output_attentions: Optional[bool] = None,
@@ -1448,8 +1479,19 @@ class CLVPSpeechModelWithProjection(CLVPPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        speech_outputs = self.speech_model(
-            input_ids=speech_ids,
+        conditioning_embeds = self.conditioning_encoder(mel_spec=input_features,
+                                                        text_tokens=input_ids)
+
+        speech_candidates = self.autoregressive_model(inputs_embeds=conditioning_embeds,
+                                                      attention_mask=attention_mask,
+                                                      output_attentions=output_attentions,
+                                                      output_hidden_states=output_hidden_states,
+                                                      return_dict=return_dict,
+                                                      )
+
+
+        speech_outputs = self.speech_transformer(
+            input_ids=speech_candidates,
             use_causal_attention_mask=use_causal_attention_mask,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
