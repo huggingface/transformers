@@ -521,6 +521,35 @@ class EpsilonLogitsWarper(LogitsWarper):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
+
+    Examples:
+    ```python
+    >>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
+
+    >>> set_seed(19)
+    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+
+    >>> # The below sentence is used since the probability of generating `J. Trump` as the next tokens is very high.
+    >>> sentence = "The full name of Donald is Donald"
+    >>> inputs = tokenizer(sentence, return_tensors="pt")
+
+    >>> # We can see that the model generates `J. Trump` as the next token
+    >>> outputs = model.generate(**inputs, max_new_tokens=4, do_sample=True)
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    The full name of Donald is Donald J. Trump –
+
+    >>> set_seed(19)
+    >>> # The use of the `epsilon_cutoff` parameter (best performing values between 3e-4 and 9e-4 from the paper
+    >>> # mentioned above) generates tokens by sampling from a variety of tokens with probabilities greater than
+    >>> # or equal to epsilon value. The disadvantage of this sampling is that if there are many possible tokens to
+    >>> # sample from, the epsilon value has to be very small for sampling to occur from all the possible tokens.
+    >>> outputs = model.generate(
+    ...     **inputs, max_new_tokens=4, do_sample=True, epsilon_cutoff=6e-4
+    ... )  # need to set do_sample=True for epsilon_cutoff to work
+    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+    The full name of Donald is Donald McGahn, who
+    ```
     """
 
     def __init__(self, epsilon: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
