@@ -64,7 +64,7 @@ class MyPipeline(Pipeline):
 `forward`는 예상 장치에서 모든 것이 작동하는지 확인하기 위한 안전장치가 포함되어 있어 선호되는 호출 메소드입니다.
 실제 모델과 관련된 것은 `_forward` 메소드에 속하며, 나머지는 전처리/후처리 과정에 있습니다.
 
-`postprocess` 매소드는 `_forward`의 출력을 가져와 이전에 결정한 최종 출력 형식으로 변환합니다.
+`postprocess` 메소드는 `_forward`의 출력을 가져와 이전에 결정한 최종 출력 형식으로 변환합니다.
 
 `_sanitize_parameters`는 초기화 시간에 `pipeline(...., maybe_arg=4)`이나 호출 시간에 `pipe = pipeline(...); output = pipe(...., maybe_arg=4)`과 같이, 사용자가 원하는 경우 언제든지 매개변수를 전달할 수 있도록 허용합니다.
 
