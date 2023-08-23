@@ -152,7 +152,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         t2u_decoder_attention_heads=16,  # works
         hidden_act="gelu",
         attention_probs_dropout_prob=0.1,
-        type_vocab_size=2,
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=3,
@@ -214,7 +213,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         # t2u config
         self.unit_pad_token_id = unit_pad_token_id
         self.hidden_act = hidden_act
-        self.type_vocab_size = type_vocab_size
+        #self.type_vocab_size = type_vocab_size
         self.t2u_encoder_layers = t2u_encoder_layers
         self.t2u_encoder_ffn_dim = t2u_encoder_ffn_dim
         self.t2u_encoder_attention_heads = t2u_encoder_attention_heads
