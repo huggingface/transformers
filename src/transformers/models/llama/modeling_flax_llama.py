@@ -370,7 +370,7 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
     """
 
     config_class = LlamaConfig
-    base_model_prefix = "transformer"
+    base_model_prefix = "model"
     module_class: nn.Module = None
 
     def __init__(
@@ -562,7 +562,7 @@ class FlaxLlamaModule(nn.Module):
             dtype=self.dtype,
         )
         self.layers = FlaxLlamaLayerCollection(self.config, dtype=self.dtype)
-        self.norm = FlaxLlamaRMSNorm(self.config.rms_norm_eps)
+        self.norm = FlaxLlamaRMSNorm(self.config)
 
     def __call__(
         self,
