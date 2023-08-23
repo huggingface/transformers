@@ -315,7 +315,7 @@ class SeamlessM4TConformerSamePadLayer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureProjection with Wav2Vec2->SeamlessM4TConformer
+# Not exactly transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureProjection but inspired
 class SeamlessM4TConformerFeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -361,7 +361,7 @@ class SeamlessM4TConformerFeedForward(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerConvolutionModule with Wav2Vec2->SeamlessM4T
+# Not exactly the same as transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerConvolutionModule but nearly
 class SeamlessM4TConformerConvolutionModule(nn.Module):
     """Convolution block used in the conformer block"""
 
@@ -384,7 +384,7 @@ class SeamlessM4TConformerConvolutionModule(nn.Module):
             config.hidden_size,
             config.conv_depthwise_kernel_size,
             stride=1,
-            padding="same",  # TODO: it's different from the original code(config.conv_depthwise_kernel_size - 1) // 2,
+            padding="same",
             groups=config.hidden_size,
             bias=False,
         )
@@ -626,7 +626,7 @@ class SeamlessM4TConformerEncoderLayer(nn.Module):
 
         # 2. Self-Attention layer
         hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, attn_weigts = self.self_attn(  # TODO: This block is where small differences
+        hidden_states, attn_weigts = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             relative_position_embeddings=relative_position_embeddings,
@@ -816,8 +816,6 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
-        # TODO: define this function - https://vscode.dev/github/ylacombe/transformers/blob/add-S2S-model/fairseq2/models/unity/adaptor_block.py#L236
-
         residual = self.residual_layer_norm(hidden_states)
 
         # Apply pooling to the residual to match the sequence length of the
@@ -1281,14 +1279,9 @@ class SeamlessM4TDecoderLayer(nn.Module):
             residual = hidden_states
             hidden_states = self.cross_attention_layer_norm(hidden_states)
 
-            # TODO:  verify if used in original implementation
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             
-            # TODO : find a way to compute proper attention_mask depending on the input modality: it works for text, not for speech 
-            
-            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             hidden_states, cross_attn_weights, cross_attn_present_key_value = self.cross_attention(
                 hidden_states=hidden_states,
                 encoder_hidden_states=encoder_hidden_states,
@@ -1465,11 +1458,6 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
         
         if input_values is None:
             raise ValueError("Both `input_values` and `inputs_embeds` are `None` in `SeamlessM4TSpeechEncoder.forward`. Make sure one of them is not `None`.")
-        # TODO: keep ?
-        #if inputs_embeds is not None and input_values is not None:
-        #    logger.warning_once(
-        #                "`use_cache=True` is incompatible with gradient checkpointing`. Setting `use_cache=False`..."
-        #            )
 
         hidden_states, _ = self.feature_projection(input_values)
 
@@ -2049,7 +2037,6 @@ class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
             is_t2u_decoder=True,
         )
 
-        # TODO: take proper care of init
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -2140,7 +2127,6 @@ class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
 
 
 class SeamlessM4TTextToUnitWithLMHead(SeamlessM4TPreTrainedModel):
-    # base_model_prefix = ""
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
     _tied_weights_keys = ["decoder.embed_tokens.weight", "lm_head.weight"]
 
@@ -2379,9 +2365,7 @@ class SeamlessM4TMultiModalToTextModel(SeamlessM4TPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if encoder_outputs is None and input_values is not None:
-            #if inputs_embeds is None:
-            #    raise ValueError(f"`input_embeds=None` but `input_modality=speech`. `input_embeds` must be passed if using the speech encoder.")
-            #
+
             if input_ids is not None:
                 logger.warning("`input_ids` is not `None` but `input_values` has been given. `input_values` will be used in priority through the `speech_encoder`. Make sure that `input_values` and `input_ids` are mutually exclusive.")
             
@@ -2459,7 +2443,6 @@ class SeamlessM4TMultiModalToTextModel(SeamlessM4TPreTrainedModel):
 
 
 class SeamlessM4TMultiModalToTextModelWithLMHead(SeamlessM4TPreTrainedModel):
-    # base_model_prefix = ""
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
 
     def __init__(
@@ -2497,18 +2480,6 @@ class SeamlessM4TMultiModalToTextModelWithLMHead(SeamlessM4TPreTrainedModel):
             return self.model.text_encoder
         else:
             return self.model.speech_encoder
-        #return self.model.get_encoder()
-    
-    #def _prepare_encoder_decoder_kwargs_for_generation(
-    #    self, inputs_tensor: torch.Tensor, model_kwargs, model_input_name: Optional[str] = None
-    #):
-    #    # overwrite modality so that generate gets the right encoder
-    #    input_modality = model_kwargs.get("input_modality", self.model.default_input_modality)
-    #    self.model.default_input_modality = input_modality
-    #    
-    #    model_input_name = "input_values" if input_modality == "speech" else "input_ids"
-    #    
-    #    return super()._prepare_encoder_decoder_kwargs_for_generation(inputs_tensor, model_kwargs, model_input_name)
 
     def get_decoder(self):
         return self.model.get_decoder()
@@ -3047,7 +3018,6 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         }
 
 
-# TODO: pretrained class
 class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["final_logits_bias", "text_decoder"]
     main_input_name = "input_values"
@@ -3103,9 +3073,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         Returns:
 
         """
-        
-        # TODO: adapt to speech input
-        
+                
         logger.warning("This calls `self.input_model.forward`. If you want to generate speech, use the `generate` method.")
         
         return self.input_model.forward(
@@ -3133,7 +3101,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         self,
         input_values: Optional[torch.Tensor] = None,
         **kwargs,
-    ) -> Union[str, torch.LongTensor]:  # TODO: output
+    ) -> Union[str, torch.LongTensor]:
         kwargs_text_generation = {}
         kwargs_speech_generation = {}
         for key, value in kwargs.items():
@@ -3152,10 +3120,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
                     kwargs_speech_generation[key] = value
 
         output_text = self.input_model.generate(input_values=input_values, **kwargs_text_generation, output_scores=True, return_dict_in_generate=True)
-
-        # TODO: do proper generation
         
-
         t2u_input_embeds = torch.stack(output_text.scores, dim = 1)
         
         pad_token_id = self.config.pad_token_id # TODO: is it the proper way, what's the priority with generation config and so on?
@@ -3166,14 +3131,12 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         
         kwargs_speech_generation["attention_mask"] = t2u_model_attention_mask
         
-        # Know that it won't worj
         output_speech = self.t2u_model.generate(inputs_embeds = t2u_input_embeds, **kwargs_speech_generation)
 
         # TODO: proper output form
 
         return output_speech
 
-    # TODO: input_modality
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
@@ -3203,7 +3166,6 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         }
 
 
-# TODO: pretrained class
 class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
     _tied_weights_keys = [
@@ -3346,7 +3308,6 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
         return output_speech
 
-    # TODO: input_modality
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
