@@ -158,6 +158,7 @@ from . import (
     pix2struct,
     plbart,
     poolformer,
+    pop2piano,
     prophetnet,
     pvt,
     qdqbert,
