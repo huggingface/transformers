@@ -273,21 +273,23 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
     Please note that CLVP uses GPT2 as it's Auto Regressive Model.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50257):
-            Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GPT2Model`] or [`TFGPT2Model`].
-        n_positions (`int`, *optional*, defaults to 1024):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        n_embd (`int`, *optional*, defaults to 768):
+        vocab_size (`int`, *optional*, defaults to 8194):
+            Vocabulary size of the model.
+        max_mel_tokens (`int`, *optional*, defaults to 608):
+            The maximum sequence length of mel tokens that this model might ever be used with.
+            Similar to `n_positions` in `GPT2Config`.
+        max_text_tokens (`int`, *optional*, defaults to 404):
+            The maximum sequence length of text tokens that this model might ever be used with.
+            Similar to `n_positions` in `GPT2Config`.
+        n_embd (`int`, *optional*, defaults to 1024):
             Dimensionality of the embeddings and hidden states.
-        n_layer (`int`, *optional*, defaults to 12):
+        n_layer (`int`, *optional*, defaults to 30):
             Number of hidden layers in the Transformer encoder.
-        n_head (`int`, *optional*, defaults to 12):
+        n_head (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        n_inner (`int`, *optional*, defaults to None):
-            Dimensionality of the inner feed-forward layers. `None` will set it to 4 times n_embd
-        activation_function (`str`, *optional*, defaults to `"gelu"`):
+        n_inner (`int`, *optional*):
+            Dimensionality of the inner feed-forward layers. `None` will set it to 4 times `n_embd`.
+        activation_function (`str`, *optional*, defaults to `"gelu_new"`):
             Activation function, to be selected in the list `["relu", "silu", "gelu", "tanh", "gelu_new"]`.
         resid_pdrop (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
@@ -300,8 +302,7 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         summary_type (`string`, *optional*, defaults to `"cls_index"`):
-            Argument used when doing sequence summary, used in the models [`GPT2DoubleHeadsModel`] and
-            [`TFGPT2DoubleHeadsModel`].
+            Argument used when doing sequence summary.
 
             Has to be one of the following options:
 
@@ -311,24 +312,12 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
                 - `"cls_index"`: Supply a Tensor of classification token position (like GPT/GPT-2).
                 - `"attn"`: Not implemented now, use multi-head attention.
         summary_use_proj (`bool`, *optional*, defaults to `True`):
-            Argument used when doing sequence summary, used in the models [`GPT2DoubleHeadsModel`] and
-            [`TFGPT2DoubleHeadsModel`].
-
             Whether or not to add a projection after the vector extraction.
         summary_activation (`str`, *optional*):
-            Argument used when doing sequence summary. Used in for the multiple choice head in
-            [`GPT2DoubleHeadsModel`].
-
             Pass `"tanh"` for a tanh activation to the output, any other value will result in no activation.
         summary_proj_to_labels (`bool`, *optional*, defaults to `True`):
-            Argument used when doing sequence summary, used in the models [`GPT2DoubleHeadsModel`] and
-            [`TFGPT2DoubleHeadsModel`].
-
             Whether the projection outputs should have `config.num_labels` or `config.hidden_size` classes.
         summary_first_dropout (`float`, *optional*, defaults to 0.1):
-            Argument used when doing sequence summary, used in the models [`GPT2DoubleHeadsModel`] and
-            [`TFGPT2DoubleHeadsModel`].
-
             The dropout ratio to be used after the projection and activation.
         scale_attn_weights (`bool`, *optional*, defaults to `True`):
             Scale attention weights by dividing by sqrt(hidden_size)..
@@ -340,15 +329,28 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
             Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
             dot-product/softmax to float() when training with mixed precision.
         feature_size (`int`, *optional*, defaults to 80):
-            The feature dimension of the extracted mel features. This value is used in `CLVPMelEncoder`.
+            The feature dimension of the extracted mel features. This value is used in `CLVPConditioningEncoder`.
+        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
+            The number of buckets to use for each attention layer. This value is used in `CLVPRelativeAttention`.
+        relative_attention_max_distance (`int`, *optional*, defaults to 128):
+            The maximum distance of the longer sequences for the bucket separation. This value is used in `CLVPRelativeAttention`.
+        max_position_embeddings
+
     """
 
     model_type = "clvp_autoregressive_model"
+    attribute_map = {
+        "hidden_size": "n_embd",
+        "max_position_embeddings": "max_mel_tokens",
+        "num_attention_heads": "n_head",
+        "num_hidden_layers": "n_layer",
+    }
 
     def __init__(
             self,
             vocab_size=8194,
-            n_positions=1012,
+            max_mel_tokens=608,
+            max_text_tokens=404,
             n_embd=1024,
             n_layer=30,
             n_head=16,
@@ -371,10 +373,13 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
             scale_attn_by_inverse_layer_idx=False,
             reorder_and_upcast_attn=False,
             feature_size=80,
+            relative_attention_num_buckets=32,
+            relative_attention_max_distance=128,
             **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.n_positions = n_positions
+        self.max_mel_tokens=max_mel_tokens
+        self.max_text_tokens = max_text_tokens
         self.n_embd = n_embd
         self.n_layer = n_layer
         self.n_head = n_head
@@ -395,6 +400,8 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
         self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
         self.reorder_and_upcast_attn = reorder_and_upcast_attn
         self.feature_size = feature_size
+        self.relative_attention_num_buckets = relative_attention_num_buckets
+        self.relative_attention_max_distance = relative_attention_max_distance
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
