@@ -40,16 +40,16 @@ class CLVPFeatureExtractor(SequenceFeatureExtractor):
     Fourier Transform` which should match pytorch's `torch.stft` equivalent.
 
     Args:
-        feature_size (`int`, defaults to 80):
+        feature_size (`int`, *optional*, defaults to 80):
             The feature dimension of the extracted features.
-        sampling_rate (`int`, defaults to 22050):
+        sampling_rate (`int`, *optional*, defaults to 22050):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
-        hop_length (`int`, defaults to 256):
+        hop_length (`int`, *optional*, defaults to 256):
             Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
-        chunk_length (`int`, defaults to 30):
+        chunk_length (`int`, *optional*, defaults to 30):
             The maximum number of chuncks of `sampling_rate` samples used to trim and pad longer or shorter audio
             sequences.
-        n_fft (`int`, defaults to 1024):
+        n_fft (`int`, *optional*, defaults to 1024):
             Size of the Fourier transform.
         padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.

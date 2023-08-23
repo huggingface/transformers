@@ -53,6 +53,10 @@ The original code can be found [here](https://github.com/neonbjb/tortoise-tts).
 
 [[autodoc]] CLVPSpeechConfig
 
+## CLVPAutoRegressiveConfig
+
+[[autodoc]] CLVPAutoRegressiveConfig
+
 ## CLVPTokenizer
 
 [[autodoc]] CLVPTokenizer

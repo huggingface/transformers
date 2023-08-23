@@ -26,6 +26,7 @@ _import_structure = {
         "CLVPConfig",
         "CLVPSpeechConfig",
         "CLVPTextConfig",
+        "CLVPAutoRegressiveConfig",
     ],
     "feature_extraction_clvp": ["CLVPFeatureExtractor"],
     "processing_clvp": ["CLVPProcessor"],
@@ -56,6 +57,7 @@ if TYPE_CHECKING:
         CLVPConfig,
         CLVPSpeechConfig,
         CLVPTextConfig,
+        CLVPAutoRegressiveConfig,
     )
     from .feature_extraction_clvp import CLVPFeatureExtractor
     from .processing_clvp import CLVPProcessor
