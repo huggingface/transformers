@@ -57,37 +57,20 @@ outputs.audio.shape
 ```
 
 For certain languages with a non-Roman alphabet, such as Arabic, Mandarin or Hindi, the [`uroman`](https://github.com/isi-nlp/uroman) 
-perl package is required to pre-process the text inputs to the Roman alphabet. First, clone the `uroman` package:
-
-```bash
-git clone https://github.com/isi-nlp/uroman.git
-```
-
-Then specify the path to the `uroman` package when you call the `tokenizer`. The following example generates 
-speech using the MMS-TTS Korean checkpoint and the `uroman` package:
-
-```python
-import torch
-from transformers import VitsTokenizer, VitsModel, set_seed
-
-tokenizer = VitsTokenizer.from_pretrained("sanchit-gandhi/mms-tts-kor")
-model = VitsModel.from_pretrained("sanchit-gandhi/mms-tts-kor")
-
-inputs = tokenizer(text="이봐 무슨 일이야", uroman_path="./uroman", return_tensors="pt")
-
-set_seed(555)  # make deterministic
-with torch.no_grad():
-   outputs = model(inputs["input_ids"])
-
-outputs.audio.shape
-```
+perl package is required to pre-process the text inputs to the Roman alphabet.
 
 You can check whether you require the `uroman` package for your language by inspecting the `is_uroman` attribute of 
 the pre-trained `tokenizer`:
 
 ```python
+from transformers import VitsTokenizer
+
+tokenizer = VitsTokenizer.from_pretrained("sanchit-gandhi/mms-tts-eng")
 tokenizer.is_uroman
 ```
+
+If required, you should apply the uroman package to your text inputs **prior** to passing them to the `VitsTokenizer`, 
+since currently the tokenizer does not support performing the pre-processing itself.  
 
 ## VitsConfig
 

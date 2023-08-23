@@ -55,32 +55,6 @@ def has_non_roman_characters(input_string):
     return has_non_roman
 
 
-def uromanize(input_string, uroman_path, language=None, chart=False):
-    """Convert non-Roman strings to Roman using the `uroman` perl package."""
-    script_path = os.path.join(uroman_path, "bin/uroman.pl")
-
-    command = ["perl", script_path]
-
-    # Add language flag if specified
-    if language:
-        command.extend(["-l", language])
-
-    # Add chart flag if specified
-    if chart:
-        command.append("--chart")
-
-    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-    # Execute the perl command
-    stdout, stderr = process.communicate(input=input_string.encode())
-
-    if process.returncode != 0:
-        raise ValueError(f"Error {process.returncode}: {stderr.decode()}")
-
-    # Return the output as a string and skip the new-line character at the end
-    return stdout.decode()[:-1]
-
-
 class VitsTokenizer(PreTrainedTokenizer):
     """
     Construct a VITS tokenizer. Also supports MMS-TTS.
