@@ -45,7 +45,7 @@ jobs:
 
       - name: Get doctest files
         run: |
-          $(python3 -c 'from utils.tests_fetcher import get_doctest_files; to_test = get_doctest_files() + ["dummy.py"]; to_test = " ".join(to_test); with open("doc_tests.txt", "w") as fp:    fp.write(to_test)')
+          $(python3 -c 'from utils.tests_fetcher import get_all_doctest_files; to_test = get_all_doctest_files(); to_test = " ".join(to_test); fp = open("doc_tests.txt", "w"); fp.write(to_test); fp.close()')
 
       - name: Run doctests
         run: |
