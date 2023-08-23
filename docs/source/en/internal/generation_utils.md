@@ -75,38 +75,43 @@ values. Here, for instance, it has two keys that are `sequences` and `scores`.
 We document here all output types.
 
 
-### GreedySearchOutput
+### PyTorch
 
 [[autodoc]] generation.GreedySearchDecoderOnlyOutput
 
 [[autodoc]] generation.GreedySearchEncoderDecoderOutput
 
-[[autodoc]] generation.FlaxGreedySearchOutput
-
-### SampleOutput
-
 [[autodoc]] generation.SampleDecoderOnlyOutput
 
 [[autodoc]] generation.SampleEncoderDecoderOutput
-
-[[autodoc]] generation.FlaxSampleOutput
-
-### BeamSearchOutput
 
 [[autodoc]] generation.BeamSearchDecoderOnlyOutput
 
 [[autodoc]] generation.BeamSearchEncoderDecoderOutput
 
-### BeamSampleOutput
-
 [[autodoc]] generation.BeamSampleDecoderOnlyOutput
 
 [[autodoc]] generation.BeamSampleEncoderDecoderOutput
+
+
+### TensorFlow
+
+
+
+### FLAX
+
+[[autodoc]] generation.FlaxSampleOutput
+
+[[autodoc]] generation.FlaxGreedySearchOutput
+
+
 
 ## LogitsProcessor
 
 A [`LogitsProcessor`] can be used to modify the prediction scores of a language model head for
 generation.
+
+### PyTorch
 
 [[autodoc]] LogitsProcessor
     - __call__
@@ -201,6 +206,8 @@ generation.
 [[autodoc]] UnbatchedClassifierFreeGuidanceLogitsProcessor
     - __call__
 
+### TensorFlow
+
 [[autodoc]] TFLogitsProcessor
     - __call__
 
@@ -246,6 +253,8 @@ generation.
 [[autodoc]] TFForceTokensLogitsProcessor
     - __call__
 
+### FLAX
+
 [[autodoc]] FlaxLogitsProcessor
     - __call__
 
@@ -287,7 +296,7 @@ generation.
 
 ## StoppingCriteria
 
-A [`StoppingCriteria`] can be used to change when to stop generation (other than EOS token).
+A [`StoppingCriteria`] can be used to change when to stop generation (other than EOS token). Please note that this is exclusivelly available to our PyTorch implementations.
 
 [[autodoc]] StoppingCriteria
     - __call__
@@ -303,7 +312,7 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 
 ## Constraints
 
-A [`Constraint`] can be used to force the generation to include specific tokens or sequences in the output.
+A [`Constraint`] can be used to force the generation to include specific tokens or sequences in the output. Please note that this is exclusivelly available to our PyTorch implementations.
 
 [[autodoc]] Constraint
 
