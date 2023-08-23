@@ -1175,10 +1175,10 @@ class VitsTextEncoder(nn.Module):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
+            return_dict=return_dict,
         )
 
-        last_hidden_state = encoder_outputs.last_hidden_state
+        last_hidden_state = encoder_outputs[0]
 
         stats = self.project(last_hidden_state.transpose(1, 2)).transpose(1, 2) * padding_mask
         prior_means, prior_log_variances = torch.split(stats, self.config.flow_size, dim=2)
@@ -1190,8 +1190,8 @@ class VitsTextEncoder(nn.Module):
                     last_hidden_state,
                     prior_means,
                     prior_log_variances,
-                    encoder_outputs.hidden_states,
-                    encoder_outputs.attentions,
+                    encoder_outputs[1],
+                    encoder_outputs[2],
                 ]
                 if v is not None
             )
@@ -1200,8 +1200,8 @@ class VitsTextEncoder(nn.Module):
             last_hidden_state=last_hidden_state,
             prior_means=prior_means,
             prior_log_variances=prior_log_variances,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            hidden_states=encoder_outputs[1],
+            attentions=encoder_outputs[2],
         )
 
 
@@ -1377,12 +1377,12 @@ class VitsModel(VitsPreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
+            return_dict=return_dict,
         )
-        hidden_states = text_encoder_output.last_hidden_state.transpose(1, 2)
+        hidden_states = text_encoder_output[0].transpose(1, 2)
         input_padding_mask = input_padding_mask.transpose(1, 2)
-        prior_means = text_encoder_output.prior_means
-        prior_log_variances = text_encoder_output.prior_log_variances
+        prior_means = text_encoder_output[1]
+        prior_log_variances = text_encoder_output[2]
 
         if self.config.num_speakers > 1:
             if speaker_id is None:
@@ -1445,8 +1445,8 @@ class VitsModel(VitsPreTrainedModel):
                     waveform,
                     sequence_lengths,
                     spectrogram,
-                    text_encoder_output.hidden_states,
-                    text_encoder_output.attentions,
+                    text_encoder_output[3],
+                    text_encoder_output[4],
                 ]
                 if v is not None
             )
@@ -1455,6 +1455,6 @@ class VitsModel(VitsPreTrainedModel):
             waveform=waveform,
             sequence_lengths=sequence_lengths,
             spectrogram=spectrogram,
-            hidden_states=text_encoder_output.hidden_states,
-            attentions=text_encoder_output.attentions,
+            hidden_states=text_encoder_output[3],
+            attentions=text_encoder_output[4],
         )
