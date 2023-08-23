@@ -435,6 +435,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
     @property
     def default_chat_template(self):
+        # TODO Figure out if the default message should go in or not
         return (
             "{% for message in messages %}"
             #            "{% if message_idx == 0 and message['role'] != 'system' and default_system_prompt is not none %}"

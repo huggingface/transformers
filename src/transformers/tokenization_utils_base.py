@@ -30,7 +30,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
-from jinja2.sandbox import ImmutableSandboxedEnvironment
 from packaging import version
 
 from . import __version__
@@ -1560,6 +1559,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             {}
         )  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
         self._in_target_context_manager = False
+
+        # Stores a Jinja template that formats chat histories into tokenizable strings
         self.chat_template = kwargs.pop("chat_template", None)
 
         super().__init__(**kwargs)
@@ -1665,6 +1666,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             List[int]: A list of token ids representing the tokenized chat so far, including control tokens. This
             output is ready to pass to the model, either directly or via methods like `generate()`.
         """
+
+        try:
+            from jinja2.sandbox import ImmutableSandboxedEnvironment
+        except ImportError:
+            raise ImportError("Chat formatting with build_conversation_input_ids requires jinja2 to be installed.")
 
         class IncrediblySandboxedEnvironment(ImmutableSandboxedEnvironment):
             def is_safe_callable(self, obj):

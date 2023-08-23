@@ -134,9 +134,22 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertGreaterEqual(len(self.tokenizer_class.pretrained_vocab_files_map), 1)
         self.assertGreaterEqual(len(list(self.tokenizer_class.pretrained_vocab_files_map.values())[0]), 1)
 
-    def test_add_prefix_space_fast(self):
-        tokenizer_w_prefix = self.get_rust_tokenizer(add_prefix_space=True)
-        tokenizer_wo_prefix = self.get_rust_tokenizer(add_prefix_space=False)
-        tokens_w_prefix = tokenizer_w_prefix.tokenize("Hey")
-        tokens_wo_prefix = tokenizer_wo_prefix.tokenize("Hey")
-        self.assertNotEqual(tokens_w_prefix, tokens_wo_prefix)
+    def test_tokenization_for_chat(self):
+        tokenizer = self.get_rust_tokenizer()
+        test_chats = [
+            [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
+            [
+                {"role": "system", "content": "You are a helpful chatbot."},
+                {"role": "user", "content": "Hello!"},
+                {"role": "assistant", "content": "Nice to meet you."},
+            ],
+            [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
+        ]
+        tokenized_chats = [tokenizer.build_conversation_input_ids(test_chat) for test_chat in test_chats]
+        expected_tokens = [
+            [5448, 1306, 267, 66799, 44799, 37143, 17, 2, 59414, 4, 2],
+            [5448, 1306, 267, 66799, 44799, 37143, 17, 2, 59414, 4, 2, 229126, 427, 11890, 1152, 17, 2],
+            [229126, 427, 11890, 1152, 17, 2, 59414, 4, 2],
+        ]
+        for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
+            self.assertListEqual(tokenized_chat, expected_tokens)

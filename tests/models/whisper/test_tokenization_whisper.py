@@ -473,3 +473,24 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
         output = multilingual_tokenizer.decode(INPUT_TOKENS, output_offsets=True)["offsets"]
         self.assertEqual(output, [])
+
+    def test_tokenization_for_chat(self):
+        multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
+        # This is in English, but it's just here to make sure the chat control tokens are being added properly
+        test_chats = [
+            [{"role": "system", "content": "You are a helpful chatbot."}, {"role": "user", "content": "Hello!"}],
+            [
+                {"role": "system", "content": "You are a helpful chatbot."},
+                {"role": "user", "content": "Hello!"},
+                {"role": "assistant", "content": "Nice to meet you."},
+            ],
+            [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
+        ]
+        tokenized_chats = [multilingual_tokenizer.build_conversation_input_ids(test_chat) for test_chat in test_chats]
+        expected_tokens = [
+            [3223, 366, 257, 4961, 5081, 18870, 13, 50257, 15947, 0, 50257],
+            [3223, 366, 257, 4961, 5081, 18870, 13, 50257, 15947, 0, 50257, 37717, 220, 1353, 1677, 291, 13, 50257],
+            [37717, 220, 1353, 1677, 291, 13, 50257, 15947, 0, 50257],
+        ]
+        for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
+            self.assertListEqual(tokenized_chat, expected_tokens)
