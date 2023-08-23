@@ -3090,10 +3090,10 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
 
         # TODO: take care of multiple same paramteres
         output_text = self.input_model.generate(
-            input_ids, **kwargs_text_generation, output_scores=True, return_dict_in_generate=True
+            input_ids, **kwargs_text_generation, output_hidden_states=True, return_dict_in_generate=True
         )
 
-        t2u_input_embeds = torch.stack(output_text.scores, dim=1)
+        t2u_input_embeds = torch.concat([hidden_states[-1] for hidden_states in output_text.decoder_hidden_states], dim =1)
 
         pad_token_id = (
             self.config.pad_token_id
@@ -3253,10 +3253,10 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
                     kwargs_speech_generation[key] = value
 
         output_text = self.input_model.generate(
-            input_values=input_values, **kwargs_text_generation, output_scores=True, return_dict_in_generate=True
+            input_values=input_values, **kwargs_text_generation, output_hidden_states=True, return_dict_in_generate=True
         )
 
-        t2u_input_embeds = torch.stack(output_text.scores, dim=1)
+        t2u_input_embeds = torch.concat([hidden_states[-1] for hidden_states in output_text.decoder_hidden_states], dim =1)
 
         pad_token_id = (
             self.config.pad_token_id
@@ -3441,7 +3441,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                 input_ids=None,
                 input_values=input_values,
                 **kwargs_text_generation,
-                output_scores=True,
+                output_hidden_states=True,
                 return_dict_in_generate=True,
             )
         else:
@@ -3450,11 +3450,11 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                 input_ids=input_ids,
                 input_values=None,
                 **kwargs_text_generation,
-                output_scores=True,
+                output_hidden_states=True,
                 return_dict_in_generate=True,
             )
 
-        t2u_input_embeds = torch.stack(output_text.scores, dim=1)
+        t2u_input_embeds = torch.concat([hidden_states[-1] for hidden_states in output_text.decoder_hidden_states], dim =1)
 
         pad_token_id = (
             self.config.pad_token_id

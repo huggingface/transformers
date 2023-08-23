@@ -28,12 +28,10 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        SeamlessM4TForCausalLM,
-        SeamlessM4TForMaskedLM,
-        SeamlessM4TForMultipleChoice,
-        SeamlessM4TForQuestionAnswering,
-        SeamlessM4TForSequenceClassification,
-        SeamlessM4TForTokenClassification,
+        SeamlessM4TForTextToSpeech,
+        SeamlessM4TForSpeechToSpeech,
+        SeamlessM4TForTextToText,
+        SeamlessM4TForSpeechToText,
         SeamlessM4TModel,
     )
     from transformers.models.seamless_m4t.modeling_seamless_m4t import (

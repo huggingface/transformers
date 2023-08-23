@@ -266,9 +266,9 @@ def load_model(pytorch_dump_folder_path):
     count_1 = param_count(hf_model.input_model.model.text_decoder)
     count_2 = param_count(original_model.model.text_decoder) + param_count(original_model.model.text_decoder_frontend)
 
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        hf_model.save_pretrained(tmpdirname)
-        hf_model = SeamlessM4TModel.from_pretrained(tmpdirname)
+    #with tempfile.TemporaryDirectory() as tmpdirname:
+    #    hf_model.save_pretrained(tmpdirname)
+    #    hf_model = SeamlessM4TModel.from_pretrained(tmpdirname)
 
     assert count_1 == count_2, f"Text decoder model --- Count HF: {count_1} != Count Seamless: {count_2}"
 
@@ -302,7 +302,8 @@ def load_model(pytorch_dump_folder_path):
     
     del original_model
 
-    hf_model.save_pretrained("/home/ubuntu/weights/seamlessM4T/", push_to_hub=True, repo_id="ylacombe/test_seamlessM4T")
+    hf_model.save_pretrained("/home/ubuntu/weights/seamlessM4T/")#, push_to_hub=True, repo_id="ylacombe/test_seamlessM4T")
+    hf_model = SeamlessM4TModel.from_pretrained("/home/ubuntu/weights/seamlessM4T/")
     
     dummy_speech_encoder_inputs = torch.load("/home/ubuntu/input_speech_encoder.pt")
 

@@ -1033,16 +1033,12 @@ else:
     _import_structure["models.seamless_m4t"].extend(
         [
             "SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SeamlessM4TForMaskedLM",
-            "SeamlessM4TForCausalLM",
-            "SeamlessM4TForMultipleChoice",
-            "SeamlessM4TForQuestionAnswering",
-            "SeamlessM4TForSequenceClassification",
-            "SeamlessM4TForTokenClassification",
-            "SeamlessM4TLayer",
+            "SeamlessM4TForTextToSpeech",
+            "SeamlessM4TForTextToText",
+            "SeamlessM4TForSpeechToText",
+            "SeamlessM4TForSpeechToSpeech",
             "SeamlessM4TModel",
             "SeamlessM4TPreTrainedModel",
-            "load_tf_weights_in_seamless_m4t",
         ]
     )
     _import_structure["models.albert"].extend(
@@ -6248,16 +6244,12 @@ if TYPE_CHECKING:
         # PyTorch model imports
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SeamlessM4TForCausalLM,
-            SeamlessM4TForMaskedLM,
-            SeamlessM4TForMultipleChoice,
-            SeamlessM4TForQuestionAnswering,
-            SeamlessM4TForSequenceClassification,
-            SeamlessM4TForTokenClassification,
-            SeamlessM4TLayer,
+            SeamlessM4TForTextToSpeech,
+            SeamlessM4TForTextToText,
+            SeamlessM4TForSpeechToText,
+            SeamlessM4TForSpeechToSpeech,
             SeamlessM4TModel,
             SeamlessM4TPreTrainedModel,
-            load_tf_weights_in_seamless_m4t,
         )
         from .models.segformer import (
             SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

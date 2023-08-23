@@ -37,16 +37,12 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_seamless_m4t"] = [
         "SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "SeamlessM4TForMaskedLM",
-        "SeamlessM4TForCausalLM",
-        "SeamlessM4TForMultipleChoice",
-        "SeamlessM4TForQuestionAnswering",
-        "SeamlessM4TForSequenceClassification",
-        "SeamlessM4TForTokenClassification",
-        "SeamlessM4TLayer",
+        "SeamlessM4TForTextToSpeech",
+        "SeamlessM4TForSpeechToSpeech",
+        "SeamlessM4TForTextToText",
+        "SeamlessM4TForSpeechToText",
         "SeamlessM4TModel",
         "SeamlessM4TPreTrainedModel",
-        "load_tf_weights_in_seamless_m4t",
     ]
 
 
@@ -70,16 +66,12 @@ if TYPE_CHECKING:
     else:
         from .modeling_seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SeamlessM4TForCausalLM,
-            SeamlessM4TForMaskedLM,
-            SeamlessM4TForMultipleChoice,
-            SeamlessM4TForQuestionAnswering,
-            SeamlessM4TForSequenceClassification,
-            SeamlessM4TForTokenClassification,
-            SeamlessM4TLayer,
+            SeamlessM4TForTextToSpeech,
+            SeamlessM4TForSpeechToSpeech,
+            SeamlessM4TForTextToText,
+            SeamlessM4TForSpeechToText,
             SeamlessM4TModel,
             SeamlessM4TPreTrainedModel,
-            load_tf_weights_in_seamless_m4t,
         )
 
 

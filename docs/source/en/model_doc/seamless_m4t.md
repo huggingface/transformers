@@ -51,36 +51,24 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingfac
     - forward
 
 
-## SeamlessM4TForCausalLM
+## SeamlessM4TForTextToSpeech
 
-[[autodoc]] SeamlessM4TForCausalLM
+[[autodoc]] SeamlessM4TForTextToSpeech
     - forward
 
 
-## SeamlessM4TForMaskedLM
+## SeamlessM4TForSpeechToSpeech
 
-[[autodoc]] SeamlessM4TForMaskedLM
+[[autodoc]] SeamlessM4TForSpeechToSpeech
     - forward
 
 
-## SeamlessM4TForSequenceClassification
+## SeamlessM4TForTextToText
 
-[[autodoc]] transformers.SeamlessM4TForSequenceClassification
+[[autodoc]] transformers.SeamlessM4TForTextToText
     - forward
 
-## SeamlessM4TForMultipleChoice
+## SeamlessM4TForSpeechToText
 
-[[autodoc]] transformers.SeamlessM4TForMultipleChoice
-    - forward
-
-
-## SeamlessM4TForTokenClassification
-
-[[autodoc]] transformers.SeamlessM4TForTokenClassification
-    - forward
-
-
-## SeamlessM4TForQuestionAnswering
-
-[[autodoc]] SeamlessM4TForQuestionAnswering
+[[autodoc]] transformers.SeamlessM4TForSpeechToText
     - forward
