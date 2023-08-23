@@ -2336,11 +2336,9 @@ class SeamlessM4TMultiModalToTextModel(SeamlessM4TPreTrainedModel):
 
         if use_text_encoder:
             self.text_encoder = SeamlessM4TEncoder(config)
-            self.default_input_modality = "text"
 
         if use_speech_encoder:
             self.speech_encoder = SeamlessM4TSpeechEncoder(config)
-            self.default_input_modality = "speech"
 
         self.text_decoder = SeamlessM4TDecoder(config)
 
@@ -2349,30 +2347,14 @@ class SeamlessM4TMultiModalToTextModel(SeamlessM4TPreTrainedModel):
     def get_decoder(self):
         return self.text_decoder
 
-    def get_encoder(self, input_modality=None):
-        input_modality = input_modality if input_modality is not None else self.default_input_modality
-
-        if input_modality == "speech" and self.speech_encoder is not None:
-            return self.speech_encoder
-        elif input_modality == "text" and self.text_encoder is not None:
-            return self.text_encoder
-        elif input_modality == "speech" and self.speech_encoder is None:
-            raise ValueError(
-                f"`input_modality={input_modality}` but `SeamlessM4TMultiModalToTextModel` has not been initialized with `use_speech_encoder=True` or `config.use_speech_encoder=True`"
-            )
-        elif input_modality == "text" and self.text_encoder is None:
-            raise ValueError(
-                f"`input_modality={input_modality}` but `SeamlessM4TMultiModalToTextModel` has not been initialized with `use_text_encoder=True` or `config.use_text_encoder=True`"
-            )
-        else:
-            raise ValueError(
-                f"`input_modality={input_modality}` is not a valid modality. It should be either `speech` or `text`."
-            )
-
+    def get_encoder(self):
+        return self.text_encoder
+        
+    # priority is given to None input values
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        input_modality: Optional[str] = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        input_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -2395,40 +2377,27 @@ class SeamlessM4TMultiModalToTextModel(SeamlessM4TPreTrainedModel):
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        input_modality = input_modality if input_modality is not None else self.default_input_modality
 
-        if input_modality not in {"speech", "text"}:
-            raise ValueError(
-                f"`input_modality={input_modality}` is not a valid modality. It should be either `speech` or `text`."
-            )
-            
-        if encoder_outputs is not None and input_modality == "speech":
-            # in that case, the encoder attention mask has no longer the same seq_length as the encoder output 
-            # (because of dilatation). So it needs to be adapted.
-            # TODO: YOACH
-            pass
-
-        if encoder_outputs is None and input_modality == "speech":
+        if encoder_outputs is None and input_values is not None:
             #if inputs_embeds is None:
             #    raise ValueError(f"`input_embeds=None` but `input_modality=speech`. `input_embeds` must be passed if using the speech encoder.")
             #
-            #if inputs is not None:
-            #    logger.warning("`inputs` is not `None` but `input_modality=speech`. It won't be used.")
+            if input_ids is not None:
+                logger.warning("`input_ids` is not `None` but `input_values` has been given. `input_values` will be used in priority through the `speech_encoder`. Make sure that `input_values` and `input_ids` are mutually exclusive.")
             
-            # TODO: make sure it is in docstrings and logger
-            inputs = input_ids if input_ids is not None else kwargs.get("input_values", kwargs.get("inputs", None))
+            if inputs_embeds is not None:
+                logger.warning("`inputs_embeds` is not `None` but `input_values` has been given. `input_values` will be used in priority through `speech_encoder`. `inputs_embeds` will be ignored.")
             
             # TODO: not head mask warnings
             encoder_outputs = self.speech_encoder(  # YOACH
-                input_values=inputs,
-                inputs_embeds=inputs_embeds,
+                input_values=input_values,
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
 
-        elif encoder_outputs is None and input_modality == "text":
+        elif encoder_outputs is None:
             encoder_outputs = self.text_encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
@@ -2454,7 +2423,8 @@ class SeamlessM4TMultiModalToTextModel(SeamlessM4TPreTrainedModel):
         
         
         encoder_attention_mask = attention_mask
-        if input_modality == "speech" and attention_mask is not None:
+        # input modality = speech so new attention mask
+        if self.main_input_name == "input_values" and attention_mask is not None:
             encoder_attention_mask = _compute_new_attention_mask(encoder_outputs[0], attention_mask, self.config.adaptor_kernel_size, self.config.adaptor_stride)
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
@@ -2510,20 +2480,35 @@ class SeamlessM4TMultiModalToTextModelWithLMHead(SeamlessM4TPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+        
+    def set_modality(self, modality="text"):
+        if modality == "text":
+            self.main_input_name = "input_ids"
+            self.model.main_input_name = "input_ids"
+        elif modality == "speech":
+            self.main_input_name = "input_values"
+            self.model.main_input_name = "input_values"
+        else:
+            raise ValueError(f"`modality={modality}` is not a valid modality. It must be `text` or `speech`.")
+
 
     def get_encoder(self):
-        return self.model.get_encoder()
+        if self.main_input_name == "input_ids":
+            return self.model.text_encoder
+        else:
+            return self.model.speech_encoder
+        #return self.model.get_encoder()
     
-    def _prepare_encoder_decoder_kwargs_for_generation(
-        self, inputs_tensor: torch.Tensor, model_kwargs, model_input_name: Optional[str] = None
-    ):
-        # overwrite modality so that generate gets the right encoder
-        input_modality = model_kwargs.get("input_modality", self.model.default_input_modality)
-        self.model.default_input_modality = input_modality
-        
-        model_input_name = "input_values" if input_modality == "speech" else "input_ids"
-        
-        return super()._prepare_encoder_decoder_kwargs_for_generation(inputs_tensor, model_kwargs, model_input_name)
+    #def _prepare_encoder_decoder_kwargs_for_generation(
+    #    self, inputs_tensor: torch.Tensor, model_kwargs, model_input_name: Optional[str] = None
+    #):
+    #    # overwrite modality so that generate gets the right encoder
+    #    input_modality = model_kwargs.get("input_modality", self.model.default_input_modality)
+    #    self.model.default_input_modality = input_modality
+    #    
+    #    model_input_name = "input_values" if input_modality == "speech" else "input_ids"
+    #    
+    #    return super()._prepare_encoder_decoder_kwargs_for_generation(inputs_tensor, model_kwargs, model_input_name)
 
     def get_decoder(self):
         return self.model.get_decoder()
@@ -2559,8 +2544,8 @@ class SeamlessM4TMultiModalToTextModelWithLMHead(SeamlessM4TPreTrainedModel):
     # @add_end_docstrings(MBART_GENERATION_EXAMPLE)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        input_modality: Optional[str] = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        input_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -2586,7 +2571,7 @@ class SeamlessM4TMultiModalToTextModelWithLMHead(SeamlessM4TPreTrainedModel):
 
         Returns:
 
-        """
+        """        
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
@@ -2597,8 +2582,8 @@ class SeamlessM4TMultiModalToTextModelWithLMHead(SeamlessM4TPreTrainedModel):
                 decoder_input_ids = shift_tokens_right(labels, self.config.unit_pad_token_id)
 
         outputs = self.model(
-            input_ids,
-            input_modality=input_modality,
+            input_ids=input_ids,
+            input_values=input_values,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
@@ -2805,6 +2790,8 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
         self.input_model = SeamlessM4TMultiModalToTextModelWithLMHead(
             config, use_text_encoder=False, use_speech_encoder=True
         )
+        
+        self.input_model.set_modality("speech")
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2812,7 +2799,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
         
         
     def get_encoder(self):
-        return self.input_model.get_encoder()
+        return self.input_model.model.speech_encoder
 
     def get_decoder(self):
         return self.input_model.get_decoder()
@@ -2929,7 +2916,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         
         
     def get_encoder(self):
-        return self.input_model.get_encoder()
+        return self.input_model.model.text_encoder
 
     def get_decoder(self):
         return self.input_model.get_decoder()
@@ -3014,10 +3001,18 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         # TODO: take care of multiple same paramteres
         output_text = self.input_model.generate(input_ids, **kwargs_text_generation, output_scores=True, return_dict_in_generate=True)
 
-        # TODO: take care when input_ids or other is in kwargs
-        # TODO: do proper generation
-        # Know that it won't worj
-        output_speech = self.t2u_model.generate(inputs_embeds = torch.stack(output_text.scores, dim = 1), **kwargs_speech_generation)
+
+        t2u_input_embeds = torch.stack(output_text.scores, dim = 1)
+        
+        pad_token_id = self.config.pad_token_id # TODO: is it the proper way, what's the priority with generation config and so on?
+
+        # Compute new attention mask 
+        seq_lens = (output_text.sequences != pad_token_id).int().sum(1)
+        t2u_model_attention_mask = to_attention_mask(t2u_input_embeds, seq_lens)
+        
+        kwargs_speech_generation["attention_mask"] = t2u_model_attention_mask
+
+        output_speech = self.t2u_model.generate(inputs_embeds = t2u_input_embeds, **kwargs_speech_generation)
 
         # TODO: proper output form
 
@@ -3055,6 +3050,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
 # TODO: pretrained class
 class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["final_logits_bias", "text_decoder"]
+    main_input_name = "input_values"
 
     def __init__(self, config):
         super().__init__(config)
@@ -3062,6 +3058,8 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         self.input_model = SeamlessM4TMultiModalToTextModelWithLMHead(
             config, use_text_encoder=False, use_speech_encoder=True
         )
+        
+        self.input_model.set_modality("speech")
 
         self.t2u_model = SeamlessM4TTextToUnitWithLMHead(config)
 
@@ -3070,7 +3068,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         
         
     def get_encoder(self):
-        return self.input_model.get_encoder()
+        return self.input_model.model.speech_encoder
 
     def get_decoder(self):
         return self.input_model.get_decoder()
@@ -3078,7 +3076,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
     # only forward input model 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_values: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -3111,7 +3109,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         logger.warning("This calls `self.input_model.forward`. If you want to generate speech, use the `generate` method.")
         
         return self.input_model.forward(
-            input_ids=input_ids,
+            input_values=input_values,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
@@ -3133,7 +3131,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
     @torch.no_grad()
     def generate(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_values: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[str, torch.LongTensor]:  # TODO: output
         kwargs_text_generation = {}
@@ -3153,13 +3151,23 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
                 if key not in kwargs_speech_generation:
                     kwargs_speech_generation[key] = value
 
-        # TODO: take care of multiple same paramteres
-        output_text = self.input_model.generate(input_ids, **kwargs_text_generation, output_scores=True, return_dict_in_generate=True)
+        output_text = self.input_model.generate(input_values=input_values, **kwargs_text_generation, output_scores=True, return_dict_in_generate=True)
 
-        # TODO: take care when input_ids or other is in kwargs
         # TODO: do proper generation
+        
+
+        t2u_input_embeds = torch.stack(output_text.scores, dim = 1)
+        
+        pad_token_id = self.config.pad_token_id # TODO: is it the proper way, what's the priority with generation config and so on?
+
+        # Compute new attention mask 
+        seq_lens = (output_text.sequences != pad_token_id).int().sum(1)
+        t2u_model_attention_mask = to_attention_mask(t2u_input_embeds, seq_lens)
+        
+        kwargs_speech_generation["attention_mask"] = t2u_model_attention_mask
+        
         # Know that it won't worj
-        output_speech = self.t2u_model.generate(inputs_embeds = torch.stack(output_text.scores, dim = 1), **kwargs_speech_generation)
+        output_speech = self.t2u_model.generate(inputs_embeds = t2u_input_embeds, **kwargs_speech_generation)
 
         # TODO: proper output form
 
@@ -3227,8 +3235,8 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
     # only forward input model
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        input_modality: Optional[str] = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        input_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -3258,11 +3266,13 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         
         logger.warning("This calls `self.input_model.forward`. If you want to generate speech, use the `generate` method.")
         
+        if input_ids is None and input_values is None and inputs_embeds is None:
+            raise ValueError("`input_ids`,`input_values` and `inputs_embeds` are all empty. Make sure at least one of them is not.")
+            
         # TODO: throws errors or warnings if shape not in line with input_modality!
-        
         return self.input_model.forward(
             input_ids=input_ids,
-            input_modality=input_modality,
+            input_values=input_values,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
@@ -3284,7 +3294,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
     def generate(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        input_modality=None,
+        input_values: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[str, torch.LongTensor]:  # TODO: output
         kwargs_text_generation = {}
@@ -3304,13 +3314,34 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                 if key not in kwargs_speech_generation:
                     kwargs_speech_generation[key] = value
 
+        if input_ids is None and input_values is None and kwargs.get("inputs_embeds", None) is None:
+            raise ValueError("`input_ids`,`input_values` and `inputs_embeds` are all empty. Make sure at least one of them is not.")
+        
         # TODO: take care of multiple same paramteres
-        output_text = self.input_model.generate(input_ids, input_modality=input_modality, **kwargs_text_generation, output_scores=True, return_dict_in_generate=True)
+        if input_values is not None:
+            if input_ids is not None:
+                logger.warning(
+                    "`input_values` and `input_ids` are both non empty. `input_values` will be used in priority through the speech encoder."
+                    "Make sure `input_values=None` if you want to use the text encoder."
+                )
+            self.input_model.set_modality("speech")
+            output_text = self.input_model.generate(input_ids=None, input_values=input_values, **kwargs_text_generation, output_scores=True, return_dict_in_generate=True)
+        else:
+            self.input_model.set_modality("text")
+            output_text = self.input_model.generate(input_ids=input_ids, input_values=None, **kwargs_text_generation, output_scores=True, return_dict_in_generate=True)
 
-        # TODO: take care when input_ids or other is in kwargs
-        # TODO: do proper generation
-        # Know that it won't worj
-        output_speech = self.t2u_model.generate(inputs_embeds = torch.stack(output_text.scores, dim = 1), **kwargs_speech_generation)
+
+        t2u_input_embeds = torch.stack(output_text.scores, dim = 1)
+        
+        pad_token_id = self.config.pad_token_id # TODO: is it the proper way, what's the priority with generation config and so on?
+
+        # Compute new attention mask 
+        seq_lens = (output_text.sequences != pad_token_id).int().sum(1)
+        t2u_model_attention_mask = to_attention_mask(t2u_input_embeds, seq_lens)
+        
+        kwargs_speech_generation["attention_mask"] = t2u_model_attention_mask
+        
+        output_speech = self.t2u_model.generate(inputs_embeds = t2u_input_embeds, **kwargs_speech_generation)
         # TODO: proper output form
 
         return output_speech
