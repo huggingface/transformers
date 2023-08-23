@@ -150,6 +150,37 @@ def _unconstrained_rational_quadratic_spline(
     """
     This transformation represents a monotonically increasing piecewise rational quadratic function. Outside of the
     `tail_bound`, the transform behaves as an identity function.
+
+    Args:
+        inputs (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+            Second half of the hidden-states input to the Vits convolutional flow module.
+        unnormalized_widths (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+            First `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
+            layer in the convolutional flow module
+        unnormalized_heights (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+            Second `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
+            layer in the convolutional flow module
+        unnormalized_derivatives (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+            Third `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
+            layer in the convolutional flow module
+        reverse (`bool`, *optional*, defaults to `False`):
+            Whether the model is being run in reverse mode.
+        tail_bound (`float`, *optional* defaults to 5):
+            Upper and lower limit bound for the rational quadratic function. Outside of this `tail_bound`, the transform
+            behaves as an identity function.
+        min_bin_width (`float`, *optional*, defaults to 1e-3):
+            Minimum bin value across the width dimension for the piecewise rational quadratic function.
+        min_bin_height (`float`, *optional*, defaults to 1e-3):
+            Minimum bin value across the height dimension for the piecewise rational quadratic function.
+        min_derivative (`float`, *optional*, defaults to 1e-3):
+            Minimum bin value across the derivatives for the piecewise rational quadratic function.
+    Returns:
+        outputs (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+            Hidden-states as transformed by the piecewise rational quadratic function with the `tail_bound`
+            limits applied.
+        log_abs_det (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+            Logarithm of the absolute value of the determinants corresponding to the `outputs` with the `tail_bound`
+            limits applied.
     """
     inside_interval_mask = (inputs >= -tail_bound) & (inputs <= tail_bound)
     outside_interval_mask = ~inside_interval_mask
@@ -190,6 +221,39 @@ def _rational_quadratic_spline(
     min_bin_height,
     min_derivative,
 ):
+    """
+    This transformation represents a monotonically increasing piecewise rational quadratic function. Unlike the function
+    `_unconstrained_rational_quadratic_spline`, the function behaves the same across the `tail_bound`.
+
+    Args:
+        inputs (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+            Second half of the hidden-states input to the Vits convolutional flow module.
+        unnormalized_widths (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+            First `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
+            layer in the convolutional flow module
+        unnormalized_heights (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+            Second `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
+            layer in the convolutional flow module
+        unnormalized_derivatives (`torch.FloatTensor` of shape `(batch_size, channels, seq_len, duration_predictor_flow_bins)`):
+            Third `duration_predictor_flow_bins` of the hidden-states from the output of the convolution projection
+            layer in the convolutional flow module
+        reverse (`bool`):
+            Whether the model is being run in reverse mode.
+        tail_bound (`float`):
+            Upper and lower limit bound for the rational quadratic function. Outside of this `tail_bound`, the transform
+            behaves as an identity function.
+        min_bin_width (`float`):
+            Minimum bin value across the width dimension for the piecewise rational quadratic function.
+        min_bin_height (`float`):
+            Minimum bin value across the height dimension for the piecewise rational quadratic function.
+        min_derivative (`float`):
+            Minimum bin value across the derivatives for the piecewise rational quadratic function.
+    Returns:
+        outputs (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+            Hidden-states as transformed by the piecewise rational quadratic function.
+        log_abs_det (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
+            Logarithm of the absolute value of the determinants corresponding to the `outputs`.
+    """
     upper_bound = tail_bound
     lower_bound = -tail_bound
 
