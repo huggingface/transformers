@@ -16,6 +16,31 @@ logger = logging.get_logger(__name__)
 
 
 class Conversation:
+    """
+    Utility class containing a conversation and its history. This class is meant to be used as an input to the
+    [`ConversationalPipeline`]. The conversation contains several utility functions to manage the addition of new user
+    inputs and generated model responses.
+
+    Arguments:
+        messages (Union[str, List[Dict[str, str]]], *optional*):
+            The initial messages to start the conversation, either a string, or a list of dicts containing "role" and
+            "content" keys. If a string is passed, it is interpreted as a single message with the "user" role.
+        conversation_id (`uuid.UUID`, *optional*):
+            Unique identifier for the conversation. If not provided, a random UUID4 id will be assigned to the
+            conversation.
+        past_user_inputs (`List[str]`, *optional*):
+            This is a legacy argument that should not be used in new code. It is kept only for backward compatibility.
+        generated_responses (`List[str]`, *optional*):
+            This is a legacy argument that should not be used in new code. It is kept only for backward compatibility.
+
+    Usage:
+
+    ```python
+    conversation = Conversation("Going to the movies tonight - any suggestions?")
+    conversation.add_message({"role": "assistant", "content": "The Big lebowski."})
+    conversation.add_message({"role": "user", "content": "Is it good?"})
+    ```"""
+
     def __init__(
         self,
         messages: Union[str, List[Dict[str, str]]] = None,
