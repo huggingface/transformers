@@ -123,6 +123,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.superglue": ["SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP", "SuperGlueConfig", "SuperGlueTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.align": [
         "ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -478,6 +479,7 @@ _import_structure = {
     "models.regnet": ["REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "RegNetConfig"],
     "models.rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
     "models.resnet": ["RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ResNetConfig"],
+    "models.superglue": ["SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP", "SuperGlueConfig"],
     "models.roberta": ["ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaConfig", "RobertaTokenizer"],
     "models.roberta_prelayernorm": ["ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP", "RobertaPreLayerNormConfig"],
     "models.roc_bert": ["ROC_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RoCBertConfig", "RoCBertTokenizer"],
@@ -789,6 +791,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     # Fast tokenizers structure
+    _import_structure["models.superglue"].append("SuperGlueTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -1027,6 +1030,22 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.superglue"].extend(
+        [
+            "SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SuperGlueForMaskedLM",
+            "SuperGlueForCausalLM",
+            "SuperGlueForMultipleChoice",
+            "SuperGlueForQuestionAnswering",
+            "SuperGlueForSequenceClassification",
+            "SuperGlueForTokenClassification",
+            "SuperGlueLayer",
+            "SuperGlueModel",
+            "SuperGluePreTrainedModel",
+            "load_tf_weights_in_superglue",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2503,6 +2522,15 @@ else:
             "ResNetForImageClassification",
             "ResNetModel",
             "ResNetPreTrainedModel",
+        ]
+    )
+    _import_structure["models.superglue"].extend(
+        [
+            "SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SuperGlueBackbone",
+            "SuperGlueForImageClassification",
+            "SuperGlueModel",
+            "SuperGluePreTrainedModel",
         ]
     )
     _import_structure["models.roberta"].extend(
@@ -4129,6 +4157,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.superglue import SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP, SuperGlueConfig, SuperGlueTokenizer
     from .models.align import (
         ALIGN_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AlignConfig,
@@ -4462,6 +4491,7 @@ if TYPE_CHECKING:
     from .models.regnet import REGNET_PRETRAINED_CONFIG_ARCHIVE_MAP, RegNetConfig
     from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
     from .models.resnet import RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ResNetConfig
+    from .models.superglue import SUPERGLUE_PRETRAINED_CONFIG_ARCHIVE_MAP, SuperGlueConfig
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
     from .models.roberta_prelayernorm import (
         ROBERTA_PRELAYERNORM_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4749,6 +4779,7 @@ if TYPE_CHECKING:
         from .utils.dummy_tokenizers_objects import *
     else:
         # Fast tokenizers imports
+        from .models.superglue import SuperGlueTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -4948,6 +4979,20 @@ if TYPE_CHECKING:
         from .modeling_utils import PreTrainedModel
 
         # PyTorch model imports
+
+        from .models.superglue import (
+            SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SuperGlueForMaskedLM,
+            SuperGlueForCausalLM,
+            SuperGlueForMultipleChoice,
+            SuperGlueForQuestionAnswering,
+            SuperGlueForSequenceClassification,
+            SuperGlueForTokenClassification,
+            SuperGlueLayer,
+            SuperGlueModel,
+            SuperGluePreTrainedModel,
+            load_tf_weights_in_superglue,
+        )
         from .models.albert import (
             ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             AlbertForMaskedLM,
@@ -6161,6 +6206,13 @@ if TYPE_CHECKING:
             ResNetForImageClassification,
             ResNetModel,
             ResNetPreTrainedModel,
+        )
+        from .models.superglue import (
+            SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SuperGlueBackbone,
+            SuperGlueForImageClassification,
+            SuperGlueModel,
+            SuperGluePreTrainedModel,
         )
         from .models.roberta import (
             ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
