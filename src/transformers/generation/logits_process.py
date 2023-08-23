@@ -540,9 +540,10 @@ class EpsilonLogitsWarper(LogitsWarper):
     The full name of Donald is Donald J. Trump –
 
     >>> set_seed(19)
-    >>> # The use of the `epsilon_cutoff` parameter (best performing values between 3e-4 and 9e-4 from the paper mentioned above) generates tokens
-    >>> # by sampling from a variety of tokens with probabilities greater than or equal to epsilon value. The disadvantage of this sampling is that
-    >>> # if there are many possible tokens to sample from, the epsilon value has to be very small for sampling to occur from all the possible tokens.
+    >>> # The use of the `epsilon_cutoff` parameter (best performing values between 3e-4 and 9e-4 from the paper
+    >>> # mentioned above) generates tokens by sampling from a variety of tokens with probabilities greater than
+    >>> # or equal to epsilon value. The disadvantage of this sampling is that if there are many possible tokens to
+    >>> # sample from, the epsilon value has to be very small for sampling to occur from all the possible tokens.
     >>> outputs = model.generate(
     ...     **inputs, max_new_tokens=4, do_sample=True, epsilon_cutoff=6e-4
     ... )  # need to set do_sample=True for epsilon_cutoff to work
