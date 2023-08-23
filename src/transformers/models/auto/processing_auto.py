@@ -49,7 +49,6 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("blip", "BlipProcessor"),
         ("blip-2", "Blip2Processor"),
         ("bridgetower", "BridgeTowerProcessor"),
-        ("bros", "BrosProcessor"),
         ("chinese_clip", "ChineseCLIPProcessor"),
         ("clap", "ClapProcessor"),
         ("clip", "CLIPProcessor"),

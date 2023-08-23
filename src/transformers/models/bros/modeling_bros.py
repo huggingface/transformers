@@ -34,10 +34,10 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
+    replace_return_docstrings,
 )
 from .configuration_bros import BrosConfig
 
@@ -813,11 +813,7 @@ class BrosModel(BrosPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -836,28 +832,27 @@ class BrosModel(BrosPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
+        Returns:
 
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        past_key_values (`Tuple[Tuple[torch.FloatTensor]]` of length `config.n_layers` with each tuple having 4 tensors of shape:
-            `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-                Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up
-                decoding.
-            hidden states of the attention blocks. Can be used to speed up decoding.
+        Examples:
 
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        """
+        ```python
+        >>> import torch
+        >>> from transformers import BrosProcessor, BrosModel
+
+        >>> processor = BrosProcessor.from_pretrained("naver-clova-ocr/bros-base-uncased")
+
+        >>> model = BrosModel.from_pretrained("naver-clova-ocr/bros-base-uncased")
+
+        >>> encoding = processor("Hello, my dog is cute", add_special_tokens=False, return_tensors="pt")
+
+        >>> bbox = torch.tensor([[[0, 0, 1, 1]]]).repeat(1, encoding["input_ids"].shape[-1], 1)
+        >>> bbox = bbox[:, :, [0, 1, 2, 1, 2, 3, 0, 3]]
+        >>> encoding["bbox"] = bbox
+
+        >>> outputs = model(**encoding)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -983,11 +978,7 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1004,9 +995,28 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> import torch
+        >>> from transformers import BrosProcessor, BrosForTokenClassification
+
+        >>> processor = BrosProcessor.from_pretrained("naver-clova-ocr/bros-base-uncased")
+
+        >>> model = BrosForTokenClassification.from_pretrained("naver-clova-ocr/bros-base-uncased")
+
+        >>> encoding = processor("Hello, my dog is cute", add_special_tokens=False, return_tensors="pt")
+
+        >>> bbox = torch.tensor([[[0, 0, 1, 1]]]).repeat(1, encoding["input_ids"].shape[-1], 1)
+        >>> bbox = bbox[:, :, [0, 1, 2, 1, 2, 3, 0, 3]]
+        >>> encoding["bbox"] = bbox
+
+        >>> outputs = model(**encoding)
+        ```"""
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bros(
@@ -1086,11 +1096,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=BrosSpadeOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1108,9 +1114,27 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], BrosSpadeOutput]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> import torch
+        >>> from transformers import BrosProcessor, BrosSpadeEEForTokenClassification
+
+        >>> processor = BrosProcessor.from_pretrained("naver-clova-ocr/bros-base-uncased")
+
+        >>> model = BrosSpadeEEForTokenClassification.from_pretrained("naver-clova-ocr/bros-base-uncased")
+
+        >>> encoding = processor("Hello, my dog is cute", add_special_tokens=False, return_tensors="pt")
+
+        >>> bbox = torch.tensor([[[0, 0, 1, 1]]]).repeat(1, encoding["input_ids"].shape[-1], 1)
+        >>> bbox = bbox[:, :, [0, 1, 2, 1, 2, 3, 0, 3]]
+        >>> encoding["bbox"] = bbox
+
+        >>> outputs = model(**encoding)
+        ```"""
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bros(
@@ -1202,11 +1226,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(BROS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1223,9 +1243,26 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> import torch
+        >>> from transformers import BrosProcessor, BrosSpadeELForTokenClassification
+
+        >>> processor = BrosProcessor.from_pretrained("naver-clova-ocr/bros-base-uncased")
+
+        >>> model = BrosSpadeELForTokenClassification.from_pretrained("naver-clova-ocr/bros-base-uncased")
+
+        >>> encoding = processor("Hello, my dog is cute", add_special_tokens=False, return_tensors="pt")
+
+        >>> bbox = torch.tensor([[[0, 0, 1, 1]]]).repeat(1, encoding["input_ids"].shape[-1], 1)
+        >>> bbox = bbox[:, :, [0, 1, 2, 1, 2, 3, 0, 3]]
+        >>> encoding["bbox"] = bbox
+
+        >>> outputs = model(**encoding)
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.bros(
