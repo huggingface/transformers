@@ -31,7 +31,7 @@ The abstract from the paper is the following:
 This model can also be used with TTS checkpoints from [Massively Multilingual Speech (MMS)](https://arxiv.org/abs/2305.13516) 
 as these checkpoints use the same architecture and a slightly modified tokenizer.
 
-This model was contributed by [Matthijs](https://huggingface.co/Matthijs). The original code can be found [here](https://github.com/jaywalnut310/vits).
+This model was contributed by [Matthijs](https://huggingface.co/Matthijs) and [sanchit-gandhi](https://huggingface.co/sanchit-gandhi). The original code can be found [here](https://github.com/jaywalnut310/vits).
 
 ## Model Usage
 
