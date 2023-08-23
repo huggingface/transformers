@@ -14,6 +14,7 @@
 # limitations under the License.
 """ Testing suite for the PyTorch BioGPT model. """
 
+import inspect
 import math
 import unittest
 
@@ -414,6 +415,48 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    # Overwritten because BioGPT applies a scaling factor on the input embeddings, when computed from the input_ids
+    def test_generate_from_inputs_embeds_decoder_only(self):
+        # When supported, tests that the decoder model can generate from `inputs_embeds` instead of `input_ids`
+        for model_class in self.all_generative_model_classes:
+            config, input_ids, _, _ = self._get_input_ids_and_config()
+            config.pad_token_id = config.eos_token_id = -1  # ignore padding/eos effects in the test
+
+            # This test is for decoder-only models (encoder-decoder models have native input embeddings support in the
+            # decoder)
+            if config.is_encoder_decoder:
+                continue
+
+            # Skip models without support
+            model = model_class(config).to(torch_device).eval()
+            if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
+                continue
+
+            # Traditional way of generating text
+            outputs_from_ids = model.generate(input_ids)
+            self.assertEqual(outputs_from_ids.shape, (2, 20))
+
+            # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output)
+            inputs_embeds = model.get_input_embeddings()(input_ids) * model.biogpt.embed_scale
+            outputs_from_embeds = model.generate(input_ids, inputs_embeds=inputs_embeds)
+            self.assertListEqual(outputs_from_ids.tolist(), outputs_from_embeds.tolist())
+
+            # But if we pass different inputs_embeds, we should get different outputs
+            torch.manual_seed(0)
+            random_embeds = torch.rand_like(inputs_embeds) * model.biogpt.embed_scale
+            outputs_from_rand_embeds = model.generate(input_ids, inputs_embeds=random_embeds)
+            with self.assertRaises(AssertionError):
+                self.assertListEqual(outputs_from_rand_embeds.tolist(), outputs_from_embeds.tolist())
+
+            # input_ids is not a required input -- if we don't pass it, the newly generated tokens will be the same
+            outputs_from_embeds_wo_ids = model.generate(
+                inputs_embeds=inputs_embeds, max_new_tokens=20 - inputs_embeds.shape[1]
+            )
+            self.assertListEqual(
+                outputs_from_embeds[:, inputs_embeds.shape[1] :].tolist(),
+                outputs_from_embeds_wo_ids[:, 1:].tolist(),
+            )
 
 
 @require_torch
