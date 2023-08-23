@@ -14,44 +14,37 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Visual Question Answering
+# 시각적 질문 응답 [[visual-question-answering]]
 
 [[open-in-colab]]
 
-Visual Question Answering (VQA) is the task of answering open-ended questions based on an image. 
-The input to models supporting this task is typically a combination of an image and a question, and the output is an 
-answer expressed in natural language.
+시각적 질문 응답(VQA)은 이미지를 기반으로 개방형 질문에 대답하는 작업입니다. 이 작업을 지원하는 모델의 입력은 이미지와 질문의 조합이며, 출력은 자연어로 표현된 답변입니다.
 
-Some noteworthy use case examples for VQA include:
-* Accessibility applications for visually impaired individuals.
-* Education: posing questions about visual materials presented in lectures or textbooks. VQA can also be utilized in interactive museum exhibits or historical sites.
-* Customer service and e-commerce: VQA can enhance user experience by letting users ask questions about products. 
-* Image retrieval: VQA models can be used to retrieve images with specific characteristics. For example, the user can ask "Is there a dog?" to find all images with dogs from a set of images.
+VQA의 주요 사용 사례는 다음과 같습니다:
+* 시각 장애인을 위한 접근성 애플리케이션.
+* 교육: 강의나 교과서에 제시된 시각 자료에 대한 질문 제기.
+* 고객 서비스 및 전자 상거래: VQA는 사용자의 질문을 통해 사용자 경험을 향상시킬 수 있습니다.
+* 이미지 검색: VQA 모델을 사용하여 이미지 내의 특정 특성을 검색할 수 있습니다.
 
-In this guide you'll learn how to:
+이 가이드에서는 다음을 배울 수 있습니다:
 
-- Fine-tune a classification VQA model, specifically [ViLT](../model_doc/vilt), on the [`Graphcore/vqa` dataset](https://huggingface.co/datasets/Graphcore/vqa).
-- Use your fine-tuned ViLT for inference.
-- Run zero-shot VQA inference with a generative model, like BLIP-2.
+- VQA 모델 중 하나인 ViLT를 Graphcore/vqa 데이터셋에서 미세조정하는 방법.
+- 미세 조정된 ViLT 모델로 추론하는 방법.
+- BLIP-2 같은 생성 모델로 제로샷 VQA 추론을 실행하는 방법.
 
-## Fine-tuning ViLT
+## ViLT 미세 조정 [[finetuning-vilt]]
 
-ViLT model incorporates text embeddings into a Vision Transformer (ViT), allowing it to have a minimal design for 
-Vision-and-Language Pre-training (VLP). This model can be used for several downstream tasks. For the VQA task, a classifier 
-head is placed on top (a linear layer on top of the final hidden state of the `[CLS]` token) and randomly initialized. 
-Visual Question Answering is thus treated as a **classification problem**.
+ViLT는 Vision Transformer (ViT) 내에 텍스트 임베딩을 포함하여 Vision-and-Language 사전 훈련(VLP)을 위한 기본 디자인을 제공합니다. VQA 작업에서는 `[CLS]` 토큰의 최종 상태 위에 분류 헤더가 있으며 초기화되어야 합니다.
 
-More recent models, such as BLIP, BLIP-2, and InstructBLIP, treat VQA as a generative task. Later in this guide we 
-illustrate how to use them for zero-shot VQA inference. 
+최근의 BLIP, BLIP-2, InstructBLIP와 같은 모델들은 VQA를 생성 작업으로 간주합니다. 이 가이드의 후반부에서는 이러한 모델을 사용하여 제로샷 VQA 추론을 실행하는 방법에 대해 설명하겠습니다.
 
-Before you begin, make sure you have all the necessary libraries installed. 
+시작하기 전 필요한 모든 라이브러리를 설치했는지 확인하세요.
 
 ```bash
 pip install -q transformers datasets
 ```
 
-We encourage you to share your model with the community. Log in to your Hugging Face account to upload it to the 🤗 Hub.
-When prompted, enter your token to log in:
+Hugging Face 계정에 로그인하여 모델을 공유하십시오.
 
 ```py
 >>> from huggingface_hub import notebook_login
@@ -59,23 +52,19 @@ When prompted, enter your token to log in:
 >>> notebook_login()
 ```
 
-Let's define the model checkpoint as a global variable.
+모델 체크포인트를 전역 변수로 선언합니다.
 
 ```py
 >>> model_checkpoint = "dandelin/vilt-b32-mlm"
 ```
 
-## Load the data
+## 데이터 로딩 [[load-the-data]]
 
-For illustration purposes, in this guide we use a very small sample of the annotated visual question answering `Graphcore/vqa` dataset. 
-You can find the full dataset on [🤗 Hub](https://huggingface.co/datasets/Graphcore/vqa).
+이 가이드에서는 `Graphcore/vqa` 데이터셋의 작은 샘플을 사용합니다. 전체 데이터셋은 Hugging Face 허브에서 확인할 수 있습니다.
 
-As an alternative to the [`Graphcore/vqa` dataset](https://huggingface.co/datasets/Graphcore/vqa), you can download the 
-same data manually from the official [VQA dataset page](https://visualqa.org/download.html). If you prefer to follow the 
-tutorial with your custom data, check out how to [Create an image dataset](https://huggingface.co/docs/datasets/image_dataset#loading-script)
-guide in the 🤗 Datasets documentation.  
+공식 VQA 데이터셋 페이지에서 동일한 데이터를 수동으로 다운로드할 수도 있습니다. 이 가이드를 따라 사용자 지정 데이터로 작업하려면 Hugging Face 데이터셋 문서를 참조하십시오.
 
-Let's load the first 200 examples from the validation split and explore the dataset's features:  
+검증 데이터의 처음 200개 항목을 불러와 데이터셋의 특성을 확인하십시오.
 
 ```python
 >>> from datasets import load_dataset
@@ -88,7 +77,7 @@ Dataset({
 })
 ```
 
-Let's take a look at an example to understand the dataset's features:
+하나의 예제로 데이터셋의 특성을 이해해봅시다.
 
 ```py
 >>> dataset[0]
@@ -104,22 +93,20 @@ Let's take a look at an example to understand the dataset's features:
    0.30000001192092896]}}
 ```
 
-The features relevant to the task include: 
-* `question`: the question to be answered from the image
-* `image_id`: the path to the image the question refers to
-* `label`: the annotations
+데이터셋에는 다음과 같은 특성이 포함되어 있습니다:
+* `question`: 이미지에 기반한 답변이 필요한 질문
+* `image_id`: 질문과 관련된 이미지의 경로
+* `label`: 주석
 
-We can remove the rest of the features as they won't be necessary: 
+나머지 특성들은 필요하지 않기 때문에 삭제할 수 있습니다:
 
 ```py 
 >>> dataset = dataset.remove_columns(['question_type', 'question_id', 'answer_type'])
 ```
 
-As you can see, the `label` feature contains several answers to the same question (called `ids` here) collected by different human annotators. 
-This is because the answer to a question can be subjective. In this case, the question is "where is he looking?". Some people 
-annotated this with "down", others with "at table", another one with "skateboard", etc. 
+`label` 특성은 동일한 질문에 대한 여러 답변을 포함할 수 있으며, 이는 다른 주석자들로부터 수집되었습니다. 질문의 답변은 주관적일 수 있습니다. 이 경우 질문은 "그는 어디를 보고 있나요?" 입니다. 어떤 사람들은 "아래"로 주석을 달았고, 다른 사람들은 "테이블에서"나 "스케이트보드" 등으로 주석을 달았습니다.
 
-Take a look at the image and consider which answer would you give:
+아래의 이미지를 보고 어떤 답변을 선택할 것인지 고려해 보세요:
 
 ```python
 >>> from PIL import Image
@@ -132,15 +119,11 @@ Take a look at the image and consider which answer would you give:
      <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/vqa-example.png" alt="VQA Image Example"/>
 </div>
 
-Due to the questions' and answers' ambiguity, datasets like this are treated as a multi-label classification problem (as 
-multiple answers are possibly valid). Moreover, rather than just creating a one-hot encoded vector, one creates a 
-soft encoding, based on the number of times a certain answer appeared in the annotations.
+질문과 답변의 모호성으로 인해 이러한 데이터셋은 여러 개의 답변이 가능하므로 다중 레이블 분류 문제로 처리됩니다. 게다가, one-hot 인코딩 벡터를 생성하기보다는 주석에서 특정 답변이 나타나는 횟수를 기반으로 소프트 인코딩을 생성합니다.
 
-For instance, in the example above, because the answer "down" is selected way more often than other answers, it has a 
-score (called `weight` in the dataset) of 1.0, and the rest of the answers have scores < 1.0. 
+예를 들어, 위의 예에서 "아래"라는 답변이 다른 답변보다 훨씬 더 자주 선택되었기 때문에, 그것은 데이터셋에서 `weight`라고 불리는 점수로 1.0을 가지며, 나머지 답변들은 1.0 미만의 점수를 가집니다.
 
-To later instantiate the model with an appropriate classification head, let's create two dictionaries: one that maps 
-the label name to an integer and vice versa:
+적절한 분류 헤더로 모델을 나중에 인스턴스화하기 위해 레이블 이름을 정수에 매핑하고 그 반대의 매핑을 하는 두 개의 사전을 생성합시다:
 
 ```py
 >>> import itertools
@@ -153,7 +136,7 @@ the label name to an integer and vice versa:
 >>> id2label = {idx: label for label, idx in label2id.items()} 
 ```
 
-Now that we have the mappings, we can replace the string answers with their ids, and flatten the dataset for a more convenient further preprocessing. 
+이제 매핑이 완료되었으므로 문자열 답변을 해당 id로 교체하고, 데이터셋을 더 편리한 후처리를 위해 편평화 할 수 있습니다.
 
 ```python
 >>> def replace_ids(inputs):
@@ -170,10 +153,10 @@ Now that we have the mappings, we can replace the string answers with their ids,
  'label.weights': Sequence(feature=Value(dtype='float64', id=None), length=-1, id=None)}
 ```
 
-## Preprocessing data
+## 데이터 전처리 [[preprocessing-data]]
 
-The next step is to load a ViLT processor to prepare the image and text data for the model. 
-[`ViltProcessor`] wraps a BERT tokenizer and ViLT image processor into a convenient single processor:
+다음 단계는 모델을 위해 이미지와 텍스트 데이터를 준비하기 위해 ViLT 프로세서를 로드하는 것입니다. 
+[`ViltProcessor`]는 BERT 토크나이저와 ViLT 이미지 프로세서를 편리한 단일 프로세서로 래핑합니다:
 
 ```py 
 >>> from transformers import ViltProcessor
@@ -181,15 +164,12 @@ The next step is to load a ViLT processor to prepare the image and text data for
 >>> processor = ViltProcessor.from_pretrained(model_checkpoint)
 ```
 
-To preprocess the data we need to encode the images and questions using the [`ViltProcessor`]. The processor will use 
-the [`BertTokenizerFast`] to tokenize the text and create `input_ids`, `attention_mask` and `token_type_ids` for the text data. 
-As for images, the processor will leverage [`ViltImageProcessor`] to resize and normalize the image, and create `pixel_values` and `pixel_mask`.
+데이터를 전처리하려면 이미지와 질문을 [`ViltProcessor`]로 인코딩해야 합니다. 프로세서는 텍스트를 토크나이즈하고 텍스트 데이터를 위해 `input_ids`, `attention_mask` 및 `token_type_ids`를 생성하는데 [`BertTokenizerFast`]를 사용합니다.
+이미지의 경우, 프로세서는 이미지를 크기 조정하고 정규화하며, `pixel_values`와 `pixel_mask`를 생성하는데 [`ViltImageProcessor`]를 활용합니다.
 
-All these preprocessing steps are done under the hood, we only need to call the `processor`. However, we still need to 
-prepare the target labels. In this representation, each element corresponds to a possible answer (label). For correct answers, the element holds 
-their respective score (weight), while the remaining elements are set to zero.
+이러한 전처리 단계는 모두 내부에서 이루어지므로, `processor`를 호출하기만 하면 됩니다. 그러나, 우리는 여전히 타겟 레이블을 준비해야 합니다. 이 표현에서, 각 요소는 가능한 답변(레이블)에 해당합니다. 정확한 답변의 경우, 요소는 해당 점수(무게)를 유지하며, 나머지 요소는 0으로 설정됩니다.
 
-The following function applies the `processor` to the images and questions and formats the labels as described above:
+다음 함수는 이미지와 질문에 `processor`를 적용하고 위에서 설명한대로 레이블을 형식화합니다:
 
 ```py
 >>> import torch
@@ -219,8 +199,7 @@ The following function applies the `processor` to the images and questions and f
 ...     return encoding
 ```
 
-To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.map`] function. You can speed up `map` by 
-setting `batched=True` to process multiple elements of the dataset at once. At this point, feel free to remove the columns you don't need.
+전체 데이터셋에 전처리 함수를 적용하려면 🤗 Datasets의 [`~datasets.map`] 함수를 사용하십시오. `batched=True`를 설정하여 데이터셋의 여러 요소를 한 번에 처리함으로써 `map`을 더 빠르게 할 수 있습니다. 이 시점에서 필요하지 않은 열은 제거하십시오.
 
 ```py
 >>> processed_dataset = flat_dataset.map(preprocess_data, batched=True, remove_columns=['question','question_type',  'question_id', 'image_id', 'answer_type', 'label.ids', 'label.weights'])
@@ -231,7 +210,7 @@ Dataset({
 })
 ```
 
-As a final step, create a batch of examples using [`DefaultDataCollator`]:
+마지막 단계로, [`DefaultDataCollator`]를 사용하여 예제의 배치를 생성합니다:
 
 ```py
 >>> from transformers import DefaultDataCollator
@@ -239,10 +218,9 @@ As a final step, create a batch of examples using [`DefaultDataCollator`]:
 >>> data_collator = DefaultDataCollator()
 ```
 
-## Train the model
+## 모델 훈련 [[train-the-model]]
 
-You’re ready to start training your model now! Load ViLT with [`ViltForQuestionAnswering`]. Specify the number of labels 
-along with the label mappings:
+이제 모델을 훈련하기 위해 준비되었습니다! [`ViltForQuestionAnswering`]으로 ViLT를 로드하십시오. 레이블의 수와 레이블 매핑을 지정합니다:
 
 ```py
 >>> from transformers import ViltForQuestionAnswering
@@ -250,9 +228,9 @@ along with the label mappings:
 >>> model = ViltForQuestionAnswering.from_pretrained(model_checkpoint, num_labels=len(id2label), id2label=id2label, label2id=label2id)
 ```
 
-At this point, only three steps remain:
+이 시점에서는 다음 세 단계만 남았습니다:
 
-1. Define your training hyperparameters in [`TrainingArguments`]:
+1. [`TrainingArguments`]에서 교육 하이퍼파라미터를 정의합니다.
 
 ```py
 >>> from transformers import TrainingArguments
@@ -272,7 +250,7 @@ At this point, only three steps remain:
 ... )
 ```
 
-2. Pass the training arguments to [`Trainer`] along with the model, dataset, processor, and data collator.
+2. 모델, 데이터셋, 프로세서, 데이터 콜레이터와 함께 교육 인수를 [`Trainer`]에 전달합니다.
 
 ```py
 >>> from transformers import Trainer
@@ -286,22 +264,21 @@ At this point, only three steps remain:
 ... )
 ```
 
-3. Call [`~Trainer.train`] to finetune your model.
+3. [`~Trainer.train`]을 호출하여 모델을 미세 조정합니다.
 
 ```py
 >>> trainer.train() 
 ```
 
-Once training is completed, share your model to the Hub with the [`~Trainer.push_to_hub`] method to share your final model on the 🤗 Hub:
+훈련이 완료되면, [`~Trainer.push_to_hub`] 메소드를 사용하여 🤗 허브에 모델을 공유하십시오.
 
 ```py
 >>> trainer.push_to_hub()
 ```
 
-## Inference
+## 추론 [[inference]]
 
-Now that you have fine-tuned a ViLT model, and uploaded it to the 🤗 Hub, you can use it for inference. The simplest
-way to try out your fine-tuned model for inference is to use it in a [`Pipeline`].
+ViLT 모델을 미세 조정하고 🤗 허브에 업로드한 후에는 추론에 사용할 수 있습니다. 미세 조정된 모델을 추론에 사용해보는 가장 간단한 방법은 [`Pipeline`]에서 사용하는 것입니다.
 
 ```py
 >>> from transformers import pipeline
@@ -309,8 +286,7 @@ way to try out your fine-tuned model for inference is to use it in a [`Pipeline`
 >>> pipe = pipeline("visual-question-answering", model="MariaK/vilt_finetuned_200")
 ```
 
-The model in this guide has only been trained on 200 examples, so don't expect a lot from it. Let's see if it at least 
-learned something from the data and take the first example from the dataset to illustrate inference:
+이 가이드의 모델은 200개의 예제에서만 훈련되었으므로 그다지 많은 것을 기대하지 마십시오. 데이터셋에서 첫 번째 예제를 사용하여 추론을 설명해 보겠습니다:
 
 ```py
 >>> example = dataset[0]
@@ -322,12 +298,12 @@ learned something from the data and take the first example from the dataset to i
 [{'score': 0.5498199462890625, 'answer': 'down'}]
 ```
 
-Even though not very confident, the model indeed has learned something. With more examples and longer training, you'll get far better results!
+비록 매우 확신하지는 않지만, 모델은 실제로 무언가를 배웠습니다. 더 많은 예제와 더 긴 훈련 기간이 주어지면 훨씬 더 나은 결과를 얻을 수 있습니다!
 
-You can also manually replicate the results of the pipeline if you'd like:
-1. Take an image and a question, prepare them for the model using the processor from your model.
-2. Forward the result or preprocessing through the model.
-3. From the logits, get the most likely answer's id, and find the actual answer in the `id2label`.
+원한다면 파이프라인의 결과를 수동으로 복제할 수도 있습니다:
+1. 이미지와 질문을 가져와서 프로세서를 사용하여 모델에 준비합니다.
+2. 전처리의 결과나 모델을 통해 전달합니다.
+3. 로짓에서 가장 가능성 있는 답변의 id를 가져와서 `id2label`에서 실제 답변을 찾습니다.
 
 ```py
 >>> processor = ViltProcessor.from_pretrained("MariaK/vilt_finetuned_200")
@@ -350,15 +326,12 @@ You can also manually replicate the results of the pipeline if you'd like:
 Predicted answer: down
 ```
 
-## Zero-shot VQA
+## 제로샷 VQA [[zeroshot-vqa]]
 
-The previous model treated VQA as a classification task. Some recent models, such as BLIP, BLIP-2, and InstructBLIP approach 
-VQA as a generative task. Let's take [BLIP-2](../model_doc/blip-2) as an example. It introduced a new visual-language pre-training 
-paradigm in which any combination of pre-trained vision encoder and LLM can be used (learn more in the [BLIP-2 blog post](https://huggingface.co/blog/blip-2)). 
-This enables achieving state-of-the-art results on multiple visual-language tasks including visual question answering. 
+이전 모델은 VQA를 분류 작업으로 처리했습니다. BLIP, BLIP-2 및 InstructBLIP와 같은 최근의 모델은 VQA를 생성 작업으로 접근합니다. [BLIP-2](../model_doc/blip-2)를 예로 들어 보겠습니다. 이는 사전 훈련된 비전 인코더와 LLM의 모든 조합을 사용할 수 있는 새로운 시각-언어 사전 훈련 패러다임을 도입했습니다([BLIP-2 블로그 포스트](https://huggingface.co/blog/blip-2)에서 더 알아보세요).
+이를 통해 시각적 질문 응답을 포함한 여러 시각-언어 작업에서 최첨단 결과를 달성할 수 있습니다.
 
-Let's illustrate how you can use this model for VQA. First, let's load the model. Here we'll explicitly send the model to a 
-GPU, if available, which we didn't need to do earlier when training, as [`Trainer`] handles this automatically: 
+이 모델을 어떻게 VQA에 사용할 수 있는지 설명해 보겠습니다. 먼저 모델을 로드해 보겠습니다. 여기서는 GPU가 사용 가능한 경우 모델을 명시적으로 GPU로 전송할 것이며, 이전에는 교육할 때 필요하지 않았습니다. 왜냐하면 [`Trainer`]가 이를 자동으로 처리하기 때문입니다:
 
 ```py
 >>> from transformers import AutoProcessor, Blip2ForConditionalGeneration
@@ -370,7 +343,7 @@ GPU, if available, which we didn't need to do earlier when training, as [`Traine
 >>> model.to(device)
 ```
 
-The model takes image and text as input, so let's use the exact same image/question pair from the first example in the VQA dataset: 
+모델은 이미지와 텍스트를 입력으로 받으므로, VQA 데이터셋의 첫 번째 예제에서와 동일한 이미지/질문 쌍을 사용해 보겠습니다:
 
 ```py 
 >>> example = dataset[0]
@@ -378,13 +351,13 @@ The model takes image and text as input, so let's use the exact same image/quest
 >>> question = example['question']
 ```
 
-To use BLIP-2 for visual question answering task, the textual prompt has to follow a specific format: `Question: {} Answer:`.
+BLIP-2를 시각적 질문 응답 작업에 사용하려면 텍스트 프롬프트가 `Question: {} Answer:` 형식을 따라야 합니다.
 
 ```py
 >>> prompt = f"Question: {question} Answer:" 
 ```
 
-Now we need to preprocess the image/prompt with the model's processor, pass the processed input through the model, and decode the output:
+이제 모델의 프로세서로 이미지/프롬프트를 전처리하고, 처리된 입력을 모델을 통해 전달하고, 출력을 디코드해야 합니다:
 
 ```py
 >>> inputs = processor(image, text=prompt, return_tensors="pt").to(device, torch.float16)
@@ -395,7 +368,4 @@ Now we need to preprocess the image/prompt with the model's processor, pass the 
 "He is looking at the crowd" 
 ```
 
-As you can see, the model recognized the crowd, and the direction of the face (looking down), however, it seems to miss 
-the fact the crowd is behind the skater. Still, in cases where acquiring human-annotated datasets is not feasible, this 
-approach can quickly produce useful results.
- 
+보시다시피, 모델은 군중을 인식하고, 얼굴의 방향(아래쪽을 보고 있음)을 인식했지만, 군중이 스케이터 뒤에 있다는 사실을 놓쳤습니다. 그러나 인간이 주석을 단 데이터셋을 얻을 수 없는 경우에, 이 접근법은 빠르게 유용한 결과를 생성할 수 있습니다.
