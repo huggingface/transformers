@@ -1756,7 +1756,8 @@ class GenerationTesterMixin:
             config, input_ids, _, _ = self._get_input_ids_and_config()
 
             # Ignore:
-            # a) pad/eos effects (can't detect them after embedding),
+            # a) eos (to always output 20 tokens) and pad (so we don't try to infer the attn mask from the input_ids,
+            #   which would cause a mismatch),
             config.pad_token_id = config.eos_token_id = -1
             # b) embedding scaling, the scaling factor applied after embeding from input_ids (requires knowledge of the
             #   variable that holds the scaling factor, which is model-dependent)
