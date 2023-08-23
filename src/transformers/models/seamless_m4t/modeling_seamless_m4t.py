@@ -3892,5 +3892,3 @@ class SeamlessM4TForCausalLM(SeamlessM4TPreTrainedModel):
             )
         return reordered_past
 
-
-c
