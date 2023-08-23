@@ -1752,6 +1752,7 @@ class GenerationTesterMixin:
 
     def test_generate_from_inputs_embeds_decoder_only(self):
         # When supported, tests that the decoder model can generate from `inputs_embeds` instead of `input_ids`
+        # if fails, you should probably update the `prepare_inputs_for_generation` function 
         for model_class in self.all_generative_model_classes:
             config, input_ids, _, _ = self._get_input_ids_and_config()
 
