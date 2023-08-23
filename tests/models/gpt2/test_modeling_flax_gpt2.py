@@ -202,8 +202,6 @@ class FlaxGPT2ModelTester:
             max_new_tokens=3,
         )
 
-        print(((output_int_att_mask.sequences - output_bool_att_mask.sequences) ** 2).sum())
-
         np.testing.assert_array_equal(
             output_bool_att_mask.sequences,
             output_int_att_mask.sequences,
