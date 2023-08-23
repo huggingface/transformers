@@ -220,13 +220,14 @@ class LlamaTokenizer(PreTrainedTokenizer):
         `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
-        if self.legacy:
-            return self.sp_model.encode(text, out_type=str)
-
-        unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
-        text = self.unk_token + text
         tokens = self.sp_model.encode(text, out_type=str)
-        return tokens[unk_token_length:]
+        if self.legacy or not text.startswith((SPIECE_UNDERLINE, " ")):
+            return tokens
+
+        # 1. Encode string + prefix ex: "<unk> Hey"
+        tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
+        # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
+        return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
