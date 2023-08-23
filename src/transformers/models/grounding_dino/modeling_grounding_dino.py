@@ -122,10 +122,10 @@ if is_timm_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GroundingDINOConfig"
-_CHECKPOINT_FOR_DOC = "idea-research/grg-dino-tiny"
+_CHECKPOINT_FOR_DOC = "idea-research/grounding-dino-tiny"
 
 GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "idea-research/grg-dino-tiny",
+    "idea-research/grounding-dino-tiny",
     # See all Grounding DINO models at https://huggingface.co/models?filter=grounding-dino
 ]
 
