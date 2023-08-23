@@ -270,14 +270,13 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         return input_ids
 
     @property
-    def default_prompt_config(self):
-        template = "{{ message.content }}{{ eos_token }}"
-        return {
-            "template": template,
-            "tokenize_separately": True,
-            "add_special_tokens": False,
-            "max_length": self.model_max_length,
-        }
+    def default_chat_template(self):
+        return (
+            "{% for message in messages %}"
+            "{% if not loop.first %}{{ bos_token}}{% endif %}"
+            "{{ sep_token }}{{ message.content }} {{ eos_token }}"
+            "{% endfor %}"
+        )
 
     # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:

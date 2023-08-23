@@ -192,11 +192,5 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         return input_ids
 
     @property
-    def default_prompt_config(self):
-        template = "{{ message.content }}{{ eos_token }}"
-        return {
-            "template": template,
-            "tokenize_separately": True,
-            "add_special_tokens": False,
-            "max_length": self.model_max_length,
-        }
+    def default_chat_template(self):
+        return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"

@@ -761,14 +761,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return input_ids
 
     @property
-    def default_prompt_config(self):
-        template = "{{ message.content }}{{ eos_token }}"
-        return {
-            "template": template,
-            "tokenize_separately": True,
-            "add_special_tokens": False,
-            "max_length": self.model_max_length,
-        }
+    def default_chat_template(self):
+        return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         self.set_prefix_tokens(task=task, language=language, predict_timestamps=not no_timestamps)

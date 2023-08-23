@@ -35,7 +35,6 @@ from packaging import version
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
-from .prompt_utils import PromptConfig
 from .utils import (
     ExplicitEnum,
     PaddingStrategy,
@@ -1561,29 +1560,20 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             {}
         )  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
         self._in_target_context_manager = False
-        self.prompt_config = PromptConfig.from_dict({}, **kwargs) if self.can_generate else None
+        self.chat_template = kwargs.pop("chat_template", None)
+
         super().__init__(**kwargs)
 
     @property
-    def can_generate(self):
-        # TODO Figure out how to get this as the tokenizer
-        return True
-
-    @property
-    def default_prompt_config(self):
-        template = (
+    def default_chat_template(self):
+        return (
             "{% for message in messages %}"
-            "{% if message.role == 'system' %}{{[SYS]}} {{message.text }} {{ [/SYS]] }}"
-            "{% elif message.role == 'user' %}{{ [USER_MSG] }} {{ message.text }} {{ [/USER_MSG] }}"
-            "{% elif message.role == 'assistant' %}{{ [ASST_MSG] }} {{ message.text }} {{ [/ASST_MSG] }}"
+            "{% if message.role == 'system' %}{{ '[SYS]' }} {{message.text }} {{ '[/SYS]]' }}"
+            "{% elif message.role == 'user' %}{{ '[USER_MSG]' }} {{ message.text }} {{ '[/USER_MSG]' }}"
+            "{% elif message.role == 'assistant' %}{{ '[ASST_MSG]' }} {{ message.text }} {{ '[/ASST_MSG]' }}"
             "{% endif %}"
             "{% endfor %}"
         )
-        return {
-            "template": template,
-            "tokenize_separately": False,
-            "add_special_tokens": False,
-        }
 
     @property
     def max_len_single_sentence(self) -> int:
@@ -1655,21 +1645,21 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     def build_conversation_input_ids(
         self,
         conversation: Union[List[Dict[str, str]], "Conversation"],
-        prompt_config: Optional[PromptConfig] = None,
-        **kwargs,
+        chat_template: Optional[str] = None,
+        **tokenizer_kwargs,
     ) -> List[int]:
         """
         Converts a Conversation object or a list of {"role", "content"} dictionaries to a list of token ids. This
-        method is intended for use with chat models, and will read the model's PromptConfig object to determine the
-        format and control tokens to use when converting. When the PromptConfig is not present, it may fall back to the
-        default_prompt_config specified at the class level.
+        method is intended for use with chat models, and will read the tokenizers's chat_template attribute to
+        determine the format and control tokens to use when converting. When chat_template is None, it may fall back to
+        the default_chat_template specified at the class level.
 
         Args:
             conversation (Union[List[Dict[str, str]], "Conversation"]): A Conversation object or list of dicts
             with "role" and "content" keys, representing the chat history so far.
-            prompt_config (Optional[PromptConfig], *optional*): A PromptConfig object to use for this conversion. If
-            this is not passed, the model's prompt config will be used instead.
-            **kwargs: Additional kwargs. These will be interpreted as prompt config kwargs.
+            chat_template (str, *optional*): A Jinja template to use for this conversion. If
+            this is not passed, the model's default chat template will be used instead.
+            **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
 
         Returns:
             List[int]: A list of token ids representing the tokenized chat so far, including control tokens. This
@@ -1684,47 +1674,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # Indicates it's a Conversation object
             conversation = conversation.messages
 
-        # priority: `prompt_config` argument > `model.prompt_config` (the default generation config)
-        if prompt_config is None:
-            prompt_config = self.prompt_config
+        # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template`
+        if chat_template is None:
+            if self.chat_template is not None:
+                chat_template = self.chat_template
+            else:
+                chat_template = self.default_chat_template
 
-        prompt_config.update(**kwargs)
-
-        if prompt_config.default_system_prompt is not None and (
-            len(conversation) == 0 or conversation.messages[0]["role"] != "system"
-        ):
-            conversation = [{"role": "system", "content": prompt_config.default_system_prompt}] + conversation.messages
-
-        tokenize_separately = prompt_config.tokenize_separately
-        if tokenize_separately is None:
-            tokenize_separately = self.default_prompt_config.get("tokenize_separately", True)
-        add_special_tokens = prompt_config.add_special_tokens
-        if add_special_tokens is None:
-            add_special_tokens = self.default_prompt_config.get("add_special_tokens", False)
-        template = prompt_config.template
-        if template is None:
-            template = self.default_prompt_config.get("template", None)
-            if template is None:
-                raise ValueError("No template specified in either PromptConfig or default_prompt_config!")
-        template_args = prompt_config.template_args
-        if template_args is None:
-            template_args = self.default_prompt_config.get("template_args", {})
         jinja_env = IncrediblySandboxedEnvironment()
-        template = jinja_env.from_string(template)
-        if tokenize_separately:
-            dialog_tokens = []
-            for idx, message in enumerate(conversation):
-                # TODO Should we just always pass the whole conversation? Do we need the option to tokenize separately
-                #      at all?
-                # TODO Can a malicious value be injected in the saved template_args value? What limitations are there?
-                rendered = template.render(
-                    message=message, message_idx=idx, **template_args, **self.special_tokens_map
-                )
-                tokenized = self.encode(rendered, add_special_tokens=add_special_tokens)
-                dialog_tokens.extend(tokenized)
-        else:
-            rendered = template.render(messages=conversation, **template_args, **self.special_tokens_map)
-            dialog_tokens = self.encode(rendered, add_special_tokens=add_special_tokens)
+        compiled_template = jinja_env.from_string(chat_template)
+
+        rendered = compiled_template.render(messages=conversation, **self.special_tokens_map)
+        dialog_tokens = self.encode(rendered, add_special_tokens=False, **tokenizer_kwargs)
         return dialog_tokens
 
     @classmethod
@@ -2194,20 +2155,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 " fine-tuned or trained."
             )
 
-        # If it is a model with generation capabilities, attempt to load the generation config
-        if tokenizer.can_generate and pretrained_model_name_or_path is not None:
-            try:
-                tokenizer.PromptConfig = PromptConfig.from_pretrained(
-                    pretrained_model_name_or_path,
-                    cache_dir=cache_dir,
-                    local_files_only=local_files_only,
-                    token=token,
-                    **kwargs,
-                )
-            except OSError:
-                logger.info("Prompt config file not found, using default prompt config.")
-                pass
-
         return tokenizer
 
     @staticmethod
@@ -2363,9 +2310,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             legacy_format=legacy_format,
             filename_prefix=filename_prefix,
         )
-
-        if self.can_generate:
-            self.prompt_config.save_pretrained(save_directory)
 
         if push_to_hub:
             self._upload_modified_files(

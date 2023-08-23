@@ -258,12 +258,12 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         return dialog_tokens
 
     @property
-    def default_prompt_config(self):
-        template_args = {"default_system_prompt": DEFAULT_SYSTEM_PROMPT}
-        template = (
-            "{% if message_idx == 0 and message['role'] != 'system' %}"
-            "{{ '<<SYS>>\\n' + default_system_prompt + '\\n<</SYS>>\\n\\n' }}"  # Insert a default sys message
-            "{% endif %}"
+    def default_chat_template(self):
+        return (
+            "{% for message in messages %}"
+            #            "{% if message_idx == 0 and message['role'] != 'system' and default_system_prompt is not none %}"
+            #            "{{ '<<SYS>>\\n' + default_system_prompt + '\\n<</SYS>>\\n\\n' }}"  # Insert a default sys message
+            #            "{% endif %}"
             "{% if message['role'] == 'user' %}"
             "{{ bos_token + '[INST]' + message['content'] + '[/INST]' }}"
             "{% elif message['role'] == 'system' %}"
@@ -271,10 +271,5 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             "{% elif message['role'] == 'assistant' %}"
             "{{ ' '  + message['content'] + ' ' + eos_token }}"
             "{% endif %}"
+            "{% endfor %}"
         )
-        return {
-            "template": template,
-            "template_args": template_args,
-            "tokenize_separately": True,
-            "add_special_tokens": False,
-        }

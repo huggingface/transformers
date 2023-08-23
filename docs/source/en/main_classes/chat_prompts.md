@@ -29,9 +29,3 @@ with wildly different formatting and control tokens for chat. This is the proble
 aims to solve. It allows information about chat formatting and default prompts to be saved and loaded with the model,
 ensuring that the model functions correctly out-of-the-box for inference, as well as allowing other users to fine-tune
 the model further without accidentally changing the chat format and silently hurting performance.
-
-## PromptConfig
-
-[[autodoc]] prompt_utils.PromptConfig
-	- from_pretrained
-	- save_pretrained

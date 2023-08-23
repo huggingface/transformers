@@ -315,18 +315,13 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         return input_ids
 
     @property
-    def default_prompt_config(self):
+    def default_chat_template(self):
         # BlenderBot actually tokenizes messages together with a "  " separator between them, so we try to imitate that
-        template = (
+        return (
             "{% for message in messages %}"
             "{% if message.role == 'user' %}{{ ' ' }}{% endif %}"
             "{{ message.content }}"
             "{% if not loop.last %}{{ '  ' }}{% endif %}"
             "{% endfor %}"
+            "{{ eos_token }}"
         )
-        return {
-            "template": template,
-            "tokenize_separately": False,
-            "add_special_tokens": True,
-            "max_length": self.model_max_length,
-        }

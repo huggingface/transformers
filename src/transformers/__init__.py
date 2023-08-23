@@ -676,7 +676,6 @@ _import_structure = {
         "pipeline",
     ],
     "processing_utils": ["ProcessorMixin"],
-    "prompt_utils": ["PromptConfig"],
     "testing_utils": [],
     "tokenization_utils": ["PreTrainedTokenizer"],
     "tokenization_utils_base": [
@@ -4743,7 +4742,6 @@ if TYPE_CHECKING:
         pipeline,
     )
     from .processing_utils import ProcessorMixin
-    from .prompt_utils import PromptConfig
 
     # Tokenization
     from .tokenization_utils import PreTrainedTokenizer
