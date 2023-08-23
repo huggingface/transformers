@@ -1757,9 +1757,9 @@ class GenerationTesterMixin:
 
             # Ignore:
             # a) pad/eos effects (can't detect them after embedding),
+            config.pad_token_id = config.eos_token_id = -1
             # b) embedding scaling, the scaling factor applied after embeding from input_ids (requires knowledge of the
             #   variable that holds the scaling factor, which is model-dependent)
-            config.pad_token_id = config.eos_token_id = -1
             if hasattr(config, "scale_embedding"):
                 config.scale_embedding = False
 
@@ -1779,7 +1779,6 @@ class GenerationTesterMixin:
 
             # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output)
             inputs_embeds = model.get_input_embeddings()(input_ids)
-
             outputs_from_embeds = model.generate(input_ids, inputs_embeds=inputs_embeds)
             self.assertListEqual(outputs_from_ids.tolist(), outputs_from_embeds.tolist())
 
