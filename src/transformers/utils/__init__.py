@@ -112,6 +112,7 @@ from .import_utils import (
     is_datasets_available,
     is_decord_available,
     is_detectron2_available,
+    is_essentia_available,
     is_faiss_available,
     is_flax_available,
     is_ftfy_available,
@@ -130,6 +131,7 @@ from .import_utils import (
     is_pandas_available,
     is_peft_available,
     is_phonemizer_available,
+    is_pretty_midi_available,
     is_protobuf_available,
     is_psutil_available,
     is_py3nvml_available,
@@ -179,13 +181,17 @@ from .import_utils import (
     requires_backends,
     torch_only_method,
 )
+from .peft_utils import (
+    ADAPTER_CONFIG_NAME,
+    ADAPTER_SAFE_WEIGHTS_NAME,
+    ADAPTER_WEIGHTS_NAME,
+    check_peft_version,
+    find_adapter_config_file,
+)
 
 
 WEIGHTS_NAME = "pytorch_model.bin"
 WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
-ADAPTER_CONFIG_NAME = "adapter_config.json"
-ADAPTER_WEIGHTS_NAME = "adapter_model.bin"
-ADAPTER_SAFE_WEIGHTS_NAME = "adapter_model.safetensors"
 TF2_WEIGHTS_NAME = "tf_model.h5"
 TF2_WEIGHTS_INDEX_NAME = "tf_model.h5.index.json"
 TF_WEIGHTS_NAME = "model.ckpt"

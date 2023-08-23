@@ -19,6 +19,8 @@
     title: Train with a script
   - local: accelerate
     title: Set up distributed training with 🤗 Accelerate
+  - local: peft
+    title: Load and train adapters with 🤗 PEFT
   - local: model_sharing
     title: Share your model
   - local: transformers_agents
@@ -27,151 +29,150 @@
     title: Generation with LLMs
   title: Tutorials
 - sections:
-  - sections:
-      - local: tasks/sequence_classification
-        title: Text classification
-      - local: tasks/token_classification
-        title: Token classification
-      - local: tasks/question_answering
-        title: Question answering
-      - local: tasks/language_modeling
-        title: Causal language modeling
-      - local: tasks/masked_language_modeling
-        title: Masked language modeling
-      - local: tasks/translation
-        title: Translation
-      - local: tasks/summarization
-        title: Summarization
-      - local: tasks/multiple_choice
-        title: Multiple choice
+  - isExpanded: false
+    sections:
+    - local: tasks/sequence_classification
+      title: Text classification
+    - local: tasks/token_classification
+      title: Token classification
+    - local: tasks/question_answering
+      title: Question answering
+    - local: tasks/language_modeling
+      title: Causal language modeling
+    - local: tasks/masked_language_modeling
+      title: Masked language modeling
+    - local: tasks/translation
+      title: Translation
+    - local: tasks/summarization
+      title: Summarization
+    - local: tasks/multiple_choice
+      title: Multiple choice
     title: Natural Language Processing
-    isExpanded: false
-  - sections:
-      - local: tasks/audio_classification
-        title: Audio classification
-      - local: tasks/asr
-        title: Automatic speech recognition
+  - isExpanded: false
+    sections:
+    - local: tasks/audio_classification
+      title: Audio classification
+    - local: tasks/asr
+      title: Automatic speech recognition
     title: Audio
-    isExpanded: false
-  - sections:
-      - local: tasks/image_classification
-        title: Image classification
-      - local: tasks/semantic_segmentation
-        title: Semantic segmentation
-      - local: tasks/video_classification
-        title: Video classification
-      - local: tasks/object_detection
-        title: Object detection
-      - local: tasks/zero_shot_object_detection
-        title: Zero-shot object detection
-      - local: tasks/zero_shot_image_classification
-        title: Zero-shot image classification
-      - local: tasks/monocular_depth_estimation
-        title: Depth estimation
+  - isExpanded: false
+    sections:
+    - local: tasks/image_classification
+      title: Image classification
+    - local: tasks/semantic_segmentation
+      title: Semantic segmentation
+    - local: tasks/video_classification
+      title: Video classification
+    - local: tasks/object_detection
+      title: Object detection
+    - local: tasks/zero_shot_object_detection
+      title: Zero-shot object detection
+    - local: tasks/zero_shot_image_classification
+      title: Zero-shot image classification
+    - local: tasks/monocular_depth_estimation
+      title: Depth estimation
     title: Computer Vision
-    isExpanded: false
-  - sections:
-      - local: tasks/image_captioning
-        title: Image captioning
-      - local: tasks/document_question_answering
-        title: Document Question Answering
-      - local: tasks/visual_question_answering
-        title: Visual Question Answering
-      - local: tasks/text-to-speech
-        title: Text to speech
+  - isExpanded: false
+    sections:
+    - local: tasks/image_captioning
+      title: Image captioning
+    - local: tasks/document_question_answering
+      title: Document Question Answering
+    - local: tasks/visual_question_answering
+      title: Visual Question Answering
+    - local: tasks/text-to-speech
+      title: Text to speech
     title: Multimodal
-    isExpanded: false
-  - sections:
-      - local: generation_strategies
-        title: Customize the generation strategy
+  - isExpanded: false
+    sections:
+    - local: generation_strategies
+      title: Customize the generation strategy
     title: Generation
-    isExpanded: false
   title: Task Guides
 - sections:
-    - local: fast_tokenizers
-      title: Use fast tokenizers from 🤗 Tokenizers
-    - local: multilingual
-      title: Run inference with multilingual models
-    - local: create_a_model
-      title: Use model-specific APIs
-    - local: custom_models
-      title: Share a custom model
-    - local: sagemaker
-      title: Run training on Amazon SageMaker
-    - local: serialization
-      title: Export to ONNX
-    - local: tflite
-      title: Export to TFLite
-    - local: torchscript
-      title: Export to TorchScript
-    - local: benchmarks
-      title: Benchmarks
-    - local: notebooks
-      title: Notebooks with examples
-    - local: community
-      title: Community resources
-    - local: custom_tools
-      title: Custom Tools and Prompts
-    - local: troubleshooting
-      title: Troubleshoot
+  - local: fast_tokenizers
+    title: Use fast tokenizers from 🤗 Tokenizers
+  - local: multilingual
+    title: Run inference with multilingual models
+  - local: create_a_model
+    title: Use model-specific APIs
+  - local: custom_models
+    title: Share a custom model
+  - local: sagemaker
+    title: Run training on Amazon SageMaker
+  - local: serialization
+    title: Export to ONNX
+  - local: tflite
+    title: Export to TFLite
+  - local: torchscript
+    title: Export to TorchScript
+  - local: benchmarks
+    title: Benchmarks
+  - local: notebooks
+    title: Notebooks with examples
+  - local: community
+    title: Community resources
+  - local: custom_tools
+    title: Custom Tools and Prompts
+  - local: troubleshooting
+    title: Troubleshoot
   title: Developer guides
 - sections:
-    - local: performance
-      title: Overview
-    - sections:
-        - local: perf_train_gpu_one
-          title: Methods and tools for efficient training on a single GPU
-        - local: perf_train_gpu_many
-          title: Multiple GPUs and parallelism
-        - local: perf_train_cpu
-          title: Efficient training on CPU
-        - local: perf_train_cpu_many
-          title: Distributed CPU training
-        - local: perf_train_tpu
-          title: Training on TPUs
-        - local: perf_train_tpu_tf
-          title: Training on TPU with TensorFlow
-        - local: perf_train_special
-          title: Training on Specialized Hardware
-        - local: perf_hardware
-          title: Custom hardware for training
-        - local: hpo_train
-          title: Hyperparameter Search using Trainer API
-      title: Efficient training techniques
-    - sections:
-        - local: perf_infer_cpu
-          title: Inference on CPU
-        - local: perf_infer_gpu_one
-          title: Inference on one GPU
-        - local: perf_infer_gpu_many
-          title: Inference on many GPUs
-        - local: perf_infer_special
-          title: Inference on Specialized Hardware
-      title: Optimizing inference
-    - local: big_models
-      title: Instantiating a big model
-    - local: debugging
-      title: Troubleshooting
-    - local: tf_xla
-      title: XLA Integration for TensorFlow Models
-    - local: perf_torch_compile
-      title: Optimize inference using `torch.compile()`
+  - local: performance
+    title: Overview
+  - sections:
+    - local: perf_train_gpu_one
+      title: Methods and tools for efficient training on a single GPU
+    - local: perf_train_gpu_many
+      title: Multiple GPUs and parallelism
+    - local: perf_train_cpu
+      title: Efficient training on CPU
+    - local: perf_train_cpu_many
+      title: Distributed CPU training
+    - local: perf_train_tpu
+      title: Training on TPUs
+    - local: perf_train_tpu_tf
+      title: Training on TPU with TensorFlow
+    - local: perf_train_special
+      title: Training on Specialized Hardware
+    - local: perf_hardware
+      title: Custom hardware for training
+    - local: hpo_train
+      title: Hyperparameter Search using Trainer API
+    title: Efficient training techniques
+  - sections:
+    - local: perf_infer_cpu
+      title: Inference on CPU
+    - local: perf_infer_gpu_one
+      title: Inference on one GPU
+    - local: perf_infer_gpu_many
+      title: Inference on many GPUs
+    - local: perf_infer_special
+      title: Inference on Specialized Hardware
+    title: Optimizing inference
+  - local: big_models
+    title: Instantiating a big model
+  - local: debugging
+    title: Troubleshooting
+  - local: tf_xla
+    title: XLA Integration for TensorFlow Models
+  - local: perf_torch_compile
+    title: Optimize inference using `torch.compile()`
   title: Performance and scalability
 - sections:
-    - local: contributing
-      title: How to contribute to transformers?
-    - local: add_new_model
-      title: How to add a model to 🤗 Transformers?
-    - local: add_tensorflow_model
-      title: How to convert a 🤗 Transformers model to TensorFlow?
-    - local: add_new_pipeline
-      title: How to add a pipeline to 🤗 Transformers?
-    - local: testing
-      title: Testing
-    - local: pr_checks
-      title: Checks on a Pull Request
+  - local: contributing
+    title: How to contribute to transformers?
+  - local: add_new_model
+    title: How to add a model to 🤗 Transformers?
+  - local: add_tensorflow_model
+    title: How to convert a 🤗 Transformers model to TensorFlow?
+  - local: add_new_pipeline
+    title: How to add a pipeline to 🤗 Transformers?
+  - local: testing
+    title: Testing
+  - local: pr_checks
+    title: Checks on a Pull Request
   title: Contribute
-
 - sections:
   - local: philosophy
     title: Philosophy
@@ -582,6 +583,8 @@
         title: MMS
       - local: model_doc/musicgen
         title: MusicGen
+      - local: model_doc/pop2piano
+        title: Pop2Piano
       - local: model_doc/sew
         title: SEW
       - local: model_doc/sew-d
@@ -641,6 +644,8 @@
         title: GIT
       - local: model_doc/groupvit
         title: GroupViT
+      - local: model_doc/idefics
+        title: IDEFICS
       - local: model_doc/instructblip
         title: InstructBLIP
       - local: model_doc/layoutlm

@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.32.0.dev0"
+__version__ = "4.33.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -28,8 +28,12 @@ from .utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
     is_bitsandbytes_available,
+    is_essentia_available,
     is_flax_available,
     is_keras_nlp_available,
+    is_librosa_available,
+    is_pretty_midi_available,
+    is_scipy_available,
     is_sentencepiece_available,
     is_speech_available,
     is_tensorflow_text_available,
@@ -111,6 +115,8 @@ _import_structure = {
         "is_tensorboard_available",
         "is_wandb_available",
     ],
+    "lib_integrations": [],
+    "lib_integrations.peft": [],
     "modelcard": ["ModelCard"],
     "modeling_tf_pytorch_utils": [
         "convert_tf_weight_name_to_pt_weight_name",
@@ -360,6 +366,10 @@ _import_structure = {
     "models.herbert": ["HerbertTokenizer"],
     "models.hubert": ["HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "HubertConfig"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
+    "models.idefics": [
+        "IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "IdeficsConfig",
+    ],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
     "models.informer": ["INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "InformerConfig"],
     "models.instructblip": [
@@ -469,6 +479,10 @@ _import_structure = {
     ],
     "models.plbart": ["PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "PLBartConfig"],
     "models.poolformer": ["POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PoolFormerConfig"],
+    "models.pop2piano": [
+        "POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Pop2PianoConfig",
+    ],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.pvt": ["PVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "PvtConfig"],
     "models.qdqbert": ["QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "QDQBertConfig"],
@@ -937,6 +951,7 @@ else:
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
+    _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
@@ -1133,6 +1148,8 @@ else:
             "AutoModelForSpeechSeq2Seq",
             "AutoModelForTableQuestionAnswering",
             "AutoModelForTextEncoding",
+            "AutoModelForTextToSpectrogram",
+            "AutoModelForTextToWaveform",
             "AutoModelForTokenClassification",
             "AutoModelForUniversalSegmentation",
             "AutoModelForVideoClassification",
@@ -1925,6 +1942,15 @@ else:
             "IBertPreTrainedModel",
         ]
     )
+    _import_structure["models.idefics"].extend(
+        [
+            "IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "IdeficsForVisionText2Text",
+            "IdeficsModel",
+            "IdeficsPreTrainedModel",
+            "IdeficsProcessor",
+        ]
+    )
     _import_structure["models.imagegpt"].extend(
         [
             "IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2410,6 +2436,13 @@ else:
             "PoolFormerForImageClassification",
             "PoolFormerModel",
             "PoolFormerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.pop2piano"].extend(
+        [
+            "POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Pop2PianoForConditionalGeneration",
+            "Pop2PianoPreTrainedModel",
         ]
     )
     _import_structure["models.prophetnet"].extend(
@@ -3765,6 +3798,29 @@ else:
     _import_structure["trainer_tf"] = ["TFTrainer"]
 
 
+try:
+    if not (
+        is_librosa_available()
+        and is_essentia_available()
+        and is_scipy_available()
+        and is_torch_available()
+        and is_pretty_midi_available()
+    ):
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects
+
+    _import_structure["utils.dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects"] = [
+        name
+        for name in dir(dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects)
+        if not name.startswith("_")
+    ]
+else:
+    _import_structure["models.pop2piano"].append("Pop2PianoFeatureExtractor")
+    _import_structure["models.pop2piano"].append("Pop2PianoTokenizer")
+    _import_structure["models.pop2piano"].append("Pop2PianoProcessor")
+
+
 # FLAX-backed objects
 try:
     if not is_flax_available():
@@ -4357,6 +4413,10 @@ if TYPE_CHECKING:
     from .models.herbert import HerbertTokenizer
     from .models.hubert import HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, HubertConfig
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
+    from .models.idefics import (
+        IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        IdeficsConfig,
+    )
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
     from .models.instructblip import (
@@ -4456,6 +4516,10 @@ if TYPE_CHECKING:
     )
     from .models.plbart import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP, PLBartConfig
     from .models.poolformer import POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, PoolFormerConfig
+    from .models.pop2piano import (
+        POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Pop2PianoConfig,
+    )
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.pvt import PVT_PRETRAINED_CONFIG_ARCHIVE_MAP, PvtConfig
     from .models.qdqbert import QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, QDQBertConfig
@@ -4869,6 +4933,7 @@ if TYPE_CHECKING:
         from .models.efficientnet import EfficientNetImageProcessor
         from .models.flava import FlavaFeatureExtractor, FlavaImageProcessor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
+        from .models.idefics import IdeficsImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.layoutlmv2 import LayoutLMv2FeatureExtractor, LayoutLMv2ImageProcessor
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor, LayoutLMv3ImageProcessor
@@ -5048,6 +5113,8 @@ if TYPE_CHECKING:
             AutoModelForSpeechSeq2Seq,
             AutoModelForTableQuestionAnswering,
             AutoModelForTextEncoding,
+            AutoModelForTextToSpectrogram,
+            AutoModelForTextToWaveform,
             AutoModelForTokenClassification,
             AutoModelForUniversalSegmentation,
             AutoModelForVideoClassification,
@@ -5694,6 +5761,13 @@ if TYPE_CHECKING:
             IBertModel,
             IBertPreTrainedModel,
         )
+        from .models.idefics import (
+            IDEFICS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            IdeficsForVisionText2Text,
+            IdeficsModel,
+            IdeficsPreTrainedModel,
+            IdeficsProcessor,
+        )
         from .models.imagegpt import (
             IMAGEGPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ImageGPTForCausalImageModeling,
@@ -6089,6 +6163,11 @@ if TYPE_CHECKING:
             PoolFormerForImageClassification,
             PoolFormerModel,
             PoolFormerPreTrainedModel,
+        )
+        from .models.pop2piano import (
+            POP2PIANO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Pop2PianoForConditionalGeneration,
+            Pop2PianoPreTrainedModel,
         )
         from .models.prophetnet import (
             PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -7179,6 +7258,20 @@ if TYPE_CHECKING:
 
         # Trainer
         from .trainer_tf import TFTrainer
+
+    try:
+        if not (
+            is_librosa_available()
+            and is_essentia_available()
+            and is_scipy_available()
+            and is_torch_available()
+            and is_pretty_midi_available()
+        ):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects import *
+    else:
+        from .models.pop2piano import Pop2PianoFeatureExtractor, Pop2PianoProcessor, Pop2PianoTokenizer
 
     try:
         if not is_flax_available():

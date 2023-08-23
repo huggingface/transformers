@@ -367,6 +367,34 @@ def get_diff_for_doctesting(repo: Repo, base_commit: str, commits: List[str]) ->
     return code_diff
 
 
+def get_all_doctest_files() -> List[str]:
+    """
+    Return the complete list of python and Markdown files on which we run doctest.
+
+    At this moment, we restrict this to only take files from `src/` or `docs/source/en/` that are not in `utils/not_doctested.txt`.
+
+    Returns:
+        `List[str]`: The complete list of Python and Markdown files on which we run doctest.
+    """
+    py_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.py")]
+    md_files = [str(x.relative_to(PATH_TO_REPO)) for x in PATH_TO_REPO.glob("**/*.md")]
+    test_files_to_run = py_files + md_files
+
+    # only include files in `src` or `docs/source/en/`
+    test_files_to_run = [x for x in test_files_to_run if x.startswith(("src/", "docs/source/en/"))]
+    # not include init files
+    test_files_to_run = [x for x in test_files_to_run if not x.endswith(("__init__.py",))]
+
+    # These are files not doctested yet.
+    with open("utils/not_doctested.txt") as fp:
+        not_doctested = set(fp.read().strip().split("\n"))
+
+    # So far we don't have 100% coverage for doctest. This line will be removed once we achieve 100%.
+    test_files_to_run = [x for x in test_files_to_run if x not in not_doctested]
+
+    return sorted(test_files_to_run)
+
+
 def get_doctest_files(diff_with_last_commit: bool = False) -> List[str]:
     """
     Return a list of python and Markdown files where doc example have been modified between:
@@ -396,21 +424,19 @@ def get_doctest_files(diff_with_last_commit: bool = False) -> List[str]:
             print(f"Parent commit: {commit}")
         test_files_to_run = get_diff_for_doctesting(repo, repo.head.commit, parent_commits)
 
-    # This is the full list of doctest tests
-    with open("utils/documentation_tests.txt") as fp:
-        documentation_tests = set(fp.read().strip().split("\n"))
-    # Do not run slow doctest tests
+    all_test_files_to_run = get_all_doctest_files()
+
+    # Do not run slow doctest tests on CircleCI
     with open("utils/slow_documentation_tests.txt") as fp:
         slow_documentation_tests = set(fp.read().strip().split("\n"))
-
-    # So far we don't have 100% coverage for doctest. This line will be removed once we achieve 100%.
     test_files_to_run = [
-        x for x in test_files_to_run if x in documentation_tests and x not in slow_documentation_tests
+        x for x in test_files_to_run if x in all_test_files_to_run and x not in slow_documentation_tests
     ]
+
     # Make sure we did not end up with a test file that was removed
     test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
 
-    return test_files_to_run
+    return sorted(test_files_to_run)
 
 
 # (:?^|\n) -> Non-catching group for the beginning of the doc or a new line.

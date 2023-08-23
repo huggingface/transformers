@@ -38,6 +38,7 @@ from .configuration_utils import PretrainedConfig
 from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, GenerationMixin
+from .lib_integrations import PeftAdapterMixin
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -48,6 +49,8 @@ from .pytorch_utils import (  # noqa: F401
     prune_linear_layer,
 )
 from .utils import (
+    ADAPTER_SAFE_WEIGHTS_NAME,
+    ADAPTER_WEIGHTS_NAME,
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
@@ -68,6 +71,7 @@ from .utils import (
     is_bitsandbytes_available,
     is_offline_mode,
     is_optimum_available,
+    is_peft_available,
     is_remote_url,
     is_safetensors_available,
     is_torch_tpu_available,
@@ -86,6 +90,7 @@ XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
 
 if is_accelerate_available():
     from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
+    from accelerate.hooks import add_hook_to_module
     from accelerate.utils import (
         check_tied_parameters_on_same_device,
         find_tied_parameters,
@@ -122,6 +127,9 @@ if is_sagemaker_mp_enabled():
     IS_SAGEMAKER_MP_POST_1_10 = version.parse(SMP_VERSION) >= version.parse("1.10")
 else:
     IS_SAGEMAKER_MP_POST_1_10 = False
+
+if is_peft_available():
+    from .utils import find_adapter_config_file
 
 
 @contextmanager
@@ -1039,7 +1047,7 @@ class ModuleUtilsMixin:
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
-class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin):
+class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMixin, PeftAdapterMixin):
     r"""
     Base class for all models.
 
@@ -1435,12 +1443,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None):
         old_embeddings = self.get_input_embeddings()
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens, pad_to_multiple_of)
+        if hasattr(old_embeddings, "_hf_hook"):
+            hook = old_embeddings._hf_hook
+            add_hook_to_module(new_embeddings, hook)
         self.set_input_embeddings(new_embeddings)
 
         # if word embeddings are not tied, make sure that lm head is resized as well
         if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
             old_lm_head = self.get_output_embeddings()
             new_lm_head = self._get_resized_lm_head(old_lm_head, new_embeddings.weight.shape[0])
+            if hasattr(old_lm_head, "_hf_hook"):
+                hook = old_lm_head._hf_hook
+                add_hook_to_module(new_lm_head, hook)
             self.set_output_embeddings(new_lm_head)
 
         return self.get_input_embeddings()
@@ -1738,6 +1752,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         safe_serialization: bool = False,
         variant: Optional[str] = None,
         token: Optional[Union[str, bool]] = None,
+        save_peft_format: bool = True,
         **kwargs,
     ):
         """
@@ -1780,6 +1795,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             token (`str` or `bool`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, or not specified, will use
                 the token generated when running `huggingface-cli login` (stored in `~/.huggingface`).
+            save_peft_format (`bool`, *optional*, defaults to `True`):
+                For backward compatibility with PEFT library, in case adapter weights are attached to the model, all
+                keys of the state dict of adapters needs to be pre-pended with `base_model.model`. Advanced users can
+                disable this behaviours by setting `save_peft_format` to `False`.
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
@@ -1847,11 +1866,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if self._auto_class is not None:
             custom_object_save(self, save_directory, config=self.config)
 
+        _hf_peft_config_loaded = getattr(model_to_save, "_hf_peft_config_loaded", False)
+
         # Save the config
         if is_main_process:
-            model_to_save.config.save_pretrained(save_directory)
+            if not _hf_peft_config_loaded:
+                model_to_save.config.save_pretrained(save_directory)
             if self.can_generate():
                 model_to_save.generation_config.save_pretrained(save_directory)
+
+            if _hf_peft_config_loaded:
+                logger.info(
+                    "Detected adapters on the model, saving the model in the PEFT format, only adapter weights will be saved."
+                )
+                state_dict = model_to_save.get_adapter_state_dict()
+
+                if save_peft_format:
+                    logger.info(
+                        "To match the expected format of the PEFT library, all keys of the state dict of adapters will be pre-pended with `base_model.model`."
+                    )
+                    peft_state_dict = {}
+                    for key, value in state_dict.items():
+                        peft_state_dict[f"base_model.model.{key}"] = value
+                    state_dict = peft_state_dict
+
+                current_peft_config = self.peft_config[self.active_adapter()]
+                current_peft_config.save_pretrained(save_directory)
 
         # Save the model
         if state_dict is None:
@@ -1907,8 +1947,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
 
         # Shard the model if it is too big.
-        weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
-        weights_name = _add_variant(weights_name, variant)
+        if not _hf_peft_config_loaded:
+            weights_name = SAFE_WEIGHTS_NAME if safe_serialization else WEIGHTS_NAME
+            weights_name = _add_variant(weights_name, variant)
+        else:
+            weights_name = ADAPTER_SAFE_WEIGHTS_NAME if safe_serialization else ADAPTER_WEIGHTS_NAME
 
         shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size, weights_name=weights_name)
 
@@ -2295,6 +2338,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
         variant = kwargs.pop("variant", None)
+        _adapter_model_path = kwargs.pop("_adapter_model_path", None)
+        adapter_name = kwargs.pop("adapter_name", "default")
 
         if is_fsdp_enabled():
             low_cpu_mem_usage = True
@@ -2322,6 +2367,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
                 " ignored."
             )
+
+        if is_peft_available() and _adapter_model_path is None:
+            maybe_adapter_model_path = find_adapter_config_file(
+                pretrained_model_name_or_path,
+                revision=revision,
+                subfolder=subfolder,
+                token=token,
+                commit_hash=commit_hash,
+            )
+        elif is_peft_available() and _adapter_model_path is not None:
+            maybe_adapter_model_path = _adapter_model_path
+        else:
+            maybe_adapter_model_path = None
+
+        has_adapter_config = maybe_adapter_model_path is not None
+
+        if has_adapter_config:
+            if _adapter_model_path is not None:
+                adapter_model_id = _adapter_model_path
+            else:
+                with open(maybe_adapter_model_path, "r", encoding="utf-8") as f:
+                    adapter_model_id = pretrained_model_name_or_path
+                    pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
 
         # change device_map into a map if we passed an int, a str or a torch.device
         if isinstance(device_map, torch.device):
@@ -3152,6 +3220,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model._is_quantized_training_enabled = True
         if quantization_method_from_config == QuantizationMethod.GPTQ:
             model = quantizer.post_init_model(model)
+
+        if has_adapter_config:
+            model.load_adapter(
+                adapter_model_id,
+                adapter_name=adapter_name,
+                revision=revision,
+                token=token,
+            )
 
         if output_loading_info:
             if loading_info is None:

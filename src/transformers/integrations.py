@@ -1282,8 +1282,12 @@ class NeptuneCallback(TrainerCallback):
         self._metadata_namespace[NeptuneCallback.trainer_parameters_key] = args.to_sanitized_dict()
 
     def _log_model_parameters(self, model):
+        from neptune.utils import stringify_unsupported
+
         if model and hasattr(model, "config") and model.config is not None:
-            self._metadata_namespace[NeptuneCallback.model_parameters_key] = model.config.to_dict()
+            self._metadata_namespace[NeptuneCallback.model_parameters_key] = stringify_unsupported(
+                model.config.to_dict()
+            )
 
     def _log_hyper_param_search_parameters(self, state):
         if state and hasattr(state, "trial_name"):
