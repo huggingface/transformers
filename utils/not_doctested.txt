@@ -194,6 +194,7 @@ docs/source/en/model_doc/phobert.md
 docs/source/en/model_doc/pix2struct.md
 docs/source/en/model_doc/plbart.md
 docs/source/en/model_doc/poolformer.md
+docs/source/en/model_doc/pop2piano.md
 docs/source/en/model_doc/prophetnet.md
 docs/source/en/model_doc/pvt.md
 docs/source/en/model_doc/qdqbert.md
@@ -727,6 +728,10 @@ src/transformers/models/pix2struct/image_processing_pix2struct.py
 src/transformers/models/pix2struct/processing_pix2struct.py
 src/transformers/models/plbart/convert_plbart_original_checkpoint_to_torch.py
 src/transformers/models/poolformer/convert_poolformer_original_to_pytorch.py
+src/transformers/models/pop2piano/convert_pop2piano_weights_to_hf.py
+src/transformers/models/pop2piano/feature_extraction_pop2piano.py
+src/transformers/models/pop2piano/processing_pop2piano.py
+src/transformers/models/pop2piano/tokenization_pop2piano.py
 src/transformers/models/prophetnet/configuration_prophetnet.py
 src/transformers/models/prophetnet/convert_prophetnet_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/prophetnet/modeling_prophetnet.py
@@ -785,6 +790,7 @@ src/transformers/models/speech_to_text/modeling_tf_speech_to_text.py
 src/transformers/models/speecht5/configuration_speecht5.py
 src/transformers/models/speecht5/convert_hifigan.py
 src/transformers/models/speecht5/convert_speecht5_original_pytorch_checkpoint_to_pytorch.py
+src/transformers/models/speecht5/number_normalizer.py
 src/transformers/models/splinter/configuration_splinter.py
 src/transformers/models/splinter/modeling_splinter.py
 src/transformers/models/squeezebert/modeling_squeezebert.py
@@ -968,8 +974,10 @@ src/transformers/utils/bitsandbytes.py
 src/transformers/utils/constants.py
 src/transformers/utils/doc.py
 src/transformers/utils/dummy_detectron2_objects.py
+src/transformers/utils/dummy_essentia_and_librosa_and_pretty_midi_and_scipy_and_torch_objects.py
 src/transformers/utils/dummy_flax_objects.py
 src/transformers/utils/dummy_keras_nlp_objects.py
+src/transformers/utils/dummy_music_objects.py
 src/transformers/utils/dummy_pt_objects.py
 src/transformers/utils/dummy_sentencepiece_and_tokenizers_objects.py
 src/transformers/utils/dummy_sentencepiece_objects.py
