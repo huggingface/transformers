@@ -1380,6 +1380,9 @@ class VitsModel(VitsPreTrainedModel):
         else:
             speaker_embeddings = None
 
+        if labels is not None:
+            raise NotImplementedError("Training of VITS is not supported yet.")
+
         text_encoder_output = self.text_encoder(
             input_ids=input_ids,
             padding_mask=input_padding_mask,
@@ -1392,9 +1395,6 @@ class VitsModel(VitsPreTrainedModel):
         input_padding_mask = input_padding_mask.transpose(1, 2)
         prior_means = text_encoder_output[1]
         prior_log_variances = text_encoder_output[2]
-
-        if labels is not None:
-            raise NotImplementedError("Training of VITS is not supported yet.")
 
         if self.config.use_stochastic_duration_prediction:
             log_duration = self.duration_predictor(
