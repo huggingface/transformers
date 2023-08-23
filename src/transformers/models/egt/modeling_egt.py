@@ -17,10 +17,16 @@ from .configuration_egt import EGTConfig
 
 
 NODE_FEATURES_OFFSET = 128
-NUM_NODE_FEATURES = 9
 EDGE_FEATURES_OFFSET = 8
-NUM_EDGE_FEATURES = 3
 
+
+_CHECKPOINT_FOR_DOC = "dgl-egt"
+_CONFIG_FOR_DOC = "EGTConfig"
+
+
+EGT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "Zhiteng/dgl-egt",
+]
 
 class VirtualNodes(nn.Module):
     """
@@ -111,13 +117,13 @@ class EGTModel(EGTPreTrainedModel):
         self.num_virtual_nodes = config.num_virtual_nodes
         self.svd_pe_size = config.svd_pe_size
 
-        self.nodef_embed = nn.Embedding(NUM_NODE_FEATURES * NODE_FEATURES_OFFSET + 1, config.feat_size, padding_idx=0)
+        self.nodef_embed = nn.Embedding(config.num_atoms * NODE_FEATURES_OFFSET + 1, config.feat_size, padding_idx=0)
         if self.svd_pe_size:
             self.svd_embed = nn.Linear(self.svd_pe_size * 2, config.feat_size)
 
         self.dist_embed = nn.Embedding(self.upto_hop + 2, config.edge_feat_size)
         self.featm_embed = nn.Embedding(
-            NUM_EDGE_FEATURES * EDGE_FEATURES_OFFSET + 1, config.edge_feat_size, padding_idx=0
+            config.num_edges * EDGE_FEATURES_OFFSET + 1, config.edge_feat_size, padding_idx=0
         )
 
         if self.num_virtual_nodes > 0:

@@ -25,6 +25,10 @@ class EGTConfig(PretrainedConfig):
 
 
     Args:
+        num_atoms (`int`, *optional*, defaults to 9):
+            Number of node types in the graphs.
+        num_edges (`int`, *optional*, defaults to 3):
+            Number of edges types in the graphs.
         feat_size (`int`, *optional*, defaults to 768):
             Node feature size.
         edge_feat_size (`int`, *optional*, defaults to 64):
@@ -75,6 +79,8 @@ class EGTConfig(PretrainedConfig):
 
     def __init__(
         self,
+        num_atoms: int = 9,
+        num_edges: int = 3,
         feat_size: int = 768,
         edge_feat_size: int = 64,
         num_heads: int = 32,
@@ -93,6 +99,8 @@ class EGTConfig(PretrainedConfig):
         eos_token_id=2,
         **kwargs,
     ):
+        self.num_atoms = num_atoms
+        self.num_edges = num_edges
         self.feat_size = feat_size
         self.edge_feat_size = edge_feat_size
         self.num_heads = num_heads
