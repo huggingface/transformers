@@ -1121,89 +1121,100 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
         diversity_penalty (`float`):
             This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
             particular time. Note that `diversity_penalty` is only effective if `group beam search` is enabled.
-                    -- The penalty applied to a beam's score when it generates a token that has already been chosen
+                    The penalty applied to a beam's score when it generates a token that has already been chosen
                             by another beam within the same group during the same time step.
-                    -- A higher `diversity_penalty` will enforce greater diversity among the beams,
+                    A higher `diversity_penalty` will enforce greater diversity among the beams,
                             making it less likely for multiple beams to choose the same token.
-                    -- Conversely, a lower penalty will allow beams to more freely choose similar tokens.
-                    -- Adjusting this value can help strike a balance between diversity and natural likelihood.
+                    Conversely, a lower penalty will allow beams to more freely choose similar tokens.
+                    Adjusting this value can help strike a balance between diversity and natural likelihood.
         num_beams (`int`):
             Number of beams used for group beam search. See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more
             details.
-                    -- Beam search is a method used that maintains beams (or "multiple hypotheses") at each step,
-                            expanding each one and keeping the top-scoring sequences.
-                    -- A higher `num_beams` will explore more potential sequences
-                    -- This can increase chances of finding a high-quality output but also increases computational cost.
+                    Beam search is a method used that maintains beams (or "multiple hypotheses") at each step,
+                    expanding each one and keeping the top-scoring sequences.
+                    A higher `num_beams` will explore more potential sequences
+                    This can increase chances of finding a high-quality output but also increases computational cost.
         num_beam_groups (`int`):
             Number of groups to divide `num_beams` into in order to ensure diversity among different groups of beams.
             See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
-                    -- Each group of beams will operate independently, selecting tokens without considering the choices of other groups.
-                    -- This division promotes diversity by ensuring that beams within different groups explore different paths.
-                    --  For instance, if `num_beams` is 6 and `num_beam_groups` is 2, there will be 2 groups each containing 3 beams.
-                    -- The choice of `num_beam_groups` should be made considering the desired level of output diversity and the total number of beams.
+                         Each group of beams will operate independently, selecting tokens without considering the choices of other groups.
+                        This division promotes diversity by ensuring that beams within different groups explore different paths.
+                        For instance, if `num_beams` is 6 and `num_beam_groups` is 2, there will be 2 groups each containing 3 beams.
+                        The choice of `num_beam_groups` should be made considering the desired level of output diversity and the total number of beams.
 
 
     Example: the below example shows a comparison before and after applying Hamming Diversity.
 
     ```python
-            from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+            from transformers import (
+                AutoTokenizer,
+                AutoModelForSeq2SeqLM,
+                LogitsProcessorList,
+                MinLengthLogitsProcessor,
+                HammingDiversityLogitsProcessor,
+                BeamSearchScorer,
+            )
+            import torch
 
             # Initialize the model and tokenizer
             tokenizer = AutoTokenizer.from_pretrained("t5-base")
             model = AutoModelForSeq2SeqLM.from_pretrained("t5-base")
 
-            # Input variable is a long text about space:
-
+            # A long text about the solar system
             text = "The Solar System is a gravitationally bound system comprising the Sun and the objects that orbit it, either directly or indirectly. Of the objects that orbit the Sun directly, the largest are the eight planets, with the remainder being smaller objects, such as the five dwarf planets and small Solar System bodies. The Solar System formed 4.6 billion years ago from the gravitational collapse of a giant interstellar molecular cloud."
 
-            # Prepare the input
             encoder_input_str = "summarize: " + text
             encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
 
-            # Set the parameters for diverse beam search
-            num_beams = 8 #higher is more diverse
-            num_beam_groups = 4 #4 groups of 2 beams will explore 4*2=8 beams (=num_beams). by separating the beams into groups and applying penalties within groups, the model is encouraged to explore different sequence possibilities in each group
-            diversity_penalty = 5.5 #enforces diversity among different groups of beams, discourages beams within a group from selecting the same tokens
+            # Set up for diverse beam search
+            num_beams = 6
+            num_beam_groups = 2
 
-            # Generate three diverse summaries using the `generate` method
-            outputs_diverse = model.generate(
-                encoder_input_ids,
-                max_length=100,
+            model_kwargs = {
+                "encoder_outputs": model.get_encoder()(
+                    encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True
+                )
+            }
+
+            beam_scorer = BeamSearchScorer(
+                batch_size=1,
+                max_length=model.config.max_length,
                 num_beams=num_beams,
+                device=model.device,
                 num_beam_groups=num_beam_groups,
-                diversity_penalty=diversity_penalty,
-                no_repeat_ngram_size=2,
-                early_stopping=True,
-                num_return_sequences=3
+            )
+            # Initialize the diversity logits processor
+            # set the logits processor list, note that `HammingDiversityLogitsProcessor` is effective only if `group beam search` is enabled
+            logits_processor_diverse = LogitsProcessorList(
+                [
+                    HammingDiversityLogitsProcessor(5.5, num_beams=num_beams, num_beam_groups=num_beam_groups),
+                    MinLengthLogitsProcessor(10, eos_token_id=model.config.eos_token_id),
+                ]
+            )
+            #generate the diverse summary using group_beam_search
+            outputs_diverse = model.group_beam_search(
+                encoder_input_ids.repeat_interleave(num_beams, dim=0), beam_scorer, logits_processor=logits_processor_diverse, **model_kwargs
             )
 
-            # Generate two non-diverse summaries
+            # Generate non-diverse summary
             outputs_non_diverse = model.generate(
                 encoder_input_ids,
                 max_length=100,
                 num_beams=num_beams,
                 no_repeat_ngram_size=2,
                 early_stopping=True,
-                num_return_sequences=2
             )
 
             # Decode and print the summaries
             summaries_diverse = tokenizer.batch_decode(outputs_diverse, skip_special_tokens=True)
-            summaries_non_diverse = tokenizer.batch_decode(outputs_non_diverse, skip_special_tokens=True)
+            summary_non_diverse = tokenizer.decode(outputs_non_diverse[0], skip_special_tokens=True)
 
-            # Print the results
-            print("Diverse Summaries:")
-            for summary in summaries_diverse:
-                print(summary)
-                # summary 1:  the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud
-                # summary 2: the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets, says john mccartney jr.
-                # summary 3: solar system formed 4.6 billion years ago from collapse of interstellar molecular cloud. largest of the eight planets orbit the Sun directly, with the remainder being smaller objects, such as dwarf planet and small solar System bodies - nicolaus mills-simons: the largest are the dwarf worlds and the solar systems' bodies.
-
-            print("\nNon-Diverse Summaries:")
-            for summary in summaries_non_diverse:
-                print(summary)
-                # summary 1:  the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud.
-                # summary 2:  the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud.
+            print("Diverse Summary:")
+            print(summaries_diverse[0])
+            # The Solar System is a gravitationally bound system comprising the Sun and the objects that orbit it, either directly or indirectly. Of the objects that orbit the Sun directly, the largest are the eight planets, with the remainder being smaller objects, such as the five dwarf planets and small Solar System bodies. The Solar System formed 4.6 billion years ago from the gravitational collapse of a giant interstellar molecular cloud.
+            print("\nNon-Diverse Summary:")
+            print(summary_non_diverse)
+            # The Sun and the objects that orbit it directly are the eight planets, with the remainder being smaller objects, such as the five dwarf worlds and small Solar System bodies. It formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud.
 
     ```
                 For more details, see [Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models](https://arxiv.org/pdf/1610.02424.pdf).
