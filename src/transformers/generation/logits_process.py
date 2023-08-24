@@ -154,31 +154,25 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
     >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
     >>> model.config.pad_token_id = model.config.eos_token_id
-    >>> model.generation_config.pad_token_id = model.config.eos_token_id
     >>> input_context = "Hugging Face Company is"
     >>> input_ids = tokenizer.encode(input_context, return_tensors="pt")
 
-    >>> # Without `eos_token_id`, it will generate the default length, 20, ignoring `min_new_tokens`
+    >>> # If the maximum length (default = 20) is smaller than the minimum length constraint, the latter is ignored.
     >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=30)
     >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
     Hugging Face Company is a company that has been working on a new product for the past year.
 
-    >>> # If `eos_token_id` is set to ` company` it will take into account how many `min_new_tokens` have been generated
-    >>> # before stopping. Note that ` Company` (5834) and ` company` (1664) are not actually the same token, and even
-    >>> # if they were ` Company` would be ignored by `min_new_tokens` as it excludes the prompt.
-    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=1, eos_token_id=1664)
+    >>> # For testing purposes, let's set `eos_token_id` to "company", the first generated token. This will make
+    >>> # generation end there.
+    >>> outputs = model.generate(input_ids=input_ids, eos_token_id=1664)
     >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
     Hugging Face Company is a company
 
-    >>> # Increasing `min_new_tokens` will bury the first occurrence of ` company` generating a different sequence.
+    >>> # Increasing `min_new_tokens` will make generation ignore occurences "company" (eos token) before the
+    >>> # minimum length condition is honored.
     >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=2, eos_token_id=1664)
     >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
     Hugging Face Company is a new company
-
-    >>> # If no more occurrences of the `eos_token` happen after `min_new_tokens` it returns to the 20 default tokens.
-    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=10, eos_token_id=1664)
-    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-    Hugging Face Company is a new and innovative brand of facial recognition technology that is designed to help you
     ```
     """
 
