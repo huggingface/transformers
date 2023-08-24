@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 
 from transformers import LlamaConfig, is_flax_available, is_torch_available
-from transformers.testing_utils import require_flax, slow
+from transformers.testing_utils import require_flax, slow, skip
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
@@ -28,10 +28,10 @@ if is_flax_available():
     import jax.numpy as jnp
 
     from transformers.models.llama.modeling_flax_llama import FlaxLlamaForCausalLM, FlaxLlamaModel
+    from transformers import LlamaTokenizerFast
 
 if is_torch_available():
     pass
-
 
 class FlaxLlamaModelTester:
     def __init__(
@@ -202,26 +202,58 @@ class FlaxLlamaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
             self.assertIsNotNone(outputs)
 
     @slow
+    @skip # wip test
     def test_model_logits(self):
         model_id = "openlm-research/open_llama_3b_v2"
         model = FlaxLlamaForCausalLM.from_pretrained(model_id, from_pt=True)
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        test_batch = [
-            "Aloha, World! ",
-            "2 + 2 = ",
-            "Paris is the capital of ",
-            "我很高興認識"
-        ]
+        test_batch = jnp.arange(32).reshape(4, 8) + 0x777
 
-        tokenized_batch = tokenizer(test_batch, padding='max_length', max_length=model.config.max_position_embeddings)
+        flax_logits = model(test_batch).logits
 
         # TODO: add expected logits here
         # fmt: off
         EXPECTED_LOGITS = None
         # fmt: on
 
-        self.assertTrue(np.allclose())
+        self.assertAlmostEqual(flax_logits, EXPECTED_LOGITS, places=4)
 
     @slow
+    @skip # wip test
+    def test_model_hidden_states(self):
+        model_id = "openlm-research/open_llama_3b_v2"
+        model = FlaxLlamaForCausalLM.from_pretrained(model_id, from_pt=True)
+        test_batch = jnp.arange(32).reshape(4, 8) + 0x777
+
+        flax_hidden_states = model(test_batch).hidden_states
+        # TODO: calculate mean of all hidden states
+        flax_hidden_means = None
+
+        # TODO: add expected logits here
+        # fmt: off
+        EXPECTED_HIDDEN_MEANS = None
+        # fmt: on
+
+        self.assertAlmostEqual(flax_hidden_means, EXPECTED_HIDDEN_MEANS, places=4)
+
+    @slow
+    @skip # wip test
     def test_generated_text(self):
-        model = FlaxLlamaForCausalLM.from_pretrained("openlm-research/open_llama_3b_f2", from_pt=True)
+        model_id = "openlm-research/open_llama_3b_v2"
+        model = FlaxLlamaForCausalLM.from_pretrained(model_id, from_pt=True)
+
+        tokenizer = LlamaTokenizerFast.from_pretrained(model_id)
+        test_batch = [
+            "Aloha, World! ",
+            "2 + 2 = ",
+            "Paris is the capital of ",
+            "我很高興認識"
+        ] 
+
+        inputs = tokenizer(test_batch, return_tensors='np', padding=True, truncation=True)
+        generated_ids = model.generate(**inputs, max_length=20).sequences
+        generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+
+        # TODO: add expected outputs
+        EXPECTED_GENERATION = None
+
+        self.assertListEqual(generated_text, EXPECTED_GENERATION)
