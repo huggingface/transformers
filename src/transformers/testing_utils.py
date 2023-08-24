@@ -99,6 +99,8 @@ from .utils import (
     is_torch_npu_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
+    is_torch_accelerator_fp16_available,
+    is_torch_accelerator_bf16_available,
     is_torch_tpu_available,
     is_torchaudio_available,
     is_torchdynamo_available,
@@ -681,6 +683,22 @@ def require_torch_tensorrt_fx(test_case):
 def require_torch_gpu(test_case):
     """Decorator marking a test that requires CUDA and PyTorch."""
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
+
+
+def require_torch_accelerator(test_case):
+    """Decorator marking a test that requires an accessible accelerator and PyTorch."""
+    return unittest.skipUnless(torch_device != "cpu", "test requires accelerator")(test_case)
+
+
+def require_torch_accelerator_fp16(test_case):
+    """Decorator marking a test that requires a device that supports fp16"""
+    return unittest.skipUnless(is_torch_accelerator_fp16_available(torch_device), "test requires device with fp16 support")(test_case)
+
+
+def require_torch_accelerator_bf16(test_case):
+    """Decorator marking a test that requires a device that supports bf16"""
+    return unittest.skipUnless(is_torch_accelerator_bf16_available(torch_device), "test requires device with bf16 support")(test_case)
+
 
 
 def require_torch_bf16_gpu(test_case):

@@ -326,6 +326,38 @@ def is_torch_bf16_cpu_available():
 
     return True
 
+# TODO: this only tests support for inference, needs training coverage
+def is_torch_accelerator_fp16_available(device):
+    if not is_torch_available():
+        return False
+    
+    import torch
+
+    try:
+        x = torch.zeros(2, 2, dtype=torch.float16).to(device)
+        _ = x @ x
+    except: # TODO: more precise exception matching, if possible.
+        return False
+    
+    return True
+
+
+# TODO: this only tests support for inference, needs training coverage
+def is_torch_accelerator_bf16_available(device):
+    if not is_torch_available():
+        return False
+    
+    import torch
+
+    try:
+        x = torch.zeros(2, 2, dtype=torch.bfloat16).to(device)
+        _ = x @ x
+    except: # TODO: more precise exception matching, if possible.
+        return False
+    
+    return True
+
+
 
 def is_torch_bf16_available():
     # the original bf16 check was for gpu only, but later a cpu/bf16 combo has emerged so this util
