@@ -226,14 +226,13 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         system_message = dialogue.pop(0) if dialogue[0]["role"] == "system" else None
         dialog_tokens = []
         if system_message is not None:
-            dialog_tokens += self.encode(
-                f"{B_SYS}{system_message['content']}{E_SYS}", add_special_tokens=False
-            )
+            dialog_tokens += self.encode(f"{B_SYS}{system_message['content']}{E_SYS}", add_special_tokens=False)
         dialog_tokens += sum(
             [
                 [self.bos_token_id]
                 + self.encode(
-                    f"{B_INST} {(prompt['content']).strip()} {E_INST} {(answer['content']).strip()} ", add_special_tokens=False
+                    f"{B_INST} {(prompt['content']).strip()} {E_INST} {(answer['content']).strip()} ",
+                    add_special_tokens=False,
                 )
                 + [self.eos_token_id]
                 for prompt, answer in zip(dialogue[::2], dialogue[1::2])
