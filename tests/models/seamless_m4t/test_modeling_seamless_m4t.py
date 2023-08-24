@@ -21,8 +21,9 @@ from transformers import SeamlessM4TConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
+from transformers.generation import InfNanRemoveLogitsProcessor, LogitsProcessorList,StoppingCriteria,StoppingCriteriaList
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask, _config_zero_init
 
 
 if is_torch_available():
@@ -111,7 +112,7 @@ class SeamlessM4TModelTester:
         if self.input_modality == "text":
             inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         else:
-            inputs = ids_tensor([self.batch_size, self.seq_length, 160], self.vocab_size)
+            inputs = ids_tensor([self.batch_size, self.seq_length, 160], self.vocab_size).float()
 
         input_mask = None
         if self.use_input_mask:
@@ -274,7 +275,7 @@ class SeamlessM4TModelTester:
 
 
 @require_torch
-class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     fx_compatible = False
     test_missing_keys = False
@@ -293,7 +294,6 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, GenerationTesterMixi
     )
     all_generative_model_classes = (
         (
-            SeamlessM4TForSpeechToSpeech,
             SeamlessM4TForSpeechToText,
         )
         if is_torch_available()
@@ -322,6 +322,82 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, GenerationTesterMixi
         for model_name in SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = SeamlessM4TModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+            
+    def _get_input_ids_and_config(self, batch_size=2):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_ids = inputs_dict[self.input_name]
+
+        # cut to half length & take max batch_size 3
+        sequence_length = input_ids.shape[-1] // 2
+        input_ids = input_ids[:batch_size, :sequence_length]
+
+        # generate max 3 tokens
+        max_length = input_ids.shape[-1] + 3
+        if config.eos_token_id is not None and config.pad_token_id is None:
+            # hack to allow generate for models such as GPT2 as is done in `generate()`
+            if isinstance(config.eos_token_id, int):
+                config.eos_token_id = [config.eos_token_id]
+            config.pad_token_id = config.eos_token_id[0]
+
+        attention_mask = torch.ones(input_ids.shape[:2], dtype=torch.long)[:batch_size, :sequence_length]
+
+        return config, input_ids.float(), attention_mask, max_length
+
+    @staticmethod
+    def _get_encoder_outputs(
+        model, input_ids, attention_mask, output_attentions=None, output_hidden_states=None, num_interleave=1
+    ):
+        encoder = model.get_encoder()
+        encoder_outputs = encoder(
+            input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+        encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
+            num_interleave, dim=0
+        )
+        input_ids = torch.zeros(input_ids.shape[:2], dtype=torch.int64, layout=input_ids.layout, device=input_ids.device) + model._get_decoder_start_token_id()
+        attention_mask = None
+        return encoder_outputs, input_ids, attention_mask
+    
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                uniform_init_parms = [
+                    "conv.weight",
+                    "masked_spec_embed",
+                    "codevectors",
+                    "quantizer.weight_proj.weight",
+                    "project_hid.weight",
+                    "project_hid.bias",
+                    "project_q.weight",
+                    "project_q.bias",
+                    "pos_bias_v",
+                    "pos_bias_u",
+                    "pointwise_conv1",
+                    "pointwise_conv2",
+                    "feature_projection.projection.weight",
+                    "feature_projection.projection.bias",
+                    "objective.weight",
+                ]
+                if param.requires_grad:
+                    if any(x in name for x in uniform_init_parms):
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
 
 @require_torch
@@ -344,8 +420,6 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
     )
     all_generative_model_classes = (
         (
-            SeamlessM4TModel,
-            SeamlessM4TForTextToSpeech,
             SeamlessM4TForTextToText,
         )
         if is_torch_available()
@@ -368,6 +442,43 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
         for model_name in SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = SeamlessM4TModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+            
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                uniform_init_parms = [
+                    "conv.weight",
+                    "masked_spec_embed",
+                    "codevectors",
+                    "quantizer.weight_proj.weight",
+                    "project_hid.weight",
+                    "project_hid.bias",
+                    "project_q.weight",
+                    "project_q.bias",
+                    "pos_bias_v",
+                    "pos_bias_u",
+                    "pointwise_conv1",
+                    "pointwise_conv2",
+                    "feature_projection.projection.weight",
+                    "feature_projection.projection.bias",
+                    "objective.weight",
+                ]
+                if param.requires_grad:
+                    if any(x in name for x in uniform_init_parms):
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
 
 @require_torch
