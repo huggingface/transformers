@@ -12,8 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-from typing import Optional
+from typing import Optional, Dict, Union, Any
 
+from transformers.utils.import_utils import is_torch_available
+
+import torch
 from ...utils import (
     check_peft_version,
     find_adapter_config_file,
@@ -59,7 +62,7 @@ class PeftAdapterMixin:
 
     def load_adapter(
         self,
-        peft_model_id: str,
+        peft_model_id: Union[str, Dict[str, torch.Tensor]],
         adapter_name: Optional[str] = None,
         revision: Optional[str] = None,
         token: Optional[str] = None,
@@ -67,6 +70,7 @@ class PeftAdapterMixin:
         max_memory: Optional[str] = None,
         offload_folder: Optional[str] = None,
         offload_index: Optional[int] = None,
+        peft_config: Dict[str, Any] = None,
     ) -> None:
         """
         Load adapter weights from file or remote Hub folder. If you are not familiar with adapters and PEFT methods, we
@@ -75,7 +79,7 @@ class PeftAdapterMixin:
         Requires peft as a backend to load the adapter weights.
 
         Args:
-            peft_model_id (`str`):
+            peft_model_id (`str` or dictionary of `torch.Tensor`):
                 The identifier of the model to look for on the Hub, or a local path to the saved adapter config file
                 and adapter weights.
             adapter_name (`str`, *optional*):
@@ -125,28 +129,32 @@ class PeftAdapterMixin:
         elif adapter_name in self.peft_config:
             raise ValueError(f"Adapter with name {adapter_name} already exists. Please use a different name.")
 
-        adapter_config_file = find_adapter_config_file(
-            peft_model_id,
-            revision=revision,
-            token=token,
-        )
-
-        if adapter_config_file is None:
-            raise ValueError(
-                f"adapter model file not found in {peft_model_id}. Make sure you are passing the correct path to the "
-                "adapter model."
+        if peft_config is None:
+            adapter_config_file = find_adapter_config_file(
+                peft_model_id,
+                revision=revision,
+                token=token,
             )
 
-        loaded_peft_config = PeftConfig.from_pretrained(
-            peft_model_id,
-            revision=revision,
-            use_auth_token=token,
-        )
+            if adapter_config_file is None:
+                raise ValueError(
+                    f"adapter model file not found in {peft_model_id}. Make sure you are passing the correct path to the "
+                    "adapter model."
+            )
+
+            peft_config = PeftConfig.from_pretrained(
+                peft_model_id,
+                revision=revision,
+                use_auth_token=token,
+            )
 
         # Create and add fresh new adapters into the model.
-        inject_adapter_in_model(loaded_peft_config, self, adapter_name)
+        inject_adapter_in_model(peft_config, self, adapter_name)
 
-        adapter_state_dict = load_peft_weights(peft_model_id, revision=revision, use_auth_token=token)
+        if not isinstance(peft_model_id, dict):
+            adapter_state_dict = load_peft_weights(peft_model_id, revision=revision, use_auth_token=token)
+        else:
+            adapter_state_dict = peft_model_id
 
         # We need to pre-process the state dict to remove unneeded prefixes - for backward compatibility
         processed_adapter_state_dict = {}
