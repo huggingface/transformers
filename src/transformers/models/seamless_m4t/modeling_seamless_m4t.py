@@ -669,7 +669,7 @@ class SeamlessM4TConformerEncoderLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         relative_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        conformer_attention_mask: Optional[torch.Tensor] = None,
+        conv_attention_mask: Optional[torch.Tensor] = None,
     ):
         hidden_states = hidden_states
 
@@ -694,7 +694,7 @@ class SeamlessM4TConformerEncoderLayer(nn.Module):
         # 3. Convolutional Layer
         residual = hidden_states
         hidden_states = self.conv_module(
-            hidden_states, attention_mask=conformer_attention_mask
+            hidden_states, attention_mask=conv_attention_mask
         )  # TODO: make sure attention mask is passed and apply
         hidden_states = residual + hidden_states
 
@@ -741,12 +741,12 @@ class SeamlessM4TConformerEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        conformer_attention_mask = None
+        conv_attention_mask = None
         if attention_mask is not None:
             # make sure padded tokens output 0
             hidden_states[~attention_mask.bool()] = 0.0
 
-            conformer_attention_mask = attention_mask
+            conv_attention_mask = attention_mask
             # extend attention_mask
             attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
             attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
@@ -793,7 +793,7 @@ class SeamlessM4TConformerEncoder(nn.Module):
                         attention_mask=attention_mask,
                         relative_position_embeddings=relative_position_embeddings,
                         output_attentions=output_attentions,
-                        conformer_attention_mask=conformer_attention_mask,
+                        conv_attention_mask=conv_attention_mask,
                     )
                 hidden_states = layer_outputs[0]
 
