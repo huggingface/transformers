@@ -52,6 +52,7 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def get_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
         kwargs["phonemize"] = False
+        kwargs["normalize"] = False
         return VitsTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_clean_sequence(self, tokenizer, with_prefix_space=False, max_length=20, min_length=5):
