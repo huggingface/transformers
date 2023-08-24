@@ -113,11 +113,11 @@ _init_weights = True
 
 
 def is_fsdp_enabled():
-    return strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
+    return torch.distributed.is_initialized() and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
 
 
 def is_fsdp_enabled_and_dist_rank_0():
-    return is_fsdp_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() == 0
+    return is_fsdp_enabled() and torch.distributed.get_rank() == 0
 
 
 if is_sagemaker_mp_enabled():
