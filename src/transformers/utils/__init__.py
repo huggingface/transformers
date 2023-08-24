@@ -160,6 +160,7 @@ from .import_utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available,
+    is_torch_fp16_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
     is_torch_compile_available,

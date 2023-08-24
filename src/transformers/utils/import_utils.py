@@ -327,7 +327,7 @@ def is_torch_bf16_cpu_available():
     return True
 
 # TODO: this only tests support for inference, needs training coverage
-def is_torch_accelerator_fp16_available(device):
+def is_torch_fp16_available(device):
     if not is_torch_available():
         return False
     
@@ -336,38 +336,32 @@ def is_torch_accelerator_fp16_available(device):
     try:
         x = torch.zeros(2, 2, dtype=torch.float16).to(device)
         _ = x @ x
-    except: # TODO: more precise exception matching, if possible.
+    except:
+        # TODO: more precise exception matching, if possible.
+        # most backends should return `RuntimeError` however this is not guaranteed.
         return False
     
     return True
 
 
 # TODO: this only tests support for inference, needs training coverage
-def is_torch_accelerator_bf16_available(device):
+def is_torch_bf16_available(device):
     if not is_torch_available():
         return False
     
     import torch
+    if device == 'cuda':
+        return is_torch_bf16_gpu_available()
 
     try:
         x = torch.zeros(2, 2, dtype=torch.bfloat16).to(device)
         _ = x @ x
-    except: # TODO: more precise exception matching, if possible.
+    except: 
+        # TODO: more precise exception matching, if possible.
+        # most backends should return `RuntimeError` however this is not guaranteed.
         return False
     
     return True
-
-
-
-def is_torch_bf16_available():
-    # the original bf16 check was for gpu only, but later a cpu/bf16 combo has emerged so this util
-    # has become ambiguous and therefore deprecated
-    warnings.warn(
-        "The util is_torch_bf16_available is deprecated, please use is_torch_bf16_gpu_available "
-        "or is_torch_bf16_cpu_available instead according to whether it's used with cpu or gpu",
-        FutureWarning,
-    )
-    return is_torch_bf16_gpu_available()
 
 
 def is_torch_tf32_available():
