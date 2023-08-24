@@ -23,8 +23,8 @@ from ...image_transforms import get_image_size, pad, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
     ImageInput,
-    is_scaled_image,
     infer_channel_dimension_format,
+    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,

@@ -30,9 +30,9 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    is_scaled_image,
     infer_channel_dimension_format,
     is_batched,
+    is_scaled_image,
     to_numpy_array,
     valid_images,
 )

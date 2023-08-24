@@ -24,9 +24,9 @@ from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
     ChannelDimension,
     PILImageResampling,
-    is_scaled_image,
     get_image_size,
     infer_channel_dimension_format,
+    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -138,7 +138,8 @@ class GLPNImageProcessor(BaseImageProcessor):
 
         Args:
             images (`PIL.Image.Image` or `TensorType` or `List[np.ndarray]` or `List[TensorType]`):
-                The image or images to preprocess.
+                Images to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
+                passing in images with pixel values between 0 and 1, set `do_normalize=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the input such that the (height, width) dimensions are a multiple of `size_divisor`.
             size_divisor (`int`, *optional*, defaults to `self.size_divisor`):
