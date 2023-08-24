@@ -1552,7 +1552,6 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
 
         hidden_states = encoder_outputs[0]
 
-        # corresponds to UnitYEncoderAdaptor._expand_contract
         expanded_hidden_states = self.proj1(hidden_states)
         expanded_hidden_states = self.activation(expanded_hidden_states)
         expanded_hidden_states = self.proj2(expanded_hidden_states)
@@ -1561,12 +1560,14 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
 
         if self.adapter is not None:
             hidden_states = self.adapter(hidden_states, attention_mask=attention_mask)
-
-        hidden_states[0] = self.inner_layer_norm(hidden_states[0])
+            hidden_states[0] = self.inner_layer_norm(hidden_states[0])
+        else:
+            hidden_states = self.inner_layer_norm(hidden_states)
 
         if not return_dict:
             return (hidden_states,) + encoder_outputs[1:]
 
+        # TODO: probably edges cases when adapter
         return Wav2Vec2BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=encoder_outputs.hidden_states,
@@ -2177,12 +2178,6 @@ class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        # TODO: keep or not?
-        ## different to other models, MBart automatically creates decoder_input_ids from
-        ## input_ids if no decoder_input_ids are provided
-        # if decoder_input_ids is None and decoder_inputs_embeds is None and input_ids is not None:
-        #    decoder_input_ids = shift_tokens_right(input_ids, self.config.unit_pad_token_id)
-
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -2503,12 +2498,6 @@ class SeamlessM4TMultiModalToTextModel(SeamlessM4TPreTrainedModel):
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
-
-        # TODO: keep or not?
-        ## different to other models, MBart automatically creates decoder_input_ids from
-        ## input_ids if no decoder_input_ids are provided
-        # if decoder_input_ids is None and decoder_inputs_embeds is None and input_ids is not None:
-        #    decoder_input_ids = shift_tokens_right(input_ids, self.config.unit_pad_token_id)
 
         encoder_attention_mask = attention_mask
         # input modality = speech so new attention mask
