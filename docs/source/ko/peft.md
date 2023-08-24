@@ -9,52 +9,52 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Load adapters with 🤗 PEFT
+# 🤗 PEFT를 사용하여 어댑터 로드하기 [[load-adapters-with-peft]]
 
-[[open-in-colab]]
+[[Colab에서 열기]]
 
-[Parameter-Efficient Fine Tuning (PEFT)](https://huggingface.co/blog/peft) methods freeze the pretrained model parameters during fine-tuning and add a small number of trainable parameters (the adapters) on top of it. The adapters are trained to learn task-specific information. This approach has been shown to be very memory-efficient with lower compute usage while producing results comparable to a fully fine-tuned model. 
+[Parameter-Efficient Fine Tuning (PEFT)](https://huggingface.co/blog/peft) 방법은 사전 훈련된 모델 매개변수를 미세 조정하는 동안 모델 매개변수를 고정하고 그 위에 훈련 가능한 매우 적은 수의 매개변수(어댑터)를 추가합니다. 어댑터는 작업별 정보를 학습하도록 훈련됩니다. 이 접근 방식은 전체로 미세 조정된 모델과 비교 가능한 결과를 생성하면서 메모리 효율적이며 더 낮은 컴퓨팅 리소스를 사용한다는 것이 입증되었습니다.
 
-Adapters trained with PEFT are also usually an order of magnitude smaller than the full model, making it convenient to share, store, and load them.
+PEFT로 훈련된 어댑터는 전체 모델 크기보다 일반적으로 한 순서 작으므로 공유, 저장 및 로드하기 편리합니다.
 
 <div class="flex flex-col justify-center">
   <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/peft/PEFT-hub-screenshot.png"/>
-  <figcaption class="text-center">The adapter weights for a OPTForCausalLM model stored on the Hub are only ~6MB compared to the full size of the model weights, which can be ~700MB.</figcaption>
+  <figcaption class="text-center">Hub에 저장된 OPTForCausalLM 모델의 어댑터 가중치는 전체 모델 가중치 크기인 ~700MB 대비 약 6MB입니다.</figcaption>
 </div>
 
-If you're interested in learning more about the 🤗 PEFT library, check out the [documentation](https://huggingface.co/docs/peft/index).
+🤗 PEFT 라이브러리에 대해 자세히 알아보려면 [문서](https://huggingface.co/docs/peft/index)를 확인하세요.
 
-## Setup
+## 설정 [[setup]]
 
-Get started by installing 🤗 PEFT:
+🤗 PEFT를 설치하여 시작하세요:
 
 ```bash
 pip install peft
 ```
 
-If you want to try out the brand new features, you might be interested in installing the library from source:
+새로운 기능을 시도하려면 라이브러리를 소스에서 설치하는 것이 관심을 끌 수 있습니다:
 
 ```bash
 pip install git+https://github.com/huggingface/peft.git
 ```
 
-## Supported PEFT models
+## 지원되는 PEFT 모델 [[supported-peft-models]]
 
-🤗 Transformers natively supports some PEFT methods, meaning you can load adapter weights stored locally or on the Hub and easily run or train them with a few lines of code. The following methods are supported:
+🤗 Transformers는 일부 PEFT 방법을 네이티브로 지원하며, 로컬로 저장된 어댑터 가중치를 로드하거나 Hub에서 쉽게 실행하거나 훈련할 수 있습니다. 다음 방법을 지원합니다:
 
 - [Low Rank Adapters](https://huggingface.co/docs/peft/conceptual_guides/lora)
 - [IA3](https://huggingface.co/docs/peft/conceptual_guides/ia3)
 - [AdaLoRA](https://arxiv.org/abs/2303.10512)
 
-If you want to use other PEFT methods, such as prompt learning or prompt tuning, or about the 🤗 PEFT library in general, please refer to the [documentation](https://huggingface.co/docs/peft/index).
+🤗 PEFT와 관련된 다른 방법(예: 프롬프트 학습 또는 프롬프트 튜닝) 또는 일반적인 🤗 PEFT 라이브러리에 대해 자세히 알아보려면 [문서](https://huggingface.co/docs/peft/index)를 참조하세요.
 
 
-## Load a PEFT adapter
+## PEFT 어댑터 로드 [[load-a-peft-adapter]]
 
-To load and use a PEFT adapter model from 🤗 Transformers, make sure the Hub repository or local directory contains an `adapter_config.json` file and the adapter weights, as shown in the example image above. Then you can load the PEFT adapter model using the `AutoModelFor` class. For example, to load a PEFT adapter model for causal language modeling:
+🤗 Transformers에서 PEFT 어댑터 모델을 로드하고 사용하려면 Hub 저장소나 로컬 디렉터리에 `adapter_config.json` 파일과 어댑터 가중치가 포함되어 있는지 확인하십시오. 그런 다음 `AutoModelFor` 클래스를 사용하여 PEFT 어댑터 모델을 로드할 수 있습니다. 예를 들어 인과 언어 모델용 PEFT 어댑터 모델을 로드하려면 다음 단계를 따르십시오:
 
-1. specify the PEFT model id
-2. pass it to the [`AutoModelForCausalLM`] class
+1. PEFT 모델 ID를 지정하십시오.
+2. [`AutoModelForCausalLM`] 클래스에 전달하십시오.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -63,13 +63,13 @@ peft_model_id = "ybelkada/opt-350m-lora"
 model = AutoModelForCausalLM.from_pretrained(peft_model_id)
 ```
 
-<Tip>
+<팁>
 
-You can load a PEFT adapter with either an `AutoModelFor` class or the base model class like `OPTForCausalLM` or `LlamaForCausalLM`.
+`AutoModelFor` 클래스나 기본 모델 클래스(예: `OPTForCausalLM` 또는 `LlamaForCausalLM`) 중 하나를 사용하여 PEFT 어댑터를 로드할 수 있습니다.
 
-</Tip>
+</팁>
 
-You can also load a PEFT adapter by calling the `load_adapter` method:
+`load_adapter` 메서드를 호출하여 PEFT 어댑터를로드할 수도 있습니다.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -81,9 +81,9 @@ model = AutoModelForCausalLM.from_pretrained(model_id)
 model.load_adapter(peft_model_id)
 ```
 
-## Load in 8bit or 4bit
+## 8비트 또는 4비트로 로드 [[load-in-8bit-or-4bit]]
 
-The `bitsandbytes` integration supports 8bit and 4bit precision data types, which are useful for loading large models because it saves memory (see the `bitsandbytes` integration [guide](./quantization#bitsandbytes-integration) to learn more). Add the `load_in_8bit` or `load_in_4bit` parameters to [`~PreTrainedModel.from_pretrained`] and set `device_map="auto"` to effectively distribute the model to your hardware:
+`bitsandbytes` 통합은 8비트와 4비트 정밀도 데이터 유형을 지원하므로 큰 모델을로드할 때 유용합니다. 이것은 메모리를 절약합니다. 모델을 하드웨어에 효과적으로 분배하려면 [`~PreTrainedModel.from_pretrained`]에 `load_in_8bit` 또는 `load_in_4bit` 매개변수를 추가하고 `device_map="auto"`를 설정하십시오:
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -92,9 +92,9 @@ peft_model_id = "ybelkada/opt-350m-lora"
 model = AutoModelForCausalLM.from_pretrained(peft_model_id, device_map="auto", load_in_8bit=True)
 ```
 
-## Add a new adapter
+## 새 어댑터 추가 [[add-a-new-adapter]]
 
-You can use [`~peft.PeftModel.add_adapter`] to add a new adapter to a model with an existing adapter as long as the new adapter is the same type as the current one. For example, if you have an existing LoRA adapter attached to a model:
+기존 어댑터가있는 모델에 새 어댑터를 추가하려면 [`~peft.PeftModel.add_adapter`]를 사용할 수 있습니다. 새 어댑터가 현재 어댑터와 동일한 유형인 한 추가할 수 있습니다. 예를 들어 모델에 연결된 기존 LoRA 어댑터가있는 경우:
 
 ```py
 from transformers import AutoModelForCausalLM, OPTForCausalLM, AutoTokenizer
@@ -111,14 +111,14 @@ lora_config = LoraConfig(
 model.add_adapter(lora_config, adapter_name="adapter_1")
 ```
 
-To add a new adapter:
+새 어댑터를 추가하려면:
 
 ```py
 # attach new adapter with same config
 model.add_adapter(lora_config, adapter_name="adapter_2")
 ```
 
-Now you can use [`~peft.PeftModel.set_adapter`] to set which adapter to use:
+이제 [`~peft.PeftModel.set_adapter`]를 사용하여 어댑터를 사용할 어댑터로 설정할 수 있습니다:
 
 ```py
 # use adapter_1
@@ -132,9 +132,9 @@ output_enabled = model.generate(**inputs)
 print(tokenizer.decode(output_enabled[0], skip_special_tokens=True))
 ```
 
-## Enable and disable adapters
+## 어댑터 활성화 및 비활성화 [[enable-and-disable-adapters]]
 
-Once you've added an adapter to a model, you can enable or disable the adapter module. To enable the adapter module:
+모델에 어댑터를 추가한 후 어댑터 모듈을 활성화 또는 비활성화할 수 있습니다. 어댑터 모듈을 활성화하려면:
 
 ```py
 from transformers import AutoModelForCausalLM, OPTForCausalLM, AutoTokenizer
@@ -157,24 +157,24 @@ model.enable_adapters()
 output = model.generate(**inputs)
 ```
 
-To disable the adapter module:
+어댑터 모듈을 비활성화하려면:
 
 ```py
 model.disable_adapters()
 output = model.generate(**inputs)
 ```
 
-## Train a PEFT adapter
+## PEFT 어댑터 훈련 [[train-a-peft-adapter]]
 
-PEFT adapters are supported by the [`Trainer`] class so that you can train an adapter for your specific use case. It only requires adding a few more lines of code. For example, to train a LoRA adapter:
+PEFT 어댑터는 [`Trainer`] 클래스에서 지원되므로 특정 사용 사례에 대한 어댑터를 훈련할 수 있습니다. 몇 줄의 코드를 추가하기만 하면됩니다. 예를 들어 LoRA 어댑터를 훈련하려면 다음과 같습니다:
 
-<Tip>
+<팁>
 
-If you aren't familiar with fine-tuning a model with [`Trainer`], take a look at the [Fine-tune a pretrained model](training) tutorial.
+[`Trainer`]를 사용하여 모델을 미세 조정하는 것이 익숙하지 않다면 [미세 조정된 모델을 미세 조정하기](training) 튜토리얼을 확인하세요.
 
-</Tip>
+</팁>
 
-1. Define your adapter configuration with the task type and hyperparameters (see [`~peft.LoraConfig`] for more details about what the hyperparameters do).
+1. 과제 유형 및 하이퍼파라미터를 지정하여 어댑터 구성을 정의합니다(하이퍼파라미터에 대한 자세한 내용은 [`~peft.LoraConfig`]를 참조하세요).
 
 ```py
 from peft import LoraConfig
@@ -188,20 +188,20 @@ peft_config = LoraConfig(
 )
 ```
 
-2. Add adapter to the model.
+2. 모델에 어댑터를 추가합니다.
 
 ```py
 model.add_adapter(peft_config)
 ```
 
-3. Now you can pass the model to [`Trainer`]!
+3. 이제 모델을 [`Trainer`]에 전달할 수 있습니다!
 
 ```py
 trainer = Trainer(model=model, ...)
 trainer.train()
 ```
 
-To save your trained adapter and load it back:
+훈련한 어댑터를 저장하고 다시로드하려면:
 
 ```py
 model.save_pretrained(save_dir)
@@ -210,7 +210,7 @@ model = AutoModelForCausalLM.from_pretrained(save_dir)
 
 <!--
 TODO: (@younesbelkada @stevhliu)
--   Link to PEFT docs for further details
--   Trainer  
--   8-bit / 4-bit examples ?
+- PEFT 문서에 대한 링크
+- Trainer
+- 8비트 / 4비트 예제?
 -->
