@@ -38,18 +38,15 @@ The abstract from the paper is the following:
 
 Tips:
 
-- [`~transformers.BrosModel.forward`] requires `input_ids` and `bbox` (bounding box). Each bounding box should be in (x0, y0, x1, y0, x1, y1, x0, y1) format represented by four clockwise points starting from top-left corner. Obtaining of Bounding boxes depends on external OCR system. The `x` coordinate should be normalized by document image width, and the `y` coordinate should be normalized by document image height. Since most OCR systems output bounding boxes with two points (x0, y0, x1, y1), you can expand and normalize bboxes with following code,
+- [`~transformers.BrosModel.forward`] requires `input_ids` and `bbox` (bounding box). Each bounding box should be in (x0, y0, x1, y1) format (top-left corner, bottom-right corner). Obtaining of Bounding boxes depends on external OCR system. The `x` coordinate should be normalized by document image width, and the `y` coordinate should be normalized by document image height.
 
 ```python
 def expand_and_normalize_bbox(bboxes, doc_width, doc_height):
     # here, bboxes are numpy array
 
-    # Expand bbox from 2 points to 4 points
-    bboxes = bboxes[:, [0, 1, 2, 1, 2, 3, 0, 3]]
-
     # Normalize bbox -> 0 ~ 1
-    bboxes[:, [0, 2, 4, 6]] = bboxes[:, [0, 2, 4, 6]] / doc_width
-    bboxes[:, [1, 3, 5, 7]] = bboxes[:, [1, 3, 5, 7]] / doc_height
+    bboxes[:, [0, 2]] = bboxes[:, [0, 2]] / width
+    bboxes[:, [1, 3]] = bboxes[:, [1, 3]] / height
 ```
 
 - [`~transformers.BrosForTokenClassification.forward`, `~transformers.BrosSpadeEEForTokenClassification.forward`, `~transformers.BrosSpadeEEForTokenClassification.forward`] require not only `input_ids` and `bbox` but also `box_first_token_mask` for loss calculation. It is a mask to filter out non-first tokens of each box. You can obtain this mask by saving start token indices of bounding boxes when creating `input_ids` from words. You can make `box_first_token_mask` with following code,
