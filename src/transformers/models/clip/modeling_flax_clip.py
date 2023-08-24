@@ -1037,7 +1037,7 @@ append_replace_return_docstrings(
 )
 
 
-class FlaxCLIPTextModuleWithProjection(nn.Module):
+class FlaxCLIPTextModelWithProjectionModule(nn.Module):
     config: CLIPTextConfig
     dtype: jnp.dtype = jnp.float32
 
@@ -1080,7 +1080,7 @@ class FlaxCLIPTextModuleWithProjection(nn.Module):
 
 
 class FlaxCLIPTextModelWithProjection(FlaxCLIPTextPreTrainedModel):
-    module_class = FlaxCLIPTextModuleWithProjection
+    module_class = FlaxCLIPTextModelWithProjectionModule
 
 
 FLAX_CLIP_TEXT_MODEL_WITH_PROJECTION_DOCSTRING = """
