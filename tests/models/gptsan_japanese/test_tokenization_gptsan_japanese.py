@@ -206,7 +206,7 @@ class GPTSanJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ],
             [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
         ]
-        tokenized_chats = [tokenizer.build_conversation_input_ids(test_chat) for test_chat in test_chats]
+        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
         # fmt: off
         expected_tokens = [
             [35993, 35998, 35637, 35659, 35665, 35716, 35645, 35662, 35649, 35716, 35645, 35716, 35652, 35649, 35656, 35660, 35650, 35665, 35656, 35716, 35647, 35652, 35645, 35664, 35646, 35659, 35664, 35595, 35999, 35993, 35998, 35620, 35649, 35656, 35656, 35659, 35582, 35999],

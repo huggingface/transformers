@@ -141,7 +141,7 @@ class GPTSw3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ],
             [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
         ]
-        tokenized_chats = [tokenizer.build_conversation_input_ids(test_chat) for test_chat in test_chats]
+        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
         # fmt: off
         expected_tokens = [
             [268, 63, 127, 462, 276, 294, 348, 536, 797, 275, 127, 65, 63, 263, 65, 938, 541, 419, 530, 339, 265, 878, 708, 727, 275, 347, 541, 260, 63, 263, 65, 1256, 263, 314, 419, 366, 354, 294, 360, 63, 263, 65, 938, 541, 419, ],

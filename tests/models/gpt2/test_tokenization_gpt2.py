@@ -286,7 +286,7 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ],
             [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
         ]
-        tokenized_chats = [tokenizer.build_conversation_input_ids(test_chat) for test_chat in test_chats]
+        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
         # fmt: off
         expected_tokens = [[20, 1, 20, 10, 20, 4, 3, 10, 20, 10, 20, 3, 0, 20, 20, 20, 0, 10, 20, 20, 20, 6, 20, 1, 6, 20, 20, 20, 3, 0, 0, 1, 20, 20],
                           [20, 1, 20, 10, 20, 4, 3, 10, 20, 10, 20, 3, 0, 20, 20, 20, 0, 10, 20, 20, 20, 6, 20, 1, 6, 20, 20, 20, 3, 0, 0, 1, 20, 20, 20, 7, 20, 3, 10, 6, 1, 10, 20, 3, 3, 6, 10, 20, 1, 20, 20, 20],

@@ -486,7 +486,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
             ],
             [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
         ]
-        tokenized_chats = [multilingual_tokenizer.build_conversation_input_ids(test_chat) for test_chat in test_chats]
+        tokenized_chats = [multilingual_tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
         expected_tokens = [
             [3223, 366, 257, 4961, 5081, 18870, 13, 50257, 15947, 0, 50257],
             [3223, 366, 257, 4961, 5081, 18870, 13, 50257, 15947, 0, 50257, 37717, 220, 1353, 1677, 291, 13, 50257],

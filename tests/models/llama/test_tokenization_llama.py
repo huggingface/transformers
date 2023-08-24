@@ -585,7 +585,7 @@ class LlamaIntegrationTest(unittest.TestCase):
                 {"role": "assistant", "content": "Nice to meet you."},
             ],
         ]
-        tokenized_chats = [tokenizer.build_conversation_input_ids(test_chat) for test_chat in test_chats]
+        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
         # fmt: off
         expected_tokens = [
             [3532, 14816, 29903, 6778, 13, 3492, 526, 263, 8444, 13563, 7451, 29889, 13, 29966, 829, 14816, 29903, 6778, 13, 13, 1, 29961, 25580, 29962, 10994, 21298, 29914, 25580, 29962],

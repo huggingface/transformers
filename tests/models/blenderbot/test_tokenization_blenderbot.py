@@ -62,7 +62,7 @@ class Blenderbot3BTokenizerTests(unittest.TestCase):
             ],
             [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
         ]
-        tokenized_chats = [tok.build_conversation_input_ids(test_chat) for test_chat in test_chats]
+        tokenized_chats = [tok.apply_chat_template(test_chat) for test_chat in test_chats]
         expected_tokens = [
             [553, 366, 265, 4792, 3879, 73, 311, 21, 228, 228, 6950, 8, 2],
             [553, 366, 265, 4792, 3879, 73, 311, 21, 228, 228, 6950, 8, 228, 3490, 287, 2273, 304, 21, 2],

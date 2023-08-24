@@ -1427,6 +1427,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             - **length** -- The length of the inputs (when `return_length=True`)
 """
 
+# TODO Matt: Add a proper doc for chat templating.
 INIT_TOKENIZER_DOCSTRING = r"""
     Class attributes (overridden by derived classes)
 
@@ -1462,6 +1463,8 @@ INIT_TOKENIZER_DOCSTRING = r"""
         truncation_side (`str`, *optional*):
             The side on which the model should have truncation applied. Should be selected between ['right', 'left'].
             Default value is picked from the class attribute of the same name.
+        chat_template (`str`, *optional*):
+            A Jinja template string that will be used to format lists of chat messages. See X document for full desc.
         model_input_names (`List[string]`, *optional*):
             The list of inputs accepted by the forward pass of the model (like `"token_type_ids"` or
             `"attention_mask"`). Default value is picked from the class attribute of the same name.
@@ -1643,12 +1646,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         raise NotImplementedError()
 
-    def build_conversation_input_ids(
+    def apply_chat_template(
         self,
         conversation: Union[List[Dict[str, str]], "Conversation"],
         chat_template: Optional[str] = None,
+        tokenize: bool = True,
         **tokenizer_kwargs,
-    ) -> List[int]:
+    ) -> Union[str, List[int]]:
         """
         Converts a Conversation object or a list of {"role", "content"} dictionaries to a list of token ids. This
         method is intended for use with chat models, and will read the tokenizers's chat_template attribute to
@@ -1657,10 +1661,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         Args:
             conversation (Union[List[Dict[str, str]], "Conversation"]): A Conversation object or list of dicts
-            with "role" and "content" keys, representing the chat history so far.
+                with "role" and "content" keys, representing the chat history so far.
             chat_template (str, *optional*): A Jinja template to use for this conversion. If
-            this is not passed, the model's default chat template will be used instead.
-            **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
+                this is not passed, the model's default chat template will be used instead.
+                **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
+            tokenize (bool, defaults to True): Whether to tokenize the output. If False, the output will be a string.
 
         Returns:
             List[int]: A list of token ids representing the tokenized chat so far, including control tokens. This
@@ -1686,8 +1691,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         jinja_env = ImmutableSandboxedEnvironment()
         compiled_template = jinja_env.from_string(chat_template)
         rendered = compiled_template.render(messages=conversation, **self.special_tokens_map)
-        dialog_tokens = self.encode(rendered, add_special_tokens=False, **tokenizer_kwargs)
-        return dialog_tokens
+        if tokenize:
+            return self.encode(rendered, add_special_tokens=False, **tokenizer_kwargs)
+        else:
+            return rendered
+
 
     @classmethod
     def from_pretrained(

@@ -145,7 +145,7 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ],
             [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
         ]
-        tokenized_chats = [tokenizer.build_conversation_input_ids(test_chat) for test_chat in test_chats]
+        tokenized_chats = [tokenizer.apply_chat_template(test_chat) for test_chat in test_chats]
         expected_tokens = [
             [5448, 1306, 267, 66799, 44799, 37143, 17, 2, 59414, 4, 2],
             [5448, 1306, 267, 66799, 44799, 37143, 17, 2, 59414, 4, 2, 229126, 427, 11890, 1152, 17, 2],
