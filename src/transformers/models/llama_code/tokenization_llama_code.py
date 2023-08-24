@@ -198,14 +198,14 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
 
     def tokenize(self, prefix, suffix=None, suffix_first=False, **kwargs) -> List[int]:
         # add a prefix space to `prefix`
-        if len(prefix) > 0:
-            prefix = SPIECE_UNDERLINE + prefix.replace(SPIECE_UNDERLINE, " ")
+        prefix = SPIECE_UNDERLINE + prefix.replace(SPIECE_UNDERLINE, " ")
+
         if self.fill_token in prefix and suffix is None:
             prefix, suffix = prefix.split(self.fill_token)
 
         prefix_tokens = self._tokenize(prefix)  # prefix has an extra `SPIECE_UNDERLINE`
         if suffix is None or len(suffix) < 1:
-            if prefix_tokens[0] == SPIECE_UNDERLINE and prefix_tokens[1] in self.all_special_tokens:
+            if len(prefix_tokens)>1 and prefix_tokens[0] == SPIECE_UNDERLINE and prefix_tokens[1] in self.all_special_tokens:
                 # strip prefix token before a special token
                 prefix_tokens = prefix_tokens[1:]
             return prefix_tokens
