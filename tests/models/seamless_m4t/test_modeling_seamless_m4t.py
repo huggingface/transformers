@@ -385,6 +385,7 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
                     "feature_projection.projection.weight",
                     "feature_projection.projection.bias",
                     "objective.weight",
+                    "adapter",
                 ]
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
@@ -466,6 +467,7 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
                     "feature_projection.projection.weight",
                     "feature_projection.projection.bias",
                     "objective.weight",
+                    "adapter",
                 ]
                 if param.requires_grad:
                     if any(x in name for x in uniform_init_parms):
@@ -479,7 +481,6 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
                             [0.0, 1.0],
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
-
 
 @require_torch
 class SeamlessM4TModelIntegrationTest(unittest.TestCase):
