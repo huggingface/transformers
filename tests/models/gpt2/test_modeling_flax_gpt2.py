@@ -202,9 +202,8 @@ class FlaxGPT2ModelTester:
             max_new_tokens=3,
         )
 
-        np.testing.assert_array_equal(
-            output_bool_att_mask.sequences,
-            output_int_att_mask.sequences,
+        self.parent.assertTrue(
+            (output_bool_att_mask.sequences == output_int_att_mask.sequences).all(),
             "Generated response differ between boolean and integer attention mask",
         )
 
