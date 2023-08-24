@@ -387,7 +387,7 @@ class SeamlessM4TConformerFeatureProjection(nn.Module):
         norm_hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.projection(norm_hidden_states)
         hidden_states = self.dropout(hidden_states)
-        return hidden_states, norm_hidden_states
+        return hidden_states
 
 
 # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerFeedForward with Wav2Vec2->SeamlessM4T
@@ -1540,7 +1540,7 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
                 "Both `input_values` and `inputs_embeds` are `None` in `SeamlessM4TSpeechEncoder.forward`. Make sure one of them is not `None`."
             )
 
-        hidden_states, _ = self.feature_projection(input_values)
+        hidden_states = self.feature_projection(input_values)
 
         encoder_outputs = self.encoder(
             hidden_states,
