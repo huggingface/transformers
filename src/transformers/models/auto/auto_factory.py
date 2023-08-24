@@ -470,21 +470,6 @@ class _BaseAutoModelClass:
         if token is not None:
             hub_kwargs["token"] = token
 
-        if is_peft_available():
-            revision = kwargs.get("revision", None)
-            subfolder = kwargs.get("subfolder", None)
-
-            maybe_adapter_path = find_adapter_config_file(
-                pretrained_model_name_or_path, revision=revision, token=token, subfolder=subfolder
-            )
-
-            if maybe_adapter_path is not None:
-                with open(maybe_adapter_path, "r", encoding="utf-8") as f:
-                    adapter_config = json.load(f)
-
-                    kwargs["_adapter_model_path"] = pretrained_model_name_or_path
-                    pretrained_model_name_or_path = adapter_config["base_model_name_or_path"]
-
         if not isinstance(config, PretrainedConfig):
             kwargs_orig = copy.deepcopy(kwargs)
             # ensure not to pollute the config object with torch_dtype="auto" - since it's
@@ -508,6 +493,28 @@ class _BaseAutoModelClass:
                 kwargs["torch_dtype"] = "auto"
             if kwargs_orig.get("quantization_config", None) is not None:
                 kwargs["quantization_config"] = kwargs_orig["quantization_config"]
+
+        if is_peft_available():
+            revision = hub_kwargs.get("revision", None)
+            subfolder = hub_kwargs.get("subfolder", None)
+
+            commit_hash = kwargs.get("_commit_hash", None)
+            if commit_hash is None:
+                commit_hash = config._commit_hash
+            maybe_adapter_path = find_adapter_config_file(
+                pretrained_model_name_or_path,
+                revision=revision,
+                token=token,
+                subfolder=subfolder,
+                commit_hash=commit_hash,
+            )
+
+            if maybe_adapter_path is not None:
+                with open(maybe_adapter_path, "r", encoding="utf-8") as f:
+                    adapter_config = json.load(f)
+
+                    kwargs["_adapter_model_path"] = pretrained_model_name_or_path
+                    pretrained_model_name_or_path = adapter_config["base_model_name_or_path"]
 
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping.keys()

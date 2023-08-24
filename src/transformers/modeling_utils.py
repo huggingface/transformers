@@ -2368,29 +2368,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " ignored."
             )
 
-        if is_peft_available() and _adapter_model_path is None:
-            maybe_adapter_model_path = find_adapter_config_file(
-                pretrained_model_name_or_path,
-                revision=revision,
-                subfolder=subfolder,
-                token=token,
-                commit_hash=commit_hash,
-            )
-        elif is_peft_available() and _adapter_model_path is not None:
-            maybe_adapter_model_path = _adapter_model_path
-        else:
-            maybe_adapter_model_path = None
-
-        has_adapter_config = maybe_adapter_model_path is not None
-
-        if has_adapter_config:
-            if _adapter_model_path is not None:
-                adapter_model_id = _adapter_model_path
-            else:
-                with open(maybe_adapter_model_path, "r", encoding="utf-8") as f:
-                    adapter_model_id = pretrained_model_name_or_path
-                    pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
-
         # change device_map into a map if we passed an int, a str or a torch.device
         if isinstance(device_map, torch.device):
             device_map = {"": device_map}
@@ -2525,6 +2502,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             model_kwargs = kwargs
 
+        if commit_hash is None:
+            commit_hash = getattr(config, "_commit_hash", None)
+
+        if is_peft_available() and _adapter_model_path is None:
+            maybe_adapter_model_path = find_adapter_config_file(
+                pretrained_model_name_or_path,
+                revision=revision,
+                subfolder=subfolder,
+                token=token,
+                commit_hash=commit_hash,
+            )
+        elif is_peft_available() and _adapter_model_path is not None:
+            maybe_adapter_model_path = _adapter_model_path
+        else:
+            maybe_adapter_model_path = None
+
+        has_adapter_config = maybe_adapter_model_path is not None
+
+        if has_adapter_config:
+            if _adapter_model_path is not None:
+                adapter_model_id = _adapter_model_path
+            else:
+                with open(maybe_adapter_model_path, "r", encoding="utf-8") as f:
+                    adapter_model_id = pretrained_model_name_or_path
+                    pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
+
         quantizer = None
         quantization_method_from_config = None
         if hasattr(config, "quantization_config"):
@@ -2621,9 +2624,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " `bitsandbytes` version to support int8 serialization. Please install the latest version of `bitsandbytes` with "
                 " `pip install --upgrade bitsandbytes`."
             )
-
-        if commit_hash is None:
-            commit_hash = getattr(config, "_commit_hash", None)
 
         # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
         # index of the files.
