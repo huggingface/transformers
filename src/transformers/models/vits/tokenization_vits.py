@@ -146,7 +146,7 @@ class VitsTokenizer(PreTrainedTokenizer):
         return text
 
     def prepare_for_tokenization(
-        self, text: str, is_split_into_words: bool = False, normalize: bool = False, **kwargs
+        self, text: str, is_split_into_words: bool = False, normalize: bool = True, **kwargs
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Performs any necessary transformations before tokenization.
@@ -161,9 +161,9 @@ class VitsTokenizer(PreTrainedTokenizer):
                 Whether or not the input is already pre-tokenized (e.g., split into words). If set to `True`, the
                 tokenizer assumes the input is already split into words (for instance, by splitting it on whitespace)
                 which it will tokenize.
-            normalize (`bool`, *optional*, defaults to `False`):
+            normalize (`bool`, *optional*, defaults to `True`):
                 Whether or not to apply punctuation and casing normalization to the text inputs. Typically, VITS is
-                trained on lower-cased and un-punctuated text. Hence, normalization can be used to ensure that the input
+                trained on lower-cased and un-punctuated text. Hence, normalization is be used to ensure that the input
                 text consists only of lower-case characters.
             kwargs (`Dict[str, Any]`, *optional*):
                 Keyword arguments to use for the tokenization.

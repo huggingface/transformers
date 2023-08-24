@@ -346,7 +346,7 @@ class VitsModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 @slow
 class VitsModelIntegrationTests(unittest.TestCase):
-    def test_generation(self):
+    def test_forward(self):
         # GPU gives different results than CPU
         torch_device = "cpu"
 
@@ -358,11 +358,12 @@ class VitsModelIntegrationTests(unittest.TestCase):
         set_seed(555)  # make deterministic
 
         input_text = "Mister quilter is the apostle of the middle classes and we are glad to welcome his gospel!"
-        input_ids = tokenizer(text=input_text, return_tensors="pt").input_ids.to(torch_device)
+        input_ids = tokenizer(input_text, return_tensors="pt").input_ids.to(torch_device)
 
-        outputs = model(input_ids)
+        with torch.no_grad():
+            outputs = model(input_ids)
+
         self.assertEqual(outputs.waveform.shape, (1, 87040))
-
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
             [

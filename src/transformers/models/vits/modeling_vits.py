@@ -1345,7 +1345,7 @@ VITS_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The VITS model.",
+    "The complete VITS model, for text-to-speech synthesis.",
     VITS_START_DOCSTRING,
 )
 class VitsModel(VitsPreTrainedModel):
