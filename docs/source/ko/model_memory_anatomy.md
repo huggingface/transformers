@@ -14,24 +14,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Model training anatomy
+# 모델 훈련의 구조 [[model-training-anatomy]]
 
-To understand performance optimization techniques that one can apply to improve efficiency of model training 
-speed and memory utilization, it's helpful to get familiar with how GPU is utilized during training, and how compute 
-intensity varies depending on an operation performed.
+모델 훈련 속도와 메모리 활용의 효율성을 향상시키기 위해 적용할 수 있는 성능 최적화 기술을 이해하려면 GPU가 훈련 중에 어떻게 활용되는지, 그리고 수행된 연산에 따라 연산 강도가 어떻게 변하는지에 익숙해져야 합니다.
 
-Let's start by exploring a motivating example of GPU utilization and the training run of a model. For the demonstration, 
-we'll need to install a few libraries: 
+GPU 활용과 모델의 훈련 실행을 예로 들어 살펴보겠습니다. 데모를 위해 몇몇 라이브러리를 설치해야 합니다:
 
 ```bash
 pip install transformers datasets accelerate nvidia-ml-py3
 ```
 
-The `nvidia-ml-py3` library allows us to monitor the memory usage of the models from within Python. You might be familiar 
-with the `nvidia-smi` command in the terminal - this library allows to access the same information in Python directly.
+`nvidia-ml-py3` 라이브러리는 Python 내부에서 모델의 메모리 사용량을 모니터링할 수 있게 해줍니다. 당신은 터미널의 `nvidia-smi` 명령어에 익숙할 수 있는데 - 이 라이브러리는 Python에서 직접 동일한 정보에 접근할 수 있게 해줍니다.
 
-Then, we create some dummy data: random token IDs between 100 and 30000 and binary labels for a classifier. 
-In total, we get 512 sequences each with length 512 and store them in a [`~datasets.Dataset`] with PyTorch format.
+그 다음, 더미 데이터를 생성합니다: 100과 30000 사이의 무작위 토큰 ID와 분류기의 이진 레이블입니다. 
+총 512 시퀀스를 각각 길이 512로 만들고, PyTorch 형식의 [`~datasets.Dataset`]에 저장합니다.
 
 
 ```py
@@ -48,7 +44,7 @@ In total, we get 512 sequences each with length 512 and store them in a [`~datas
 >>> ds.set_format("pt")
 ```
 
-To print summary statistics for the GPU utilization and the training run with the [`Trainer`] we define two helper functions:
+GPU 활용 및 훈련 실행에 대한 요약 통계를 인쇄하기 위해 두 개의 도우미 함수를 정의하겠습니다:
 
 ```py
 >>> from pynvml import *
@@ -67,17 +63,14 @@ To print summary statistics for the GPU utilization and the training run with th
 ...     print_gpu_utilization()
 ```
 
-Let's verify that we start with a free GPU memory:
+우리가 시작할 때 GPU 메모리가 비어 있는지 확인해 봅시다:
 
 ```py
 >>> print_gpu_utilization()
 GPU memory occupied: 0 MB.
 ```
 
-That looks good: the GPU memory is not occupied as we would expect before we load any models. If that's not the case on 
-your machine make sure to stop all processes that are using GPU memory. However, not all free GPU memory can be used by 
-the user. When a model is loaded to the GPU also the kernels are loaded which can take up 1-2GB of memory. To see how 
-much it is we load a tiny tensor into the GPU which triggers the kernels to be loaded as well.
+좋아 보입니다: 모델을 불러오기 전에 예상대로 GPU 메모리가 점유되지 않았습니다. 당신의 기기에서 그렇지 않다면 GPU 메모리를 사용하는 모든 프로세스를 중단해야 합니다. 그러나 사용자가 사용할 수 있는 모든 무료 GPU 메모리가 있지는 않습니다. 모델이 GPU에 로드될 때 커널도 로드되는데 이것은 1-2GB의 메모리를 차지할 수 있습니다. 얼마나 되는지 확인하기 위해 GPU에 작은 텐서를 로드하면 커널이 로드되도록 트리거됩니다.
 
 ```py
 >>> import torch
@@ -88,12 +81,11 @@ much it is we load a tiny tensor into the GPU which triggers the kernels to be l
 GPU memory occupied: 1343 MB.
 ```
 
-We see that the kernels alone take up 1.3GB of GPU memory. Now let's see how much space the model uses.
+커널만으로도 GPU 메모리의 1.3GB를 차지합니다. 이제 모델이 얼마나 많은 공간을 사용하는지 확인해 보겠습니다.
 
-## Load Model
+## 모델 로드 [[load-model]]
 
-First, we load the `bert-large-uncased` model. We load the model weights directly to the GPU so that we can check 
-how much space just the weights use.
+우선, `bert-large-uncased` 모델을 로드합니다. 모델의 가중치를 직접 GPU에 로드해서 가중치만이 얼마나 많은 공간을 차지하는지 확인할 수 있습니다.
 
 
 ```py
@@ -105,10 +97,7 @@ how much space just the weights use.
 GPU memory occupied: 2631 MB.
 ```
 
-We can see that the model weights alone take up 1.3 GB of the GPU memory. The exact number depends on the specific 
-GPU you are using. Note that on newer GPUs a model can sometimes take up more space since the weights are loaded in an 
-optimized fashion that speeds up the usage of the model. Now we can also quickly check if we get the same result 
-as with `nvidia-smi` CLI:
+모델의 가중치만으로도 GPU 메모리의 1.3 GB를 차지한다는 것을 볼 수 있습니다. 정확한 숫자는 사용하는 특정 GPU에 따라 다릅니다. 새로운 GPU에서는 모델의 가중치가 최적화된 방식으로 로드되어 모델의 사용이 더 빨라질 때 때로 더 많은 공간을 차지할 수 있다는 점에 유의하세요. 이제 `nvidia-smi` CLI와 동일한 결과를 얻는지 빠르게 확인할 수도 있습니다:
 
 
 ```bash
@@ -138,9 +127,7 @@ Tue Jan 11 08:58:05 2022
 +-----------------------------------------------------------------------------+
 ```
 
-We get the same number as before and you can also see that we are using a V100 GPU with 16GB of memory. So now we can 
-start training the model and see how the GPU memory consumption changes. First, we set up a few standard training 
-arguments:
+이전과 동일한 숫자를 얻고, 우리가 16GB 메모리를 가진 V100 GPU를 사용하고 있다는 것을 볼 수 있습니다. 그러므로 이제 GPU 메모리 소비가 어떻게 변하는지 모델을 훈련시키기 시작할 수 있습니다. 우선, 몇몇 표준 훈련 인수를 설정합니다:
 
 ```py
 default_args = {
@@ -154,14 +141,13 @@ default_args = {
 
 <Tip>
 
- If you plan to run multiple experiments, in order to properly clear the memory between experiments, restart the Python 
- kernel between experiments.
+여러 실험을 실행할 계획이라면, 실험 간에 메모리를 제대로 지우려면 Python 커널을 실험 사이에 재시작하세요.
 
 </Tip>
 
-## Memory utilization at vanilla training
+## 기본 훈련에서의 메모리 활용 [[memory-utilization-at-vanilla-training]]
 
-Let's use the [`Trainer`] and train the model without using any GPU performance optimization techniques and a batch size of 4:
+[`Trainer`]를 사용하여 모델을 훈련시키고, GPU 성능 최적화 기술을 사용하지 않고 배치 크기가 4인 상태로 모델을 훈련시키겠습니다:
 
 ```py
 >>> from transformers import TrainingArguments, Trainer, logging
@@ -181,92 +167,76 @@ Samples/second: 8.86
 GPU memory occupied: 14949 MB.
 ```
 
-We see that already a relatively small batch size almost fills up our GPU's entire memory. However, a larger batch size 
-can often result in faster model convergence or better end performance. So ideally we want to tune the batch size to our
-model's needs and not to the GPU limitations. What's interesting is that we use much more memory than the size of the model. 
-To understand a bit better why this is the case let's have look at a model's operations and memory needs.
+우리는 이미 상대적으로 작은 배치 크기가 우리 GPU의 전체 메모리를 거의 채워 넣는다는 것을 볼 수 있습니다. 그러나 더 큰 배치 크기는 종종 모델의 수렴이 더 빠르거나 최종 성능이 더 좋게 될 수 있습니다. 그래서 이상적으로는 GPU의 제한이 아닌 우리 모델의 요구에 맞게 배치 크기를 조정하려고 합니다. 흥미로운 점은 모델의 크기보다 훨씬 더 많은 메모리를 사용한다는 것입니다. 이것이 왜 그런지 조금 더 잘 이해하기 위해 모델의 연산과 메모리 필요에 대해 알아보겠습니다.
 
-## Anatomy of Model's Operations
+## 모델의 연산 구조 [[anatomy-of-models-operations]]
 
-Transformers architecture includes 3 main groups of operations grouped below by compute-intensity.
+트랜스포머 아키텍처는 계산 강도에 따라 그룹화된 3가지 주요 연산 그룹을 포함하고 있습니다.
 
-1. **Tensor Contractions**
+1. **텐서 축약(Tensor Contractions)**
 
-    Linear layers and components of Multi-Head Attention all do batched **matrix-matrix multiplications**. These operations are the most compute-intensive part of training a transformer.
+    선형 계층과 다중 머리 주의의 구성 요소는 모두 **행렬-행렬 곱셈(matrix-matrix multiplications)**을 일괄 처리합니다. 이 연산들은 트랜스포머를 훈련시키는 데 가장 계산 집약적인 부분입니다.
 
-2. **Statistical Normalizations**
+2. **통계 정규화(Statistical Normalizations)**
 
-    Softmax and layer normalization are less compute-intensive than tensor contractions, and involve one or more **reduction operations**, the result of which is then applied via a map.
+    Softmax와 레이어 정규화는 텐서 축약보다 계산 강도가 낮으며, 하나 이상의 **감소 연산(reduction operations)**을 포함하며, 그 결과는 맵을 통해 적용됩니다.
 
-3. **Element-wise Operators**
+3. **원소별 연산자(Element-wise Operators)**
 
-    These are the remaining operators: **biases, dropout, activations, and residual connections**. These are the least compute-intensive operations.
+    이것은 남은 연산자들입니다: **편향(biases), 드롭아웃(dropout), 활성화 함수(activations), 그리고 잔여 연결(residual connections)**. 이들은 계산에 있어 가장 적게 부하를 주는 연산입니다.
 
-This knowledge can be helpful to know when analyzing performance bottlenecks.
+이러한 지식은 성능 병목 현상을 분석할 때 도움이 될 수 있습니다.
 
-This summary is derived from [Data Movement Is All You Need: A Case Study on Optimizing Transformers 2020](https://arxiv.org/abs/2007.00072)
+이 요약은 [Data Movement Is All You Need: A Case Study on Optimizing Transformers 2020](https://arxiv.org/abs/2007.00072)에서 유래되었습니다.
 
 
-## Anatomy of Model's Memory
+## 모델의 메모리 구조 [[anatomy-of-models-memory]]
 
-We've seen that training the model uses much more memory than just putting the model on the GPU. This is because there 
-are many components during training that use GPU memory. The components on GPU memory are the following:
+우리는 모델을 훈련시키는 데는 GPU에 모델을 올리는 것보다 훨씬 더 많은 메모리를 사용한다는 것을 보았습니다. 이는 훈련 중 GPU 메모리를 사용하는 많은 구성 요소가 있기 때문입니다. GPU 메모리의 구성 요소는 다음과 같습니다:
 
-1. model weights
-2. optimizer states
-3. gradients
-4. forward activations saved for gradient computation
-5. temporary buffers
-6. functionality-specific memory
+1. 모델 가중치
+2. 최적화기 상태
+3. 그라디언트
+4. 그라디언트 계산을 위해 저장된 전방 활성화
+5. 임시 버퍼
+6. 기능 특정 메모리
 
-A typical model trained in mixed precision with AdamW requires 18 bytes per model parameter plus activation memory. For 
-inference there are no optimizer states and gradients, so we can subtract those. And thus we end up with 6 bytes per 
-model parameter for mixed precision inference, plus activation memory.
+일반적으로 혼합 정밀도로 훈련된 AdamW와 함께 사용되는 모델은 모델 매개변수 당 18 바이트와 활성화 메모리가 필요합니다. 추론을 위해 최적화기 상태와 그라디언트가 필요하지 않으므로 이들을 뺄 수 있습니다. 따라서 혼합 정밀도 추론의 경우 모델 매개변수 당 6 바이트, 그리고 활성화 메모리가 필요합니다.
 
-Let's look at the details.
+자세히 살펴보겠습니다.
 
-**Model Weights:**
+**모델 가중치:**
 
-- 4 bytes * number of parameters for fp32 training
-- 6 bytes * number of parameters for mixed precision training (maintains a model in fp32 and one in fp16 in memory)
+- fp32 훈련의 경우 매개 변수 수 * 4 바이트
+- 혼합 정밀도 훈련의 경우 매개 변수 수 * 6 바이트 (메모리에 fp32와 fp16 두 가지 모델을 유지)
 
-**Optimizer States:**
+**최적화기 상태:**
 
-- 8 bytes * number of parameters for normal AdamW (maintains 2 states)
-- 2 bytes * number of parameters for 8-bit AdamW optimizers like [bitsandbytes](https://github.com/TimDettmers/bitsandbytes)
-- 4 bytes * number of parameters for optimizers like SGD with momentum (maintains only 1 state)
+- 일반 AdamW의 경우 매개 변수 수 * 8 바이트 (2 상태 유지)
+- 8비트 AdamW 최적화기와 같은 [bitsandbytes](https://github.com/TimDettmers/bitsandbytes)의 경우 매개 변수 수 * 2 바이트
+- momentum을 가진 SGD와 같은 최적화기의 경우 매개 변수 수 * 4 바이트 (오직 1 상태만 유지)
 
-**Gradients**
+**그라디언트**
 
-- 4 bytes * number of parameters for either fp32 or mixed precision training (gradients are always kept in fp32)
+- fp32 또는 혼합 정밀도 훈련의 경우 매개 변수 수 * 4 바이트 (그라디언트는 항상 fp32에서 유지됩니다.)
 
-**Forward Activations**
+**전방 활성화**
 
-- size depends on many factors, the key ones being sequence length, hidden size and batch size.
+- 크기는 여러 요인에 따라 달라지며, 주요 요인은 시퀀스 길이, 숨겨진 크기 및 배치 크기입니다.
 
-There are the input and output that are being passed and returned by the forward and the backward functions and the 
-forward activations saved for gradient computation.
+전방 및 후방 함수에서 전달 및 반환되는 입력과 출력이 있으며, 그라디언트 계산을 위해 저장된 전방 활성화가 있습니다.
 
-**Temporary Memory**
+**임시 메모리**
 
-Additionally, there are all kinds of temporary variables which get released once the calculation is done, but in the 
-moment these could require additional memory and could push to OOM. Therefore, when coding it's crucial to think 
-strategically about such temporary variables and sometimes to explicitly free those as soon as they are no longer needed.
+게다가, 계산이 완료되면 곧바로 해제되는 모든 종류의 임시 변수가 있습니다. 그러나 그 순간에는 추가 메모리를 필요로 할 수 있고, OOM으로 밀어낼 수 있습니다. 따라서 코딩할 때 이러한 임시 변수에 전략적으로 생각하는 것이 중요하며, 더 이상 필요하지 않을 때 이러한 변수를 명시적으로 빠르게 해제하는 것이 때로는 중요합니다.
 
-**Functionality-specific memory**
+**기능 특정 메모리**
 
-Then, your software could have special memory needs. For example, when generating text using beam search, the software 
-needs to maintain multiple copies of inputs and outputs.
+그런 다음, 소프트웨어에는 특별한 메모리 요구 사항이 있을 수 있습니다. 예를 들어, 빔 검색을 사용하여 텍스트를 생성할 때 소프트웨어는 입력과 출력의 여러 복사본을 유지해야 합니다.
 
-**`forward` vs `backward` Execution Speed**
+**`forward` vs `backward` 실행 속도**
 
-For convolutions and linear layers there are 2x flops in the backward compared to the forward, which generally translates 
-into ~2x slower (sometimes more, because sizes in the backward tend to be more awkward). Activations are usually 
-bandwidth-limited, and it’s typical for an activation to have to read more data in the backward than in the forward 
-(e.g. activation forward reads once, writes once, activation backward reads twice, gradOutput and output of the forward, 
-and writes once, gradInput).
+합성곱과 선형 계층의 경우 전방에 비해 후방에서는 2배의 flops이 있으므로 일반적으로 ~2배 느리게 변환됩니다(때로는 더 많이, 왜냐하면 후방의 크기는 더 어색하기 때문입니다). 활성화는 일반적으로 대역폭에 제한되며, 후방에서는 전방보다 더 많은 데이터를 읽어야 하는 활성화가 일반적입니다.
 
-As you can see, there are potentially a few places where we could save GPU memory or speed up operations. 
-Now that you understand what affects GPU utilization and computation speed, refer to 
-the [Methods and tools for efficient training on a single GPU](perf_train_gpu_one) documentation page to learn about 
-performance optimization techniques. 
+보시다시피, GPU 메모리를 절약하거나 작업 속도를 높일 수 있는 몇 가지 가능성이 있습니다.
+이제 GPU 활용과 계산 속도에 영향을 주는 것을 이해했으므로, [Methods and tools for efficient training on a single GPU](perf_train_gpu_one) 문서 페이지를 참조하여 성능 최적화 기법에 대해 알아보십시오.
