@@ -3211,7 +3211,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if quantization_method_from_config == QuantizationMethod.GPTQ:
             model = quantizer.post_init_model(model)
 
-        if _adapter_model_path:
+        if _adapter_model_path is not None:
             model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,
