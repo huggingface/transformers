@@ -1007,6 +1007,8 @@ class AutoConfig:
         kwargs["_from_auto"] = True
         kwargs["name_or_path"] = pretrained_model_name_or_path
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+        code_revision = kwargs.pop("code_revision", None)
+
         config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
@@ -1016,10 +1018,11 @@ class AutoConfig:
 
         if has_remote_code and trust_remote_code:
             class_ref = config_dict["auto_map"]["AutoConfig"]
-            config_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
+            config_class = get_class_from_dynamic_module(
+                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
+            )
             if os.path.isdir(pretrained_model_name_or_path):
                 config_class.register_for_auto_class()
-            _ = kwargs.pop("code_revision", None)
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]
