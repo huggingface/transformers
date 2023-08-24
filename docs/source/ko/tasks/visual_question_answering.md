@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-시각적 질의응답(VQA)은 이미지를 기반으로 개방형 질문에 대응하는 태스크입니다. 이 태스크를 지원하는 모델의 입력은 대부분 이미지와 질문의 조합이며, 출력은 자연어로 된 답변입니다.
+시각적 질의응답(VQA)은 이미지를 기반으로 개방형 질문에 대응하는 작업입니다. 이 작업을 지원하는 모델의 입력은 대부분 이미지와 질문의 조합이며, 출력은 자연어로 된 답변입니다.
 
 VQA의 주요 사용 사례는 다음과 같습니다:
 * 시각 장애인을 위한 접근성 애플리케이션을 구축할 수 있습니다.
@@ -34,11 +34,11 @@ VQA의 주요 사용 사례는 다음과 같습니다:
 
 ## ViLT 미세 조정 [[finetuning-vilt]]
 
-ViLT는 Vision Transformer (ViT) 내에 텍스트 임베딩을 포함하여 비전/자연어 사전 학습(VLP; Vision-and-Language Pretraining)을 위한 기본 디자인을 제공합니다.
+ViLT는 Vision Transformer (ViT) 내에 텍스트 임베딩을 포함하여 비전/자연어 사전훈련(VLP; Vision-and-Language Pretraining)을 위한 기본 디자인을 제공합니다.
 ViLT 모델은 비전 트랜스포머(ViT)에 텍스트 임베딩을 넣어 비전/언어 사전훈련(VLP; Vision-and-Language Pre-training)을 위한 기본적인 디자인을 갖췄습니다. 이 모델은 여러 다운스트림 작업에 사용할 수 있습니다. VQA 태스크에서는 (`[CLS]` 토큰의 최종 은닉 상태 위에 선형 레이어인) 분류 헤더가 있으며 무작위로 초기화됩니다. 
 따라서 여기에서 시각적 질의응답은 **분류 문제**로 취급됩니다.
 
-최근의 BLIP, BLIP-2, InstructBLIP와 같은 모델들은 VQA를 생성형 태스크로 간주합니다. 가이드의 후반부에서는 이런 모델들을 사용하여 제로샷 VQA 추론을 하는 방법에 대해 설명하겠습니다.
+최근의 BLIP, BLIP-2, InstructBLIP와 같은 모델들은 VQA를 생성형 작업으로 간주합니다. 가이드의 후반부에서는 이런 모델들을 사용하여 제로샷 VQA 추론을 하는 방법에 대해 설명하겠습니다.
 
 시작하기 전 필요한 모든 라이브러리를 설치했는지 확인하세요.
 
@@ -332,8 +332,8 @@ Predicted answer: down
 
 ## 제로샷 VQA [[zeroshot-vqa]]
 
-이전 모델은 VQA를 분류 문제로 처리했습니다. BLIP, BLIP-2 및 InstructBLIP와 같은 최근의 모델은 VQA를 생성 태스크로 접근합니다. [BLIP-2](../../en/model_doc/blip-2)를 예로 들어 보겠습니다. 이 모델은 사전 학습된 비전 인코더와 LLM의 모든 조합을 사용할 수 있는 새로운 비전-자연어 사전 학습 패러다임을 도입했습니다. ([BLIP-2 블로그 포스트](https://huggingface.co/blog/blip-2)를 통해 더 자세히 알아볼 수 있어요)
-이를 통해 시각적 질의응답을 포함한 여러 비전-자연어 태스크에서 SOTA를 달성할 수 있었습니다.
+이전 모델은 VQA를 분류 문제로 처리했습니다. BLIP, BLIP-2 및 InstructBLIP와 같은 최근의 모델은 VQA를 생성 작업으로 접근합니다. [BLIP-2](../../en/model_doc/blip-2)를 예로 들어 보겠습니다. 이 모델은 사전훈련된 비전 인코더와 LLM의 모든 조합을 사용할 수 있는 새로운 비전-자연어 사전 학습 패러다임을 도입했습니다. ([BLIP-2 블로그 포스트](https://huggingface.co/blog/blip-2)를 통해 더 자세히 알아볼 수 있어요)
+이를 통해 시각적 질의응답을 포함한 여러 비전-자연어 작업에서 SOTA를 달성할 수 있었습니다.
 
 이 모델을 어떻게 VQA에 사용할 수 있는지 설명해 보겠습니다. 먼저 모델을 가져와 보겠습니다. 여기서 GPU가 사용 가능한 경우 모델을 명시적으로 GPU로 전송할 것입니다. 이전에는 훈련할 때 쓰지 않은 이유는 [`Trainer`]가 이 부분을 자동으로 처리하기 때문입니다:
 
@@ -355,7 +355,7 @@ Predicted answer: down
 >>> question = example['question']
 ```
 
-BLIP-2를 시각적 질의응답 태스크에 사용하려면 텍스트 프롬프트가 `Question: {} Answer:` 형식을 따라야 합니다.
+BLIP-2를 시각적 질의응답 작업에 사용하려면 텍스트 프롬프트가 `Question: {} Answer:` 형식을 따라야 합니다.
 
 ```py
 >>> prompt = f"Question: {question} Answer:" 
