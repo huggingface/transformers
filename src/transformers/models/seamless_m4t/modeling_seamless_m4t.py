@@ -3108,7 +3108,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
         sequences = output_text.sequences
 
         # compute last hidden state 
-        t2u_input_embeds = self.compute_last_hidden_states_per_sample(output_text.decoder_hidden_states, output_text.get("beam_indices", None))
+        t2u_input_embeds = self.compute_last_hidden_states_per_sample(output_text.decoder_hidden_states, output_text.get("beam_indices"))
         
         # take care of num_return_sequences
         # take most probable hidden states per batch of return_sequences
