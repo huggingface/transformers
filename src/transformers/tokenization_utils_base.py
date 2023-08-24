@@ -1932,6 +1932,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     cache_dir=cache_dir,
                     local_files_only=local_files_only,
                     _commit_hash=_commit_hash,
+                    trust_remote_code=kwargs.get('trust_remote_code',False)
                 )
                 config_tokenizer_class = config.tokenizer_class
             except (OSError, ValueError, KeyError):
