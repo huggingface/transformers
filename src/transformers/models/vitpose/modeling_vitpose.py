@@ -175,14 +175,16 @@ class ViTPoseEmbeddings(nn.Module):
             embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
         # add the [CLS] token to the embedded patch tokens
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+        #cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        #embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # add positional encoding to each token
         if interpolate_pos_encoding:
             embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
         else:
-            embeddings = embeddings + self.position_embeddings
+            #embeddings = embeddings + self.position_embeddings
+            embeddings = embeddings
+        
         
         print(embeddings.shape)
         #embeddings = self.dropout(embeddings)
@@ -563,7 +565,9 @@ class ViTPosePreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
+        print("modeule",module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
+            print("ini in in in")
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
             module.weight.data = nn.init.trunc_normal_(
@@ -909,18 +913,18 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
             return pose_results
 
         bboxes = [box['bbox'] for box in person_results]
-        bboxes_xyxy = []
+        bboxes_xywh = []
         for bbox in bboxes:
-            bboxes_xyxy.append(box_convert(bbox, 'xywh', 'xyxy'))
+            bboxes_xywh.append(box_convert(bbox, 'xyxy', 'xywh'))
         #bboxes, bboxes_xyxy = bboxes.detach().numpy(), bboxes_xyxy.detach().numpy()
 
         poses, heatmap = self._inference_pose_model(self.vitpose,
             pixel_values,
-            bboxes_xyxy,
+            bboxes_xywh,
             return_heatmap = False)
 
         pose_results.append(pixel_values)
-        for pose, person_result, bbox in zip(poses, person_results, bboxes_xyxy):
+        for pose, person_result, bbox in zip(poses, person_results, bboxes_xywh):
             pose_result = person_result.copy()
             pose_result['keypoints'] = pose
             pose_result['bbox'] = bbox
