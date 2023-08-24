@@ -26,7 +26,7 @@ from .tokenization_deberta import DebertaTokenizer
 
 
 if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
+    from ...pipelines.conversational import Conversation
 
 
 logger = logging.get_logger(__name__)
