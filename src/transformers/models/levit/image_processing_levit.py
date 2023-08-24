@@ -193,7 +193,8 @@ class LevitImageProcessor(BaseImageProcessor):
 
         Args:
             images (`ImageInput`):
-                Image or batch of images to preprocess.
+                Image or batch of images to preprocess. Expects a single or batch of images with pixel values ranging
+                from 0 to 255. If passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):

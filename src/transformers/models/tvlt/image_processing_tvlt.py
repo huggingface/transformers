@@ -276,7 +276,8 @@ class TvltImageProcessor(BaseImageProcessor):
 
         Args:
             videos (`ImageInput`):
-                Images or videos to preprocess.
+                Images or videos to preprocess. Expects a single or batch of frames with pixel values ranging from 0 to
+                255. If passing in frames with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):

@@ -1034,7 +1034,8 @@ class YolosImageProcessor(BaseImageProcessor):
 
         Args:
             images (`ImageInput`):
-                Image or batch of images to preprocess.
+                Image or batch of images to preprocess. Expects a single or batch of images with pixel values ranging
+                from 0 to 255. If passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
                 List of annotations associated with the image or batch of images. If annotionation is for object
                 detection, the annotations should be a dictionary with the following keys:
