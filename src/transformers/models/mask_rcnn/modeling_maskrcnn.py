@@ -1802,7 +1802,7 @@ class MaskRCNNRandomSampler:
             Number of samples.
         pos_fraction (`float`):
             Fraction of positive samples
-        neg_pos_up (`int`, *optional*, defaults to -1):
+        num_samples_upper_bound (`int`, *optional*, defaults to -1):
             Upper bound number of negative and positive samples.
         add_gt_as_proposals (`bool`, *optional*, defaults to `True`):
             Whether to add ground truth boxes as proposals.
