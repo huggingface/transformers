@@ -524,7 +524,6 @@ class _BaseAutoModelClass:
             if kwargs.get("quantization_config", None) is not None:
                 _ = kwargs.pop("quantization_config")
 
-            print(commit_hash)
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path,
                 return_unused_kwargs=True,
