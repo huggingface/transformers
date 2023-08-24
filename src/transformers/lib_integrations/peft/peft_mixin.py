@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
-from typing import Optional, Dict, Union, Any
-
-from transformers.utils.import_utils import is_torch_available
+from typing import Any, Dict, Optional, Union
 
 import torch
+
 from ...utils import (
     check_peft_version,
     find_adapter_config_file,
@@ -140,7 +139,7 @@ class PeftAdapterMixin:
                 raise ValueError(
                     f"adapter model file not found in {peft_model_id}. Make sure you are passing the correct path to the "
                     "adapter model."
-            )
+                )
 
             peft_config = PeftConfig.from_pretrained(
                 peft_model_id,
