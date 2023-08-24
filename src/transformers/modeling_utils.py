@@ -2377,9 +2377,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     token=token,
                     commit_hash=commit_hash,
                 )
-            if os.path.isfile(_adapter_model_path):
+            if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
                 with open(_adapter_model_path, "r", encoding="utf-8") as f:
-                    _adapter_model_path = json.load(f)["base_model_name_or_path"]
+                    _adapter_model_path = pretrained_model_name_or_path
+                    pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
 
         # change device_map into a map if we passed an int, a str or a torch.device
         if isinstance(device_map, torch.device):
