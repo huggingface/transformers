@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 
 from transformers import LlamaConfig, is_flax_available, is_torch_available
-from transformers.testing_utils import require_flax, skip, slow
+from transformers.testing_utils import require_flax, slow
 
 from ...generation.test_flax_utils import FlaxGenerationTesterMixin
 from ...test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
@@ -203,7 +203,6 @@ class FlaxLlamaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
             self.assertIsNotNone(outputs)
 
     @slow
-    @skip  # wip test
     def test_model_logits(self):
         model_id = "openlm-research/open_llama_3b_v2"
         model = FlaxLlamaForCausalLM.from_pretrained(model_id, from_pt=True)
@@ -211,45 +210,58 @@ class FlaxLlamaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
 
         flax_logits = model(test_batch).logits
 
-        # TODO: add expected logits here
         # fmt: off
-        EXPECTED_LOGITS = None
+        EXPECTED_LOGITS = [-74.4243, -74.0680, -65.2507, -79.1658, -77.7460, -69.2379, -86.4588, -84.8933, -77.8456]
+        EXPECTED_MIN, EXPECTED_MAX, EXPECTED_MEAN = -96.9952, -18.4571, -65.0608
         # fmt: on
 
-        self.assertAlmostEqual(flax_logits, EXPECTED_LOGITS, places=4)
+        self.assertTrue(np.allclose(flax_logits[0, :3, :3].flatten(), EXPECTED_LOGITS, atol=1e-4))
+        self.assertAlmostEqual(flax_logits.min(), EXPECTED_MIN, places=3)
+        self.assertAlmostEqual(flax_logits.max(), EXPECTED_MAX, places=3)
+        self.assertAlmostEqual(flax_logits.mean(), EXPECTED_MEAN, places=3)
 
     @slow
-    @skip  # wip test
     def test_model_hidden_states(self):
         model_id = "openlm-research/open_llama_3b_v2"
         model = FlaxLlamaForCausalLM.from_pretrained(model_id, from_pt=True)
         test_batch = jnp.arange(32).reshape(4, 8) + 0x777
 
-        model(test_batch).hidden_states
-        # TODO: calculate mean of all hidden states
-        flax_hidden_means = None
+        flax_hidden_states = model(test_batch, output_hidden_states=True).hidden_states
+        flax_hidden_means = [h.mean() for h in flax_hidden_states]
 
-        # TODO: add expected logits here
         # fmt: off
-        EXPECTED_HIDDEN_MEANS = None
+        EXPECTED_HIDDEN_MEANS = [
+            -0.00007,-0.00049,-0.00169,-0.00253,-0.00271,
+            -0.00290,-0.00252,0.00230,0.00230,0.00198,
+            0.00196,0.00174,0.00246,0.00205,0.00242,
+            0.00171,0.00092,0.00054,0.00102,0.00024,
+            0.00029,0.00037,-0.00101,-0.00062,-0.00341,-0.00636,-0.00357
+        ]
         # fmt: on
 
-        self.assertAlmostEqual(flax_hidden_means, EXPECTED_HIDDEN_MEANS, places=4)
+        self.assertTrue(np.allclose(flax_hidden_means, EXPECTED_HIDDEN_MEANS, atol=1e-4))
 
     @slow
-    @skip  # wip test
     def test_generated_text(self):
         model_id = "openlm-research/open_llama_3b_v2"
         model = FlaxLlamaForCausalLM.from_pretrained(model_id, from_pt=True)
 
         tokenizer = LlamaTokenizerFast.from_pretrained(model_id)
+        tokenizer.pad_token_id = 2
         test_batch = ["Aloha, World! ", "2 + 2 = ", "Paris is the capital of ", "我很高興認識"]
 
-        inputs = tokenizer(test_batch, return_tensors="np", padding=True, truncation=True)
-        generated_ids = model.generate(**inputs, max_length=20).sequences
+        inputs = tokenizer(test_batch, return_tensors="np", truncation=True, padding=True)
+        generated_ids = model.generate(**inputs, max_length=15).sequences
         generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 
         # TODO: add expected outputs
-        EXPECTED_GENERATION = None
+        # fmt: off
+        EXPECTED_GENERATION = [
+            "Aloha, World! 201",
+            "2 + 2 = 4\n2",
+            "Paris is the capital of Île-",
+            "我很高興認識你，我"
+        ]
+        # fmt: on
 
         self.assertListEqual(generated_text, EXPECTED_GENERATION)
