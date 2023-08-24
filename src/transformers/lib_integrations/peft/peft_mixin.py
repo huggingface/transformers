@@ -14,13 +14,12 @@
 import inspect
 from typing import Any, Dict, Optional, Union
 
-import torch
-
 from ...utils import (
     check_peft_version,
     find_adapter_config_file,
     is_accelerate_available,
     is_peft_available,
+    is_torch_available,
     logging,
 )
 
@@ -28,6 +27,10 @@ from ...utils import (
 if is_accelerate_available():
     from accelerate import dispatch_model
     from accelerate.utils import get_balanced_memory, infer_auto_device_map
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
