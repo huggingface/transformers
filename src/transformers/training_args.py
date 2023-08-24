@@ -48,9 +48,9 @@ from .utils import (
     is_torch_bf16_gpu_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
-    is_torch_xpu_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
+    is_torch_xpu_available,
     logging,
     requires_backends,
 )

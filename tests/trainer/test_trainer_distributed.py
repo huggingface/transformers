@@ -23,8 +23,8 @@ from transformers.testing_utils import (
     execute_subprocess_async,
     get_torch_dist_unique_port,
     require_torch_multi_gpu,
-    require_torch_neuroncore,
     require_torch_multi_xpu,
+    require_torch_neuroncore,
     require_torch_npu,
 )
 from transformers.training_args import ParallelMode
@@ -160,7 +160,7 @@ class TestTrainerDistributed(TestCasePlus):
         # successful return here == success - any errors would have caused an error in the sub-call
 
 
-class TestTrainerDistributed(TestCasePlus):
+class TestTrainerDistributedXPU(TestCasePlus):
     @require_torch_multi_xpu
     def test_trainer(self):
         distributed_args = f"""--nproc_per_node={torch.xpu.device_count()}
