@@ -226,16 +226,11 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
         self, prefix: str, suffix: Optional[str] = None, add_special_tokens: bool = False, suffix_first=False, **kwargs
     ) -> List[str]:
         """
-        Format and encode an infilling problem.
-        If `suffix_first` is set, format in suffix-prefix-middle format.
-        The extra `' '` in the tokens are required because the tokenizer will otherwise
-        split these tokens. Ex:
+        Format and encode an infilling problem. If `suffix_first` is set, format in suffix-prefix-middle format. The
+        extra `' '` in the tokens are required because the tokenizer will otherwise split these tokens. Ex:
         ```python
-        >>> tokenizer.tokenize("Hey<PRE>")
-        ['▁Hey', '<', 'PRE', '>' ]
-        >>> tokenizer.tokenizer("Hey <PRE>")
-        ['▁Hey', '▁<PRE>' ]
-        """
+        >>> tokenizer.tokenize("Hey<PRE>") ['▁Hey', '<', 'PRE', '>' ] >>> tokenizer.tokenizer("Hey <PRE>") ['▁Hey',
+        '▁<PRE>' ]"""
         if self.fill_token in prefix and suffix is None:
             prefix, suffix = prefix.split(self.fill_token)
 

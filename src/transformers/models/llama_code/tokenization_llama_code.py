@@ -228,8 +228,8 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
 
     def decode_infilling(self, tokens, prompt_id_length=None, **kwargs):
         """
-        Utility function to use when decoding the output of `model.generate()`. The `prompt_id_length`
-        need to be passed as an argument to make sur only the infilling output is produced.
+        Utility function to use when decoding the output of `model.generate()`. The `prompt_id_length` need to be
+        passed as an argument to make sur only the infilling output is produced.
         """
         # cut at EOT ( though generate should stop generating when EOT is reached no?)
         eot_idx = tokens.index(self.eot_id) if self.eot_id in tokens else len(tokens)
