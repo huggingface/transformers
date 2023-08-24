@@ -427,7 +427,7 @@ class TrainerMemoryTracker:
             self.gpu = {}
         elif is_torch_xpu_available():
             import torch
-            
+
             self.torch = torch
             self.gpu = {}
         else:

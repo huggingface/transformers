@@ -546,7 +546,7 @@ def is_torch_xpu_available(check_device=False):
         except RuntimeError:
             return False
     return hasattr(torch, "xpu") and torch.xpu.is_available()
-    
+
 
 def is_bitsandbytes_available():
     if not is_torch_available():

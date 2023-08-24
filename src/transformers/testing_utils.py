@@ -628,7 +628,7 @@ def require_torch_multi_npu(test_case):
 def require_torch_xpu(test_case):
     """
     Decorator marking a test that requires XPU and IPEX.
-    
+
     These tests are skipped when Intel Extension for PyTorch isn't installed or it does not match current PyTorch
     version.
     """
@@ -637,9 +637,9 @@ def require_torch_xpu(test_case):
 
 def require_torch_multi_xpu(test_case):
     """
-    Decorator marking a test that requires a multi-XPU setup with IPEX and atleast one XPU device. These tests are skipped 
+    Decorator marking a test that requires a multi-XPU setup with IPEX and atleast one XPU device. These tests are skipped
     on a machine without IPEX or multiple XPUs.
-    
+
     To run *only* the multi_xpu tests, assuming all test names contain multi_xpu: $ pytest -sv ./tests -k "multi_xpu"
     """
     if not is_torch_xpu_available():
