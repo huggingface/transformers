@@ -34,13 +34,13 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "sanchit-gandhi/mms-tts-eng": "https://huggingface.co/sanchit-gandhi/mms-tts-eng/resolve/main/vocab.json",
+        "facebook/mms-tts-eng": "https://huggingface.co/facebook/mms-tts-eng/resolve/main/vocab.json",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     # This model does not have a maximum input length.
-    "sanchit-gandhi/mms-tts-eng": 4096,
+    "facebook/mms-tts-eng": 4096,
 }
 
 

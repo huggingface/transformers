@@ -172,7 +172,7 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         for tokenizer_class in tokenizer_classes:
             tokenizer = tokenizer_class.from_pretrained(
-                "sanchit-gandhi/mms-tts-eng",
+                "facebook/mms-tts-eng",
                 revision="d188a254c84ae6cfd24deb7a8f5c0c1d349d7d9f",  # to pin the tokenizer version
             )
 

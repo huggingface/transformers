@@ -350,10 +350,10 @@ class VitsModelIntegrationTests(unittest.TestCase):
         # GPU gives different results than CPU
         torch_device = "cpu"
 
-        model = VitsModel.from_pretrained("sanchit-gandhi/mms-tts-eng")
+        model = VitsModel.from_pretrained("facebook/mms-tts-eng")
         model.to(torch_device)
 
-        tokenizer = VitsTokenizer.from_pretrained("sanchit-gandhi/mms-tts-eng")
+        tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
 
         set_seed(555)  # make deterministic
 

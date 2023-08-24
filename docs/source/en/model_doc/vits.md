@@ -17,12 +17,21 @@ specific language governing permissions and limitations under the License.
 The VITS model was proposed in [Conditional Variational Autoencoder with Adversarial Learning for End-to-End Text-to-Speech](https://arxiv.org/abs/2106.06103) by Jaehyeon Kim, Jungil Kong, Juhee Son.
 
 
-VITS (Variational Inference with adversarial learning for end-to-end Text-to-Speech) is a conditional variational 
-autoencoder (VAE) comprised of a posterior encoder, decoder, and conditional prior. The use of a conditional VAE allows
-for efficient end-to-end learning through latent variables. To improve the expressiveness of the model, normalizing flows
-are applied to the conditional prior distribution. Motivated by the one-to-many nature of the TTS problem (the same text 
-can be spoken in multiple ways, all of which are valid), the model also includes a stochastic duration predictor, 
-which allows the model to synthesise speech with different rhythms from the same input text.
+VITS (**V**ariational **I**nference with adversarial learning for end-to-end **T**ext-to-**S**peech) is an end-to-end 
+speech synthesis model that predicts a speech waveform conditional on an input text sequence. It is a conditional variational 
+autoencoder (VAE) comprised of a posterior encoder, decoder, and conditional prior.
+
+A set of spectrogram-based acoustic features are predicted by the flow-based module, which is formed of a Transformer-based
+text encoder and multiple coupling layers. The spectrogram is decoded using a stack of transposed convolutional layers,
+much in the same style as the HiFi-GAN vocoder. Motivated by the one-to-many nature of the TTS problem, where the same text 
+input can be spoken in multiple ways, the model also includes a stochastic duration predictor, which allows the model to 
+synthesise speech with different rhythms from the same input text. 
+
+The model is trained end-to-end with a combination of losses derived from variational lower bound and adversarial training. 
+To improve the expressiveness of the model, normalizing flows are applied to the conditional prior distribution. During 
+inference, the text encodings are up-sampled based on the duration prediction module, and then mapped into the 
+waveform using a cascade of the flow module and HiFi-GAN decoder. Due to the stochastic nature of the duration predictor,
+the model is non-deterministic, and thus requires a fixed seed to generate the same speech waveform.
 
 The abstract from the paper is the following:
 
@@ -44,14 +53,15 @@ runs a forward pass using the MMS-TTS English checkpoint:
 import torch
 from transformers import VitsTokenizer, VitsModel, set_seed
 
-tokenizer = VitsTokenizer.from_pretrained("sanchit-gandhi/mms-tts-eng")
-model = VitsModel.from_pretrained("sanchit-gandhi/mms-tts-eng")
+tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
+model = VitsModel.from_pretrained("facebook/mms-tts-eng")
 
 inputs = tokenizer(text="Hello, my dog is cute", return_tensors="pt")
 
 set_seed(555)  # make deterministic
+
 with torch.no_grad():
-   outputs = model(inputs["input_ids"])
+   outputs = model(**inputs)
 
 outputs.audio.shape
 ```
@@ -65,7 +75,7 @@ the pre-trained `tokenizer`:
 ```python
 from transformers import VitsTokenizer
 
-tokenizer = VitsTokenizer.from_pretrained("sanchit-gandhi/mms-tts-eng")
+tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
 tokenizer.is_uroman
 ```
 
