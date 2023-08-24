@@ -1098,7 +1098,6 @@ FLAX_CLIP_TEXT_MODEL_WITH_PROJECTION_DOCSTRING = """
 
     >>> outputs = model(**inputs)
     >>> text_embeds = outputs.text_embeds
-    >>> pooler_output = outputs.pooler_output  # pooled (EOS token) states
     ```
 """
 
