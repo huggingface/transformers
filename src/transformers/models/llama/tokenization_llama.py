@@ -154,7 +154,10 @@ class LlamaTokenizer(PreTrainedTokenizer):
         self.use_default_system_prompt = use_default_system_prompt
 
         self.sp_model = self.get_spm_processor()
-        self.unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
+
+    @property
+    def unk_token_length(self):
+        return len(self.sp_model.encode(str(self.unk_token)))
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
     def get_spm_processor(self):
