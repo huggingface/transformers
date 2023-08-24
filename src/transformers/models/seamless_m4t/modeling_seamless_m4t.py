@@ -3416,12 +3416,72 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 class SeamlessM4TVariancePredictor(nn.Module):
     def __init__(self, config):
         super().__init__()
+        
+        encoder_embed_dim = config.encoder_embed_dim
+        var_pred_hidden_dim = config.var_pred_hidden_dim
+        var_pred_kernel_size = config.var_pred_kernel_size
+        var_pred_dropout = config.var_pred_dropout
+
+        self.conv1 = nn.Sequential(
+            nn.Conv1d(
+                encoder_embed_dim,
+                var_pred_hidden_dim,
+                kernel_size=var_pred_kernel_size,
+                padding=(var_pred_kernel_size - 1) // 2,
+            ),
+            nn.ReLU(),
+        )
+        self.ln1 = nn.LayerNorm(var_pred_hidden_dim)
+        self.dropout_module = nn.Dropout(p=var_pred_dropout)
+        self.conv2 = nn.Sequential(
+            nn.Conv1d(
+                var_pred_hidden_dim,
+                var_pred_hidden_dim,
+                kernel_size=var_pred_kernel_size,
+                padding=1,
+            ),
+            nn.ReLU(),
+        )
+        self.ln2 = nn.LayerNorm(var_pred_hidden_dim)
+        self.proj = nn.Linear(var_pred_hidden_dim, 1)
+
+    def forward(self, hidden_states: Tensor) -> Tensor:
+        # Input: B x T x C; Output: B x T
+        hidden_states = self.conv1(hidden_states.transpose(1, 2)).transpose(1, 2)
+        hidden_states = self.dropout_module(self.ln1(hidden_states))
+        hidden_states = self.conv2(hidden_states.transpose(1, 2)).transpose(1, 2)
+        hidden_states = self.dropout_module(self.ln2(hidden_states))
+        return self.proj(hidden_states).squeeze(dim=2)
 
 
-class SeamlessM4TVocoder(nn.Module):
-    def __init__(self, config):
+class SeamlessM4TCodeHifiGan(nn.Module):
+    """Builds modules of a vocoder model (Code Hifigan) as described in
+    :cite:t`https://github.com/facebookresearch/speech-resynthesis`.
+
+    To tweak the architecture, you can derive from this class and override the
+    corresponding methods.
+    """
+    def __init__(self, config, lang_spkr_idx_map):
         super().__init__()
+        
+        self.upsample_rates = config.upsample_rates
+        self.upsample_kernel_sizes = config.upsample_kernel_sizes
+        self.upsample_initial_channel = config.upsample_initial_channel
+        self.resblock_kernel_sizes = config.resblock_kernel_sizes
+        self.resblock_dilation_sizes = config.resblock_dilation_sizes
+        self.model_in_dim = config.model_in_dim
+        self.num_embeddings = config.num_embeddings
+        self.embedding_dim = config.embedding_dim
+        self.dur_predictor_params = config.dur_predictor_params
+        self.lang_embedding_dim = config.lang_embedding_dim
+        self.num_langs = config.num_langs
+        self.spkr_embedding_dim = config.spkr_embedding_dim
+        self.num_spkrs = config.num_spkrs
+        
+        self.lang_spkr_idx_map = lang_spkr_idx_map
+        
 
+        # code generator
         self.conv_pre = ...  # Conv1d(...)
 
         self.ups = nn.ModuleList([])  # ... ConvTranspose1d
@@ -3434,6 +3494,140 @@ class SeamlessM4TVocoder(nn.Module):
         self.lang_embeds_layer = nn.Embedding(...)  #
 
         self.dur_predictor = SeamlessM4TVariancePredictor()
+        
+    def func():
+        
+        x = {
+            "code": torch.LongTensor(code).view(1, -1),
+        }
+        lang_idx = self.lang_spkr_idx_map["multilingual"][lang]
+        spkr_list = self.lang_spkr_idx_map["multispkr"][lang]
+        if not spkr:
+            spkr = -1
+        spkr = spkr_list[0] if spkr == -1 else spkr
+        x["spkr"] = torch.tensor([[spkr]])
+        x["lang"] = torch.tensor([[lang_idx]])
+        return self.code_generator(x, dur_prediction)
+    
+    
+    
+
+@add_start_docstrings(
+    """HiFi-GAN vocoder.""",
+    HIFIGAN_START_DOCSTRING,
+)
+class SpeechT5HifiGan(PreTrainedModel):
+    config_class = SpeechT5HifiGanConfig
+    main_input_name = "spectrogram"
+
+    def __init__(self, config: SpeechT5HifiGanConfig):
+        super().__init__(config)
+        self.num_kernels = len(config.resblock_kernel_sizes)
+        self.num_upsamples = len(config.upsample_rates)
+        self.conv_pre = nn.Conv1d(
+            config.model_in_dim,
+            config.upsample_initial_channel,
+            kernel_size=7,
+            stride=1,
+            padding=3,
+        )
+
+        self.upsampler = nn.ModuleList()
+        for i, (upsample_rate, kernel_size) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes)):
+            self.upsampler.append(
+                nn.ConvTranspose1d(
+                    config.upsample_initial_channel // (2**i),
+                    config.upsample_initial_channel // (2 ** (i + 1)),
+                    kernel_size=kernel_size,
+                    stride=upsample_rate,
+                    padding=(kernel_size - upsample_rate) // 2,
+                )
+            )
+
+        self.resblocks = nn.ModuleList()
+        for i in range(len(self.upsampler)):
+            channels = config.upsample_initial_channel // (2 ** (i + 1))
+            for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes):
+                self.resblocks.append(HifiGanResidualBlock(channels, kernel_size, dilation, config.leaky_relu_slope))
+
+        self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
+
+        self.register_buffer("mean", torch.zeros(config.model_in_dim))
+        self.register_buffer("scale", torch.ones(config.model_in_dim))
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def _init_weights(self, module):
+        """Initialize the weights."""
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+
+    def apply_weight_norm(self):
+        nn.utils.weight_norm(self.conv_pre)
+        for layer in self.upsampler:
+            nn.utils.weight_norm(layer)
+        for layer in self.resblocks:
+            layer.apply_weight_norm()
+        nn.utils.weight_norm(self.conv_post)
+
+    def remove_weight_norm(self):
+        nn.utils.remove_weight_norm(self.conv_pre)
+        for layer in self.upsampler:
+            nn.utils.remove_weight_norm(layer)
+        for layer in self.resblocks:
+            layer.remove_weight_norm()
+        nn.utils.remove_weight_norm(self.conv_post)
+
+    def forward(self, spectrogram: torch.FloatTensor) -> torch.FloatTensor:
+        r"""
+        Converts a log-mel spectrogram into a speech waveform. Passing a batch of log-mel spectrograms returns a batch
+        of speech waveforms. Passing a single, un-batched log-mel spectrogram returns a single, un-batched speech
+        waveform.
+
+        Args:
+            spectrogram (`torch.FloatTensor`):
+                Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
+                config.model_in_dim)`, or un-batched and of shape `(sequence_length, config.model_in_dim)`.
+
+        Returns:
+            `torch.FloatTensor`: Tensor containing the speech waveform. If the input spectrogram is batched, will be of
+            shape `(batch_size, num_frames,)`. If un-batched, will be of shape `(num_frames,)`.
+        """
+        if self.config.normalize_before:
+            spectrogram = (spectrogram - self.mean) / self.scale
+
+        is_batched = spectrogram.dim() == 3
+        if not is_batched:
+            spectrogram = spectrogram.unsqueeze(0)
+
+        hidden_states = spectrogram.transpose(2, 1)
+
+        hidden_states = self.conv_pre(hidden_states)
+        for i in range(self.num_upsamples):
+            hidden_states = nn.functional.leaky_relu(hidden_states, self.config.leaky_relu_slope)
+            hidden_states = self.upsampler[i](hidden_states)
+
+            res_state = self.resblocks[i * self.num_kernels](hidden_states)
+            for j in range(1, self.num_kernels):
+                res_state += self.resblocks[i * self.num_kernels + j](hidden_states)
+            hidden_states = res_state / self.num_kernels
+
+        hidden_states = nn.functional.leaky_relu(hidden_states)
+        hidden_states = self.conv_post(hidden_states)
+        hidden_states = torch.tanh(hidden_states)
+
+        if not is_batched:
+            # remove batch dim and collapse tensor to 1-d audio waveform
+            waveform = hidden_states.squeeze(0).transpose(1, 0).view(-1)
+        else:
+            # remove seq-len dim since this collapses to 1
+            waveform = hidden_states.squeeze(1)
+
+        return waveform
+
 
 
 # TODO: model with vocoder head
