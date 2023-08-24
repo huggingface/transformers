@@ -2377,10 +2377,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     token=token,
                     commit_hash=commit_hash,
                 )
-            if os.ispath(_adapter_model_path):
+            if os.path.isfile(_adapter_model_path):
                 with open(_adapter_model_path, "r", encoding="utf-8") as f:
                     _adapter_model_path = json.load(f)["base_model_name_or_path"]
-            adapter_model_id = _adapter_model_path
 
         # change device_map into a map if we passed an int, a str or a torch.device
         if isinstance(device_map, torch.device):
@@ -3212,9 +3211,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if quantization_method_from_config == QuantizationMethod.GPTQ:
             model = quantizer.post_init_model(model)
 
-        if has_adapter_config:
+        if _adapter_model_path:
             model.load_adapter(
-                adapter_model_id,
+                _adapter_model_path,
                 adapter_name=adapter_name,
                 revision=revision,
                 token=token,
