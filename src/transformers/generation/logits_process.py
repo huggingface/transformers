@@ -271,7 +271,7 @@ class TemperatureLogitsWarper(LogitsWarper):
                 "scores will be invalid."
             )
             if isinstance(temperature, float) and temperature == 0.0:
-                except_msg += "If you're looking for greedy decoding strategies, set `do_sample=False`."
+                except_msg += " If you're looking for greedy decoding strategies, set `do_sample=False`."
             raise ValueError(except_msg)
 
         self.temperature = temperature
