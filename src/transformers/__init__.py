@@ -284,6 +284,7 @@ _import_structure = {
     ],
     "models.ernie_m": ["ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP", "ErnieMConfig"],
     "models.esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "EsmConfig", "EsmTokenizer"],
+    "models.fastvit": ["FASTVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FastViTConfig"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
         "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1618,6 +1619,15 @@ else:
             "FNetLayer",
             "FNetModel",
             "FNetPreTrainedModel",
+        ]
+    )
+    _import_structure["models.fastvit"].extend(
+        [
+            "FASTVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FastViTForImageClassification",
+            "FastViTForMaskedImageModeling",
+            "FastViTModel",
+            "FastViTPreTrainedModel",
         ]
     )
     _import_structure["models.focalnet"].extend(
@@ -4025,6 +4035,7 @@ if TYPE_CHECKING:
     from .models.ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig
     from .models.ernie_m import ERNIE_M_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieMConfig
     from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer
+    from .models.fastvit import FASTVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, FastViTConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5140,6 +5151,13 @@ if TYPE_CHECKING:
             EsmForTokenClassification,
             EsmModel,
             EsmPreTrainedModel,
+        )
+        from .models.fastvit import (
+            FASTVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FastViTForImageClassification,
+            FastViTForMaskedImageModeling,
+            FastViTModel,
+            FastViTPreTrainedModel,
         )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

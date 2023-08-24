@@ -75,6 +75,7 @@ from . import (
     ernie,
     ernie_m,
     esm,
+    fastvit,
     flaubert,
     flava,
     fnet,
