@@ -306,7 +306,7 @@ class VivitImageProcessor(BaseImageProcessor):
 
         Args:
             videos (`ImageInput`):
-                Video frames to preprocess. Expects a single or batch of video frame with pixel values ranging from 0
+                Video frames to preprocess. Expects a single or batch of video frames with pixel values ranging from 0
                 to 255. If passing in frames with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
