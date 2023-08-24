@@ -25,7 +25,7 @@ import requests
 from huggingface_hub import HfFolder, hf_hub_download, list_spaces
 
 from ..models.auto import AutoTokenizer
-from ..utils import is_openai_available, is_torch_available, logging
+from ..utils import is_offline_mode, is_openai_available, is_torch_available, logging
 from .base import TASK_MAPPING, TOOL_CONFIG_FILE, Tool, load_tool, supports_remote
 from .prompts import CHAT_MESSAGE_PROMPT, download_prompt
 from .python_interpreter import evaluate
@@ -75,6 +75,10 @@ HUGGINGFACE_DEFAULT_TOOLS_FROM_HUB = [
 
 
 def get_remote_tools(organization="huggingface-tools"):
+    if is_offline_mode():
+        logger.info("You are in offline mode, so remote tools are not available.")
+        return {}
+
     spaces = list_spaces(author=organization)
     tools = {}
     for space_info in spaces:
@@ -105,16 +109,17 @@ def _setup_default_tools():
         description = tool_class.description
         HUGGINGFACE_DEFAULT_TOOLS[tool_class.name] = PreTool(task=task_name, description=description, repo_id=None)
 
-    for task_name in HUGGINGFACE_DEFAULT_TOOLS_FROM_HUB:
-        found = False
-        for tool_name, tool in remote_tools.items():
-            if tool.task == task_name:
-                HUGGINGFACE_DEFAULT_TOOLS[tool_name] = tool
-                found = True
-                break
+    if not is_offline_mode():
+        for task_name in HUGGINGFACE_DEFAULT_TOOLS_FROM_HUB:
+            found = False
+            for tool_name, tool in remote_tools.items():
+                if tool.task == task_name:
+                    HUGGINGFACE_DEFAULT_TOOLS[tool_name] = tool
+                    found = True
+                    break
 
-        if not found:
-            raise ValueError(f"{task_name} is not implemented on the Hub.")
+            if not found:
+                raise ValueError(f"{task_name} is not implemented on the Hub.")
 
     _tools_are_initialized = True
 

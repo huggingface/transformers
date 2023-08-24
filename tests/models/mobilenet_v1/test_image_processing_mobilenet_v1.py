@@ -16,20 +16,13 @@
 
 import unittest
 
-import numpy as np
-
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_vision_available
 
-from ...test_image_processing_common import ImageProcessingSavingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
-
-if is_torch_available():
-    import torch
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import MobileNetV1ImageProcessor
 
 
@@ -68,10 +61,24 @@ class MobileNetV1ImageProcessingTester(unittest.TestCase):
             "crop_size": self.crop_size,
         }
 
+    def expected_output_image_shape(self, images):
+        return self.num_channels, self.crop_size["height"], self.crop_size["width"]
+
+    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+        return prepare_image_inputs(
+            batch_size=self.batch_size,
+            num_channels=self.num_channels,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
+            equal_resolution=equal_resolution,
+            numpify=numpify,
+            torchify=torchify,
+        )
+
 
 @require_torch
 @require_vision
-class MobileNetV1ImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
+class MobileNetV1ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = MobileNetV1ImageProcessor if is_vision_available() else None
 
     def setUp(self):
@@ -96,102 +103,3 @@ class MobileNetV1ImageProcessingTest(ImageProcessingSavingTestMixin, unittest.Te
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
         self.assertEqual(image_processor.size, {"shortest_edge": 42})
         self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
-
-    def test_batch_feature(self):
-        pass
-
-    def test_call_pil(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random PIL images
-        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False)
-        for image in image_inputs:
-            self.assertIsInstance(image, Image.Image)
-
-        # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                1,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.crop_size["height"],
-                self.image_processor_tester.crop_size["width"],
-            ),
-        )
-
-        # Test batched
-        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                self.image_processor_tester.batch_size,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.crop_size["height"],
-                self.image_processor_tester.crop_size["width"],
-            ),
-        )
-
-    def test_call_numpy(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random numpy tensors
-        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False, numpify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, np.ndarray)
-
-        # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                1,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.crop_size["height"],
-                self.image_processor_tester.crop_size["width"],
-            ),
-        )
-
-        # Test batched
-        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                self.image_processor_tester.batch_size,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.crop_size["height"],
-                self.image_processor_tester.crop_size["width"],
-            ),
-        )
-
-    def test_call_pytorch(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random PyTorch tensors
-        image_inputs = prepare_image_inputs(self.image_processor_tester, equal_resolution=False, torchify=True)
-        for image in image_inputs:
-            self.assertIsInstance(image, torch.Tensor)
-
-        # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                1,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.crop_size["height"],
-                self.image_processor_tester.crop_size["width"],
-            ),
-        )
-
-        # Test batched
-        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                self.image_processor_tester.batch_size,
-                self.image_processor_tester.num_channels,
-                self.image_processor_tester.crop_size["height"],
-                self.image_processor_tester.crop_size["width"],
-            ),
-        )

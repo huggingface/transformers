@@ -163,6 +163,7 @@ class ViTHybridModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    model_split_percents = [0.5, 0.9]
 
     def setUp(self):
         self.model_tester = ViTHybridModelTester(self)
@@ -280,7 +281,7 @@ class ViTModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
 
-        inputs = image_processor(images=image, return_tensors="pt")
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
         outputs = model(**inputs)
         logits = outputs.logits
         # model predicts one of the 1000 ImageNet classes
