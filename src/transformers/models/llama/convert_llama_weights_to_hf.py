@@ -81,9 +81,9 @@ def write_json(text, path):
 
 
 def write_model(model_path, input_base_path, model_size, tokenizer_path=None, safe_serialization=True):
-    # for backward compatibility: 
+    # for backward compatibility, before you needed the repo to be called `my_repo/model_size`
     if not os.path.isfile(os.path.join(input_base_path, "params.json")):
-        model_path = os.path.join(model_path,model_size)
+        input_base_path = os.path.join(input_base_path, model_size)
 
     os.makedirs(model_path, exist_ok=True)
     tmp_model_path = os.path.join(model_path, "tmp")
@@ -255,7 +255,7 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path=None, sa
         num_hidden_layers=params["n_layers"],
         rms_norm_eps=params["norm_eps"],
         num_key_value_heads=num_key_value_heads,
-        vocab_size = vocab_size,
+        vocab_size=vocab_size,
         rope_theta=base,
         max_position_embeddings=max_position_embeddings,
     )
@@ -292,7 +292,7 @@ def main():
     )
     parser.add_argument(
         "--model_size",
-        choices=["7B", "7Bf", "13B", "13Bf", "30B", "34B","65B", "70B", "70Bf", "tokenizer_only"],
+        choices=["7B", "7Bf", "13B", "13Bf", "30B", "34B", "65B", "70B", "70Bf", "tokenizer_only"],
         help="'f' models correspond to the finetuned versions, and are specific to the Llama2 official release. For more details on Llama2, checkout the original repo: https://huggingface.co/meta-llama",
     )
     parser.add_argument(
@@ -308,11 +308,10 @@ def main():
             input_base_path=args.input_dir,
             model_size=args.model_size,
             safe_serialization=args.safe_serialization,
-            tokenizer_path=spm_path
+            tokenizer_path=spm_path,
         )
     else:
         write_tokenizer(args.output_dir, spm_path)
-    
 
 
 if __name__ == "__main__":

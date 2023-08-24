@@ -232,11 +232,13 @@ class LlamaTokenizerFast(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tokenizers"])
 
+
 class LlamaCodeTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tokenizers"])
+
 
 class LongformerTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]

@@ -86,11 +86,11 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
         bos_token="<s>",
         eos_token="</s>",
         pad_token=None,
-        prefix_token = "▁<PRE>",
-        middle_token = "▁<MID>",
-        suffix_token = "▁<SUF>",
-        eot_token = "▁<EOT>",
-        fill_token = "<FILL_ME>",
+        prefix_token="▁<PRE>",
+        middle_token="▁<MID>",
+        suffix_token="▁<SUF>",
+        eot_token="▁<EOT>",
+        fill_token="<FILL_ME>",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         add_bos_token=True,
         add_eos_token=False,
@@ -149,7 +149,7 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
     @property
     def prefix_token(self):
         return self._prefix_token
-    
+
     @property
     def prefix_id(self):
         if self._prefix_token is None:
@@ -159,17 +159,17 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
     @property
     def middle_token(self):
         return self._middle_token
-    
+
     @property
     def middle_id(self):
         if self._middle_token is None:
             return None
         return self.convert_tokens_to_ids(self.middle_token)
-    
+
     @property
     def suffix_token(self):
         return self._suffix_token
-    
+
     @property
     def suffix_id(self):
         if self._suffix_token is None:
@@ -179,7 +179,7 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
     @property
     def eot_token(self):
         return self._eot_token
-    
+
     @property
     def eot_id(self):
         if self._eot_token is None:
@@ -197,14 +197,14 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def tokenize(self, prefix: "TextInput", suffix = None, suffix_first=False, **kwargs) -> List[int]:
+    def tokenize(self, prefix, suffix=None, suffix_first=False, **kwargs) -> List[int]:
         # add a prefix space to `prefix`
         if len(prefix) > 0:
             prefix = SPIECE_UNDERLINE + prefix.replace(SPIECE_UNDERLINE, " ")
         if self.fill_token in prefix and suffix is None:
             prefix, suffix = prefix.split(self.fill_token)
 
-        prefix_tokens = self._tokenize(prefix) # prefix has an extra `SPIECE_UNDERLINE`
+        prefix_tokens = self._tokenize(prefix)  # prefix has an extra `SPIECE_UNDERLINE`
         if len(suffix) < 1:
             if prefix_tokens[0] == SPIECE_UNDERLINE and prefix_tokens[1] in self.all_special_tokens:
                 # strip prefix token before a special token
@@ -212,10 +212,12 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
             return prefix_tokens
 
         if None in (self.prefix_id, self.middle_id, self.suffix_id):
-            raise ValueError("Then input includes a `prefix` and a `suffix` used for the infilling task,"
-                             " the `prefix_id, middle_id, suffix_id` must all be initialized. Current"
-                             f" values : {self.prefix_id, self.middle_id, self.suffix_id}")
-        suffix_tokens = self._tokenizer(suffix) # make sure LlamaCode sp model does not mess up
+            raise ValueError(
+                "Then input includes a `prefix` and a `suffix` used for the infilling task,"
+                " the `prefix_id, middle_id, suffix_id` must all be initialized. Current"
+                f" values : {self.prefix_id, self.middle_id, self.suffix_id}"
+            )
+        suffix_tokens = self._tokenizer(suffix)  # make sure LlamaCode sp model does not mess up
 
         if suffix_first:
             # format as " <PRE> <SUF>{suf} <MID> {pre}"
@@ -224,19 +226,19 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
             # format as " <PRE> {pre} <SUF>{suf} <MID>"
             return [self.prefix_token] + prefix_tokens + [self.suffix_token] + suffix_tokens + [self.mid_token]
 
-    def decode_infilling(self, tokens, prompt_id_length = None, **kwargs):
+    def decode_infilling(self, tokens, prompt_id_length=None, **kwargs):
         """
         Utility function to use when decoding the output of `model.generate()`. The `prompt_id_length`
         need to be passed as an argument to make sur only the infilling output is produced.
         """
         # cut at EOT ( though generate should stop generating when EOT is reached no?)
         eot_idx = tokens.index(self.eot_id) if self.eot_id in tokens else len(tokens)
-        sequence = sequence[:eot_idx]
+        sequence = tokens[:eot_idx]
         prompt_id_length = prompt_id_length if prompt_id_length is not None else 0
         outputs = {
-            "full_text":super.decode(sequence[:eot_idx], **kwargs),
+            "full_text": super.decode(sequence[:eot_idx], **kwargs),
             "infilling": super.decode(sequence[prompt_id_length:eot_idx], **kwargs),
-            "infilling_token_ids": sequence
+            "infilling_token_ids": sequence,
         }
         return outputs
 
@@ -467,4 +469,3 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
         self.__dict__ = d
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
-        

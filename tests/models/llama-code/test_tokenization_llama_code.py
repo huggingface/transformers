@@ -546,11 +546,11 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(decoded_tokens, " <s> Hello<s> how")
 
     def test_infilling_tokenization(self):
-        tokenizer = LlamaCodeTokenizer.from_pretrained("huggyllama/llama-7b")
-        fast_tokenizer = LlamaCodeTokenizerFast.from_pretrained("huggyllama/llama-7b")
-        
-        input = ""
+        LlamaCodeTokenizer.from_pretrained("huggyllama/llama-7b")
+        LlamaCodeTokenizerFast.from_pretrained("huggyllama/llama-7b")
+
         # TODO ADD TESTS FOR API CONSISTENCY
+
 
 @require_sentencepiece
 @require_tokenizers

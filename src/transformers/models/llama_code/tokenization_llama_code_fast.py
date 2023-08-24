@@ -14,7 +14,7 @@
 # limitations under the License.
 import os
 from shutil import copyfile
-from typing import TYPE_CHECKING, Optional, Tuple, List
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 from tokenizers import processors
 
@@ -111,11 +111,11 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
         unk_token="<unk>",
         bos_token="<s>",
         eos_token="</s>",
-        prefix_token = "▁<PRE>",
-        middle_token = "▁<MID>",
-        suffix_token = "▁<SUF>",
-        eot_token = "▁<EOT>",
-        fill_token = "<FILL>",
+        prefix_token="▁<PRE>",
+        middle_token="▁<MID>",
+        suffix_token="▁<SUF>",
+        eot_token="▁<EOT>",
+        fill_token="<FILL>",
         add_bos_token=True,
         add_eos_token=False,
         **kwargs,
@@ -135,13 +135,12 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
 
         self.vocab_file = vocab_file
         self.can_save_slow_tokenizer = False if not self.vocab_file else True
-        
+
         self._prefix_token = prefix_token
         self._middle_token = middle_token
         self._suffix_token = suffix_token
         self._eot_token = eot_token
         self.fill_token = fill_token
-        
 
     def update_post_processor(self):
         """
@@ -168,7 +167,7 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
     @property
     def prefix_token(self):
         return self._prefix_token
-    
+
     @property
     def prefix_id(self):
         if self._prefix_token is None:
@@ -178,17 +177,17 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
     @property
     def middle_token(self):
         return self._middle_token
-    
+
     @property
     def middle_id(self):
         if self._middle_token is None:
             return None
         return self.convert_tokens_to_ids(self.middle_token)
-    
+
     @property
     def suffix_token(self):
         return self._suffix_token
-    
+
     @property
     def suffix_id(self):
         if self._suffix_token is None:
@@ -200,7 +199,7 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
         if self._eot_token is None:
             return None
         return self.convert_tokens_to_ids(self.eot_token)
-    
+
     @property
     def eot_token(self):
         return self._eot_token
@@ -222,13 +221,15 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
     def add_bos_token(self, value):
         self._add_bos_token = value
         self.update_post_processor()
-    
-    def tokenize(self, prefix: str, suffix: Optional[str] = None, add_special_tokens: bool = False, suffix_first= False, **kwargs) -> List[str]:
+
+    def tokenize(
+        self, prefix: str, suffix: Optional[str] = None, add_special_tokens: bool = False, suffix_first=False, **kwargs
+    ) -> List[str]:
         """
         Format and encode an infilling problem.
         If `suffix_first` is set, format in suffix-prefix-middle format.
         The extra `' '` in the tokens are required because the tokenizer will otherwise
-        split these tokens. Ex: 
+        split these tokens. Ex:
         ```python
         >>> tokenizer.tokenize("Hey<PRE>")
         ['▁Hey', '<', 'PRE', '>' ]
@@ -238,15 +239,19 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
         if self.fill_token in prefix and suffix is None:
             prefix, suffix = prefix.split(self.fill_token)
 
-        prefix_tokens = super().tokenize(prefix) # prefix has an extra `SPIECE_UNDERLINE` added by the backend tokenizer
+        prefix_tokens = super().tokenize(
+            prefix
+        )  # prefix has an extra `SPIECE_UNDERLINE` added by the backend tokenizer
         if len(suffix) < 1:
             return prefix_tokens
 
         if None in (self.prefix_id, self.middle_id, self.suffix_id):
-            raise ValueError("Then input includes a `prefix` and a `suffix` used for the infilling task,"
-                             " the `prefix_id, middle_id, suffix_id` must all be initialized. Current"
-                             f" values : {self.prefix_id, self.middle_id, self.suffix_id}")
-        suffix_tokens = super().tokenize(suffix) # make sure LlamaCode sp model does not mess up
+            raise ValueError(
+                "Then input includes a `prefix` and a `suffix` used for the infilling task,"
+                " the `prefix_id, middle_id, suffix_id` must all be initialized. Current"
+                f" values : {self.prefix_id, self.middle_id, self.suffix_id}"
+            )
+        suffix_tokens = super().tokenize(suffix)  # make sure LlamaCode sp model does not mess up
 
         if suffix_first:
             # format as " <PRE> <SUF>{suf} <MID> {pre}"
@@ -255,9 +260,8 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
             # format as " <PRE> {pre} <SUF>{suf} <MID>"
             return [self.prefix_token] + prefix_tokens + [self.suffix_token] + suffix_tokens + [self.mid_token]
 
-
-    def decode(self, tokens, infilling_length = None, **kwargs):
-        #TODO only return infilling if pre suf and mid in text
+    def decode(self, tokens, infilling_length=None, **kwargs):
+        # TODO only return infilling if pre suf and mid in text
         text = super().decode(tokens, **kwargs)
         if infilling_length is not None:
             text = text[infilling_length:]
@@ -310,7 +314,7 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return self.prefix_tokens + token_ids_0 + self.suffix_tokens
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
-    
+
     def _build_conversation_input_ids(self, conversation: "Conversation"):
         """Builds the input ids for a conversation.
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
