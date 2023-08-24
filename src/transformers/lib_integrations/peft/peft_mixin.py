@@ -64,7 +64,7 @@ class PeftAdapterMixin:
 
     def load_adapter(
         self,
-        peft_model_id: Union[str, Dict[str, torch.Tensor]],
+        peft_model_id: Union[str, Dict[str, "torch.Tensor"]],
         adapter_name: Optional[str] = None,
         revision: Optional[str] = None,
         token: Optional[str] = None,
