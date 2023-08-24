@@ -533,9 +533,6 @@ def is_torch_xpu_available(check_device=False):
     "Checks if `intel_extension_for_pytorch` is installed and potentially if a XPU is in the environment"
     if is_ipex_available():
         import torch
-
-        if is_torch_version("<=", "1.12"):
-            return False
     else:
         return False
 
