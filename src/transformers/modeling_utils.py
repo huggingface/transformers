@@ -2368,20 +2368,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " ignored."
             )
 
-        if is_peft_available() and _adapter_model_path is None:
-            _adapter_model_path = find_adapter_config_file(
-                pretrained_model_name_or_path,
-                revision=revision,
-                subfolder=subfolder,
-                token=token,
-                commit_hash=commit_hash,
-            )
-
-        if os.ispath(_adapter_model_path):
-            with open(_adapter_model_path, "r", encoding="utf-8") as f:
-                pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
-            adapter_model_id = pretrained_model_name_or_path
-        elif _adapter_model_path is not None:
+        if is_peft_available():
+            if _adapter_model_path is None:
+                _adapter_model_path = find_adapter_config_file(
+                    pretrained_model_name_or_path,
+                    revision=revision,
+                    subfolder=subfolder,
+                    token=token,
+                    commit_hash=commit_hash,
+                )
+            if os.ispath(_adapter_model_path):
+                with open(_adapter_model_path, "r", encoding="utf-8") as f:
+                    _adapter_model_path = json.load(f)["base_model_name_or_path"]
             adapter_model_id = _adapter_model_path
 
         # change device_map into a map if we passed an int, a str or a torch.device
