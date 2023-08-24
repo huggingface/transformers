@@ -463,6 +463,7 @@ class _BaseAutoModelClass:
         ]
         hub_kwargs = {name: kwargs.pop(name) for name in hub_kwargs_names if name in kwargs}
         code_revision = kwargs.pop("code_revision", None)
+        commit_hash = kwargs.pop("_commit_hash", None)
 
         token = hub_kwargs.pop("token", None)
         use_auth_token = hub_kwargs.pop("use_auth_token", None)
@@ -479,17 +480,19 @@ class _BaseAutoModelClass:
         if token is not None:
             hub_kwargs["token"] = token
 
-        commit_hash = None
-        if not isinstance(config, PretrainedConfig):
-            # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
-            resolved_config_file = cached_file(
-                pretrained_model_name_or_path,
-                CONFIG_NAME,
-                _raise_exceptions_for_missing_entries=False,
-                _raise_exceptions_for_connection_errors=False,
-                **hub_kwargs,
-            )
-            commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
+        if commit_hash is None:
+            if not isinstance(config, PretrainedConfig):
+                # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
+                resolved_config_file = cached_file(
+                    pretrained_model_name_or_path,
+                    CONFIG_NAME,
+                    _raise_exceptions_for_missing_entries=False,
+                    _raise_exceptions_for_connection_errors=False,
+                    **hub_kwargs,
+                )
+                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
+            else:
+                commit_hash = getattr(config, "_commit_hash", None)
 
         if is_peft_available():
             maybe_adapter_path = find_adapter_config_file(
@@ -513,7 +516,6 @@ class _BaseAutoModelClass:
             if kwargs.get("quantization_config", None) is not None:
                 _ = kwargs.pop("quantization_config")
 
-            print(commit_hash)
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path,
                 return_unused_kwargs=True,
