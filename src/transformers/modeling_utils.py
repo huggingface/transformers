@@ -2391,33 +2391,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 commit_hash = getattr(config, "_commit_hash", None)
 
-        if is_peft_available() and _adapter_model_path is None:
-            maybe_adapter_model_path = find_adapter_config_file(
-                pretrained_model_name_or_path,
-                cache_dir=cache_dir,
-                force_download=force_download,
-                resume_download=resume_download,
-                proxies=proxies,
-                local_files_only=local_files_only,
-                token=token,
-                revision=revision,
-                subfolder=subfolder,
-                _commit_hash=commit_hash,
-            )
-        elif is_peft_available() and _adapter_model_path is not None:
-            maybe_adapter_model_path = _adapter_model_path
-        else:
-            maybe_adapter_model_path = None
-
-        has_adapter_config = maybe_adapter_model_path is not None
-
-        if has_adapter_config:
-            if _adapter_model_path is not None:
-                adapter_model_id = _adapter_model_path
-            else:
-                with open(maybe_adapter_model_path, "r", encoding="utf-8") as f:
-                    adapter_model_id = pretrained_model_name_or_path
-                    pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
+        if is_peft_available():
+            if _adapter_model_path is None:
+                _adapter_model_path = find_adapter_config_file(
+                    pretrained_model_name_or_path,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    resume_download=resume_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    token=token,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _commit_hash=commit_hash,
+                )
+            if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
+                with open(_adapter_model_path, "r", encoding="utf-8"):
+                    _adapter_model_path = pretrained_model_name_or_path
 
         # change device_map into a map if we passed an int, a str or a torch.device
         if isinstance(device_map, torch.device):
@@ -3246,9 +3236,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if quantization_method_from_config == QuantizationMethod.GPTQ:
             model = quantizer.post_init_model(model)
 
-        if has_adapter_config:
+        if _adapter_model_path is not None:
             model.load_adapter(
-                adapter_model_id,
+                _adapter_model_path,
                 adapter_name=adapter_name,
                 revision=revision,
                 token=token,
