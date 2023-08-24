@@ -1062,10 +1062,10 @@ class FlaxCLIPTextModuleWithProjection(nn.Module):
             deterministic=deterministic,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=True,
+            return_dict=return_dict,
         )
 
-        pooled_output = text_outputs.pooler_output
+        pooled_output = text_outputs[1]
         text_embeds = self.text_projection(pooled_output)
 
         if not return_dict:
