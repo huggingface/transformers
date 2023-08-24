@@ -138,10 +138,9 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
             sp_model = f.read()
             model_pb2 = import_protobuf()
             model = model_pb2.ModelProto.FromString(sp_model)
-            if not self.legacy:
-                normalizer_spec = model_pb2.NormalizerSpec()
-                normalizer_spec.add_dummy_prefix = False
-                model.normalizer_spec.MergeFrom(normalizer_spec)
+            normalizer_spec = model_pb2.NormalizerSpec()
+            normalizer_spec.add_dummy_prefix = False
+            model.normalizer_spec.MergeFrom(normalizer_spec)
             sp_model = model.SerializeToString()
             tokenizer.LoadFromSerializedProto(sp_model)
         return tokenizer
@@ -205,7 +204,7 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
             prefix, suffix = prefix.split(self.fill_token)
 
         prefix_tokens = self._tokenize(prefix)  # prefix has an extra `SPIECE_UNDERLINE`
-        if len(suffix) < 1:
+        if suffix is None or len(suffix) < 1:
             if prefix_tokens[0] == SPIECE_UNDERLINE and prefix_tokens[1] in self.all_special_tokens:
                 # strip prefix token before a special token
                 prefix_tokens = prefix_tokens[1:]
@@ -254,9 +253,6 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
         tokens = self.sp_model.encode(text, out_type=str)
-        if self.legacy or not text.startswith((SPIECE_UNDERLINE, " ")):
-            return tokens
-
         # 1. Encode string + prefix ex: "<unk> Hey"
         tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
         # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
