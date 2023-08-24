@@ -68,7 +68,7 @@ VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 ## GREEN
-class ViTPosePatchEmbed(nn.Module):
+class ViTPosePatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -104,7 +104,8 @@ class ViTPosePatchEmbed(nn.Module):
         embeddings = self.projection(pixel_values)
         Hp, Wp = embeddings.shape[2], embeddings.shape[3]
         embeddings = embeddings.flatten(2).transpose(1, 2)
-        return embeddings
+        print("afsdasfd",embeddings.shape)
+        return embeddings, (Hp,Wp)
 
     
 class ViTPoseEmbeddings(nn.Module):
@@ -120,7 +121,7 @@ class ViTPoseEmbeddings(nn.Module):
         self.patch_embeddings = ViTPosePatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.embed_dim))
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(config.dropout_p)
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -163,8 +164,9 @@ class ViTPoseEmbeddings(nn.Module):
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
-        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        embeddings, (Hp,Wp) = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
 
+        print(embeddings.shape)
         if bool_masked_pos is not None:
             seq_length = embeddings.shape[1]
             mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
@@ -181,10 +183,11 @@ class ViTPoseEmbeddings(nn.Module):
             embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
         else:
             embeddings = embeddings + self.position_embeddings
+        
+        print(embeddings.shape)
+        #embeddings = self.dropout(embeddings)
 
-        embeddings = self.dropout(embeddings)
-
-        return embeddings
+        return embeddings, (Hp,Wp)
 
 ## GREEN
 class ViTPoseAttention(nn.Module):
@@ -213,6 +216,7 @@ class ViTPoseAttention(nn.Module):
     def forward(
         self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        print("asd",hidden_states.shape)
         B, N, C = hidden_states.shape
         qkv_layer = self.qkv(hidden_states)
         qkv_layer = qkv_layer.reshape(B, N, 3, self.num_attention_heads, -1).permute(2, 0, 3, 1, 4)
@@ -315,35 +319,53 @@ class ViTPoseEncoder(nn.Module):
 
     def forward(
         self,
-        pixel_values: torch.Tensor,
+        hidden_states: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
         interpolate_pos_encoding: bool = False,
+        head_mask = None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ) -> torch.Tensor:
-        batch_size, num_channels, height, width = pixel_values.shape
-        embeddings, (Hp,Wp) = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        #batch_size, num_channels, height, width = pixel_values.shape
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attention = () if output_attentions else None
 
-        if bool_masked_pos is not None:
-            seq_length = embeddings.shape[1]
-            mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
-            # replace the masked visual tokens by mask_tokens
-            mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
-            embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
+        for i, layer_module in enumerate(self.blocks):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
-        # add the [CLS] token to the embedded patch tokens
-        #cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        #embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+            layer_head_mask = head_mask[i] if head_mask is not None else None
 
-        # add positional encoding to each token
-        if interpolate_pos_encoding is not None:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+            if self.gradient_checkpointing and self.training:
+                
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attention)
 
-        for blk in self.blocks:
-            embeddings = blk(embeddings)
+                    return custom_forward
 
-        embeddings = self.last_norm(embeddings)
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer_module),
+                    hidden_states,
+                    layer_head_mask,
+                )
+            else:
+                hidden_states = layer_module(hidden_states)
 
-        return embeddings.permute(0,2,1).reshape(batch_size, -1, Hp, Wp).contiguous()
+            #hidden_states = layer_outputs[0]
 
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states, )
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attention] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states = all_hidden_states,
+            attentions = all_self_attention
+        )
+        
 class ViTPoseTopDownHeatMap(nn.Module):
     """
     Top-down heatmap simple head. paper ref: Bin Xiao et al. ``Simple Baselines for Human Pose Estimation and Tracking``.
@@ -541,7 +563,6 @@ class ViTPosePreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
-        print(module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
             # `trunc_normal_cpu` not implemented in `half` issues
@@ -551,16 +572,14 @@ class ViTPosePreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
-            print("ai i in")
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, ViTPosePatchEmbed):
-            print("in in in in in in")
-            module.patch_embeddings.data = nn.init.trunc_normal_(
-                module.patch_embeddings.data.to(torch.float32),
+        elif isinstance(module, ViTPoseEmbeddings):
+            module.position_embeddings.data = nn.init.trunc_normal_(
+                module.position_embeddings.data.to(torch.float32),
                 mean=0.0,
                 std=self.config.initializer_range,
-            ).to(module.patch_embeddings.dtype)
+            ).to(module.position_embeddings.dtype)
 
             module.cls_token.data = nn.init.trunc_normal_(
                 module.cls_token.data.to(torch.float32),
@@ -622,8 +641,6 @@ class ViTPoseModel(ViTPosePreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.backbone = ViTPoseBackbone(config)
-        #break into two 
         self.embeddings = ViTPoseEmbeddings(config)
         self.encoder = ViTPoseEncoder(config)
         self.layernorm = nn.LayerNorm(config.embed_dim, eps=1e-06, elementwise_affine=True)
@@ -632,8 +649,8 @@ class ViTPoseModel(ViTPosePreTrainedModel):
         self.post_init()
 
 
-    def get_input_embeddings(self) -> ViTPosePatchEmbed:
-        return self.backbone.patch_embeddings
+    def get_input_embeddings(self) -> ViTPosePatchEmbeddings:
+        return self.embeddings.patch_embeddings
 
     #def _prune_heads(self, heads_to_prune: Dict[int, List[int]]) -> None:
     #    """
@@ -667,6 +684,7 @@ class ViTPoseModel(ViTPosePreTrainedModel):
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
         """
+        batch_size, channels, height, width = pixel_values.shape
         results = {}
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -685,15 +703,30 @@ class ViTPoseModel(ViTPosePreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.depth)
 
         # TODO: maybe have a cleaner way to cast the input (from `ImageProcessor` side?)
-        expected_dtype = self.backbone.patch_embeddings.projection.weight.dtype
+        expected_dtype = self.embeddings.patch_embeddings.projection.weight.dtype
         pixel_values = pixel_values.to(expected_dtype) if type(pixel_values) != expected_dtype else pixel_values
-
-        backbone_output = self.backbone(
+        print("pe",pixel_values.shape)
+        embedding_output, (Hp,Wp) = self.embeddings(
             pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
         )
+        print(embedding_output.shape)
+        encoder_outputs = self.encoder(
+            embedding_output,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        
+        sequence_output = encoder_outputs[0]
+        print(sequence_output.shape)
+        sequence_output = self.layernorm(sequence_output)
+        print(sequence_output.shape)
+        
+        sequence_output = sequence_output.permute(0,2,1).reshape(batch_size, -1, Hp, Wp).contiguous()
 
         keypoint_outputs = self.keypoint_head(
-            backbone_output,
+            sequence_output,
         )
 
         output_heatmap = keypoint_outputs
