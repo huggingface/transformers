@@ -154,10 +154,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         self.use_default_system_prompt = use_default_system_prompt
 
         self.sp_model = self.get_spm_processor()
-
-    @property
-    def unk_token_length(self):
-        return len(self.sp_model.encode(str(self.unk_token)))
+        self.unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
     def get_spm_processor(self):
@@ -413,8 +410,8 @@ class LlamaTokenizer(PreTrainedTokenizer):
                 raise ValueError("Last message must be from user")
 
         dialogue = list(conversation.iter_texts())
-        if not all(is_user for is_user, msg in dialogue[::2]) or not all(
-            not is_user for is_user, msg in dialogue[1::2]
+        if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
+            [not is_user for is_user, msg in dialogue[1::2]]
         ):
             raise ValueError(
                 "The model only supports 'user' and 'assistant' roles, starting with user and alternating (u/a/u/a/u...)"
