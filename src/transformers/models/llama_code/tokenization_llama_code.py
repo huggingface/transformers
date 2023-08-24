@@ -205,7 +205,11 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
 
         prefix_tokens = self._tokenize(prefix)  # prefix has an extra `SPIECE_UNDERLINE`
         if suffix is None or len(suffix) < 1:
-            if len(prefix_tokens)>1 and prefix_tokens[0] == SPIECE_UNDERLINE and prefix_tokens[1] in self.all_special_tokens:
+            if (
+                len(prefix_tokens) > 1
+                and prefix_tokens[0] == SPIECE_UNDERLINE
+                and prefix_tokens[1] in self.all_special_tokens
+            ):
                 # strip prefix token before a special token
                 prefix_tokens = prefix_tokens[1:]
             return prefix_tokens
@@ -241,7 +245,6 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
         }
         return outputs
 
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
     def _tokenize(self, text, **kwargs):
         """
         Returns a tokenized string.
