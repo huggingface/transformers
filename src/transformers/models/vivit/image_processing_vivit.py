@@ -33,7 +33,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    _is_scaled_image,
+    is_scaled_image,
     infer_channel_dimension_format,
     is_valid_image,
     to_numpy_array,
@@ -258,7 +258,7 @@ class VivitImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
 
-        if _is_scaled_image(image) and do_rescale:
+        if is_scaled_image(image) and do_rescale:
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."

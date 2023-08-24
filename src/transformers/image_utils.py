@@ -96,7 +96,7 @@ def is_batched(img):
     return False
 
 
-def _is_scaled_image(image: np.ndarray) -> bool:
+def is_scaled_image(image: np.ndarray) -> bool:
     """
     Checks to see whether the pixel values have already been rescaled to [0, 1].
     """

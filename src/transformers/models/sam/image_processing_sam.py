@@ -28,7 +28,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    _is_scaled_image,
+    is_scaled_image,
     get_image_size,
     infer_channel_dimension_format,
     make_list_of_images,
@@ -346,7 +346,7 @@ class SamImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if _is_scaled_image(images[0]) and do_rescale:
+        if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
