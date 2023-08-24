@@ -2508,10 +2508,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if is_peft_available() and _adapter_model_path is None:
             maybe_adapter_model_path = find_adapter_config_file(
                 pretrained_model_name_or_path,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                resume_download=resume_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
+                token=token,
                 revision=revision,
                 subfolder=subfolder,
-                token=token,
-                commit_hash=commit_hash,
+                _commit_hash=commit_hash,
             )
         elif is_peft_available() and _adapter_model_path is not None:
             maybe_adapter_model_path = _adapter_model_path

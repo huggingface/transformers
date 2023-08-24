@@ -13,7 +13,7 @@
 # limitations under the License.
 import importlib
 import os
-from typing import Optional
+from typing import Dict, Optional, Union
 
 from packaging import version
 
@@ -28,10 +28,15 @@ ADAPTER_SAFE_WEIGHTS_NAME = "adapter_model.safetensors"
 
 def find_adapter_config_file(
     model_id: str,
-    revision: str = None,
-    subfolder: str = None,
-    token: Optional[str] = None,
-    commit_hash: Optional[str] = None,
+    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    force_download: bool = False,
+    resume_download: bool = False,
+    proxies: Optional[Dict[str, str]] = None,
+    token: Optional[Union[bool, str]] = None,
+    revision: Optional[str] = None,
+    local_files_only: bool = False,
+    subfolder: str = "",
+    _commit_hash: Optional[str] = None,
 ) -> Optional[str]:
     r"""
     Simply checks if the model stored on the Hub or locally is an adapter model or not, return the path the the adapter
@@ -69,10 +74,15 @@ def find_adapter_config_file(
         adapter_cached_filename = cached_file(
             model_id,
             ADAPTER_CONFIG_NAME,
-            revision=revision,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            resume_download=resume_download,
+            proxies=proxies,
             token=token,
-            _commit_hash=commit_hash,
+            revision=revision,
+            local_files_only=local_files_only,
             subfolder=subfolder,
+            _commit_hash=_commit_hash,
             _raise_exceptions_for_missing_entries=False,
             _raise_exceptions_for_connection_errors=False,
         )
@@ -92,7 +102,6 @@ def check_peft_version(min_version: str) -> None:
         raise ValueError("PEFT is not installed. Please install it with `pip install peft`")
 
     is_peft_version_compatible = version.parse(importlib.metadata.version("peft")) >= version.parse(min_version)
-
     if not is_peft_version_compatible:
         raise ValueError(
             f"The version of PEFT you are using is not compatible, please use a version that is greater"
