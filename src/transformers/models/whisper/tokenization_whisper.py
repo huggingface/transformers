@@ -219,7 +219,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods. Users should refer to
     the superclass for more information regarding such methods.
 
-     Args:
+    Args:
         vocab_file (`str`):
             Path to the vocabulary file.
         merges_file (`str`):
