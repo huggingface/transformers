@@ -1672,10 +1672,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         except ImportError:
             raise ImportError("Chat formatting with build_conversation_input_ids requires jinja2 to be installed.")
 
-        class IncrediblySandboxedEnvironment(ImmutableSandboxedEnvironment):
-            def is_safe_callable(self, obj):
-                return False
-
         if hasattr(conversation, "messages"):
             # Indicates it's a Conversation object
             conversation = conversation.messages
@@ -1687,7 +1683,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             else:
                 chat_template = self.default_chat_template
 
-        jinja_env = IncrediblySandboxedEnvironment()
+        jinja_env = ImmutableSandboxedEnvironment()
         compiled_template = jinja_env.from_string(chat_template)
         rendered = compiled_template.render(messages=conversation, **self.special_tokens_map)
         dialog_tokens = self.encode(rendered, add_special_tokens=False, **tokenizer_kwargs)

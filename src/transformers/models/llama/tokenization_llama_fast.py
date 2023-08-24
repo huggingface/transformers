@@ -217,35 +217,23 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             `List[int]`:
                 Input ids for the conversation.
         """
-        if self.use_default_system_prompt:
-            if len(conversation.past_user_inputs) > 0:
-                if (
-                    not conversation.past_user_inputs[0].startswith(B_SYS)
-                    or E_SYS not in conversation.past_user_inputs[0]
-                ):
-                    conversation.past_user_inputs[0] = (
-                        B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
-                    )
-            elif conversation.new_user_input:
-                if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
-                    conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
-            else:
-                raise ValueError("Last message must be from user")
+        if not len(conversation) > 0 or conversation[-1]["role"] != "user":
+            raise ValueError("Most recent conversation message must be from 'user'!")
+        if self.use_default_system_prompt and conversation[0]["role"] != "system":
+            conversation.messages.insert(0, {"role": "system", "content": DEFAULT_SYSTEM_PROMPT})
 
-        dialogue = list(conversation.iter_texts())
-        if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
-            [not is_user for is_user, msg in dialogue[1::2]]
-        ):
-            raise ValueError(
-                "The model only supports 'user' and 'assistant' roles, starting with user and alternating (u/a/u/a/u...)"
-            )
-
+        dialogue = conversation.messages[:]
+        system_message = dialogue.pop(0) if dialogue[0]["role"] == "system" else None
         dialog_tokens = []
+        if system_message is not None:
+            dialog_tokens += self.encode(
+                f"{B_SYS}{system_message['content']}{E_SYS}", add_special_tokens=False
+            )
         dialog_tokens += sum(
             [
                 [self.bos_token_id]
                 + self.encode(
-                    f"{B_INST} {(prompt[1]).strip()} {E_INST} {(answer[1]).strip()} ", add_special_tokens=False
+                    f"{B_INST} {(prompt['content']).strip()} {E_INST} {(answer['content']).strip()} ", add_special_tokens=False
                 )
                 + [self.eos_token_id]
                 for prompt, answer in zip(dialogue[::2], dialogue[1::2])
@@ -253,7 +241,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             [],
         )
         dialog_tokens += [self.bos_token_id] + self.encode(
-            f"{B_INST} {(dialogue[-1][1]).strip()} {E_INST}", add_special_tokens=False
+            f"{B_INST} {(dialogue[-1]['content']).strip()} {E_INST}", add_special_tokens=False
         )
         return dialog_tokens
 
@@ -270,9 +258,9 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             template = template.replace("sys_prompt", prompt)  # Use replace to avoid f-string + Jinja interaction
         template += (
             "{% if message['role'] == 'user' %}"
-            "{{ bos_token + '[INST]' + message['content'] + '[/INST]' }}"
+            "{{ bos_token + '[INST] ' + message['content'].strip() + ' [/INST]' }}"
             "{% elif message['role'] == 'system' %}"
-            "{{ '<<SYS>>\\n' + message['content'] + '\\n<</SYS>>\\n\\n' }}"
+            "{{ '<<SYS>>\\n' + message['content'].strip() + '\\n<</SYS>>\\n\\n' }}"
             "{% elif message['role'] == 'assistant' %}"
             "{{ ' '  + message['content'] + ' ' + eos_token }}"
             "{% endif %}"

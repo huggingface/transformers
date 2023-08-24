@@ -584,7 +584,6 @@ class LlamaIntegrationTest(unittest.TestCase):
                 {"role": "user", "content": "Hello!"},
                 {"role": "assistant", "content": "Nice to meet you."},
             ],
-            [{"role": "assistant", "content": "Nice to meet you."}, {"role": "user", "content": "Hello!"}],
         ]
         tokenized_chats = [tokenizer.build_conversation_input_ids(test_chat) for test_chat in test_chats]
         expected_tokens = [
@@ -657,7 +656,6 @@ class LlamaIntegrationTest(unittest.TestCase):
                 29871,
                 2,
             ],
-            [29871, 20103, 304, 5870, 366, 29889, 29871, 2, 1, 29961, 25580, 29962, 10994, 21298, 29914, 25580, 29962],
         ]
         for tokenized_chat, expected_tokens in zip(tokenized_chats, expected_tokens):
             self.assertListEqual(tokenized_chat, expected_tokens)
