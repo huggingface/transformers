@@ -2743,6 +2743,12 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
     # base_model_prefix = ""
     _keys_to_ignore_on_load_missing = ["final_logits_bias", "speech_encoder", "t2_model"]
     main_input_name = "input_ids"
+    
+    _tied_weights_keys = [
+        "lm_head.weight",
+        "text_encoder.embed_tokens.weight",
+        "text_decoder.embed_tokens.weight",
+    ]
 
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__(config)
@@ -2814,6 +2820,7 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -2945,6 +2952,11 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
 class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["final_logits_bias", "text_decoder", "t2_model"]
     main_input_name = "input_values"
+    
+    _tied_weights_keys = [
+        "lm_head.weight",
+        "text_decoder.embed_tokens.weight",
+    ]
 
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__(config)
@@ -3016,6 +3028,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -3154,8 +3167,11 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
     main_input_name = "input_ids"
 
     def __init__(self, config: SeamlessM4TConfig):
-        self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
         super().__init__(config)
+        self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
+        
+        # TODO: post init ?
+        
 
     # @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     # @add_code_sample_docstrings(
@@ -3283,8 +3299,12 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
     main_input_name = "input_values"
 
     def __init__(self, config):
-        self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
         super().__init__(config)
+        self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
+        
+        # TODO: post init ?
+        
+        
 
     # @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     # @add_code_sample_docstrings(
@@ -3413,32 +3433,75 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
 class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
     _keys_to_ignore_on_load_missing = ["final_logits_bias"]
     _tied_weights_keys = [
-        "input_model.lm_head.weight",
-        "input_model.model.text_encoder.embed_tokens.weight",
-        "input_model.model.text_decoder.embed_tokens.weight",
+        "lm_head.weight",
+        "text_encoder.embed_tokens.weight",
+        "text_decoder.embed_tokens.weight",
     ]
-
-    def __init__(self, config):
+    def __init__(self, config, current_modality="text"):
         super().__init__(config)
 
-        self.input_model = SeamlessM4TMultiModalToTextModelWithLMHead(
-            config, use_text_encoder=True, use_speech_encoder=True
-        )
-
+        self.text_encoder = SeamlessM4TEncoder(config)
+        self.speech_encoder = SeamlessM4TSpeechEncoder(config)
+        self.text_decoder = SeamlessM4TDecoder(config)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        
+        self.current_modality=current_modality
+        if current_modality == "speech":
+            self.main_input_name = current_modality
+        
+        self.register_buffer("final_logits_bias", torch.zeros((1, config.vocab_size)))
+        
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
 
         # Initialize weights and apply final processing
         self.post_init()
+        
+    def set_modality(self, modality="text"):
+        if modality == "text":
+            self.main_input_name = "input_ids"
+            self.current_modality = "text"
+        elif modality == "speech":
+            self.main_input_name = "input_values"
+            self.current_modality = "input_values"
+        else:
+            raise ValueError(f"`modality={modality}` is not a valid modality. It must be `text` or `speech`.")
+
 
     def get_encoder(self):
-        return self.input_model.get_encoder()
+        if self.current_modality == "text":
+            return self.text_encoder
+        else:
+            return self.speech_encoder
 
-    def get_decoder(self):
-        return self.input_model.get_decoder()
+
+
+    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
+        new_embeddings = super().resize_token_embeddings(new_num_tokens)
+        self._resize_final_logits_bias(new_num_tokens)
+        return new_embeddings
+
+    def _resize_final_logits_bias(self, new_num_tokens: int) -> None:
+        old_num_tokens = self.final_logits_bias.shape[-1]
+        if new_num_tokens <= old_num_tokens:
+            new_bias = self.final_logits_bias[:, :new_num_tokens]
+        else:
+            extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
+            new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
+        self.register_buffer("final_logits_bias", new_bias)
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
 
     def get_input_embeddings(self):
-        return self.input_model.get_input_embeddings()
+        return self.text_decoder.embed_tokens
 
+    def set_input_embeddings(self, value):
+        self.text_decoder.embed_tokens = value
+
+        
     # @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     # @add_code_sample_docstrings(
     #    checkpoint=_CHECKPOINT_FOR_DOC,
@@ -3474,35 +3537,117 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         Returns:
 
         """
+                
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+
+        if labels is not None:
+            if use_cache:
+                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+            use_cache = False
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
+                decoder_input_ids = shift_tokens_right(labels, self.config.unit_pad_token_id)
+                
+                
         logger.warning(
-            "This calls `self.input_model.forward`. If you want to generate speech, use the `generate` method."
+            "This calls the same method `forward` as `SeamlessM4TForTextToText` and `SeamlessM4TForSpeechToText` depending on the input modality. If you want to generate speech, use the `generate` method."
         )
 
-        if input_ids is None and input_values is None and inputs_embeds is None:
+        if input_ids is None and input_values is None and inputs_embeds is None and encoder_outputs is None:
             raise ValueError(
-                "`input_ids`,`input_values` and `inputs_embeds` are all empty. Make sure at least one of them is not."
+                "`input_ids`,`input_values`, `inputs_embeds` and `encoder_outputs` are all empty. Make sure at least one of them is not."
+            )
+        elif input_values is not None:
+            if input_ids is not None:
+                logger.warning(
+                    "`input_ids` is not `None` but `input_values` has been given. `input_values` will be used in priority through the `speech_encoder`. Make sure that `input_values` and `input_ids` are mutually exclusive."
+                )
+
+            if inputs_embeds is not None:
+                logger.warning(
+                    "`inputs_embeds` is not `None` but `input_values` has been given. `input_values` will be used in priority through `speech_encoder`. `inputs_embeds` will be ignored."
+                )
+                
+            self.set_modality("speech")
+            
+            # TODO: not head mask warnings
+            encoder_outputs = self.speech_encoder(
+                input_values=input_values,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+                        
+        elif input_ids is not None:
+            self.set_modality("text")
+            encoder_outputs = self.text_encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        # TODO: throws errors or warnings if shape not in line with input_modality!
-        return self.input_model.forward(
-            input_ids=input_ids,
-            input_values=input_values,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
+        encoder_attention_mask = attention_mask
+        # input modality = speech so new attention mask
+        if self.current_modality == "speech" and attention_mask is not None:
+            encoder_attention_mask = _compute_new_attention_mask(
+                encoder_outputs[0], attention_mask, self.config.adaptor_kernel_size, self.config.adaptor_stride
+            )
+
+        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
+        decoder_outputs = self.text_decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=encoder_outputs[0],
+            encoder_attention_mask=encoder_attention_mask,
+            head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
-            encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            labels=labels,
+            inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+        )
+
+        lm_logits = self.lm_head(decoder_outputs.last_hidden_state) + self.final_logits_bias
+
+        masked_lm_loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
+
+        if not return_dict:
+            outputs = decoder_outputs + encoder_outputs
+            output = (lm_logits,) + outputs[1:]
+            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+
+        return Seq2SeqLMOutput(
+            loss=masked_lm_loss,
+            logits=lm_logits,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
         )
 
     @torch.no_grad()
@@ -3545,14 +3690,12 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                     "`input_values` and `input_ids` are both non empty. `input_values` will be used in priority through the speech encoder."
                     "Make sure `input_values=None` if you want to use the text encoder."
                 )
-            self.input_model.set_modality("speech")
-            generation_outputs = self.input_model.generate(
+            generation_outputs = super().generate(
                 input_ids=None, input_values=input_values, **kwargs_text_generation
             )
             batch_size = len(input_values)
         else:
-            self.input_model.set_modality("text")
-            generation_outputs = self.input_model.generate(input_ids=input_ids, input_values=None, **kwargs_text_generation)
+            generation_outputs = super().generate(input_ids=input_ids, input_values=None, **kwargs_text_generation)
             batch_size = len(input_ids)
         
         num_return_sequences = len(generation_outputs.sequences) // batch_size
