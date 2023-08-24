@@ -76,15 +76,15 @@ def number_to_words(num: int) -> str:
     """
     Converts numbers(`int`) to words(`str`).
 
-    Please note that it only supports upto - "'nine hundred and ninety nine quadrillion nine hundred and ninety nine
-    trillion nine hundred and ninety nine billion nine hundred and ninety nine million nine hundred and ninety nine
-    thousand nine hundred and ninety nine'" or `number_to_words(999_999_999_999_999_999)`.
+    Please note that it only supports upto - "'nine hundred ninety-nine quadrillion, nine hundred ninety-nine trillion,
+    nine hundred ninety-nine billion, nine hundred ninety-nine million, nine hundred ninety-nine thousand, nine hundred
+    ninety-nine'" or `number_to_words(999_999_999_999_999_999)`.
 
     Example:
 
     ```python
     >>> print(number_to_words(1_101_000_000_000))
-    'one trillion one hundred and one billion'
+    'one trillion, one hundred one billion'
     ```
     """
 
@@ -112,38 +112,38 @@ def number_to_words(num: int) -> str:
     elif num < 20:
         return teens[num - 10]
     elif num < 100:
-        return tens[num // 10] + (" " + number_to_words(num % 10) if num % 10 != 0 else "")
+        return tens[num // 10] + ("-" + number_to_words(num % 10) if num % 10 != 0 else "")
     elif num < 1000:
         return ones[num // 100] + " hundred" + (" " + number_to_words(num % 100) if num % 100 != 0 else "")
     elif num < 1_000_000:
         return (
             number_to_words(num // 1000)
-            + " thousand, "
-            + (" " + number_to_words(num % 1000) if num % 1000 != 0 else "")
+            + " thousand"
+            + (", " + number_to_words(num % 1000) if num % 1000 != 0 else "")
         )
     elif num < 1_000_000_000:
         return (
             number_to_words(num // 1_000_000)
-            + " million, "
-            + (" " + number_to_words(num % 1_000_000) if num % 1_000_000 != 0 else "")
+            + " million"
+            + (", " + number_to_words(num % 1_000_000) if num % 1_000_000 != 0 else "")
         )
     elif num < 1_000_000_000_000:
         return (
             number_to_words(num // 1_000_000_000)
-            + " billion, "
-            + (" " + number_to_words(num % 1_000_000_000) if num % 1_000_000_000 != 0 else "")
+            + " billion"
+            + (", " + number_to_words(num % 1_000_000_000) if num % 1_000_000_000 != 0 else "")
         )
     elif num < 1_000_000_000_000_000:
         return (
             number_to_words(num // 1_000_000_000_000)
-            + " trillion, "
-            + (" " + number_to_words(num % 1_000_000_000_000) if num % 1_000_000_000_000 != 0 else "")
+            + " trillion"
+            + (", " + number_to_words(num % 1_000_000_000_000) if num % 1_000_000_000_000 != 0 else "")
         )
     elif num < 1_000_000_000_000_000_000:
         return (
             number_to_words(num // 1_000_000_000_000_000)
-            + " quadrillion, "
-            + (" " + number_to_words(num % 1_000_000_000_000_000) if num % 1_000_000_000_000_000 != 0 else "")
+            + " quadrillion"
+            + (", " + number_to_words(num % 1_000_000_000_000_000) if num % 1_000_000_000_000_000 != 0 else "")
         )
     else:
         return "number out of range"
