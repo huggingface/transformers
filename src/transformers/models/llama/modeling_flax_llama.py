@@ -199,7 +199,6 @@ class FlaxLlamaAttention(nn.Module):
 
     # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoSelfAttention._concatenate_to_cache
     @nn.compact
-    def _concatenate_to_cache(self, key, value, query, attention_mask):
         """
         This function takes projected key, value states from a single input token and concatenates the states to cached
         states from previous steps. This function is slighly adapted from the official Flax repository:
@@ -370,7 +369,7 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
     """
 
     config_class = LlamaConfig
-    base_model_prefix = "model"
+    base_model_prefix = "transformer"
     module_class: nn.Module = None
 
     def __init__(
@@ -393,9 +392,7 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        random_params = self.module.init(
-            rngs, input_ids, position_ids=position_ids, attention_mask=attention_mask, return_dict=False
-        )["params"]
+        random_params = self.module.init(rngs, input_ids, attention_mask, position_ids, return_dict=False)["params"]
 
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
@@ -422,16 +419,11 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
 
         init_variables = self.module.init(
-            jax.random.PRNGKey(0),
-            input_ids,
-            position_ids=position_ids,
-            attention_mask=attention_mask,
-            return_dict=False,
-            init_cache=True,
+            jax.random.PRNGKey(0), input_ids, attention_mask, position_ids, return_dict=False, init_cache=True
         )
         return unfreeze(init_variables["cache"])
 
-    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids,
@@ -469,7 +461,7 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
 
         inputs = {"params": params or self.params}
 
-        # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be changed by FlaxLlamaNeoAttention module
+        # if past_key_values are passed then cache is already initialized a private flag init_cache has to be passed down to ensure cache is used. It has to be made sure that cache is marked as mutable so that it can be changed by FlaxLlamaAttention module
         if past_key_values:
             inputs["cache"] = past_key_values
             mutable = ["cache"]
