@@ -746,7 +746,7 @@ class WandbCallback(TrainerCallback):
             # keep track of model topology and gradients, unsupported on TPU
             _watch_model = os.getenv("WANDB_WATCH", "false")
             if not is_torch_tpu_available() and _watch_model in ("all", "parameters", "gradients"):
-                self._wandb.watch(model, log=_watch_model, log_freq=max(100, args.logging_steps))
+                self._wandb.watch(model, log=_watch_model, log_freq=max(100, state.logging_steps))
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         if self._wandb is None:
@@ -1282,8 +1282,12 @@ class NeptuneCallback(TrainerCallback):
         self._metadata_namespace[NeptuneCallback.trainer_parameters_key] = args.to_sanitized_dict()
 
     def _log_model_parameters(self, model):
+        from neptune.utils import stringify_unsupported
+
         if model and hasattr(model, "config") and model.config is not None:
-            self._metadata_namespace[NeptuneCallback.model_parameters_key] = model.config.to_dict()
+            self._metadata_namespace[NeptuneCallback.model_parameters_key] = stringify_unsupported(
+                model.config.to_dict()
+            )
 
     def _log_hyper_param_search_parameters(self, state):
         if state and hasattr(state, "trial_name"):

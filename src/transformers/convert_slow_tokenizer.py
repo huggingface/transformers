@@ -1301,6 +1301,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "SplinterTokenizer": SplinterConverter,
     "XGLMTokenizer": XGLMConverter,
     "LlamaTokenizer": LlamaConverter,
+    "LlamaCodeTokenizer": LlamaConverter,
 }
 
 

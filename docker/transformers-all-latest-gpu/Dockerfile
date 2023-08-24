@@ -22,7 +22,6 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip
 
 ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
-RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime]
 
 # TODO: Handle these in a python utility script
 RUN [ ${#PYTORCH} -gt 0 -a "$PYTORCH" != "pre" ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; echo "export VERSION='$VERSION'" >> ~/.profile
@@ -32,7 +31,10 @@ RUN echo torch=$VERSION
 # TODO: We might need to specify proper versions that work with a specific torch version (especially for past CI).
 RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA || python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
 
-RUN python3 -m pip install --no-cache-dir -U tensorflow==2.12 protobuf==3.20.3 tensorflow_text tensorflow_probability
+RUN python3 -m pip install --no-cache-dir -U tensorflow==2.13 protobuf==3.20.3 tensorflow_text tensorflow_probability
+
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime]
+
 RUN python3 -m pip uninstall -y flax jax
 
 RUN python3 -m pip install --no-cache-dir intel_extension_for_pytorch==$INTEL_TORCH_EXT+cpu -f https://developer.intel.com/ipex-whl-stable-cpu
@@ -42,11 +44,19 @@ RUN python3 -m pip install -U "itsdangerous<2.1.0"
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
+RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/peft@main#egg=peft
+
 # Add bitsandbytes for mixed int8 testing
 RUN python3 -m pip install --no-cache-dir bitsandbytes
 
-# For bettertransformer
-RUN python3 -m pip install --no-cache-dir optimum
+# Add auto-gptq for gtpq quantization testing
+RUN python3 -m pip install --no-cache-dir auto-gptq --extra-index-url https://huggingface.github.io/autogptq-index/whl/cu118/
+
+# Add einops for additional model testing
+RUN python3 -m pip install --no-cache-dir einops
+
+# For bettertransformer + gptq 
+RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/optimum@main#egg=optimum
 
 # For video model testing
 RUN python3 -m pip install --no-cache-dir decord av==9.2.0

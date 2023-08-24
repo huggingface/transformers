@@ -285,7 +285,7 @@ torch_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager git+https://github.com/huggingface/accelerate",
     ],
     parallelism=1,
-    pytest_num_workers=3,
+    pytest_num_workers=8,
 )
 
 
@@ -298,8 +298,6 @@ tf_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager tensorflow_probability",
     ],
     parallelism=1,
-    pytest_num_workers=6,
-    pytest_options={"rA": None},
 )
 
 
@@ -311,7 +309,6 @@ flax_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[flax,testing,sentencepiece,flax-speech,vision]",
     ],
     parallelism=1,
-    pytest_options={"rA": None},
 )
 
 
@@ -323,7 +320,6 @@ pipelines_torch_job = CircleCIJob(
         "pip install --upgrade --upgrade-strategy eager pip",
         "pip install -U --upgrade-strategy eager .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm,video]",
     ],
-    pytest_options={"rA": None},
     marker="is_pipeline_test",
 )
 
@@ -337,7 +333,6 @@ pipelines_tf_job = CircleCIJob(
         "pip install -U --upgrade-strategy eager .[sklearn,tf-cpu,testing,sentencepiece,vision]",
         "pip install -U --upgrade-strategy eager tensorflow_probability",
     ],
-    pytest_options={"rA": None},
     marker="is_pipeline_test",
 )
 

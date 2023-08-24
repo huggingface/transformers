@@ -91,6 +91,10 @@ class ZeroShotImageClassificationPipeline(Pipeline):
                 replacing the placeholder with the candidate_labels. Then likelihood is estimated by using
                 logits_per_image
 
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
+
         Return:
             A list of dictionaries containing result, one dictionary per proposed label. The dictionaries contain the
             following keys:
@@ -104,13 +108,15 @@ class ZeroShotImageClassificationPipeline(Pipeline):
         preprocess_params = {}
         if "candidate_labels" in kwargs:
             preprocess_params["candidate_labels"] = kwargs["candidate_labels"]
+        if "timeout" in kwargs:
+            preprocess_params["timeout"] = kwargs["timeout"]
         if "hypothesis_template" in kwargs:
             preprocess_params["hypothesis_template"] = kwargs["hypothesis_template"]
 
         return preprocess_params, {}, {}
 
-    def preprocess(self, image, candidate_labels=None, hypothesis_template="This is a photo of {}."):
-        image = load_image(image)
+    def preprocess(self, image, candidate_labels=None, hypothesis_template="This is a photo of {}.", timeout=None):
+        image = load_image(image, timeout=timeout)
         inputs = self.image_processor(images=[image], return_tensors=self.framework)
         inputs["candidate_labels"] = candidate_labels
         sequences = [hypothesis_template.format(x) for x in candidate_labels]

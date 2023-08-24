@@ -474,27 +474,6 @@ class TFGenerationMixin:
             "A model class needs to define a `prepare_inputs_for_generation` method in order to use `generate`."
         )
 
-    def adjust_logits_during_generation(
-        self, logits, cur_len, max_length, forced_bos_token_id, forced_eos_token_id, **kwargs
-    ):
-        """
-        Implement in subclasses of [`PreTrainedModel`] for custom behavior to adjust the logits in the generate method.
-        """
-        vocab_size = getattr(self.config, "vocab_size", None)
-        if vocab_size is None and self.config.is_encoder_decoder:
-            decoder_config = getattr(self.config, "decoder", None)
-            if decoder_config is not None:
-                vocab_size = getattr(self.config.decoder, "vocab_size", None)
-
-        if cur_len == 1 and forced_bos_token_id is not None:
-            vocab_range = tf.constant(range(vocab_size))
-            return tf.where(vocab_range != forced_bos_token_id, -1e8, logits)
-        elif cur_len == max_length - 1 and forced_eos_token_id is not None:
-            vocab_range = tf.constant(range(vocab_size))
-            return tf.where(vocab_range != forced_eos_token_id, -1e8, logits)
-        else:
-            return logits
-
     def compute_transition_scores(
         self,
         sequences: tf.Tensor,
@@ -850,7 +829,7 @@ class TFGenerationMixin:
         # 7. Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = shape_list(input_ids)[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length != 20:
+        if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
             # 20 is the default max_length of the generation config
             warnings.warn(
                 f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
