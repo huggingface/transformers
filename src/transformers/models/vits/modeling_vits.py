@@ -1412,7 +1412,7 @@ class VitsModel(VitsPreTrainedModel):
 
         >>> with torch.no_grad():
         ...     outputs = model(inputs["input_ids"])
-        >>> outputs.audio.shape
+        >>> outputs.waveform.shape
         torch.Size([1, 33280])
         ```
         """
