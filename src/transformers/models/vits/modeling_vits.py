@@ -167,8 +167,8 @@ def _unconstrained_rational_quadratic_spline(
         reverse (`bool`, *optional*, defaults to `False`):
             Whether the model is being run in reverse mode.
         tail_bound (`float`, *optional* defaults to 5):
-            Upper and lower limit bound for the rational quadratic function. Outside of this `tail_bound`, the transform
-            behaves as an identity function.
+            Upper and lower limit bound for the rational quadratic function. Outside of this `tail_bound`, the
+            transform behaves as an identity function.
         min_bin_width (`float`, *optional*, defaults to 1e-3):
             Minimum bin value across the width dimension for the piecewise rational quadratic function.
         min_bin_height (`float`, *optional*, defaults to 1e-3):
@@ -177,8 +177,8 @@ def _unconstrained_rational_quadratic_spline(
             Minimum bin value across the derivatives for the piecewise rational quadratic function.
     Returns:
         outputs (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
-            Hidden-states as transformed by the piecewise rational quadratic function with the `tail_bound`
-            limits applied.
+            Hidden-states as transformed by the piecewise rational quadratic function with the `tail_bound` limits
+            applied.
         log_abs_det (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
             Logarithm of the absolute value of the determinants corresponding to the `outputs` with the `tail_bound`
             limits applied.
@@ -223,8 +223,8 @@ def _rational_quadratic_spline(
     min_derivative,
 ):
     """
-    This transformation represents a monotonically increasing piecewise rational quadratic function. Unlike the function
-    `_unconstrained_rational_quadratic_spline`, the function behaves the same across the `tail_bound`.
+    This transformation represents a monotonically increasing piecewise rational quadratic function. Unlike the
+    function `_unconstrained_rational_quadratic_spline`, the function behaves the same across the `tail_bound`.
 
     Args:
         inputs (`torch.FloatTensor` of shape `(batch_size, channels, seq_len)`:
@@ -241,8 +241,8 @@ def _rational_quadratic_spline(
         reverse (`bool`):
             Whether the model is being run in reverse mode.
         tail_bound (`float`):
-            Upper and lower limit bound for the rational quadratic function. Outside of this `tail_bound`, the transform
-            behaves as an identity function.
+            Upper and lower limit bound for the rational quadratic function. Outside of this `tail_bound`, the
+            transform behaves as an identity function.
         min_bin_width (`float`):
             Minimum bin value across the width dimension for the piecewise rational quadratic function.
         min_bin_height (`float`):
