@@ -113,11 +113,11 @@ _init_weights = True
 
 
 def is_fsdp_enabled():
-    return strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
+    return torch.distributed.is_initialized() and strtobool(os.environ.get("ACCELERATE_USE_FSDP", "False")) == 1
 
 
 def is_fsdp_enabled_and_dist_rank_0():
-    return is_fsdp_enabled() and torch.distributed.is_initialized() and torch.distributed.get_rank() == 0
+    return is_fsdp_enabled() and torch.distributed.get_rank() == 0
 
 
 if is_sagemaker_mp_enabled():
@@ -1502,9 +1502,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             new_num_tokens = ((new_num_tokens // pad_to_multiple_of) + 1) * pad_to_multiple_of
         else:
             logger.warning(
-                "You are resizing the embedding layer without providing a `pad_to_multiple_of` parameter. This means that the new embeding"
+                "You are resizing the embedding layer without providing a `pad_to_multiple_of` parameter. This means that the new embedding"
                 f" dimension will be {new_num_tokens}. This might induce some performance reduction as *Tensor Cores* will not be available."
-                " For more details  about this, or help on choosing the correct value for resizing, refer to this guide:"
+                " For more details about this, or help on choosing the correct value for resizing, refer to this guide:"
                 " https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc"
             )
 
