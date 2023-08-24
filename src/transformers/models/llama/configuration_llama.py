@@ -78,7 +78,7 @@ class LlamaConfig(PretrainedConfig):
         tie_word_embeddings(`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports three scaling
+            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
             strategies: linear and dynamic. Their scaling factor must be an float greater than 1. The expected format
             is `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
             `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
@@ -122,6 +122,7 @@ class LlamaConfig(PretrainedConfig):
         pretraining_tp=1,
         tie_word_embeddings=False,
         rope_scaling=None,
+        rope_theta=10000,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -143,6 +144,7 @@ class LlamaConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_scaling = rope_scaling
         self._rope_scaling_validation()
+        self.rope_theta = rope_theta
 
         super().__init__(
             pad_token_id=pad_token_id,
