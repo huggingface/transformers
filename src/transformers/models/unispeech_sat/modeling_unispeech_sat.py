@@ -1045,15 +1045,13 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
 
         return input_lengths
 
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PreTrainedModel._get_feature_vector_attention_mask
-    def _get_feature_vector_attention_mask(
-        self, feature_vector_length: int, attention_mask: torch.LongTensor, add_adapter=None
-    ):
+    # Copied from transformers.models.hubert.modeling_hubert.HubertPreTrainedModel._get_feature_vector_attention_mask
+    def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
         # Effectively attention_mask.sum(-1), but not inplace to be able to run
         # on inference mode.
         non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
 
-        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
+        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths)
         output_lengths = output_lengths.to(torch.long)
 
         batch_size = attention_mask.shape[0]
@@ -1225,9 +1223,7 @@ class UniSpeechSatModel(UniSpeechSatPreTrainedModel):
 
         if attention_mask is not None:
             # compute reduced attention_mask corresponding to feature vectors
-            attention_mask = self._get_feature_vector_attention_mask(
-                extract_features.shape[1], attention_mask, add_adapter=False
-            )
+            attention_mask = self._get_feature_vector_attention_mask(extract_features.shape[1], attention_mask)
 
         hidden_states, extract_features = self.feature_projection(extract_features)
         hidden_states = self._mask_hidden_states(
