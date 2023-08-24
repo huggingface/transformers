@@ -399,7 +399,7 @@ class SeamlessM4TConformerFeedForward(nn.Module):
         self.intermediate_dense = nn.Linear(config.hidden_size, config.intermediate_size)
 
         if use_relu:
-            self.intermediate_act_fn = ACT2FN["relu"]
+            self.intermediate_act_fn = nn.ReLU()
         elif isinstance(config.speech_encoder_hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.speech_encoder_hidden_act]
         else:
@@ -1508,7 +1508,7 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
         self.encoder = SeamlessM4TConformerEncoder(config)
 
         self.proj1 = nn.Linear(config.hidden_size, config.hidden_size * 4, bias=True)
-        self.activation = ACT2FN["relu"]
+        self.activation = nn.ReLU()
         self.proj2 = nn.Linear(4 * config.hidden_size, config.hidden_size, bias=True)
 
         self.adapter = SeamlessM4TConformerAdapter(config) if config.add_adapter else None
