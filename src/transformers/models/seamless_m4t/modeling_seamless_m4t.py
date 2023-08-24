@@ -815,22 +815,6 @@ class SeamlessM4TConformerEncoder(nn.Module):
             attentions=all_self_attentions,
         )
 
-
-class SeamlessM4TConformerAdapter(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        self.layers = nn.ModuleList(SeamlessM4TConformerAdapterLayer(config) for _ in range(config.num_adapter_layers))
-
-    def forward(self, hidden_states, attention_mask):
-        # down project hidden_states if necessary
-
-        for layer in self.layers:
-            hidden_states = layer(hidden_states, attention_mask)
-
-        return hidden_states
-
-
 class SeamlessM4TConformerAdapterLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -915,6 +899,22 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
         hidden_states = self.ffn_dropout(hidden_states) + residual
 
         # TODO: return attention_weights ? (must pass output_attention first)
+        return hidden_states
+
+
+
+class SeamlessM4TConformerAdapter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        self.layers = nn.ModuleList(SeamlessM4TConformerAdapterLayer(config) for _ in range(config.num_adapter_layers))
+
+    def forward(self, hidden_states, attention_mask):
+        # down project hidden_states if necessary
+
+        for layer in self.layers:
+            hidden_states = layer(hidden_states, attention_mask)
+
         return hidden_states
 
 
