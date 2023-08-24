@@ -112,7 +112,7 @@ pytest tests/test_optimization.py --collect-only -q
 To run an individual test module:
 
 ```bash
-pytest tests/test_logging.py
+pytest tests/utils/test_logging.py
 ```
 
 ### Run specific tests
@@ -432,14 +432,14 @@ pytest --instafail
 On a GPU-enabled setup, to test in CPU-only mode add `CUDA_VISIBLE_DEVICES=""`:
 
 ```bash
-CUDA_VISIBLE_DEVICES="" pytest tests/test_logging.py
+CUDA_VISIBLE_DEVICES="" pytest tests/utils/test_logging.py
 ```
 
 or if you have multiple gpus, you can specify which one is to be used by `pytest`. For example, to use only the
 second gpu if you have gpus `0` and `1`, you can run:
 
 ```bash
-CUDA_VISIBLE_DEVICES="1" pytest tests/test_logging.py
+CUDA_VISIBLE_DEVICES="1" pytest tests/utils/test_logging.py
 ```
 
 This is handy when you want to run different tasks on different GPUs.
@@ -511,6 +511,21 @@ from transformers.testing_utils import get_gpu_count
 n_gpu = get_gpu_count()  # works with torch and tf
 ```
 
+### Testing with a specific PyTorch backend or device
+
+To run the test suite on a specific torch device add `TRANSFORMERS_TEST_DEVICE="$device"` where `$device` is the target backend. For example, to test on CPU only:
+```bash
+TRANSFORMERS_TEST_DEVICE="cpu" pytest tests/utils/test_logging.py
+```
+
+This variable is useful for testing custom or less common PyTorch backends such as `mps`. It can also be used to achieve the same effect as `CUDA_VISIBLE_DEVICES` by targeting specific GPUs or testing in CPU-only mode.
+
+Certain devices will require an additional import after importing `torch` for the first time. This can be specified using the environment variable `TRANSFORMERS_TEST_BACKEND`:
+```bash
+TRANSFORMERS_TEST_BACKEND="torch_npu" pytest tests/utils/test_logging.py
+```
+
+
 ### Distributed training
 
 `pytest` can't deal with distributed training directly. If this is attempted - the sub-processes don't do the right
@@ -538,7 +553,7 @@ according captured output will usually be shown along with the failure traceback
 To disable output capturing and to get the `stdout` and `stderr` normally, use `-s` or `--capture=no`:
 
 ```bash
-pytest -s tests/test_logging.py
+pytest -s tests/utils/test_logging.py
 ```
 
 To send test results to JUnit format output:
@@ -552,7 +567,7 @@ py.test tests --junitxml=result.xml
 To have no color (e.g., yellow on white background is not readable):
 
 ```bash
-pytest --color=no tests/test_logging.py
+pytest --color=no tests/utils/test_logging.py
 ```
 
 ### Sending test report to online pastebin service
@@ -560,7 +575,7 @@ pytest --color=no tests/test_logging.py
 Creating a URL for each test failure:
 
 ```bash
-pytest --pastebin=failed tests/test_logging.py
+pytest --pastebin=failed tests/utils/test_logging.py
 ```
 
 This will submit test run information to a remote Paste service and provide a URL for each failure. You may select
@@ -569,7 +584,7 @@ tests as usual or add for example -x if you only want to send one particular fai
 Creating a URL for a whole test session log:
 
 ```bash
-pytest --pastebin=all tests/test_logging.py
+pytest --pastebin=all tests/utils/test_logging.py
 ```
 
 ## Writing tests
@@ -1199,7 +1214,7 @@ tf.random.set_seed(seed)
 To start a debugger at the point of the warning, do this:
 
 ```bash
-pytest tests/test_logging.py -W error::UserWarning --pdb
+pytest tests/utils/test_logging.py -W error::UserWarning --pdb
 ```
 
 ## Working with github actions workflows

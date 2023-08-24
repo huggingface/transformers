@@ -47,7 +47,7 @@ class CodeGenModelTester:
         vocab_size=256,
         hidden_size=32,
         rotary_dim=4,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",

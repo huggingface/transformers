@@ -32,6 +32,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     get_image_size,
+    infer_channel_dimension_format,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -122,7 +123,11 @@ class DonutImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
     def align_long_axis(
-        self, image: np.ndarray, size: Dict[str, int], data_format: Optional[Union[str, ChannelDimension]] = None
+        self,
+        image: np.ndarray,
+        size: Dict[str, int],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """
         Align the long axis of the image to the longest axis of the specified size.
@@ -132,11 +137,15 @@ class DonutImageProcessor(BaseImageProcessor):
                 The image to be aligned.
             size (`Dict[str, int]`):
                 The size `{"height": h, "width": w}` to align the long axis to.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The data format of the output image. If unset, the same format as the input image is used.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
 
         Returns:
             `np.ndarray`: The aligned image.
         """
-        input_height, input_width = get_image_size(image)
+        input_height, input_width = get_image_size(image, channel_dim=input_data_format)
         output_height, output_width = size["height"], size["width"]
 
         if (output_width < output_height and input_width > input_height) or (
@@ -145,7 +154,7 @@ class DonutImageProcessor(BaseImageProcessor):
             image = np.rot90(image, 3)
 
         if data_format is not None:
-            image = to_channel_dimension_format(image, data_format)
+            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
 
         return image
 
@@ -155,6 +164,7 @@ class DonutImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         random_padding: bool = False,
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """
         Pad the image to the specified size.
@@ -168,9 +178,11 @@ class DonutImageProcessor(BaseImageProcessor):
                 Whether to use random padding or not.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The data format of the output image. If unset, the same format as the input image is used.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
         """
         output_height, output_width = size["height"], size["width"]
-        input_height, input_width = get_image_size(image)
+        input_height, input_width = get_image_size(image, channel_dim=input_data_format)
 
         delta_width = output_width - input_width
         delta_height = output_height - input_height
@@ -186,7 +198,7 @@ class DonutImageProcessor(BaseImageProcessor):
         pad_right = delta_width - pad_left
 
         padding = ((pad_top, pad_bottom), (pad_left, pad_right))
-        return pad(image, padding, data_format=data_format)
+        return pad(image, padding, data_format=data_format, input_data_format=input_data_format)
 
     def pad(self, *args, **kwargs):
         logger.info("pad is deprecated and will be removed in version 4.27. Please use pad_image instead.")
@@ -198,6 +210,7 @@ class DonutImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -213,8 +226,10 @@ class DonutImageProcessor(BaseImageProcessor):
                 The resampling filter to use.
             data_format (`Optional[Union[str, ChannelDimension]]`, *optional*):
                 The data format of the output image. If unset, the same format as the input image is used.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        input_height, input_width = get_image_size(image)
+        input_height, input_width = get_image_size(image, channel_dim=input_data_format)
         output_height, output_width = size["height"], size["width"]
 
         # We always resize to the smallest of either the input or output size.
@@ -230,7 +245,13 @@ class DonutImageProcessor(BaseImageProcessor):
             height = int(input_height * width / input_width)
 
         return resize(
-            image, size=(height, width), resample=resample, reducing_gap=2.0, data_format=data_format, **kwargs
+            image,
+            size=(height, width),
+            resample=resample,
+            reducing_gap=2.0,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
         )
 
     def resize(
@@ -239,6 +260,7 @@ class DonutImageProcessor(BaseImageProcessor):
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -254,11 +276,22 @@ class DonutImageProcessor(BaseImageProcessor):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
         """
         size = get_size_dict(size)
         shortest_edge = min(size["height"], size["width"])
-        output_size = get_resize_output_image_size(image, size=shortest_edge, default_to_square=False)
-        resized_image = resize(image, size=output_size, resample=resample, data_format=data_format, **kwargs)
+        output_size = get_resize_output_image_size(
+            image, size=shortest_edge, default_to_square=False, input_data_format=input_data_format
+        )
+        resized_image = resize(
+            image,
+            size=output_size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
         return resized_image
 
     def preprocess(
@@ -278,6 +311,7 @@ class DonutImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -327,6 +361,12 @@ class DonutImageProcessor(BaseImageProcessor):
                 - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - Unset: defaults to the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -367,25 +407,45 @@ class DonutImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
         if do_align_long_axis:
-            images = [self.align_long_axis(image, size=size) for image in images]
+            images = [self.align_long_axis(image, size=size, input_data_format=input_data_format) for image in images]
 
         if do_resize:
-            images = [self.resize(image=image, size=size, resample=resample) for image in images]
+            images = [
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_thumbnail:
-            images = [self.thumbnail(image=image, size=size) for image in images]
+            images = [self.thumbnail(image=image, size=size, input_data_format=input_data_format) for image in images]
 
         if do_pad:
-            images = [self.pad_image(image=image, size=size, random_padding=random_padding) for image in images]
+            images = [
+                self.pad_image(
+                    image=image, size=size, random_padding=random_padding, input_data_format=input_data_format
+                )
+                for image in images
+            ]
 
         if do_rescale:
-            images = [self.rescale(image=image, scale=rescale_factor) for image in images]
+            images = [
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_normalize:
-            images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
+            images = [
+                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                for image in images
+            ]
 
-        images = [to_channel_dimension_format(image, data_format) for image in images]
+        images = [
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+        ]
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)

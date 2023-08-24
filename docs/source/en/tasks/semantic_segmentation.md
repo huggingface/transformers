@@ -221,6 +221,10 @@ logits first, and then reshaped to match the size of the labels before you can c
 <pt>
 
 ```py
+>>> import numpy as np
+>>> import torch
+>>> from torch import nn
+
 >>> def compute_metrics(eval_pred):
 ...     with torch.no_grad():
 ...         logits, labels = eval_pred

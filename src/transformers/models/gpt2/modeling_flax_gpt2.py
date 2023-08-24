@@ -742,7 +742,7 @@ class FlaxGPT2LMHeadModule(nn.Module):
 class FlaxGPT2LMHeadModel(FlaxGPT2PreTrainedModel):
     module_class = FlaxGPT2LMHeadModule
 
-    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jnp.DeviceArray] = None):
+    def prepare_inputs_for_generation(self, input_ids, max_length, attention_mask: Optional[jax.Array] = None):
         # initializing the cache
         batch_size, seq_length = input_ids.shape
 
