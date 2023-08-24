@@ -1502,9 +1502,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             new_num_tokens = ((new_num_tokens // pad_to_multiple_of) + 1) * pad_to_multiple_of
         else:
             logger.warning(
-                "You are resizing the embedding layer without providing a `pad_to_multiple_of` parameter. This means that the new embeding"
+                "You are resizing the embedding layer without providing a `pad_to_multiple_of` parameter. This means that the new embedding"
                 f" dimension will be {new_num_tokens}. This might induce some performance reduction as *Tensor Cores* will not be available."
-                " For more details  about this, or help on choosing the correct value for resizing, refer to this guide:"
+                " For more details about this, or help on choosing the correct value for resizing, refer to this guide:"
                 " https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc"
             )
 
