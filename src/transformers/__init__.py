@@ -518,6 +518,7 @@ _import_structure = {
     "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+    "models.fastvit": ["FASTVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FastViTConfig"],
     "models.vit_hybrid": ["VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTHybridConfig"],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
@@ -2635,6 +2636,15 @@ else:
             "ViTPreTrainedModel",
         ]
     )
+    _import_structure["models.fastvit"].extend(
+        [
+            "FASTVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "FastViTForImageClassification",
+            "FastViTForMaskedImageModeling",
+            "FastViTModel",
+            "FastViTPreTrainedModel",
+        ]
+    )
     _import_structure["models.vit_hybrid"].extend(
         [
             "VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4237,6 +4247,7 @@ if TYPE_CHECKING:
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+    from .models.fastvit import FASTVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, FastViTConfig
     from .models.vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
@@ -5987,6 +5998,13 @@ if TYPE_CHECKING:
             ViTForMaskedImageModeling,
             ViTModel,
             ViTPreTrainedModel,
+        )
+        from .models.fastvit import (
+            FASTVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FastViTForImageClassification,
+            FastViTForMaskedImageModeling,
+            FastViTModel,
+            FastViTPreTrainedModel,
         )
         from .models.vit_hybrid import (
             VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST,
