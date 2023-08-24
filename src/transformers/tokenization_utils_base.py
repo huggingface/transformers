@@ -1564,20 +1564,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self._in_target_context_manager = False
 
         # Stores a Jinja template that formats chat histories into tokenizable strings
-        self.chat_template = kwargs.pop("chat_template", None)
+        self._chat_template = kwargs.pop("chat_template", None)
 
         super().__init__(**kwargs)
-
-    @property
-    def default_chat_template(self):
-        return (
-            "{% for message in messages %}"
-            "{% if message.role == 'system' %}{{ '[SYS]' }} {{message.text }} {{ '[/SYS]]' }}"
-            "{% elif message.role == 'user' %}{{ '[USER_MSG]' }} {{ message.text }} {{ '[/USER_MSG]' }}"
-            "{% elif message.role == 'assistant' %}{{ '[ASST_MSG]' }} {{ message.text }} {{ '[/ASST_MSG]' }}"
-            "{% endif %}"
-            "{% endfor %}"
-        )
 
     @property
     def max_len_single_sentence(self) -> int:
@@ -1664,8 +1653,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 with "role" and "content" keys, representing the chat history so far.
             chat_template (str, *optional*): A Jinja template to use for this conversion. If
                 this is not passed, the model's default chat template will be used instead.
-                **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
             tokenize (bool, defaults to True): Whether to tokenize the output. If False, the output will be a string.
+            **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
+
 
         Returns:
             List[int]: A list of token ids representing the tokenized chat so far, including control tokens. This
@@ -1683,10 +1673,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template`
         if chat_template is None:
-            if self.chat_template is not None:
-                chat_template = self.chat_template
-            else:
-                chat_template = self.default_chat_template
+            chat_template = self.chat_template
 
         jinja_env = ImmutableSandboxedEnvironment()
         compiled_template = jinja_env.from_string(chat_template)
@@ -1696,6 +1683,27 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         else:
             return rendered
 
+    @property
+    def chat_template(self):
+        if self._chat_template is not None:
+            return self._chat_template
+        else:
+            return self.default_chat_template
+
+    @chat_template.setter
+    def chat_template(self, value):
+        self._chat_template = value
+
+    @property
+    def default_chat_template(self):
+        return (
+            "{% for message in messages %}"
+            "{% if message.role == 'system' %}{{ '[SYS]' }} {{message.text }} {{ '[/SYS]]' }}"
+            "{% elif message.role == 'user' %}{{ '[USER_MSG]' }} {{ message.text }} {{ '[/USER_MSG]' }}"
+            "{% elif message.role == 'assistant' %}{{ '[ASST_MSG]' }} {{ message.text }} {{ '[/ASST_MSG]' }}"
+            "{% endif %}"
+            "{% endfor %}"
+        )
 
     @classmethod
     def from_pretrained(
