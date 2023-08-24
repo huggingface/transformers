@@ -80,7 +80,11 @@ def write_json(text, path):
         json.dump(text, f)
 
 
-def write_model(model_path, input_base_path, model_size, tokenizer_path, safe_serialization=True):
+def write_model(model_path, input_base_path, model_size, tokenizer_path=None, safe_serialization=True):
+    # for backward compatibility: 
+    if not os.path.isfile(os.path.join(input_base_path, "params.json")):
+        model_path = os.path.join(model_path,model_size)
+
     os.makedirs(model_path, exist_ok=True)
     tmp_model_path = os.path.join(model_path, "tmp")
     os.makedirs(tmp_model_path, exist_ok=True)
@@ -100,9 +104,10 @@ def write_model(model_path, input_base_path, model_size, tokenizer_path, safe_se
         max_position_embeddings = 2048
 
     tokenizer_class = LlamaTokenizer if LlamaTokenizerFast is None else LlamaTokenizerFast
-    tokenizer = tokenizer_class(tokenizer_path)
-    tokenizer.save_pretrained(model_path)
-    vocab_size = tokenizer.vocab_size
+    if tokenizer_path is not None:
+        tokenizer = tokenizer_class(tokenizer_path)
+        tokenizer.save_pretrained(model_path)
+    vocab_size = tokenizer.vocab_size if tokenizer_path is not None else 32000
 
     if "n_kv_heads" in params:
         num_key_value_heads = params["n_kv_heads"]  # for GQA / MQA
@@ -296,14 +301,17 @@ def main():
     )
     parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
+    spm_path = os.path.join(args.input_dir, "tokenizer.model")
     if args.model_size != "tokenizer_only":
         write_model(
             model_path=args.output_dir,
             input_base_path=args.input_dir,
             model_size=args.model_size,
             safe_serialization=args.safe_serialization,
-            tokenizer_path=os.path.join(args.input_dir, "tokenizer.model")
+            tokenizer_path=spm_path
         )
+    else:
+        write_tokenizer(args.output_dir, spm_path)
     
 
 
