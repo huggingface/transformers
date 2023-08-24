@@ -845,9 +845,7 @@ class BrosModel(BrosPreTrainedModel):
         >>> model = BrosModel.from_pretrained("naver-clova-ocr/bros-base-uncased")
 
         >>> encoding = processor("Hello, my dog is cute", add_special_tokens=False, return_tensors="pt")
-
         >>> bbox = torch.tensor([[[0, 0, 1, 1]]]).repeat(1, encoding["input_ids"].shape[-1], 1)
-        >>> bbox = bbox[:, :, [0, 1, 2, 1, 2, 3, 0, 3]]
         >>> encoding["bbox"] = bbox
 
         >>> outputs = model(**encoding)
@@ -922,6 +920,9 @@ class BrosModel(BrosPreTrainedModel):
 
         bbox_position_embeddings = None
         if bbox is not None:
+            # if bbox has 2 points (4 float tensors) per token, convert it to 4 points (8 float tensors) per token
+            if bbox.shape[-1] == 4:
+                bbox = bbox[:, :, [0, 1, 2, 1, 2, 3, 0, 3]]
             scaled_bbox = bbox * self.config.bbox_scale
             bbox_position_embeddings = self.embeddings.calculate_bbox_pos_emb(scaled_bbox)
 
@@ -1009,9 +1010,7 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         >>> model = BrosForTokenClassification.from_pretrained("naver-clova-ocr/bros-base-uncased")
 
         >>> encoding = processor("Hello, my dog is cute", add_special_tokens=False, return_tensors="pt")
-
         >>> bbox = torch.tensor([[[0, 0, 1, 1]]]).repeat(1, encoding["input_ids"].shape[-1], 1)
-        >>> bbox = bbox[:, :, [0, 1, 2, 1, 2, 3, 0, 3]]
         >>> encoding["bbox"] = bbox
 
         >>> outputs = model(**encoding)
@@ -1127,9 +1126,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         >>> model = BrosSpadeEEForTokenClassification.from_pretrained("naver-clova-ocr/bros-base-uncased")
 
         >>> encoding = processor("Hello, my dog is cute", add_special_tokens=False, return_tensors="pt")
-
         >>> bbox = torch.tensor([[[0, 0, 1, 1]]]).repeat(1, encoding["input_ids"].shape[-1], 1)
-        >>> bbox = bbox[:, :, [0, 1, 2, 1, 2, 3, 0, 3]]
         >>> encoding["bbox"] = bbox
 
         >>> outputs = model(**encoding)
@@ -1256,9 +1253,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
         >>> model = BrosSpadeELForTokenClassification.from_pretrained("naver-clova-ocr/bros-base-uncased")
 
         >>> encoding = processor("Hello, my dog is cute", add_special_tokens=False, return_tensors="pt")
-
         >>> bbox = torch.tensor([[[0, 0, 1, 1]]]).repeat(1, encoding["input_ids"].shape[-1], 1)
-        >>> bbox = bbox[:, :, [0, 1, 2, 1, 2, 3, 0, 3]]
         >>> encoding["bbox"] = bbox
 
         >>> outputs = model(**encoding)
