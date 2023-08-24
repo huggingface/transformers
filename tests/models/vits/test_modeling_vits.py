@@ -164,7 +164,7 @@ class VitsModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
-    @unittest.skip("this model is not deterministic")
+    @unittest.skip("VITS is not deterministic")
     def test_determinism(self):
         pass
 
