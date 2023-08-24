@@ -33,7 +33,7 @@ from ..models.auto import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
-from ..utils import ExplicitEnum, ModelOutput, logging, is_accelerate_available
+from ..utils import ExplicitEnum, ModelOutput, is_accelerate_available, logging
 from .beam_constraints import DisjunctiveConstraint, PhrasalConstraint
 from .beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .configuration_utils import GenerationConfig
@@ -81,7 +81,8 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 if is_accelerate_available():
-    from accelerate.hooks import add_hook_to_module, AlignDevicesHook
+    from accelerate.hooks import AlignDevicesHook, add_hook_to_module
+
 
 @dataclass
 class GreedySearchDecoderOnlyOutput(ModelOutput):
@@ -633,7 +634,7 @@ class GenerationMixin:
         encoder = self.get_encoder()
         # Compatibility with Accelerate big model inference: we need the encoder to outputs stuff on the same device
         # as the inputs.
-        if hasattr(self,"hf_device_map"):
+        if hasattr(self, "hf_device_map"):
             if hasattr(encoder, "_hf_hook"):
                 encoder._hf_hook.io_same_device = True
             else:
