@@ -2209,7 +2209,7 @@ class SeamlessM4TTextToUnitModel(SeamlessM4TPreTrainedModel):
         )
 
 
-class SeamlessM4TTextToUnitWithLMHead(SeamlessM4TPreTrainedModel):
+class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
     """
     Transformer text-to-unit encoder-decoder with a language model head. The base encoder-decoder model is a
     [`SeamlessM4TTextToUnit`].
@@ -3000,7 +3000,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
             config, use_text_encoder=True, use_speech_encoder=False
         )
 
-        self.t2u_model = SeamlessM4TTextToUnitWithLMHead(config)
+        self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -3177,7 +3177,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
 
         self.input_model.set_modality("speech")
 
-        self.t2u_model = SeamlessM4TTextToUnitWithLMHead(config)
+        self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -3358,7 +3358,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             config, use_text_encoder=True, use_speech_encoder=True
         )
 
-        self.t2u_model = SeamlessM4TTextToUnitWithLMHead(config)
+        self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
 
         # Initialize weights and apply final processing
         self.post_init()
