@@ -897,7 +897,8 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
         hidden_states = hidden_states.transpose(1, 2)
 
         attention_mask = _compute_new_attention_mask(hidden_states, attention_mask, self.kernel_size, self.stride)
-        attention_mask = _expand_mask(attention_mask, hidden_states.dtype,)
+        if attention_mask is not None:
+            attention_mask = _expand_mask(attention_mask, hidden_states.dtype,)
         
         # The rest of the computation is identical to a vanilla Transformer
         # encoder layer.
@@ -1434,48 +1435,6 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
         if isinstance(module, (SeamlessM4TDecoder, SeamlessM4TEncoder)):
             module.gradient_checkpointing = value
 
-    def _get_feat_extract_output_lengths(
-        self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
-    ):
-        """
-        Computes the output length of the convolutional layers
-        """
-
-        add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
-
-        def _conv_out_length(input_length, kernel_size, stride):
-            # 1D convolutional layer output length formula taken
-            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
-
-        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
-            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
-
-        if add_adapter:
-            for _ in range(self.config.num_adapter_layers):
-                input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
-
-        return input_lengths
-
-    def _get_feature_vector_attention_mask(
-        self, feature_vector_length: int, attention_mask: torch.LongTensor, add_adapter=None
-    ):
-        # Effectively attention_mask.sum(-1), but not inplace to be able to run
-        # on inference mode.
-        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
-
-        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
-        output_lengths = output_lengths.to(torch.long)
-
-        batch_size = attention_mask.shape[0]
-
-        attention_mask = torch.zeros(
-            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
-        )
-        # these two operations makes sure that all values before the output lengths idxs are attended to
-        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
-        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
-        return attention_mask
 
     def compute_last_hidden_states_per_sample(
         self,
