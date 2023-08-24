@@ -51,6 +51,7 @@ from .pytorch_utils import (  # noqa: F401
 from .utils import (
     ADAPTER_SAFE_WEIGHTS_NAME,
     ADAPTER_WEIGHTS_NAME,
+    CONFIG_NAME,
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
@@ -65,6 +66,7 @@ from .utils import (
     cached_file,
     copy_func,
     download_url,
+    extract_commit_hash,
     has_file,
     is_accelerate_available,
     is_auto_gptq_available,
@@ -2368,13 +2370,39 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " ignored."
             )
 
+        if commit_hash is None:
+            if not isinstance(config, PretrainedConfig):
+                # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
+                resolved_config_file = cached_file(
+                    pretrained_model_name_or_path,
+                    CONFIG_NAME,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    resume_download=resume_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    token=token,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
+                    _raise_exceptions_for_connection_errors=False,
+                )
+                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
+            else:
+                commit_hash = getattr(config, "_commit_hash", None)
+
         if is_peft_available() and _adapter_model_path is None:
             maybe_adapter_model_path = find_adapter_config_file(
                 pretrained_model_name_or_path,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                resume_download=resume_download,
+                proxies=proxies,
+                local_files_only=local_files_only,
+                token=token,
                 revision=revision,
                 subfolder=subfolder,
-                token=token,
-                commit_hash=commit_hash,
+                _commit_hash=commit_hash,
             )
         elif is_peft_available() and _adapter_model_path is not None:
             maybe_adapter_model_path = _adapter_model_path
@@ -2621,9 +2649,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " `bitsandbytes` version to support int8 serialization. Please install the latest version of `bitsandbytes` with "
                 " `pip install --upgrade bitsandbytes`."
             )
-
-        if commit_hash is None:
-            commit_hash = getattr(config, "_commit_hash", None)
 
         # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
         # index of the files.
