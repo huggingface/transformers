@@ -18,7 +18,6 @@
 import json
 import os
 import re
-import subprocess
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ...tokenization_utils import PreTrainedTokenizer

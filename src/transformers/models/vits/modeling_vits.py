@@ -41,9 +41,10 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "VitsConfig"
 
 
+# TODO(SG): replace checkpoints with those on the hub
 VITS_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "sanchit-gandhi/mms-tts-eng",
-    # See all VITS models at https://huggingface.co/models?filter=vits
+    # See all VITS models at https://huggingface.co/models?filter=vits and all MMS models at https://huggingface.co/models?filter=mms
 ]
 
 
@@ -69,7 +70,7 @@ class VitsModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            Attention weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
@@ -101,7 +102,7 @@ class VitsTextEncoderOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            Attention weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
