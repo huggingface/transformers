@@ -27,6 +27,8 @@ if is_accelerate_available():
     from accelerate import dispatch_model
     from accelerate.utils import get_balanced_memory, infer_auto_device_map
 
+# Minimum PEFT version supported for the integration
+MIN_PEFT_VERSION = "0.5.0"
 
 logger = logging.get_logger(__name__)
 
@@ -113,7 +115,7 @@ class PeftAdapterMixin:
             offload_index (`int`, `optional`):
                 `offload_index` argument to be passed to `accelerate.dispatch_model` method.
         """
-        check_peft_version(min_version="0.4.0")
+        check_peft_version(min_version=MIN_PEFT_VERSION)
 
         adapter_name = adapter_name if adapter_name is not None else "default"
 
@@ -198,7 +200,7 @@ class PeftAdapterMixin:
             adapter_name (`str`, *optional*, defaults to `"default"`):
                 The name of the adapter to add. If no name is passed, a default name is assigned to the adapter.
         """
-        check_peft_version(min_version="0.4.0")
+        check_peft_version(min_version=MIN_PEFT_VERSION)
 
         from peft import PeftConfig, inject_adapter_in_model
 
@@ -229,7 +231,7 @@ class PeftAdapterMixin:
             adapter_name (`str`):
                 The name of the adapter to set.
         """
-        check_peft_version(min_version="0.4.0")
+        check_peft_version(min_version=MIN_PEFT_VERSION)
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
         elif adapter_name not in self.peft_config:
@@ -258,7 +260,7 @@ class PeftAdapterMixin:
 
         Disable all adapters that are attached to the model. This leads to inferring with the base model only.
         """
-        check_peft_version(min_version="0.4.0")
+        check_peft_version(min_version=MIN_PEFT_VERSION)
 
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
@@ -276,7 +278,7 @@ class PeftAdapterMixin:
 
         Enable adapters that are attached to the model. The model will use `self.active_adapter()`
         """
-        check_peft_version(min_version="0.4.0")
+        check_peft_version(min_version=MIN_PEFT_VERSION)
 
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
@@ -294,7 +296,7 @@ class PeftAdapterMixin:
 
         Gets the current active adapter of the model.
         """
-        check_peft_version(min_version="0.4.0")
+        check_peft_version(min_version=MIN_PEFT_VERSION)
 
         if not is_peft_available():
             raise ImportError("PEFT is not available. Please install PEFT to use this function: `pip install peft`.")
@@ -320,7 +322,7 @@ class PeftAdapterMixin:
             adapter_name (`str`, *optional*):
                 The name of the adapter to get the state dict from. If no name is passed, the active adapter is used.
         """
-        check_peft_version(min_version="0.4.0")
+        check_peft_version(min_version=MIN_PEFT_VERSION)
 
         if not self._hf_peft_config_loaded:
             raise ValueError("No adapter loaded. Please load an adapter first.")
