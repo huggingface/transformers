@@ -51,12 +51,17 @@ tokenizer = LlamaTokenizer.from_pretrained("/output/path")
 
 Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
 come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM).
+
+CodeLlama note: your original weights directory will need to be structured in the same format as the original LLaMA weights
+as provided by Meta AI. i.e., `/path/to/CodeLlama/34B`, where `34B/` will contain the consolidated weights and the root
+`/path/to/CodeLlama/` will contain the `tokenizer.model` file.
 """
 
 INTERMEDIATE_SIZE_MAP = {
     "7B": 11008,
     "13B": 13824,
     "30B": 17920,
+    "34B": 22100,
     "65B": 22016,
     "70B": 28672,
 }
@@ -66,6 +71,7 @@ NUM_SHARDS = {
     "13B": 2,
     "13Bf": 2,
     "30B": 4,
+    "34B": 4,
     "65B": 8,
     "70B": 8,
     "70Bf": 8,
@@ -281,7 +287,7 @@ def main():
     )
     parser.add_argument(
         "--model_size",
-        choices=["7B", "7Bf", "13B", "13Bf", "30B", "65B", "70B", "70Bf", "tokenizer_only"],
+        choices=["7B", "7Bf", "13B", "13Bf", "30B", "34B", "65B", "70B", "70Bf", "tokenizer_only"],
         help="'f' models correspond to the finetuned versions, and are specific to the Llama2 official release. For more details on Llama2, checkout the original repo: https://huggingface.co/meta-llama",
     )
     parser.add_argument(
