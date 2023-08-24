@@ -53,7 +53,7 @@ This model was contributed by TODO. The original code of the authors can be foun
 
 ## LlamaCodeTokenizer
 
-[[autodoc]] LlamaTokenizer
+[[autodoc]] LlamaCodeTokenizer
     - build_inputs_with_special_tokens
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
@@ -61,7 +61,7 @@ This model was contributed by TODO. The original code of the authors can be foun
 
 ## LlamaCodeTokenizerFast
 
-[[autodoc]] LlamaTokenizerFast
+[[autodoc]] LlamaCodeTokenizerFast
     - build_inputs_with_special_tokens
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
