@@ -473,6 +473,28 @@ class Wav2Vec2ModelTester:
         with self.parent.assertRaises(ValueError):
             model(input_values, labels=labels)
 
+    def check_returned_attention_mask(self, config, input_values, *args):
+        model = Wav2Vec2Model(config=config)
+        model.to(torch_device)
+
+        input_values = input_values[:3]
+        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.long)
+
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+
+        # pad input
+        for i in range(len(input_lengths)):
+            input_values[i, input_lengths[i] :] = 0.0
+            attention_mask[i, input_lengths[i] :] = 0
+
+        returned_mask = model(input_values, attention_mask=attention_mask).attention_mask
+
+        feat_length = model._get_feat_extract_output_lengths(input_values.shape[1], add_adapter=False).item()
+        expected_mask = model._get_feature_vector_attention_mask(feat_length, attention_mask, add_adapter=False)
+
+        self.parent.assertTrue(returned_mask.dtype == torch.long)
+        self.parent.assertTrue(torch.allclose(returned_mask, expected_mask))
+
     def prepare_config_and_inputs_for_common(self):
         config, input_values, attention_mask = self.prepare_config_and_inputs()
         inputs_dict = {"input_values": input_values, "attention_mask": attention_mask}
@@ -546,6 +568,10 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)
+
+    def test_returned_attention_mask(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_returned_attention_mask(*config_and_inputs)
 
     # Wav2Vec2 has no inputs_embeds
     def test_inputs_embeds(self):
