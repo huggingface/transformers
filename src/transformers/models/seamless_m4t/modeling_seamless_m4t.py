@@ -741,12 +741,10 @@ class SeamlessM4TConformerEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        conv_attention_mask = None
+        conv_attention_mask = attention_mask
         if attention_mask is not None:
             # make sure padded tokens output 0
             hidden_states[~attention_mask.bool()] = 0.0
-
-            conv_attention_mask = attention_mask
             # extend attention_mask
             attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
             attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
