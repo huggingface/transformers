@@ -374,7 +374,7 @@ class SeamlessM4TConformerSamePadLayer(nn.Module):
         return hidden_states
 
 
-# Not exactly transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureProjection but inspired
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureProjection with Wav2Vec2->SeamlessM4T, feat_proj_dropout->speech_encoder_dropout
 class SeamlessM4TConformerFeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -383,8 +383,6 @@ class SeamlessM4TConformerFeatureProjection(nn.Module):
         self.dropout = nn.Dropout(config.speech_encoder_dropout)
 
     def forward(self, hidden_states):
-        # input hidden_states are supposed to be processed by a FBankFeatureExtractor
-
         # non-projected hidden states are needed for quantization
         norm_hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.projection(norm_hidden_states)
