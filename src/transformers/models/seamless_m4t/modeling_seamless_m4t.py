@@ -897,7 +897,8 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
         hidden_states = hidden_states.transpose(1, 2)
 
         attention_mask = _compute_new_attention_mask(hidden_states, attention_mask, self.kernel_size, self.stride)
-
+        attention_mask = _expand_mask(attention_mask, hidden_states.dtype,)
+        
         # The rest of the computation is identical to a vanilla Transformer
         # encoder layer.
         hidden_states, attn_weigths = self.self_attn(
@@ -1476,6 +1477,59 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
+    def compute_last_hidden_states_per_sample(
+        self,
+        hidden_states: Tuple[Tuple[torch.Tensor]],
+        beam_indices: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Computes the last hidden states. 
+
+        Parameters:
+            hidden_states (`Tuple[Tuple[torch.Tensor]]`):
+                The generated hidden states. Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of torch.FloatTensor of shape (batch_size*num_beams*num_return_sequences, generated_length, hidden_size).
+            beam_indices (`torch.LongTensor`, *optional*):
+                Beam indices of generated token id at each generation step. `torch.LongTensor` of shape
+                `(batch_size*num_return_sequences, sequence_length)`. Only required if a `num_beams>1` at
+                generate-time.
+
+        Return:
+            `torch.Tensor`: A `torch.Tensor` of shape `(batch_size*num_return_sequences, sequence_length, hidden_size)` containing
+                the last hidden states.
+        ```"""
+        # 1. First, let's compute last_hidden_states from hidden_states.
+        # For each generation step, takes the hidden state from the last layer.
+        # shape: (batch_size*vocab_size*num_return_sequences, # generation_steps, hidden_dim)
+        last_hidden_states = torch.concat(
+            [hidden_states[-1] for hidden_states in hidden_states], dim=1
+        )
+        
+        # 2. In absence of `beam_indices`, we can assume that we come from e.g. greedy search, which is equivalent
+        # to a beam search approach were the first (and only) beam is always selected
+        # in that case, return directly last_hidden_states
+        if beam_indices is None:
+            return last_hidden_states
+            
+
+        # 3. cut beam_indices to longest beam length
+        beam_indices_mask = beam_indices < 0
+        max_beam_length = (1 - beam_indices_mask.long()).sum(-1).max()
+        beam_indices = beam_indices.clone()[:, :max_beam_length]
+        beam_indices_mask = beam_indices_mask[:, :max_beam_length]
+        
+        # 4. Set indices of beams that finished early to 0; such indices will be masked correctly afterwards anyways
+        beam_indices[beam_indices_mask] = 0
+        
+        # 5. expand beam_indices to last_hidden_states dim
+        beam_indices = beam_indices.unsqueeze(-1)
+        beam_indices = beam_indices.expand(-1, -1, last_hidden_states.shape[-1])
+        
+        # 6. select the right candidate for each beam
+        # in other words, new_last_hidden_states[i,j,k] = last_hidden_states[beam_indices[i,j,k], j, k] for all i, j, k
+        last_hidden_states = torch.gather(last_hidden_states, 0, beam_indices)
+        
+
+        return last_hidden_states
 
 # not exactly the same as Wav2Vec2ConformerModel
 class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
@@ -3097,31 +3151,37 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TPreTrainedModel):
                 if key not in kwargs_speech_generation:
                     kwargs_speech_generation[key] = value
 
-        # TODO: take care of multiple same parameters
-
         kwargs_text_generation["output_hidden_states"] = True
         kwargs_text_generation["return_dict_in_generate"] = True
         kwargs_text_generation["output_scores"] = True
 
         output_text = self.input_model.generate(input_ids, **kwargs_text_generation)
+        
+        batch_size = len(input_ids)
+        num_return_sequences = len(output_text.sequences) // batch_size
+        sequences = output_text.sequences
 
-        t2u_input_embeds = torch.concat(
-            [hidden_states[-1] for hidden_states in output_text.decoder_hidden_states], dim=1
-        )
+        # compute last hidden state 
+        t2u_input_embeds = self.compute_last_hidden_states_per_sample(output_text.decoder_hidden_states, output_text.get("beam_indices", None))
+        
+        # take care of num_return_sequences
+        # take most probable hidden states per batch of return_sequences
+        # (batch_size*num_return_sequences, ...) -> (batch_size,...)
+        if num_return_sequences > 1:
+            idx_most_probable_sequences_per_batch = output_text.sequences_scores.view(batch_size, -1).argmax(-1)
+            idx_most_probable_sequences_per_batch = idx_most_probable_sequences_per_batch + torch.arange(batch_size)*num_return_sequences
+            t2u_input_embeds = t2u_input_embeds[idx_most_probable_sequences_per_batch]
+            sequences = sequences[idx_most_probable_sequences_per_batch]
 
-        pad_token_id = (
-            self.config.pad_token_id
-        )  # TODO: is it the proper way, what's the priority with generation config and so on?
+        # TODO: is it the proper way, what's the priority with generation config and so on?
+        pad_token_id = self.config.pad_token_id
 
         # Compute new attention mask
-        seq_lens = (output_text.sequences != pad_token_id).int().sum(1)
+        seq_lens = (sequences != pad_token_id).int().sum(1)
         t2u_model_attention_mask = to_attention_mask(t2u_input_embeds, seq_lens)
-
         kwargs_speech_generation["attention_mask"] = t2u_model_attention_mask
 
         output_speech = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech_generation)
-
-        # TODO: proper output form
 
         return output_speech
 
@@ -3273,19 +3333,29 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TPreTrainedModel):
         kwargs_text_generation["output_scores"] = True
 
         output_text = self.input_model.generate(input_values, **kwargs_text_generation)
+        
+        batch_size = len(input_values)
+        num_return_sequences = len(output_text.sequences) // batch_size
+        sequences = output_text.sequences
 
-        t2u_input_embeds = torch.concat(
-            [hidden_states[-1] for hidden_states in output_text.decoder_hidden_states], dim=1
-        )
+        # compute last hidden state 
+        t2u_input_embeds = self.compute_last_hidden_states_per_sample(output_text.decoder_hidden_states, output_text.get("beam_indices", None))
 
-        pad_token_id = (
-            self.config.pad_token_id
-        )  # TODO: is it the proper way, what's the priority with generation config and so on?
+        # take care of num_return_sequences
+        # take most probable hidden states per batch of return_sequences
+        # (batch_size*num_return_sequences, ...) -> (batch_size,...)
+        if num_return_sequences > 1:
+            idx_most_probable_sequences_per_batch = output_text.sequences_scores.view(batch_size, -1).argmax(-1)
+            idx_most_probable_sequences_per_batch = idx_most_probable_sequences_per_batch + torch.arange(batch_size)*num_return_sequences
+            t2u_input_embeds = t2u_input_embeds[idx_most_probable_sequences_per_batch]
+            sequences = sequences[idx_most_probable_sequences_per_batch]
+
+        # TODO: is it the proper way, what's the priority with generation config and so on?
+        pad_token_id = self.config.pad_token_id
 
         # Compute new attention mask
-        seq_lens = (output_text.sequences != pad_token_id).int().sum(1)
+        seq_lens = (sequences != pad_token_id).int().sum(1)
         t2u_model_attention_mask = to_attention_mask(t2u_input_embeds, seq_lens)
-
         kwargs_speech_generation["attention_mask"] = t2u_model_attention_mask
 
         output_speech = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech_generation)
@@ -3466,23 +3536,33 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             output_text = self.input_model.generate(
                 input_ids=None, input_values=input_values, **kwargs_text_generation
             )
+            batch_size = len(input_values)
         else:
             self.input_model.set_modality("text")
             output_text = self.input_model.generate(input_ids=input_ids, input_values=None, **kwargs_text_generation)
+            batch_size = len(input_ids)
+        
+        num_return_sequences = len(output_text.sequences) // batch_size
+        sequences = output_text.sequences
 
-        # TODO: pb - if beam seach decoding, this has too many dimensions, needs a way to get last-hidden-states
-        t2u_input_embeds = torch.concat(
-            [hidden_states[-1] for hidden_states in output_text.decoder_hidden_states], dim=1
-        )
+        # compute last hidden state 
+        t2u_input_embeds = self.compute_last_hidden_states_per_sample(output_text.decoder_hidden_states, output_text.get("beam_indices", None))
 
-        pad_token_id = (
-            self.config.pad_token_id
-        )  # TODO: is it the proper way, what's the priority with generation config and so on?
+        # take care of num_return_sequences
+        # take most probable hidden states per batch of return_sequences
+        # (batch_size*num_return_sequences, ...) -> (batch_size,...)
+        if num_return_sequences > 1:
+            idx_most_probable_sequences_per_batch = output_text.sequences_scores.view(batch_size, -1).argmax(-1)
+            idx_most_probable_sequences_per_batch = idx_most_probable_sequences_per_batch + torch.arange(batch_size)*num_return_sequences
+            t2u_input_embeds = t2u_input_embeds[idx_most_probable_sequences_per_batch]
+            sequences = sequences[idx_most_probable_sequences_per_batch]
+
+        # TODO: is it the proper way, what's the priority with generation config and so on?
+        pad_token_id = self.config.pad_token_id
 
         # Compute new attention mask
-        seq_lens = (output_text.sequences != pad_token_id).int().sum(1)
+        seq_lens = (sequences != pad_token_id).int().sum(1)
         t2u_model_attention_mask = to_attention_mask(t2u_input_embeds, seq_lens)
-
         kwargs_speech_generation["attention_mask"] = t2u_model_attention_mask
 
         output_speech = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech_generation)
