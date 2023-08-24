@@ -259,11 +259,16 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
 
     @property
     def default_chat_template(self):
-        return (
-            "{% for message in messages %}"
-            #            "{% if message_idx == 0 and message['role'] != 'system' and default_system_prompt is not none %}"
-            #            "{{ '<<SYS>>\\n' + default_system_prompt + '\\n<</SYS>>\\n\\n' }}"  # Insert a default sys message
-            #            "{% endif %}"
+        template = "{% for message in messages %}"
+        if self.use_default_system_prompt:
+            prompt = DEFAULT_SYSTEM_PROMPT.replace("\n", "\\n").replace("'", "\\'")
+            template += (
+                "{% if loop.index == 0 and message['role'] != 'system' %}"
+                "{{ '<<SYS>>\\n' + 'sys_prompt' + '\\n<</SYS>>\\n\\n' }}"
+                "{% endif %}"
+            )
+            template = template.replace("sys_prompt", prompt)  # Use replace to avoid f-string + Jinja interaction
+        template += (
             "{% if message['role'] == 'user' %}"
             "{{ bos_token + '[INST]' + message['content'] + '[/INST]' }}"
             "{% elif message['role'] == 'system' %}"
@@ -273,3 +278,4 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             "{% endif %}"
             "{% endfor %}"
         )
+        return template

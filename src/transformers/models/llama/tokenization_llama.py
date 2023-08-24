@@ -395,26 +395,10 @@ class LlamaTokenizer(PreTrainedTokenizer):
         """
         if self.use_default_system_prompt:
             if len(conversation) > 0:
-                if (
-                    not conversation.past_user_inputs[0].startswith(B_SYS)
-                    or E_SYS not in conversation.past_user_inputs[0]
-                ):
-                    conversation.past_user_inputs[0] = (
-                        B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
-                    )
-            elif conversation.new_user_input:
-                if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
-                    conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
-            else:
-                raise ValueError("Last message must be from user")
+                if not conversation[0]["role"] == "system":
+                    conversation.messages.insert(0, {"role": "system", "content": DEFAULT_SYSTEM_PROMPT})
 
-        dialogue = list(conversation.iter_texts())
-        if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
-            [not is_user for is_user, msg in dialogue[1::2]]
-        ):
-            raise ValueError(
-                "The model only supports 'user' and 'assistant' roles, starting with user and alternating (u/a/u/a/u...)"
-            )
+        dialogue = conversation.messages
 
         dialog_tokens: List[int] = []
         dialog_tokens += sum(
@@ -435,12 +419,16 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
     @property
     def default_chat_template(self):
-        # TODO Figure out if the default message should go in or not
-        return (
-            "{% for message in messages %}"
-            #            "{% if message_idx == 0 and message['role'] != 'system' and default_system_prompt is not none %}"
-            #            "{{ '<<SYS>>\\n' + default_system_prompt + '\\n<</SYS>>\\n\\n' }}"  # Insert a default sys message
-            #            "{% endif %}"
+        template = "{% for message in messages %}"
+        if self.use_default_system_prompt:
+            prompt = DEFAULT_SYSTEM_PROMPT.replace("\n", "\\n").replace("'", "\\'")
+            template += (
+                "{% if loop.index == 0 and message['role'] != 'system' %}"
+                "{{ '<<SYS>>\\n' + 'sys_prompt' + '\\n<</SYS>>\\n\\n' }}"
+                "{% endif %}"
+            )
+            template = template.replace("sys_prompt", prompt)  # Use replace to avoid f-string + Jinja interaction
+        template += (
             "{% if message['role'] == 'user' %}"
             "{{ bos_token + '[INST]' + message['content'] + '[/INST]' }}"
             "{% elif message['role'] == 'system' %}"
@@ -450,3 +438,4 @@ class LlamaTokenizer(PreTrainedTokenizer):
             "{% endif %}"
             "{% endfor %}"
         )
+        return template

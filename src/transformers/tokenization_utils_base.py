@@ -1689,7 +1689,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         jinja_env = IncrediblySandboxedEnvironment()
         compiled_template = jinja_env.from_string(chat_template)
-
         rendered = compiled_template.render(messages=conversation, **self.special_tokens_map)
         dialog_tokens = self.encode(rendered, add_special_tokens=False, **tokenizer_kwargs)
         return dialog_tokens
