@@ -1129,8 +1129,8 @@ class BarkFineModel(BarkPreTrainedModel):
             return model_embeds
 
         # Update base model and current model config
-        self.config.output_vocab_size = model_embeds.weight.shape[0]
-        self.output_vocab_size = model_embeds.weight.shape[0]
+        self.config.output_vocab_size = model_embeds[0].weight.shape[0]
+        self.output_vocab_size = model_embeds[0].weight.shape[0]
 
         # Tie weights again if needed
         self.tie_weights()
