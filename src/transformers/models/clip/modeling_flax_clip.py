@@ -161,7 +161,7 @@ class FlaxCLIPTextModelOutput(ModelOutput):
     Base class for text model's outputs that also contains a pooling of the last hidden states.
 
     Args:
-        text_embeds(`jnp.ndarray` of shape `(batch_size, output_dim`):
+        text_embeds (`jnp.ndarray` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of
             [`FlaxCLIPTextModel`].
         last_hidden_state (`jnp.ndarray` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -1043,7 +1043,7 @@ class FlaxCLIPTextModuleWithProjection(nn.Module):
 
     def setup(self):
         self.text_model = FlaxCLIPTextTransformer(self.config, dtype=self.dtype)
-        self.text_projection = nn.Dense(self.config.projection_dim, use_bias=False)
+        self.text_projection = nn.Dense(self.config.projection_dim, use_bias=False, dtype=self.dtype)
 
     def __call__(
         self,
