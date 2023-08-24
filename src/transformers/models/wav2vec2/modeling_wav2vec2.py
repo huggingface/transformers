@@ -2303,7 +2303,7 @@ class TDNNLayer(nn.Module):
         # )
         # hidden_states = hidden_states.transpose(1, 2)
         # hidden_states = self.kernel(hidden_states)
-    
+
         hidden_states = hidden_states.transpose(1, 2)
         weight = self.kernel.weight.view(self.out_conv_dim, self.kernel_size, self.in_conv_dim).transpose(1, 2)
         hidden_states = nn.functional.conv1d(hidden_states, weight, self.kernel.bias, dilation=self.dilation)
