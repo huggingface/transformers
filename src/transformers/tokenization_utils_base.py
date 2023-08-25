@@ -1427,7 +1427,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             - **length** -- The length of the inputs (when `return_length=True`)
 """
 
-# TODO Matt: Add a proper doc for chat templating.
+
 INIT_TOKENIZER_DOCSTRING = r"""
     Class attributes (overridden by derived classes)
 
@@ -1464,7 +1464,8 @@ INIT_TOKENIZER_DOCSTRING = r"""
             The side on which the model should have truncation applied. Should be selected between ['right', 'left'].
             Default value is picked from the class attribute of the same name.
         chat_template (`str`, *optional*):
-            A Jinja template string that will be used to format lists of chat messages. See X document for full desc.
+            A Jinja template string that will be used to format lists of chat messages. See 
+            https://huggingface.co/docs/transformers/chat_templating for a full description.
         model_input_names (`List[string]`, *optional*):
             The list of inputs accepted by the forward pass of the model (like `"token_type_ids"` or
             `"attention_mask"`). Default value is picked from the class attribute of the same name.
