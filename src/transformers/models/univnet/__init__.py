@@ -25,7 +25,8 @@ _import_structure = {
     "configuration_univnet": [
         "UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UnivNetGanConfig",
-    ]
+    ],
+    "feature_extraction_univnet": ["UnivNetFeatureExtractor"],
 }
 
 try:
@@ -45,6 +46,7 @@ if TYPE_CHECKING:
         UNIVNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
         UnivNetGanConfig,
     )
+    from .feature_extraction_univnet import UnivNetFeatureExtractor
 
     try:
         if not is_torch_available():

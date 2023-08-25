@@ -249,7 +249,7 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         return inputs
 
     @torch.no_grad()
-    def test_generation_tortoise_tts_batched(self):
+    def test_inference_tortoise_tts_batched(self):
         # Load sample checkpoint from Tortoise TTS
         model = UnivNetGan.from_pretrained("dg845/univnet-dev")
         model.to(torch_device)
@@ -258,14 +258,14 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         input_speech = self.get_inputs(torch_device, num_samples=3)
 
         waveform = model(**input_speech)
-        waveform_slice = waveform[-1, -9:].cpu().flatten().numpy()
+        waveform_slice = waveform[-1, -9:].detach().cpu().flatten().numpy()
 
         expected_slice = np.array([-0.3408, -0.6045, -0.5052, 0.1160, -0.1556, -0.0405, -0.3024, -0.5290, -0.5019])
 
         assert np.abs(waveform_slice - expected_slice).max() < 1e-3
 
     @torch.no_grad()
-    def test_generation_tortoise_tts_unbatched(self):
+    def test_inference_tortoise_tts_unbatched(self):
         # Load sample checkpoint from Tortoise TTS
         model = UnivNetGan.from_pretrained("dg845/univnet-dev")
         model.to(torch_device)
@@ -274,7 +274,7 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         input_speech = self.get_inputs(torch_device, num_samples=1)
 
         waveform = model(**input_speech)
-        waveform_slice = waveform[-9:].cpu().flatten().numpy()
+        waveform_slice = waveform[-9:].detach().cpu().flatten().numpy()
 
         expected_slice = np.array([-0.3276, -0.5504, -0.3484, 0.3574, -0.0373, -0.1826, -0.4880, -0.6431, -0.5162])
 

@@ -31,12 +31,17 @@ Tips:
 - When creating a [`UnivNetGanConfig`], the `resblock_kernel_sizes`, `resblock_stride_sizes`, and `resblock_dilation_sizes` arguments should have the same length (which corresponds to the number of outer resnet blocks in the vocoder).
 
 This model was contributed by [dg845](https://huggingface.co/dg845).
-To the best of my knowledge, there is no official code release, but an unofficial implementation can be found at [mindslab-ai/univnet](https://github.com/mindslab-ai/univnet).
+To the best of my knowledge, there is no official code release, but an unofficial implementation can be found at [maum-ai/univnet](https://github.com/maum-ai/univnet).
 
 
 ## UnivNetGanConfig
 
 [[autodoc]] UnivNetGanConfig
+
+## UnivNetFeatureExtractor
+
+[[autodoc]] UnivNetFeatureExtractor
+    - __call__
 
 ## UnivNetGan
 
