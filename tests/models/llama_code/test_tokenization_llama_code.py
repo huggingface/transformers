@@ -24,8 +24,8 @@ from datasets import load_dataset
 from transformers import (
     SPIECE_UNDERLINE,
     AddedToken,
-    LlamaCodeTokenizer,
-    LlamaCodeTokenizerFast,
+    CodeLlamaTokenizer,
+    CodeLlamaTokenizerFast,
     is_torch_available,
 )
 from transformers.convert_slow_tokenizer import convert_slow_tokenizer
@@ -50,9 +50,9 @@ if is_torch_available():
 
 @require_sentencepiece
 @require_tokenizers
-class LlamaCodeTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = LlamaCodeTokenizer
-    rust_tokenizer_class = LlamaCodeTokenizerFast
+class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    tokenizer_class = CodeLlamaTokenizer
+    rust_tokenizer_class = CodeLlamaTokenizerFast
     test_rust_tokenizer = False
     test_sentencepiece = True
     from_pretrained_kwargs = {}
@@ -61,12 +61,12 @@ class LlamaCodeTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = LlamaCodeTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = CodeLlamaTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_full_tokenizer(self):
-        tokenizer = LlamaCodeTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = CodeLlamaTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -292,7 +292,7 @@ class LlamaCodeTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_picklable(self):
         with tempfile.NamedTemporaryFile() as f:
             shutil.copyfile(SAMPLE_VOCAB, f.name)
-            tokenizer = LlamaCodeTokenizer(f.name, keep_accents=True)
+            tokenizer = CodeLlamaTokenizer(f.name, keep_accents=True)
             pickled_tokenizer = pickle.dumps(tokenizer)
         pickle.loads(pickled_tokenizer)
 
@@ -312,8 +312,8 @@ class LlamaIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         checkpoint_name = "hf-internal-testing/llama-code-tokenizer"
-        cls.tokenizer: LlamaCodeTokenizer = LlamaCodeTokenizer.from_pretrained(checkpoint_name)
-        cls.rust_tokenizer = LlamaCodeTokenizerFast.from_pretrained(checkpoint_name)
+        cls.tokenizer: CodeLlamaTokenizer = CodeLlamaTokenizer.from_pretrained(checkpoint_name)
+        cls.rust_tokenizer = CodeLlamaTokenizerFast.from_pretrained(checkpoint_name)
         return cls
 
     @require_torch
@@ -352,13 +352,13 @@ class LlamaIntegrationTest(unittest.TestCase):
         slow = slow_tokenizer.encode("A sample test", add_special_tokens=True)
         assert slow == [1, 319, 4559, 1243, 2]
 
-        fast_tokenizer = LlamaCodeTokenizerFast.from_pretrained(
+        fast_tokenizer = CodeLlamaTokenizerFast.from_pretrained(
             "hf-internal-testing/llama-tokenizer", add_eos_token=True, add_bos_token=False
         )
         fast = fast_tokenizer.encode("A sample test", add_special_tokens=True)
         assert fast == [319, 4559, 1243, 2]
 
-        slow_tokenzier = LlamaCodeTokenizer.from_pretrained(
+        slow_tokenzier = CodeLlamaTokenizer.from_pretrained(
             "hf-internal-testing/llama-tokenizer", add_eos_token=True, add_bos_token=False
         )
         slow = slow_tokenzier.encode("A sample test", add_special_tokens=True)
@@ -512,7 +512,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
     def test_special_token_special_word(self):
         # the word inform should be split as ['in', 'form']
-        tokenizer = LlamaCodeTokenizer.from_pretrained("codellama/CodeLlama-7b-hf", legacy=False)
+        tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf", legacy=False)
         tokenizer.add_tokens(["<REPR_END>"], special_tokens=True)
         out1 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
@@ -587,8 +587,8 @@ split,
 end
 """,
         ]
-        tokenizer = LlamaCodeTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
-        tokenizer_fast = LlamaCodeTokenizerFast.from_pretrained("codellama/CodeLlama-7b-hf")
+        tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
+        tokenizer_fast = CodeLlamaTokenizerFast.from_pretrained("codellama/CodeLlama-7b-hf")
 
         formatted_prompt = tokenizer.tokenize(PROMPTS[0])
         self.assertEqual(formatted_prompt, tokenizer_fast.tokenize(PROMPTS[0]))

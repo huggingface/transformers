@@ -32,7 +32,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        LlamaCodeTokenizer,
+        CodeLlamaTokenizer,
         LlamaForCausalLM,
         LlamaForSequenceClassification,
         LlamaModel,
@@ -459,7 +459,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
 
 @require_torch
-class LlamaCodeIntegrationTest(unittest.TestCase):
+class CodeLlamaIntegrationTest(unittest.TestCase):
     PROMPTS = [
         '''def remove_non_ascii(s: str) -> str:
     """ <FILL_ME>
@@ -502,7 +502,7 @@ end
     @slow
     def test_model_7b_logits(self):
         model = LlamaForCausalLM.from_pretrained("codellama/CodeLlama-7b-hf").to(torch_device)
-        tokenizer = LlamaCodeTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
+        tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
         # Tokenize and prepare for the model a list of sequences or a list of pairs of sequences.
         # meaning by default this supports passing splitted list of inputs
         processed_text = tokenizer.batch_decode(tokenizer(self.PROMPTS)["input_ids"], add_special_tokens=False)

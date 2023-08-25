@@ -29,9 +29,9 @@ if TYPE_CHECKING:
 require_version("tokenizers>=0.13.3")
 
 if is_sentencepiece_available():
-    from .tokenization_llama_code import LlamaCodeTokenizer
+    from .tokenization_code_llama import CodeLlamaTokenizer
 else:
-    LlamaCodeTokenizer = None
+    CodeLlamaTokenizer = None
 
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model", "tokenizer_file": "tokenizer.json"}
@@ -52,16 +52,16 @@ correct. If you don't know the answer to a question, please don't share false in
 # fmt: on
 
 
-class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
+class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding.
 
     This uses notably ByteFallback and no normalization.
 
     ```
-    from transformers import LlamaCodeTokenizerFast
+    from transformers import CodeLlamaTokenizerFast
 
-    tokenizer = LlamaCodeTokenizerFast.from_pretrained("hf-internal-testing/llama-tokenizer")
+    tokenizer = CodeLlamaTokenizerFast.from_pretrained("hf-internal-testing/llama-tokenizer")
     tokenizer.encode("Hello this is a test")
     >>> [1, 15043, 445, 338, 263, 1243]
     ```
@@ -107,7 +107,7 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class = LlamaCodeTokenizer
+    slow_tokenizer_class = CodeLlamaTokenizer
     padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
 
@@ -128,10 +128,14 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
         add_eos_token=False,
         **kwargs,
     ):
+        # mark tokens special to skip them
+        additional_special_tokens = kwargs.pop("additional_special_tokens", [])
+        additional_special_tokens += [prefix_token, middle_token, suffix_token, eot_token]
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            additional_special_tokens=additional_special_tokens,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,

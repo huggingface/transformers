@@ -14,18 +14,17 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# LlamaCode
+# CodeLlama
 
 ## Overview
 
-The LlamaCode model was proposed in [Llama2: Open Foundation and Fine-Tuned Chat Models](https://ai.meta.com/research/publications/llama-2-open-foundation-and-fine-tuned-chat-models/XXX) by Hugo Touvron, Louis Martin, Kevin Stone, Peter Albert, Amjad Almahairi, Yasmine Babaei, Nikolay Bashlykov, Soumya Batra, Prajjwal Bhargava, Shruti Bhosale, Dan Bikel, Lukas Blecher, Cristian Canton Ferrer, Moya Chen, Guillem Cucurull, David Esiobu, Jude Fernandes, Jeremy Fu, Wenyin Fu, Brian Fuller, Cynthia Gao, Vedanuj Goswami, Naman Goyal, Anthony Hartshorn, Saghar Hosseini, Rui Hou, Hakan Inan, Marcin Kardas, Viktor Kerkez Madian Khabsa, Isabel Kloumann, Artem Korenev, Punit Singh Koura, Marie-Anne Lachaux, Thibaut Lavril, Jenya Lee, Diana Liskovich, Yinghai Lu, Yuning Mao, Xavier Martinet, Todor Mihaylov, Pushka rMishra, Igor Molybog, Yixin Nie, Andrew Poulton, Jeremy Reizenstein, Rashi Rungta, Kalyan Saladi, Alan Schelten, Ruan Silva, Eric Michael Smith, Ranjan Subramanian, Xiaoqing EllenTan, Binh Tang, Ross Taylor, Adina Williams, Jian Xiang Kuan, Puxin Xu, Zheng Yan, Iliyan Zarov, Yuchen Zhang, Angela Fan, Melanie Kambadur, Sharan Narang, Aurelien Rodriguez, Robert Stojnic, Sergey Edunov, Thomas Scialom.
-
+The CodeLlama model was proposed in [Code Llama: Open Foundation Models for Code](https://ai.meta.com/research/publications/code-llama-open-foundation-models-for-code/) by Baptiste Rozière, Jonas Gehring, Fabian Gloeckle, Sten Sootla, Itai Gat, Xiaoqing Ellen Tan, Yossi Adi, Jingyu Liu, Tal Remez, Jérémy Rapin, Artyom Kozhevnikov, Ivan Evtimov, Joanna Bitton, Manish Bhatt, Cristian Canton Ferrer, Aaron Grattafiori, Wenhan Xiong, Alexandre Défossez, Jade Copet, Faisal Azhar, Hugo Touvron, Louis Martin, Nicolas Usunier, Thomas Scialom, Gabriel Synnaeve.
 
 The abstract from the paper is the following:
 
 *We release Code Llama, a family of large language models for code based on Llama 2 providing state-of-the-art performance among open models, infilling capabilities, support for large input contexts, and zero-shot instruction following ability for programming tasks. We provide multiple flavors to cover a wide range of applications: foundation models (Code Llama), Python specializations (Code Llama - Python), and instruction-following models (Code Llama - Instruct) with 7B, 13B and 34B parameters each. All models are trained on sequences of 16k tokens and show improvements on inputs with up to 100k tokens. 7B and 13B Code Llama and Code Llama - Instruct variants support infilling based on surrounding content. Code Llama reaches state-of-the-art performance among open models on several code benchmarks, with scores of up to 53% and 55% on HumanEval and MBPP, respectively. Notably, Code Llama - Python 7B outperforms Llama 2 70B on HumanEval and MBPP, and all our models outperform every other publicly available model on MultiPL-E. We release Code Llama under a permissive license that allows for both research and commercial use.*
 
-Checkout all LlamaCode models [here](https://huggingface.co/models?search=llama_code)
+Checkout all CodeLlama models [here](https://huggingface.co/models?search=code_llama)
 
 Tips:
 
@@ -42,9 +41,9 @@ python src/transformers/models/llama/convert_llama_weights_to_hf.py \
 - After conversion, the model and tokenizer can be loaded via:
 
 ```python
->>> from transformers import LlamaForCausalLM, LlamaCodeTokenizer
+>>> from transformers import LlamaForCausalLM, CodeLlamaTokenizer
 
->>> tokenizer = LlamaCodeTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
+>>> tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
 >>> model = LlamaForCausalLM.from_pretrained("codellama/CodeLlama-7b-hf")
 >>> PROMPT = '''def remove_non_ascii(s: str) -> str:
     """ <FILL_ME>
@@ -56,7 +55,14 @@ python src/transformers/models/llama/convert_llama_weights_to_hf.py \
 >>> tokenizer.batch_decode(generated_ids)
 '<s> <PRE> def remove_non_ascii(s: str) -> str:\n    """  <SUF>\n    return result\n <MID>Remove non-ASCII characters from a string.\n\n    Args:\n        s: The string to remove non-ASCII characters from.\n\n    Returns:\n        The string with non-ASCII characters removed.\n    """\n    result = ""\n    for c in s:\n        if ord(c) < 128:\n            result += c <EOT></s>'
 ```
+If you only want the infilled part:
+```python
+>>> from transformers import pipeline
+>>> import torch
 
+>>> pipeline = pipeline("text-generation",model="codellama/CodeLlama-7b-hf",torch_dtype=torch.float16, device_map="auto")
+>>> pipeline('def remove_non_ascii(s: str) -> str:\n    """ <FILL_ME>\n    return result', max_new_tokens = 128, return_type = 1)
+```
 Note that executing the script requires enough CPU RAM to host the whole model in float16 precision (even if the biggest versions
 come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM). For the 75B model, it's thus 145GB of RAM needed.
 
@@ -65,17 +71,17 @@ come in several checkpoints they each contain a part of each weight of the model
 This model was contributed by Arthur Zucker. The original code of the authors can be found [here](https://github.com/facebookresearch/llama).
 
 
-## LlamaCodeTokenizer
+## CodeLlamaTokenizer
 
-[[autodoc]] LlamaCodeTokenizer
+[[autodoc]] CodeLlamaTokenizer
     - build_inputs_with_special_tokens
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
-## LlamaCodeTokenizerFast
+## CodeLlamaTokenizerFast
 
-[[autodoc]] LlamaCodeTokenizerFast
+[[autodoc]] CodeLlamaTokenizerFast
     - build_inputs_with_special_tokens
     - get_special_tokens_mask
     - create_token_type_ids_from_sequences

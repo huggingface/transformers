@@ -186,10 +186,10 @@ else:
                 ),
             ),
             (
-                "llama_code",
+                "code_llama",
                 (
-                    "LlamaCodeTokenizer" if is_sentencepiece_available() else None,
-                    "LlamaCodeTokenizerFast" if is_tokenizers_available() else None,
+                    "CodeLlamaTokenizer" if is_sentencepiece_available() else None,
+                    "CodeLlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),

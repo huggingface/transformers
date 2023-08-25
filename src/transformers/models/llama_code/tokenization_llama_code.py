@@ -59,9 +59,9 @@ correct. If you don't know the answer to a question, please don't share false in
 # fmt: on
 
 
-class LlamaCodeTokenizer(PreTrainedTokenizer):
+class CodeLlamaTokenizer(PreTrainedTokenizer):
     """
-    Construct a LlamaCode tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as
+    Construct a CodeLlama tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as
     there is no padding token in the original model.
 
     Args:
@@ -144,6 +144,10 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+
+        # mark tokens special to skip them
+        additional_special_tokens = kwargs.pop("additional_special_tokens", [])
+        additional_special_tokens += [prefix_token, middle_token, suffix_token, eot_token]
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -159,6 +163,7 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
             sp_model_kwargs=self.sp_model_kwargs,
             suffix_first=suffix_first,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
         self.vocab_file = vocab_file
@@ -262,7 +267,7 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
                 " the `prefix_id, middle_id, suffix_id` must all be initialized. Current"
                 f" values : {self.prefix_id, self.middle_id, self.suffix_id}"
             )
-        suffix_tokens = self._tokenize(suffix)  # make sure LlamaCode sp model does not mess up
+        suffix_tokens = self._tokenize(suffix)  # make sure CodeLlama sp model does not mess up
 
         suffix_first = suffix_first if suffix_first is not None else self.suffix_first
         if suffix_first:
@@ -287,6 +292,21 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
         tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
         # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
         return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
+
+    # def decode(self, ids, prompt_ids = None, skip_special_tokens = True, **kwargs):
+    #     if prompt_ids is not None:
+    #         infilling = super().decode(ids[:len(prompt_ids)], skip_special_tokens = skip_special_tokens, **kwargs)
+    #     else:
+    #         infilling = super().decode(ids, skip_special_tokens = skip_special_tokens, **kwargs)
+        
+    #     if skip_special_tokens:
+    #         # tokens to remove are not special, remove them anyway
+    #         infilling = infilling.replace(" " + self.prefix_token[1:], "")
+    #         infilling = infilling.replace(" " + self.suffix_token[1:], "")
+    #         infilling = infilling.replace(" " + self.middle_token[1:], "")
+    #         infilling = infilling.replace(" " + self.eot_token[1:], "")
+
+    #     return infilling
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""

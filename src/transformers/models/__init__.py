@@ -114,7 +114,7 @@ from . import (
     levit,
     lilt,
     llama,
-    llama_code,
+    code_llama,
     longformer,
     longt5,
     luke,

@@ -93,7 +93,7 @@ class LlamaTokenizer(metaclass=DummyObject):
         requires_backends(self, ["sentencepiece"])
 
 
-class LlamaCodeTokenizer(metaclass=DummyObject):
+class CodeLlamaTokenizer(metaclass=DummyObject):
     _backends = ["sentencepiece"]
 
     def __init__(self, *args, **kwargs):

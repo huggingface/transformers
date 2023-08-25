@@ -233,7 +233,7 @@ class LlamaTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
-class LlamaCodeTokenizerFast(metaclass=DummyObject):
+class CodeLlamaTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):
