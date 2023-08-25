@@ -161,13 +161,13 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
     Hugging Face Company is a company that has been working on a new product for the past year.
 
-    >>> # For testing purposes, let's set `eos_token_id` to "company", the first generated token. This will make
+    >>> # For testing purposes, let's set `eos_token` to `"company"`, the first generated token. This will make
     >>> # generation end there.
     >>> outputs = model.generate(**inputs, eos_token_id=1664)
     >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
     Hugging Face Company is a company
 
-    >>> # Increasing `min_new_tokens` will make generation ignore occurences "company" (eos token) before the
+    >>> # Increasing `min_new_tokens` will make generation ignore occurences `"company"` (eos token) before the
     >>> # minimum length condition is honored.
     >>> outputs = model.generate(**inputs, min_new_tokens=2, eos_token_id=1664)
     >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
