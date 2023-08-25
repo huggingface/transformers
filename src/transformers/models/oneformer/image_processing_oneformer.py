@@ -36,6 +36,7 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
+    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -574,6 +575,11 @@ class OneFormerImageProcessor(BaseImageProcessor):
         """Preprocesses a single image."""
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
+        if is_scaled_image(image) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
         image = self._preprocess(
