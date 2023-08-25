@@ -529,7 +529,8 @@ def extract_entities_with_patch_indices(text):
         phrase_tag, phrase, match_content = match.groups()
         if not phrase_tag:
             phrase = None
-            span = (None, None)
+            # We take the starting position of `<object>`
+            span = (match.span(0)[0], match.span(0)[0])
 
         # Split the match_content by the delimiter to get individual patch_index pairs
         patch_index_pairs = match_content.split('</delimiter_of_multi_objects/>')
