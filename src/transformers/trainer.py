@@ -471,6 +471,10 @@ class Trainer:
             if self.args.fsdp_config.get("limit_all_gathers", False):
                 self.limit_all_gathers = True
 
+            self.activation_checkpointing = False
+            if self.args.fsdp_config.get("activation_checkpointing", False):
+                self.activation_checkpointing = True
+
         # one place to sort out whether to place the model on device or not
         # postpone switching model to cuda when:
         # 1. MP - since we are trying to fit a much bigger than 1 gpu model
@@ -3895,6 +3899,9 @@ class Trainer:
             fsdp_plugin = self.accelerator.state.fsdp_plugin
             fsdp_plugin.limit_all_gathers = self.args.fsdp_config.get(
                 "limit_all_gathers", fsdp_plugin.limit_all_gathers
+            )
+            fsdp_plugin.activation_checkpointing = self.args.fsdp_config.get(
+                "activation_checkpointing", fsdp_plugin.activation_checkpointing
             )
 
         if self.is_deepspeed_enabled:
