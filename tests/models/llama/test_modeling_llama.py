@@ -456,17 +456,17 @@ class LlamaIntegrationTest(unittest.TestCase):
 class LlamaCodeIntegrationTest(unittest.TestCase):
     PROMPTS = [
         '''def remove_non_ascii(s: str) -> str:
-    """ <FILL>
+    """ <FILL_ME>
     return result
 ''',
         """# Installation instructions:
     ```bash
-<FILL>
+<FILL_ME>
     ```
 This downloads the LLaMA inference code and installs the repository as a local pip package.
 """,
         """class InterfaceManagerFactory(AbstractManagerFactory):
-    def __init__(<FILL>
+    def __init__(<FILL_ME>
 def main():
     factory = InterfaceManagerFactory(start=datetime.now())
     managers = []
@@ -475,7 +475,7 @@ def main():
 """,
         """/-- A quasi-prefunctoid is 1-connected iff all its etalisations are 1-connected. -/
 theorem connected_iff_etalisation [C D : precategoroid] (P : quasi_prefunctoid C D) :
-π₁ P = 0 ↔ <FILL> = 0 :=
+π₁ P = 0 ↔ <FILL_ME> = 0 :=
 begin
 split,
 { intros h f,
@@ -494,7 +494,8 @@ end
 
     # @slow
     def test_model_7b_logits(self):
-        tokenizer = AutoTokenizer.from_pretrained("path-to-llama-code-tokenizer")
+        model = LlamaForCausalLM.from_pretrained("codellama/CodeLlama-7b-hf")
+        tokenizer = AutoTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
         # Tokenize and prepare for the model a list of sequences or a list of pairs of sequences.
         # meaning by default this supports passing splitted list of inputs
         processed_text = tokenizer.batch_decode(tokenizer(self.PROMPTS)["input_ids"], add_special_tokens=False)
@@ -507,7 +508,6 @@ end
         ]
         # fmt: on
         self.assertEqual(processed_text, EXPECTED_TEXT)
-
         processed_text_suffix_first = tokenizer.batch_decode(
             tokenizer(self.PROMPTS)["input_ids"], suffix_first=True, add_special_tokens=False
         )
@@ -521,9 +521,16 @@ end
         # fmt: on
         self.assertEqual(processed_text_suffix_first, EXPECTED_TEXT)
 
+        generated_ids = model.generate(processed_text)
+        EXPECTED_IDS = torch.tensor([])
+        self.assertEqual(generated_ids, EXPECTED_IDS)
+        
+        EXPECTED_INFILLING = ""
+        infilling = tokenizer.decode_infilling(infilling,prompt_id_length=len(processed_text))
+        self.assertEqual(infilling, EXPECTED_INFILLING)
+        
         prefix, suffix = self.PROMPTS[0].split("<FILL>")
         processed_text = tokenizer.encode(prefix, suffix=suffix)
         EXPECTED_TEXT = '<s> <PRE> def remove_non_ascii(s: str) -> str:\n"""  <SUF>\nreturn result\n <MID>'
         self.assertEqual(processed_text, EXPECTED_TEXT)
 
-        # add expected results

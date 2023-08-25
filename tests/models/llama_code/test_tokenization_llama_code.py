@@ -508,7 +508,7 @@ class LlamaIntegrationTest(unittest.TestCase):
 
     def test_special_token_special_word(self):
         # the word inform should be split as ['in', 'form']
-        tokenizer = LlamaCodeTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)
+        tokenizer = LlamaCodeTokenizer.from_pretrained("codellama/CodeLlama-7b-hf", legacy=False)
         tokenizer.add_tokens(["<REPR_END>"], special_tokens=True)
         out1 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
@@ -546,7 +546,56 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(decoded_tokens, " <s> Hello<s> how")
 
     def test_infilling_tokenization(self):
-        LlamaCodeTokenizer.from_pretrained("huggyllama/llama-7b")
-        LlamaCodeTokenizerFast.from_pretrained("huggyllama/llama-7b")
+        PROMPTS = [
+        '''def remove_non_ascii(s: str) -> str:
+    """ <FILL_ME>
+    return result
+''',
+        """# Installation instructions:
+    ```bash
+<FILL_ME>
+    ```
+This downloads the LLaMA inference code and installs the repository as a local pip package.
+""",
+        """class InterfaceManagerFactory(AbstractManagerFactory):
+    def __init__(<FILL_ME>
+def main():
+    factory = InterfaceManagerFactory(start=datetime.now())
+    managers = []
+    for i in range(10):
+        managers.append(factory.build(id=i))
+""",
+        """/-- A quasi-prefunctoid is 1-connected iff all its etalisations are 1-connected. -/
+theorem connected_iff_etalisation [C D : precategoroid] (P : quasi_prefunctoid C D) :
+π₁ P = 0 ↔ <FILL_ME> = 0 :=
+begin
+split,
+{ intros h f,
+    rw pi_1_etalisation at h,
+    simp [h],
+    refl
+},
+{ intro h,
+    have := @quasi_adjoint C D P,
+    simp [←pi_1_etalisation, this, h],
+    refl
+}
+end
+""",
+    ]
+        tokenizer = LlamaCodeTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
+        tokenizer_fast = LlamaCodeTokenizerFast.from_pretrained("codellama/CodeLlama-7b-hf")
 
-        # TODO ADD TESTS FOR API CONSISTENCY
+        formatted_prompt = tokenizer.tokenize(PROMPTS[0])
+        self.assertEqual(formatted_prompt, tokenizer_fast.tokenize(PROMPTS[0]))
+        prefix, suffix = PROMPTS[0].split("<FILL_ME>")
+        self.assertEqual(formatted_prompt, tokenizer.tokenize(prefix, suffix))
+        self.assertEqual(formatted_prompt, tokenizer_fast.tokenize(prefix, suffix))
+        
+        input_ids = tokenizer.encode(PROMPTS[0])
+        self.assertEqual(input_ids, tokenizer_fast.encode(PROMPTS[0]))
+        
+        prefix, suffix = PROMPTS[0].split("<FILL_ME>")
+        self.assertEqual(formatted_prompt, tokenizer.encode(prefix, suffix = suffix))
+        self.assertEqual(formatted_prompt, tokenizer_fast.encode(prefix, suffix = suffix))
+        
