@@ -24,7 +24,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-BEIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "microsoft/kosmos-2-patch14-224": (
         "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/config.json"
     ),

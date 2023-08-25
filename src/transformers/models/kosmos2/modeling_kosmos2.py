@@ -47,6 +47,11 @@ _CHECKPOINT_FOR_DOC = "microsoft/kosmos-2-patch14-224"
 _CONFIG_FOR_DOC = Kosmos2Config
 _EXPECTED_OUTPUT_SHAPE = None
 
+KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "microsoft/kosmos-2-patch14-224",
+    # See all KOSMOS-2 models at https://huggingface.co/models?filter=kosmos-2
+]
+
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
