@@ -82,20 +82,28 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
         tokenizer_file (`str`):
             [tokenizers](https://github.com/huggingface/tokenizers) file (generally has a .json extension) that
             contains everything needed to load the tokenizer.
-
         clean_up_tokenization_spaces (`str`, *optional*, defaults to `False`):
             Wether to cleanup spaces after decoding, cleanup consists in removing potential artifacts like extra
             spaces.
-
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
-
         unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
+        prefix_token (`str`, *optional*, defaults to `"▁<PRE>"`):
+            Prefix token used for infilling.
+        suffix_token (`str`, *optional*, defaults to `"▁<SUF>"`):
+            Suffix token used for infilling.
+        middle_token (`str`, *optional*, defaults to `"▁<MID>"`):
+            Middle token used for infilling.
+        eot_token (`str`, *optional*, defaults to `"▁<EOT>"`):
+            End of text token used for infilling.
+        fill_token (`str`, *optional*, defaults to `"<FILL_ME>"`):
+            The token used to split the input between the prefix and suffix.
+        suffix_first (`bool`, *optional*, default to `False`):
+            Whether the input prompt and suffix should be formatted with the suffix first.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

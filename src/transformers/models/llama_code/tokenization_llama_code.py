@@ -61,13 +61,57 @@ correct. If you don't know the answer to a question, please don't share false in
 
 class LlamaCodeTokenizer(PreTrainedTokenizer):
     """
-    Construct a LlamaCode tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as there is
-    no padding token in the original model.
+    Construct a LlamaCode tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as
+    there is no padding token in the original model.
 
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
-        # TODO add the doc for additional kwargs
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
+            The end of sequence token.
+
+            <Tip>
+
+            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            The token used is the `sep_token`.
+
+            </Tip>
+
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        prefix_token (`str`, *optional*, defaults to `"▁<PRE>"`):
+            Prefix token used for infilling.
+        suffix_token (`str`, *optional*, defaults to `"▁<SUF>"`):
+            Suffix token used for infilling.
+        middle_token (`str`, *optional*, defaults to `"▁<MID>"`):
+            Middle token used for infilling.
+        eot_token (`str`, *optional*, defaults to `"▁<EOT>"`):
+            End of text token used for infilling.
+        fill_token (`str`, *optional*, defaults to `"<FILL_ME>"`):
+            The token used to split the input between the prefix and suffix.
+        suffix_first (`bool`, *optional*, default to `False`):
+            Whether the input prompt and suffix should be formatted with the suffix first.
+        additional_special_tokens (`List[str]`, *optional*):
+            Additional special tokens used by the tokenizer.
+        sp_model_kwargs (`dict`, *optional*):
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
+
+            - `enable_sampling`: Enable subword regularization.
+            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - `nbest_size = {0,1}`: No sampling is performed.
+              - `nbest_size > 1`: samples from the nbest_size results.
+              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+
+            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
+
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -87,6 +131,7 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
         suffix_token="▁<SUF>",
         eot_token="▁<EOT>",
         fill_token="<FILL_ME>",
+        suffix_first=False,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         add_bos_token=True,
         add_eos_token=False,
@@ -111,6 +156,7 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
             eot_token=eot_token,
             fill_token=fill_token,
             sp_model_kwargs=self.sp_model_kwargs,
+            suffix_first=suffix_first,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
@@ -122,6 +168,7 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
         self._suffix_token = suffix_token
         self._eot_token = eot_token
         self.fill_token = fill_token
+        self.suffix_first = suffix_first
         self.sp_model = self.get_spm_processor()
 
     @property
@@ -216,6 +263,7 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
             )
         suffix_tokens = self._tokenize(suffix)  # make sure LlamaCode sp model does not mess up
 
+        suffix_first = suffix_first if suffix_first is not None else self.suffix_first
         if suffix_first:
             # format as " <PRE> <SUF>{suf} <MID> {pre}"
             return [self.prefix_token, self.suffix_token] + suffix_tokens + [self.middle_token] + prefix_tokens
