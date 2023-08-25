@@ -1141,7 +1141,7 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     >>> outputs_diverse = model.generate(
     ...     **inputs,
     ...     num_beam_groups=2,
-    ...     diversity_penalty=10.,
+    ...     diversity_penalty=10.0,
     ...     max_length=100,
     ...     num_beams=4,
     ...     num_return_sequences=2,
@@ -1161,6 +1161,7 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     >>> print(summary_non_diverse)
     ['the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.',
     'the Solar System formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.']
+
     >>> print(summaries_diverse)
     ['the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.',
     'the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets. the rest of the objects are smaller objects, such as the five dwarf planets and small solar system bodies.']
