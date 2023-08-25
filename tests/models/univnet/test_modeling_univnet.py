@@ -19,7 +19,8 @@ import unittest
 
 import numpy as np
 
-from transformers import UnivNetGanConfig
+from datasets import Audio, load_dataset
+from transformers import UnivNetGanConfig, UnivNetFeatureExtractor
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
@@ -211,6 +212,14 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         super().tearDown()
         gc.collect()
         torch.cuda.empty_cache()
+    
+    def _load_datasamples(self, num_samples):
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = ds.cast_column("audio", Audio(sampling_rate=24000))
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+
+        return [x["array"] for x in speech_samples], [x["sampling_rate"] for x in speech_samples]
 
     def get_inputs(self, device, num_samples: int = 3, noise_length: int = 10, seed: int = 0):
         generator = torch.manual_seed(seed)
@@ -249,7 +258,7 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         return inputs
 
     @torch.no_grad()
-    def test_inference_tortoise_tts_batched(self):
+    def test_model_inference_batched(self):
         # Load sample checkpoint from Tortoise TTS
         model = UnivNetGan.from_pretrained("dg845/univnet-dev")
         model.to(torch_device)
@@ -262,10 +271,10 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
 
         expected_slice = np.array([-0.3408, -0.6045, -0.5052, 0.1160, -0.1556, -0.0405, -0.3024, -0.5290, -0.5019])
 
-        assert np.abs(waveform_slice - expected_slice).max() < 1e-3
+        self.assertTrue(np.allclose(waveform_slice, expected_slice, atol=5e-4))
 
     @torch.no_grad()
-    def test_inference_tortoise_tts_unbatched(self):
+    def test_model_inference_unbatched(self):
         # Load sample checkpoint from Tortoise TTS
         model = UnivNetGan.from_pretrained("dg845/univnet-dev")
         model.to(torch_device)
@@ -278,4 +287,27 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
 
         expected_slice = np.array([-0.3276, -0.5504, -0.3484, 0.3574, -0.0373, -0.1826, -0.4880, -0.6431, -0.5162])
 
-        assert np.abs(waveform_slice - expected_slice).max() < 1e-3
+        self.assertTrue(np.allclose(waveform_slice, expected_slice, atol=5e-4))
+    
+    @unittest.skip(reason="Haven't gotten expected features yet")
+    @torch.no_grad()
+    def test_integration(self):
+        # TODO: upload feature extractor to hub
+        feature_extractor = UnivNetFeatureExtractor.from_pretrained("susnato/clvp_dev")
+        model = UnivNetGan.from_pretrained("dg845/univnet-dev")
+        model.to(torch_device)
+
+        input_speech, sr = self._load_datasamples(1)
+
+        input_features = feature_extractor(input_speech, sampling_rate=sr[0], return_tensors="pt").input_features
+
+        input_speech = self.get_inputs(torch_device, num_samples=1)
+        input_speech["spectrogram"] = input_features
+
+        waveform = model(**input_speech)
+        waveform_slice = waveform[-9:].detach().cpu().flatten().numpy()
+
+        # TODO: get expected features
+        expected_slice = np.array([0.0] * 9)
+
+        self.assertTrue(np.allclose(waveform_slice, expected_slice, atol=5e-4))

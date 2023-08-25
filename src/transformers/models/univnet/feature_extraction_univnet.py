@@ -83,7 +83,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             Whether or not [`~UnivNetFeatureExtractor.__call__`] should return `attention_mask`.
     """
 
-    model_input_names = ["input_values", "attention_mask"]
+    model_input_names = ["input_features", "attention_mask"]
 
     def __init__(
         self,
@@ -204,7 +204,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
         sampling_rate: Optional[int] = None,
-        padding: Union[bool, str, PaddingStrategy] = "max_length",
+        padding: Union[bool, str, PaddingStrategy] = True,
         max_length: Optional[int] = None,
         truncation: bool = True,
         pad_to_multiple_of: Optional[int] = None,
@@ -308,9 +308,10 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         )
 
         # make sure list is in array format
-        input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
+        # input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
+        input_features = padded_inputs.get("input_features")
 
-        mel_spectrograms = [self.mel_spectrogram(waveform) for waveform in input_features[0]]
+        mel_spectrograms = [self.mel_spectrogram(waveform) for waveform in input_features]
 
         if isinstance(input_features[0], List):
             batched_speech["input_features"] = [np.asarray(mel) for mel in mel_spectrograms]
