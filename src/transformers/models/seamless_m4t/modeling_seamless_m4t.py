@@ -3635,7 +3635,6 @@ class SeamlessM4THifiGan(PreTrainedModel):
         hidden_states = torch.tanh(hidden_states)
 
         # remove seq-len dim since this collapses to 1
-        # TODO: keep that?
         waveform = hidden_states.squeeze(1)
 
         return waveform
@@ -3666,6 +3665,30 @@ class SeamlessM4TCodeHifiGan(SeamlessM4THifiGan):
         
         # Initialize weights and apply final processing
         self.post_init()
+        
+        
+    @staticmethod
+    def _upsample(signal: Tensor, max_frames: int) -> Tensor:
+        if signal.dim() == 3:
+            bsz, channels, cond_length = signal.size()
+        elif signal.dim() == 2:
+            signal = signal.unsqueeze(2)
+            bsz, channels, cond_length = signal.size()
+        else:
+            signal = signal.view(-1, 1, 1)
+            bsz, channels, cond_length = signal.size()
+
+        signal = signal.unsqueeze(3).repeat(1, 1, 1, max_frames // cond_length)
+
+        # pad zeros as needed (if signal's shape does not divide completely with max_frames)
+        reminder = (max_frames - signal.shape[2] * signal.shape[3]) // signal.shape[3]
+        if reminder > 0:
+            raise NotImplementedError(
+                "Padding condition signal - misalignment between condition features."
+            )
+
+        signal = signal.view(bsz, channels, max_frames)
+        return signal
 
 
     def forward(self, input_ids: Tensor,
@@ -3673,28 +3696,28 @@ class SeamlessM4TCodeHifiGan(SeamlessM4THifiGan):
                 lang_id: Tensor,
                 use_dur_prediction: bool) -> Tensor:  # type: ignore
         
-        hidden_input_ids = input_ids
+        hidden_states = self.unit_embeds_layer(input_ids).transpose(1,2)
 
         if self.dur_predictor and use_dur_prediction:
-            if hidden_input_ids.size(0) == 1:
-                raise ValueError(f"Input `batch_size={hidden_input_ids.size(0)} and `use_dur_prediction=True`, but the variance predictor only supports single sample prediction. Use it sample per sample.")
+            if hidden_states.size(0) != 1:
+                raise ValueError(f"Input `batch_size={hidden_states.size(0)} and `use_dur_prediction=True`, but the variance predictor only supports single sample prediction. Use it sample per sample.")
 
-            log_dur_pred = self.dur_predictor(hidden_input_ids.transpose(1, 2))
+            log_dur_pred = self.dur_predictor(hidden_states.transpose(1, 2))
             dur_out = torch.clamp(
                 torch.round((torch.exp(log_dur_pred) - 1)).long(), min=1
             )
             # B x C x T
-            hidden_input_ids = torch.repeat_interleave(x, dur_out.view(-1), dim=2)
+            hidden_states = torch.repeat_interleave(hidden_states, dur_out.view(-1), dim=2)
 
-        spkr = self.spkr(speaker_id).transpose(1, 2)
-        spkr = self._upsample(spkr, hidden_input_ids.shape[-1])
-        hidden_input_ids = torch.cat([hidden_input_ids, spkr], dim=1)
+        spkr = self.spkr_embeds_layer(speaker_id).transpose(1, 2)
+        spkr = self._upsample(spkr, hidden_states.shape[-1])
+        hidden_states = torch.cat([hidden_states, spkr], dim=1)
 
-        lang = self.lang(lang_id).transpose(1, 2)
-        lang = self._upsample(lang, hidden_input_ids.shape[-1])
-        hidden_input_ids = torch.cat([lang, hidden_input_ids], dim=1)
+        lang = self.lang_embeds_layer(lang_id).transpose(1, 2)
+        lang = self._upsample(lang, hidden_states.shape[-1])
+        hidden_states = torch.cat([lang, hidden_states], dim=1)
 
-        return super().forward(hidden_input_ids)
+        return super().forward(hidden_states)
 
     
 

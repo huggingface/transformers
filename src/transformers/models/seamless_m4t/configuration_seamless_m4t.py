@@ -25,6 +25,11 @@ SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     # See all SeamlessM4T models at https://huggingface.co/models?filter=seamless_m4t
 }
 
+SEAMLESS_M4T_HIFIGAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "meta-private/m4t_large": "https://huggingface.co/meta-private/m4t_large/resolve/main/config.json",
+    # See all SeamlessM4T models at https://huggingface.co/models?filter=seamless_m4t
+}
+
 
 # TODO: docstrings is a mix of wav2vec2_conformer, mBart, nllb
 class SeamlessM4TConfig(PretrainedConfig):
@@ -272,13 +277,14 @@ class SeamlessM4TCodeHifiGanConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import SpeechT5HifiGan, SpeechT5HifiGanConfig
+    >>> from transformers import SeamlessM4TCodeHifiGan, SeamlessM4TCodeHifiGanConfig
 
+    # TODO update repo
     >>> # Initializing a "microsoft/speecht5_hifigan" style configuration
-    >>> configuration = SpeechT5HifiGanConfig()
+    >>> configuration = SeamlessM4TCodeHifiGanConfig()
 
     >>> # Initializing a model (with random weights) from the "microsoft/speecht5_hifigan" style configuration
-    >>> model = SpeechT5HifiGan(configuration)
+    >>> model = SeamlessM4TCodeHifiGan(SeamlessM4TCodeHifiGanConfig)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -319,7 +325,8 @@ class SeamlessM4TCodeHifiGanConfig(PretrainedConfig):
         self.resblock_dilation_sizes = resblock_dilation_sizes
         self.initializer_range = initializer_range
         self.leaky_relu_slope = leaky_relu_slope
-        
+
+        # TODO: add to docstrings        
         # specific to Code Hifi-Gan
         self.unit_hifi_gan_vocab_size = unit_hifi_gan_vocab_size
         self.unit_embed_dim = unit_embed_dim
