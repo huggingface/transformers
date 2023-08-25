@@ -227,3 +227,109 @@ class SeamlessM4TConfig(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
+
+
+
+class SeamlessM4TCodeHifiGanConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`SeamlessM4TCodeHifiGanConfig`]. It is used to instantiate
+    a SeamlessM4T Code HiFi-GAN vocoder model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the SeamlessM4T
+    [microsoft/speecht5_hifigan](https://huggingface.co/microsoft/speecht5_hifigan) architecture.
+    TODO: adapt code rpo
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        model_in_dim (`int`, *optional*, defaults to 80):
+            The number of frequency bins in the input log-mel spectrogram.
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate at which the output audio will be generated, expressed in hertz (Hz).
+        upsample_initial_channel (`int`, *optional*, defaults to 512):
+            The number of input channels into the upsampling network.
+        upsample_rates (`Tuple[int]` or `List[int]`, *optional*, defaults to `[4, 4, 4, 4]`):
+            A tuple of integers defining the stride of each 1D convolutional layer in the upsampling network. The
+            length of *upsample_rates* defines the number of convolutional layers and has to match the length of
+            *upsample_kernel_sizes*.
+        upsample_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[8, 8, 8, 8]`):
+            A tuple of integers defining the kernel size of each 1D convolutional layer in the upsampling network. The
+            length of *upsample_kernel_sizes* defines the number of convolutional layers and has to match the length of
+            *upsample_rates*.
+        resblock_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 7, 11]`):
+            A tuple of integers defining the kernel sizes of the 1D convolutional layers in the multi-receptive field
+            fusion (MRF) module.
+        resblock_dilation_sizes (`Tuple[Tuple[int]]` or `List[List[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
+            A nested tuple of integers defining the dilation rates of the dilated 1D convolutional layers in the
+            multi-receptive field fusion (MRF) module.
+        initializer_range (`float`, *optional*, defaults to 0.01):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        leaky_relu_slope (`float`, *optional*, defaults to 0.1):
+            The angle of the negative slope used by the leaky ReLU activation.
+        normalize_before (`bool`, *optional*, defaults to `True`):
+            Whether or not to normalize the spectrogram before vocoding using the vocoder's learned mean and variance.
+
+    Example:
+
+    ```python
+    >>> from transformers import SpeechT5HifiGan, SpeechT5HifiGanConfig
+
+    >>> # Initializing a "microsoft/speecht5_hifigan" style configuration
+    >>> configuration = SpeechT5HifiGanConfig()
+
+    >>> # Initializing a model (with random weights) from the "microsoft/speecht5_hifigan" style configuration
+    >>> model = SpeechT5HifiGan(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+    model_type = "code_hifigan"
+
+    def __init__(
+        self,
+        model_in_dim=1792,
+        sampling_rate=16000,
+        upsample_initial_channel=512,
+        upsample_rates=[5, 4, 4, 2, 2],
+        upsample_kernel_sizes=[11, 8, 8, 4, 4],
+        resblock_kernel_sizes=[3, 7, 11],
+        resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
+        initializer_range=0.01,
+        leaky_relu_slope=0.1,
+        
+        # specific to Code Hifi-Gan
+        unit_hifi_gan_vocab_size = 10000,
+        unit_embed_dim = 1280,
+        lang_embed_dim = 256,
+        spkr_embed_dim = 256,
+        num_langs = 36,
+        num_spkrs = 200,
+        use_dur_predictor = True,
+        var_pred_kernel_size = 3,
+        var_pred_dropout = 0.5,
+        **kwargs,
+    ):
+        # original parameters specific to Hifi-Gan
+        self.model_in_dim = model_in_dim
+        self.sampling_rate = sampling_rate
+        self.upsample_initial_channel = upsample_initial_channel
+        self.upsample_rates = upsample_rates
+        self.upsample_kernel_sizes = upsample_kernel_sizes
+        self.resblock_kernel_sizes = resblock_kernel_sizes
+        self.resblock_dilation_sizes = resblock_dilation_sizes
+        self.initializer_range = initializer_range
+        self.leaky_relu_slope = leaky_relu_slope
+        self.normalize_before = normalize_before
+        
+        # specific to Code Hifi-Gan
+        self.unit_hifi_gan_vocab_size = unit_hifi_gan_vocab_size
+        self.unit_embed_dim = unit_embed_dim
+        self.lang_embed_dim = lang_embed_dim
+        self.spkr_embed_dim = spkr_embed_dim
+        self.num_langs = num_langs
+        self.num_spkrs = num_spkrs
+        self.use_dur_predictor = use_dur_predictor
+        self.var_pred_kernel_size = var_pred_kernel_size
+        self.var_pred_dropout = var_pred_dropout
+        
+        super().__init__(**kwargs)
