@@ -269,18 +269,19 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
+        # since we manually add the prefix space, we have to remove it when decoding
+        if tokens[0].startswith(SPIECE_UNDERLINE):
+            tokens[0] = tokens[0][1:]
+
         current_sub_tokens = []
         out_string = ""
-        prev_is_special = False
-        for i, token in enumerate(tokens):
+        for _, token in enumerate(tokens):
             # make sure that special tokens are not decoded using sentencepiece model
             if token in self.all_special_tokens:
                 out_string += self.sp_model.decode(current_sub_tokens) + token
-                prev_is_special = True
                 current_sub_tokens = []
             else:
                 current_sub_tokens.append(token)
-                prev_is_special = False
         out_string += self.sp_model.decode(current_sub_tokens)
         return out_string
 
