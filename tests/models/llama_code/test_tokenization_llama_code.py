@@ -281,7 +281,7 @@ class LlamaCodeTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.tokenizer_integration_test_util(
             expected_encoding=expected_encoding,
             model_name="hf-internal-testing/llama-code-tokenizer",
-            revision="0984d03108b1a041ed679bd253b6519b7e1a4778",
+            revision="6eb30c03ab6a9e2cdef4d523024909ec815ddb75",
             padding=False,
         )
 
