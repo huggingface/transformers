@@ -94,6 +94,7 @@ _import_structure = {
     "data.metrics": [],
     "data.processors": [],
     "debug_utils": [],
+    "deepspeed": [],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
     "dynamic_module_utils": [],
@@ -115,8 +116,6 @@ _import_structure = {
         "is_tensorboard_available",
         "is_wandb_available",
     ],
-    "lib_integrations": [],
-    "lib_integrations.peft": [],
     "modelcard": ["ModelCard"],
     "modeling_tf_pytorch_utils": [
         "convert_tf_weight_name_to_pt_weight_name",
@@ -745,7 +744,6 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
-    "utils.bitsandbytes": [],
     "utils.quantization_config": ["BitsAndBytesConfig", "GPTQConfig"],
 }
 
@@ -1002,7 +1000,6 @@ else:
         "TextDataset",
         "TextDatasetForNextSentencePrediction",
     ]
-    _import_structure["deepspeed"] = []
     _import_structure["generation"].extend(
         [
             "AlternatingCodebooksLogitsProcessor",

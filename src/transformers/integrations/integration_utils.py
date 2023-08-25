@@ -30,8 +30,8 @@ from typing import TYPE_CHECKING, Dict, Optional
 
 import numpy as np
 
-from . import __version__ as version
-from .utils import flatten_dict, is_datasets_available, is_pandas_available, is_torch_available, logging
+from .. import __version__ as version
+from ..utils import flatten_dict, is_datasets_available, is_pandas_available, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -68,10 +68,10 @@ if TYPE_CHECKING and _has_neptune:
         except importlib.metadata.PackageNotFoundError:
             _has_neptune = False
 
-from .trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
-from .training_args import ParallelMode  # noqa: E402
-from .utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
+from ..trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
+from ..trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
+from ..training_args import ParallelMode  # noqa: E402
+from ..utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
 
 
 # Integration functions:
