@@ -2961,6 +2961,8 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
         super().__init__(config)
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
         
+        # TODO: add vocoder ! 
+        
         # TODO: post init ?
         
         
@@ -3081,6 +3083,10 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
         output_speech = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech_generation)
 
         # TODO: proper output form
+        
+        
+        #units = unit_out.units[:, 1:][0].cpu().numpy().tolist()
+        #wav_out = self.vocoder(units, tgt_lang, spkr, dur_prediction=True)
 
         return output_speech
 
