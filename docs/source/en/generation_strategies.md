@@ -111,7 +111,7 @@ If you would like to share your fine-tuned model with a specific generation conf
 >>> generation_config = GenerationConfig(
 ...     max_new_tokens=50, do_sample=True, top_k=50, eos_token_id=model.config.eos_token_id
 ... )
->>> generation_config.save_pretrained("my_account/my_model", push_to_hub=True)
+>>> generation_config.save_pretrained("my_account/my_model", push_to_hub=True)  # doctest: +SKIP
 ```
 
 You can also store several generation configurations in a single directory, making use of the `config_file_name`
