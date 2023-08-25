@@ -42,7 +42,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_seamless_m4t import SeamlessM4TConfig, SeamlessM4TCodeHifiGanConfig
+from .configuration_seamless_m4t import SeamlessM4TConfig
 
 
 logger = logging.get_logger(__name__)
@@ -3538,11 +3538,11 @@ class SeamlessM4TVariancePredictor(nn.Module):
 
     
 class SeamlessM4THifiGan(PreTrainedModel):
-    config_class = SeamlessM4TCodeHifiGanConfig
+    config_class = SeamlessM4TConfig
     main_input_name = "input_embeds"
 
     # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan.__init__ with SpeechT5->SeamlessM4TCode
-    def __init__(self, config: SeamlessM4TCodeHifiGanConfig):
+    def __init__(self, config: SeamlessM4TConfig):
         super().__init__(config)
         self.num_kernels = len(config.resblock_kernel_sizes)
         self.num_upsamples = len(config.upsample_rates)
