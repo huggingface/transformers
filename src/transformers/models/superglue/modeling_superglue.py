@@ -1,513 +1,364 @@
-# coding=utf-8
-# Copyright 2023 Microsoft Research, Inc. and The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-""" PyTorch SuperGlue model."""
-
-from typing import Optional
+from copy import deepcopy
+from typing import List, Tuple, Optional, Union
 
 import torch
-import torch.utils.checkpoint
-from torch import Tensor, nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch import nn, Tensor
 
-from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BackboneOutput,
-    BaseModelOutputWithNoAttention,
-    BaseModelOutputWithPoolingAndNoAttention,
-    ImageClassifierOutputWithNoAttention,
-)
-from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
-from ...utils.backbone_utils import BackboneMixin
-from .configuration_superglue import SuperGlueConfig
+from transformers import PreTrainedModel
+from transformers.models.superglue.configuration_superglue import SuperGlueConfig
+from transformers.modeling_outputs import ImageMatchingOutput
 
 
-logger = logging.get_logger(__name__)
-
-# General docstring
-_CONFIG_FOR_DOC = "SuperGlueConfig"
-
-# Base docstring
-_CHECKPOINT_FOR_DOC = "magicleap/superglue"
-_EXPECTED_OUTPUT_SHAPE = [1, 2048, 7, 7]
-
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "magicleap/superglue"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "tiger cat"
-
-SUPERGLUE_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "magicleap/superglue",
-    # See all SuperGlue models at https://huggingface.co/models?filter=superglue
-]
-
-
-
-# Copied from transformers.models.resnet.modeling_resnet.ResNetConvLayer with ResNet->SuperGlue
-class SuperGlueConvLayer(nn.Module):
+class SuperGlueMultiLayerPerceptron(nn.Module):
     def __init__(
-        self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu"
+            self,
+            channels: List[int],
+            do_batch_norm: bool = True,
     ):
         super().__init__()
-        self.convolution = nn.Conv2d(
-            in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=kernel_size // 2, bias=False
-        )
-        self.normalization = nn.BatchNorm2d(out_channels)
-        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
-
-    def forward(self, input: Tensor) -> Tensor:
-        hidden_state = self.convolution(input)
-        hidden_state = self.normalization(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        return hidden_state
-
-
-# Copied from transformers.models.resnet.modeling_resnet.ResNetEmbeddings with ResNet->SuperGlue
-class SuperGlueEmbeddings(nn.Module):
-    """
-    SuperGlue Embeddings (stem) composed of a single aggressive convolution.
-    """
-
-    def __init__(self, config: SuperGlueConfig):
-        super().__init__()
-        self.embedder = SuperGlueConvLayer(
-            config.num_channels, config.embedding_size, kernel_size=7, stride=2, activation=config.hidden_act
-        )
-        self.pooler = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.num_channels = config.num_channels
-
-    def forward(self, pixel_values: Tensor) -> Tensor:
-        num_channels = pixel_values.shape[1]
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+        num_layers = len(channels)
+        layers = []
+        for i in range(1, num_layers):
+            layers.append(
+                nn.Conv1d(
+                    channels[i - 1],
+                    channels[i],
+                    kernel_size=1,
+                    bias=True
+                )
             )
-        embedding = self.embedder(pixel_values)
-        embedding = self.pooler(embedding)
-        return embedding
-
-
-# Copied from transformers.models.resnet.modeling_resnet.ResNetShortCut with ResNet->SuperGlue
-class SuperGlueShortCut(nn.Module):
-    """
-    SuperGlue shortcut, used to project the residual features to the correct size. If needed, it is also used to
-    downsample the input using `stride=2`.
-    """
-
-    def __init__(self, in_channels: int, out_channels: int, stride: int = 2):
-        super().__init__()
-        self.convolution = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False)
-        self.normalization = nn.BatchNorm2d(out_channels)
+            if i < (num_layers - 1):
+                if do_batch_norm:
+                    layers.append(nn.BatchNorm1d(channels[i]))
+                layers.append(nn.ReLU())
+        self.layers = nn.Sequential(*layers)
+        nn.init.constant_(self.layers[-1].bias, 0.0)
 
     def forward(self, input: Tensor) -> Tensor:
-        hidden_state = self.convolution(input)
-        hidden_state = self.normalization(hidden_state)
-        return hidden_state
+        return self.layers(input)
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetBasicLayer with ResNet->SuperGlue
-class SuperGlueBasicLayer(nn.Module):
-    """
-    A classic SuperGlue's residual layer composed by two `3x3` convolutions.
-    """
-
-    def __init__(self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu"):
-        super().__init__()
-        should_apply_shortcut = in_channels != out_channels or stride != 1
-        self.shortcut = (
-            SuperGlueShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
-        )
-        self.layer = nn.Sequential(
-            SuperGlueConvLayer(in_channels, out_channels, stride=stride),
-            SuperGlueConvLayer(out_channels, out_channels, activation=None),
-        )
-        self.activation = ACT2FN[activation]
-
-    def forward(self, hidden_state):
-        residual = hidden_state
-        hidden_state = self.layer(hidden_state)
-        residual = self.shortcut(residual)
-        hidden_state += residual
-        hidden_state = self.activation(hidden_state)
-        return hidden_state
-
-
-# Copied from transformers.models.resnet.modeling_resnet.ResNetBottleNeckLayer with ResNet->SuperGlue
-class SuperGlueBottleNeckLayer(nn.Module):
-    """
-    A classic SuperGlue's bottleneck layer composed by three `3x3` convolutions.
-
-    The first `1x1` convolution reduces the input by a factor of `reduction` in order to make the second `3x3`
-    convolution faster. The last `1x1` convolution remaps the reduced features to `out_channels`.
-    """
+class SuperGlueKeypointEncoder(nn.Module):
 
     def __init__(
-        self, in_channels: int, out_channels: int, stride: int = 1, activation: str = "relu", reduction: int = 4
+            self,
+            feature_dim: int = 256,
+            layers_sizes: List[int] = [32, 64, 128, 256],
     ):
         super().__init__()
-        should_apply_shortcut = in_channels != out_channels or stride != 1
-        reduces_channels = out_channels // reduction
-        self.shortcut = (
-            SuperGlueShortCut(in_channels, out_channels, stride=stride) if should_apply_shortcut else nn.Identity()
+        self.encoder = SuperGlueMultiLayerPerceptron(
+            channels=[3] + layers_sizes + [feature_dim]
         )
-        self.layer = nn.Sequential(
-            SuperGlueConvLayer(in_channels, reduces_channels, kernel_size=1),
-            SuperGlueConvLayer(reduces_channels, reduces_channels, stride=stride),
-            SuperGlueConvLayer(reduces_channels, out_channels, kernel_size=1, activation=None),
-        )
-        self.activation = ACT2FN[activation]
 
-    def forward(self, hidden_state):
-        residual = hidden_state
-        hidden_state = self.layer(hidden_state)
-        residual = self.shortcut(residual)
-        hidden_state += residual
-        hidden_state = self.activation(hidden_state)
-        return hidden_state
+    def forward(self, keypoints: Tensor, scores: Tensor) -> Tensor:
+        keypoints = keypoints.transpose(1, 2)
+        scores = scores.unsqueeze(1)
+        inputs = torch.cat([keypoints, scores], dim=1)
+        return self.encoder(inputs)
 
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetStage with ResNet->SuperGlue
-class SuperGlueStage(nn.Module):
-    """
-    A SuperGlue stage composed by stacked layers.
-    """
-
+class SuperGlueMultiHeadAttention(nn.Module):
     def __init__(
-        self,
-        config: SuperGlueConfig,
-        in_channels: int,
-        out_channels: int,
-        stride: int = 2,
-        depth: int = 2,
+            self,
+            feature_dim: int,
+            num_heads: int
     ):
         super().__init__()
-
-        layer = SuperGlueBottleNeckLayer if config.layer_type == "bottleneck" else SuperGlueBasicLayer
-
-        self.layers = nn.Sequential(
-            # downsampling is done in the first layer with stride of 2
-            layer(in_channels, out_channels, stride=stride, activation=config.hidden_act),
-            *[layer(out_channels, out_channels, activation=config.hidden_act) for _ in range(depth - 1)],
-        )
-
-    def forward(self, input: Tensor) -> Tensor:
-        hidden_state = input
-        for layer in self.layers:
-            hidden_state = layer(hidden_state)
-        return hidden_state
-
-
-# Copied from transformers.models.resnet.modeling_resnet.ResNetEncoder with ResNet->SuperGlue
-class SuperGlueEncoder(nn.Module):
-    def __init__(self, config: SuperGlueConfig):
-        super().__init__()
-        self.stages = nn.ModuleList([])
-        # based on `downsample_in_first_stage` the first layer of the first stage may or may not downsample the input
-        self.stages.append(
-            SuperGlueStage(
-                config,
-                config.embedding_size,
-                config.hidden_sizes[0],
-                stride=2 if config.downsample_in_first_stage else 1,
-                depth=config.depths[0],
-            )
-        )
-        in_out_channels = zip(config.hidden_sizes, config.hidden_sizes[1:])
-        for (in_channels, out_channels), depth in zip(in_out_channels, config.depths[1:]):
-            self.stages.append(SuperGlueStage(config, in_channels, out_channels, depth=depth))
+        assert feature_dim % num_heads == 0
+        self.feature_dim = feature_dim
+        self.num_heads = num_heads
+        self.dim = feature_dim // num_heads
+        self.merge = nn.Conv1d(feature_dim, feature_dim, kernel_size=1)
+        self.proj = nn.ModuleList([deepcopy(self.merge) for _ in range(3)])
 
     def forward(
-        self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
-    ) -> BaseModelOutputWithNoAttention:
-        hidden_states = () if output_hidden_states else None
+            self,
+            query: torch.Tensor,
+            key: torch.Tensor,
+            value: torch.Tensor
+    ) -> torch.Tensor:
+        batch_dim = query.size(0)
+        query, key, value = [
+            layer(x).view(batch_dim, self.dim, self.num_heads, -1)
+            for layer, x in zip(self.proj, (query, key, value))
+        ]
+        x, _ = self.attention(query, key, value)
+        output = self.merge(x.contiguous().view(batch_dim, self.dim * self.num_heads, -1))
+        return output
 
-        for stage_module in self.stages:
-            if output_hidden_states:
-                hidden_states = hidden_states + (hidden_state,)
+    def attention(
+            self,
+            query: torch.Tensor,
+            key: torch.Tensor,
+            value: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        dim = query.shape[1]
+        scores = torch.einsum('bdhn,bdhm->bhnm', query, key) / dim ** .5
+        prob = torch.nn.functional.softmax(scores, dim=-1)
+        output = torch.einsum('bhnm,bdhm->bdhn', prob, value)
+        return output, prob
 
-            hidden_state = stage_module(hidden_state)
 
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
+class SuperGlueAttentionalPropagation(nn.Module):
+    def __init__(
+            self,
+            feature_dim: int,
+            num_heads: int
+    ):
+        super().__init__()
+        self.feature_dim = feature_dim
+        self.num_heads = num_heads
+        self.attention = SuperGlueMultiHeadAttention(
+            feature_dim=feature_dim,
+            num_heads=num_heads
+        )
+        self.mlp = SuperGlueMultiLayerPerceptron(
+            [feature_dim * 2, feature_dim * 2, feature_dim]
+        )
+        nn.init.constant_(self.mlp.layers[-1].bias, 0.0)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_state, hidden_states] if v is not None)
+    def forward(self, x: torch.Tensor, source: torch.Tensor) -> torch.Tensor:
+        message = self.attention(x, source, source)
+        message = torch.cat([x, message], dim=1)
+        message = self.mlp(message)
+        return message
 
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_state,
-            hidden_states=hidden_states,
+
+class SuperGlueAttentionalGNN(nn.Module):
+    def __init__(
+            self,
+            feature_dim: int,
+            num_heads: int,
+            layers_types: List[str],
+    ):
+        super().__init__()
+        self.feature_dim = feature_dim
+        self.num_heads = num_heads
+        self.layers_types = layers_types
+        self.num_layers = len(self.layers_types)
+        self.layers = nn.ModuleList(
+            [
+                SuperGlueAttentionalPropagation(
+                    self.feature_dim,
+                    self.num_heads
+                )
+                for _ in range(self.num_layers)
+            ]
         )
 
+    def forward(self, descriptors_0: torch.Tensor, descriptors_1: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        for gnn_layer, type in zip(self.layers, self.layers_types):
+            if type == 'cross':
+                source_0, source_1 = descriptors_1, descriptors_0
+            else:  # if type == 'self':
+                source_0, source_1 = descriptors_0, descriptors_1
+            delta0, delta1 = gnn_layer(descriptors_0, source_0), gnn_layer(descriptors_1, source_1)
+            descriptor_0, descriptors_1 = (descriptors_0 + delta0), (descriptors_1 + delta1)
+        return descriptors_0, descriptors_1
 
-# Copied from transformers.models.resnet.modeling_resnet.ResNetPreTrainedModel with ResNet->SuperGlue,resnet->superglue
-class SuperGluePreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
+
+class SuperGlue(nn.Module):
+    """SuperGlue feature matching middle-end
+
+    Given two sets of keypoints and locations, we determine the
+    correspondences by:
+      1. Keypoint Encoding (normalization + visual feature and location fusion)
+      2. Graph Neural Network with multiple self and cross-attention layers
+      3. Final projection layer
+      4. Optimal Transport Layer (a differentiable Hungarian matching algorithm)
+      5. Thresholding matrix based on mutual exclusivity and a match_threshold
+
+    The correspondence ids use -1 to indicate non-matching points.
+
+    Paul-Edouard Sarlin, Daniel DeTone, Tomasz Malisiewicz, and Andrew
+    Rabinovich. SuperGlue: Learning Feature Matching with Graph Neural
+    Networks. In CVPR, 2020. https://arxiv.org/abs/1911.11763
+
     """
 
+    def __init__(
+            self,
+            descriptor_dim: int = 256,
+            keypoint_encoder_sizes: List[int] = [32, 64, 128, 256],
+            gnn_layers_types: List[str] = ['self', 'cross'] * 9,
+            num_heads: int = 4,
+            sinkhorn_iterations: int = 100,
+            matching_threshold: float = 0.2,
+    ):
+        super().__init__()
+
+        self.descriptor_dim = descriptor_dim
+        self.keypoint_encoder_sizes = keypoint_encoder_sizes
+        self.gnn_layers_types = gnn_layers_types
+        self.num_heads = num_heads
+        self.sinkhorn_iterations = sinkhorn_iterations
+        self.match_threshold = matching_threshold
+
+        self.keypoint_encoder = SuperGlueKeypointEncoder(
+            feature_dim=self.descriptor_dim,
+            layers_sizes=self.keypoint_encoder_sizes
+        )
+
+        self.gnn = SuperGlueAttentionalGNN(
+            feature_dim=self.descriptor_dim,
+            num_heads=self.num_heads,
+            layers_types=self.gnn_layers_types
+        )
+
+        self.final_proj = nn.Conv1d(
+            self.descriptor_dim, self.descriptor_dim,
+            kernel_size=1, bias=True)
+
+        bin_score = torch.nn.Parameter(torch.tensor(1.))
+        self.register_parameter('bin_score', bin_score)
+
+    def forward(
+            self,
+            keypoints_0: Tensor,
+            scores_0: Tensor,
+            descriptors_0: Tensor,
+            keypoints_1: Tensor,
+            scores_1: Tensor,
+            descriptors_1: Tensor
+    ):
+        """Run SuperGlue on a pair of keypoints and descriptors"""
+        if keypoints_0.shape[1] == 0 or keypoints_1.shape[1] == 0:  # no keypoints
+            shape0, shape1 = keypoints_0.shape[:-1], keypoints_1.shape[:-1]
+            return tuple([
+                keypoints_0.new_full(shape0, -1, dtype=torch.int),
+                keypoints_1.new_full(shape1, -1, dtype=torch.int),
+                keypoints_0.new_zeros(shape0),
+                keypoints_1.new_zeros(shape1)
+            ])
+
+        # Keypoint MLP encoder.
+        descriptors_0 = descriptors_0 + self.keypoint_encoder(keypoints_0, scores_0)
+        descriptors_1 = descriptors_1 + self.keypoint_encoder(keypoints_1, scores_1)
+
+        # Multi-layer Transformer network.
+        descriptors_0, descriptors_1 = self.gnn(descriptors_0, descriptors_1)
+
+        # Final MLP projection.
+        projected_descriptors_0, projected_descriptors_1 = self.final_proj(descriptors_0), self.final_proj(descriptors_1)
+
+        # Compute matching descriptor distance.
+        scores = torch.einsum('bdn,bdm->bnm', projected_descriptors_0, projected_descriptors_1)
+        scores = scores / self.descriptor_dim ** .5
+
+        # Run the optimal transport.
+        scores = self.log_optimal_transport(
+            scores,
+            self.bin_score,
+            iters=self.sinkhorn_iterations
+        )
+
+        # Get the matches with score above "match_threshold".
+        max0, max1 = scores[:, :-1, :-1].max(2), scores[:, :-1, :-1].max(1)
+        indices0, indices1 = max0.indices, max1.indices
+        mutual0 = self.arange_like(indices0, 1)[None] == indices1.gather(1, indices0)
+        mutual1 = self.arange_like(indices1, 1)[None] == indices0.gather(1, indices1)
+        zero = scores.new_tensor(0)
+        matching_scores_0 = torch.where(mutual0, max0.values.exp(), zero)
+        matching_scores_1 = torch.where(mutual1, matching_scores_0.gather(1, indices1), zero)
+        valid0 = mutual0 & (matching_scores_0 > self.match_threshold)
+        valid1 = mutual1 & valid0.gather(1, indices1)
+        matches_0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
+        matches_1 = torch.where(valid1, indices1, indices1.new_tensor(-1))
+
+        return matches_0, matches_1, matching_scores_0, matching_scores_1
+
+    @staticmethod
+    def normalize_keypoints(
+            kpts: Tensor,
+            height: int,
+            width: int
+    ):
+        """ Normalize keypoints locations based on image image_shape"""
+        one = kpts.new_tensor(1)
+        size = torch.stack([one * width, one * height])[None]
+        center = size / 2
+        scaling = size.max(1, keepdim=True).values * 0.7
+        return (kpts - center[:, None, :]) / scaling[:, None, :]
+
+    @staticmethod
+    def log_sinkhorn_iterations(
+            Z: torch.Tensor,
+            log_mu: torch.Tensor,
+            log_nu: torch.Tensor,
+            iters: int
+    ) -> torch.Tensor:
+        """ Perform Sinkhorn Normalization in Log-space for stability"""
+        u, v = torch.zeros_like(log_mu), torch.zeros_like(log_nu)
+        for _ in range(iters):
+            u = log_mu - torch.logsumexp(Z + v.unsqueeze(1), dim=2)
+            v = log_nu - torch.logsumexp(Z + u.unsqueeze(2), dim=1)
+        return Z + u.unsqueeze(2) + v.unsqueeze(1)
+
+    @staticmethod
+    def log_optimal_transport(scores: torch.Tensor, alpha: torch.Tensor, iters: int) -> torch.Tensor:
+        """ Perform Differentiable Optimal Transport in Log-space for stability"""
+        b, m, n = scores.shape
+        one = scores.new_tensor(1)
+        ms, ns = (m * one).to(scores), (n * one).to(scores)
+
+        bins0 = alpha.expand(b, m, 1)
+        bins1 = alpha.expand(b, 1, n)
+        alpha = alpha.expand(b, 1, 1)
+
+        couplings = torch.cat([torch.cat([scores, bins0], -1),
+                               torch.cat([bins1, alpha], -1)], 1)
+
+        norm = - (ms + ns).log()
+        log_mu = torch.cat([norm.expand(m), ns.log()[None] + norm])
+        log_nu = torch.cat([norm.expand(n), ms.log()[None] + norm])
+        log_mu, log_nu = log_mu[None].expand(b, -1), log_nu[None].expand(b, -1)
+
+        Z = SuperGlueModel.log_sinkhorn_iterations(couplings, log_mu, log_nu, iters)
+        Z = Z - norm  # multiply probabilities by M+N
+        return Z
+
+    @staticmethod
+    def arange_like(x, dim: int):
+        return x.new_ones(x.shape[dim]).cumsum(0) - 1
+
+
+class SuperGlueModel(PreTrainedModel):
     config_class = SuperGlueConfig
-    base_model_prefix = "superglue"
-    main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
 
-    def _init_weights(self, module):
-        if isinstance(module, nn.Conv2d):
-            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-        elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
-            nn.init.constant_(module.weight, 1)
-            nn.init.constant_(module.bias, 0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, SuperGlueEncoder):
-            module.gradient_checkpointing = value
-
-
-SUPERGLUE_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`SuperGlueConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-SUPERGLUE_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`SuperGlueImageProcessor.__call__`] for details.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare SuperGlue model outputting raw features without any specific head on top.",
-    SUPERGLUE_START_DOCSTRING,
-)
-# Copied from transformers.models.resnet.modeling_resnet.ResNetModel with RESNET->SUPERGLUE,ResNet->SuperGlue
-class SuperGlueModel(SuperGluePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.config = config
-        self.embedder = SuperGlueEmbeddings(config)
-        self.encoder = SuperGlueEncoder(config)
-        self.pooler = nn.AdaptiveAvgPool2d((1, 1))
-        # Initialize weights and apply final processing
-        self.post_init()
+        self.superglue = SuperGlue(
+            descriptor_dim=config.descriptor_dim,
+            keypoint_encoder_sizes=config.keypoint_encoder_sizes,
+            gnn_layers_types=config.gnn_layers_types,
+            sinkhorn_iterations=config.sinkhorn_iterations,
+            matching_threshold=config.matching_threshold,
+        )
 
-    @add_start_docstrings_to_model_forward(SUPERGLUE_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
     def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
-    ) -> BaseModelOutputWithPoolingAndNoAttention:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+            self,
+            image0_keypoints: Tensor = None,
+            image0_scores: Tensor = None,
+            image0_descriptors: Tensor = None,
+            image1_keypoints: Tensor = None,
+            image1_scores: Tensor = None,
+            image1_descriptors: Tensor = None,
+            return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, ImageMatchingOutput]:
+        image0_matches, image1_matches, image0_matching_scores, image1_matching_scores = self.model(
+            image0_keypoints=image0_keypoints,
+            image0_scores=image0_scores,
+            image0_descriptors=image0_descriptors,
+            image1_keypoints=image1_keypoints,
+            image1_scores=image1_scores,
+            image1_descriptors=image1_descriptors,
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        embedding_output = self.embedder(pixel_values)
-
-        encoder_outputs = self.encoder(
-            embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict
-        )
-
-        last_hidden_state = encoder_outputs[0]
-
-        pooled_output = self.pooler(last_hidden_state)
-
         if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+            return image0_matches, image1_matches, image0_matching_scores, image1_matching_scores
 
-        return BaseModelOutputWithPoolingAndNoAttention(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-        )
-
-
-@add_start_docstrings(
-    """
-    SuperGlue Model with an image classification head on top (a linear layer on top of the pooled features), e.g. for
-    ImageNet.
-    """,
-    SUPERGLUE_START_DOCSTRING,
-)
-# Copied from transformers.models.resnet.modeling_resnet.ResNetForImageClassification with RESNET->SUPERGLUE,ResNet->SuperGlue,resnet->superglue
-class SuperGlueForImageClassification(SuperGluePreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.superglue = SuperGlueModel(config)
-        # classification head
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity(),
-        )
-        # initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(SUPERGLUE_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutputWithNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
-    )
-    def forward(
-        self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> ImageClassifierOutputWithNoAttention:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.superglue(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-
-        pooled_output = outputs.pooler_output if return_dict else outputs[1]
-
-        logits = self.classifier(pooled_output)
-
-        loss = None
-
-        if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return (loss,) + output if loss is not None else output
-
-        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
-
-
-@add_start_docstrings(
-    """
-    SuperGlue backbone, to be used with frameworks like DETR and MaskFormer.
-    """,
-    SUPERGLUE_START_DOCSTRING,
-)
-# Copied from transformers.models.resnet.modeling_resnet.ResNetBackbone with RESNET->SUPERGLUE,ResNet->SuperGlue,microsoft/resnet-50->magicleap/superglue
-class SuperGlueBackbone(SuperGluePreTrainedModel, BackboneMixin):
-    def __init__(self, config):
-        super().__init__(config)
-        super()._init_backbone(config)
-
-        self.num_features = [config.embedding_size] + config.hidden_sizes
-        self.embedder = SuperGlueEmbeddings(config)
-        self.encoder = SuperGlueEncoder(config)
-
-        # initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(SUPERGLUE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BackboneOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
-    ) -> BackboneOutput:
-        """
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from transformers import AutoImageProcessor, AutoBackbone
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> processor = AutoImageProcessor.from_pretrained("magicleap/superglue")
-        >>> model = AutoBackbone.from_pretrained(
-        ...     "magicleap/superglue", out_features=["stage1", "stage2", "stage3", "stage4"]
-        ... )
-
-        >>> inputs = processor(image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> feature_maps = outputs.feature_maps
-        >>> list(feature_maps[-1].shape)
-        [1, 2048, 7, 7]
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
-        embedding_output = self.embedder(pixel_values)
-
-        outputs = self.encoder(embedding_output, output_hidden_states=True, return_dict=True)
-
-        hidden_states = outputs.hidden_states
-
-        feature_maps = ()
-        for idx, stage in enumerate(self.stage_names):
-            if stage in self.out_features:
-                feature_maps += (hidden_states[idx],)
-
-        if not return_dict:
-            output = (feature_maps,)
-            if output_hidden_states:
-                output += (outputs.hidden_states,)
-            return output
-
-        return BackboneOutput(
-            feature_maps=feature_maps,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=None,
+        return ImageMatchingOutput(
+            image0_matches=image0_matches,
+            image1_matches=image1_matches,
+            image0_matching_scores=image0_matching_scores,
+            image1_matching_scores=image1_matching_scores,
         )
