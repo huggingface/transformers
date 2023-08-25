@@ -596,5 +596,6 @@ end
         self.assertEqual(input_ids, tokenizer_fast.encode(PROMPTS[0], add_special_tokens=False))
 
         prefix, suffix = PROMPTS[0].split("<FILL_ME>")
+        input_ids = tokenizer.encode(PROMPTS[0])
         self.assertEqual(input_ids, tokenizer.encode(prefix, suffix=suffix))
-        self.assertEqual(input_ids, tokenizer_fast.encode(prefix, suffix=suffix))
+        self.assertEqual(tokenizer.encode(prefix, suffix=suffix), tokenizer_fast.encode(prefix, suffix=suffix))

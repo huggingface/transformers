@@ -164,33 +164,6 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
             single=single, pair=pair, special_tokens=special_tokens
         )
 
-    def set_infilling_processor(self, mode, suffix_first=False):
-        if mode is False:
-            self._tokenizer.normalizer = normalizers.Sequence(
-                [
-                    normalizers.Prepend(prepend="▁"),
-                    normalizers.Replace(pattern=" ", content="▁"),
-                ]
-            )
-            self.update_post_processor()
-
-        self._tokenizer.normalizer = normalizers.Replace(pattern=" ", content="▁")
-        pair = [self.bos_token] if self.add_bos_token else []
-        special_tokens = [(self.bos_token, self.bos_token_id)] if self.add_bos_token else []
-        if suffix_first:
-            # format as " <PRE> <SUF>{suf} <MID> {pre}"
-            pair += [self.prefix_token, self.suffix_token, "$A", self.middle_token, "$B"]
-            special_tokens += [(self.prefix_token, self.prefix_id),(self.suffix_token, self.suffix_id),(self.middle_token, self.middle_id)]
-        else:
-            # format as " <PRE> {pre} <SUF>{suf} <MID>"
-            pair += [self.prefix_token, "$A", self.suffix_token, "$B", self.middle_token]
-            special_tokens += [(self.prefix_token, self.prefix_id),(self.suffix_token, self.suffix_id),(self.middle_token, self.middle_id)]
-        
-        if self.add_eos_token:
-            pair += [self.eos_token]
-            special_tokens += [(self.eos_token, self.eos_token_id)]
-        self._tokenizer.post_processor = processors.TemplateProcessing(single="$A",pair=pair,special_tokens=special_tokens)
-
     @property
     def prefix_token(self):
         return self._prefix_token
@@ -249,8 +222,36 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
         self._add_bos_token = value
         self.update_post_processor()
 
+    def set_infilling_processor(self, mode, suffix_first=False):
+        if mode is False:
+            self._tokenizer.normalizer = normalizers.Sequence(
+                [
+                    normalizers.Prepend(prepend="▁"),
+                    normalizers.Replace(pattern=" ", content="▁"),
+                ]
+            )
+            self.update_post_processor()
+
+        self._tokenizer.normalizer = normalizers.Replace(pattern=" ", content="▁")
+        pair = [self.bos_token] if self.add_bos_token else []
+        special_tokens = [(self.bos_token, self.bos_token_id)] if self.add_bos_token else []
+        if suffix_first:
+            # format as " <PRE> <SUF>{suf} <MID> {pre}"
+            pair += [self.prefix_token, self.suffix_token, "$A", self.middle_token, "$B"]
+            special_tokens += [(self.prefix_token, self.prefix_id),(self.suffix_token, self.suffix_id),(self.middle_token, self.middle_id)]
+        else:
+            # format as " <PRE> {pre} <SUF>{suf} <MID>"
+            pair += [self.prefix_token, "$A", self.suffix_token, "$B", self.middle_token]
+            special_tokens += [(self.prefix_token, self.prefix_id),(self.suffix_token, self.suffix_id),(self.middle_token, self.middle_id)]
+        
+        if self.add_eos_token:
+            pair += [self.eos_token]
+            special_tokens += [(self.eos_token, self.eos_token_id)]
+        self._tokenizer.post_processor = processors.TemplateProcessing(single="$A",pair=pair,special_tokens=special_tokens)
+
     def encode_plus(self, text, text_pair=None, suffix_first=False, **kwargs):
         # hack to make sure the input is pre-process but outside rust
+        text_pair = kwargs.pop("suffix", text_pair)
         if self.fill_token in text and text_pair is None:
             text, text_pair = text.split(self.fill_token)
 
@@ -264,7 +265,10 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
                 " the `prefix_id, middle_id, suffix_id` must all be initialized. Current"
                 f" values : {self.prefix_id, self.middle_id, self.suffix_id}"
             )
+            
 
+        self._add_bos_token = kwargs.pop("add_special_tokens", False)
+        self._add_eos_token = kwargs.pop("add_special_tokens", False)
         self.set_infilling_processor(True, suffix_first=suffix_first)
         kwargs["add_special_tokens"] = True
         return super().encode_plus(" " + text, text_pair=text_pair, **kwargs)
