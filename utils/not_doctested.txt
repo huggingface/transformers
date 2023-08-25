@@ -371,7 +371,6 @@ src/transformers/generation/beam_constraints.py
 src/transformers/generation/beam_search.py
 src/transformers/generation/flax_logits_process.py
 src/transformers/generation/flax_utils.py
-src/transformers/generation/logits_process.py
 src/transformers/generation/stopping_criteria.py
 src/transformers/generation/streamers.py
 src/transformers/generation/tf_logits_process.py
