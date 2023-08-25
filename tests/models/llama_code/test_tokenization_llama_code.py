@@ -547,17 +547,17 @@ class LlamaIntegrationTest(unittest.TestCase):
 
     def test_infilling_tokenization(self):
         PROMPTS = [
-        '''def remove_non_ascii(s: str) -> str:
+            '''def remove_non_ascii(s: str) -> str:
     """ <FILL_ME>
     return result
 ''',
-        """# Installation instructions:
+            """# Installation instructions:
     ```bash
 <FILL_ME>
     ```
 This downloads the LLaMA inference code and installs the repository as a local pip package.
 """,
-        """class InterfaceManagerFactory(AbstractManagerFactory):
+            """class InterfaceManagerFactory(AbstractManagerFactory):
     def __init__(<FILL_ME>
 def main():
     factory = InterfaceManagerFactory(start=datetime.now())
@@ -565,7 +565,7 @@ def main():
     for i in range(10):
         managers.append(factory.build(id=i))
 """,
-        """/-- A quasi-prefunctoid is 1-connected iff all its etalisations are 1-connected. -/
+            """/-- A quasi-prefunctoid is 1-connected iff all its etalisations are 1-connected. -/
 theorem connected_iff_etalisation [C D : precategoroid] (P : quasi_prefunctoid C D) :
 π₁ P = 0 ↔ <FILL_ME> = 0 :=
 begin
@@ -582,7 +582,7 @@ split,
 }
 end
 """,
-    ]
+        ]
         tokenizer = LlamaCodeTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
         tokenizer_fast = LlamaCodeTokenizerFast.from_pretrained("codellama/CodeLlama-7b-hf")
 
@@ -591,11 +591,10 @@ end
         prefix, suffix = PROMPTS[0].split("<FILL_ME>")
         self.assertEqual(formatted_prompt, tokenizer.tokenize(prefix, suffix))
         self.assertEqual(formatted_prompt, tokenizer_fast.tokenize(prefix, suffix))
-        
+
         input_ids = tokenizer.encode(PROMPTS[0])
         self.assertEqual(input_ids, tokenizer_fast.encode(PROMPTS[0]))
-        
+
         prefix, suffix = PROMPTS[0].split("<FILL_ME>")
-        self.assertEqual(formatted_prompt, tokenizer.encode(prefix, suffix = suffix))
-        self.assertEqual(formatted_prompt, tokenizer_fast.encode(prefix, suffix = suffix))
-        
+        self.assertEqual(formatted_prompt, tokenizer.encode(prefix, suffix=suffix))
+        self.assertEqual(formatted_prompt, tokenizer_fast.encode(prefix, suffix=suffix))

@@ -524,13 +524,12 @@ end
         generated_ids = model.generate(processed_text)
         EXPECTED_IDS = torch.tensor([])
         self.assertEqual(generated_ids, EXPECTED_IDS)
-        
+
         EXPECTED_INFILLING = ""
-        infilling = tokenizer.decode_infilling(infilling,prompt_id_length=len(processed_text))
+        infilling = tokenizer.decode_infilling(generated_ids, prompt_id_length=len(processed_text))
         self.assertEqual(infilling, EXPECTED_INFILLING)
-        
+
         prefix, suffix = self.PROMPTS[0].split("<FILL>")
         processed_text = tokenizer.encode(prefix, suffix=suffix)
         EXPECTED_TEXT = '<s> <PRE> def remove_non_ascii(s: str) -> str:\n"""  <SUF>\nreturn result\n <MID>'
         self.assertEqual(processed_text, EXPECTED_TEXT)
-
