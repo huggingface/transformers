@@ -23,7 +23,7 @@ of text (as is the case with a standard language model), the model instead conti
 of one or more **messages**, each of which includes a **role** as well as message text.
 
 All LLMs, including models fine-tuned for chat, operate on linear sequences of tokens, and do not intrinsically
-have special handling for 'roles'. This means that role information is usually injected by adding control tokens
+have special handling for roles. This means that role information is usually injected by adding control tokens
 between messages, to indicate both the message boundary and the relevant roles.
 
 Unfortunately, there isn't (yet!) a standard for which tokens to use, and so different models have been trained
@@ -50,7 +50,7 @@ Let's make this concrete with a quick example using the `BlenderBot` model:
 ```
 
 Notice how the entire chat is condensed into a single string. If we use `tokenize=True`, which is the default setting,
-that string will also be tokenized for us. Blenderbot's *chat template* is very simple, however. To see a more complex
+that string will also be tokenized for us. Blenderbot's chat template is very simple, however. To see a more complex
 template in action, let's use the `meta-llama/Llama-2-7b-chat-hf` model. Note that this model has gated access, so you
 will have to request access on the repo if you want to run this code yourself:
 
@@ -85,7 +85,10 @@ default template for that model class is used instead. Let's take a look at the 
 "{% for message in messages %}{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}{{ message['content'] }}{% if not loop.last %}{{ '  ' }}{% endif %}{% endfor %}{{ eos_token }}"
 ```
 
-That's kind of intimidating. Let's add some newlines and indentation to make it more readable:
+That's kind of intimidating. Let's add some newlines and indentation to make it more readable. Note that
+we remove the first newline after each block as well as any preceding whitespace before a block by default, using the 
+Jinja `trim_blocks` and `lstrip_blocks` flags. This means that you can write your templates with indentations and 
+newlines and still have them function correctly!
 
 ```
 {% for message in messages %}
@@ -157,11 +160,19 @@ above and add "[ASST]" and "[/ASST]" to assistant messages:
 {% endfor %}
 ```
 
-Now, simply set `tokenizer.chat_template = template_string`. Next time you use `tokenizer.apply_chat_template`, it will
-use your new template! This attribute will be saved with the tokenizer, so you can use `tokenizer.save_pretrained()` and 
-`tokenizer.push_to_hub()` to upload your new template to the Hub. `apply_chat_template()` is called by the
-`ConversationalPipeline` class, so once you set the correct chat template, your model will automatically become
-compatible with `ConversationalPipeline`.
+Now, simply set the `tokenizer.chat_template` attribute. Next time you use `tokenizer.apply_chat_template`, it will
+use your new template! This attribute will be saved with the tokenizer, so you can use `tokenizer.save_pretrained()` or 
+`tokenizer.push_to_hub()` to upload your new template to the Hub:
+
+```python
+template = tokenizer.chat_template
+template = template.replace("SYS", "SYSTEM")  # Change the system token
+tokenizer.chat_template = template  # Set the new template
+tokenizer.push_to_hub("model_name")  # Upload your new template to the Hub!
+```
+
+The method `apply_chat_template()` which uses your chat template is called by the `ConversationalPipeline` class, so 
+once you set the correct chat template, your model will automatically become compatible with `ConversationalPipeline`.
 
 ## What template should I use?
 
@@ -169,8 +180,5 @@ When setting the template for a model that's already been trained for chat, you 
 exactly matches the message formatting that the model saw during training, or else you will probably experience
 performance degradation. If you're training a model from scratch, or fine-tuning a base language model for chat,
 you can do whatever you like! LLMs are smart enough to learn to handle lots of different formats. You also are not
-limited to the "user", "system" and "assistant" roles - although these are the standard for chat and we recommend
-using them when it makes sense, particularly if you want your model to operate well with `ConversationalPipeline`,
-your particular application may have different roles. For example, you might have multiple user roles, like "user1",
-"user2" and so on.
-
+limited to the "user", "system" and "assistant" roles - although these are the standard for chat, and we recommend
+using them when it makes sense, particularly if you want your model to operate well with `ConversationalPipeline`.

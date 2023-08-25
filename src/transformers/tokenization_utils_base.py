@@ -1675,7 +1675,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if chat_template is None:
             chat_template = self.chat_template
 
-        jinja_env = ImmutableSandboxedEnvironment()
+        jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
         compiled_template = jinja_env.from_string(chat_template)
         rendered = compiled_template.render(messages=conversation, **self.special_tokens_map)
         if tokenize:
