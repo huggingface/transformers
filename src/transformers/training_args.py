@@ -1647,7 +1647,7 @@ class TrainingArguments:
             # - must be run before the model is created.
             if not is_accelerate_available():
                 raise ValueError("--deepspeed requires Accelerate to be installed: `pip install accelerate`.")
-            from transformers.deepspeed import HfTrainerDeepSpeedConfig
+            from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
             # will be used later by the Trainer
             # note: leave self.deepspeed unmodified in case a user relies on it not to be modified)
