@@ -283,6 +283,8 @@
         title: CANINE
       - local: model_doc/codegen
         title: CodeGen
+      - local: model_doc/code_llama
+        title: CodeLlama
       - local: model_doc/convbert
         title: ConvBERT
       - local: model_doc/cpm
