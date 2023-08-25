@@ -1464,7 +1464,7 @@ INIT_TOKENIZER_DOCSTRING = r"""
             The side on which the model should have truncation applied. Should be selected between ['right', 'left'].
             Default value is picked from the class attribute of the same name.
         chat_template (`str`, *optional*):
-            A Jinja template string that will be used to format lists of chat messages. See 
+            A Jinja template string that will be used to format lists of chat messages. See
             https://huggingface.co/docs/transformers/chat_templating for a full description.
         model_input_names (`List[string]`, *optional*):
             The list of inputs accepted by the forward pass of the model (like `"token_type_ids"` or
