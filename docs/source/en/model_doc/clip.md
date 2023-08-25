@@ -184,6 +184,11 @@ The resource should ideally demonstrate something new instead of duplicating an 
 [[autodoc]] FlaxCLIPTextModel
     - __call__
 
+## FlaxCLIPTextModelWithProjection
+
+[[autodoc]] FlaxCLIPTextModelWithProjection
+    - __call__
+
 ## FlaxCLIPVisionModel
 
 [[autodoc]] FlaxCLIPVisionModel
