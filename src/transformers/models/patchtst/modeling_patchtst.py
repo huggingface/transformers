@@ -1079,23 +1079,14 @@ class PatchTSTForForecastingOutput(ModelOutput):
 
 
 class ForecastHead(nn.Module):
-    def __init__(self,
-                individual: bool,
-                n_vars: int,
-                d_model: int,
-                num_patch: int,
-                forecast_len: int,
-                head_dropout: float = 0.,
-                use_cls_token: bool = False,
-                pooling: str = None,
-                ):
+    def __init__(self, config: PatchTSTConfig):
         super().__init__()
 
-        self.individual = individual
-        self.n_vars = n_vars
-        self.use_cls_token = use_cls_token
-        self.pooling = pooling
-        head_dim = d_model if pooling else d_model * num_patch
+        self.individual = config.individual
+        self.n_vars = config.input_size
+        self.use_cls_token = config.use_cls_token
+        self.pooling = config.pooling
+        head_dim = config.d_model if self.pooling else config.d_model * config.num_patch
 
         if self.individual:
             self.linears = nn.ModuleList()
@@ -1103,15 +1094,15 @@ class ForecastHead(nn.Module):
             self.flattens = nn.ModuleList()
             for i in range(self.n_vars):
                 self.flattens.append(nn.Flatten(start_dim=2))
-                self.linears.append(nn.Linear(head_dim, forecast_len))
+                self.linears.append(nn.Linear(head_dim, config.prediction_length))
                 self.dropouts.append(nn.Dropout(head_dropout) if head_dropout > 0 else nn.Identity()
                                      )
         else:
             self.flatten = nn.Flatten(start_dim=2)
-            self.linear = nn.Linear(head_dim, forecast_len)
-            self.dropout = nn.Dropout(head_dropout) if head_dropout > 0 else nn.Identity()
+            self.linear = nn.Linear(head_dim, config.prediction_length)
+            self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         """
         x: [bs x nvars x num_patch x d_model]
             or [bs x nvars x (num_patch+1) x d_model] if use cls_token
@@ -1150,9 +1141,6 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
     # PatchTST model + classification head
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
-
-        self.patching = Patch(config.context_length, patch_len=config.patch_length, stride=config.stride)
-
         self.model = PatchTSTModel(config)
         self.head = ForecastHead(config)
         self.loss = nn.MSELoss(reduction='mean')
@@ -1175,90 +1163,4 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
             forecast_outputs=y_hat,
             hidden_states=model_output.hidden_states
         )
-
-
-if __name__ == "__main__":
-
-    from transformers import Trainer, TrainingArguments
-    from torch.utils.data import Dataset
-    from transformers import AutoModel, AutoConfig
-    import numpy as np
-
-    class AssetDataset(Dataset):
-        def __init__(self, x, y, seq_len=10, pred_len=10, is_pred=False):
-            self.seq_len = seq_len
-            self.x = x
-            self.y = y
-            self.is_pred = is_pred
-            self.pred_len = pred_len
-
-        def __getitem__(self, index):
-            s_begin = index
-            s_end = s_begin + self.seq_len
-            r_begin = s_end - 1
-            r_end = s_end + self.pred_len
-
-            seq_x = self.x[s_begin:s_end]
-            seq_y = np.array(self.y[r_begin])
-            if self.is_pred:
-                seq_y = self.x[s_end:r_end]
-
-            return {'past_values': seq_x, 'future_values': seq_y}
-
-        def __len__(self):
-            if self.is_pred:
-                return len(self.x) - self.seq_len - self.pred_len + 1
-            return len(self.x) - self.seq_len + 1
-
-    n_classes = 3
-    bs = 200
-    n_features = 20
-    pred_len = 7
-    x = torch.randn(bs, n_features)
-    y = torch.randint(low=0, high=n_classes, size=(bs, 1))[:, 0]
-    valid_asset_ds = train_asset_ds = AssetDataset(x, y, seq_len=10, pred_len=pred_len, is_pred=False)
-    config = PatchTSTConfig(
-        input_size=n_features,
-        num_classes=n_classes,
-        context_length=10,
-        patch_length=5,
-        stride=5,
-        batch_size=50,
-        standardscale=None,  # 'bysample'
-        context_points=10,
-        encoder_layers=12,
-        encoder_attention_heads=8,
-        d_model=256,
-        encoder_ffn_dim=1024,
-        dropout=0.2,
-        fc_dropout=0,
-        r=0.4,
-        prediction_length=pred_len,
-    )
-    # model = PatchTSTForPretraining(config)
-    # model = PatchTSTForPrediction(config)
-    model = PatchTSTForClassification(config)
-    training_args = TrainingArguments(
-        output_dir='./save_model/',
-        num_train_epochs=1,
-        per_device_train_batch_size=5,
-        per_device_eval_batch_size=5,
-        report_to=[],
-        save_strategy='no',
-        remove_unused_columns=False,
-        no_cuda=True
-    )
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_asset_ds,
-        eval_dataset=valid_asset_ds
-    )
-    trainer.train()
-    trainer.save_model('./save_model')
-    # AutoConfig.register("patchtst", PatchTSTConfig)
-    AutoModel.register(PatchTSTConfig, PatchTSTForClassification)
-    config = AutoConfig.from_pretrained('./save_model')
-    model = AutoModel.from_pretrained('./save_model', config=config)
-    print(model)
 

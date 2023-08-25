@@ -35,7 +35,7 @@ if is_torch_available():
     import torch
 
     from transformers.models.patchtst.configuration_patchtst import PatchTSTConfig
-    from transformers.models.patchtst.modeling_patchtst import PatchTSTForPrediction, PatchTSTForPretraining, PatchTSTModel, ChannelAttentionPatchTSTEncoder
+    from transformers.models.patchtst.modeling_patchtst import PatchTSTForPrediction, PatchTSTForForecasting, PatchTSTForPretraining, PatchTSTModel, ChannelAttentionPatchTSTEncoder
 
 
 @require_torch
@@ -155,8 +155,8 @@ class PatchTSTModelTester:
 
 @require_torch
 class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (PatchTSTModel, PatchTSTForPrediction, PatchTSTForPretraining) if is_torch_available() else ()
-    all_generative_model_classes = (PatchTSTForPrediction, PatchTSTForPretraining) if is_torch_available() else ()
+    all_model_classes = (PatchTSTModel, PatchTSTForPrediction, PatchTSTForForecasting, PatchTSTForPretraining) if is_torch_available() else ()
+    all_generative_model_classes = (PatchTSTForPrediction, PatchTSTForForecasting, PatchTSTForPretraining) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": PatchTSTModel} if is_torch_available() else {}
     is_encoder_decoder = False
     test_pruning = False
