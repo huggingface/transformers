@@ -1081,6 +1081,11 @@ JIEBA_IMPORT_ERROR = """
 jieba`. Please note that you may need to restart your runtime after installation.
 """
 
+PEFT_IMPORT_ERROR = """
+{0} requires the peft library but it was not found in your environment. You can install it with pip: `pip install
+peft`. Please note that you may need to restart your runtime after installation.
+"""
+
 JINJA_IMPORT_ERROR = """
 {0} requires the jinja library but it was not found in your environment. You can install it with pip: `pip install
 jinja2`. Please note that you may need to restart your runtime after installation.
