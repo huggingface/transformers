@@ -272,13 +272,14 @@ class Kosmos2Processor(ProcessorMixin):
                         )
 
         def preprocess_single(text, image, bboxes):
+            text = text.strip()
             if image is not None:
                 # Add `<image> ... (fake) image tokens ... </image>`
                 text = f"{img_info} {text}"
 
-                # Add `<object> <patch_idx_xxxx> <patch_idx_yyy> </object>` after `<phrase> phrase text </phrase>`
-                text = self._insert_patch_index_tokens(text, bboxes)
-                text = self._add_remove_spaces_around_tag_tokens(text)
+            # Add `<object> <patch_idx_xxxx> <patch_idx_yyy> </object>` after `<phrase> phrase text </phrase>`
+            text = self._insert_patch_index_tokens(text, bboxes)
+            text = self._add_remove_spaces_around_tag_tokens(text)
 
             return text
 
@@ -418,6 +419,8 @@ class Kosmos2Processor(ProcessorMixin):
         )
         pattern = "|".join(tag_tokens)
         splits = re.split(rf"({pattern})", text)
+        # Don't keep the leading and trailing space if any
+        splits = [split for idx, split in enumerate(splits) if not (idx in [0, len(splits) - 1] and split == "")]
 
         output = ""
         prev_str_in_targets = False
