@@ -175,28 +175,21 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
             self.update_post_processor()
 
         self._tokenizer.normalizer = normalizers.Replace(pattern=" ", content="▁")
+        pair = [self.bos_token] if self.add_bos_token else []
+        special_tokens = [(self.bos_token, self.bos_token_id)] if self.add_bos_token else []
         if suffix_first:
             # format as " <PRE> <SUF>{suf} <MID> {pre}"
-            self._tokenizer.post_processor = processors.TemplateProcessing(
-                single="$A",
-                pair=[self.prefix_token, self.suffix_token, "$A", self.middle_token, "$B"],
-                special_tokens=[
-                    (self.prefix_token, self.prefix_id),
-                    (self.suffix_token, self.suffix_id),
-                    (self.middle_token, self.middle_id),
-                ],
-            )
+            pair += [self.prefix_token, self.suffix_token, "$A", self.middle_token, "$B"]
+            special_tokens += [(self.prefix_token, self.prefix_id),(self.suffix_token, self.suffix_id),(self.middle_token, self.middle_id)]
         else:
             # format as " <PRE> {pre} <SUF>{suf} <MID>"
-            self._tokenizer.post_processor = processors.TemplateProcessing(
-                single="$A",
-                pair=[self.prefix_token, "$A", self.suffix_token, "$B", self.middle_token],
-                special_tokens=[
-                    (self.prefix_token, self.prefix_id),
-                    (self.suffix_token, self.suffix_id),
-                    (self.middle_token, self.middle_id),
-                ],
-            )
+            pair += [self.prefix_token, "$A", self.suffix_token, "$B", self.middle_token]
+            special_tokens += [(self.prefix_token, self.prefix_id),(self.suffix_token, self.suffix_id),(self.middle_token, self.middle_id)]
+        
+        if self.add_eos_token:
+            pair += [self.eos_token]
+            special_tokens += [(self.eos_token, self.eos_token_id)]
+        self._tokenizer.post_processor = processors.TemplateProcessing(single="$A",pair=pair,special_tokens=special_tokens)
 
     @property
     def prefix_token(self):
