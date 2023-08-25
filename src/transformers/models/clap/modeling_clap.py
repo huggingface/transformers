@@ -1955,8 +1955,8 @@ class ClapModel(ClapPreTrainedModel):
         text_config = config.text_config
         audio_config = config.audio_config
 
-        self.logit_scale_a = nn.Parameter(torch.log(torch.tensor(config.logit_scale_init_value)))
-        self.logit_scale_t = nn.Parameter(torch.log(torch.tensor(config.logit_scale_init_value)))
+        self.logit_scale_a = nn.Parameter(torch.tensor(math.log(config.logit_scale_init_value)))
+        self.logit_scale_t = nn.Parameter(torch.tensor(math.log(config.logit_scale_init_value)))
 
         self.projection_dim = config.projection_dim
 
