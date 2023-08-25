@@ -58,12 +58,12 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
 
     This uses notably ByteFallback and no normalization.
 
-    ```
-    from transformers import CodeLlamaTokenizerFast
+    ```python
+    >>> from transformers import CodeLlamaTokenizerFast
 
-    tokenizer = CodeLlamaTokenizerFast.from_pretrained("hf-internal-testing/llama-tokenizer")
-    tokenizer.encode("Hello this is a test")
-    >>> [1, 15043, 445, 338, 263, 1243]
+    >>> tokenizer = CodeLlamaTokenizerFast.from_pretrained("hf-internal-testing/llama-tokenizer")
+    >>> tokenizer.encode("Hello this is a test")
+    [1, 15043, 445, 338, 263, 1243]
     ```
 
     If you want to change the `bos_token` or the `eos_token`, make sure to specify them when initializing the model, or
@@ -346,7 +346,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
     def _build_conversation_input_ids(self, conversation: "Conversation"):
-        """Builds the input ids for a conversation.
+        r"""Builds the input ids for a conversation.
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
         the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
         ```
@@ -361,7 +361,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
 
         >>> Conversation(
         ...     "<<SYS>>\n Only answer with emojis, and charades\n<</SYS>>\n\nHow can I build a house in 10 septs?"
-        ... )
+        ... )  # doctest: +IGNORE_RESULT
         ```
         Args:
             conversation (`Conversation`):
