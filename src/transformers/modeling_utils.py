@@ -35,10 +35,9 @@ from torch.nn import CrossEntropyLoss
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
-from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, GenerationMixin
-from .lib_integrations import PeftAdapterMixin
+from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -663,7 +662,7 @@ def _load_state_dict_into_meta_model(
     #   they won't get loaded.
 
     if is_quantized:
-        from .utils.bitsandbytes import set_module_quantized_tensor_to_device
+        from .integrations import set_module_quantized_tensor_to_device
 
     error_msgs = []
 
@@ -2960,7 +2959,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             keep_in_fp32_modules = []
 
         if load_in_8bit or load_in_4bit:
-            from .utils.bitsandbytes import get_keys_to_not_convert, replace_with_bnb_linear
+            from .integrations import get_keys_to_not_convert, replace_with_bnb_linear
 
             llm_int8_skip_modules = quantization_config.llm_int8_skip_modules
             load_in_8bit_fp32_cpu_offload = quantization_config.llm_int8_enable_fp32_cpu_offload
@@ -3278,7 +3277,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     ):
         is_safetensors = False
         if is_quantized:
-            from .utils.bitsandbytes import set_module_quantized_tensor_to_device
+            from .integrations import set_module_quantized_tensor_to_device
 
         if device_map is not None and "disk" in device_map.values():
             archive_file = (
