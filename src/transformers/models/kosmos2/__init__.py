@@ -22,7 +22,7 @@ _import_structure = {
         "KOSMOS2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Kosmos2Config"
      ],
-    "processing_clip": ["Kosmos2Processor"],
+    "processing_kosmos2": ["Kosmos2Processor"],
 }
 
 try:
