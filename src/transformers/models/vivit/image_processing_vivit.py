@@ -34,6 +34,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     infer_channel_dimension_format,
+    is_scaled_image,
     is_valid_image,
     to_numpy_array,
     valid_images,
@@ -257,6 +258,12 @@ class VivitImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
 
+        if is_scaled_image(image) and do_rescale:
+            logger.warning_once(
+                "It looks like you are trying to rescale already rescaled images. If the input"
+                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+            )
+
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
@@ -299,7 +306,8 @@ class VivitImageProcessor(BaseImageProcessor):
 
         Args:
             videos (`ImageInput`):
-                Video frames to preprocess.
+                Video frames to preprocess. Expects a single or batch of video frames with pixel values ranging from 0
+                to 255. If passing in frames with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
