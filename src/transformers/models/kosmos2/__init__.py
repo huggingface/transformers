@@ -60,6 +60,8 @@ else:
         "Kosmos2ForConditionalGeneration",
         "Kosmos2Model",
         "Kosmos2PreTrainedModel",
+        "Kosmos2TextModel",
+        "Kosmos2VisionModel",
     ]
 
 
@@ -101,6 +103,8 @@ if TYPE_CHECKING:
             KOSMOS2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Kosmos2ForConditionalGeneration,
             Kosmos2Model,
+            Kosmos2PreTrainedModel,
+            Kosmos2VisionModel,
             Kosmos2PreTrainedModel,
         )
 
