@@ -107,7 +107,7 @@ If you would like to share your fine-tuned model with a specific generation conf
 ```python
 >>> from transformers import AutoModelForCausalLM, GenerationConfig
 
->>> model = AutoModelForCausalLM.from_pretrained("my_account/my_model")
+>>> model = AutoModelForCausalLM.from_pretrained("my_account/my_model")  # doctest: +SKIP
 >>> generation_config = GenerationConfig(
 ...     max_new_tokens=50, do_sample=True, top_k=50, eos_token_id=model.config.eos_token_id
 ... )
@@ -133,7 +133,8 @@ one for summarization with beam search). You must have the right Hub permissions
 ...     pad_token=model.config.pad_token_id,
 ... )
 
->>> translation_generation_config.save_pretrained("t5-small", "translation_generation_config.json", push_to_hub=True)
+>>> # Tip: add `push_to_hub=True` to push to the Hub
+>>> translation_generation_config.save_pretrained("t5-small", "translation_generation_config.json")
 
 >>> # You could then use the named generation config file to parameterize generation
 >>> generation_config = GenerationConfig.from_pretrained("t5-small", "translation_generation_config.json")
