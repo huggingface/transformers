@@ -19,7 +19,7 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, LlamaConfig, is_torch_available, set_seed
+from transformers import LlamaConfig, is_torch_available, set_seed
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -31,7 +31,13 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaTokenizer
+    from transformers import (
+        LlamaCodeTokenizer,
+        LlamaForCausalLM,
+        LlamaForSequenceClassification,
+        LlamaModel,
+        LlamaTokenizer,
+    )
 
 
 class LlamaModelTester:
@@ -495,7 +501,7 @@ end
     # @slow
     def test_model_7b_logits(self):
         model = LlamaForCausalLM.from_pretrained("codellama/CodeLlama-7b-hf")
-        tokenizer = AutoTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
+        tokenizer = LlamaCodeTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
         # Tokenize and prepare for the model a list of sequences or a list of pairs of sequences.
         # meaning by default this supports passing splitted list of inputs
         processed_text = tokenizer.batch_decode(tokenizer(self.PROMPTS)["input_ids"], add_special_tokens=False)
@@ -520,13 +526,24 @@ end
         ]
         # fmt: on
         self.assertEqual(processed_text_suffix_first, EXPECTED_TEXT)
+        input_ids = tokenizer(self.PROMPTS[0], return_tensors="pt")["input_ids"]
+        generated_ids = model.generate(input_ids)
+        # fmt: off
+        EXPECTED_IDS = torch.tensor(
+            [
+                [
+                    1, 822, 3349, 29918, 5464, 29918, 294, 18869, 29898, 29879,
+                    29901, 851, 29897, 1599, 851, 29901, 13, 15945, 29908, 529,
+                    3738, 2208, 29918, 2303, 29958, 13, 2457, 1121, 13, 15945
+                ]
+            ]
+        )
+        # fmt: on
 
-        generated_ids = model.generate(processed_text)
-        EXPECTED_IDS = torch.tensor([])
         self.assertEqual(generated_ids, EXPECTED_IDS)
 
         EXPECTED_INFILLING = ""
-        infilling = tokenizer.decode_infilling(generated_ids, prompt_id_length=len(processed_text))
+        infilling = tokenizer.decode_infilling(generated_ids, prompt_id_length=len(input_ids))
         self.assertEqual(infilling, EXPECTED_INFILLING)
 
         prefix, suffix = self.PROMPTS[0].split("<FILL>")

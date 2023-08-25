@@ -227,7 +227,7 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
         self._add_bos_token = value
         self.update_post_processor()
 
-    def set_infilling_processor(self, reset, suffix_first=False, add_special_tokens = True):
+    def set_infilling_processor(self, reset, suffix_first=False, add_special_tokens=True):
         if reset:
             self._tokenizer.normalizer = normalizers.Sequence(
                 [
@@ -280,7 +280,7 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
                 f" values : {self.prefix_id, self.middle_id, self.suffix_id}"
             )
 
-        self.set_infilling_processor(False, suffix_first=suffix_first, add_special_tokens = add_special_tokens)
+        self.set_infilling_processor(False, suffix_first=suffix_first, add_special_tokens=add_special_tokens)
         tokens = super().encode_plus(" " + text, text_pair=text_pair, add_special_tokens=True, **kwargs)
         self.set_infilling_processor(True)
         return tokens
@@ -291,12 +291,14 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
         passed as an argument to make sur only the infilling output is produced.
         """
         # cut at EOT ( though generate should stop generating when EOT is reached no?)
+        if not isinstance(tokens[0], list):
+            tokens = [tokens]
         eot_idx = tokens.index(self.eot_id) if self.eot_id in tokens else len(tokens)
         sequence = tokens[:eot_idx]
         prompt_id_length = prompt_id_length if prompt_id_length is not None else 0
         outputs = {
-            "full_text": super().decode(sequence[:eot_idx], **kwargs),
-            "infilling": super().decode(sequence[prompt_id_length:eot_idx], **kwargs),
+            "full_text": super().batch_decode(sequence[:, :eot_idx], **kwargs),
+            "infilling": super().batch_decode(sequence[:, prompt_id_length:eot_idx], **kwargs),
             "infilling_token_ids": sequence,
         }
         return outputs
