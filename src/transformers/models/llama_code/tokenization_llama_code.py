@@ -23,7 +23,7 @@ import sentencepiece as spm
 
 from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import logging, requires_backend
+from ...utils import logging, requires_backends
 
 
 if TYPE_CHECKING:
@@ -138,7 +138,7 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
         clean_up_tokenization_spaces=False,
         **kwargs,
     ):
-        requires_backend(self, "protobuf")
+        requires_backends(self, "protobuf")
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
