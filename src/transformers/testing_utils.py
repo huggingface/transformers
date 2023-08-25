@@ -2114,3 +2114,43 @@ class HfDoctestModule(Module):
         for test in finder.find(module, module.__name__):
             if test.examples:  # skip empty doctests and cuda
                 yield DoctestItem.from_parent(self, name=test.name, runner=runner, dtest=test)
+
+def _device_agnostic_dispatch(device, dispatch_table, *args, **kwargs):
+    if device not in dispatch_table:
+        return dispatch_table["default"](*args, **kwargs)
+
+    fn = dispatch_table[device]
+    
+    # TODO: intended to be noop, but are there any edge cases to this approach?
+    # eg. returning None when expected at least something.
+    if fn is None:
+        return 
+    return fn(*args, **kwargs)
+
+# TODO: insert new entries in dicts from environment variable spec
+
+ACCELERATOR_MANUAL_SEED = {
+    'cuda': torch.cuda.manual_seed,
+    'default': torch.manual_seed
+}
+
+def accelerator_manual_seed(device, seed):
+    return _device_agnostic_dispatch(device, ACCELERATOR_MANUAL_SEED, seed)
+
+
+ACCELERATOR_EMPTY_CACHE = {
+    'cuda': torch.cuda.empty_cache,
+    'cpu': None
+}
+
+def accelerator_empty_cache(device):
+    return _device_agnostic_dispatch(device, ACCELERATOR_EMPTY_CACHE)
+
+
+ACCELERATOR_DEVICE_COUNT = {
+    'cuda': torch.cuda.device_count(),
+    'cpu': lambda: 0
+}
+
+def accelerator_device_count(device):
+    return _device_agnostic_dispatch(device, ACCELERATOR_DEVICE_COUNT)
