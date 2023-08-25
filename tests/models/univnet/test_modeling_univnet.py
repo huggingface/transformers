@@ -18,9 +18,9 @@ import random
 import unittest
 
 import numpy as np
-
 from datasets import Audio, load_dataset
-from transformers import UnivNetGanConfig, UnivNetFeatureExtractor
+
+from transformers import UnivNetFeatureExtractor, UnivNetGanConfig
 from transformers.testing_utils import (
     is_torch_available,
     require_torch,
@@ -212,7 +212,7 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         super().tearDown()
         gc.collect()
         torch.cuda.empty_cache()
-    
+
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", Audio(sampling_rate=24000))
@@ -288,7 +288,7 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         expected_slice = np.array([-0.3276, -0.5504, -0.3484, 0.3574, -0.0373, -0.1826, -0.4880, -0.6431, -0.5162])
 
         self.assertTrue(np.allclose(waveform_slice, expected_slice, atol=5e-4))
-    
+
     @unittest.skip(reason="Haven't gotten expected features yet")
     @torch.no_grad()
     def test_integration(self):
