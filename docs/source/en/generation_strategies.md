@@ -218,10 +218,9 @@ The two main parameters that enable and control the behavior of contrastive sear
 
 >>> outputs = model.generate(**inputs, penalty_alpha=0.6, top_k=4, max_new_tokens=100)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Hugging Face Company is a family owned and operated business. \
-We pride ourselves on being the best in the business and our customer service is second to none.\
-\n\nIf you have any questions about our products or services, feel free to contact us at any time.\
- We look forward to hearing from you!']
+['Hugging Face Company is a family owned and operated business. We pride ourselves on being the best
+in the business and our customer service is second to none.\n\nIf you have any questions about our
+products or services, feel free to contact us at any time. We look forward to hearing from you!']
 ```
 
 ### Multinomial sampling
