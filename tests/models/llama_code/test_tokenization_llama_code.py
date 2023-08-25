@@ -52,6 +52,7 @@ if is_torch_available():
 @require_tokenizers
 class LlamaCodeTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = LlamaCodeTokenizer
+    rust_tokenizer_class = LlamaCodeTokenizerFast
     test_rust_tokenizer = False
     test_sentencepiece = True
     from_pretrained_kwargs = {}
@@ -137,7 +138,7 @@ class LlamaCodeTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     def test_save_pretrained(self):
-        self.tokenizers_list += (self.rust_tokenizer_class, "hf-internal-testing/llama-code-tokenizer", {})
+        self.tokenizers_list = [(self.rust_tokenizer_class, "hf-internal-testing/llama-code-tokenizer", {}), (self.tokenizer_class, "hf-internal-testing/llama-code-tokenizer", {})]
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
