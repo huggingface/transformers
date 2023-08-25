@@ -77,7 +77,7 @@ producing highly repetitive results.
 You can override any `generation_config` by passing the parameters and their values directly to the [`generate`] method:
 
 ```python
->>> my_model.generate(**inputs, num_beams=4, do_sample=True)
+>>> my_model.generate(**inputs, num_beams=4, do_sample=True)  # doctest: +SKIP
 ```
 
 Even if the default decoding strategy mostly works for your task, you can still tweak a few things. Some of the
