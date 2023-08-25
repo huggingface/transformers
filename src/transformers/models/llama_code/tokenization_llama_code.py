@@ -219,14 +219,14 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
                 " the `prefix_id, middle_id, suffix_id` must all be initialized. Current"
                 f" values : {self.prefix_id, self.middle_id, self.suffix_id}"
             )
-        suffix_tokens = self._tokenizer(suffix)  # make sure LlamaCode sp model does not mess up
+        suffix_tokens = self._tokenize(suffix)  # make sure LlamaCode sp model does not mess up
 
         if suffix_first:
             # format as " <PRE> <SUF>{suf} <MID> {pre}"
-            return [self.prefix_token, self.suffix_token] + suffix_tokens + [self.mid_token] + prefix_tokens
+            return [self.prefix_token, self.suffix_token] + suffix_tokens + [self.middle_token] + prefix_tokens
         else:
             # format as " <PRE> {pre} <SUF>{suf} <MID>"
-            return [self.prefix_token] + prefix_tokens + [self.suffix_token] + suffix_tokens + [self.mid_token]
+            return [self.prefix_token] + prefix_tokens + [self.suffix_token] + suffix_tokens + [self.middle_token]
 
     def decode_infilling(self, tokens, prompt_id_length=None, **kwargs):
         """

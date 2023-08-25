@@ -237,7 +237,7 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
         prefix_tokens = super().tokenize(
             prefix
         )  # prefix has an extra `SPIECE_UNDERLINE` added by the backend tokenizer
-        if len(suffix) < 1:
+        if suffix is None or len(suffix) < 1:
             return prefix_tokens
 
         if None in (self.prefix_id, self.middle_id, self.suffix_id):
@@ -246,6 +246,7 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
                 " the `prefix_id, middle_id, suffix_id` must all be initialized. Current"
                 f" values : {self.prefix_id, self.middle_id, self.suffix_id}"
             )
+
         suffix_tokens = super().tokenize(suffix)  # make sure LlamaCode sp model does not mess up
 
         if suffix_first:
