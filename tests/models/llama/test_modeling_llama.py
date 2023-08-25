@@ -20,7 +20,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import LlamaConfig, is_torch_available, set_seed
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device, require_torch_gpu
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -497,10 +497,10 @@ split,
 end
 """,
     ]
-
-    # @slow
+    @require_torch_gpu
+    @slow
     def test_model_7b_logits(self):
-        model = LlamaForCausalLM.from_pretrained("codellama/CodeLlama-7b-hf")
+        model = LlamaForCausalLM.from_pretrained("codellama/CodeLlama-7b-hf").to(torch_device)
         tokenizer = LlamaCodeTokenizer.from_pretrained("codellama/CodeLlama-7b-hf")
         # Tokenize and prepare for the model a list of sequences or a list of pairs of sequences.
         # meaning by default this supports passing splitted list of inputs
@@ -523,13 +523,13 @@ end
             '<PRE> <SUF>\ndef main():\n    factory = InterfaceManagerFactory(start=datetime.now())\n    managers = []\n    for i in range(10):\n        managers.append(factory.build(id=i))\n <MID> class InterfaceManagerFactory(AbstractManagerFactory):\n    def __init__(',
             '<PRE> <SUF> = 0 :=\nbegin\nsplit,\n{ intros h f,\n    rw pi_1_etalisation at h,\n    simp [h],\n    refl\n},\n{ intro h,\n    have := @quasi_adjoint C D P,\n    simp [←pi_1_etalisation, this, h],\n    refl\n}\nend\n <MID> /-- A quasi-prefunctoid is 1-connected iff all its etalisations are 1-connected. -/\ntheorem connected_iff_etalisation [C D : precategoroid] (P : quasi_prefunctoid C D) :\nπ₁ P = 0 ↔ '
         ]
-        EXPECTED_IDS = torch.tensor([[1, 32007, 822, 3349, 29918, 5464, 29918, 294, 18869, 29898,29879, 29901, 851, 29897, 1599, 851, 29901, 13, 1678, 9995,29871, 32008, 13, 1678, 736, 1121, 13, 32009, 15941]])
+        EXPECTED_IDS = torch.tensor([[    1, 32007, 822, 3349, 29918, 5464, 29918, 294, 18869, 29898,29879, 29901, 851, 29897, 1599, 851, 29901, 13, 1678, 9995, 29871, 32008, 13, 1678, 736, 1121, 13, 32009, 15941, 1661, 29899, 28599, 2687, 4890, 515, 263, 1347, 29889, 13, 13, 1678, 826, 3174, 29901, 13, 4706, 269, 29901, 450, 1347, 304, 3349, 1661, 29899, 28599, 2687, 4890, 515, 29889, 13, 13, 1678, 16969, 29901, 13, 4706, 450, 1347, 411, 1661, 29899, 28599, 2687, 4890, 6206, 29889, 13, 1678, 9995, 13, 1678, 1121, 353, 5124, 13, 1678, 363, 274, 297, 269, 29901, 13, 4706, 565, 4356, 29898, 29883, 29897, 529, 29871, 29896, 29906, 29947, 29901, 13, 9651, 1121, 4619, 274, 32010, 2]])
         # fmt: on
         self.assertEqual(processed_text_suffix_first, EXPECTED_TEXT)
         input_ids = tokenizer(self.PROMPTS[0], return_tensors="pt")["input_ids"]
-        generated_ids = model.generate(input_ids, max_new_tokens = 128)
+        generated_ids = model.generate(input_ids.to(torch_device), max_new_tokens = 128, max_new_tokens = 128)
         torch.testing.assert_close(generated_ids, EXPECTED_IDS)
 
-        EXPECTED_INFILLING = ['<s> <PRE> def remove_non_ascii(s: str) -> str:\n    """  <SUF>\n    return result\n <MID>Remove']
+        EXPECTED_INFILLING = ['<s> <PRE> def remove_non_ascii(s: str) -> str:\n    """  <SUF>\n    return result\n <MID>Remove non-ASCII characters from a string.\n\n    Args:\n        s: The string to remove non-ASCII characters from.\n\n    Returns:\n        The string with non-ASCII characters removed.\n    """\n    result = ""\n    for c in s:\n        if ord(c) < 128:\n            result += c <EOT></s>']
         infilling = tokenizer.batch_decode(generated_ids)
         self.assertEqual(infilling, EXPECTED_INFILLING)
