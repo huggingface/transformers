@@ -681,6 +681,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("data2vec-text", "data2vec"),
         ("data2vec-vision", "data2vec"),
         ("donut-swin", "donut"),
+        ("kosmos-2", "kosmos2"),
         ("maskformer-swin", "maskformer"),
         ("xclip", "x_clip"),
     ]
