@@ -16,6 +16,13 @@ class FlaxForcedEOSTokenLogitsProcessor(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+class FlaxForceTokensLogitsProcessor(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxGenerationMixin(metaclass=DummyObject):
     _backends = ["flax"]
 
@@ -51,6 +58,20 @@ class FlaxMinLengthLogitsProcessor(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+class FlaxSuppressTokensAtBeginLogitsProcessor(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxSuppressTokensLogitsProcessor(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxTemperatureLogitsWarper(metaclass=DummyObject):
     _backends = ["flax"]
 
@@ -66,6 +87,13 @@ class FlaxTopKLogitsWarper(metaclass=DummyObject):
 
 
 class FlaxTopPLogitsWarper(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
+class FlaxWhisperTimeStampLogitsProcessor(metaclass=DummyObject):
     _backends = ["flax"]
 
     def __init__(self, *args, **kwargs):
