@@ -903,7 +903,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
     )
     def forward(
         self,
-        pixel_values,
+        pixel_values: torch.FloatTensor,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
