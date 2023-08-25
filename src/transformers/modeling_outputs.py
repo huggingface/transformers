@@ -1751,3 +1751,14 @@ class MaskedImageModelingOutput(ModelOutput):
             FutureWarning,
         )
         return self.reconstruction
+
+@dataclass
+class ImageMatchingOutput(ModelOutput):
+    """
+    TODO documentation
+    """
+
+    image0_matches: torch.FloatTensor = None
+    image1_matches: torch.FloatTensor = None
+    image0_matching_scores: torch.FloatTensor = None
+    image1_matching_scores: torch.FloatTensor = None
