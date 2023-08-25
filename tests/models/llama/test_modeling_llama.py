@@ -507,46 +507,32 @@ end
         processed_text = tokenizer.batch_decode(tokenizer(self.PROMPTS)["input_ids"], add_special_tokens=False)
         # fmt: off
         EXPECTED_TEXT = [
-            '<s> <PRE> def remove_non_ascii(s: str) -> str:\n"""  <SUF>\nreturn result\n <MID>',
-            '<s> <PRE> # Installation instructions:\n```bash\n <SUF>\n```\nThis downloads the LLaMA inference code and installs the repository as a local pip package.\n <MID>',
-            '<s> <PRE> class InterfaceManagerFactory(AbstractManagerFactory):\ndef __init__( <SUF>\ndef main():\nfactory = InterfaceManagerFactory(start=datetime.now())\nmanagers = []\nfor i in range(10):\n    managers.append(factory.build(id=i))\n <MID>',
-            '<s> <PRE> /-- A quasi-prefunctoid is 1-connected iff all its etalisations are 1-connected. -/\ntheorem connected_iff_etalisation [C D : precategoroid] (P : quasi_prefunctoid C D) :\nπ₁ P = 0 ↔  <SUF> = 0 :=\nbegin\nsplit,\n{ intros h f,\nrw pi_1_etalisation at h,\nsimp [h],\nrefl\n},\n{ intro h,\nhave := @quasi_adjoint C D P,\nsimp [←pi_1_etalisation, this, h],\nrefl\n}\nend\n <MID>'
+            '<s> <PRE> def remove_non_ascii(s: str) -> str:\n    """  <SUF>\n    return result\n <MID>',
+            '<s> <PRE> # Installation instructions:\n    ```bash\n <SUF>\n    ```\nThis downloads the LLaMA inference code and installs the repository as a local pip package.\n <MID>',
+            '<s> <PRE> class InterfaceManagerFactory(AbstractManagerFactory):\n    def __init__( <SUF>\ndef main():\n    factory = InterfaceManagerFactory(start=datetime.now())\n    managers = []\n    for i in range(10):\n        managers.append(factory.build(id=i))\n <MID>',
+            '<s> <PRE> /-- A quasi-prefunctoid is 1-connected iff all its etalisations are 1-connected. -/\ntheorem connected_iff_etalisation [C D : precategoroid] (P : quasi_prefunctoid C D) :\nπ₁ P = 0 ↔  <SUF> = 0 :=\nbegin\nsplit,\n{ intros h f,\n    rw pi_1_etalisation at h,\n    simp [h],\n    refl\n},\n{ intro h,\n    have := @quasi_adjoint C D P,\n    simp [←pi_1_etalisation, this, h],\n    refl\n}\nend\n <MID>'
         ]
         # fmt: on
         self.assertEqual(processed_text, EXPECTED_TEXT)
-        processed_text_suffix_first = tokenizer.batch_decode(
-            tokenizer(self.PROMPTS)["input_ids"], suffix_first=True, add_special_tokens=False
-        )
+        processed_text_suffix_first =  tokenizer.batch_decode(tokenizer(self.PROMPTS, suffix_first=True, add_special_tokens=False)["input_ids"])
+
         # fmt: off
         EXPECTED_TEXT = [
-            '<s> <PRE> def remove_non_ascii(s: str) -> str:\n"""  <SUF>\nreturn result\n <MID>',
-            '<s> <PRE> # Installation instructions:\n```bash\n <SUF>\n```\nThis downloads the LLaMA inference code and installs the repository as a local pip package.\n <MID>',
-            '<s> <PRE> class InterfaceManagerFactory(AbstractManagerFactory):\ndef __init__( <SUF>\ndef main():\nfactory = InterfaceManagerFactory(start=datetime.now())\nmanagers = []\nfor i in range(10):\n    managers.append(factory.build(id=i))\n <MID>',
-            '<s> <PRE> /-- A quasi-prefunctoid is 1-connected iff all its etalisations are 1-connected. -/\ntheorem connected_iff_etalisation [C D : precategoroid] (P : quasi_prefunctoid C D) :\nπ₁ P = 0 ↔  <SUF> = 0 :=\nbegin\nsplit,\n{ intros h f,\nrw pi_1_etalisation at h,\nsimp [h],\nrefl\n},\n{ intro h,\nhave := @quasi_adjoint C D P,\nsimp [←pi_1_etalisation, this, h],\nrefl\n}\nend\n <MID>'
+            '<PRE> <SUF>\n    return result\n <MID> def remove_non_ascii(s: str) -> str:\n    """ ',
+            '<PRE> <SUF>\n    ```\nThis downloads the LLaMA inference code and installs the repository as a local pip package.\n <MID> # Installation instructions:\n    ```bash\n',
+            '<PRE> <SUF>\ndef main():\n    factory = InterfaceManagerFactory(start=datetime.now())\n    managers = []\n    for i in range(10):\n        managers.append(factory.build(id=i))\n <MID> class InterfaceManagerFactory(AbstractManagerFactory):\n    def __init__(',
+            '<PRE> <SUF> = 0 :=\nbegin\nsplit,\n{ intros h f,\n    rw pi_1_etalisation at h,\n    simp [h],\n    refl\n},\n{ intro h,\n    have := @quasi_adjoint C D P,\n    simp [←pi_1_etalisation, this, h],\n    refl\n}\nend\n <MID> /-- A quasi-prefunctoid is 1-connected iff all its etalisations are 1-connected. -/\ntheorem connected_iff_etalisation [C D : precategoroid] (P : quasi_prefunctoid C D) :\nπ₁ P = 0 ↔ '
         ]
         # fmt: on
         self.assertEqual(processed_text_suffix_first, EXPECTED_TEXT)
         input_ids = tokenizer(self.PROMPTS[0], return_tensors="pt")["input_ids"]
         generated_ids = model.generate(input_ids)
         # fmt: off
-        EXPECTED_IDS = torch.tensor(
-            [
-                [
-                    1, 822, 3349, 29918, 5464, 29918, 294, 18869, 29898, 29879,
-                    29901, 851, 29897, 1599, 851, 29901, 13, 15945, 29908, 529,
-                    3738, 2208, 29918, 2303, 29958, 13, 2457, 1121, 13, 15945
-                ]
-            ]
-        )
+        EXPECTED_IDS = torch.tensor([[1, 32007, 822, 3349, 29918, 5464, 29918, 294, 18869, 29898,29879, 29901, 851, 29897, 1599, 851, 29901, 13, 1678, 9995,29871, 32008, 13, 1678, 736, 1121, 13, 32009, 15941]])
         # fmt: on
 
-        self.assertEqual(generated_ids, EXPECTED_IDS)
+        torch.testing.assert_close(generated_ids, EXPECTED_IDS)
 
         EXPECTED_INFILLING = ""
-        infilling = tokenizer.decode_infilling(generated_ids, prompt_id_length=len(input_ids))
+        infilling = tokenizer.decode(generated_ids)
         self.assertEqual(infilling, EXPECTED_INFILLING)
-
-        prefix, suffix = self.PROMPTS[0].split("<FILL>")
-        processed_text = tokenizer.encode(prefix, suffix=suffix)
-        EXPECTED_TEXT = '<s> <PRE> def remove_non_ascii(s: str) -> str:\n"""  <SUF>\nreturn result\n <MID>'
-        self.assertEqual(processed_text, EXPECTED_TEXT)

@@ -285,24 +285,6 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
         self.set_infilling_processor(True)
         return tokens
 
-    def decode_infilling(self, tokens, prompt_id_length=None, **kwargs):
-        """
-        Utility function to use when decoding the output of `model.generate()`. The `prompt_id_length` need to be
-        passed as an argument to make sur only the infilling output is produced.
-        """
-        # cut at EOT ( though generate should stop generating when EOT is reached no?)
-        if not isinstance(tokens[0], list):
-            tokens = [tokens]
-        eot_idx = tokens.index(self.eot_id) if self.eot_id in tokens else len(tokens)
-        sequence = tokens[:eot_idx]
-        prompt_id_length = prompt_id_length if prompt_id_length is not None else 0
-        outputs = {
-            "full_text": super().batch_decode(sequence[:, :eot_idx], **kwargs),
-            "infilling": super().batch_decode(sequence[:, prompt_id_length:eot_idx], **kwargs),
-            "infilling_token_ids": sequence,
-        }
-        return outputs
-
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
