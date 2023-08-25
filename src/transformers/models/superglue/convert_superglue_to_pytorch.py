@@ -1,200 +1,121 @@
-# coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""Convert SuperGlue checkpoints from timm."""
-
-
 import argparse
-import json
-from dataclasses import dataclass, field
-from functools import partial
-from pathlib import Path
-from typing import List
 
-import timm
 import torch
-import torch.nn as nn
-from huggingface_hub import hf_hub_download
-from torch import Tensor
 
-from transformers import AutoImageProcessor, SuperGlueConfig, SuperGlueForImageClassification
-from transformers.utils import logging
+from transformers import SuperGlueConfig, SuperGlueModel
 
 
-logging.set_verbosity_info()
-logger = logging.get_logger()
+def get_superglue_config(checkpoint_url):
+    config = SuperGlueConfig(
+        descriptor_dim=256,
+        keypoint_encoder_sizes=[32, 64, 128, 256],
+        gnn_layers_types=['self', 'cross'] * 9,
+        sinkhorn_iterations=100,
+        matching_threshold=0.2,
+    )
+
+    if "superglue_indoor" in checkpoint_url:
+        config.model_version = "indoor"
+    elif "superglue_outdoor" in checkpoint_url:
+        config.model_version = "outdoor"
+
+    return config
 
 
-@dataclass
-class Tracker:
-    module: nn.Module
-    traced: List[nn.Module] = field(default_factory=list)
-    handles: list = field(default_factory=list)
+def create_rename_keys(config, state_dict):
+    rename_keys = []
 
-    def _forward_hook(self, m, inputs: Tensor, outputs: Tensor):
-        has_not_submodules = len(list(m.modules())) == 1 or isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d)
-        if has_not_submodules:
-            self.traced.append(m)
+    # keypoint encoder
+    n = len([3] + config.keypoint_encoder_sizes + [config.descriptor_dim])
+    for i in range(n * 2 + 1):
+        if ((i + 1) % 3) != 0:
+            rename_keys.append((f"kenc.encoder.{i}.weight", f"keypoint_encoder.encoder.layers.{i}.weight"))
+            rename_keys.append((f"kenc.encoder.{i}.bias", f"keypoint_encoder.encoder.layers.{i}.bias"))
+            if ((i % 3) - 1) == 0:
+                rename_keys.append((f"kenc.encoder.{i}.running_mean",
+                                    f"keypoint_encoder.encoder.layers.{i}.running_mean"))
+                rename_keys.append((f"kenc.encoder.{i}.running_var",
+                                    f"keypoint_encoder.encoder.layers.{i}.running_var"))
+                rename_keys.append((f"kenc.encoder.{i}.num_batches_tracked",
+                                    f"keypoint_encoder.encoder.layers.{i}.num_batches_tracked"))
 
-    def __call__(self, x: Tensor):
-        for m in self.module.modules():
-            self.handles.append(m.register_forward_hook(self._forward_hook))
-        self.module(x)
-        [x.remove() for x in self.handles]
-        return self
-
-    @property
-    def parametrized(self):
-        # check the len of the state_dict keys to see if we have learnable params
-        return list(filter(lambda x: len(list(x.state_dict().keys())) > 0, self.traced))
-
-
-@dataclass
-class ModuleTransfer:
-    src: nn.Module
-    dest: nn.Module
-    verbose: int = 0
-    src_skip: List = field(default_factory=list)
-    dest_skip: List = field(default_factory=list)
-
-    def __call__(self, x: Tensor):
-        """
-        Transfer the weights of `self.src` to `self.dest` by performing a forward pass using `x` as input. Under the
-        hood we tracked all the operations in both modules.
-        """
-        dest_traced = Tracker(self.dest)(x).parametrized
-        src_traced = Tracker(self.src)(x).parametrized
-
-        src_traced = list(filter(lambda x: type(x) not in self.src_skip, src_traced))
-        dest_traced = list(filter(lambda x: type(x) not in self.dest_skip, dest_traced))
-
-        if len(dest_traced) != len(src_traced):
-            raise Exception(
-                f"Numbers of operations are different. Source module has {len(src_traced)} operations while"
-                f" destination module has {len(dest_traced)}."
-            )
-
-        for dest_m, src_m in zip(dest_traced, src_traced):
-            dest_m.load_state_dict(src_m.state_dict())
-            if self.verbose == 1:
-                print(f"Transfered from={src_m} to={dest_m}")
+    # gnn
+    for i in range(len(config.gnn_layers_types)):
+        rename_keys.append((f"gnn.layers.{i}.attn.merge.weight", f"gnn.layers.{i}.attention.merge.weight"))
+        rename_keys.append((f"gnn.layers.{i}.attn.merge.bias", f"gnn.layers.{i}.attention.merge.bias"))
+        for j in range(3):
+            rename_keys.append((f"gnn.layers.{i}.attn.proj.{j}.weight", f"gnn.layers.{i}.attention.proj.{j}.weight"))
+            rename_keys.append((f"gnn.layers.{i}.attn.proj.{j}.bias", f"gnn.layers.{i}.attention.proj.{j}.bias"))
+        for j in range(len([config.descriptor_dim * 2, config.descriptor_dim * 2, config.descriptor_dim]) + 1):
+            if j != 2 :
+                rename_keys.append((f"gnn.layers.{i}.mlp.{j}.weight", f"gnn.layers.{i}.mlp.layers.{j}.weight"))
+                rename_keys.append((f"gnn.layers.{i}.mlp.{j}.bias", f"gnn.layers.{i}.mlp.layers.{j}.bias"))
+                if j == 1:
+                    rename_keys.append((f"gnn.layers.{i}.mlp.{j}.running_mean",
+                                        f"gnn.layers.{i}.mlp.layers.{j}.running_mean"))
+                    rename_keys.append((f"gnn.layers.{i}.mlp.{j}.running_var",
+                                        f"gnn.layers.{i}.mlp.layers.{j}.running_var"))
+                    rename_keys.append((f"gnn.layers.{i}.mlp.{j}.num_batches_tracked",
+                                        f"gnn.layers.{i}.mlp.layers.{j}.num_batches_tracked"))
+    return rename_keys
 
 
-def convert_weight_and_push(name: str, config: SuperGlueConfig, save_directory: Path, push_to_hub: bool = True):
-    print(f"Converting {name}...")
-    with torch.no_grad():
-        from_model = timm.create_model(name, pretrained=True).eval()
-        our_model = SuperGlueForImageClassification(config).eval()
-        module_transfer = ModuleTransfer(src=from_model, dest=our_model)
-        x = torch.randn((1, 3, 224, 224))
-        module_transfer(x)
-
-    assert torch.allclose(from_model(x), our_model(x).logits), "The model logits don't match the original one."
-
-    checkpoint_name = f"superglue{'-'.join(name.split('superglue'))}"
-    print(checkpoint_name)
-
-    if push_to_hub:
-        our_model.push_to_hub(
-            repo_path_or_name=save_directory / checkpoint_name,
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
-
-        # we can use the convnext one
-        image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-base-224-22k-1k")
-        image_processor.push_to_hub(
-            repo_path_or_name=save_directory / checkpoint_name,
-            commit_message="Add image processor",
-            use_temp_dir=True,
-        )
-
-        print(f"Pushed {checkpoint_name}")
+# Copied from transformers.models.dinov2.convert_dinov2_to_hf
+def rename_key(dct, old, new):
+    val = dct.pop(old)
+    dct[new] = val
 
 
-def convert_weights_and_push(save_directory: Path, model_name: str = None, push_to_hub: bool = True):
-    filename = "imagenet-1k-id2label.json"
-    num_labels = 1000
-    expected_shape = (1, num_labels)
+@torch.no_grad()
+def convert_superglue_checkpoint(checkpoint_url, pytorch_dump_folder_path, save_model, push_to_hub):
+    """
+    TODO docs
+    """
 
-    repo_id = "huggingface/label-files"
-    num_labels = num_labels
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
-    id2label = {int(k): v for k, v in id2label.items()}
+    print("Downloading original model from checkpoint...")
+    config = get_superglue_config(checkpoint_url)
 
-    id2label = id2label
-    label2id = {v: k for k, v in id2label.items()}
+    original_state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)
+    print(original_state_dict)
 
-    ImageNetPreTrainedConfig = partial(SuperGlueConfig, num_labels=num_labels, id2label=id2label, label2id=label2id)
+    print("Converting model parameters...")
+    rename_keys = create_rename_keys(config, original_state_dict)
+    new_state_dict = original_state_dict.copy()
+    for src, dest in rename_keys:
+        rename_key(new_state_dict, src, dest)
 
-    names_to_config = {
-        "superglue18": ImageNetPreTrainedConfig(
-            depths=[2, 2, 2, 2], hidden_sizes=[64, 128, 256, 512], layer_type="basic"
-        ),
-        "superglue26": ImageNetPreTrainedConfig(
-            depths=[2, 2, 2, 2], hidden_sizes=[256, 512, 1024, 2048], layer_type="bottleneck"
-        ),
-        "superglue34": ImageNetPreTrainedConfig(
-            depths=[3, 4, 6, 3], hidden_sizes=[64, 128, 256, 512], layer_type="basic"
-        ),
-        "superglue50": ImageNetPreTrainedConfig(
-            depths=[3, 4, 6, 3], hidden_sizes=[256, 512, 1024, 2048], layer_type="bottleneck"
-        ),
-        "superglue101": ImageNetPreTrainedConfig(
-            depths=[3, 4, 23, 3], hidden_sizes=[256, 512, 1024, 2048], layer_type="bottleneck"
-        ),
-        "superglue152": ImageNetPreTrainedConfig(
-            depths=[3, 8, 36, 3], hidden_sizes=[256, 512, 1024, 2048], layer_type="bottleneck"
-        ),
-    }
+    for key in new_state_dict.copy().keys():
+        val = new_state_dict.pop(key)
+        if not key.startswith("superglue"):
+            key = "superglue." + key
+        new_state_dict[key] = val
 
-    if model_name:
-        convert_weight_and_push(model_name, names_to_config[model_name], save_directory, push_to_hub)
-    else:
-        for model_name, config in names_to_config.items():
-            convert_weight_and_push(model_name, config, save_directory, push_to_hub)
-    return config, expected_shape
+    model = SuperGlueModel(config)
+    model.load_state_dict(new_state_dict)
+    model.eval()
+    print("Successfully loaded weights in the model")
+
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--model_name",
-        default=None,
+        "--checkpoint_url",
+        default="https://github.com/magicleap/SuperGluePretrainedNetwork/raw/master/models/weights/superglue_indoor.pth",
         type=str,
-        help=(
-            "The name of the model you wish to convert, it must be one of the supported superglue* architecture,"
-            " currently: superglue18,26,34,50,101,152. If `None`, all of them will the converted."
-        ),
+        help="URL of the original SuperGlue checkpoint you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default=None,
-        type=Path,
-        required=True,
+        default="model",
+        type=str,
         help="Path to the output PyTorch model directory.",
     )
-    parser.add_argument(
-        "--push_to_hub",
-        default=True,
-        type=bool,
-        required=False,
-        help="If True, push model and image processor to the hub.",
-    )
+    parser.add_argument("--save_model", action="store_true", help="Save model to local")
+    parser.add_argument("--push_to_hub", action="store_true", help="Push model and image preprocessor to the hub")
 
     args = parser.parse_args()
-    pytorch_dump_folder_path: Path = args.pytorch_dump_folder_path
-    pytorch_dump_folder_path.mkdir(exist_ok=True, parents=True)
-    convert_weights_and_push(pytorch_dump_folder_path, args.model_name, args.push_to_hub)
+    convert_superglue_checkpoint(
+        args.checkpoint_url, args.pytorch_dump_folder_path, args.save_model, args.push_to_hub
+    )
