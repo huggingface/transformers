@@ -154,31 +154,24 @@ class MinNewTokensLengthLogitsProcessor(LogitsProcessor):
     >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
     >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
     >>> model.config.pad_token_id = model.config.eos_token_id
-    >>> model.generation_config.pad_token_id = model.config.eos_token_id
-    >>> input_context = "Hugging Face Company is"
-    >>> input_ids = tokenizer.encode(input_context, return_tensors="pt")
+    >>> inputs = tokenizer(["Hugging Face Company is"], return_tensors="pt")
 
-    >>> # Without `eos_token_id`, it will generate the default length, 20, ignoring `min_new_tokens`
-    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=30)
+    >>> # If the maximum length (default = 20) is smaller than the minimum length constraint, the latter is ignored!
+    >>> outputs = model.generate(**inputs, min_new_tokens=30)
     >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
     Hugging Face Company is a company that has been working on a new product for the past year.
 
-    >>> # If `eos_token_id` is set to ` company` it will take into account how many `min_new_tokens` have been generated
-    >>> # before stopping. Note that ` Company` (5834) and ` company` (1664) are not actually the same token, and even
-    >>> # if they were ` Company` would be ignored by `min_new_tokens` as it excludes the prompt.
-    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=1, eos_token_id=1664)
+    >>> # For testing purposes, let's set `eos_token` to `"company"`, the first generated token. This will make
+    >>> # generation end there.
+    >>> outputs = model.generate(**inputs, eos_token_id=1664)
     >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
     Hugging Face Company is a company
 
-    >>> # Increasing `min_new_tokens` will bury the first occurrence of ` company` generating a different sequence.
-    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=2, eos_token_id=1664)
+    >>> # Increasing `min_new_tokens` will make generation ignore occurences `"company"` (eos token) before the
+    >>> # minimum length condition is honored.
+    >>> outputs = model.generate(**inputs, min_new_tokens=2, eos_token_id=1664)
     >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
     Hugging Face Company is a new company
-
-    >>> # If no more occurrences of the `eos_token` happen after `min_new_tokens` it returns to the 20 default tokens.
-    >>> outputs = model.generate(input_ids=input_ids, min_new_tokens=10, eos_token_id=1664)
-    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-    Hugging Face Company is a new and innovative brand of facial recognition technology that is designed to help you
     ```
     """
 
@@ -231,36 +224,28 @@ class TemperatureLogitsWarper(LogitsWarper):
 
     ```python
     >>> import torch
-    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
+
+    >>> set_seed(0)  # for reproducibility
 
     >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
     >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
     >>> model.config.pad_token_id = model.config.eos_token_id
-    >>> model.generation_config.pad_token_id = model.config.eos_token_id
-    >>> input_context = "Hugging Face Company is"
-    >>> input_ids = tokenizer.encode(input_context, return_tensors="pt")
+    >>> inputs = tokenizer(["Hugging Face Company is"], return_tensors="pt")
 
-    >>> torch.manual_seed(0)
+    >>> # With temperature=1.0, the default, we consistently get random outputs due to random sampling.
+    >>> generate_kwargs = {"max_new_tokens": 10, "do_sample": True, "temperature": 1.0, "num_return_sequences": 2}
+    >>> outputs = model.generate(**inputs, **generate_kwargs)
+    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
+    ['Hugging Face Company is a joint venture between GEO Group, one of',
+    'Hugging Face Company is not an exact science – but what we believe does']
 
-    >>> # With temperature=1, the default, we consistently get random outputs due to random sampling.
-    >>> outputs = model.generate(input_ids=input_ids, max_new_tokens=10, temperature=1, do_sample=True)
-    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-    Hugging Face Company is one of these companies that is going to take a
-
-    >>> outputs = model.generate(input_ids=input_ids, max_new_tokens=10, temperature=1, do_sample=True)
-    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-    Hugging Face Company is one of these companies, you can make a very
-
-    >>> # However, with temperature close to 0 , the output remains invariant.
-    >>> outputs = model.generate(input_ids=input_ids, max_new_tokens=10, temperature=0.0001, do_sample=True)
-    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-    Hugging Face Company is a company that has been around for over 20 years
-
-    >>> # even if we set a different seed.
-    >>> torch.manual_seed(42)
-    >>> outputs = model.generate(input_ids=input_ids, max_new_tokens=10, temperature=0.0001, do_sample=True)
-    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-    Hugging Face Company is a company that has been around for over 20 years
+    >>> # However, with temperature close to 0, it approximates greedy decoding strategies (invariant)
+    >>> generate_kwargs["temperature"] = 0.0001
+    >>> outputs = model.generate(**inputs, **generate_kwargs)
+    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
+    ['Hugging Face Company is a company that has been around for over 20 years',
+    'Hugging Face Company is a company that has been around for over 20 years']
     ```
     """
 
@@ -302,19 +287,19 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
     >>> # Initializing the model and tokenizer for it
-    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
     >>> inputs = tokenizer(["I'm not going to"], return_tensors="pt")
 
     >>> # This shows a normal generate without any specific parameters
-    >>> summary_ids = model.generate(inputs["input_ids"], max_length=20)
+    >>> summary_ids = model.generate(**inputs)
     >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True)[0])
-    I'm not going to lie, I'm not going to lie. I'm not going to lie
+    I'm not going to be able to do that. I'm going to be able to do that
 
     >>> # This generates a penalty for repeated tokens
-    >>> penalized_ids = model.generate(inputs["input_ids"], max_length=20, repetition_penalty=1.2)
-    >>> print(tokenizer.batch_decode(biased_ids, skip_special_tokens=True)[0])
-    I'm not going to lie, I was really excited about this. It's a great game
+    >>> penalized_ids = model.generate(**inputs, repetition_penalty=1.1)
+    >>> print(tokenizer.batch_decode(penalized_ids, skip_special_tokens=True)[0])
+    I'm not going to be able to do that. I'll just have to go out and play
     ```
     """
 
@@ -382,30 +367,21 @@ class TopPLogitsWarper(LogitsWarper):
     >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 
     >>> set_seed(0)
-    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
 
-    >>> text = "It is probably one of the most important things for parents to teach children about patience and acceptance. In this way, we as a society can ensure"
-    >>> inputs = tokenizer(text, return_tensors="pt")
+    >>> inputs = tokenizer("A sequence: 1, 2", return_tensors="pt")
 
-    >>> # Generate sequences without top_p sampling
-    >>> # We see that the answer tends to have a lot of repeated tokens and phrases
-    >>> outputs = model.generate(**inputs, max_length=55)
+    >>> # With sampling, the output is unexpected -- sometimes too unexpected.
+    >>> outputs = model.generate(**inputs, do_sample=True)
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
-    'It is probably one of the most important things for parents to teach children about patience and acceptance. In this way, we as a society can ensure that our children are not taught to be impatient or to be afraid of the future.\n\nThe first step is to teach them'
+    A sequence: 1, 2, 0, 2, 2. 2, 2, 2, 2
 
-    >>> # Generate sequences with top_p sampling: set `do_sample=True` to use top_p sampling with `top_p` arugment
-    >>> # We already see that the answer has less repetitive tokens and is more diverse
-    >>> outputs = model.generate(**inputs, max_length=55, do_sample=True, top_p=0.25)
+    >>> # With `top_p` sampling, the output gets restricted to high-probability tokens.
+    >>> # Pro tip: In practice, LLMs use `top_p` in the 0.9-0.95 range.
+    >>> outputs = model.generate(**inputs, do_sample=True, top_p=0.1)
     >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
-    'It is probably one of the most important things for parents to teach children about patience and acceptance. In this way, we as a society can ensure that children learn to be more accepting of others and to be more tolerant of others.\n\nWe can also teach children to be'
-
-    >>> # Generate sequences with top_p sampling with a larger top_p value
-    >>> # We see that as we increase the top_p value, less probable tokens also get selected during text generation, making the answer more diverse
-    >>> # Pro Tip: In practice, we tend to use top_p values between 0.9 and 1.0!
-    >>> outputs = model.generate(**inputs, max_length=55, do_sample=True, top_p=0.95)
-    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
-    'It is probably one of the most important things for parents to teach children about patience and acceptance. In this way, we as a society can ensure we have the best learning environment, so that we can teach to learn and not just take advantage of the environment.\n\nThe'
+    A sequence: 1, 2, 3, 4, 5, 6, 7, 8, 9
     ```
     """
 
@@ -530,31 +506,25 @@ class EpsilonLogitsWarper(LogitsWarper):
 
     Examples:
     ```python
-    >>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 
-    >>> set_seed(19)
-    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
-    >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    >>> set_seed(0)
+    >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
 
-    >>> # The below sentence is used since the probability of generating `J. Trump` as the next tokens is very high.
-    >>> sentence = "The full name of Donald is Donald"
-    >>> inputs = tokenizer(sentence, return_tensors="pt")
+    >>> inputs = tokenizer("A sequence: 1, 2", return_tensors="pt")
 
-    >>> # We can see that the model generates `J. Trump` as the next token
-    >>> outputs = model.generate(**inputs, max_new_tokens=4, do_sample=True)
-    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-    The full name of Donald is Donald J. Trump –
+    >>> # With sampling, the output is unexpected -- sometimes too unexpected.
+    >>> outputs = model.generate(**inputs, do_sample=True)
+    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
+    A sequence: 1, 2, 0, 2, 2. 2, 2, 2, 2
 
-    >>> set_seed(19)
-    >>> # The use of the `epsilon_cutoff` parameter (best performing values between 3e-4 and 9e-4 from the paper
-    >>> # mentioned above) generates tokens by sampling from a variety of tokens with probabilities greater than
-    >>> # or equal to epsilon value. The disadvantage of this sampling is that if there are many possible tokens to
-    >>> # sample from, the epsilon value has to be very small for sampling to occur from all the possible tokens.
-    >>> outputs = model.generate(
-    ...     **inputs, max_new_tokens=4, do_sample=True, epsilon_cutoff=6e-4
-    ... )  # need to set do_sample=True for epsilon_cutoff to work
-    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-    The full name of Donald is Donald McGahn, who
+    >>> # With epsilon sampling, the output gets restricted to high-probability tokens. Note that this is similar to
+    >>> # Top P sampling, which restricts tokens based on their cumulative probability.
+    >>> # Pro tip: The paper recomends using `epsilon_cutoff` values between 3e-4 and 9e-4
+    >>> outputs = model.generate(**inputs, do_sample=True, epsilon_cutoff=0.1)
+    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
+    A sequence: 1, 2, 3, 4, 5, 6, 7, 8, 9
     ```
     """
 
@@ -591,7 +561,7 @@ class EtaLogitsWarper(LogitsWarper):
     r"""
     [`LogitsWarper`] that performs eta-sampling, a technique to filter out tokens with probabilities below a dynamic
     cutoff value, `eta`, which is calculated based on a combination of the hyperparameter `epsilon` and the entropy of
-    the token probabilities, i.e. `eta := min(epsilon, sqrt(epsilon, e^-entropy(probabilities)))`. Takes the largest
+    the token probabilities, i.e. `eta := min(epsilon, sqrt(epsilon * e^-entropy(probabilities)))`. Takes the largest
     min_tokens_to_keep tokens if no tokens satisfy this constraint. It addresses the issue of poor quality in long
     samples of text generated by neural language models leading to more coherent and fluent text. See [Truncation
     Sampling as Language Model Desmoothing](https://arxiv.org/abs/2210.15191) for more information. Note: `do_sample`
@@ -613,39 +583,25 @@ class EtaLogitsWarper(LogitsWarper):
 
     Examples:
     ```python
-    >>> # Import required libraries
-    >>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
-
-    >>> # Set the model name
-    >>> model_name = "gpt2"
-
-    >>> # Initialize the model and tokenizer
-    >>> model = AutoModelForCausalLM.from_pretrained(model_name)
-    >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-    >>> # Set the pad token to eos token
-    >>> model.config.pad_token_id = model.config.eos_token_id
-    >>> model.generation_config.pad_token_id = model.config.eos_token_id
-
-    >>> # The below sequence intentionally contains two subjects to show the difference between the two approaches
-    >>> sequence = "a quadcopter flight controller (RTFQ Flip MWC) that supports I2C sensors for adding things like a barometer, magnetometer, and GPS system. The officially supported sensor block (BMP180, HMC5883L on one board) is discontinued, as far as I know, everyone involved lived to sing another day. . . disorder and an extreme state of dysmetabolism characterized by extensive erythema and a significant reduction in uncovered"
-
-    >>> # Tokenize the sequence
-    >>> inputs = tokenizer(sequence, return_tensors="pt")
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 
     >>> set_seed(0)
+    >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
 
-    >>> # We can see that the model is generating repeating text and also is not able to continue the sequence properly
-    >>> outputs = model.generate(inputs["input_ids"], max_length=128)
-    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-    a quadcopter flight controller (RTFQ Flip MWC) that supports I2C sensors for adding things like a barometer, magnetometer, and GPS system. The officially supported sensor block (BMP180, HMC5883L on one board) is discontinued, as far as I know, everyone involved lived to sing another day... disorder and an extreme state of dysmetabolism characterized by extensive erythema and a significant reduction in uncovered muscle mass. The patient was diagnosed with a severe erythema and a severe erythema-like condition. The patient was treated with a combination
+    >>> inputs = tokenizer("A sequence: 1, 2", return_tensors="pt")
 
-    >>> # The result is much better and coherent when we use the `eta_cutoff` parameter
-    >>> outputs = model.generate(
-    ...     inputs["input_ids"], max_length=128, do_sample=True, eta_cutoff=2e-2
-    ... )  # need to set do_sample=True for eta_cutoff to work
-    >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-    a quadcopter flight controller (RTFQ Flip MWC) that supports I2C sensors for adding things like a barometer, magnetometer, and GPS system. The officially supported sensor block (BMP180, HMC5883L on one board) is discontinued, as far as I know, everyone involved lived to sing another day... disorder and an extreme state of dysmetabolism characterized by extensive erythema and a significant reduction in uncovered fatty acids. A significant loss of brain development. The individual also experienced high levels of a common psychiatric condition called schizophrenia, with an important and life threatening consequence.
+    >>> # With sampling, the output is unexpected -- sometimes too unexpected.
+    >>> outputs = model.generate(**inputs, do_sample=True)
+    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
+    A sequence: 1, 2, 0, 2, 2. 2, 2, 2, 2
+
+    >>> # With eta sampling, the output gets restricted to high-probability tokens. You can see it as a dynamic form of
+    >>> # epsilon sampling that adapts its cutoff probability based on the entropy (high entropy = lower cutoff).
+    >>> # Pro tip: The paper recomends using `eta_cutoff` values between 3e-4 to 4e-3
+    >>> outputs = model.generate(**inputs, do_sample=True, eta_cutoff=0.1)
+    >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
+    A sequence: 1, 2, 3, 4, 5, 6, 7, 8, 9
     ```
     """
 
@@ -771,20 +727,20 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     Examples:
 
     ```py
-    >>> from transformers import GPT2Tokenizer, AutoModelForCausalLM
+    >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
-    >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
-    >>> tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-    >>> inputs = tokenizer(["I enjoy watching football"], return_tensors="pt")
+    >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+    >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+    >>> inputs = tokenizer(["Today I"], return_tensors="pt")
 
-    >>> output = model.generate(**inputs, max_length=50)
+    >>> output = model.generate(**inputs)
     >>> print(tokenizer.decode(output[0], skip_special_tokens=True))
-    "I enjoy playing football on the weekends, but I'm not a big fan of the idea of playing in the middle of the night. I'm not a big fan of the idea of playing in the middle of the night. I'm not a big"
+    Today I’m not sure if I’m going to be able to do it.
 
-    >>> # Now let's add ngram size using <no_repeat_ngram_size> in model.generate. This should stop the repetitions in the output.
-    >>> output = model.generate(**inputs, max_length=50, no_repeat_ngram_size=2)
+    >>> # Now let's add ngram size using `no_repeat_ngram_size`. This stops the repetitions ("I’m") in the output.
+    >>> output = model.generate(**inputs, no_repeat_ngram_size=2)
     >>> print(tokenizer.decode(output[0], skip_special_tokens=True))
-    I enjoy playing football on the weekends, but I'm not a big fan of the idea of playing in the middle of a game. I think it's a bit of an overreaction to the fact that we're playing a team that's playing"
+    Today I’m not sure if I can get a better understanding of the nature of this issue
     ```
     """
 
@@ -1023,39 +979,29 @@ class NoBadWordsLogitsProcessor(SequenceBiasLogitsProcessor):
     >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
     >>> inputs = tokenizer(["In a word, the cake is a"], return_tensors="pt")
 
-    >>> summary_ids = model.generate(inputs["input_ids"], max_new_tokens=5, pad_token_id=tokenizer.eos_token_id)
-    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True)[0])
+    >>> output_ids = model.generate(inputs["input_ids"], max_new_tokens=5, pad_token_id=tokenizer.eos_token_id)
+    >>> print(tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0])
     In a word, the cake is a bit of a mess.
 
-    >>> # Now let's control generation taking the bad words out. Please note that the tokenizer is initialized differently
-
+    >>> # Now let's take the bad words out. Please note that the tokenizer is initialized differently
     >>> tokenizer_with_prefix_space = AutoTokenizer.from_pretrained("gpt2", add_prefix_space=True)
 
 
     >>> def get_tokens_as_list(word_list):
     ...     "Converts a sequence of words into a list of tokens"
     ...     tokens_list = []
-    ...     for word in word_list.split(" "):
+    ...     for word in word_list:
     ...         tokenized_word = tokenizer_with_prefix_space([word], add_special_tokens=False).input_ids[0]
     ...         tokens_list.append(tokenized_word)
     ...     return tokens_list
 
 
-    >>> word_list = "mess"
-    >>> bad_words_ids = get_tokens_as_list(word_list=word_list)
-
-    >>> badwords_ids = model.generate(
-    ...     inputs["input_ids"],
-    ...     max_new_tokens=5,
-    ...     bad_words_ids=bad_words_ids,
-    ...     eos_token_id=tokenizer_with_prefix_space.eos_token_id,
+    >>> bad_words_ids = get_tokens_as_list(word_list=["mess"])
+    >>> output_ids = model.generate(
+    ...     inputs["input_ids"], max_new_tokens=5, bad_words_ids=bad_words_ids, pad_token_id=tokenizer.eos_token_id
     ... )
-    >>> print(tokenizer.batch_decode(badwords_ids, skip_special_tokens=True)[0])
+    >>> print(tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0])
     In a word, the cake is a bit of a surprise.
-
-    >>> badwords_ids = model.generate(inputs["input_ids"], max_new_tokens=4, num_beams=5, bad_words_ids=bad_words_ids)
-    >>> print(tokenizer.batch_decode(biased_ids, skip_special_tokens=True)[0])
-    In a word, the cake is a great way to start
     ```
     """
 
@@ -1680,21 +1626,19 @@ class UnbatchedClassifierFreeGuidanceLogitsProcessor(LogitsProcessor):
     >>> inputs = tokenizer(["Today, a dragon flew over Paris, France,"], return_tensors="pt")
     >>> out = model.generate(inputs["input_ids"], guidance_scale=1.5)
     >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
-    The dragon flew over Paris, France, landing in Lyon, a city of a few million. Dragon-flying was a new form of
-    transport, and the dragon was the first in Europe.
+    'Today, a dragon flew over Paris, France, killing at least 50 people and injuring more than 100'
 
     >>> # with a negative prompt
     >>> neg_inputs = tokenizer(["A very happy event happened,"], return_tensors="pt")
     >>> out = model.generate(inputs["input_ids"], guidance_scale=2, negative_prompt_ids=neg_inputs["input_ids"])
     >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
-    The dragon flew over Paris, France, crashing into Notre Dame Cathedral in the French capital killing at least 127
-    people and injuring more than 350.
+    'Today, a dragon flew over Paris, France, killing at least 130 people. French media reported that'
 
     >>> # with a positive prompt
     >>> neg_inputs = tokenizer(["A very happy event happened,"], return_tensors="pt")
     >>> out = model.generate(inputs["input_ids"], guidance_scale=0, negative_prompt_ids=neg_inputs["input_ids"])
     >>> tokenizer.batch_decode(out, skip_special_tokens=True)[0]
-    Today, a dragon flew over Paris, France, and I'm very happy to be here.
+    "Today, a dragon flew over Paris, France, and I'm very happy to be here. I"
     ```
     """
 
