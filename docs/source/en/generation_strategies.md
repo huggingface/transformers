@@ -141,7 +141,7 @@ one for summarization with beam search). You must have the right Hub permissions
 >>> inputs = tokenizer("translate English to French: Configuration files are easy to use!", return_tensors="pt")
 >>> outputs = model.generate(**inputs, generation_config=generation_config)
 >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
-['Les fichiers de configuration sont faciles à utiliser !']
+['Les fichiers de configuration sont faciles à utiliser!']
 ```
 
 ## Streaming
