@@ -48,13 +48,28 @@ python src/transformers/models/llama/convert_llama_weights_to_hf.py \
 >>> PROMPT = '''def remove_non_ascii(s: str) -> str:
     """ <FILL_ME>
     return result
-''',
->>> input_ids = tokenizer("PROMPT", return_tensors="pt")["input_ids"]
->>> generated_ids = model.generate(input_ids.to(torch_device), max_new_tokens=128)
+'''
+>>> input_ids = tokenizer(PROMPT, return_tensors="pt")["input_ids"]
+>>> generated_ids = model.generate(input_ids, max_new_tokens=128)
 
->>> tokenizer.batch_decode(generated_ids)
-'<s> <PRE> def remove_non_ascii(s: str) -> str:\n    """  <SUF>\n    return result\n <MID>Remove non-ASCII characters from a string.\n\n    Args:\n        s: The string to remove non-ASCII characters from.\n\n    Returns:\n        The string with non-ASCII characters removed.\n    """\n    result = ""\n    for c in s:\n        if ord(c) < 128:\n            result += c <EOT></s>'
+>>> filling = tokenizer.batch_decode(generated_ids[:, input_ids.shape[1]:], skip_special_tokens = True)[0]
+>>> print(PROMPT.replace("<FILL_ME>", filling))
+def remove_non_ascii(s: str) -> str:
+    """ Remove non-ASCII characters from a string.
+
+    Args:
+        s: The string to remove non-ASCII characters from.
+
+    Returns:
+        The string with non-ASCII characters removed.
+    """
+    result = ""
+    for c in s:
+        if ord(c) < 128:
+            result += c
+    return result
 ```
+
 If you only want the infilled part:
 ```python
 >>> from transformers import pipeline
@@ -68,7 +83,7 @@ come in several checkpoints they each contain a part of each weight of the model
 
 - The LLaMA tokenizer is a BPE model based on [sentencepiece](https://github.com/google/sentencepiece). One quirk of sentencepiece is that when decoding a sequence, if the first token is the start of the word (e.g. "Banana"), the tokenizer does not prepend the prefix space to the string.
 
-This model was contributed by Arthur Zucker. The original code of the authors can be found [here](https://github.com/facebookresearch/llama).
+This model was contributed by [ArthurZucker](https://huggingface.co/ArthurZ). The original code of the authors can be found [here](https://github.com/facebookresearch/llama).
 
 
 ## CodeLlamaTokenizer

@@ -293,21 +293,6 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
         return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
 
-    # def decode(self, ids, prompt_ids = None, skip_special_tokens = True, **kwargs):
-    #     if prompt_ids is not None:
-    #         infilling = super().decode(ids[:len(prompt_ids)], skip_special_tokens = skip_special_tokens, **kwargs)
-    #     else:
-    #         infilling = super().decode(ids, skip_special_tokens = skip_special_tokens, **kwargs)
-
-    #     if skip_special_tokens:
-    #         # tokens to remove are not special, remove them anyway
-    #         infilling = infilling.replace(" " + self.prefix_token[1:], "")
-    #         infilling = infilling.replace(" " + self.suffix_token[1:], "")
-    #         infilling = infilling.replace(" " + self.middle_token[1:], "")
-    #         infilling = infilling.replace(" " + self.eot_token[1:], "")
-
-    #     return infilling
-
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         return self.sp_model.piece_to_id(token)
