@@ -20,7 +20,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import LlamaConfig, is_torch_available, set_seed
-from transformers.testing_utils import require_torch, slow, torch_device, require_torch_gpu
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -497,6 +497,7 @@ split,
 end
 """,
     ]
+
     @require_torch_gpu
     @slow
     def test_model_7b_logits(self):
@@ -514,7 +515,9 @@ end
         ]
         # fmt: on
         self.assertEqual(processed_text, EXPECTED_TEXT)
-        processed_text_suffix_first =  tokenizer.batch_decode(tokenizer(self.PROMPTS, suffix_first=True, add_special_tokens=False)["input_ids"])
+        processed_text_suffix_first = tokenizer.batch_decode(
+            tokenizer(self.PROMPTS, suffix_first=True, add_special_tokens=False)["input_ids"]
+        )
 
         # fmt: off
         EXPECTED_TEXT = [
@@ -527,9 +530,11 @@ end
         # fmt: on
         self.assertEqual(processed_text_suffix_first, EXPECTED_TEXT)
         input_ids = tokenizer(self.PROMPTS[0], return_tensors="pt")["input_ids"]
-        generated_ids = model.generate(input_ids.to(torch_device), max_new_tokens = 128, max_new_tokens = 128)
+        generated_ids = model.generate(input_ids.to(torch_device), max_new_tokens=128)
         torch.testing.assert_close(generated_ids, EXPECTED_IDS)
 
-        EXPECTED_INFILLING = ['<s> <PRE> def remove_non_ascii(s: str) -> str:\n    """  <SUF>\n    return result\n <MID>Remove non-ASCII characters from a string.\n\n    Args:\n        s: The string to remove non-ASCII characters from.\n\n    Returns:\n        The string with non-ASCII characters removed.\n    """\n    result = ""\n    for c in s:\n        if ord(c) < 128:\n            result += c <EOT></s>']
+        EXPECTED_INFILLING = [
+            '<s> <PRE> def remove_non_ascii(s: str) -> str:\n    """  <SUF>\n    return result\n <MID>Remove non-ASCII characters from a string.\n\n    Args:\n        s: The string to remove non-ASCII characters from.\n\n    Returns:\n        The string with non-ASCII characters removed.\n    """\n    result = ""\n    for c in s:\n        if ord(c) < 128:\n            result += c <EOT></s>'
+        ]
         infilling = tokenizer.batch_decode(generated_ids)
         self.assertEqual(infilling, EXPECTED_INFILLING)
