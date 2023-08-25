@@ -1126,14 +1126,7 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     Example: the below example shows a comparison before and after applying Hamming Diversity.
 
     ```python
-    >>> from transformers import (
-    ...     AutoTokenizer,
-    ...     AutoModelForSeq2SeqLM,
-    ...     LogitsProcessorList,
-    ...     MinLengthLogitsProcessor,
-    ...     HammingDiversityLogitsProcessor,
-    ...     BeamSearchScorer,
-    ... )
+    >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
     >>> import torch
 
     >>> # Initialize the model and tokenizer
@@ -1142,62 +1135,35 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
 
     >>> # A long text about the solar system
     >>> text = "The Solar System is a gravitationally bound system comprising the Sun and the objects that orbit it, either directly or indirectly. Of the objects that orbit the Sun directly, the largest are the eight planets, with the remainder being smaller objects, such as the five dwarf planets and small Solar System bodies. The Solar System formed 4.6 billion years ago from the gravitational collapse of a giant interstellar molecular cloud."
+    >>> inputs = tokenizer("summarize: " + text, return_tensors="pt")
 
-    >>> encoder_input_str = "summarize: " + text
-    >>> encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
-
-    >>> # Set up for diverse beam search
-    >>> num_beams = 6
-    >>> num_beam_groups = 2
-
-    >>> model_kwargs = {
-    ...     "encoder_outputs": model.get_encoder()(
-    ...         encoder_input_ids.repeat_interleave(num_beams, dim=0), return_dict=True
-    ...     )
-    ... }
-
-    >>> beam_scorer = BeamSearchScorer(
-    ...     batch_size=1,
-    ...     max_length=model.config.max_length,
-    ...     num_beams=num_beams,
-    ...     device=model.device,
-    ...     num_beam_groups=num_beam_groups,
+    >>> # Generate diverse summary
+    >>> outputs_diverse = model.generate(
+    ...     **inputs,
+    ...     num_beam_groups=2,
+    ...     diversity_penalty=10.,
+    ...     max_length=100,
+    ...     num_beams=4,
+    ...     num_return_sequences=2,
     ... )
-    >>> # Initialize the diversity logits processor
-    >>> # set the logits processor list, note that `HammingDiversityLogitsProcessor` is effective only if `group beam search` is enabled
-    >>> logits_processor_diverse = LogitsProcessorList(
-    ...     [
-    ...         HammingDiversityLogitsProcessor(5.5, num_beams=num_beams, num_beam_groups=num_beam_groups),
-    ...         MinLengthLogitsProcessor(10, eos_token_id=model.config.eos_token_id),
-    ...     ]
-    ... )
-    >>> # generate the diverse summary using group_beam_search
-    >>> outputs_diverse = model.group_beam_search(
-    ...     encoder_input_ids.repeat_interleave(num_beams, dim=0),
-    ...     beam_scorer,
-    ...     logits_processor=logits_processor_diverse,
-    ...     **model_kwargs,
-    ... )
+    >>> summaries_diverse = tokenizer.batch_decode(outputs_diverse, skip_special_tokens=True)
 
     >>> # Generate non-diverse summary
     >>> outputs_non_diverse = model.generate(
-    ...     encoder_input_ids,
+    ...     **inputs,
     ...     max_length=100,
-    ...     num_beams=num_beams,
-    ...     no_repeat_ngram_size=2,
-    ...     early_stopping=True,
+    ...     num_beams=4,
+    ...     num_return_sequences=2,
     ... )
+    >>> summary_non_diverse = tokenizer.batch_decode(outputs_non_diverse, skip_special_tokens=True)
 
-    >>> # Decode and print the summaries
-    >>> summaries_diverse = tokenizer.batch_decode(outputs_diverse, skip_special_tokens=True)
-    >>> summary_non_diverse = tokenizer.decode(outputs_non_diverse[0], skip_special_tokens=True)
-
-    >>> print("Diverse Summary:")
-    >>> print(summaries_diverse[0])
-    >>> # The Solar System is a gravitationally bound system comprising the Sun and the objects that orbit it, either directly or indirectly. Of the objects that orbit the Sun directly, the largest are the eight planets, with the remainder being smaller objects, such as the five dwarf planets and small Solar System bodies. The Solar System formed 4.6 billion years ago from the gravitational collapse of a giant interstellar molecular cloud.
-    >>> print("\nNon-Diverse Summary:")
+    >>> # With `diversity_penalty`, the resulting beams are much more diverse
     >>> print(summary_non_diverse)
-    >>> # The Sun and the objects that orbit it directly are the eight planets, with the remainder being smaller objects, such as the five dwarf worlds and small Solar System bodies. It formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud.    ```
+    ['the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.',
+    'the Solar System formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.']
+    >>> print(summaries_diverse)
+    ['the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets.',
+    'the solar system formed 4.6 billion years ago from the collapse of a giant interstellar molecular cloud. of the objects that orbit the Sun directly, the largest are the eight planets. the rest of the objects are smaller objects, such as the five dwarf planets and small solar system bodies.']
     ```
     """
 
