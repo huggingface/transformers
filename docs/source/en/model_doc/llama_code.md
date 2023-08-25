@@ -33,6 +33,7 @@ Tips:
 - The infilling task is supported out of the box. You should be using the `tokenizer.fill_token` where you want your input to be filled.
 - The model conversion script is the same as for the `Llama2` familly:
 
+Here is a sample usage
 ```bash
 python src/transformers/models/llama/convert_llama_weights_to_hf.py \
     --input_dir /path/to/downloaded/llama/weights --model_size 7B --output_dir /output/path
