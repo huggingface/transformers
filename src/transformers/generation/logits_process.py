@@ -1123,7 +1123,7 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
             3 beams. The choice of `num_beam_groups` should be made considering the desired level of output diversity
             and the total number of beams. See [this paper](https://arxiv.org/pdf/1610.02424.pdf) for more details.
 
-    Example: the below example shows a comparison before and after applying Hamming Diversity.
+    Examples:
 
     ```python
     >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
