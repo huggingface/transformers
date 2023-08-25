@@ -92,6 +92,14 @@ if TYPE_CHECKING:
     else:
         from .modeling_llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
 
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_flax_llama import FlaxLlamaForCausalLM, FlaxLlamaModel
+
 
 else:
     import sys
