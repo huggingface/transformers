@@ -31,8 +31,8 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a UnivNet feature extractor.
 
-    This class extracts log-mel-filter bank features from raw speech using the short time Fourier Transform (STFT).
-    The STFT implementation follows that of TacoTron 2 and Hifi-GAN.
+    This class extracts log-mel-filter bank features from raw speech using the short time Fourier Transform (STFT). The
+    STFT implementation follows that of TacoTron 2 and Hifi-GAN.
 
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
@@ -45,8 +45,8 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         padding_value (`float`, *optional*, defaults to 0.0):
             The value that is used to fill the padding values.
         do_normalize (`bool`, *optional*, defaults to `False`):
-            Whether to perform Tacotron 2 normalization on the input. Normalizing can help to significantly
-            improve the performance for some models.
+            Whether to perform Tacotron 2 normalization on the input. Normalizing can help to significantly improve the
+            performance for some models.
         num_mel_bins (`int`, *optional*, defaults to 80):
             The number of mel-frequency bins in the extracted spectrogram features.
         hop_length (`int`, *optional*, defaults to 256):
@@ -127,7 +127,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
         self.sample_size = win_length * sampling_rate // 1000
         self.sample_stride = hop_length * sampling_rate // 1000
-        
+
         if filter_length is None:
             self.n_fft = optimal_fft_length(self.sample_size)
         else:
@@ -161,23 +161,23 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 "The argument `reduction_factor` is deprecated and will be removed in version 4.30.0 of Transformers",
                 FutureWarning,
             )
-    
+
     # Based on tacotron2.audio_processing.dynamic_range_compression
     # https://github.com/NVIDIA/tacotron2/blob/master/audio_processing.py#L78
     def dynamic_range_compression(self, waveform: np.ndarray):
         return np.log(np.clip(waveform, a_min=self.compression_clip_val) * self.compression_factor)
-    
+
     # Based on tacotron2.audio_processing.dynamic_range_compression
     # https://github.com/NVIDIA/tacotron2/blob/master/audio_processing.py#L87
     def dynamic_range_decompression(self, waveform: np.ndarray):
         return np.exp(waveform) / self.compression_factor
-    
+
     def normalize(self, spectrogram):
         return 2 * ((spectrogram - self.normalize_min) / (self.normalize_max - self.normalize_min)) - 1
-    
+
     def denormalize(self, spectrogram):
         return self.normalize_min + (self.normalize_max - self.normalize_min) * ((spectrogram + 1) / 2)
-    
+
     def mel_spectrogram(self, waveform: np.ndarray):
         """
         Calculates log MEL spectrograms from a batch of waveforms.
@@ -199,7 +199,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         log_mel_spectrogram = self.dynamic_range_compression(mel_spectrogram)
 
         return log_mel_spectrogram
-    
+
     def __call__(
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
@@ -248,8 +248,8 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
                 [What are attention masks?](../glossary#attention-mask)
             do_normalize (`bool`, *optional*):
-                Whether to perform Tacotron 2 normalization on the input. Normalizing can help to significantly
-                improve the performance for some models. If not set, this will default to `self.config.do_normalize`.
+                Whether to perform Tacotron 2 normalization on the input. Normalizing can help to significantly improve
+                the performance for some models. If not set, this will default to `self.config.do_normalize`.
             compression_factor (`float`, *optional*):
                 The multiplicative compression factor for dynamic range compression during spectral normalization. If
                 not set, this will default to `self.config.compression_factor`.
@@ -277,7 +277,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 "It is strongly recommended to pass the `sampling_rate` argument to this function. "
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
-        
+
         is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
         if is_batched_numpy and len(raw_speech.shape) > 2:
             raise ValueError(f"Only mono-channel audio is supported for input to {self}")
@@ -295,7 +295,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         # always return batch
         if not is_batched:
             raw_speech = [np.asarray(raw_speech)]
-        
+
         batched_speech = BatchFeature({"input_features": raw_speech})
 
         padded_inputs = self.pad(
@@ -310,26 +310,24 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
 
-        mel_spectrograms = [
-            self.mel_spectrogram(waveform) for waveform in input_features[0]
-        ]
+        mel_spectrograms = [self.mel_spectrogram(waveform) for waveform in input_features[0]]
 
         if isinstance(input_features[0], List):
             batched_speech["input_features"] = [np.asarray(mel) for mel in mel_spectrograms]
         else:
             batched_speech["input_features"] = mel_spectrograms
-        
+
         if return_attention_mask:
             batched_speech["attention_mask"] = padded_inputs["attention_mask"]
-        
+
         if do_normalize:
             batched_speech["input_features"] = self.normalize(batched_speech["input_features"])
 
         if return_tensors is not None:
             batched_speech = batched_speech.convert_to_tensors(return_tensors)
-        
+
         return batched_speech
-    
+
     # Currently from transformers.models.speecht5.feature_extraction_speecht5.to_dict
     def to_dict(self) -> Dict[str, Any]:
         output = super().to_dict()
