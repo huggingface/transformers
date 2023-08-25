@@ -211,8 +211,11 @@ class LlamaTokenizer(PreTrainedTokenizer):
         if len(text) > 0:
             tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
 
-        if tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
-            tokens = tokens[1:]
+            if tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
+                tokens = tokens[1:]
+        else:
+            # If the text is empty, we still want to return something.
+            tokens = []
         return tokens
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
