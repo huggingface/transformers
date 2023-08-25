@@ -1040,6 +1040,7 @@ class GenerationTesterMixin:
                     input_ids,
                     attention_mask=attention_mask,
                     max_length=max_length,
+                    num_beams=2,
                 )
 
     def test_beam_sample_generate(self):
