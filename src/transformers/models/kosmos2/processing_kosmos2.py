@@ -336,7 +336,7 @@ class Kosmos2Processor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    def post_processor_generation(self, text, cleanup_and_extract=True):
+    def post_process_generation(self, text, cleanup_and_extract=True):
 
         caption = text.split("</image>")[-1]
         if cleanup_and_extract:
