@@ -319,7 +319,6 @@ class SeamlessM4TCodeHifiGanConfig(PretrainedConfig):
         self.resblock_dilation_sizes = resblock_dilation_sizes
         self.initializer_range = initializer_range
         self.leaky_relu_slope = leaky_relu_slope
-        self.normalize_before = normalize_before
         
         # specific to Code Hifi-Gan
         self.unit_hifi_gan_vocab_size = unit_hifi_gan_vocab_size
