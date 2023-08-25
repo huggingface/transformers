@@ -562,6 +562,13 @@ class FlaxCLIPTextModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
+class FlaxCLIPTextModelWithProjection(metaclass=DummyObject):
+    _backends = ["flax"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["flax"])
+
+
 class FlaxCLIPTextPreTrainedModel(metaclass=DummyObject):
     _backends = ["flax"]
 
