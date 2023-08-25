@@ -72,6 +72,13 @@ class CLIPTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class CodeLlamaTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class CodeGenTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
@@ -227,13 +234,6 @@ class LEDTokenizerFast(metaclass=DummyObject):
 
 
 class LlamaTokenizerFast(metaclass=DummyObject):
-    _backends = ["tokenizers"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tokenizers"])
-
-
-class CodeLlamaTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):
