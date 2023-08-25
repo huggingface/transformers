@@ -233,7 +233,8 @@ risk of repetition.
 To enable multinomial sampling set `do_sample=True` and `num_beams=1`.
 
 ```python
->>> from transformers import AutoTokenizer, AutoModelForCausalLM
+>>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
+>>> set_seed(0)  # For reproducibility
 
 >>> checkpoint = "gpt2-large"
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
@@ -282,7 +283,8 @@ As the name implies, this decoding strategy combines beam search with multinomia
 the `num_beams` greater than 1, and set `do_sample=True` to use this decoding strategy.
 
 ```python
->>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+>>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, set_seed
+>>> set_seed(0)  # For reproducibility
 
 >>> prompt = "translate English to German: The house is wonderful."
 >>> checkpoint = "t5-small"
@@ -369,7 +371,8 @@ When using assisted decoding with sampling methods, you can use the `temperarure
 just like in multinomial sampling. However, in assisted decoding, reducing the temperature will help improving latency.
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
+>>> set_seed(0)  # For reproducibility
 
 >>> prompt = "Alice and Bob"
 >>> checkpoint = "EleutherAI/pythia-1.4b-deduped"
