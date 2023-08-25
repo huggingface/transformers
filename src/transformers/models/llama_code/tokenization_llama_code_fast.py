@@ -16,7 +16,7 @@ import os
 from shutil import copyfile
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
-from tokenizers import processors
+from tokenizers import processors, normalizers
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
@@ -163,6 +163,26 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single=single, pair=pair, special_tokens=special_tokens
         )
+        
+    def set_infilling_processor(self, mode, suffix_first = False):
+        if mode == False:
+            self.update_post_processor()
+
+        self._tokenizer.normalizer = normalizers.Replace(pattern=" ", content="▁")
+        if suffix_first:
+            # format as " <PRE> <SUF>{suf} <MID> {pre}"
+            self._tokenizer.post_processor = processors.TemplateProcessing(
+                single= "$A",
+                pair= [self.prefix_token, self.suffix_token,"$A",self.middle_token,"$B"],
+                special_tokens=[(self.prefix_token, self.prefix_id),(self.suffix_token, self.suffix_id),(self.middle_token, self.middle_id)],
+            )
+        else:
+            # format as " <PRE> {pre} <SUF>{suf} <MID>"
+            self._tokenizer.post_processor = processors.TemplateProcessing(
+                single= "$A",
+                pair= [self.prefix_token, "$A", self.suffix_token, "$B", self.middle_token],
+                special_tokens=[(self.prefix_token, self.prefix_id),(self.suffix_token, self.suffix_id),(self.middle_token, self.middle_id)],
+            )
 
     @property
     def prefix_token(self):
@@ -222,24 +242,15 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
         self._add_bos_token = value
         self.update_post_processor()
 
-    def tokenize(
-        self, prefix: str, suffix: Optional[str] = None, add_special_tokens: bool = False, suffix_first=False, **kwargs
-    ) -> List[str]:
-        """
-        Format and encode an infilling problem. If `suffix_first` is set, format in suffix-prefix-middle format. The
-        extra `' '` in the tokens are required because the tokenizer will otherwise split these tokens. Ex:
-        ```python
-        >>> tokenizer.tokenize("Hey<PRE>") ['▁Hey', '<', 'PRE', '>' ] >>> tokenizer.tokenizer("Hey <PRE>") ['▁Hey',
-        '▁<PRE>' ]"""
-        if self.fill_token in prefix and suffix is None:
-            prefix, suffix = prefix.split(self.fill_token)
-
-        prefix_tokens = super().tokenize(
-            prefix
-        )  # prefix has an extra `SPIECE_UNDERLINE` added by the backend tokenizer
-        if suffix is None or len(suffix) < 1:
-            return prefix_tokens
-
+    def encode_plus(self, text, text_pair = None, suffix_first = False, **kwargs):
+        # hack to make sure the input is pre-process but outside rust
+        if self.fill_token in text and text_pair is None:
+            text, text_pair = text.split(self.fill_token)
+        
+        if text_pair is None or len(text_pair) < 1:
+            self.set_infilling_processor(False)
+            return super().encode_plus(text, text_pair, **kwargs)
+        
         if None in (self.prefix_id, self.middle_id, self.suffix_id):
             raise ValueError(
                 "Then input includes a `prefix` and a `suffix` used for the infilling task,"
@@ -247,14 +258,9 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
                 f" values : {self.prefix_id, self.middle_id, self.suffix_id}"
             )
 
-        suffix_tokens = super().tokenize(suffix)  # make sure LlamaCode sp model does not mess up
-
-        if suffix_first:
-            # format as " <PRE> <SUF>{suf} <MID> {pre}"
-            return [self.prefix_token, self.suffix_token] + suffix_tokens + [self.middle_token] + prefix_tokens
-        else:
-            # format as " <PRE> {pre} <SUF>{suf} <MID>"
-            return [self.prefix_token] + prefix_tokens + [self.suffix_token] + suffix_tokens + [self.middle_token]
+        self.set_infilling_processor(True, suffix_first = suffix_first)
+        kwargs["add_special_tokens"] = True
+        return super().encode_plus(" " + text, text_pair = text_pair, **kwargs)
 
     def decode_infilling(self, tokens, prompt_id_length=None, **kwargs):
         """
