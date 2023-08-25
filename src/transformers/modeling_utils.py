@@ -304,7 +304,7 @@ def shard_checkpoint(
 
     <Tip warning={true}>
 
-    If one of the model's weight is bigger that `max_sahrd_size`, it will end up in its own sub-checkpoint which will
+    If one of the model's weight is bigger than `max_shard_size`, it will end up in its own sub-checkpoint which will
     have a size greater than `max_shard_size`.
 
     </Tip>
