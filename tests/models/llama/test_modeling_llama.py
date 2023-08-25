@@ -523,16 +523,13 @@ end
             '<PRE> <SUF>\ndef main():\n    factory = InterfaceManagerFactory(start=datetime.now())\n    managers = []\n    for i in range(10):\n        managers.append(factory.build(id=i))\n <MID> class InterfaceManagerFactory(AbstractManagerFactory):\n    def __init__(',
             '<PRE> <SUF> = 0 :=\nbegin\nsplit,\n{ intros h f,\n    rw pi_1_etalisation at h,\n    simp [h],\n    refl\n},\n{ intro h,\n    have := @quasi_adjoint C D P,\n    simp [←pi_1_etalisation, this, h],\n    refl\n}\nend\n <MID> /-- A quasi-prefunctoid is 1-connected iff all its etalisations are 1-connected. -/\ntheorem connected_iff_etalisation [C D : precategoroid] (P : quasi_prefunctoid C D) :\nπ₁ P = 0 ↔ '
         ]
+        EXPECTED_IDS = torch.tensor([[1, 32007, 822, 3349, 29918, 5464, 29918, 294, 18869, 29898,29879, 29901, 851, 29897, 1599, 851, 29901, 13, 1678, 9995,29871, 32008, 13, 1678, 736, 1121, 13, 32009, 15941]])
         # fmt: on
         self.assertEqual(processed_text_suffix_first, EXPECTED_TEXT)
         input_ids = tokenizer(self.PROMPTS[0], return_tensors="pt")["input_ids"]
-        generated_ids = model.generate(input_ids)
-        # fmt: off
-        EXPECTED_IDS = torch.tensor([[1, 32007, 822, 3349, 29918, 5464, 29918, 294, 18869, 29898,29879, 29901, 851, 29897, 1599, 851, 29901, 13, 1678, 9995,29871, 32008, 13, 1678, 736, 1121, 13, 32009, 15941]])
-        # fmt: on
-
+        generated_ids = model.generate(input_ids, max_new_tokens = 128)
         torch.testing.assert_close(generated_ids, EXPECTED_IDS)
 
-        EXPECTED_INFILLING = ""
-        infilling = tokenizer.decode(generated_ids)
+        EXPECTED_INFILLING = ['<s> <PRE> def remove_non_ascii(s: str) -> str:\n    """  <SUF>\n    return result\n <MID>Remove']
+        infilling = tokenizer.batch_decode(generated_ids)
         self.assertEqual(infilling, EXPECTED_INFILLING)
