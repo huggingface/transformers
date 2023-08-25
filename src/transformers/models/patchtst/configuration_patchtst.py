@@ -56,10 +56,6 @@ class PatchTSTConfig(PretrainedConfig):
             The number of static categorical features.
         num_static_real_features (`int`, *optional*, defaults to 0):
             The number of static real valued features.
-        cardinality (`list[int]`, *optional*):
-            The cardinality (number of different values) for each of the static categorical features. Should be a list
-            of integers, having the same length as `num_static_categorical_features`. Cannot be `None` if
-            `num_static_categorical_features` is > 0.
         embedding_dimension (`list[int]`, *optional*):
             The dimension of the embedding for each of the static categorical features. Should be a list of integers,
             having the same length as `num_static_categorical_features`. Cannot be `None` if
@@ -154,6 +150,8 @@ class PatchTSTConfig(PretrainedConfig):
         use_cls_token: bool = False,
         patch_last: bool = True,
         individual: bool = False,
+        seed_number= None,
+        mask_input: Optional[bool] = None,
         mask_type: str = "random",
         mask_ratio=0.5,
         mask_patches: list = [2, 3],
@@ -223,6 +221,8 @@ class PatchTSTConfig(PretrainedConfig):
         self.distil = distil
 
         # Masking
+        self.seed_number = seed_number
+        self.mask_input = mask_input
         self.mask_type = mask_type
         self.mask_ratio = mask_ratio
         self.mask_patches = mask_patches

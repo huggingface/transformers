@@ -18,15 +18,15 @@ from typing import Optional, Tuple
 import torch
 from torch import nn
 import math
+import random
+import numpy as np
 
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import add_start_docstrings, logging
 from transformers.modeling_outputs import BaseModelOutputWithNoAttention
 from transformers.utils import ModelOutput
-
 from torch.nn.modules.activation import MultiheadAttention
-
-from .configuration_patchtst import PatchTSTConfig
+from transformers.models.patchtst.configuration_patchtst import PatchTSTConfig
 
 logger = logging.get_logger(__name__)
 
@@ -167,14 +167,20 @@ class ChannelAttentionTSTEncoder(nn.Module):
             ]
         )
 
-    def forward(self, src: torch.Tensor):
+    def forward(self, src: torch.Tensor, output_hidden_states: Optional[bool] = None):
         """
         src: tensor [bs x nvars x seq_len x d_model]
         Return:
             Tensor [bs x nvars x seq_len x d_model]
         """
-        for mod in self.layers: src = mod(src)
-        return src
+        all_hidden_states = []
+        for mod in self.layers:
+            if output_hidden_states:
+                src = mod(src)
+                all_hidden_states.append(src)
+        if output_hidden_states:
+            return src, all_hidden_states
+        return src, None
 
 
 class ChannelAttentionTSTEncoderLayer(nn.Module):
@@ -283,6 +289,7 @@ class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
         self.d_model = config.d_model
         self.shared_embedding = config.shared_embedding
         self.use_cls_token = config.use_cls_token
+        self.gradient_checkpointing = False
 
         # Input encoding: projection of feature vectors onto a d-dim vector space
         if not config.shared_embedding:
@@ -308,7 +315,7 @@ class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, past_values: torch.Tensor, output_hidden_states: Optional[bool] = None) -> torch.Tensor:
         """
         x: tensor [bs x nvars x num_patch x patch_len]
         return:
@@ -316,30 +323,38 @@ class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
                 or [bs x nvars x (num_patch+1) x d_model] if use cls_token
         """
         # bs, num_patch, n_vars, patch_len = x.shape
-        bs, n_vars, num_patch, patch_len = x.shape
+        bs, n_vars, num_patch, patch_len = past_values.shape
+
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         # Input encoding
         if not self.shared_embedding:
             x_out = []
             for i in range(n_vars):
-                z = self.w_p[i](x[:, i, :, :])
+                z = self.w_p[i](past_values[:, i, :, :])
                 x_out.append(z)
-            x = torch.stack(x_out, dim=1)
+            past_values = torch.stack(x_out, dim=1)
         else:
-            x = self.w_p(x)  # x: [bs x nvars  x num_patch x d_model]
+            past_values = self.w_p(past_values)  # x: [bs x nvars  x num_patch x d_model]
 
         if self.use_cls_token:
-            x = self.dropout(x + self.w_pos[1:, :])  # x: [bs x nvars x num_patch x d_model]
+            past_values = self.dropout(past_values + self.w_pos[1:, :])  # x: [bs x nvars x num_patch x d_model]
             # append cls token
             cls_token = self.cls_token + self.w_pos[:1, :]  # cls_token: [1 x 1 x 1 x d_model]
-            cls_tokens = cls_token.expand(x.shape[0], -1, -1)  # get the same copy for all the batch samples
-            x = torch.cat((cls_tokens, x), dim=1)  # x: [bs x nvars x (num_patch+1) x d_model]
+            cls_tokens = cls_token.expand(past_values.shape[0], -1, -1)  # get the same copy for all the batch samples
+            past_values = torch.cat((cls_tokens, past_values), dim=1)  # x: [bs x nvars x (num_patch+1) x d_model]
         else:
-            x = self.dropout(x + self.w_pos)  # x: [bs x nvars x num_patch x d_model]
+            past_values = self.dropout(past_values + self.w_pos)  # x: [bs x nvars x num_patch x d_model]
 
         # Encoder
-        x = self.encoder(
-            x)  # x: [bs x nvars x num_patch x d_model] or [bs x nvars x (num_patch+1) x d_model] if use cls_token
-        return x
+        past_values, hidden_states = self.encoder(
+            past_values, output_hidden_states)  # x: [bs x nvars x num_patch x d_model] or [bs x nvars x (num_patch+1) x d_model] if use cls_token
+        # return past_values
+        # return past_values, hidden_states
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=past_values, hidden_states=hidden_states
+        )
 
 
 PATCHTST_START_DOCSTRING = r"""
@@ -521,11 +536,56 @@ PATCHTST_INPUTS_DOCSTRING = r"""
 class PatchTSTModel(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
+        self.patching = Patch(config.context_length, patch_len=config.patch_length, stride=config.stride)
+        if config.mask_input:
+            self.masking = PatchMasking(
+                mask_type=config.mask_type,
+                mask_ratio=config.mask_ratio,
+                mask_patches=config.mask_patches,
+                mask_patch_ratios=config.mask_patch_ratios,
+                channel_consistent_masking=config.channel_consistent_masking,
+                d_size=config.d_size,
+                cv_channel_indices=config.cv_channel_indices,
+                mask_value=config.mask_value,
+                seed_number=config.seed_number
+            )
+        else:
+            self.masking = nn.Identity()
         self.encoder = ChannelAttentionPatchTSTEncoder(config)
 
-    def forward(self, x: torch.Tensor):
-        encoder_output = self.encoder(x)
-        return BaseModelOutputWithNoAttention(last_hidden_state=encoder_output, hidden_states=None)
+    def forward(self,
+                past_values: torch.Tensor,
+                future_values: Optional[torch.Tensor]=None,
+                output_hidden_states: Optional[bool] = None):
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        patched_values = self.patching(past_values)  # patched_values: [bs x n_vars x num_patch x patch_len] for pretrain
+        masked_values = self.masking(patched_values)
+        encoder_output = self.encoder(masked_values, output_hidden_states=output_hidden_states)
+        return PatchTSTModelOutputWithNoAttention(last_hidden_state=encoder_output.last_hidden_state,
+                                                  hidden_states=encoder_output.hidden_states,
+                                                  patched_input=patched_values)
+
+
+class PatchTSTModelOutputWithNoAttention(ModelOutput):
+    """
+    Base class for model's outputs, with potential hidden states.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, num_channels, height, width)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        patched_input
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    patched_input: torch.FloatTensor = None
 
 
 class PretrainHead(nn.Module):
@@ -598,6 +658,13 @@ def cv_random_masking(
     return xb_mask, mask[..., 0]
 
 
+def set_seed(x=42):
+    random.seed(x)
+    np.random.seed(x)
+    torch.manual_seed(x)
+    if torch.cuda.is_available(): torch.cuda.manual_seed_all(x)
+
+
 class PatchMasking(nn.Module):
     def __init__(
         self,
@@ -609,6 +676,7 @@ class PatchMasking(nn.Module):
         d_size: str = "4D",
         cv_channel_indices: list = None,
         mask_value=0,
+        seed_number: Optional[int] = None
     ):
         """PatchMasking: Class to random or forcast masking.
 
@@ -623,7 +691,8 @@ class PatchMasking(nn.Module):
             d_size (str, optional): Input data size. Allowed values: 4D, 6D. Defaults to "4D".
             mask_value (int, optional): Value to use for masking. Defaults to 0.
         """
-
+        if seed_number:
+            set_seed(seed_number)
         self.mask_ratio = mask_ratio
         self.channel_consistent_masking = channel_consistent_masking
         self.d_size = d_size
@@ -665,7 +734,7 @@ class PatchMasking(nn.Module):
 
         mask = mask.bool()  # mask: [bs x n_vars x num_patch]
 
-        return x_mask, mask
+        return x_mask #, mask
 
 
 class Patch(nn.Module):
@@ -699,7 +768,7 @@ class Patch(nn.Module):
         """
 
         Args:
-            x (torch.Tensor, required): Input of shape [bs x ... x seq_len x n_vars]
+            x (torch.Tensor, required): Input of shape [bs x seq_len x n_vars]
         Returns:
             z: output tensor data [bs x ... x n_vars x num_patch x patch_len]
         """
@@ -754,39 +823,28 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
-        self.patching = Patch(config.context_length, patch_len=config.patch_length, stride=config.stride)
-        self.masking = PatchMasking(
-            mask_type=config.mask_type,
-            mask_ratio=config.mask_ratio,
-            mask_patches=config.mask_patches,
-            mask_patch_ratios=config.mask_patch_ratios,
-            channel_consistent_masking=config.channel_consistent_masking,
-            d_size=config.d_size,
-            cv_channel_indices=config.cv_channel_indices,
-            mask_value=config.mask_value,
-        )
+        config.mask_input = True
         self.model = PatchTSTModel(config)
         self.head = PretrainHead(config)
         self.loss = torch.nn.MSELoss(reduction="mean")
 
     def forward(
-        self, past_values: torch.Tensor, 
-        future_values: Optional[torch.Tensor] = None
+        self, past_values: torch.Tensor,
+            future_values: Optional[torch.Tensor] = None,
+            output_hidden_states: Optional[bool] = None
     ) -> PatchTSTForPreTrainingOutput:
         """
         past_values (x): tensor [bs x seq_len x n_vars ]
         future_values (y): labels
         """
-        patched_x = self.patching(past_values) # patched_x: [bs x n_vars x num_patch x patch_len] for pretrain
-        masked_x, masked = self.masking(patched_x)
-        model_output = self.model(masked_x)  # x: [bs x nvars x num_patch x d_model]
-        #  or [bs x nvars x (num_patch+1) x d_model] if use cls_token
+        model_output = self.model(past_values)  # x: [bs x nvars x num_patch x d_model] or [bs x nvars x (num_patch+1) x d_model] if use cls_token
         x_hat = self.head(model_output[0])  # tensor [bs x nvars x num_patch x patch_len]
 
-        loss_val = self.loss(x_hat, patched_x)
+        loss_val = self.loss(x_hat, model_output.patched_input)
         return PatchTSTForPreTrainingOutput(
             loss=loss_val,
             prediction_logits=x_hat,
+            hidden_states=model_output.hidden_states
         )
 
 
@@ -795,15 +853,12 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
-        self.patching = Patch(config.context_length, patch_len=config.patch_length, stride=config.stride)
-
         self.model = PatchTSTModel(config)
         self.head = ClassificationHead(config)
         self.loss = nn.CrossEntropyLoss()
 
-    def forward(self, past_values, future_values=None):
-        patched_x = self.patching(past_values)
-        model_output = self.model(patched_x)
+    def forward(self, past_values, future_values=None, output_hidden_states: Optional[bool] = None):
+        model_output = self.model(past_values)
         y_hat = self.head(model_output[0])
 
         loss_val = None
@@ -812,6 +867,7 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         return PatchTSTForClassificationOutput(
             loss=loss_val,
             prediction_logits=y_hat,
+            hidden_states=model_output.hidden_states
         )
 
 
@@ -968,16 +1024,19 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
-        self.patching = Patch(config.context_length, patch_len=config.patch_length, stride=config.stride)
-
         self.model = PatchTSTModel(config)
         self.head = PredictionHead(config)
         self.loss = nn.MSELoss(reduction='mean')
 
-    def forward(self, past_values: torch.Tensor, future_values: Optional[torch.Tensor]):
-        patched_x = self.patching(past_values)
-        model_output = self.model(patched_x)
-        y_hat = self.head(model_output[0])
+    def forward(self,
+                past_values: torch.Tensor,
+                future_values: Optional[torch.Tensor],
+                output_hidden_states: Optional[bool] = None):
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        model_output = self.model(past_values, output_hidden_states=output_hidden_states)
+        y_hat = self.head(model_output.last_hidden_state)
 
         loss_val = None
         if future_values is not None:
@@ -985,6 +1044,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         return PatchTSTForPredictionOutput(
             loss=loss_val,
             prediction_outputs=y_hat,
+            hidden_states=model_output.hidden_states
         )
 
 
@@ -1097,9 +1157,14 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
         self.head = ForecastHead(config)
         self.loss = nn.MSELoss(reduction='mean')
 
-    def forward(self, past_values: torch.Tensor, future_values: Optional[torch.Tensor]):
-        patched_x = self.patching(past_values)
-        model_output = self.model(patched_x)
+    def forward(self,
+                past_values: torch.Tensor,
+                future_values: Optional[torch.Tensor],
+                output_hidden_states: Optional[bool] = None):
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        model_output = self.model(past_values, output_hidden_states=output_hidden_states)
         y_hat = self.head(model_output[0])
 
         loss_val = None
@@ -1108,4 +1173,92 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
         return PatchTSTForForecastingOutput(
             loss=loss_val,
             forecast_outputs=y_hat,
+            hidden_states=model_output.hidden_states
         )
+
+
+if __name__ == "__main__":
+
+    from transformers import Trainer, TrainingArguments
+    from torch.utils.data import Dataset
+    from transformers import AutoModel, AutoConfig
+    import numpy as np
+
+    class AssetDataset(Dataset):
+        def __init__(self, x, y, seq_len=10, pred_len=10, is_pred=False):
+            self.seq_len = seq_len
+            self.x = x
+            self.y = y
+            self.is_pred = is_pred
+            self.pred_len = pred_len
+
+        def __getitem__(self, index):
+            s_begin = index
+            s_end = s_begin + self.seq_len
+            r_begin = s_end - 1
+            r_end = s_end + self.pred_len
+
+            seq_x = self.x[s_begin:s_end]
+            seq_y = np.array(self.y[r_begin])
+            if self.is_pred:
+                seq_y = self.x[s_end:r_end]
+
+            return {'past_values': seq_x, 'future_values': seq_y}
+
+        def __len__(self):
+            if self.is_pred:
+                return len(self.x) - self.seq_len - self.pred_len + 1
+            return len(self.x) - self.seq_len + 1
+
+    n_classes = 3
+    bs = 200
+    n_features = 20
+    pred_len = 7
+    x = torch.randn(bs, n_features)
+    y = torch.randint(low=0, high=n_classes, size=(bs, 1))[:, 0]
+    valid_asset_ds = train_asset_ds = AssetDataset(x, y, seq_len=10, pred_len=pred_len, is_pred=False)
+    config = PatchTSTConfig(
+        input_size=n_features,
+        num_classes=n_classes,
+        context_length=10,
+        patch_length=5,
+        stride=5,
+        batch_size=50,
+        standardscale=None,  # 'bysample'
+        context_points=10,
+        encoder_layers=12,
+        encoder_attention_heads=8,
+        d_model=256,
+        encoder_ffn_dim=1024,
+        dropout=0.2,
+        fc_dropout=0,
+        r=0.4,
+        prediction_length=pred_len,
+    )
+    # model = PatchTSTForPretraining(config)
+    # model = PatchTSTForPrediction(config)
+    model = PatchTSTForClassification(config)
+    training_args = TrainingArguments(
+        output_dir='./save_model/',
+        num_train_epochs=1,
+        per_device_train_batch_size=5,
+        per_device_eval_batch_size=5,
+        report_to=[],
+        save_strategy='no',
+        remove_unused_columns=False,
+        no_cuda=True
+    )
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_asset_ds,
+        eval_dataset=valid_asset_ds
+    )
+    trainer.train()
+    trainer.save_model('./save_model')
+    # AutoConfig.register("patchtst", PatchTSTConfig)
+    AutoModel.register(PatchTSTConfig, PatchTSTForClassification)
+    config = AutoConfig.from_pretrained('./save_model')
+    model = AutoModel.from_pretrained('./save_model', config=config)
+    print(model)
+
