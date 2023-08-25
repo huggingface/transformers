@@ -222,8 +222,8 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
         self._add_bos_token = value
         self.update_post_processor()
 
-    def set_infilling_processor(self, mode, suffix_first=False):
-        if mode is False:
+    def set_infilling_processor(self, reset, suffix_first=False, add_special_tokens = True):
+        if reset:
             self._tokenizer.normalizer = normalizers.Sequence(
                 [
                     normalizers.Prepend(prepend="▁"),
@@ -233,8 +233,8 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
             self.update_post_processor()
 
         self._tokenizer.normalizer = normalizers.Replace(pattern=" ", content="▁")
-        pair = [self.bos_token] if self.add_bos_token else []
-        special_tokens = [(self.bos_token, self.bos_token_id)] if self.add_bos_token else []
+        pair = [self.bos_token] if self.add_bos_token and add_special_tokens else []
+        special_tokens = [(self.bos_token, self.bos_token_id)] if self.add_bos_token and add_special_tokens else []
         if suffix_first:
             # format as " <PRE> <SUF>{suf} <MID> {pre}"
             pair += [self.prefix_token, self.suffix_token, "$A", self.middle_token, "$B"]
@@ -252,22 +252,21 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
                 (self.middle_token, self.middle_id),
             ]
 
-        if self.add_eos_token:
+        if self.add_eos_token and add_special_tokens:
             pair += [self.eos_token]
             special_tokens += [(self.eos_token, self.eos_token_id)]
         self._tokenizer.post_processor = processors.TemplateProcessing(
             single="$A", pair=pair, special_tokens=special_tokens
         )
 
-    def encode_plus(self, text, text_pair=None, suffix_first=False, **kwargs):
+    def encode_plus(self, text, text_pair=None, suffix_first=False, add_special_tokens=True, **kwargs):
         # hack to make sure the input is pre-process but outside rust
         text_pair = kwargs.pop("suffix", text_pair)
         if self.fill_token in text and text_pair is None:
             text, text_pair = text.split(self.fill_token)
 
         if text_pair is None or len(text_pair) < 1:
-            self.set_infilling_processor(False)
-            return super().encode_plus(text, text_pair, **kwargs)
+            return super().encode_plus(text, text_pair, add_special_tokens=add_special_tokens, **kwargs)
 
         if None in (self.prefix_id, self.middle_id, self.suffix_id):
             raise ValueError(
@@ -276,11 +275,10 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
                 f" values : {self.prefix_id, self.middle_id, self.suffix_id}"
             )
 
-        self._add_bos_token = kwargs.pop("add_special_tokens", False)
-        self._add_eos_token = kwargs.pop("add_special_tokens", False)
-        self.set_infilling_processor(True, suffix_first=suffix_first)
-        kwargs["add_special_tokens"] = True
-        return super().encode_plus(" " + text, text_pair=text_pair, **kwargs)
+        self.set_infilling_processor(False, suffix_first=suffix_first, add_special_tokens = add_special_tokens)
+        tokens = super().encode_plus(" " + text, text_pair=text_pair, add_special_tokens=True, **kwargs)
+        self.set_infilling_processor(True)
+        return tokens
 
     def decode_infilling(self, tokens, prompt_id_length=None, **kwargs):
         """

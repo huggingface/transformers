@@ -197,22 +197,20 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
 
     def tokenize(self, prefix, suffix=None, suffix_first=False, **kwargs) -> List[int]:
         # add a prefix space to `prefix`
-        prefix = SPIECE_UNDERLINE + prefix.replace(SPIECE_UNDERLINE, " ")
-
         if self.fill_token in prefix and suffix is None:
             prefix, suffix = prefix.split(self.fill_token)
+        
+        if len(prefix) > 0:
+            prefix = SPIECE_UNDERLINE + prefix.replace(SPIECE_UNDERLINE, " ")
+
+        if suffix is None or len(suffix) < 1:
+            tokens = super().tokenize(prefix, **kwargs)
+            if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
+                tokens = tokens[1:]
+            return tokens
 
         prefix_tokens = self._tokenize(prefix)  # prefix has an extra `SPIECE_UNDERLINE`
-        if suffix is None or len(suffix) < 1:
-            if (
-                len(prefix_tokens) > 1
-                and prefix_tokens[0] == SPIECE_UNDERLINE
-                and prefix_tokens[1] in self.all_special_tokens
-            ):
-                # strip prefix token before a special token
-                prefix_tokens = prefix_tokens[1:]
-            return prefix_tokens
-
+    
         if None in (self.prefix_id, self.middle_id, self.suffix_id):
             raise ValueError(
                 "Then input includes a `prefix` and a `suffix` used for the infilling task,"
@@ -277,8 +275,6 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
         for i, token in enumerate(tokens):
             # make sure that special tokens are not decoded using sentencepiece model
             if token in self.all_special_tokens:
-                if not prev_is_special and i != 0:
-                    out_string += " "
                 out_string += self.sp_model.decode(current_sub_tokens) + token
                 prev_is_special = True
                 current_sub_tokens = []
