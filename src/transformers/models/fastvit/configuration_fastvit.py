@@ -76,14 +76,13 @@ class FastViTConfig(PretrainedConfig):
            Factor to increase the spatial resolution by in the decoder head for masked image modeling.
 
     Example:
-
     ```python
     >>> from transformers import FastViTConfig, FastViTModel
 
-    >>> # Initializing a FastViT fastvit-base-patch16-224 style configuration
+    >>> # Initializing a fastvit-t8 style configuration
     >>> configuration = FastViTConfig()
 
-    >>> # Initializing a model (with random weights) from the fastvit-base-patch16-224 style configuration
+    >>> # Initializing a model (with random weights) from the fastvit-t8 style configuration
     >>> model = FastViTModel(configuration)
 
     >>> # Accessing the model configuration
