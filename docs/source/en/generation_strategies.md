@@ -244,10 +244,10 @@ To enable multinomial sampling set `do_sample=True` and `num_beams=1`.
 
 >>> outputs = model.generate(**inputs, do_sample=True, num_beams=1, max_new_tokens=100)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Today was an amazing day because we are now in the final stages of our trip to New York City which was very tough. \
-It is a difficult schedule and a challenging part of the year but still worth it. I have been taking things easier and \
-I feel stronger and more motivated to be out there on their tour. Hopefully, that experience is going to help them with \
-their upcoming events which are currently scheduled in Australia.\n\nWe love that they are here. They want to make a \
+['Today was an amazing day because we are now in the final stages of our trip to New York City which was very tough.
+It is a difficult schedule and a challenging part of the year but still worth it. I have been taking things easier and
+I feel stronger and more motivated to be out there on their tour. Hopefully, that experience is going to help them with
+their upcoming events which are currently scheduled in Australia.\n\nWe love that they are here. They want to make a
 name for themselves and become famous for what they']
 ```
 
@@ -272,7 +272,7 @@ To enable this decoding strategy, specify the `num_beams` (aka number of hypothe
 
 >>> outputs = model.generate(**inputs, num_beams=5, max_new_tokens=50)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['It is astonishing how one can have such a profound impact on the lives of so many people in such a short period of \
+['It is astonishing how one can have such a profound impact on the lives of so many people in such a short period of
 time."\n\nHe added: "I am very proud of the work I have been able to do in the last few years.\n\n"I have']
 ```
 
