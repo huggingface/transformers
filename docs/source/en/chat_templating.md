@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Chat Templates
+# Templates for Chat Models
 
 ## Introduction
 
