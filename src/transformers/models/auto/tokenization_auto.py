@@ -120,6 +120,13 @@ else:
                     "CLIPTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "code_llama",
+                (
+                    "CodeLlamaTokenizer" if is_sentencepiece_available() else None,
+                    "CodeLlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("codegen", ("CodeGenTokenizer", "CodeGenTokenizerFast" if is_tokenizers_available() else None)),
             ("convbert", ("ConvBertTokenizer", "ConvBertTokenizerFast" if is_tokenizers_available() else None)),
             (
@@ -183,13 +190,6 @@ else:
                 (
                     "LlamaTokenizer" if is_sentencepiece_available() else None,
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
-                ),
-            ),
-            (
-                "code_llama",
-                (
-                    "CodeLlamaTokenizer" if is_sentencepiece_available() else None,
-                    "CodeLlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),

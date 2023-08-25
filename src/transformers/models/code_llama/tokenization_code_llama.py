@@ -298,7 +298,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
     #         infilling = super().decode(ids[:len(prompt_ids)], skip_special_tokens = skip_special_tokens, **kwargs)
     #     else:
     #         infilling = super().decode(ids, skip_special_tokens = skip_special_tokens, **kwargs)
-        
+
     #     if skip_special_tokens:
     #         # tokens to remove are not special, remove them anyway
     #         infilling = infilling.replace(" " + self.prefix_token[1:], "")

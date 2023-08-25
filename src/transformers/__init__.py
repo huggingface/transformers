@@ -254,6 +254,7 @@ _import_structure = {
         "CLIPSegTextConfig",
         "CLIPSegVisionConfig",
     ],
+    "models.code_llama": [],
     "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
     "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
@@ -408,7 +409,6 @@ _import_structure = {
     "models.levit": ["LEVIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LevitConfig"],
     "models.lilt": ["LILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "LiltConfig"],
     "models.llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
-    "models.code_llama": [],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
     "models.longt5": ["LONGT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongT5Config"],
     "models.luke": ["LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP", "LukeConfig", "LukeTokenizer"],
@@ -767,6 +767,7 @@ else:
     _import_structure["models.bert_generation"].append("BertGenerationTokenizer")
     _import_structure["models.big_bird"].append("BigBirdTokenizer")
     _import_structure["models.camembert"].append("CamembertTokenizer")
+    _import_structure["models.code_llama"].append("CodeLlamaTokenizer")
     _import_structure["models.cpm"].append("CpmTokenizer")
     _import_structure["models.deberta_v2"].append("DebertaV2Tokenizer")
     _import_structure["models.ernie_m"].append("ErnieMTokenizer")
@@ -774,7 +775,6 @@ else:
     _import_structure["models.gpt_sw3"].append("GPTSw3Tokenizer")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizer")
     _import_structure["models.llama"].append("LlamaTokenizer")
-    _import_structure["models.code_llama"].append("CodeLlamaTokenizer")
     _import_structure["models.m2m_100"].append("M2M100Tokenizer")
     _import_structure["models.marian"].append("MarianTokenizer")
     _import_structure["models.mbart"].append("MBartTokenizer")
@@ -816,6 +816,7 @@ else:
     _import_structure["models.bloom"].append("BloomTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
+    _import_structure["models.code_llama"].append("CodeLlamaTokenizerFast")
     _import_structure["models.codegen"].append("CodeGenTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.cpm"].append("CpmTokenizerFast")
@@ -839,7 +840,6 @@ else:
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizerFast")
     _import_structure["models.led"].append("LEDTokenizerFast")
     _import_structure["models.llama"].append("LlamaTokenizerFast")
-    _import_structure["models.code_llama"].append("CodeLlamaTokenizerFast")
     _import_structure["models.longformer"].append("LongformerTokenizerFast")
     _import_structure["models.lxmert"].append("LxmertTokenizerFast")
     _import_structure["models.markuplm"].append("MarkupLMTokenizerFast")
@@ -4809,6 +4809,7 @@ if TYPE_CHECKING:
         from .models.bert_generation import BertGenerationTokenizer
         from .models.big_bird import BigBirdTokenizer
         from .models.camembert import CamembertTokenizer
+        from .models.code_llama import CodeLlamaTokenizer
         from .models.cpm import CpmTokenizer
         from .models.deberta_v2 import DebertaV2Tokenizer
         from .models.ernie_m import ErnieMTokenizer
@@ -4816,7 +4817,6 @@ if TYPE_CHECKING:
         from .models.gpt_sw3 import GPTSw3Tokenizer
         from .models.layoutxlm import LayoutXLMTokenizer
         from .models.llama import LlamaTokenizer
-        from .models.code_llama import CodeLlamaTokenizer
         from .models.m2m_100 import M2M100Tokenizer
         from .models.marian import MarianTokenizer
         from .models.mbart import MBart50Tokenizer, MBartTokenizer
@@ -4852,6 +4852,7 @@ if TYPE_CHECKING:
         from .models.bloom import BloomTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast
+        from .models.code_llama import CodeLlamaTokenizerFast
         from .models.codegen import CodeGenTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.cpm import CpmTokenizerFast
@@ -4873,7 +4874,6 @@ if TYPE_CHECKING:
         from .models.layoutxlm import LayoutXLMTokenizerFast
         from .models.led import LEDTokenizerFast
         from .models.llama import LlamaTokenizerFast
-        from .models.code_llama import CodeLlamaTokenizerFast
         from .models.longformer import LongformerTokenizerFast
         from .models.lxmert import LxmertTokenizerFast
         from .models.markuplm import MarkupLMTokenizerFast
