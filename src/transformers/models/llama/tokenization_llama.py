@@ -154,19 +154,25 @@ class LlamaTokenizer(PreTrainedTokenizer):
         self.use_default_system_prompt = use_default_system_prompt
 
         self.sp_model = self.get_spm_processor()
-        self.unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
+
+    @property
+    def unk_token_length(self):
+        return len(self.sp_model.encode(str(self.unk_token)))
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
     def get_spm_processor(self):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        if self.legacy:  # no dependency on protobuf
+            tokenizer.Load(self.vocab_file)
+            return tokenizer
+
         with open(self.vocab_file, "rb") as f:
             sp_model = f.read()
-            model_pb2 = import_protobuf()
+            model_pb2 = import_protobuf(f"The new behaviour of {self.__class__.__name__} (with `self.legacy = False`)")
             model = model_pb2.ModelProto.FromString(sp_model)
-            if not self.legacy:
-                normalizer_spec = model_pb2.NormalizerSpec()
-                normalizer_spec.add_dummy_prefix = False
-                model.normalizer_spec.MergeFrom(normalizer_spec)
+            normalizer_spec = model_pb2.NormalizerSpec()
+            normalizer_spec.add_dummy_prefix = False
+            model.normalizer_spec.MergeFrom(normalizer_spec)
             sp_model = model.SerializeToString()
             tokenizer.LoadFromSerializedProto(sp_model)
         return tokenizer
@@ -219,13 +225,14 @@ class LlamaTokenizer(PreTrainedTokenizer):
         `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
-        if self.legacy:
-            return self.sp_model.encode(text, out_type=str)
-
-        unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
-        text = self.unk_token + text
         tokens = self.sp_model.encode(text, out_type=str)
-        return tokens[unk_token_length:]
+        if self.legacy or not text.startswith((SPIECE_UNDERLINE, " ")):
+            return tokens
+
+        # 1. Encode string + prefix ex: "<unk> Hey"
+        tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
+        # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
+        return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
