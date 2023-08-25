@@ -115,7 +115,7 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
         middle_token="▁<MID>",
         suffix_token="▁<SUF>",
         eot_token="▁<EOT>",
-        fill_token="<FILL>",
+        fill_token="<FILL_ME>",
         add_bos_token=True,
         add_eos_token=False,
         **kwargs,
@@ -251,17 +251,26 @@ class LlamaCodeTokenizerFast(PreTrainedTokenizerFast):
 
         if suffix_first:
             # format as " <PRE> <SUF>{suf} <MID> {pre}"
-            return [self.prefix_token, self.suffix_token] + suffix_tokens + [self.mid_token] + prefix_tokens
+            return [self.prefix_token, self.suffix_token] + suffix_tokens + [self.middle_token] + prefix_tokens
         else:
             # format as " <PRE> {pre} <SUF>{suf} <MID>"
-            return [self.prefix_token] + prefix_tokens + [self.suffix_token] + suffix_tokens + [self.mid_token]
+            return [self.prefix_token] + prefix_tokens + [self.suffix_token] + suffix_tokens + [self.middle_token]
 
-    def decode(self, tokens, infilling_length=None, **kwargs):
-        # TODO only return infilling if pre suf and mid in text
-        text = super().decode(tokens, **kwargs)
-        if infilling_length is not None:
-            text = text[infilling_length:]
-        return text
+    def decode_infilling(self, tokens, prompt_id_length=None, **kwargs):
+        """
+        Utility function to use when decoding the output of `model.generate()`. The `prompt_id_length` need to be
+        passed as an argument to make sur only the infilling output is produced.
+        """
+        # cut at EOT ( though generate should stop generating when EOT is reached no?)
+        eot_idx = tokens.index(self.eot_id) if self.eot_id in tokens else len(tokens)
+        sequence = tokens[:eot_idx]
+        prompt_id_length = prompt_id_length if prompt_id_length is not None else 0
+        outputs = {
+            "full_text": super().decode(sequence[:eot_idx], **kwargs),
+            "infilling": super().decode(sequence[prompt_id_length:eot_idx], **kwargs),
+            "infilling_token_ids": sequence,
+        }
+        return outputs
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:

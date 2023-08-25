@@ -238,8 +238,8 @@ class LlamaCodeTokenizer(PreTrainedTokenizer):
         sequence = tokens[:eot_idx]
         prompt_id_length = prompt_id_length if prompt_id_length is not None else 0
         outputs = {
-            "full_text": super.decode(sequence[:eot_idx], **kwargs),
-            "infilling": super.decode(sequence[prompt_id_length:eot_idx], **kwargs),
+            "full_text": super().decode(sequence[:eot_idx], **kwargs),
+            "infilling": super().decode(sequence[prompt_id_length:eot_idx], **kwargs),
             "infilling_token_ids": sequence,
         }
         return outputs
