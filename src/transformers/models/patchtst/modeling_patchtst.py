@@ -156,6 +156,176 @@ def coord1d_pos_encoding(q_len, exponential=False, normalize=True):
     return cpe
 
 
+def set_seed(x=42):
+    random.seed(x)
+    np.random.seed(x)
+    torch.manual_seed(x)
+    if torch.cuda.is_available(): torch.cuda.manual_seed_all(x)
+
+
+def random_masking(
+    xb: torch.Tensor,
+    mask_ratio: float,
+    unmasked_channel_indices: list = None,
+    channel_consistent_masking: bool = True,
+    mask_value=0,
+):
+    """random_masking: Mask the input considering the control variables.
+
+    Args:
+        xb (Tensor): Input to mask [ bs x nvars x num_patch x patch_len]
+        mask_ratio (float): Mask ratio.
+        unmasked_channel_indices (list, optional): indices of unmasked channels. These channels will not be masked. Defaults to None.
+        channel_consistent_masking (bool, optional): When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary across channels. Defaults to True.
+        mask_value (int, optional): Value to use for masking. Defaults to 0.
+
+    Returns:
+        Tensor: xb_mask, masked input, same shape as input
+        Tensor: Mask tensor of shape [bs x c x n]
+    """
+    bs, nvars, L, D = xb.shape
+
+    len_keep = int(L * (1 - mask_ratio))
+
+    if channel_consistent_masking:
+        noise = torch.rand(bs, 1, L, device=xb.device)  # noise in [0, 1], bs x 1 x  L
+        noise = noise.repeat(1, nvars, 1)  # bs x nvars x L
+    else:
+        noise = torch.rand(bs, nvars, L, device=xb.device)  # noise in [0, 1], bs x nvars x L
+
+        mask = torch.ones(bs, nvars, L, device=xb.device)  # mask: [bs x nvars x num_patch]
+        mask[:, :, :len_keep] = 0
+
+    # sort noise for each sample
+    ids_shuffle = torch.argsort(noise, dim=-1)  # ascend: small is keep, large is remove
+    ids_restore = torch.argsort(ids_shuffle, dim=-1)  # ids_restore: [bs x nvars x L]
+    mask = torch.gather(mask, dim=-1, index=ids_restore)
+
+    mask = mask.unsqueeze(-1).repeat(1, 1, 1, D)  # mask: [bs x nvars x num_patch x patch_len]
+    if unmasked_channel_indices is not None:
+        mask[:, unmasked_channel_indices, :, :] = 0
+
+    xb_mask = xb.masked_fill(mask.bool(), mask_value)
+    return xb_mask, mask[..., 0]
+
+
+class Patch(nn.Module):
+    """
+    A class to patchify the time series sequence into different patches
+    """
+
+    def __init__(
+        self,
+        seq_len: int,
+        patch_len: int,
+        stride: int,
+        padding: bool = False,  # TODO: use this to set whether we want to pad zeros to the sequence
+    ):
+        super().__init__()
+
+        assert (
+            seq_len > patch_len
+        ), f"Sequence length ({seq_len}) has to be greater than the patch length ({patch_len})"
+
+        self.seq_len = seq_len
+        self.patch_len = patch_len
+        self.stride = stride
+
+        # get the number of patches
+        self.num_patch = (max(seq_len, patch_len) - patch_len) // stride + 1
+        tgt_len = patch_len + stride * (self.num_patch - 1)
+        self.s_begin = seq_len - tgt_len
+
+    def forward(self, x: torch.Tensor):
+        """
+
+        Args:
+            x (torch.Tensor, required): Input of shape [bs x seq_len x n_vars]
+        Returns:
+            z: output tensor data [bs x ... x n_vars x num_patch x patch_len]
+        """
+        seq_len = x.shape[-2]
+        assert seq_len == self.seq_len, f"Input sequence length ({seq_len}) doesn't match model ({self.seq_len})."
+
+        # x = x[:, :, self.s_begin:, :]  # xb: [bs x ... x tgt_len x nvars]
+        z = x.transpose(0, -2)[self.s_begin :]  # z: [tgt_len x ... x bs x n_vars]
+        z = z.transpose(0, -2).contiguous()  # z: [bs x ... x tgt_len x n_vars]  # TODO: need a better solution
+        z = z.unfold(
+            dimension=-2, size=self.patch_len, step=self.stride
+        )  # xb: [bs x ... x num_patch x n_vars x patch_len]
+        z = z.transpose(-2, -3).contiguous()  # xb: [bs x ... x n_vars x num_patch x patch_len]
+        return z
+
+
+class PatchMasking(nn.Module):
+    def __init__(
+        self,
+        mask_type: str = "random",
+        mask_ratio=0.5,
+        mask_patches: list = [2, 3],
+        mask_patch_ratios: list = [1, 1],
+        channel_consistent_masking: bool = False,
+        unmasked_channel_indices: list = None,
+        mask_value=0,
+        seed_number: Optional[int] = None
+    ):
+        """PatchMasking: Class to random or forcast masking.
+
+        Args:
+            mask_type (str, optional): Masking type. Allowed values are random, forecast. Defaults to random.
+            mask_ratio (float, optional): Mask ratio.
+            mask_patches (list, optional): List of patch lengths to mask in the end of the data.
+            mask_patch_ratios (list, optional): List of weights to use for each patch length. For Ex.
+            if patch_lengths is [5,4] and mix_ratio is [1,1], then equal weights to both patch lengths. Defaults to None.
+            unmasked_channel_indices (list, optional): Control Variable channel indices. These channels will not be masked. Defaults to None.
+            channel_consistent_masking (bool, optional): When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary across channels. Defaults to True.
+            mask_value (int, optional): Value to use for masking. Defaults to 0.
+        """
+        if seed_number:
+            set_seed(seed_number)
+        self.mask_ratio = mask_ratio
+        self.channel_consistent_masking = channel_consistent_masking
+        self.mask_type = mask_type
+        self.mask_patches = mask_patches
+        self.mask_patch_ratios = mask_patch_ratios
+        self.unmasked_channel_indices = unmasked_channel_indices
+        self.mask_value = mask_value
+        if self.unmasked_channel_indices is not None:
+            self.unmasked_channel_indices.sort()
+
+        super().__init__()
+
+    def forward(self, x: torch.Tensor):
+        """
+        Input:
+            x: patched input
+                4D: [bs x n_vars x num_patch  x patch_len]
+
+        Output:
+            x_mask: Masked patched input
+                4D: [bs x n_vars x num_patch  x patch_len]
+            mask: bool tensor indicating True on masked points
+                4D: [bs x n_vars x num_patch]
+        """
+
+        if self.mask_type == "random":
+            x_mask, mask = random_masking(
+                xb=x,
+                mask_ratio=self.mask_ratio,
+                unmasked_channel_indices=self.unmasked_channel_indices,
+                channel_consistent_masking=self.channel_consistent_masking,
+                mask_value=self.mask_value,
+            )
+
+        else:
+            raise Exception("Invalid mask type")
+
+        mask = mask.bool()  # mask: [bs x n_vars x num_patch]
+
+        return x_mask, mask
+
+
+
 class ChannelAttentionTSTEncoder(nn.Module):
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
@@ -532,40 +702,6 @@ PATCHTST_INPUTS_DOCSTRING = r"""
     "The bare PatchTST Model outputting raw hidden-states without any specific head on top.",
     PATCHTST_START_DOCSTRING,
 )
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerModel with TimeSeriesTransformer->PatchTST,TIME_SERIES_TRANSFORMER->PATCHTST,time-series-transformer->patchtst,TimeSeries->PatchTST
-class PatchTSTModel(PatchTSTPreTrainedModel):
-    def __init__(self, config: PatchTSTConfig):
-        super().__init__(config)
-        self.patching = Patch(config.context_length, patch_len=config.patch_length, stride=config.stride)
-        if config.mask_input:
-            self.masking = PatchMasking(
-                mask_type=config.mask_type,
-                mask_ratio=config.mask_ratio,
-                mask_patches=config.mask_patches,
-                mask_patch_ratios=config.mask_patch_ratios,
-                channel_consistent_masking=config.channel_consistent_masking,
-                d_size=config.d_size,
-                cv_channel_indices=config.cv_channel_indices,
-                mask_value=config.mask_value,
-                seed_number=config.seed_number
-            )
-        else:
-            self.masking = nn.Identity()
-        self.encoder = ChannelAttentionPatchTSTEncoder(config)
-
-    def forward(self,
-                past_values: torch.Tensor,
-                future_values: Optional[torch.Tensor]=None,
-                output_hidden_states: Optional[bool] = None):
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        patched_values = self.patching(past_values)  # patched_values: [bs x n_vars x num_patch x patch_len] for pretrain
-        masked_values = self.masking(patched_values)
-        encoder_output = self.encoder(masked_values, output_hidden_states=output_hidden_states)
-        return PatchTSTModelOutputWithNoAttention(last_hidden_state=encoder_output.last_hidden_state,
-                                                  hidden_states=encoder_output.hidden_states,
-                                                  patched_input=patched_values)
 
 
 class PatchTSTModelOutputWithNoAttention(ModelOutput):
@@ -586,6 +722,44 @@ class PatchTSTModelOutputWithNoAttention(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     patched_input: torch.FloatTensor = None
+    mask: torch.FloatTensor = None
+
+
+# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerModel with TimeSeriesTransformer->PatchTST,TIME_SERIES_TRANSFORMER->PATCHTST,time-series-transformer->patchtst,TimeSeries->PatchTST
+class PatchTSTModel(PatchTSTPreTrainedModel):
+    def __init__(self, config: PatchTSTConfig):
+        super().__init__(config)
+        self.patching = Patch(config.context_length, patch_len=config.patch_length, stride=config.stride)
+        if config.mask_input:
+            self.masking = PatchMasking(
+                mask_type=config.mask_type,
+                mask_ratio=config.mask_ratio,
+                mask_patches=config.mask_patches,
+                mask_patch_ratios=config.mask_patch_ratios,
+                channel_consistent_masking=config.channel_consistent_masking,
+                unmasked_channel_indices=config.unmasked_channel_indices,
+                mask_value=config.mask_value,
+                seed_number=config.seed_number
+            )
+        else:
+            self.masking = nn.Identity()
+        self.encoder = ChannelAttentionPatchTSTEncoder(config)
+
+    def forward(self,
+                past_values: torch.Tensor,
+                future_values: Optional[torch.Tensor]=None,
+                output_hidden_states: Optional[bool] = None):
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        patched_values = self.patching(past_values)  # patched_values: [bs x n_vars x num_patch x patch_len] for pretrain
+        masked_values, mask = self.masking(patched_values)
+        encoder_output = self.encoder(masked_values, output_hidden_states=output_hidden_states)
+        return PatchTSTModelOutputWithNoAttention(last_hidden_state=encoder_output.last_hidden_state,
+                                                  hidden_states=encoder_output.hidden_states,
+                                                  patched_input=patched_values,
+                                                  mask=mask
+                                                  )
 
 
 class PretrainHead(nn.Module):
@@ -605,184 +779,6 @@ class PretrainHead(nn.Module):
         if self.use_cls_token:
             x = x[:, :, 1:, :]  # remove the first cls token
         return x
-
-
-def cv_random_masking(
-    xb: torch.Tensor,
-    mask_ratio: float,
-    cv_channel_indices: list = None,
-    channel_consistent_masking: bool = True,
-    d_size="4D",
-    mask_value=0,
-):
-    """cv_random_masking: Mask the input considering the control variables.
-
-    Args:
-        xb (Tensor): Input to mask [ bs x nvars x num_patch x patch_len] or [ bs x tsg1 x tag2 x nvars x num_patch x patch_len]
-        mask_ratio (float): Mask ratio.
-        cv_channel_indices (list, optional): Control Variable channel indices. These channels will not be masked. Defaults to None.
-        channel_consistent_masking (bool, optional): When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary across channels. Defaults to True.
-        d_size (str, optional): Input data size. Allowed values: 4D, 6D. Defaults to "4D".
-        mask_value (int, optional): Value to use for masking. Defaults to 0.
-
-    Returns:
-        Tensor: xb_mask, masked input, same shape as input
-        Tensor: Mask tensor of shape [bs x c x n] or [bs x tsg1 x tsg2 x c x n]
-    """
-    if d_size == "4D":
-        bs, nvars, L, D = xb.shape
-
-    len_keep = int(L * (1 - mask_ratio))
-
-    if d_size == "4D":
-        if channel_consistent_masking:
-            noise = torch.rand(bs, 1, L, device=xb.device)  # noise in [0, 1], bs x 1 x  L
-            noise = noise.repeat(1, nvars, 1)  # bs x nvars x L
-        else:
-            noise = torch.rand(bs, nvars, L, device=xb.device)  # noise in [0, 1], bs x nvars x L
-
-        mask = torch.ones(bs, nvars, L, device=xb.device)  # mask: [bs x nvars x num_patch]
-        mask[:, :, :len_keep] = 0
-
-    # sort noise for each sample
-    ids_shuffle = torch.argsort(noise, dim=-1)  # ascend: small is keep, large is remove
-    ids_restore = torch.argsort(ids_shuffle, dim=-1)  # ids_restore: [bs x nvars x L]
-    mask = torch.gather(mask, dim=-1, index=ids_restore)
-
-    if d_size == "4D":
-        mask = mask.unsqueeze(-1).repeat(1, 1, 1, D)  # mask: [bs x nvars x num_patch x patch_len]
-        if cv_channel_indices is not None:
-            mask[:, cv_channel_indices, :, :] = 0
-
-    xb_mask = xb.masked_fill(mask.bool(), mask_value)
-    return xb_mask, mask[..., 0]
-
-
-def set_seed(x=42):
-    random.seed(x)
-    np.random.seed(x)
-    torch.manual_seed(x)
-    if torch.cuda.is_available(): torch.cuda.manual_seed_all(x)
-
-
-class PatchMasking(nn.Module):
-    def __init__(
-        self,
-        mask_type: str = "random",
-        mask_ratio=0.5,
-        mask_patches: list = [2, 3],
-        mask_patch_ratios: list = [1, 1],
-        channel_consistent_masking: bool = True,
-        d_size: str = "4D",
-        cv_channel_indices: list = None,
-        mask_value=0,
-        seed_number: Optional[int] = None
-    ):
-        """PatchMasking: Class to random or forcast masking.
-
-        Args:
-            mask_type (str, optional): Masking type. Allowed values are random, forecast. Defaults to random.
-            mask_ratio (float, optional): Mask ratio.
-            mask_patches (list, optional): List of patch lengths to mask in the end of the data.
-            mask_patch_ratios (list, optional): List of weights to use for each patch length. For Ex.
-            if patch_lengths is [5,4] and mix_ratio is [1,1], then equal weights to both patch lengths. Defaults to None.
-            cv_channel_indices (list, optional): Control Variable channel indices. These channels will not be masked. Defaults to None.
-            channel_consistent_masking (bool, optional): When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary across channels. Defaults to True.
-            d_size (str, optional): Input data size. Allowed values: 4D, 6D. Defaults to "4D".
-            mask_value (int, optional): Value to use for masking. Defaults to 0.
-        """
-        if seed_number:
-            set_seed(seed_number)
-        self.mask_ratio = mask_ratio
-        self.channel_consistent_masking = channel_consistent_masking
-        self.d_size = d_size
-        self.mask_type = mask_type
-        self.mask_patches = mask_patches
-        self.mask_patch_ratios = mask_patch_ratios
-        self.cv_channel_indices = cv_channel_indices
-        self.mask_value = mask_value
-        if self.cv_channel_indices is not None:
-            self.cv_channel_indices.sort()
-
-        super().__init__()
-
-    def forward(self, x: torch.Tensor):
-        """
-        Input:
-            x: patched input
-                4D: [bs x n_vars x num_patch  x patch_len]
-
-        Output:
-            x_mask: Masked patched input
-                4D: [bs x n_vars x num_patch  x patch_len]
-            mask: bool tensor indicating True on masked points
-                4D: [bs x n_vars x num_patch]
-        """
-
-        if self.mask_type == "random":
-            x_mask, mask = cv_random_masking(
-                xb=x,
-                mask_ratio=self.mask_ratio,
-                cv_channel_indices=self.cv_channel_indices,
-                channel_consistent_masking=self.channel_consistent_masking,
-                d_size=self.d_size,
-                mask_value=self.mask_value,
-            )
-
-        else:
-            raise Exception("Invalid mask type")
-
-        mask = mask.bool()  # mask: [bs x n_vars x num_patch]
-
-        return x_mask #, mask
-
-
-class Patch(nn.Module):
-    """
-    A class to patchify the time series sequence into different patches
-    """
-
-    def __init__(
-        self,
-        seq_len: int,
-        patch_len: int,
-        stride: int,
-        padding: bool = False,  # TODO: use this to set whether we want to pad zeros to the sequence
-    ):
-        super().__init__()
-
-        assert (
-            seq_len > patch_len
-        ), f"Sequence length ({seq_len}) has to be greater than the patch length ({patch_len})"
-
-        self.seq_len = seq_len
-        self.patch_len = patch_len
-        self.stride = stride
-
-        # get the number of patches
-        self.num_patch = (max(seq_len, patch_len) - patch_len) // stride + 1
-        tgt_len = patch_len + stride * (self.num_patch - 1)
-        self.s_begin = seq_len - tgt_len
-
-    def forward(self, x: torch.Tensor):
-        """
-
-        Args:
-            x (torch.Tensor, required): Input of shape [bs x seq_len x n_vars]
-        Returns:
-            z: output tensor data [bs x ... x n_vars x num_patch x patch_len]
-        """
-        seq_len = x.shape[-2]
-        assert seq_len == self.seq_len, f"Input sequence length ({seq_len}) doesn't match model ({self.seq_len})."
-
-        # x = x[:, :, self.s_begin:, :]  # xb: [bs x ... x tgt_len x nvars]
-        z = x.transpose(0, -2)[self.s_begin :]  # z: [tgt_len x ... x bs x n_vars]
-        z = z.transpose(0, -2).contiguous()  # z: [bs x ... x tgt_len x n_vars]  # TODO: need a better solution
-        z = z.unfold(
-            dimension=-2, size=self.patch_len, step=self.stride
-        )  # xb: [bs x ... x num_patch x n_vars x patch_len]
-        z = z.transpose(-2, -3).contiguous()  # xb: [bs x ... x n_vars x num_patch x patch_len]
-        return z
 
 
 class PatchTSTForPreTrainingOutput(ModelOutput):
@@ -838,7 +834,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         future_values (y): labels
         """
         model_output = self.model(past_values)  # x: [bs x nvars x num_patch x d_model] or [bs x nvars x (num_patch+1) x d_model] if use cls_token
-        x_hat = self.head(model_output[0])  # tensor [bs x nvars x num_patch x patch_len]
+        x_hat = self.head(model_output[0])  # tensor [bs x nvars x num_patch x patch_len] or [bs x nvars x (num_patch+1) x patch_len] if use cls_token
 
         loss_val = self.loss(x_hat, model_output.patched_input)
         return PatchTSTForPreTrainingOutput(
@@ -909,9 +905,6 @@ class PatchTSTForClassificationOutput(ModelOutput):
             (classification) loss.
         prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
-            Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
-            before SoftMax).
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
@@ -927,7 +920,6 @@ class PatchTSTForClassificationOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     prediction_logits: torch.FloatTensor = None
-    seq_relationship_logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -996,10 +988,8 @@ class PatchTSTForPredictionOutput(ModelOutput):
     Args:
         loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
             MSE loss.
-
         prediction_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
             Prediction outputs of the time series modeling heads.
-
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
