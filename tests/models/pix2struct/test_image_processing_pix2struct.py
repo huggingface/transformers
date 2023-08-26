@@ -222,6 +222,40 @@ class Pix2StructImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 (self.image_processor_tester.batch_size, max_patch, expected_hidden_dim),
             )
 
+    def test_call_numpy_4_channels(self):
+        # Initialize image_processor
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+        # create random numpy tensors
+        self.image_processor_tester.num_channels = 4
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        for image in image_inputs:
+            self.assertIsInstance(image, np.ndarray)
+
+        expected_hidden_dim = (
+            (self.image_processor_tester.patch_size["height"] * self.image_processor_tester.patch_size["width"])
+            * self.image_processor_tester.num_channels
+        ) + 2
+
+        for max_patch in self.image_processor_tester.max_patches:
+            # Test not batched input
+            encoded_images = image_processor(
+                image_inputs[0], return_tensors="pt", max_patches=max_patch, input_data_format="channels_first"
+            ).flattened_patches
+            self.assertEqual(
+                encoded_images.shape,
+                (1, max_patch, expected_hidden_dim),
+            )
+
+            # Test batched
+            encoded_images = image_processor(
+                image_inputs, return_tensors="pt", max_patches=max_patch, input_data_format="channels_first"
+            ).flattened_patches
+            self.assertEqual(
+                encoded_images.shape,
+                (self.image_processor_tester.batch_size, max_patch, expected_hidden_dim),
+            )
+        self.image_processor_tester.num_channels = 3
+
     def test_call_pytorch(self):
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)
@@ -317,4 +351,8 @@ class Pix2StructImageProcessingTestFourChannels(ImageProcessingTestMixin, unitte
 
     @unittest.skip("Pix2StructImageProcessor does not support 4 channels yet")  # FIXME Amy
     def test_call_pytorch(self):
+        return super().test_call_torch()
+
+    @unittest.skip("Pix2StructImageProcessor does treat numpy and PIL 4 channel images consistently")  # FIXME Amy
+    def test_call_numpy_4_channels(self):
         return super().test_call_torch()

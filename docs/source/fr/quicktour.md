@@ -30,11 +30,13 @@ Vous aurez aussi besoin d'installer votre bibliothèque d'apprentissage profond 
 
 <frameworkcontent>
 <pt>
+
 ```bash
 pip install torch
 ```
 </pt>
 <tf>
+
 ```bash
 pip install tensorflow
 ```
@@ -203,6 +205,7 @@ Un tokenizer peut également accepter une liste de textes, et remplir et tronque
 
 <frameworkcontent>
 <pt>
+
 ```py
 >>> pt_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
@@ -214,6 +217,7 @@ Un tokenizer peut également accepter une liste de textes, et remplir et tronque
 ```
 </pt>
 <tf>
+
 ```py
 >>> tf_batch = tokenizer(
 ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
@@ -346,6 +350,7 @@ Une fonctionnalité particulièrement cool 🤗 Transformers est la possibilité
 
 <frameworkcontent>
 <pt>
+
 ```py
 >>> from transformers import AutoModel
 
@@ -354,6 +359,7 @@ Une fonctionnalité particulièrement cool 🤗 Transformers est la possibilité
 ```
 </pt>
 <tf>
+
 ```py
 >>> from transformers import TFAutoModel
 

@@ -252,3 +252,36 @@ class ImageProcessingTestMixin:
             tuple(encoded_images.shape),
             (self.image_processor_tester.batch_size, *expected_output_image_shape),
         )
+
+    def test_call_numpy_4_channels(self):
+        # Test that can process images which have an arbitrary number of channels
+        # Initialize image_processing
+        image_processor = self.image_processing_class(**self.image_processor_dict)
+
+        # create random numpy tensors
+        self.image_processor_tester.num_channels = 4
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+
+        # Test not batched input
+        encoded_images = image_processor(
+            image_inputs[0],
+            return_tensors="pt",
+            input_data_format="channels_first",
+            image_mean=0,
+            image_std=1,
+        ).pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+        # Test batched
+        encoded_images = image_processor(
+            image_inputs,
+            return_tensors="pt",
+            input_data_format="channels_first",
+            image_mean=0,
+            image_std=1,
+        ).pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        self.assertEqual(
+            tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
+        )

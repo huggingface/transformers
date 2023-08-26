@@ -1413,6 +1413,26 @@ class ModelTesterMixin:
 
             self.assertTrue(models_equal)
 
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+
+            model_vocab_size = config.vocab_size
+            model.resize_token_embeddings(model_vocab_size + 10, pad_to_multiple_of=1)
+            self.assertTrue(model.config.vocab_size + 10, model_vocab_size)
+
+            model_embed = model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0] // 64, 0)
+
+            model_embed = model.resize_token_embeddings(model_vocab_size + 13, pad_to_multiple_of=64)
+            self.assertTrue(model_embed.weight.shape[0] // 64, 0)
+
+            with self.assertRaisesRegex(
+                ValueError,
+                "Asking to pad the embedding matrix to a multiple of `1.3`, which is not and integer. Please make sure to pass an integer",
+            ):
+                model.resize_token_embeddings(model_vocab_size, pad_to_multiple_of=1.3)
+
     def test_resize_embeddings_untied(self):
         (
             original_config,

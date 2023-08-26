@@ -148,6 +148,24 @@ class Swin2SRImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
     # Swin2SRImageProcessor does not support batched input
+    def test_call_numpy_4_channels(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random numpy tensors
+        self.image_processor_tester.num_channels = 4
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        for image in image_inputs:
+            self.assertIsInstance(image, np.ndarray)
+
+        # Test not batched input
+        encoded_images = image_processing(
+            image_inputs[0], return_tensors="pt", input_data_format="channels_first"
+        ).pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+        self.image_processor_tester.num_channels = 3
+
+    # Swin2SRImageProcessor does not support batched input
     def test_call_pytorch(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)

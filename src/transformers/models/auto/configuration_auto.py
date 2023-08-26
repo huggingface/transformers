@@ -56,6 +56,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("clap", "ClapConfig"),
         ("clip", "CLIPConfig"),
         ("clipseg", "CLIPSegConfig"),
+        ("code_llama", "LlamaConfig"),
         ("codegen", "CodeGenConfig"),
         ("conditional_detr", "ConditionalDetrConfig"),
         ("convbert", "ConvBertConfig"),
@@ -109,6 +110,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("groupvit", "GroupViTConfig"),
         ("hubert", "HubertConfig"),
         ("ibert", "IBertConfig"),
+        ("idefics", "IdeficsConfig"),
         ("imagegpt", "ImageGPTConfig"),
         ("informer", "InformerConfig"),
         ("instructblip", "InstructBlipConfig"),
@@ -161,6 +163,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("pix2struct", "Pix2StructConfig"),
         ("plbart", "PLBartConfig"),
         ("poolformer", "PoolFormerConfig"),
+        ("pop2piano", "Pop2PianoConfig"),
         ("prophetnet", "ProphetNetConfig"),
         ("pvt", "PvtConfig"),
         ("qdqbert", "QDQBertConfig"),
@@ -311,6 +314,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("groupvit", "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("hubert", "HUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("ibert", "IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("idefics", "IDEFICS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("imagegpt", "IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("informer", "INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("instructblip", "INSTRUCTBLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -359,6 +363,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("pix2struct", "PIX2STRUCT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("plbart", "PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("poolformer", "POOLFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("pop2piano", "POP2PIANO_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("prophetnet", "PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("pvt", "PVT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("qdqbert", "QDQBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -454,6 +459,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("clap", "CLAP"),
         ("clip", "CLIP"),
         ("clipseg", "CLIPSeg"),
+        ("code_llama", "CodeLlama"),
         ("codegen", "CodeGen"),
         ("conditional_detr", "Conditional DETR"),
         ("convbert", "ConvBERT"),
@@ -514,6 +520,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("herbert", "HerBERT"),
         ("hubert", "Hubert"),
         ("ibert", "I-BERT"),
+        ("idefics", "IDEFICS"),
         ("imagegpt", "ImageGPT"),
         ("informer", "Informer"),
         ("instructblip", "InstructBLIP"),
@@ -575,6 +582,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("pix2struct", "Pix2Struct"),
         ("plbart", "PLBart"),
         ("poolformer", "PoolFormer"),
+        ("pop2piano", "Pop2Piano"),
         ("prophetnet", "ProphetNet"),
         ("pvt", "PVT"),
         ("qdqbert", "QDQBert"),
@@ -1001,6 +1009,8 @@ class AutoConfig:
         kwargs["_from_auto"] = True
         kwargs["name_or_path"] = pretrained_model_name_or_path
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+        code_revision = kwargs.pop("code_revision", None)
+
         config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
@@ -1010,10 +1020,11 @@ class AutoConfig:
 
         if has_remote_code and trust_remote_code:
             class_ref = config_dict["auto_map"]["AutoConfig"]
-            config_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
+            config_class = get_class_from_dynamic_module(
+                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
+            )
             if os.path.isdir(pretrained_model_name_or_path):
                 config_class.register_for_auto_class()
-            _ = kwargs.pop("code_revision", None)
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]

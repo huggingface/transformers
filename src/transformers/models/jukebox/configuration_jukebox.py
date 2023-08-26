@@ -606,3 +606,9 @@ class JukeboxConfig(PretrainedConfig):
         """
         prior_config_list = [config.to_dict() for config in prior_configs]
         return cls(prior_config_list=prior_config_list, vqvae_config_dict=vqvae_config.to_dict(), **kwargs)
+
+    def to_dict(self):
+        # Override the default to_dict to apply to_dict to the list of prior configs.
+        result = super().to_dict()
+        result["prior_config_list"] = [config.to_dict() for config in result.pop("prior_configs")]
+        return result

@@ -122,7 +122,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         router_z_loss_coef=0.001,
         router_aux_loss_coef=0.001,
         initializer_factor=1.0,
-        feed_forward_proj="relu",
+        dense_act_fn="relu",
         is_encoder_decoder=True,
         add_router_probs=False,
         use_cache=True,
@@ -171,27 +171,12 @@ class SwitchTransformersConfig(PretrainedConfig):
         self.dropout_rate = dropout_rate
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor
-        self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
         self.add_router_probs = add_router_probs
 
         self.router_z_loss_coef = router_z_loss_coef
         self.router_aux_loss_coef = router_aux_loss_coef
-
-        act_info = self.feed_forward_proj.split("-")
-        self.dense_act_fn = act_info[-1]
-        self.is_gated_act = act_info[0] == "gated"
-
-        if len(act_info) > 1 and act_info[0] != "gated" or len(act_info) > 2:
-            raise ValueError(
-                f"`feed_forward_proj`: {feed_forward_proj} is not a valid activation function of the dense layer."
-                "Please make sure `feed_forward_proj` is of the format `gated-{ACT_FN}` or `{ACT_FN}`, e.g. "
-                "'gated-gelu' or 'relu'"
-            )
-
-        # for backwards compatibility
-        if feed_forward_proj == "gated-gelu":
-            self.dense_act_fn = "gelu_new"
+        self.dense_act_fn = dense_act_fn
 
         super().__init__(
             pad_token_id=pad_token_id,

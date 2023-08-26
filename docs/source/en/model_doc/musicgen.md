@@ -53,6 +53,10 @@ better results than greedy, thus we encourage sampling mode to be used where pos
 and can be explicitly specified by setting `do_sample=True` in the call to [`MusicgenForConditionalGeneration.generate`],
 or by overriding the model's generation config (see below).
 
+Generation is limited by the sinusoidal positional embeddings to 30 second inputs. Meaning, MusicGen cannot generate more
+than 30 seconds of audio (1503 tokens), and input audio passed by Audio-Prompted Generation contributes to this limit so,
+given an input of 20 seconds of audio, MusicGen cannot generate more than 10 seconds of additional audio.
+
 ### Unconditional Generation
 
 The inputs for unconditional (or 'null') generation can be obtained through the method

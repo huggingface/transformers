@@ -25,7 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, L1Loss
 
 from ...activations import ACT2FN
-from ...deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
@@ -2362,10 +2362,6 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel):
         """
         self.get_encoder().prenet.freeze_feature_encoder()
 
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        return new_embeddings
-
     def get_output_embeddings(self):
         return self.text_decoder_postnet.get_output_embeddings()
 
@@ -2785,6 +2781,13 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
+
+    def can_generate(self) -> bool:
+        """
+        Returns True. This model can `generate` and must therefore have this property set to True in order to be used
+        in the TTS pipeline.
+        """
+        return True
 
     @torch.no_grad()
     def generate(

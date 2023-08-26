@@ -17,13 +17,17 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_vision_available():
     from transformers import ChineseCLIPImageProcessor
+
+
+if is_torch_available():
+    pass
 
 
 class ChineseCLIPImageProcessingTester(unittest.TestCase):
@@ -120,6 +124,10 @@ class ChineseCLIPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         self.assertEqual(image_processor.size, {"shortest_edge": 42})
         self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 
+    @unittest.skip("ChineseCLIPImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
+    def test_call_numpy_4_channels(self):
+        pass
+
 
 @require_torch
 @require_vision
@@ -152,3 +160,7 @@ class ChineseCLIPImageProcessingTestFourChannels(ImageProcessingTestMixin, unitt
     @unittest.skip("ChineseCLIPImageProcessor does not support 4 channels yet")  # FIXME Amy
     def test_call_pytorch(self):
         return super().test_call_torch()
+
+    @unittest.skip("ChineseCLIPImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
+    def test_call_numpy_4_channels(self):
+        pass

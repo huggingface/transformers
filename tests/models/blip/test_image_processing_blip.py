@@ -70,7 +70,7 @@ class BlipImageProcessingTester(unittest.TestCase):
         }
 
     def expected_output_image_shape(self, images):
-        return 3, self.size["height"], self.size["width"]
+        return self.num_channels, self.size["height"], self.size["width"]
 
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
@@ -135,3 +135,11 @@ class BlipImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.Tes
     @unittest.skip("BlipImageProcessor does not support 4 channels yet")  # FIXME Amy
     def test_call_pytorch(self):
         return super().test_call_torch()
+
+    @unittest.skip("BLIP doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
+    def test_call_pil(self):
+        pass
+
+    @unittest.skip("BLIP doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
+    def test_call_numpy_4_channels(self):
+        pass

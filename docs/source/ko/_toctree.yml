@@ -73,6 +73,8 @@
         title: 이미지 캡셔닝
       - local: tasks/document_question_answering
         title: 문서 질의 응답(Document Question Answering)
+      - local: tasks/visual_question_answering
+        title: 시각적 질의응답 (Visual Question Answering)
     title: 멀티모달
     isExpanded: false
   title: 태스크 가이드
@@ -119,8 +121,8 @@
       title: 다중 CPU에서 훈련하기
     - local: in_translation
       title: (번역중) Training on TPUs
-    - local: in_translation
-      title: (번역중) Training on TPU with TensorFlow
+    - local: perf_train_tpu_tf
+      title: TensorFlow로 TPU에서 훈련하기
     - local: in_translation
       title: (번역중) Training on Specialized Hardware
     - local: perf_infer_cpu
@@ -153,8 +155,8 @@
       title: (번역중) How to add a pipeline to 🤗 Transformers?
     - local: testing
       title: 테스트
-    - local: in_translation
-      title: (번역중) Checks on a Pull Request
+    - local: pr_checks
+      title: Pull Request에 대한 검사
   title: (번역중) 기여하기
 
 - sections:
