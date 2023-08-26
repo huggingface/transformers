@@ -89,13 +89,6 @@ class UnivNetKernelPredictorResidualBlock(nn.Module):
         hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
         return hidden_states + residual
 
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
     def get_padding(self, kernel_size: int, dilation: int = 1):
         return dilation * (kernel_size - 1) // 2
 
@@ -235,13 +228,6 @@ class UnivNetKernelPredictor(nn.Module):
 
         return kernels, biases
 
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
     def get_padding(self, kernel_size: int, dilation: int = 1):
         return dilation * (kernel_size - 1) // 2
 
@@ -375,13 +361,6 @@ class UnivNetLVCResidualBlock(nn.Module):
 
         return output_hidden_states
 
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
     def get_padding(self, kernel_size: int, dilation: int = 1):
         return dilation * (kernel_size - 1) // 2
 
@@ -495,13 +474,6 @@ class UnivNetLVCBlock(nn.Module):
 
         return hidden_states
 
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
     def apply_weight_norm(self):
         nn.utils.weight_norm(self.convt_pre)
         self.kernel_predictor.apply_weight_norm()
@@ -584,6 +556,9 @@ class UnivNetGan(PreTrainedModel):
         )
 
         self.conv_post = nn.Conv1d(config.model_hidden_channels, 1, 7, padding=3, padding_mode="reflect")
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward(
         self,
@@ -668,7 +643,7 @@ class UnivNetGan(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
+        if isinstance(module, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()

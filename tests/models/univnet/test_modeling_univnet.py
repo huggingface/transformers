@@ -150,10 +150,6 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
     def test_hidden_states_output(self):
         pass
 
-    @unittest.skip(reason="UnivNetGan._init_weights allows weights to be initialized to negative values.")
-    def test_initialization(self):
-        pass
-
     @unittest.skip(reason="UnivNetGan.forward does not accept an inputs_embeds argument.")
     def test_inputs_embeds(self):
         pass
