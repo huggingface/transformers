@@ -235,7 +235,7 @@ class Data2VecAudioPositionalConvLayer(nn.Module):
             groups=config.num_conv_pos_embedding_groups,
         )
 
-        self.padding = Data2VecAudioPadLayer(config.conv_pos_kernel_size)
+        self.padding = Data2VecAudioSamePadLayer(config.conv_pos_kernel_size)
         self.activation = ACT2FN[config.feat_extract_activation]
         # no learnable parameters
         self.layer_norm = nn.LayerNorm(config.hidden_size, elementwise_affine=False)
