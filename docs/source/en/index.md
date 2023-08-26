@@ -69,6 +69,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [BARThez](model_doc/barthez)                       |       ✅        |         ✅         |      ✅      |
 |                       [BARTpho](model_doc/bartpho)                       |       ✅        |         ✅         |      ✅      |
 |                          [BEiT](model_doc/beit)                          |       ✅        |         ❌         |      ✅      |
+|                         [BEiT3](model_doc/beit3)                         |       ✅        |         ❌         |      ✅      |
 |                          [BERT](model_doc/bert)                          |       ✅        |         ✅         |      ✅      |
 |               [Bert Generation](model_doc/bert-generation)               |       ✅        |         ❌         |      ❌      |
 |                 [BertJapanese](model_doc/bert-japanese)                  |       ✅        |         ✅         |      ✅      |
