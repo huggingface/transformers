@@ -27,15 +27,13 @@ from ...image_transforms import (
     to_channel_dimension_format,
 )
 from ...image_utils import (
-    to_numpy_array,
-)
-from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
     make_list_of_images,
+    to_numpy_array,
     valid_images,
 )
 from ...utils import TensorType, logging
