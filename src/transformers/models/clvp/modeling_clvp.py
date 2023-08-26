@@ -22,17 +22,28 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+import math
+
 from ...activations import ACT2FN
 from transformers import GPT2LMHeadModel
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel, SequenceSummary
 from ...utils import (
     ModelOutput,
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
 )
+
+from torch.nn import CrossEntropyLoss
+
+from transformers.models.gpt2.modeling_gpt2 import GPT2Block, GPT2_INPUTS_DOCSTRING
+
+from transformers.generation_utils import GenerationMixin
+from transformers.generation import GenerationConfig
+
 from .configuration_clvp import CLVPConfig, CLVPSpeechConfig, CLVPTextConfig, CLVPAutoRegressiveConfig, PretrainedConfig
 
 
@@ -226,12 +237,15 @@ class CLVPOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
+    speech_candidates: Optional[torch.LongTensor] = None
     logits_per_speech: torch.FloatTensor = None
     logits_per_text: torch.FloatTensor = None
     text_embeds: torch.FloatTensor = None
     speech_embeds: torch.FloatTensor = None
     text_model_output: BaseModelOutputWithPooling = None
     speech_model_output: BaseModelOutputWithPooling = None
+
+
 
     def to_tuple(self) -> Tuple[Any]:
         return tuple(
@@ -268,12 +282,12 @@ class CLVPAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
+        hidden_states: torch.FloatTensor,
+        rotary_pos_emb: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        causal_attention_mask: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+    ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor], Optional[Tuple[torch.FloatTensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = hidden_states.size()
@@ -371,7 +385,7 @@ class CLVPMLP(nn.Module):
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout_layer = nn.Dropout(config.dropout)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.dropout_layer(hidden_states)
         hidden_states = self.fc2(hidden_states)
@@ -400,7 +414,7 @@ class CLVPRotaryPositionalEmbedding(nn.Module):
             return self.cached_rotary_positional_embedding
 
         self.cached_sequence_length = sequence_length
-        time_stamps = torch.arange(sequence_length).type_as(self.inv_freq)
+        time_stamps = torch.arange(sequence_length, device=hidden_states.device).type_as(self.inv_freq)
         freqs = torch.einsum("i,j->ij", time_stamps, self.inv_freq)
         embeddings = torch.cat((freqs, freqs), dim=-1)
 
@@ -421,10 +435,10 @@ class CLVPEncoderLayer(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        rotary_pos_emb: torch.Tensor,
-        attention_mask: torch.Tensor,
-        causal_attention_mask: torch.Tensor,
+        hidden_states: torch.FloatTensor,
+        rotary_pos_emb: torch.FloatTensor,
+        attention_mask: torch.LongTensor,
+        causal_attention_mask: torch.LongTensor,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor]:
         """
@@ -471,6 +485,7 @@ class CLVPRelativeAttention(nn.Module):
     """
     def __init__(self, config: CLVPAutoRegressiveConfig, has_relative_attention_bias=False):
         super().__init__()
+        self.config = config
         self.has_relative_attention_bias = has_relative_attention_bias
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.relative_attention_max_distance = config.relative_attention_max_distance
@@ -482,224 +497,228 @@ class CLVPRelativeAttention(nn.Module):
         self.v = nn.Linear(self.n_embd, self.n_embd, bias=True)
         self.o = nn.Linear(self.n_embd, self.n_embd, bias=True)
 
+        self.norm = nn.GroupNorm(32, self.n_embd, eps=1e-5, affine=True)
+
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
         self.pruned_heads = set()
         self.gradient_checkpointing = False
 
-        def prune_heads(self, heads):
-            if len(heads) == 0:
-                return
-            heads, index = find_pruneable_heads_and_indices(
-                heads, self.n_heads, self.key_value_proj_dim, self.pruned_heads
-            )
-            # Prune linear layers
-            self.q = prune_linear_layer(self.q, index)
-            self.k = prune_linear_layer(self.k, index)
-            self.v = prune_linear_layer(self.v, index)
-            self.o = prune_linear_layer(self.o, index, dim=1)
-            # Update hyper params
-            self.n_heads = self.n_heads - len(heads)
-            self.pruned_heads = self.pruned_heads.union(heads)
+    def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.n_heads, self.n_embd // self.n_heads, self.pruned_heads
+        )
+        # Prune linear layers
+        self.q = prune_linear_layer(self.q, index)
+        self.k = prune_linear_layer(self.k, index)
+        self.v = prune_linear_layer(self.v, index)
+        self.o = prune_linear_layer(self.o, index, dim=1)
+        # Update hyper params
+        self.n_heads = self.n_heads - len(heads)
+        self.pruned_heads = self.pruned_heads.union(heads)
 
-        @staticmethod
-        def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
-            """
-            Adapted from Mesh Tensorflow:
-            https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
-            Translate relative position to a bucket number for relative attention. The relative position is defined as
-            memory_position - query_position, i.e. the distance in tokens from the attending position to the attended-to
-            position. If bidirectional=False, then positive relative positions are invalid. We use smaller buckets for
-            small absolute relative_position and larger buckets for larger absolute relative_positions. All relative
-            positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.
-            This should allow for more graceful generalization to longer sequences than the model has been trained on
-            Args:
-                relative_position: an int32 Tensor
-                bidirectional: a boolean - whether the attention is bidirectional
-                num_buckets: an integer
-                max_distance: an integer
-            Returns:
-                a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)
-            """
-            relative_buckets = 0
-            if bidirectional:
-                num_buckets //= 2
-                relative_buckets += (relative_position > 0).to(torch.long) * num_buckets
-                relative_position = torch.abs(relative_position)
-            else:
-                relative_position = -torch.min(relative_position, torch.zeros_like(relative_position))
-            # now relative_position is in the range [0, inf)
+    @staticmethod
+    def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
+        """
+        Adapted from Mesh Tensorflow:
+        https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
+        Translate relative position to a bucket number for relative attention. The relative position is defined as
+        memory_position - query_position, i.e. the distance in tokens from the attending position to the attended-to
+        position. If bidirectional=False, then positive relative positions are invalid. We use smaller buckets for
+        small absolute relative_position and larger buckets for larger absolute relative_positions. All relative
+        positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.
+        This should allow for more graceful generalization to longer sequences than the model has been trained on
+        Args:
+            relative_position: an int32 Tensor
+            bidirectional: a boolean - whether the attention is bidirectional
+            num_buckets: an integer
+            max_distance: an integer
+        Returns:
+            a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)
+        """
+        relative_buckets = 0
+        if bidirectional:
+            num_buckets //= 2
+            relative_buckets += (relative_position > 0).to(torch.long) * num_buckets
+            relative_position = torch.abs(relative_position)
+        else:
+            relative_position = -torch.min(relative_position, torch.zeros_like(relative_position))
+        # now relative_position is in the range [0, inf)
 
-            # half of the buckets are for exact increments in positions
-            max_exact = num_buckets // 2
-            is_small = relative_position < max_exact
+        # half of the buckets are for exact increments in positions
+        max_exact = num_buckets // 2
+        is_small = relative_position < max_exact
 
-            # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
-            relative_position_if_large = max_exact + (
-                    torch.log(relative_position.float() / max_exact)
-                    / math.log(max_distance / max_exact)
-                    * (num_buckets - max_exact)
-            ).to(torch.long)
-            relative_position_if_large = torch.min(
-                relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
-            )
+        # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
+        relative_position_if_large = max_exact + (
+                torch.log(relative_position.float() / max_exact)
+                / math.log(max_distance / max_exact)
+                * (num_buckets - max_exact)
+        ).to(torch.long)
+        relative_position_if_large = torch.min(
+            relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
+        )
 
-            relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
-            return relative_buckets
+        relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
+        return relative_buckets
 
-        def compute_bias(self, query_length, key_length, device=None):
-            """Compute binned relative position bias"""
-            if device is None:
-                device = self.relative_attention_bias.weight.device
-            context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
-            memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
-            relative_position = memory_position - context_position  # shape (query_length, key_length)
-            relative_position_bucket = self._relative_position_bucket(
-                relative_position,  # shape (query_length, key_length)
-                bidirectional=False,
-                num_buckets=self.relative_attention_num_buckets,
-                max_distance=self.relative_attention_max_distance,
-            )
-            values = self.relative_attention_bias(
-                relative_position_bucket)  # shape (query_length, key_length, num_heads)
-            values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
-            return values
+    def compute_bias(self, query_length, key_length, device=None):
+        """Compute binned relative position bias"""
+        if device is None:
+            device = self.relative_attention_bias.weight.device
+        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
+        memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
+        relative_position = memory_position - context_position  # shape (query_length, key_length)
+        relative_position_bucket = self._relative_position_bucket(
+            relative_position,  # shape (query_length, key_length)
+            bidirectional=False,
+            num_buckets=self.relative_attention_num_buckets,
+            max_distance=self.relative_attention_max_distance,
+        )
+        values = self.relative_attention_bias(
+            relative_position_bucket)  # shape (query_length, key_length, num_heads)
+        values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
+        return values
 
-        def forward(
-                self,
-                hidden_states,
-                mask=None,
-                key_value_states=None,
-                position_bias=None,
-                past_key_value=None,
-                layer_head_mask=None,
-                query_length=None,
-                use_cache=False,
-                output_attentions=False,
-        ):
-            """
-            Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
-            """
-            # Input is (batch_size, seq_length, dim)
-            # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
-            # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
-            batch_size, seq_length = hidden_states.shape[:2]
+    def forward(
+            self,
+            hidden_states,
+            mask=None,
+            key_value_states=None,
+            position_bias=None,
+            past_key_value=None,
+            layer_head_mask=None,
+            query_length=None,
+            use_cache=False,
+            output_attentions=False,
+    ):
+        """
+        Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
+        """
+        norm_hidden_states = torch.permute(self.norm(torch.permute(hidden_states, (0, 2, 1))), (0, 2, 1))
 
-            real_seq_length = seq_length
+        # Input is (batch_size, seq_length, dim)
+        # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
+        # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
+        batch_size, seq_length = norm_hidden_states.shape[:2]
+
+        real_seq_length = seq_length
+
+        if past_key_value is not None:
+            if len(past_key_value) != 2:
+                raise ValueError(
+                    f"past_key_value should have 2 past states: keys and values. Got {len(past_key_value)} past states"
+                )
+            real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
+
+        key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
+
+        def shape(states):
+            """projection"""
+            return states.view(batch_size, -1, self.n_heads, self.n_embd // self.n_heads).transpose(1, 2)
+
+        def unshape(states):
+            """reshape"""
+            return states.transpose(1, 2).contiguous().view(batch_size, -1, self.n_embd)
+
+        def project(hidden_states, proj_layer, key_value_states, past_key_value):
+            """projects hidden states correctly to key/query states"""
+            if key_value_states is None:
+                # self-attn
+                # (batch_size, n_heads, seq_length, dim_per_head)
+                hidden_states = shape(proj_layer(hidden_states))
+            elif past_key_value is None:
+                # cross-attn
+                # (batch_size, n_heads, seq_length, dim_per_head)
+                hidden_states = shape(proj_layer(key_value_states))
 
             if past_key_value is not None:
-                if len(past_key_value) != 2:
-                    raise ValueError(
-                        f"past_key_value should have 2 past states: keys and values. Got {len(past_key_value)} past states"
-                    )
-                real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
-
-            key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
-
-            def shape(states):
-                """projection"""
-                return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
-
-            def unshape(states):
-                """reshape"""
-                return states.transpose(1, 2).contiguous().view(batch_size, -1, self.n_embd)
-
-            def project(hidden_states, proj_layer, key_value_states, past_key_value):
-                """projects hidden states correctly to key/query states"""
                 if key_value_states is None:
                     # self-attn
-                    # (batch_size, n_heads, seq_length, dim_per_head)
-                    hidden_states = shape(proj_layer(hidden_states))
-                elif past_key_value is None:
+                    # (batch_size, n_heads, key_length, dim_per_head)
+                    hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
+                elif past_key_value.shape[2] != key_value_states.shape[1]:
+                    # checking that the `sequence_length` of the `past_key_value` is the same as
+                    # the provided `key_value_states` to support prefix tuning
                     # cross-attn
                     # (batch_size, n_heads, seq_length, dim_per_head)
                     hidden_states = shape(proj_layer(key_value_states))
-
-                if past_key_value is not None:
-                    if key_value_states is None:
-                        # self-attn
-                        # (batch_size, n_heads, key_length, dim_per_head)
-                        hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
-                    elif past_key_value.shape[2] != key_value_states.shape[1]:
-                        # checking that the `sequence_length` of the `past_key_value` is the same as
-                        # the provided `key_value_states` to support prefix tuning
-                        # cross-attn
-                        # (batch_size, n_heads, seq_length, dim_per_head)
-                        hidden_states = shape(proj_layer(key_value_states))
-                    else:
-                        # cross-attn
-                        hidden_states = past_key_value
-                return hidden_states
-
-            scale = 1 / math.sqrt(self.query_dim // self.n_heads) if self.scale_qk else 1.0
-
-            # get query states
-            query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
-
-            # get key/value states
-            key_states = project(
-                hidden_states, self.k, key_value_states, past_key_value[0] if past_key_value is not None else None
-            )
-            value_states = project(
-                hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
-            )
-
-            # compute scores
-            scores = torch.matmul(
-                query_states * scale, key_states.transpose(3, 2)
-            )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
-
-            if position_bias is None:
-                if not self.has_relative_attention_bias:
-                    position_bias = torch.zeros(
-                        (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
-                    )
-                    if self.gradient_checkpointing and self.training:
-                        position_bias.requires_grad = True
                 else:
-                    position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
+                    # cross-attn
+                    hidden_states = past_key_value
+            return hidden_states
 
-                # if key and values are already calculated
-                # we want only the last query position bias
-                if past_key_value is not None:
-                    position_bias = position_bias[:, :, -hidden_states.size(1):, :]
+        scale = 1 / math.sqrt(self.n_embd // self.n_heads)
 
-                if mask is not None:
-                    position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
+        # get query states
+        query_states = shape(self.q(norm_hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
 
-            if self.pruned_heads:
-                mask = torch.ones(position_bias.shape[1])
-                mask[list(self.pruned_heads)] = 0
-                position_bias_masked = position_bias[:, mask.bool()]
+        # get key/value states
+        key_states = project(
+            norm_hidden_states, self.k, key_value_states, past_key_value[0] if past_key_value is not None else None
+        )
+        value_states = project(
+            norm_hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
+        )
+
+        # compute scores
+        scores = torch.matmul(
+            query_states * scale, key_states.transpose(3, 2)
+        )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
+
+        if position_bias is None:
+            if not self.has_relative_attention_bias:
+                position_bias = torch.zeros(
+                    (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
+                )
+                if self.gradient_checkpointing and self.training:
+                    position_bias.requires_grad = True
             else:
-                position_bias_masked = position_bias
+                position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
 
-            # scores += position_bias_masked
-            scores += (
-                    position_bias_masked * 8
-            )  # its actually root under the dimension of each attn head will be updated in the final version
+            # if key and values are already calculated
+            # we want only the last query position bias
+            if past_key_value is not None:
+                position_bias = position_bias[:, :, -norm_hidden_states.size(1):, :]
 
-            attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
-                scores
-            )  # (batch_size, n_heads, seq_length, key_length)
-            attn_weights = nn.functional.dropout(
-                attn_weights, p=self.dropout, training=self.training
-            )  # (batch_size, n_heads, seq_length, key_length)
+            if mask is not None:
+                position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
-            # Mask heads if we want to
-            if layer_head_mask is not None:
-                attn_weights = attn_weights * layer_head_mask
+        if self.pruned_heads:
+            mask = torch.ones(position_bias.shape[1])
+            mask[list(self.pruned_heads)] = 0
+            position_bias_masked = position_bias[:, mask.bool()]
+        else:
+            position_bias_masked = position_bias
 
-            attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
-            attn_output = self.o(attn_output)
+        # scores += position_bias_masked
+        scores += (
+                position_bias_masked * 8
+        )  # its actually root under the dimension of each attn head will be updated in the final version
 
-            present_key_value_state = None
-            outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
+        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
+            scores
+        )  # (batch_size, n_heads, seq_length, key_length)
+        attn_weights = nn.functional.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )  # (batch_size, n_heads, seq_length, key_length)
 
-            if output_attentions:
-                outputs = outputs + (attn_weights,)
+        # Mask heads if we want to
+        if layer_head_mask is not None:
+            attn_weights = attn_weights * layer_head_mask
 
-            return outputs
+        attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
+        attn_output = self.o(attn_output) + hidden_states
+
+        present_key_value_state = None
+        outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
+
+        if output_attentions:
+            outputs = outputs + (attn_weights,)
+
+        return outputs
 
 class CLVPConditioningEncoder(nn.Module):
     """
@@ -719,27 +738,36 @@ class CLVPConditioningEncoder(nn.Module):
 
         text_config = config.text_config
         autoregressive_config = config.autoregressive_config
+        self.text_start_token_id = text_config.bos_token_id
+        self.text_end_token_id = text_config.eos_token_id
 
         self.mel_conv = nn.Conv1d(autoregressive_config.feature_size, autoregressive_config.n_embd, kernel_size=1)
-        self.mel_attn_blocks = nn.Sequential(*[CLVPRelativeAttention(autoregressive_config) for _ in range(6)])
+        self.mel_attn_blocks = nn.ModuleList([CLVPRelativeAttention(autoregressive_config) for _ in range(6)])
 
         self.text_token_embedding = nn.Embedding(text_config.vocab_size, autoregressive_config.n_embd)
         self.text_position_embedding = nn.Embedding(autoregressive_config.max_text_tokens, autoregressive_config.n_embd)
 
-    def forward(self, mel_spec: torch.Tensor, text_tokens: torch.Tensor):
+    def forward(self, mel_spec: torch.FloatTensor, text_tokens: torch.LongTensor):
         # process each log-mel spectrogram into a single vector
         mel_spec = self.mel_conv(mel_spec)
-        mel_spec = self.mel_attn_blocks(mel_spec)
+        mel_spec = torch.permute(mel_spec, (0, 2, 1))
+        for mel_attn_block in self.mel_attn_blocks:
+            mel_spec = mel_attn_block(mel_spec)[0]
+        mel_spec = torch.permute(mel_spec, (0, 2,  1))
         mel_spec = mel_spec[:, :, 0]
 
         # process text-tokens
+        # we add bos and eos token ids in the modeling file instead of the tokenizer file(same as the original repo)
+        text_tokens = torch.nn.functional.pad(text_tokens, (1,0), value=self.text_start_token_id)
+        text_tokens = torch.nn.functional.pad(text_tokens, (0, 1), value=self.text_end_token_id)
+
         token_embeds = self.text_token_embedding(text_tokens)
-        position_ids = torch.arange(0, text_tokens.shape[1], dtype=torch.int64)
+        position_ids = torch.arange(0, text_tokens.shape[1], dtype=torch.int64, device=text_tokens.device)
         position_embeds = self.text_position_embedding(position_ids)
 
         text_embeds = token_embeds + position_embeds
 
-        return  torch.concat([mel_spec, text_embeds], dim=1)
+        return  torch.concat([mel_spec.unsqueeze(1), text_embeds], dim=1)
 
 
 class CLVPPreTrainedModel(PreTrainedModel):
@@ -751,6 +779,8 @@ class CLVPPreTrainedModel(PreTrainedModel):
     config_class = CLVPConfig
     base_model_prefix = "clvp"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["GPT2Block"]
+    _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -785,14 +815,14 @@ class CLVPPreTrainedModel(PreTrainedModel):
 
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
-        elif isinstance(module, CLVPSpeechModelWithProjection):
+        # elif isinstance(module, CLVPSpeechModelWithProjection):
+        #     nn.init.normal_(
+        #         module.speech_projection.weight,
+        #         std=self.config.speech_config.hidden_size**-0.5 * self.config.initializer_factor,
+        #     )
+        elif isinstance(module, CLVPTransformerWithProjection):
             nn.init.normal_(
-                module.speech_projection.weight,
-                std=self.config.speech_config.hidden_size**-0.5 * self.config.initializer_factor,
-            )
-        elif isinstance(module, CLVPTextModelWithProjection):
-            nn.init.normal_(
-                module.text_projection.weight,
+                module.projection.weight,
                 std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
             )
         if isinstance(module, nn.LayerNorm):
@@ -801,8 +831,16 @@ class CLVPPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
+        for name, p in module.named_parameters():
+            if name == "c_proj.weight":
+                # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
+                p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
+
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, CLVPEncoder):
+            module.gradient_checkpointing = value
+
+        if isinstance(module, CLVPAutoRegressiveLMHeadModel):
             module.gradient_checkpointing = value
 
 
@@ -930,8 +968,8 @@ class CLVPEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        causal_attention_mask: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1035,8 +1073,8 @@ class CLVPTransformer(nn.Module):
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=PretrainedConfig)
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         use_causal_attention_mask: Optional[bool] = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1098,6 +1136,295 @@ class CLVPTransformer(nn.Module):
         )
 
 
+class CLVPAutoRegressiveLMHeadModel(CLVPPreTrainedModel):
+    _tied_weights_keys = ["lm_head.weight"]
+
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.embed_dim = config.hidden_size
+
+        self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
+        self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
+
+        self.drop = nn.Dropout(config.embd_pdrop)
+        self.h = nn.ModuleList([GPT2Block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+
+        self.final_norm = nn.LayerNorm(config.n_embd)
+        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=True)
+
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.wte
+
+    def set_input_embeddings(self, new_embeddings):
+        self.wte = new_embeddings
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
+        position_ids = kwargs.get("position_ids", None)
+        position_ids = torch.arange(input_ids.shape[1], dtype=torch.long, device=input_ids.device).repeat(
+            input_ids.shape[0], 1) if position_ids is None else position_ids
+
+        token_type_ids = kwargs.get("token_type_ids", None)
+        # only last token for inputs_ids if past is defined in kwargs
+        if past_key_values:
+            input_ids = input_ids[:, -1].unsqueeze(-1)
+            position_ids = position_ids[:, -1].unsqueeze(-1)
+            if token_type_ids is not None:
+                token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
+
+        attention_mask = kwargs.get("attention_mask", None)
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids}
+
+        model_inputs.update(
+            {
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "position_ids": position_ids,
+                "attention_mask": attention_mask,
+                "token_type_ids": token_type_ids,
+            }
+        )
+        return model_inputs
+
+    def _prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        """
+        for layer, heads in heads_to_prune.items():
+            self.h[layer].attn.prune_heads(heads)
+
+    @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
+            `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
+            are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
+        """
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
+            input_shape = input_ids.size()
+            input_ids = input_ids.view(-1, input_shape[-1])
+            batch_size = input_ids.shape[0]
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+            batch_size = inputs_embeds.shape[0]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if token_type_ids is not None:
+            token_type_ids = token_type_ids.view(-1, input_shape[-1])
+
+        if past_key_values is None:
+            past_length = 0
+            past_key_values = tuple([None] * len(self.h))
+        else:
+            past_length = past_key_values[0][0].size(-2)
+        if position_ids is None:
+            position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
+            position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
+
+        # GPT2Attention mask.
+        if attention_mask is not None:
+            if batch_size <= 0:
+                raise ValueError("batch_size has to be defined and > 0")
+            attention_mask = attention_mask.view(batch_size, -1)
+            # We create a 3D attention mask from a 2D tensor mask.
+            # Sizes are [batch_size, 1, 1, to_seq_length]
+            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
+            # this attention mask is more simple than the triangular masking of causal attention
+            # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
+            attention_mask = attention_mask[:, None, None, :]
+
+            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+            # masked positions, this operation will create a tensor which is 0.0 for
+            # positions we want to attend and the dtype's smallest value for masked positions.
+            # Since we are adding it to the raw scores before the softmax, this is
+            # effectively the same as removing these entirely.
+            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
+
+        # If a 2D or 3D attention mask is provided for the cross-attention
+        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
+        if self.config.add_cross_attention and encoder_hidden_states is not None:
+            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
+            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
+            if encoder_attention_mask is None:
+                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+            encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+        else:
+            encoder_attention_mask = None
+
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # head_mask has shape n_layer x batch x n_heads x N x N
+        head_mask = self.get_head_mask(head_mask, self.config.n_layer)
+
+        if inputs_embeds is None:
+            inputs_embeds = self.wte(input_ids)
+            position_embeds = self.wpe(position_ids)
+            inputs_embeds = inputs_embeds + position_embeds
+
+        hidden_states = inputs_embeds
+
+        if token_type_ids is not None:
+            token_type_embeds = self.wte(token_type_ids)
+            hidden_states = hidden_states + token_type_embeds
+
+        hidden_states = self.drop(hidden_states)
+
+        output_shape = (-1,) + input_shape[1:] + (hidden_states.size(-1),)
+
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
+                )
+                use_cache = False
+
+        presents = () if use_cache else None
+        all_self_attentions = () if output_attentions else None
+        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
+        all_hidden_states = () if output_hidden_states else None
+        for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            if self.gradient_checkpointing and self.training:
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        # None for past_key_value
+                        return module(*inputs, use_cache, output_attentions)
+
+                    return custom_forward
+
+                outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(block),
+                    hidden_states,
+                    None,
+                    attention_mask,
+                    head_mask[i],
+                    encoder_hidden_states,
+                    encoder_attention_mask,
+                )
+            else:
+                outputs = block(
+                    hidden_states,
+                    layer_past=layer_past,
+                    attention_mask=attention_mask,
+                    head_mask=head_mask[i],
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    use_cache=use_cache,
+                    output_attentions=output_attentions,
+                )
+
+            hidden_states = outputs[0]
+            if use_cache is True:
+                presents = presents + (outputs[1],)
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
+                if self.config.add_cross_attention:
+                    all_cross_attentions = all_cross_attentions + (outputs[3 if use_cache else 2],)
+
+        hidden_states = self.ln_f(hidden_states)
+
+        hidden_states = hidden_states.view(output_shape)
+
+        # Add last hidden state
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        lm_logits = self.final_norm(hidden_states)
+        lm_logits = self.lm_head(lm_logits)
+
+        loss = None
+        if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(lm_logits.device)
+            # Shift so that tokens < n predict n
+            shift_logits = lm_logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            # Flatten the tokens
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+
+        if not return_dict:
+            output = (lm_logits, presents, all_hidden_states, all_self_attentions, all_cross_attentions)
+            return ((loss,) + output) if loss is not None else output
+
+        return CausalLMOutputWithCrossAttentions(
+            loss=loss,
+            logits=lm_logits,
+            past_key_values=presents,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+            cross_attentions=all_cross_attentions,
+        )
+
+    @staticmethod
+    def _reorder_cache(
+            past_key_values: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor
+    ) -> Tuple[Tuple[torch.Tensor]]:
+        """
+        This function is used to re-order the `past_key_values` cache if [`~PreTrainedModel.beam_search`] or
+        [`~PreTrainedModel.beam_sample`] is called. This is required to match `past_key_values` with the correct
+        beam_idx at every generation step.
+        """
+        return tuple(
+            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            for layer_past in past_key_values
+        )
+
+
 @add_start_docstrings(CLVP_START_DOCSTRING)
 class CLVPModel(CLVPPreTrainedModel):
     config_class = CLVPConfig
@@ -1117,10 +1444,13 @@ class CLVPModel(CLVPPreTrainedModel):
                 f" {type(config.speech_config)}."
             )
 
-        self.projection_dim = config.projection_dim
+        self.conditioning_encoder = CLVPConditioningEncoder(config)
 
-        self.text_model = CLVPTextModelWithProjection(config.text_config)
-        self.speech_model = CLVPSpeechModelWithProjection(config)
+        self.autoregressive_model = CLVPAutoRegressiveLMHeadModel(config.autoregressive_config)
+
+        self.text_model = CLVPTransformerWithProjection(config.text_config)
+        self.speech_model = CLVPTransformerWithProjection(config.speech_config)
+
         self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
 
         # Initialize weights and apply final processing
@@ -1128,13 +1458,13 @@ class CLVPModel(CLVPPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(CLVP_TEXT_INPUTS_DOCSTRING)
     def get_text_features(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        use_causal_attention_mask: Optional[bool] = False,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: Optional[torch.LongTensor] = None,
+            attention_mask: Optional[torch.LongTensor] = None,
+            use_causal_attention_mask: Optional[bool] = False,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1179,75 +1509,96 @@ class CLVPModel(CLVPPreTrainedModel):
             return_dict=return_dict,
         )[0]
 
-    @add_start_docstrings_to_model_forward(CLVP_SPEECH_INPUTS_DOCSTRING)
-    def get_speech_features(
-        self,
-            input_ids: torch.LongTensor = None,
-            input_features: torch.FloatTensor = None,
-            attention_mask: Optional[torch.Tensor] = None,
-        use_causal_attention_mask: Optional[bool] = False,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> torch.FloatTensor:
-        r"""
-        Returns:
-            speech_features (`torch.FloatTensor` of shape `(batch_size, output_dim)`: The speech embeddings obtained by
-            applying the projection layer to the pooled output of the CLVP Speech Model.
+    def fix_autoregressive_output(self, autoreg_output):
+        autoreg_output = autoreg_output[:, 1:]
 
-        Examples:
+        stop_token_indices = torch.where(autoreg_output==self.autoregressive_model.config.eos_token_id,  1, 0)
+        autoreg_output = torch.masked_fill(autoreg_output, mask=stop_token_indices.bool(), value=83)
 
-        ```python
-        >>> from transformers import CLVPModel
+        for i, each_seq_stop_token_indice in enumerate(stop_token_indices):
+            # This means that no stop tokens were found so the sentence was still being generated, in that case we don't need
+            # to apply any padding so just skip to the next sequence of tokens.
+            if each_seq_stop_token_indice.sum() == 0:
+                continue
 
-        >>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
+            stm = each_seq_stop_token_indice.argmax()
+            autoreg_output[i, stm:] = 83
+            if stm - 3 < autoreg_output.shape[1]:
+                autoreg_output[i, -3] = 45
+                autoreg_output[i, -2] = 45
+                autoreg_output[i, -1] = 248
 
-        >>> # TODO : after FeatureExtractor is implemented we need to change it to something lik FE.__call__(...)
-        >>> inputs = {"speech_ids": torch.tensor([[56, 8, 48, 7, 11, 23]]).long()}
+        return autoreg_output
 
-        >>> speech_features = model.get_speech_features(**inputs)
-        ```"""
-
-        # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if return_dict:
-            return self.speech_model(
-                input_features=input_features,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                use_causal_attention_mask=use_causal_attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            ).speech_embeds
-
-        return self.speech_model(
-            input_features=input_features,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            use_causal_attention_mask=use_causal_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )[0]
+    # @add_start_docstrings_to_model_forward(CLVP_SPEECH_INPUTS_DOCSTRING)
+    # def get_speech_features(
+    #     self,
+    #         input_ids: torch.LongTensor = None,
+    #         input_features: torch.FloatTensor = None,
+    #         attention_mask: Optional[torch.Tensor] = None,
+    #     use_causal_attention_mask: Optional[bool] = False,
+    #     output_attentions: Optional[bool] = None,
+    #     output_hidden_states: Optional[bool] = None,
+    #     return_dict: Optional[bool] = None,
+    # ) -> torch.FloatTensor:
+    #     r"""
+    #     Returns:
+    #         speech_features (`torch.FloatTensor` of shape `(batch_size, output_dim)`: The speech embeddings obtained by
+    #         applying the projection layer to the pooled output of the CLVP Speech Model.
+    #
+    #     Examples:
+    #
+    #     ```python
+    #     >>> from transformers import CLVPModel
+    #
+    #     >>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
+    #
+    #     >>> # TODO : after FeatureExtractor is implemented we need to change it to something lik FE.__call__(...)
+    #     >>> inputs = {"speech_ids": torch.tensor([[56, 8, 48, 7, 11, 23]]).long()}
+    #
+    #     >>> speech_features = model.get_speech_features(**inputs)
+    #     ```"""
+    #
+    #     # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
+    #     output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+    #     output_hidden_states = (
+    #         output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+    #     )
+    #     return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+    #
+    #     if return_dict:
+    #         return self.speech_model(
+    #             input_features=input_features,
+    #             input_ids=input_ids,
+    #             attention_mask=attention_mask,
+    #             use_causal_attention_mask=use_causal_attention_mask,
+    #             output_attentions=output_attentions,
+    #             output_hidden_states=output_hidden_states,
+    #             return_dict=return_dict,
+    #         ).speech_embeds
+    #
+    #     return self.speech_model(
+    #         input_features=input_features,
+    #         input_ids=input_ids,
+    #         attention_mask=attention_mask,
+    #         use_causal_attention_mask=use_causal_attention_mask,
+    #         output_attentions=output_attentions,
+    #         output_hidden_states=output_hidden_states,
+    #         return_dict=return_dict,
+    #     )[0]
 
     @add_start_docstrings_to_model_forward(CLVP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CLVPOutput, config_class=CLVPConfig)
     def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        input_features: torch.FloatTensor = None,
-        text_attention_mask: Optional[torch.Tensor] = None,
-        use_causal_attention_mask: Optional[bool] = False,
-        return_loss: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+            self,
+            input_ids: torch.LongTensor = None,
+            input_features: torch.FloatTensor = None,
+            attention_mask: Optional[torch.LongTensor] = None,
+            use_causal_attention_mask: Optional[bool] = False,
+            return_loss: Optional[bool] = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CLVPOutput]:
         r"""
         Returns:
@@ -1279,11 +1630,28 @@ class CLVPModel(CLVPPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        conditioning_embeds = self.conditioning_encoder(mel_spec=input_features,
+                                                        text_tokens=input_ids)
+
+        speech_candidates = self.autoregressive_model(inputs_embeds=conditioning_embeds,
+                                                      attention_mask=None,
+                                                      output_attentions=output_attentions,
+                                                      output_hidden_states=output_hidden_states,
+                                                      return_dict=return_dict,
+                                                      )
+        speech_candidates = speech_candidates[0]
+
+        # since we will get the embeds of shape `(batch_size, seq_len, embedding_dim)` during the forward pass
+        # we must convert it to tokens, to make it compaitable with speech_transformer
+        if speech_candidates.ndim == 3:
+            speech_candidates = speech_candidates.argmax(2)
+
+        speech_candidates = self.fix_autoregressive_output(speech_candidates)
+
         speech_outputs = self.speech_model(
-            input_ids=input_ids,
-            input_features=input_features,
-            attention_mask=text_attention_mask,
+            input_ids=speech_candidates,
             use_causal_attention_mask=use_causal_attention_mask,
+            attention_mask=None,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1291,7 +1659,7 @@ class CLVPModel(CLVPPreTrainedModel):
 
         text_outputs = self.text_model(
             input_ids=input_ids,
-            attention_mask=text_attention_mask,
+            attention_mask=attention_mask,
             use_causal_attention_mask=use_causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1328,45 +1696,116 @@ class CLVPModel(CLVPPreTrainedModel):
             speech_model_output=speech_outputs[2],
         )
 
+    @torch.no_grad()
+    def generate(
+            self,
+            input_ids: torch.LongTensor = None,
+            input_features: torch.FloatTensor = None,
+            generation_config: Optional[GenerationConfig] = None,
+            **kwargs,
+    ):
+        if generation_config is None:
+            generation_config = self.generation_config
+        generation_config.update(**kwargs)
 
-@add_start_docstrings(
-    """
-    CLVP Text Model with a projection layer on top (a linear layer on top of the pooled output).
-    """,
-    CLVP_START_DOCSTRING,
-)
-class CLVPTextModelWithProjection(CLVPPreTrainedModel):
-    config_class = CLVPTextConfig
+        conditioning_embeds = self.conditioning_encoder(mel_spec=input_features,
+                                                        text_tokens=input_ids)
+
+        # Add the start mel token at the beginning
+        mel_start_token_id = torch.tensor([[self.autoregressive_model.config.bos_token_id]], device=conditioning_embeds.device)
+        mel_start_token_embedding = self.autoregressive_model.wte(mel_start_token_id)
+        mel_start_token_embedding = mel_start_token_embedding + self.autoregressive_model.wpe(torch.tensor([[0]], device=conditioning_embeds.device))
+        conditioning_embeds = torch.concat([conditioning_embeds, mel_start_token_embedding], dim=1)
+
+
+        speech_candidates = self.autoregressive_model.generate(inputs_embeds=conditioning_embeds,
+                                                               generation_config=generation_config,
+                                                               )
+        speech_candidates = self.fix_autoregressive_output(speech_candidates[0])
+
+        speech_outputs = self.speech_model(
+            input_ids=speech_candidates,
+        )
+
+        text_outputs = self.text_model(
+            input_ids=input_ids,
+        )
+
+        speech_embeds = speech_outputs[0]
+        text_embeds = text_outputs[0]
+
+        # normalized features
+        speech_embeds = speech_embeds / speech_embeds.norm(p=2, dim=-1, keepdim=True)
+        text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
+
+        # cosine similarity as logits
+        logit_scale = self.logit_scale.exp()
+        logits_per_text = torch.matmul(text_embeds, speech_embeds.t()) * logit_scale
+        logits_per_speech = logits_per_text.t()
+
+        if not generation_config.return_dict_in_generate:
+            output = (speech_candidates, logits_per_speech, logits_per_text, text_embeds, speech_embeds, text_outputs[2], speech_outputs[2])
+            return output
+
+        return CLVPOutput(
+            speech_candidates=speech_candidates,
+            logits_per_speech=logits_per_speech,
+            logits_per_text=logits_per_text,
+            text_embeds=text_embeds,
+            speech_embeds=speech_embeds,
+            text_model_output=text_outputs[2],
+            speech_model_output=speech_outputs[2],
+        )
+
+    def prepare_inputs_for_generation(self, input_ids, inputs_embeds, **kwargs):
+        return {
+            "inputs_embeds": inputs_embeds,
+            "input_ids": input_ids,
+            **kwargs
+        }
+
+
+# @add_start_docstrings(
+#     """
+#     CLVP Transformer with a projection layer on top (a linear layer on top of the pooled output).
+#     """,
+#     CLVP_START_DOCSTRING,
+# )
+class CLVPTransformerWithProjection(CLVPPreTrainedModel):
+    config_class = CLVPTextConfig or CLVPSpeechConfig
 
     _no_split_modules = None
 
-    def __init__(self, config: CLVPTextConfig):
+    def __init__(self, config: Union[CLVPTextConfig, CLVPSpeechConfig]):
         super().__init__(config)
 
-        self.text_transformer = CLVPTransformer(config)
+        self.model_type = config.model_type
 
-        self.text_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
+        self.transformer = CLVPTransformer(config)
+
+        self.projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
-        return self.text_model.token_embedding
+        return self.transformer.token_embedding
 
     def set_input_embeddings(self, value):
-        self.text_model.token_embedding = value
+        self.transformer.token_embedding = value
 
-    @add_start_docstrings_to_model_forward(CLVP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLVPTextModelOutput, config_class=CLVPTextConfig)
+    # @add_start_docstrings_to_model_forward(CLVP_TEXT_INPUTS_DOCSTRING)
+    # @replace_return_docstrings(output_type=Union[CLVPTextModelOutput, CLVPSpeechModelOutput],
+    #                            config_class=Union[CLVPTextConfig, CLVPSpeechConfig])
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         use_causal_attention_mask: Optional[bool] = False,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CLVPTextModelOutput]:
+    ) -> Union[Tuple, CLVPTextModelOutput, CLVPSpeechModelOutput]:
         r"""
         Returns:
 
@@ -1388,7 +1827,7 @@ class CLVPTextModelWithProjection(CLVPPreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        text_outputs = self.text_transformer(
+        transformer_outputs = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,
             use_causal_attention_mask=use_causal_attention_mask,
@@ -1397,120 +1836,31 @@ class CLVPTextModelWithProjection(CLVPPreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = text_outputs[1]
+        pooled_output = transformer_outputs[1]
 
-        text_embeds = self.text_projection(pooled_output)
-
-        if not return_dict:
-            outputs = (text_embeds, ) + text_outputs
-            return tuple(output for output in outputs if output is not None)
-
-        return CLVPTextModelOutput(
-            text_embeds=text_embeds,
-            last_hidden_state=text_outputs.last_hidden_state,
-            pooler_output=text_outputs.pooler_output,
-            hidden_states=text_outputs.hidden_states,
-            attentions=text_outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    CLVP Speech Model with a projection layer on top (a linear layer on top of the pooled output).
-    """,
-    CLVP_START_DOCSTRING,
-)
-class CLVPSpeechModelWithProjection(CLVPPreTrainedModel):
-    config_class = CLVPConfig
-
-    _no_split_modules = None
-
-    def __init__(self, config: CLVPConfig):
-        super().__init__(config)
-
-        self.conditioning_encoder = CLVPConditioningEncoder(config)
-
-        self.autoregressive_model = GPT2LMHeadModel(config.autoregressive_config)
-        # Set the lm_head bias to True
-        self.autoregressive_model.lm_head = nn.Linear(config.autoregressive_config.n_embd, config.autoregressive_config.vocab_size, bias=True)
-
-        self.speech_transformer = CLVPTransformer(config.speech_config)
-        self.speech_projection = nn.Linear(config.speech_config.hidden_size, config.projection_dim, bias=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.speech_model.token_embedding
-
-    def set_input_embeddings(self, value):
-        self.speech_model.token_embedding = value
-
-    @add_start_docstrings_to_model_forward(CLVP_SPEECH_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CLVPSpeechModelOutput, config_class=CLVPSpeechConfig)
-    def forward(
-        self,
-        input_features: torch.FloatTensor,
-        input_ids: torch.LongTensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        use_causal_attention_mask: Optional[bool] = False,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CLVPSpeechModelOutput]:
-        r"""
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> import torch
-        >>> from transformers import CLVPSpeechModelWithProjection
-
-        >>> model = CLVPSpeechModelWithProjection.from_pretrained("susnato/clvp_dev")
-
-        >>> # TODO : after FeatureExtractor is implemented we need to change it to something lik FE.__call__(...)
-        >>> inputs = {"speech_ids": torch.tensor([[5, 62, 1, 5, 9, 10]]).long()}
-
-        >>> outputs = model(**inputs)
-        >>> speech_embeds = outputs.speech_embeds
-        ```
-        """
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        conditioning_embeds = self.conditioning_encoder(mel_spec=input_features,
-                                                        text_tokens=input_ids)
-
-        speech_candidates = self.autoregressive_model(inputs_embeds=conditioning_embeds,
-                                                      attention_mask=attention_mask,
-                                                      output_attentions=output_attentions,
-                                                      output_hidden_states=output_hidden_states,
-                                                      return_dict=return_dict,
-                                                      )
-
-
-        speech_outputs = self.speech_transformer(
-            input_ids=speech_candidates,
-            use_causal_attention_mask=use_causal_attention_mask,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        pooled_output = speech_outputs[1]  # pooled_output
-
-        speech_embeds = self.speech_projection(pooled_output)
+        embeds = self.projection(pooled_output)
 
         if not return_dict:
-            outputs = (speech_embeds, ) + speech_outputs
+            outputs = (embeds, ) + transformer_outputs
             return tuple(output for output in outputs if output is not None)
+
+        if self.model_type=="clvp_text_model":
+            return CLVPTextModelOutput(
+                text_embeds=embeds,
+                last_hidden_state=transformer_outputs.last_hidden_state,
+                pooler_output=transformer_outputs.pooler_output,
+                hidden_states=transformer_outputs.hidden_states,
+                attentions=transformer_outputs.attentions,
+            )
 
         return CLVPSpeechModelOutput(
-            speech_embeds=speech_embeds,
-            last_hidden_state=speech_outputs.last_hidden_state,
-            pooler_output=speech_outputs.pooler_output,
-            hidden_states=speech_outputs.hidden_states,
-            attentions=speech_outputs.attentions,
+            speech_embeds=embeds,
+            last_hidden_state=transformer_outputs.last_hidden_state,
+            pooler_output=transformer_outputs.pooler_output,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
         )
+
+
+
+
