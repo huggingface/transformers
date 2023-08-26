@@ -158,7 +158,7 @@ class PatchTSTConfig(PretrainedConfig):
         mask_patch_ratios: list = [1, 1],
         channel_consistent_masking: bool = True,
         d_size: str = "4D",
-        cv_channel_indices: list = None,
+        unmasked_channel_indices: list = None,
         mask_value=0,
         pooling: str = 'mean',
         num_classes: int = 1,
@@ -229,7 +229,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.mask_patch_ratios = mask_patch_ratios
         self.channel_consistent_masking = channel_consistent_masking
         self.d_size = d_size
-        self.cv_channel_indices = cv_channel_indices
+        self.unmasked_channel_indices = unmasked_channel_indices
         self.mask_value = mask_value
 
         # Classification
