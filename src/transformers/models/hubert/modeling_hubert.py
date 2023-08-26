@@ -383,7 +383,7 @@ class HubertFeatureProjection(nn.Module):
         self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
         self.dropout = nn.Dropout(config.feat_proj_dropout)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         # non-projected hidden states are needed for quantization
         norm_hidden_states = self.layer_norm(hidden_states) if self.feat_proj_layer_norm else hidden_states
         hidden_states = self.projection(norm_hidden_states)

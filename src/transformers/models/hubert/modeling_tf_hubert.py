@@ -37,6 +37,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ..wav2vec2.modeling_tf_wav2vec2 import TFWav2Vec2BaseModelOutput
 from .configuration_hubert import HubertConfig
 
 
@@ -602,11 +603,11 @@ class TFHubertFeatureProjection(tf.keras.layers.Layer):
         )
         self.dropout = tf.keras.layers.Dropout(rate=config.feat_proj_dropout)
 
-    def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.projection(hidden_states)
+    def call(self, hidden_states: tf.Tensor, training: bool = False) -> Tuple[tf.Tensor, tf.Tensor]:
+        norm_hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.projection(norm_hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
-        return hidden_states
+        return hidden_states, norm_hidden_states
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with TFBart->TFHubert
@@ -1112,17 +1113,17 @@ class TFHubertMainLayer(tf.keras.layers.Layer):
         training: bool = False,
         **kwargs: Any,
     ):
-        hidden_states = self.feature_extractor(tf.cast(input_values, tf.float32), training=training)
+        extract_features = self.feature_extractor(tf.cast(input_values, tf.float32), training=training)
 
         if attention_mask is not None:
             # compute real output lengths according to convolution formula
             output_lengths = self._get_feat_extract_output_lengths(tf.reduce_sum(attention_mask, -1))
 
             attention_mask = tf.sequence_mask(
-                output_lengths, maxlen=shape_list(hidden_states)[1], dtype=hidden_states.dtype
+                output_lengths, maxlen=shape_list(extract_features)[1], dtype=extract_features.dtype
             )
 
-        hidden_states = self.feature_projection(hidden_states, training=training)
+        hidden_states, extract_features = self.feature_projection(extract_features, training=training)
 
         mask_time_indices = kwargs.get("mask_time_indices", None)
         if training:
@@ -1139,12 +1140,15 @@ class TFHubertMainLayer(tf.keras.layers.Layer):
         hidden_states = encoder_outputs[0]
 
         if not return_dict:
-            return (hidden_states,) + encoder_outputs[1:]
+            outputs = (hidden_states, extract_features) + encoder_outputs[1:]
+            return outputs + (attention_mask,) if attention_mask is not None else outputs
 
-        return TFBaseModelOutput(
+        return TFWav2Vec2BaseModelOutput(
             last_hidden_state=hidden_states,
+            extract_features=extract_features,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+            attention_mask=attention_mask,
         )
 
 
