@@ -134,7 +134,7 @@ def coord2d_pos_encoding(q_len, d_model, exponential=False, normalize=True, eps=
             2 * (torch.linspace(0, 1, q_len).reshape(-1, 1) ** x) * (torch.linspace(0, 1, d_model).reshape(1, -1) ** x)
             - 1
         )
-        # pv(f'{i:4.0f}  {x:5.3f}  {cpe.mean():+6.3f}', verbose)
+
         if abs(cpe.mean()) <= eps:
             break
         elif cpe.mean() > eps:
@@ -789,11 +789,8 @@ class PatchTSTForPreTrainingOutput(ModelOutput):
         loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
             Total loss as the sum of the masked language modeling loss and the next sequence prediction
             (classification) loss.
-        prediction_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        seq_relationship_logits (`torch.FloatTensor` of shape `(batch_size, 2)`):
-            Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
-            before SoftMax).
+        prediction_outputs (`torch.FloatTensor` of shape `(batch_size, nvars, num_patch, patch_len )`):
+            Prediction outputs of the modeling head.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
@@ -808,8 +805,7 @@ class PatchTSTForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_logits: torch.FloatTensor = None
-    seq_relationship_logits: torch.FloatTensor = None
+    prediction_outputs: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -822,7 +818,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         config.mask_input = True
         self.model = PatchTSTModel(config)
         self.head = PretrainHead(config)
-        self.loss = torch.nn.MSELoss(reduction="mean")
+        self.loss = torch.nn.MSELoss(reduction=None)
 
     def forward(
         self, past_values: torch.Tensor,
@@ -836,10 +832,13 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         model_output = self.model(past_values)  # x: [bs x nvars x num_patch x d_model] or [bs x nvars x (num_patch+1) x d_model] if use cls_token
         x_hat = self.head(model_output[0])  # tensor [bs x nvars x num_patch x patch_len] or [bs x nvars x (num_patch+1) x patch_len] if use cls_token
 
+        # calculate masked_loss
         loss_val = self.loss(x_hat, model_output.patched_input)
+        masked_loss = (loss_val * model_output.mask).sum() / (model_output.mask.sum() + 1e-10)
+
         return PatchTSTForPreTrainingOutput(
-            loss=loss_val,
-            prediction_logits=x_hat,
+            loss=masked_loss,
+            prediction_outputs=x_hat,
             hidden_states=model_output.hidden_states
         )
 
