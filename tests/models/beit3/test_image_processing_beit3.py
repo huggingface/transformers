@@ -21,7 +21,8 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import prepare_image_inputs, ImageProcessingTestMixin
+from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+
 
 if is_torch_available():
     import torch
@@ -32,7 +33,7 @@ if is_vision_available():
     from transformers import Beit3ImageProcessor
 
 
-class Beit3ImageProcessingTester(ImageProcessingTestMixin,unittest.TestCase):
+class Beit3ImageProcessingTester(ImageProcessingTestMixin, unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -91,6 +92,7 @@ class Beit3ImageProcessingTester(ImageProcessingTestMixin,unittest.TestCase):
             torchify=torchify,
         )
 
+
 @require_torch
 @require_vision
 class Beit3ImageProcessingTest(unittest.TestCase):
@@ -127,7 +129,9 @@ class Beit3ImageProcessingTest(unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
-        image_inputs = self.image_processor_tester.prepare_image_inputs(self.image_processor_tester, equal_resolution=False)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(
+            self.image_processor_tester, equal_resolution=False
+        )
 
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
@@ -160,7 +164,9 @@ class Beit3ImageProcessingTest(unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(self.image_processor_tester, equal_resolution=False, numpify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(
+            self.image_processor_tester, equal_resolution=False, numpify=True
+        )
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
@@ -192,7 +198,9 @@ class Beit3ImageProcessingTest(unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(self.image_processor_tester, equal_resolution=False, torchify=True)
+        image_inputs = self.image_processor_tester.prepare_image_inputs(
+            self.image_processor_tester, equal_resolution=False, torchify=True
+        )
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
