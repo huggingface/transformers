@@ -25,6 +25,8 @@ from ...image_transforms import (
     rescale,
     resize,
     to_channel_dimension_format,
+)
+from ...image_utils import (
     to_numpy_array,
 )
 from ...image_utils import (
