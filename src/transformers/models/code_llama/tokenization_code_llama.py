@@ -1,10 +1,6 @@
 # coding=utf-8
-# Copyright 2022 EleutherAI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2023 MetaAI and the HuggingFace Inc. team. All rights reserved.
 #
-# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
-# and OPT implementations in this library. It has been modified from its
-# original forms to accommodate minor architectural differences compared
-# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tokenization classes for LLaMA."""
+"""Tokenization classes for Code LLaMA."""
 import os
 from shutil import copyfile
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
@@ -27,12 +23,11 @@ import sentencepiece as spm
 
 from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import logging
+from ...utils import logging, requires_backends
 
 
 if TYPE_CHECKING:
-    from ...pipelines.conversational import Conversation
-    from ...tokenization_utils_base import TextInput
+    from transformers.pipelines.conversational import Conversation
 
 logger = logging.get_logger(__name__)
 
@@ -40,14 +35,14 @@ VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "hf-internal-testing/llama-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer.model",
+        "hf-internal-testing/llama-code-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer.model",
     },
     "tokenizer_file": {
-        "hf-internal-testing/llama-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer_config.json",
+        "hf-internal-testing/llama-code-tokenizer": "https://huggingface.co/hf-internal-testing/llama-tokenizer/resolve/main/tokenizer_config.json",
     },
 }
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "hf-internal-testing/llama-tokenizer": 2048,
+    "hf-internal-testing/llama-code-tokenizer": 2048,
 }
 SPIECE_UNDERLINE = "▁"
 
@@ -64,36 +59,58 @@ correct. If you don't know the answer to a question, please don't share false in
 # fmt: on
 
 
-class LlamaTokenizer(PreTrainedTokenizer):
+class CodeLlamaTokenizer(PreTrainedTokenizer):
     """
-    Construct a Llama tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as there is
-    no padding token in the original model.
+    Construct a CodeLlama tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as
+    there is no padding token in the original model.
 
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
-        legacy (`bool`, *optional*):
-            Whether or not the `legacy` behavior of the tokenizer should be used. Legacy is before the merge of #24622
-            and #25224 which includes fixes to properly handle tokens that appear after special tokens. A simple
-            example:
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
+            The end of sequence token.
 
-            - `legacy=True`:
-            ```python
-            >>> from transformers import T5Tokenizer
+            <Tip>
 
-            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=True)
-            >>> tokenizer.encode("Hello <extra_id_0>.")
-            [8774, 32099, 3, 5, 1]
-            ```
-            - `legacy=False`:
-            ```python
-            >>> from transformers import T5Tokenizer
+            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+            The token used is the `sep_token`.
 
-            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
-            >>> tokenizer.encode("Hello <extra_id_0>.")  # the extra space `[3]` is no longer here
-            [8774, 32099, 5, 1]
-            ```
-            Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
+            </Tip>
+
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        prefix_token (`str`, *optional*, defaults to `"▁<PRE>"`):
+            Prefix token used for infilling.
+        suffix_token (`str`, *optional*, defaults to `"▁<SUF>"`):
+            Suffix token used for infilling.
+        middle_token (`str`, *optional*, defaults to `"▁<MID>"`):
+            Middle token used for infilling.
+        eot_token (`str`, *optional*, defaults to `"▁<EOT>"`):
+            End of text token used for infilling.
+        fill_token (`str`, *optional*, defaults to `"<FILL_ME>"`):
+            The token used to split the input between the prefix and suffix.
+        suffix_first (`bool`, *optional*, default to `False`):
+            Whether the input prompt and suffix should be formatted with the suffix first.
+        additional_special_tokens (`List[str]`, *optional*):
+            Additional special tokens used by the tokenizer.
+        sp_model_kwargs (`dict`, *optional*):
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
+
+            - `enable_sampling`: Enable subword regularization.
+            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - `nbest_size = {0,1}`: No sampling is performed.
+              - `nbest_size > 1`: samples from the nbest_size results.
+              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+
+            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
 
     """
 
@@ -109,20 +126,28 @@ class LlamaTokenizer(PreTrainedTokenizer):
         bos_token="<s>",
         eos_token="</s>",
         pad_token=None,
+        prefix_token="▁<PRE>",
+        middle_token="▁<MID>",
+        suffix_token="▁<SUF>",
+        eot_token="▁<EOT>",
+        fill_token="<FILL_ME>",
+        suffix_first=False,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
-        use_default_system_prompt=True,
-        spaces_between_special_tokens=False,
-        legacy=None,
         **kwargs,
     ):
+        requires_backends(self, "protobuf")
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+
+        # mark tokens special to skip them
+        additional_special_tokens = kwargs.pop("additional_special_tokens", [])
+        additional_special_tokens += [prefix_token, middle_token, suffix_token, eot_token]
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -130,45 +155,37 @@ class LlamaTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
+            prefix_token=prefix_token,
+            middle_token=middle_token,
+            suffix_token=suffix_token,
+            eot_token=eot_token,
+            fill_token=fill_token,
             sp_model_kwargs=self.sp_model_kwargs,
+            suffix_first=suffix_first,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            use_default_system_prompt=use_default_system_prompt,
-            spaces_between_special_tokens=spaces_between_special_tokens,
-            legacy=legacy,
+            additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-        if legacy is None:
-            logger.warning_once(
-                f"You are using the default legacy behaviour of the {self.__class__}. If you see this, DO NOT PANIC! This is"
-                " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
-                " If you want to use the new behaviour, set `legacy=True`. This should only be set if you understand what it"
-                " means, and thouroughly read the reason why this was added as explained in"
-                " https://github.com/huggingface/transformers/pull/24565"
-            )
-            legacy = True
-
-        self.legacy = legacy
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
-        self.use_default_system_prompt = use_default_system_prompt
-
+        self._prefix_token = prefix_token
+        self._middle_token = middle_token
+        self._suffix_token = suffix_token
+        self._eot_token = eot_token
+        self.fill_token = fill_token
+        self.suffix_first = suffix_first
         self.sp_model = self.get_spm_processor()
 
     @property
     def unk_token_length(self):
         return len(self.sp_model.encode(str(self.unk_token)))
 
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
     def get_spm_processor(self):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        if self.legacy:  # no dependency on protobuf
-            tokenizer.Load(self.vocab_file)
-            return tokenizer
-
         with open(self.vocab_file, "rb") as f:
             sp_model = f.read()
-            model_pb2 = import_protobuf(f"The new behaviour of {self.__class__.__name__} (with `self.legacy = False`)")
+            model_pb2 = import_protobuf()
             model = model_pb2.ModelProto.FromString(sp_model)
             normalizer_spec = model_pb2.NormalizerSpec()
             normalizer_spec.add_dummy_prefix = False
@@ -177,16 +194,45 @@ class LlamaTokenizer(PreTrainedTokenizer):
             tokenizer.LoadFromSerializedProto(sp_model)
         return tokenizer
 
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["sp_model"] = None
-        state["sp_model_proto"] = self.sp_model.serialized_model_proto()
-        return state
+    @property
+    def prefix_token(self):
+        return self._prefix_token
 
-    def __setstate__(self, d):
-        self.__dict__ = d
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
+    @property
+    def prefix_id(self):
+        if self._prefix_token is None:
+            return None
+        return self.convert_tokens_to_ids(self.prefix_token)
+
+    @property
+    def middle_token(self):
+        return self._middle_token
+
+    @property
+    def middle_id(self):
+        if self._middle_token is None:
+            return None
+        return self.convert_tokens_to_ids(self.middle_token)
+
+    @property
+    def suffix_token(self):
+        return self._suffix_token
+
+    @property
+    def suffix_id(self):
+        if self._suffix_token is None:
+            return None
+        return self.convert_tokens_to_ids(self.suffix_token)
+
+    @property
+    def eot_token(self):
+        return self._eot_token
+
+    @property
+    def eot_id(self):
+        if self._eot_token is None:
+            return None
+        return self.convert_tokens_to_ids(self.eot_token)
 
     @property
     def vocab_size(self):
@@ -199,23 +245,38 @@ class LlamaTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
-    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
-        """
-        Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
-        first token is special.
-        """
-        if self.legacy:
-            return super().tokenize(text, **kwargs)
+    def tokenize(self, prefix, suffix=None, suffix_first=False, **kwargs) -> List[int]:
+        # add a prefix space to `prefix`
+        if self.fill_token in prefix and suffix is None:
+            prefix, suffix = prefix.split(self.fill_token)
 
-        if len(text) > 0:
-            tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
+        if len(prefix) > 0:
+            prefix = SPIECE_UNDERLINE + prefix.replace(SPIECE_UNDERLINE, " ")
 
-        if tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
-            tokens = tokens[1:]
-        return tokens
+        if suffix is None or len(suffix) < 1:
+            tokens = super().tokenize(prefix, **kwargs)
+            if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
+                tokens = tokens[1:]
+            return tokens
 
-    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
+        prefix_tokens = self._tokenize(prefix)  # prefix has an extra `SPIECE_UNDERLINE`
+
+        if None in (self.prefix_id, self.middle_id, self.suffix_id):
+            raise ValueError(
+                "Then input includes a `prefix` and a `suffix` used for the infilling task,"
+                " the `prefix_id, middle_id, suffix_id` must all be initialized. Current"
+                f" values : {self.prefix_id, self.middle_id, self.suffix_id}"
+            )
+        suffix_tokens = self._tokenize(suffix)  # make sure CodeLlama sp model does not mess up
+
+        suffix_first = suffix_first if suffix_first is not None else self.suffix_first
+        if suffix_first:
+            # format as " <PRE> <SUF>{suf} <MID> {pre}"
+            return [self.prefix_token, self.suffix_token] + suffix_tokens + [self.middle_token] + prefix_tokens
+        else:
+            # format as " <PRE> {pre} <SUF>{suf} <MID>"
+            return [self.prefix_token] + prefix_tokens + [self.suffix_token] + suffix_tokens + [self.middle_token]
+
     def _tokenize(self, text, **kwargs):
         """
         Returns a tokenized string.
@@ -227,9 +288,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
         tokens = self.sp_model.encode(text, out_type=str)
-        if self.legacy or not text.startswith((SPIECE_UNDERLINE, " ")):
-            return tokens
-
         # 1. Encode string + prefix ex: "<unk> Hey"
         tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
         # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
@@ -252,18 +310,13 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
         current_sub_tokens = []
         out_string = ""
-        prev_is_special = False
-        for i, token in enumerate(tokens):
+        for _, token in enumerate(tokens):
             # make sure that special tokens are not decoded using sentencepiece model
             if token in self.all_special_tokens:
-                if not prev_is_special and i != 0 and self.legacy:
-                    out_string += " "
                 out_string += self.sp_model.decode(current_sub_tokens) + token
-                prev_is_special = True
                 current_sub_tokens = []
             else:
                 current_sub_tokens.append(token)
-                prev_is_special = False
         out_string += self.sp_model.decode(current_sub_tokens)
         return out_string
 
@@ -400,20 +453,16 @@ class LlamaTokenizer(PreTrainedTokenizer):
             `List[int]`:
                 Input ids for the conversation.
         """
-        if self.use_default_system_prompt:
-            if len(conversation.past_user_inputs) > 0:
-                if (
-                    not conversation.past_user_inputs[0].startswith(B_SYS)
-                    or E_SYS not in conversation.past_user_inputs[0]
-                ):
-                    conversation.past_user_inputs[0] = (
-                        B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
-                    )
-            elif conversation.new_user_input:
-                if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
-                    conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
-            else:
-                raise ValueError("Last message must be from user")
+        if len(conversation.past_user_inputs) > 0:
+            if not conversation.past_user_inputs[0].startswith(B_SYS) or E_SYS not in conversation.past_user_inputs[0]:
+                conversation.past_user_inputs[0] = (
+                    B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
+                )
+        elif conversation.new_user_input:
+            if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
+                conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
+        else:
+            raise ValueError("Last message must be from user")
 
         dialogue = list(conversation.iter_texts())
         if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
@@ -439,3 +488,14 @@ class LlamaTokenizer(PreTrainedTokenizer):
             f"{B_INST} {(dialogue[-1][1]).strip()} {E_INST}", add_special_tokens=False
         )
         return dialog_tokens
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["sp_model"] = None
+        state["sp_model_proto"] = self.sp_model.serialized_model_proto()
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
