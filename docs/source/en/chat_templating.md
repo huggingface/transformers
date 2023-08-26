@@ -27,11 +27,14 @@ have special handling for roles. This means that role information is usually inj
 between messages, to indicate both the message boundary and the relevant roles.
 
 Unfortunately, there isn't (yet!) a standard for which tokens to use, and so different models have been trained
-with wildly different formatting and control tokens for chat. This is what **chat templates** aim to resolve. 
+with wildly different formatting and control tokens for chat. This can be a real problem for users - if you use the
+wrong format, then the model will be confused by your input, and your performance will be a lot worse than it should be.
+This is the problem that **chat templates** aim to resolve. 
 
 Chat conversations are typically represented as a list of dictionaries, where each dictionary contains `role`
 and `content` keys, and represents a single chat message. Chat templates are strings containing a Jinja template that
-specifies how to format a conversation for a given model into a single tokenizable sequence.
+specifies how to format a conversation for a given model into a single tokenizable sequence. By storing this information
+with the tokenizer, we can ensure that models get input data in the format they expect.
 
 Let's make this concrete with a quick example using the `BlenderBot` model:
 
