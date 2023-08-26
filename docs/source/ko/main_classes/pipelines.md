@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# 파이프라인 [[Pipelines]]
+# 파이프라인 [[pipelines]]
 
 파이프라인은 추론에 모델을 사용할 수 있는 훌륭하고 쉬운 방법입니다. 이러한 파이프라인은 라이브러리의 복잡한 코드를 대부분 추상화한 객체들로, 
 명명된 개체 인식(Named Entity Recognition), 마스크드 언어 모델링(Masked Language Modeling), 
@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 - 가장 강력한 객체인 [파이프라인]은 다른 모든 파이프라인을 캡슐화합니다.
 - 작업별 파이프라인은 오디오, 컴퓨터 비전, 자연어 처리, 멀티모달 작업을 위한 특정 작업에 사용할 수 있습니다.
 
-## 파이프라인 추상화 [[The-pipeline-abstraction]]
+## 파이프라인 추상화 [[the-pipeline-abstraction]]
 
 *파이프라인* 추상화는 다른 모든 사용 가능한 파이프라인을 감싸고 있는 래퍼입니다. 
 다른 파이프라인처럼 인스턴스화될 수 있지만, 추가적인 편의성을 제공할 수도 있습니다.
@@ -107,7 +107,7 @@ for out in pipe(data()):
 
 [[autodoc]] 파이프라인
 
-## 파이프라인 일괄 처리 [[Pipeline-batching]]
+## 파이프라인 일괄 처리 [[pipeline-batching]]
 
 모든 파이프라인은 일괄 처리 작업이 가능합니다. 
 일괄 처리는 파이프라인이 스트리밍 기능을 사용할 때마다(즉, 리스트나 `Dataset` 또는 `generator`를 전달할 때) 작동합니다.
@@ -237,7 +237,7 @@ RuntimeError: CUDA out of memory. Tried to allocate 376.00 MiB (GPU 0; 3.95 GiB 
   - GPU가 클수록 일괄 처리 더 흥미롭게 보일 가능성이 큽니다.
 - 일괄처리를 활성화하자마자 OOM을 잘 처리할 수 있는지 확인하세요.
  
-## 파이프라인 청크 일괄처리 [[Pipeline-chunk-batching]]
+## 파이프라인 청크 일괄처리 [[pipeline-chunk-batching]]
 
 `zero-shot-classification`과 `question-answering`은 단일 입력으로 여러 개의 포워드 패스를 생성할 수 있다는 점에서 약간 특별합니다. 
 일반적인 상황에서는 이것이 `batch_size` 인수에서 문제가 발생할 것입니다.
@@ -270,7 +270,7 @@ outputs = pipe.postprocess(all_model_outputs)
 즉, 실제로 얼마나 많은 포워드 패스를 트리거할지 신경 쓸 필요가 없으므로, 입력과 무관하게 `batch_size`를 최적화할 수 있습니다. 
 이전 섹션의 주의 사항은 여전히 적용됩니다.
 
-## 파이프라인 사용자 정의 코드 [[Pipeline-custom-code]]
+## 파이프라인 사용자 정의 코드 [[pipeline-custom-code]]
 
 특정 파이프라인을 재정의하려면.
 
@@ -298,7 +298,7 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 이것은 당신이 원하는 모든 사용자 정의 코드를 수행할 수 있게 해야 합니다.
 
 
-## 파이프라인 구현하기 [[Implementing-a-pipeline]]
+## 파이프라인 구현하기 [[implementing-a-pipeline]]
 
 [새로운 파이프라인 구현하기](../add_new_pipeline)
 
