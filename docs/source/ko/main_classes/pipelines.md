@@ -14,24 +14,24 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Pipelines
+# 파이프라인
 
-The pipelines are a great and easy way to use models for inference. These pipelines are objects that abstract most of
-the complex code from the library, offering a simple API dedicated to several tasks, including Named Entity
-Recognition, Masked Language Modeling, Sentiment Analysis, Feature Extraction and Question Answering. See the
-[task summary](../task_summary) for examples of use.
+파이프라인은 추론에 모델을 사용할 수 있는 훌륭하고 쉬운 방법입니다. 이러한 파이프라인은 라이브러리의 복잡한 코드를 대부분 추상화한 객체들로, 
+명명된 개체 인식(Named Entity Recognition), 마스크드 언어 모델링(Masked Language Modeling), 
+감정 분석(Sentiment Analysis), 특징 추출(Feature Extraction), 질문 응답(Question Answering)과 같은 여러 작업을 위한 간단한 API를 제공합니다. 
+사용 예제는 [작업 요약](../task_summary)에서 확인할 수 있습니다.
 
-There are two categories of pipeline abstractions to be aware about:
+파이프라인 추상화에는 두 가지 범주가 있습니다:
 
-- The [`pipeline`] which is the most powerful object encapsulating all other pipelines.
-- Task-specific pipelines are available for [audio](#audio), [computer vision](#computer-vision), [natural language processing](#natural-language-processing), and [multimodal](#multimodal) tasks.
+- 가장 강력한 객체인 [파이프라인]은 다른 모든 파이프라인을 캡슐화합니다.
+- 작업별 파이프라인은 오디오, 컴퓨터 비전, 자연어 처리, 멀티모달 작업을 위한 특정 작업에 사용할 수 있습니다.
 
-## The pipeline abstraction
+## 파이프라인 추상화
 
-The *pipeline* abstraction is a wrapper around all the other available pipelines. It is instantiated as any other
-pipeline but can provide additional quality of life.
+*파이프라인* 추상화는 다른 모든 사용 가능한 파이프라인을 감싸고 있는 래퍼입니다. 
+다른 파이프라인처럼 인스턴스화될 수 있지만, 추가적인 편의성을 제공할 수도 있습니다.
 
-Simple call on one item:
+단일 항목에 대한 간단한 호출:
 
 ```python
 >>> pipe = pipeline("text-classification")
@@ -39,8 +39,8 @@ Simple call on one item:
 [{'label': 'POSITIVE', 'score': 0.9998743534088135}]
 ```
 
-If you want to use a specific model from the [hub](https://huggingface.co) you can ignore the task if the model on
-the hub already defines it:
+[허브](https://huggingface.co)에서 특정 모델을 사용하려고 할 떄, 
+허브에서 모델이 이미 그것을 정의하고 있다면 그 작업은 건너뛰어도 됩니다:
 
 ```python
 >>> pipe = pipeline(model="roberta-large-mnli")
@@ -48,7 +48,7 @@ the hub already defines it:
 [{'label': 'NEUTRAL', 'score': 0.7313136458396912}]
 ```
 
-To call a pipeline on many items, you can call it with a *list*.
+여러 항목에 파이프라인을 호출하려면, *리스트*로 호출할 수 있습니다.
 
 ```python
 >>> pipe = pipeline("text-classification")
@@ -57,9 +57,9 @@ To call a pipeline on many items, you can call it with a *list*.
  {'label': 'NEGATIVE', 'score': 0.9996669292449951}]
 ```
 
-To iterate over full datasets it is recommended to use a `dataset` directly. This means you don't need to allocate
-the whole dataset at once, nor do you need to do batching yourself. This should work just as fast as custom loops on
-GPU. If it doesn't don't hesitate to create an issue.
+전체 데이터 세트를 반복하려면 `데이터셋`을 직접 사용하는 것이 좋습니다. 
+즉, 한 번에 전체 데이터 세트를 할당할 필요가 없고, 직접 일괄 처리할 필요도 없다는 것을 의미합니다.
+이것은 GPU에서의 사용자 정의 루프만큼 빠르게 작동해야 합니다. 그렇지 않다면 주저하지 말고 이슈를 생성하세요.
 
 ```python
 import datasets
@@ -70,8 +70,8 @@ from tqdm.auto import tqdm
 pipe = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h", device=0)
 dataset = datasets.load_dataset("superb", name="asr", split="test")
 
-# KeyDataset (only *pt*) will simply return the item in the dict returned by the dataset item
-# as we're not interested in the *target* part of the dataset. For sentence pair use KeyPairDataset
+# KeyDataset(*pt*만 해당)은 단순히 데이터셋 항목이 반환한 딕셔너리의 항목을 반환합니다. 
+# 데이터셋의 *대상* 부분에는 관심이 없기 때문입니다. 문장 쌍의 경우 KeyPairDataset을 사용합니다.
 for out in tqdm(pipe(KeyDataset(dataset, "file"))):
     print(out)
     # {"text": "NUMBER TEN FRESH NELLY IS WAITING ON YOU GOOD NIGHT HUSBAND"}
@@ -79,7 +79,7 @@ for out in tqdm(pipe(KeyDataset(dataset, "file"))):
     # ....
 ```
 
-For ease of use, a generator is also possible:
+사용하기 쉽도록 생성자도 가능합니다:
 
 
 ```python
@@ -90,11 +90,11 @@ pipe = pipeline("text-classification")
 
 def data():
     while True:
-        # This could come from a dataset, a database, a queue or HTTP request
-        # in a server
-        # Caveat: because this is iterative, you cannot use `num_workers > 1` variable
-        # to use multiple threads to preprocess data. You can still have 1 thread that
-        # does the preprocessing while the main runs the big inference
+        # 이것은 서버의 데이터 세트, 데이터베이스, 
+        # 대기열 또는 HTTP 요청에서 올 수 있습니다.
+        # 주의: 이 작업은 반복적이므로 `num_workers > 1` 변수를 이용하는 것으로 
+        # 여러 스레드를 사용하여 데이터를 전처리할 수 없습니다. 
+        # 메인 스레드가 대규모 추론을 실행하는 동안 전처리를 수행하는 하나의 스레드만 사용할 수 있습니다. 
         yield "This is a test"
 
 
@@ -105,12 +105,12 @@ for out in pipe(data()):
     # ....
 ```
 
-[[autodoc]] pipeline
+[[autodoc]] 파이프라인
 
-## Pipeline batching
+## 파이프라인 일괄 처리
 
-All pipelines can use batching. This will work
-whenever the pipeline uses its streaming ability (so when passing lists or `Dataset` or `generator`).
+모든 파이프라인은 일괄 처리거 거눙합니다. 
+이것은 파이프라인이 스트리밍 기능을 사용할 때마다(즉, 리스트나 `Dataset` 또는 `generator`를 전달할 때) 작동합니다.
 
 ```python
 from transformers import pipeline
@@ -122,16 +122,16 @@ pipe = pipeline("text-classification", device=0)
 for out in pipe(KeyDataset(dataset, "text"), batch_size=8, truncation="only_first"):
     print(out)
     # [{'label': 'POSITIVE', 'score': 0.9998743534088135}]
-    # Exactly the same output as before, but the content are passed
-    # as batches to the model
+    # 이전과 정확히 동일한 출력이지만 
+    # 콘텐츠는 모델에 일괄적으로 전달됩니다.
 ```
 
 <Tip warning={true}>
 
-However, this is not automatically a win for performance. It can be either a 10x speedup or 5x slowdown depending
-on hardware, data and the actual model being used.
+그러나 이것이 자동으로 성능 향상으로 이어지지는 않습니다. 
+하드웨어, 데이터 및 실제 사용 중인 모델에 따라 10배 빨라지거나 5배 느려질 수도 있습니다.
 
-Example where it's mostly a speedup:
+속도 향상이 주로 나타나는 예:
 
 </Tip>
 
@@ -177,7 +177,7 @@ Streaming batch_size=256
 (diminishing returns, saturated the GPU)
 ```
 
-Example where it's most a slowdown:
+속도 저하가 주로 나타나는 예:
 
 ```python
 class MyDataset(Dataset):
@@ -192,9 +192,9 @@ class MyDataset(Dataset):
         return "This is a test" * n
 ```
 
-This is a occasional very long sentence compared to the other. In that case, the **whole** batch will need to be 400
-tokens long, so the whole batch will be [64, 400] instead of [64, 4], leading to the high slowdown. Even worse, on
-bigger batches, the program simply crashes.
+이것은 다른 것들에 비해 아주 긴 문장입니다. 이 경우, **전체** 배치의 길이가 400토큰이 되어야 하므로 
+전체 배치가 [64, 4]가 아닌 [64, 400]이 되어 속도가 매우 느려집니다. 더 나쁜 것은,
+더 큰 배치에서는 프로그램이 단순히 충돌한다는 것입니다.
 
 
 ```
@@ -218,32 +218,32 @@ Traceback (most recent call last):
 RuntimeError: CUDA out of memory. Tried to allocate 376.00 MiB (GPU 0; 3.95 GiB total capacity; 1.72 GiB already allocated; 354.88 MiB free; 2.46 GiB reserved in total by PyTorch)
 ```
 
-There are no good (general) solutions for this problem, and your mileage may vary depending on your use cases. Rule of
-thumb:
+이 문제에 대한 좋은 (일반적인) 해결책은 없으며, 사용 사례에 따라 결과가 달라질 수 있습니다. 
+대략적인 규칙:
 
-For users, a rule of thumb is:
+경험에 따른 사용자를 위한 규칙은 다음과 같습니다:
 
-- **Measure performance on your load, with your hardware. Measure, measure, and keep measuring. Real numbers are the
-  only way to go.**
-- If you are latency constrained (live product doing inference), don't batch
-- If you are using CPU, don't batch.
-- If you are using throughput (you want to run your model on a bunch of static data), on GPU, then:
+- **하드웨어와 함께 부하에 대한 성능을 측정하세요. 측정하고,  측정하고, 계속 측정하세요. 
+  실제 숫자만이 해답입니다.**
+- 지연 시간 제약이 있는 경우(추론을 수행하는 라이브 제품), 일괄 처리하지 마세요.
+- CPU를 사용하는 경우 일괄 처리하지 마세요.
+- 처리량이 중요한 경우(많은 정적 데이터에 대해 모델을 실행하려는 경우) GPU를 사용하세요:
 
-  - If you have no clue about the size of the sequence_length ("natural" data), by default don't batch, measure and
-    try tentatively to add it, add OOM checks to recover when it will fail (and it will at some point if you don't
-    control the sequence_length.)
-  - If your sequence_length is super regular, then batching is more likely to be VERY interesting, measure and push
-    it until you get OOMs.
-  - The larger the GPU the more likely batching is going to be more interesting
-- As soon as you enable batching, make sure you can handle OOMs nicely.
+  - 시퀀스_길이("원래"의 데이터)의 크기에 대한 단서가 없는 경우 기본적으로 일괄 처리하지 말고 측정한 후
+    임시로 추가를 시도하고, 실패할 때 복구하기 위해 OOM 검사를 추가합니다.
+    (그리고 시퀀스 길이를 제어하지 않으면 언젠가는 실패할 것입니다).
+  - 시퀀스 길이가 매우 규칙적이라면, 일괄 처리가 아주 흥미롭게 보일 가능성이 큽니다. 
+    OOM이 발생할 때까지 측정하고 푸시하세요.
+  - GPU가 클수록 일괄 처리 더 흥미롭게 보일 가능성이 큽니다.
+- 일괄처리를 활성화하자마자 OOM을 잘 처리할 수 있는지 확인하세요.
+ 
+## 파이프라인 청크 일괄처리
 
-## Pipeline chunk batching
+`zero-shot-classification`과 `question-answering`은 단일 입력으로 여러 개의 포워드 패스를 생성할 수 있다는 점에서 약간 특별합니다. 
+일반적인 상황에서는 이것이 `batch_size` 인수와 문제가 발생할 것입니다.
 
-`zero-shot-classification` and `question-answering` are slightly specific in the sense, that a single input might yield
-multiple forward pass of a model. Under normal circumstances, this would yield issues with `batch_size` argument.
-
-In order to circumvent this issue, both of these pipelines are a bit specific, they are `ChunkPipeline` instead of
-regular `Pipeline`. In short:
+이 문제를 피하기 위한 이 두 파이프라인은 조금 특별합니다. 그것들은 일반 `Pipeline` 대신 `ChunkPipeline`입니다. 
+요약하면:
 
 
 ```python
@@ -252,7 +252,7 @@ model_outputs = pipe.forward(preprocessed)
 outputs = pipe.postprocess(model_outputs)
 ```
 
-Now becomes:
+이제 다음과 같이 됩니다:
 
 
 ```python
@@ -263,24 +263,24 @@ for preprocessed in pipe.preprocess(inputs):
 outputs = pipe.postprocess(all_model_outputs)
 ```
 
-This should be very transparent to your code because the pipelines are used in
-the same way.
+파이프라인이 동일한 방식으로 사용되기 때문에 
+코드에 매우 투명해야 합니다.
 
-This is a simplified view, since the pipeline can handle automatically the batch to ! Meaning you don't have to care
-about how many forward passes you inputs are actually going to trigger, you can optimize the `batch_size`
-independently of the inputs. The caveats from the previous section still apply.
+파이프라인이 배치를 자동으로 처리할 수 있기 때문에 이것은 단순화된 보기입니다! 
+즉, 실제로 얼마나 많은 포워드 패스를 트리거할지 신경 쓸 필요가 없으므로, 입력과 무관하게 `batch_size`를 최적화할 수 있습니다. 
+이전 섹션의 주의 사항은 여전히 적용됩니다.
 
-## Pipeline custom code
+## 파이프라인 사용자 정의 코드
 
-If you want to override a specific pipeline.
+특정 파이프라인을 재정의하려면.
 
-Don't hesitate to create an issue for your task at hand, the goal of the pipeline is to be easy to use and support most
-cases, so `transformers` could maybe support your use case.
+파이프라인의 목표는 사용하기 쉽고 대부분의 사용 사례를 지원하는 것이므로 이슈를 생성하는 것을 주저하지 마세요.
+그 결과 '트랜스포머'가 당신의 사용 사례를 지원할 수 있습니다.
 
 
-If you want to try simply you can:
+간단하게 시도하려면 다음을 수행할 수 있습니다:
 
-- Subclass your pipeline of choice
+- 선택한 파이프라인을 서브 클래스로 만들기
 
 ```python
 class MyPipeline(TextClassificationPipeline):
@@ -295,16 +295,16 @@ my_pipeline = MyPipeline(model=model, tokenizer=tokenizer, ...)
 my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 ```
 
-That should enable you to do all the custom code you want.
+이것은 당신이 원하는 모든 사용자 정의 코드를 수행할 수 있게 해야 합니다.
 
 
-## Implementing a pipeline
+## 파이프라인 구현하기
 
-[Implementing a new pipeline](../add_new_pipeline)
+[새로운 파이프라인 구현하기](../add_new_pipeline)
 
-## Audio
+## 오디오
 
-Pipelines available for audio tasks include the following.
+오디오 작업에 사용 가능한 파이프라인은 다음과 같습니다.
 
 ### AudioClassificationPipeline
 
@@ -318,6 +318,13 @@ Pipelines available for audio tasks include the following.
     - __call__
     - all
 
+### TextToAudioPipeline
+
+[[autodoc]] TextToAudioPipeline
+    - __call__
+    - all
+
+
 ### ZeroShotAudioClassificationPipeline
 
 [[autodoc]] ZeroShotAudioClassificationPipeline
@@ -326,7 +333,7 @@ Pipelines available for audio tasks include the following.
 
 ## Computer vision
 
-Pipelines available for computer vision tasks include the following.
+컴퓨터 비전 작업에 사용 가능한 파이프라인은 다음과 같습니다.
 
 ### DepthEstimationPipeline
 [[autodoc]] DepthEstimationPipeline
@@ -371,7 +378,7 @@ Pipelines available for computer vision tasks include the following.
 
 ## Natural Language Processing
 
-Pipelines available for natural language processing tasks include the following.
+자연어 처리 작업에 사용할 수 있는 파이프라인은 다음과 같습니다.
 
 ### ConversationalPipeline
 
@@ -391,7 +398,7 @@ Pipelines available for natural language processing tasks include the following.
 
 [[autodoc]] NerPipeline
 
-See [`TokenClassificationPipeline`] for all details.
+더 자세한 세부사항은 [`TokenClassificationPipeline`] 을 확인하세요.
 
 ### QuestionAnsweringPipeline
 
@@ -448,7 +455,7 @@ See [`TokenClassificationPipeline`] for all details.
 
 ## Multimodal
 
-Pipelines available for multimodal tasks include the following.
+멀티모달 작업에 사용할 수 있는 파이프라인은 다음과 같습니다.
 
 ### DocumentQuestionAnsweringPipeline
 
