@@ -21,7 +21,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingSavingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import prepare_image_inputs
 
 
 if is_torch_available():
@@ -81,7 +81,7 @@ class Beit3ImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class Beit3ImageProcessingTest(ImageProcessingSavingTestMixin, unittest.TestCase):
+class Beit3ImageProcessingTest(unittest.TestCase):
     image_processing_class = Beit3ImageProcessor if is_vision_available() else None
 
     def setUp(self):
