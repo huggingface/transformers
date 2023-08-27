@@ -351,7 +351,7 @@ class CLVPTokenizer(PreTrainedTokenizer):
         unk_token="[UNK]",
         bos_token="<|endoftext|>",
         eos_token="[STOP]",
-        pad_token=None,
+        pad_token="[STOP]",
         add_prefix_space=False,
         add_bos_token=False,
         **kwargs,

@@ -44,8 +44,7 @@ else:
         "CLVP_PRETRAINED_MODEL_ARCHIVE_LIST",
         "CLVPModel",
         "CLVPPreTrainedModel",
-        "CLVPTextModelWithProjection",
-        "CLVPSpeechModelWithProjection",
+        "CLVPTransformerWithProjection",
     ]
 
 
@@ -71,8 +70,7 @@ if TYPE_CHECKING:
             CLVP_PRETRAINED_MODEL_ARCHIVE_LIST,
             CLVPModel,
             CLVPPreTrainedModel,
-            CLVPSpeechModelWithProjection,
-            CLVPTextModelWithProjection,
+            CLVPTransformerWithProjection,
         )
 
 else:

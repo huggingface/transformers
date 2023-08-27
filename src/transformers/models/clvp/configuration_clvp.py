@@ -334,8 +334,9 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
             The number of buckets to use for each attention layer. This value is used in `CLVPRelativeAttention`.
         relative_attention_max_distance (`int`, *optional*, defaults to 128):
             The maximum distance of the longer sequences for the bucket separation. This value is used in `CLVPRelativeAttention`.
-        max_position_embeddings
-
+        initializer_factor (`float`, *optional*, defaults to 1):
+            A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
+            testing).
     """
 
     model_type = "clvp_autoregressive_model"
@@ -375,6 +376,7 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
             feature_size=80,
             relative_attention_num_buckets=32,
             relative_attention_max_distance=128,
+            initializer_factor=1.0,
             **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -402,6 +404,7 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
         self.feature_size = feature_size
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.relative_attention_max_distance = relative_attention_max_distance
+        self.initializer_factor = initializer_factor
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

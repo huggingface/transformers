@@ -22,6 +22,8 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from ...pytorch_utils import Conv1D
+
 import math
 
 from ...activations import ACT2FN
@@ -247,11 +249,11 @@ class CLVPOutput(ModelOutput):
 
 
 
-    def to_tuple(self) -> Tuple[Any]:
-        return tuple(
-            self[k] if k not in ["text_model_output", "speech_model_output"] else getattr(self, k).to_tuple()
-            for k in self.keys()
-        )
+    # def to_tuple(self) -> Tuple[Any]:
+    #     return tuple(
+    #         self[k] if k not in ["text_model_output", "speech_model_output"] else getattr(self, k).to_tuple()
+    #         for k in self.keys()
+    #     )
 
 
 class CLVPAttention(nn.Module):
@@ -750,6 +752,7 @@ class CLVPConditioningEncoder(nn.Module):
     def forward(self, mel_spec: torch.FloatTensor, text_tokens: torch.LongTensor):
         # process each log-mel spectrogram into a single vector
         mel_spec = self.mel_conv(mel_spec)
+
         mel_spec = torch.permute(mel_spec, (0, 2, 1))
         for mel_attn_block in self.mel_attn_blocks:
             mel_spec = mel_attn_block(mel_spec)[0]
@@ -767,7 +770,10 @@ class CLVPConditioningEncoder(nn.Module):
 
         text_embeds = token_embeds + position_embeds
 
-        return  torch.concat([mel_spec.unsqueeze(1), text_embeds], dim=1)
+        mel_spec = mel_spec.unsqueeze(1)
+        mel_spec = mel_spec.repeat(text_embeds.shape[0], 1, 1)
+
+        return  torch.concat([mel_spec, text_embeds], dim=1)
 
 
 class CLVPPreTrainedModel(PreTrainedModel):
@@ -779,7 +785,6 @@ class CLVPPreTrainedModel(PreTrainedModel):
     config_class = CLVPConfig
     base_model_prefix = "clvp"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["GPT2Block"]
     _skip_keys_device_placement = "past_key_values"
 
     def _init_weights(self, module):
@@ -787,6 +792,10 @@ class CLVPPreTrainedModel(PreTrainedModel):
         factor = self.config.initializer_factor
         if isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=factor * 0.02)
+        if isinstance(module, (nn.Linear, Conv1D, nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            if module.bias is not None:
+                module.bias.data.zero_()
         elif isinstance(module, CLVPAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
@@ -803,6 +812,12 @@ class CLVPPreTrainedModel(PreTrainedModel):
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.proj.weight if getattr(module.fc1, "proj") else module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
+        elif isinstance(module, CLVPTransformerWithProjection):
+            config = self.config.text_config if hasattr(self.config, "text_config") else self.config
+            module.projection.weight.data.normal_(mean=0.0, std=factor * (config.hidden_size ** -0.5))
+        elif isinstance(module, CLVPConditioningEncoder):
+            module.mel_conv.weight.data.normal_(mean=0.0, std=factor)
+            module.mel_conv.bias.data.zero_()
         elif isinstance(module, CLVPRelativeAttention):
             d_model = self.config.autoregressive_config.n_embd
             key_value_proj_dim = self.config.autoregressive_config.n_embd // self.config.autoregressive_config.n_head
@@ -815,33 +830,27 @@ class CLVPPreTrainedModel(PreTrainedModel):
 
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
-        # elif isinstance(module, CLVPSpeechModelWithProjection):
-        #     nn.init.normal_(
-        #         module.speech_projection.weight,
-        #         std=self.config.speech_config.hidden_size**-0.5 * self.config.initializer_factor,
-        #     )
-        elif isinstance(module, CLVPTransformerWithProjection):
-            nn.init.normal_(
-                module.projection.weight,
-                std=self.config.hidden_size**-0.5 * self.config.initializer_factor,
-            )
+        elif isinstance(module, CLVPAutoRegressiveLMHeadModel):
+            for name, p in module.named_parameters():
+                # if isinstance(p, (nn.Linear, Conv1D)):
+                #     p.weight.data.normal_(mean=0.0, std=factor)
+                #     if p.bias is not None:
+                #         p.bias.data.zero_()
+                if name == "c_proj.weight":
+                    # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
+                    p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
-        for name, p in module.named_parameters():
-            if name == "c_proj.weight":
-                # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
-
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, CLVPEncoder):
             module.gradient_checkpointing = value
-
-        if isinstance(module, CLVPAutoRegressiveLMHeadModel):
-            module.gradient_checkpointing = value
+        #
+        # if isinstance(module, CLVPAutoRegressiveLMHeadModel):
+        #     module.gradient_checkpointing = value
 
 
 CLVP_START_DOCSTRING = r"""
@@ -1137,8 +1146,6 @@ class CLVPTransformer(nn.Module):
 
 
 class CLVPAutoRegressiveLMHeadModel(CLVPPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1164,12 +1171,6 @@ class CLVPAutoRegressiveLMHeadModel(CLVPPreTrainedModel):
 
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
         position_ids = kwargs.get("position_ids", None)
@@ -1388,7 +1389,6 @@ class CLVPAutoRegressiveLMHeadModel(CLVPPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
             labels = labels.to(lm_logits.device)
             # Shift so that tokens < n predict n
             shift_logits = lm_logits[..., :-1, :].contiguous()
@@ -1442,6 +1442,12 @@ class CLVPModel(CLVPPreTrainedModel):
             raise ValueError(
                 "config.speech_config is expected to be of type CLVPSpeechConfig but is of type"
                 f" {type(config.speech_config)}."
+            )
+
+        if not isinstance(config.autoregressive_config, CLVPAutoRegressiveConfig):
+            raise ValueError(
+                "config.autoregressive_config is expected to be of type CLVPAutoRegressiveConfig but is of type"
+                f" {type(config.autoregressive_config)}."
             )
 
         self.conditioning_encoder = CLVPConditioningEncoder(config)
@@ -1634,11 +1640,11 @@ class CLVPModel(CLVPPreTrainedModel):
                                                         text_tokens=input_ids)
 
         speech_candidates = self.autoregressive_model(inputs_embeds=conditioning_embeds,
-                                                      attention_mask=None,
                                                       output_attentions=output_attentions,
                                                       output_hidden_states=output_hidden_states,
                                                       return_dict=return_dict,
                                                       )
+
         speech_candidates = speech_candidates[0]
 
         # since we will get the embeds of shape `(batch_size, seq_len, embedding_dim)` during the forward pass
@@ -1715,6 +1721,7 @@ class CLVPModel(CLVPPreTrainedModel):
         mel_start_token_id = torch.tensor([[self.autoregressive_model.config.bos_token_id]], device=conditioning_embeds.device)
         mel_start_token_embedding = self.autoregressive_model.wte(mel_start_token_id)
         mel_start_token_embedding = mel_start_token_embedding + self.autoregressive_model.wpe(torch.tensor([[0]], device=conditioning_embeds.device))
+        mel_start_token_embedding = mel_start_token_embedding.repeat(conditioning_embeds.shape[0], 1, 1)
         conditioning_embeds = torch.concat([conditioning_embeds, mel_start_token_embedding], dim=1)
 
 
@@ -1773,9 +1780,6 @@ class CLVPModel(CLVPPreTrainedModel):
 # )
 class CLVPTransformerWithProjection(CLVPPreTrainedModel):
     config_class = CLVPTextConfig or CLVPSpeechConfig
-
-    _no_split_modules = None
-
     def __init__(self, config: Union[CLVPTextConfig, CLVPSpeechConfig]):
         super().__init__(config)
 
