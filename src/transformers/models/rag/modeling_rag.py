@@ -462,8 +462,8 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
             `question_encoder_last_hidden_state` and `retrieved_doc_embeds`, see examples for more information.
         context_input_ids (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`, *optional*, returned when *output_retrieved=True*):
             Input IDs post-processed from the retrieved documents and the question encoder `input_ids` by the
-            retriever. If the model was not initialized with a `retriever` ``context_input_ids` has to be provided
-            to the forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`].
+            retriever. If the model was not initialized with a `retriever` ``context_input_ids` has to be provided to
+            the forward pass. `context_input_ids` are returned by [`~RagRetriever.__call__`].
         context_attention_mask (`torch.LongTensor` of shape `(batch_size * config.n_docs, config.max_combined_length)`,*optional*, returned when *output_retrieved=True*):
             Attention mask post-processed from the retrieved documents and the question encoder `input_ids` by the
             retriever. If the model has is not initialized with a `retriever` `context_attention_mask` has to be
