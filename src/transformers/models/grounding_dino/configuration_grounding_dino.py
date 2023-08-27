@@ -16,7 +16,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -44,6 +44,8 @@ class GroundingDINOConfig(PretrainedConfig):
         backbone_config (`PretrainedConfig` or `dict`, *optional*):
             The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
             case it will default to `ResNetConfig()`.
+        text_backbone_config (`str`, *optional*, defaults to `"bert-base-uncased"`):
+            The configuration of the text backbone model. Should be a bert-like config.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
         num_queries (`int`, *optional*, defaults to 300):
@@ -153,6 +155,7 @@ class GroundingDINOConfig(PretrainedConfig):
         self,
         use_timm_backbone=False,
         backbone_config={"model_type": "swin"},
+        text_backbone_config="bert-base-uncased",
         num_channels=3,
         num_queries=300,
         max_position_embeddings=1024,
@@ -251,6 +254,8 @@ class GroundingDINOConfig(PretrainedConfig):
         self.eos_coefficient = eos_coefficient
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
+        # Text backbone
+        self.text_backbone_config = AutoConfig.from_pretrained(text_backbone_config)
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property

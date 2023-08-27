@@ -60,7 +60,7 @@ def get_grounding_dino_config(model_name):
     return config
 
 
-def create_rename_keys(config):
+def create_rename_keys(state_dict, config):
     rename_keys = []
     # fmt: off
     #TODO names might change after modifing GroundingDINOModel class
@@ -126,9 +126,13 @@ def create_rename_keys(config):
         
     ########################################## VISION BACKBONE - END
 
+    ########################################## TEXT BACKBONE - START
+    for layer_name, params in state_dict.items():
+        if "module.bert" in layer_name:
+            rename_keys.append((layer_name, layer_name.replace("module.bert", "model.text_backbone")))
+    ########################################## TEXT BACKBONE - END
     # fmt: on
     return rename_keys
-
 
 def rename_key(dct, old, new):
     val = dct.pop(old)
@@ -172,7 +176,7 @@ def convert_grounding_dino_checkpoint(model_name, checkpoint_path):
 
     # Rename keys
     new_state_dict = original_state_dict.copy()
-    rename_keys = create_rename_keys(config)
+    rename_keys = create_rename_keys(original_state_dict, config)
     for src, dest in rename_keys:
         rename_key(new_state_dict, src, dest)
     read_in_q_k_v(new_state_dict, config)
@@ -192,7 +196,8 @@ def convert_grounding_dino_checkpoint(model_name, checkpoint_path):
     )
     inputs = image_processor(image)
     pixel_mask = torch.ones(((1, inputs.shape[1], inputs.shape[2])), dtype=torch.long, device=inputs.device)
-    output= model.model.backbone.conv_encoder.model(pixel_values=inputs.unsqueeze(0))
+    output = model.model.backbone.conv_encoder.model(pixel_values=inputs.unsqueeze(0))
+
     for feature_map in output.feature_maps:
         print(f"{feature_map.shape}")
         print(f"\t {feature_map[:, :5, 0, 0].cpu().numpy()}")
