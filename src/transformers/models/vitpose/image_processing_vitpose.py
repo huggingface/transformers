@@ -266,6 +266,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         
         img_h, img_w = img.size
+        print("last",img_h, img_w)
         img = np.asarray(img)
 
         for kpts in pose_results:

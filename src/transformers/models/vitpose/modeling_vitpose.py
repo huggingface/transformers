@@ -924,7 +924,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
             return_heatmap = False)
 
         pose_results.append(pixel_values)
-        for pose, person_result, bbox in zip(poses, person_results, bboxes_xywh):
+        for pose, person_result, bbox in zip(poses, person_results, bboxes):
             pose_result = person_result.copy()
             pose_result['keypoints'] = pose
             pose_result['bbox'] = bbox
