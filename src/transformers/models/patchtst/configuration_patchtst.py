@@ -215,7 +215,7 @@ class PatchTSTConfig(PretrainedConfig):
         # PatchTST
         self.patch_length = patch_length
         self.stride = stride
-        self.num_patch = self._num_patches()
+        self.num_patches = self._num_patches()
         self.attention_type = attention_type
         self.sampling_factor = sampling_factor
         self.distil = distil
