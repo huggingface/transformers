@@ -213,8 +213,8 @@
       title: (번역중) Processors
     - local: in_translation
       title: (번역중) Quantization
-    - local: in_translation
-      title: (번역중) Tokenizer
+    - local: tokenizer
+      title: 토크나이저
     - local: in_translation
       title: (번역중) Trainer
     - local: in_translation
