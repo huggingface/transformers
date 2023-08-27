@@ -14,44 +14,25 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Tokenizer
+# 토크나이저 [[tokenizer]]
 
-A tokenizer is in charge of preparing the inputs for a model. The library contains tokenizers for all the models. Most
-of the tokenizers are available in two flavors: a full python implementation and a "Fast" implementation based on the
-Rust library [🤗 Tokenizers](https://github.com/huggingface/tokenizers). The "Fast" implementations allows:
+토크나이저는 모델에 대한 입력을 준비하는 역할을 담당합니다. 이 라이브러리에는 모든 모델에 대한 토크나이저가 포함되어 있습니다. 대부분의 토크나이저는 두 가지 버전으로 제공됩니다: 전체 파이썬 구현 및 Rust 라이브러리 [🤗 Tokenizers](https://github.com/huggingface/tokenizers)를 기반으로 한 "Fast" 구현. "Fast" 구현은 다음을 가능하게 합니다:
 
-1. a significant speed-up in particular when doing batched tokenization and
-2. additional methods to map between the original string (character and words) and the token space (e.g. getting the
-   index of the token comprising a given character or the span of characters corresponding to a given token). 
+1. 특히 배치 토큰화를 할 때 상당한 속도 향상과
+2. 원본 문자열(문자 및 단어)과 토큰 공간(예: 주어진 문자를 포함하는 토큰의 인덱스 또는 주어진 토큰에 해당하는 문자의 범위) 간의 매핑을 위한 추가적인 방법.
 
-The base classes [`PreTrainedTokenizer`] and [`PreTrainedTokenizerFast`]
-implement the common methods for encoding string inputs in model inputs (see below) and instantiating/saving python and
-"Fast" tokenizers either from a local file or directory or from a pretrained tokenizer provided by the library
-(downloaded from HuggingFace's AWS S3 repository). They both rely on
-[`~tokenization_utils_base.PreTrainedTokenizerBase`] that contains the common methods, and
-[`~tokenization_utils_base.SpecialTokensMixin`].
+기본 클래스 [`PreTrainedTokenizer`]와 [`PreTrainedTokenizerFast`]는 모델 입력에 문자열 입력을 인코딩하는 공통 메서드를 구현하고, 로컬 파일 또는 디렉터리 또는 라이브러리에서 제공된 사전 훈련된 토크나이저(허깅페이스의 AWS S3 저장소에서 다운로드됨)에서 파이썬 및 "Fast" 토크나이저를 인스턴스화하고 저장합니다. 둘 다 [`~tokenization_utils_base.PreTrainedTokenizerBase`]가 포함된 공통 메서드와 [`~tokenization_utils_base.SpecialTokensMixin`]에 의존합니다.
 
-[`PreTrainedTokenizer`] and [`PreTrainedTokenizerFast`] thus implement the main
-methods for using all the tokenizers:
+[`PreTrainedTokenizer`]와 [`PreTrainedTokenizerFast`]는 따라서 모든 토크나이저를 사용하기 위한 주요 메서드를 구현합니다:
 
-- Tokenizing (splitting strings in sub-word token strings), converting tokens strings to ids and back, and
-  encoding/decoding (i.e., tokenizing and converting to integers).
-- Adding new tokens to the vocabulary in a way that is independent of the underlying structure (BPE, SentencePiece...).
-- Managing special tokens (like mask, beginning-of-sentence, etc.): adding them, assigning them to attributes in the
-  tokenizer for easy access and making sure they are not split during tokenization.
+- 토크나이징(하위 단어 토큰 문자열 분할), 토큰 문자열을 id로 변환하고 반대로 변환하고, 인코딩/디코딩(즉, 토크나이징하고 정수로 변환).
+- 기본 구조(BPE, SentencePiece 등)와 독립적인 방법으로 어휘에 새 토큰 추가.
+- 특별 토큰(마스크, 문장 시작 등) 관리: 추가, 토크나이저의 속성에 할당하여 쉽게 액세스하고, 토큰화 중에 분할되지 않도록 확인.
 
-[`BatchEncoding`] holds the output of the
-[`~tokenization_utils_base.PreTrainedTokenizerBase`]'s encoding methods (`__call__`,
-`encode_plus` and `batch_encode_plus`) and is derived from a Python dictionary. When the tokenizer is a pure python
-tokenizer, this class behaves just like a standard python dictionary and holds the various model inputs computed by
-these methods (`input_ids`, `attention_mask`...). When the tokenizer is a "Fast" tokenizer (i.e., backed by
-HuggingFace [tokenizers library](https://github.com/huggingface/tokenizers)), this class provides in addition
-several advanced alignment methods which can be used to map between the original string (character and words) and the
-token space (e.g., getting the index of the token comprising a given character or the span of characters corresponding
-to a given token).
+[`BatchEncoding`]은 [`~tokenization_utils_base.PreTrainedTokenizerBase`]의 인코딩 메서드(`__call__`, `encode_plus`, `batch_encode_plus`)의 출력을 보유하고, 파이썬 딕셔너리에서 파생됩니다. 토크나이저가 순수 파이썬 토크나이저인 경우 이 클래스는 이러한 메서드(`input_ids`, `attention_mask` 등)에 의해 계산된 여러 모델 입력을 보유하는 표준 파이썬 딕셔너리처럼 동작합니다. 토크나이저가 "Fast" 토크나이저(즉, HuggingFace [tokenizers library](https://github.com/huggingface/tokenizers)에 의해 백업된)인 경우, 이 클래스는 원본 문자열(문자 및 단어)과 토큰 공간(예: 주어진 문자를 포함하는 토큰의 인덱스 또는 주어진 토큰에 해당하는 문자의 범위) 간의 매핑을 위한 몇 가지 고급 정렬 방법을 추가로 제공합니다.
 
 
-## PreTrainedTokenizer
+## PreTrainedTokenizer [[pretrainedtokenizer]]
 
 [[autodoc]] PreTrainedTokenizer
     - __call__
@@ -61,10 +42,9 @@ to a given token).
     - push_to_hub
     - all
 
-## PreTrainedTokenizerFast
+## PreTrainedTokenizerFast [[pretrainedtokenizerfast]]
 
-The [`PreTrainedTokenizerFast`] depend on the [tokenizers](https://huggingface.co/docs/tokenizers) library. The tokenizers obtained from the 🤗 tokenizers library can be
-loaded very simply into 🤗 transformers. Take a look at the [Using tokenizers from 🤗 tokenizers](../fast_tokenizers) page to understand how this is done.
+[`PreTrainedTokenizerFast`]는 [tokenizers](https://huggingface.co/docs/tokenizers) 라이브러리에 의존합니다. 🤗 tokenizers 라이브러리에서 얻은 토크나이저는 🤗 transformers에 매우 간단하게 로드할 수 있습니다. 이것이 어떻게 수행되는지 이해하려면 [Using tokenizers from 🤗 tokenizers](../fast_tokenizers) 페이지를 참조하세요.
 
 [[autodoc]] PreTrainedTokenizerFast
     - __call__
@@ -74,6 +54,6 @@ loaded very simply into 🤗 transformers. Take a look at the [Using tokenizers 
     - push_to_hub
     - all
 
-## BatchEncoding
+## BatchEncoding [[batchencoding]]
 
 [[autodoc]] BatchEncoding
