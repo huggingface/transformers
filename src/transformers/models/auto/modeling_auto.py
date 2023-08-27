@@ -1101,6 +1101,12 @@ MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING_NAMES = OrderedDict(
+    [
+        ("superpoint", "SuperPointModelForInterestPointDescription"),
+    ]
+)
+
 MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_MAPPING_NAMES)
 MODEL_FOR_PRETRAINING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_PRETRAINING_MAPPING_NAMES)
 MODEL_WITH_LM_HEAD_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_WITH_LM_HEAD_MAPPING_NAMES)
@@ -1185,6 +1191,10 @@ MODEL_FOR_BACKBONE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_BA
 MODEL_FOR_MASK_GENERATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_MASK_GENERATION_MAPPING_NAMES)
 
 MODEL_FOR_TEXT_ENCODING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES)
+
+MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING_NAMES
+)
 
 
 class AutoModelForMaskGeneration(_BaseAutoModelClass):
@@ -1455,6 +1465,14 @@ class AutoModelForMaskedImageModeling(_BaseAutoModelClass):
 
 
 AutoModelForMaskedImageModeling = auto_class_update(AutoModelForMaskedImageModeling, head_doc="masked image modeling")
+
+
+class AutoModelForInterestPointDescription(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_INTEREST_POINT_DESCRIPTION_MAPPING
+
+
+AutoModelForInterestPointDescription = auto_class_update(AutoModelForInterestPointDescription,
+                                                         head_doc="image interest point description")
 
 
 class AutoModelWithLMHead(_AutoModelWithLMHead):
