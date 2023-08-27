@@ -152,9 +152,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             self.n_fft = filter_length
         self.n_freqs = (self.n_fft // 2) + 1
 
-        self.window = window_function(
-            window_length=self.win_length, name=self.win_function, periodic=True
-        )
+        self.window = window_function(window_length=self.win_length, name=self.win_function, periodic=True)
 
         self.mel_filters = mel_filter_bank(
             num_frequency_bins=self.n_freqs,
@@ -206,7 +204,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         Args:
             waveform (`np.ndarray` of shape `(length,)`):
                 The input waveform. This must be a single real-valued, mono waveform.
-        
+
         Returns:
             `np.ndarray` containing a spectrogram of shape `(num_mel_bins, length)`.
         """
@@ -215,7 +213,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         waveform = np.pad(
             waveform,
             (int((self.n_fft - self.hop_length) / 2), int((self.n_fft - self.hop_length) / 2)),
-            mode='reflect',
+            mode="reflect",
         )
 
         # Get the power spectrogram.
@@ -362,7 +360,9 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             batched_speech["attention_mask"] = padded_inputs["attention_mask"]
 
         if do_normalize:
-            batched_speech["input_features"] = [self.normalize(spectrogram) for spectrogram in batched_speech["input_features"]]
+            batched_speech["input_features"] = [
+                self.normalize(spectrogram) for spectrogram in batched_speech["input_features"]
+            ]
 
         if return_tensors is not None:
             batched_speech = batched_speech.convert_to_tensors(return_tensors)

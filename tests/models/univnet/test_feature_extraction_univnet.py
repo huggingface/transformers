@@ -216,7 +216,10 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
         # Test truncation required
-        speech_inputs = [floats_list((1, x))[0] for x in range((feature_extractor.num_max_samples - 100), (feature_extractor.num_max_samples + 500), 200)]
+        speech_inputs = [
+            floats_list((1, x))[0]
+            for x in range((feature_extractor.num_max_samples - 100), (feature_extractor.num_max_samples + 500), 200)
+        ]
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
 
         speech_inputs_truncated = [x[: feature_extractor.num_max_samples] for x in speech_inputs]
