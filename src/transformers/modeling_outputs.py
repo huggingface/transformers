@@ -1751,3 +1751,11 @@ class MaskedImageModelingOutput(ModelOutput):
             FutureWarning,
         )
         return self.reconstruction
+
+
+@dataclass
+class ImagePointDescriptionOutput(ModelOutput):
+
+    keypoints: Optional[torch.IntTensor] = None
+    scores: Optional[torch.FloatTensor] = None
+    descriptors: Optional[torch.FloatTensor] = None
