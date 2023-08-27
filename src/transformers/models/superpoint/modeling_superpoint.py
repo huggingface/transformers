@@ -185,7 +185,7 @@ class SuperPoint(nn.Module):
         return descriptors
 
 
-class SuperPointModel(PreTrainedModel):
+class SuperPointModelForInterestPointDescription(PreTrainedModel):
     config_class = SuperPointConfig
     base_model_prefix = "superpoint"
 
