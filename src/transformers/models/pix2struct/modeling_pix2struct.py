@@ -1389,7 +1389,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
