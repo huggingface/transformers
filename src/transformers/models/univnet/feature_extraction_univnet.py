@@ -56,6 +56,8 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         filter_length (`int`, *optional*, defaults to 1024):
             The number of FFT components to use. If `None`, this is determined using
             `transformers.audio_utils.optimal_fft_length`.
+        max_length_s (`int`, *optional*, defaults to 10):
+            The maximum input lenght of the model in seconds. This is used to pad the audio.
         win_function (`str`, *optional*, defaults to `"hann_window"`):
             Name for the window function used for windowing, must be accessible via `torch.{win_function}`
         frame_signal_scale (`float`, *optional*, defaults to 1.0):
@@ -66,6 +68,9 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             Maximum mel frequency in Hz.
         mel_floor (`float`, *optional*, defaults to 1e-9):
             Minimum value of mel frequency banks.
+        center (`bool`, *optional*, default to `False`):
+            Whether to pad the waveform so that frame `t` is centered around time `t * hop_length`. If `False`, frame
+            `t` will start at time `t * hop_length`.
         compression_factor (`float`, *optional*, defaults to 1.0):
             The multiplicative compression factor for dynamic range compression during spectral normalization.
         compression_clip_val (`float`, *optional*, defaults to 1e-5):
@@ -91,15 +96,17 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: int = 24000,
         padding_value: float = 0.0,
         do_normalize: bool = False,
-        num_mel_bins: int = 80,
+        num_mel_bins: int = 100,
         hop_length: int = 256,
         win_length: int = 1024,
         win_function: str = "hann_window",
         filter_length: Optional[int] = 1024,
+        max_length_s: int = 10,
         frame_signal_scale: float = 1.0,
         fmin: float = 0.0,
         fmax: Optional[float] = None,
         mel_floor: float = 1e-9,
+        center: bool = False,
         compression_factor: float = 1.0,
         compression_clip_val: float = 1e-5,
         normalize_min: float = -11.512925148010254,
@@ -108,14 +115,21 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask: bool = True,
         **kwargs,
     ):
-        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+        super().__init__(
+            feature_size=feature_size,
+            sampling_rate=sampling_rate,
+            padding_value=padding_value,
+            return_attention_mask=return_attention_mask,
+            **kwargs,
+        )
+
         self.do_normalize = do_normalize
-        self.return_attention_mask = return_attention_mask
 
         self.num_mel_bins = num_mel_bins
         self.hop_length = hop_length
         self.win_length = win_length
         self.win_function = win_function
+        self.filter_length = filter_length
         self.frame_signal_scale = frame_signal_scale
         self.fmin = fmin
         if fmax is None:
@@ -125,8 +139,12 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         self.mel_floor = mel_floor
         self.reduction_factor = reduction_factor
 
-        self.sample_size = win_length * sampling_rate // 1000
-        self.sample_stride = hop_length * sampling_rate // 1000
+        self.max_length_s = max_length_s
+        self.num_max_samples = max_length_s * sampling_rate
+
+        # Currently the default arguments are the "direct" win_length and hop_length
+        # self.sample_size = win_length * sampling_rate // 1000
+        # self.sample_stride = hop_length * sampling_rate // 1000
 
         if filter_length is None:
             self.n_fft = optimal_fft_length(self.sample_size)
@@ -134,7 +152,9 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             self.n_fft = filter_length
         self.n_freqs = (self.n_fft // 2) + 1
 
-        self.window = window_function(window_length=self.sample_size, name=self.win_function, periodic=True)
+        self.window = window_function(
+            window_length=self.win_length, name=self.win_function, periodic=True
+        )
 
         self.mel_filters = mel_filter_bank(
             num_frequency_bins=self.n_freqs,
@@ -146,6 +166,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="slaney",
         )
 
+        self.center = center
         self.compression_factor = compression_factor
         self.compression_clip_val = compression_clip_val
         self.normalize_min = normalize_min
@@ -165,7 +186,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
     # Based on tacotron2.audio_processing.dynamic_range_compression
     # https://github.com/NVIDIA/tacotron2/blob/master/audio_processing.py#L78
     def dynamic_range_compression(self, waveform: np.ndarray):
-        return np.log(np.clip(waveform, a_min=self.compression_clip_val) * self.compression_factor)
+        return np.log(np.clip(waveform, a_min=self.compression_clip_val, a_max=None) * self.compression_factor)
 
     # Based on tacotron2.audio_processing.dynamic_range_compression
     # https://github.com/NVIDIA/tacotron2/blob/master/audio_processing.py#L87
@@ -178,25 +199,44 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
     def denormalize(self, spectrogram):
         return self.normalize_min + (self.normalize_max - self.normalize_min) * ((spectrogram + 1) / 2)
 
-    def mel_spectrogram(self, waveform: np.ndarray):
+    def mel_spectrogram(self, waveform: np.ndarray) -> np.ndarray:
         """
         Calculates log MEL spectrograms from a batch of waveforms.
+
+        Args:
+            waveform (`np.ndarray` of shape `(length,)`):
+                The input waveform. This must be a single real-valued, mono waveform.
+        
+        Returns:
+            `np.ndarray` containing a spectrogram of shape `(num_mel_bins, length)`.
         """
-        # Get the (non-log) mel spectrogram.
-        # Note that waveform must be unbatched currently due to the implementation of spectrogram().
-        mel_spectrogram = spectrogram(
+        # Do custom padding
+        # See https://github.com/maum-ai/univnet/blob/master/utils/stft.py#L84
+        waveform = np.pad(
+            waveform,
+            (int((self.n_fft - self.hop_length) / 2), int((self.n_fft - self.hop_length) / 2)),
+            mode='reflect',
+        )
+
+        # Get the power spectrogram.
+        # Note: waveform must be unbatched currently due to the implementation of spectrogram(...).
+        power_spectrogram = spectrogram(
             waveform,
             window=self.window,
-            frame_length=self.sample_size,
-            hop_length=self.sample_stride,
+            frame_length=self.n_fft,
+            hop_length=self.hop_length,
             fft_length=self.n_fft,
+            power=2.0,
+            center=self.center,
             mel_filters=self.mel_filters,
             mel_floor=self.mel_floor,
         )
-        mel_spectrogram = mel_spectrogram.T
+
+        # Transpose the spectrogram to put the batch dimension first.
+        # power_spectrogram = power_spectrogram.T
 
         # Perform spectral normalization to get the log mel spectrogram.
-        log_mel_spectrogram = self.dynamic_range_compression(mel_spectrogram)
+        log_mel_spectrogram = self.dynamic_range_compression(power_spectrogram)
 
         return log_mel_spectrogram
 
@@ -301,7 +341,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         padded_inputs = self.pad(
             batched_speech,
             padding=padding,
-            max_length=max_length,
+            max_length=max_length if max_length is not None else self.num_max_samples,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
@@ -322,7 +362,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             batched_speech["attention_mask"] = padded_inputs["attention_mask"]
 
         if do_normalize:
-            batched_speech["input_features"] = self.normalize(batched_speech["input_features"])
+            batched_speech["input_features"] = [self.normalize(spectrogram) for spectrogram in batched_speech["input_features"]]
 
         if return_tensors is not None:
             batched_speech = batched_speech.convert_to_tensors(return_tensors)
