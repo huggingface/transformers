@@ -23,8 +23,8 @@ rendered properly in your Markdown viewer.
 
 파이프라인 추상화에는 두 가지 범주가 있습니다:
 
-- 가장 강력한 객체인 [파이프라인]은 다른 모든 파이프라인을 캡슐화합니다.
-- 작업별 파이프라인은 오디오, 컴퓨터 비전, 자연어 처리, 멀티모달 작업을 위한 특정 작업에 사용할 수 있습니다.
+- 가장 강력한 객체인 [`pipeline`]은 다른 모든 파이프라인을 캡슐화합니다.
+- 작업별 파이프라인은 [오디오](#audio), [컴퓨터 비전](#computer-vision), [자연어 처리](#natural-language-processing), [멀티모달](#multimodal) 작업에 사용할 수 있습니다.
 
 ## 파이프라인 추상화 [[the-pipeline-abstraction]]
 
