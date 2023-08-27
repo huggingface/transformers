@@ -371,7 +371,6 @@ src/transformers/generation/beam_constraints.py
 src/transformers/generation/beam_search.py
 src/transformers/generation/flax_logits_process.py
 src/transformers/generation/flax_utils.py
-src/transformers/generation/logits_process.py
 src/transformers/generation/stopping_criteria.py
 src/transformers/generation/streamers.py
 src/transformers/generation/tf_logits_process.py
@@ -383,9 +382,11 @@ src/transformers/hyperparameter_search.py
 src/transformers/image_processing_utils.py
 src/transformers/image_transforms.py
 src/transformers/image_utils.py
-src/transformers/integrations.py
+src/transformers/integrations/bitsandbytes.py
+src/transformers/integrations/deepspeed.py
+src/transformers/integrations/integration_utils.py
+src/transformers/integrations/peft.py
 src/transformers/keras_callbacks.py
-src/transformers/lib_integrations/peft/peft_mixin.py
 src/transformers/modelcard.py
 src/transformers/modeling_flax_outputs.py
 src/transformers/modeling_flax_pytorch_utils.py
