@@ -308,7 +308,7 @@ The diversily penalty ensures the outputs are distinct across groups, and beam s
 >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 >>> checkpoint = "google/pegasus-xsum"
->>> prompt = "The Permaculture Design Principles are a set of universal design principles
+>>> prompt = ("The Permaculture Design Principles are a set of universal design principles
 ... that can be applied to any location, climate and culture, and they allow us to design
 ... the most efficient and sustainable human habitation and food production systems.
 ... Permaculture is a design system that encompasses a wide variety of disciplines, such
@@ -321,7 +321,7 @@ The diversily penalty ensures the outputs are distinct across groups, and beam s
 ... living system. Each design principle serves as a tool that allows us to integrate all
 ... the separate parts of a design, referred to as elements, into a functional, synergistic,
 ... whole system, where the elements harmoniously interact and work together in the most
-... efficient way possible."
+... efficient way possible.")
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> inputs = tokenizer(prompt, return_tensors="pt")
