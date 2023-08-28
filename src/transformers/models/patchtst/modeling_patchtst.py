@@ -164,11 +164,12 @@ def set_seed(x=42):
     if torch.cuda.is_available(): torch.cuda.manual_seed_all(x)
 
 
+
 def random_masking(
     xb: torch.Tensor,
     mask_ratio: float,
     unmasked_channel_indices: list = None,
-    channel_consistent_masking: bool = True,
+    channel_consistent_masking: bool = False,
     mask_value=0,
 ):
     """random_masking: Mask the input considering the control variables.
@@ -194,14 +195,14 @@ def random_masking(
     else:
         noise = torch.rand(bs, nvars, L, device=xb.device)  # noise in [0, 1], bs x nvars x L
 
-        mask = torch.ones(bs, nvars, L, device=xb.device)  # mask: [bs x nvars x num_patch]
-        mask[:, :, :len_keep] = 0
+    mask = torch.ones(bs, nvars, L, device=xb.device)  # mask: [bs x nvars x num_patch]
+    mask[:, :, :len_keep] = 0
 
     # sort noise for each sample
     ids_shuffle = torch.argsort(noise, dim=-1)  # ascend: small is keep, large is remove
     ids_restore = torch.argsort(ids_shuffle, dim=-1)  # ids_restore: [bs x nvars x L]
-    mask = torch.gather(mask, dim=-1, index=ids_restore)
 
+    mask = torch.gather(mask, dim=-1, index=ids_restore)
     mask = mask.unsqueeze(-1).repeat(1, 1, 1, D)  # mask: [bs x nvars x num_patches x patch_length]
     if unmasked_channel_indices is not None:
         mask[:, unmasked_channel_indices, :, :] = 0
@@ -255,7 +256,7 @@ class Patchify(nn.Module):
             x: output tensor data [bs x n_vars x num_patches x patch_length]
         """
         sequence_length = past_values.shape[-2]
-        assert sequence_length == self.sequence_length, f"Input sequence length ({sequence_length}) doesn't match model ({self.sequence_length})."
+        assert sequence_length == self.sequence_length, f"Input sequence length ({sequence_length}) doesn't match model configuration ({self.sequence_length})."
 
         x = past_values[:, self.s_begin:, :]  # x: [bs x new_sequence_length x nvars]
         x = x.unfold(
@@ -803,10 +804,12 @@ class PatchTSTModelOutputWithNoAttention(ModelOutput):
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerModel with TimeSeriesTransformer->PatchTST,TIME_SERIES_TRANSFORMER->PATCHTST,time-series-transformer->patchtst,TimeSeries->PatchTST
 class PatchTSTModel(PatchTSTPreTrainedModel):
-    def __init__(self, config: PatchTSTConfig):
+    def __init__(self, config: PatchTSTConfig, mask_input: bool = False):
         super().__init__(config)
         self.patching = Patchify(config.context_length, patch_length=config.patch_length, stride=config.stride)
-        if config.mask_input:
+        self.mask_input = mask_input #config.mask_input
+
+        if self.mask_input:
             self.masking = PatchMasking(
                 mask_type=config.mask_type,
                 mask_ratio=config.mask_ratio,
@@ -829,7 +832,10 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         patched_values = self.patching(past_values)  # patched_values: [bs x n_vars x num_patches x patch_length] for pretrain
-        masked_values, mask = self.masking(patched_values)
+        if self.mask_input:
+            masked_values, mask = self.masking(patched_values)
+        else:
+            masked_values, mask = self.masking(patched_values), None
         encoder_output = self.encoder(masked_values, output_hidden_states=output_hidden_states)
         return PatchTSTModelOutputWithNoAttention(last_hidden_state=encoder_output.last_hidden_state,
                                                   hidden_states=encoder_output.hidden_states,
@@ -891,10 +897,10 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
-        config.mask_input = True
-        self.model = PatchTSTModel(config)
+        # config.mask_input = True
+        self.model = PatchTSTModel(config=config, mask_input=True)
         self.head = PretrainHead(config)
-        self.loss = torch.nn.MSELoss(reduction=None)
+        self.loss = torch.nn.MSELoss(reduction='none')
 
     def forward(
         self, past_values: torch.Tensor,
@@ -910,7 +916,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
 
         # calculate masked_loss
         loss_val = self.loss(x_hat, model_output.patched_input)
-        masked_loss = (loss_val * model_output.mask).sum() / (model_output.mask.sum() + 1e-10)
+        masked_loss = (loss_val.mean(dim=-1) * model_output.mask).sum() / (model_output.mask.sum() + 1e-10)
 
         return PatchTSTForPreTrainingOutput(
             loss=masked_loss,
