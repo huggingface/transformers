@@ -194,9 +194,9 @@ def accuracy(pred, target, topk=1, thresh=None):
 
     Args:
         pred (`torch.Tensor`):
-            The model prediction, shape (N, num_class).
+            The model prediction, shape (batch_size, num_labels).
         target (`torch.Tensor`):
-            The target of each prediction, shape (N, ).
+            The target of each prediction, shape (batch_size, ).
         topk (`int` or `Tuple[int]`, *optional*, defaults to 1):
             If the predictions in `topk` matches the target, the predictions will be regarded as correct ones.
         thresh (`float`, *optional*):
@@ -2112,11 +2112,11 @@ class MaskRCNNRPN(nn.Module):
                 Multi level valid flags of the image, which are concatenated into a single tensor of shape
                 (num_anchors,).
             gt_bboxes (`torch.Tensor`):
-                Ground truth bboxes of the image, shape (num_gts, 4).
+                Ground truth bboxes of the image, shape (number_of_ground_truths, 4).
             gt_bboxes_ignore (`torch.Tensor`):
                 Ground truth bboxes to be ignored, shape (num_ignored_gts, 4).
             gt_labels (`torch.Tensor`):
-                Ground truth labels of each box, shape (num_gts,).
+                Ground truth labels of each box, shape (number_of_ground_truths,).
             img_meta (`dict`):
                 Meta info of the image.
             label_channels (`int`, *optional*, defaults to 1):
@@ -2370,8 +2370,8 @@ class MaskRCNNRPN(nn.Module):
             bbox_preds (`List[torch.Tensor]`):
                 Box energies / deltas for each scale level with shape (N, num_anchors * 4, height, width).
             gt_bboxes (`List[torch.Tensor]`):
-                Ground truth bboxes for each image with shape (num_gts, 4) in [top_left_x, top_left_y, bottom_right_x,
-                bottom_right_y] format.
+                Ground truth bboxes for each image with shape (number_of_ground_truths, 4) in [top_left_x, top_left_y,
+                bottom_right_x, bottom_right_y] format.
             gt_labels (`List[torch.Tensor]`):
                 Class indices corresponding to each box.
             img_metas (`List[dict]`):
@@ -2472,13 +2472,10 @@ class MaskRCNNRPN(nn.Module):
                 Score factor for all scale level, each is a 4D-tensor, has shape (batch_size, num_priors * 1, height,
                 width).
             img_metas (`List[dict]`, *optional*):
-                Image meta info. Default None.
-            cfg (`mmcv.Config`, *optional*):
+                Image meta info as a list of dictionaries. Each dictionary should contain the keys `img_shape` and
+                `pad_shape`.
+            cfg (`Dict`, *optional*):
                 Test / postprocessing configuration. If None, `test_cfg` is used.
-            rescale (`bool`, *optional*, defaults to `False`):
-                If True, return boxes in original image space.
-            with_nms (`bool`, *optional*, defaults to `True`):
-                If `True`, do NMS (non-maximum suppression) before return boxes.
 
         Returns:
             `List[List[torch.Tensor, torch.Tensor]]`: Each item in result_list is 2-tuple.
@@ -2550,7 +2547,7 @@ class MaskRCNNRPN(nn.Module):
             multilevel_anchors (`List[torch.Tensor]`):
                 Anchors of all scale level each item has shape (num_anchors, 4).
             img_meta (dict): Image meta info.
-            cfg (`mmcv.Config`, *optional*):
+            cfg (`Dict`, *optional*):
                 Test / postprocessing configuration. If None, `test_cfg` is used.
 
         Returns:
@@ -2625,7 +2622,7 @@ class MaskRCNNRPN(nn.Module):
                 Anchors of all scale level each item has shape (num_bboxes, 4).
             level_ids (`List[torch.Tensor]`):
                 Indexes from all scale levels of a single image, each item has shape (num_bboxes, ).
-            cfg (`mmcv.Config`):
+            cfg (`Dict`):
                 Test / postprocessing configuration. If None, `self.test_cfg` is used.
             img_shape (`Tuple[int]`):
                 The shape of model's input image.
@@ -2695,9 +2692,10 @@ class RoIAlign(nn.Module):
         """
         Args:
             input (`torch.Tensor` of shape `(batch_size, num_channels, height, width)`):
-                Images.
+                Input images.
             rois (`torch.Tensor` of shape `(num_rois, 5)`):
-                Bx5 boxes. First column is the index into N. The other 4 columns are xyxy.
+                Batch size x 5 boxes. First element in each row is the batch index. The other 4 elements are the xyxy
+                coordinates.
         """
         return torchvision.ops.roi_align(
             input, rois, self.output_size, self.spatial_scale, self.sampling_ratio, self.aligned

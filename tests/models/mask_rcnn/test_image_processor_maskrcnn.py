@@ -17,8 +17,6 @@
 import json
 import unittest
 
-import numpy as np
-
 from transformers.testing_utils import require_torchvision, require_vision, slow
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -78,7 +76,7 @@ class MaskRCNNImageProcessingTester(unittest.TestCase):
             "image_std": self.image_std,
             "do_pad": self.do_pad,
         }
-    
+
     def expected_output_image_shape(self, images):
         expected_height, expected_width = self.get_expected_values(images, batched=True)
 

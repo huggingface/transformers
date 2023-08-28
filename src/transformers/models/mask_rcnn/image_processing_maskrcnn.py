@@ -76,18 +76,21 @@ def max_across_indices(values: Iterable[Any]) -> List[Any]:
 
 
 # Copied from transformers.models.vilt.image_processing_vilt.get_max_height_width
-def get_max_height_width(images: List[np.ndarray]) -> List[int]:
+def get_max_height_width(
+    images: List[np.ndarray], input_data_format: Optional[Union[str, ChannelDimension]] = None
+) -> List[int]:
     """
     Get the maximum height and width across all images in a batch.
     """
-    input_channel_dimension = infer_channel_dimension_format(images[0])
+    if input_data_format is None:
+        input_data_format = infer_channel_dimension_format(images[0])
 
-    if input_channel_dimension == ChannelDimension.FIRST:
+    if input_data_format == ChannelDimension.FIRST:
         _, max_height, max_width = max_across_indices([img.shape for img in images])
-    elif input_channel_dimension == ChannelDimension.LAST:
+    elif input_data_format == ChannelDimension.LAST:
         max_height, max_width, _ = max_across_indices([img.shape for img in images])
     else:
-        raise ValueError(f"Invalid channel dimension format: {input_channel_dimension}")
+        raise ValueError(f"Invalid channel dimension format: {input_data_format}")
     return (max_height, max_width)
 
 
@@ -127,11 +130,16 @@ def convert_coco_poly_to_mask(segmentations, height: int, width: int) -> np.ndar
 
 
 # Copied from transformers.models.detr.image_processing_detr.prepare_coco_detection_annotation
-def prepare_coco_detection_annotation(image, target, return_segmentation_masks: bool = False):
+def prepare_coco_detection_annotation(
+    image,
+    target,
+    return_segmentation_masks: bool = False,
+    input_data_format: Optional[Union[ChannelDimension, str]] = None,
+):
     """
     Convert the target in COCO format into the format expected by DETR.
     """
-    image_height, image_width = get_image_size(image)
+    image_height, image_width = get_image_size(image, channel_dim=input_data_format)
 
     image_id = target["image_id"]
     image_id = np.asarray([image_id], dtype=np.int64)
@@ -265,7 +273,10 @@ def get_size_with_aspect_ratio(image_size, size, max_size=None) -> Tuple[int, in
 
 # Copied from transformers.models.detr.image_processing_detr.get_resize_output_image_size
 def get_resize_output_image_size(
-    input_image: np.ndarray, size: Union[int, Tuple[int, int], List[int]], max_size: Optional[int] = None
+    input_image: np.ndarray,
+    size: Union[int, Tuple[int, int], List[int]],
+    max_size: Optional[int] = None,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> Tuple[int, int]:
     """
     Computes the output image size given the input image size and the desired output size. If the desired output size
@@ -279,8 +290,10 @@ def get_resize_output_image_size(
             The desired output size.
         max_size (`int`, *optional*):
             The maximum allowed output size.
+        input_data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format of the input image. If not provided, it will be inferred from the input image.
     """
-    image_size = get_image_size(input_image)
+    image_size = get_image_size(input_image, input_data_format)
     if isinstance(size, (list, tuple)):
         return size
 
@@ -395,15 +408,25 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
-        self.test_cfg = test_cfg if test_cfg is not None else {
-            "score_thr": 0.05,
-            "nms": {"type": "nms", "iou_threshold": 0.5},
-            "max_per_img": 100,
-            "mask_thr_binary": 0.5,
-        }
+        self.test_cfg = (
+            test_cfg
+            if test_cfg is not None
+            else {
+                "score_thr": 0.05,
+                "nms": {"type": "nms", "iou_threshold": 0.5},
+                "max_per_img": 100,
+                "mask_thr_binary": 0.5,
+            }
+        )
         self.num_classes = num_classes
-        bbox_head_bbox_coder_target_means = bbox_head_bbox_coder_target_means if bbox_head_bbox_coder_target_means is not None else [0.0, 0.0, 0.0, 0.0]
-        bbox_head_bbox_coder_target_stds = bbox_head_bbox_coder_target_stds if bbox_head_bbox_coder_target_stds is not None else [0.1, 0.1, 0.2, 0.2]
+        bbox_head_bbox_coder_target_means = (
+            bbox_head_bbox_coder_target_means
+            if bbox_head_bbox_coder_target_means is not None
+            else [0.0, 0.0, 0.0, 0.0]
+        )
+        bbox_head_bbox_coder_target_stds = (
+            bbox_head_bbox_coder_target_stds if bbox_head_bbox_coder_target_stds is not None else [0.1, 0.1, 0.2, 0.2]
+        )
         self.bbox_coder = MaskRCNNDeltaXYWHBBoxCoder(
             target_means=bbox_head_bbox_coder_target_means, target_stds=bbox_head_bbox_coder_target_stds
         )
@@ -454,12 +477,32 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.rescale
     def rescale(
-        self, image: np.ndarray, rescale_factor: Union[float, int], data_format: Optional[ChannelDimension] = None
+        self,
+        image: np.ndarray,
+        rescale_factor: float,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """
-        Rescale the image by the given factor.
+        Rescale the image by the given factor. image = image * rescale_factor.
+
+        Args:
+            image (`np.ndarray`):
+                Image to rescale.
+            rescale_factor (`float`):
+                The value to use for rescaling.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            input_data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the input image. If unset, is inferred from the input image. Can be
+                one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
-        return rescale(image, rescale_factor, data_format=data_format)
+        return rescale(image, rescale_factor, data_format=data_format, input_data_format=input_data_format)
 
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.resize_annotation
     def resize_annotation(
@@ -482,18 +525,24 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         output_size: Tuple[int, int],
         constant_values: Union[float, Iterable[float]] = 0,
         data_format: Optional[ChannelDimension] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """
         Pad an image with zeros to the given size.
         """
-        input_height, input_width = get_image_size(image)
+        input_height, input_width = get_image_size(image, channel_dim=input_data_format)
         output_height, output_width = output_size
 
         pad_bottom = output_height - input_height
         pad_right = output_width - input_width
         padding = ((0, pad_bottom), (0, pad_right))
         padded_image = pad(
-            image, padding, mode=PaddingMode.CONSTANT, constant_values=constant_values, data_format=data_format
+            image,
+            padding,
+            mode=PaddingMode.CONSTANT,
+            constant_values=constant_values,
+            data_format=data_format,
+            input_data_format=input_data_format,
         )
         return padded_image
 
@@ -665,10 +714,8 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         return encoded_inputs
 
     def get_bboxes(self, rois, cls_score, bbox_pred, img_shape, scale_factor, rescale=False, cfg=None):
-        # # some loss (Seesaw loss..) may have custom activation
-        # if self.custom_cls_channels:
-        #     scores = self.loss_cls.get_activation(cls_score)
-        # else:
+        # some loss (Seesaw loss..) may have custom activation
+        # removed self.custom_cls_channels from original implementation
         scores = nn.functional.softmax(cls_score, dim=-1) if cls_score is not None else None
         # bbox_pred would be None in some detector when with_reg is False,
         # e.g. Grid R-CNN.
@@ -689,7 +736,9 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
             return bboxes, scores
         else:
             # it's here that we create a different amount of objects per image in a batch
-            det_bboxes, det_labels, _ = multiclass_nms(bboxes, scores, cfg["score_thr"], cfg["nms"], cfg["max_per_img"])
+            det_bboxes, det_labels, _ = multiclass_nms(
+                bboxes, scores, cfg["score_thr"], cfg["nms"], cfg["max_per_img"]
+            )
 
             return det_bboxes, det_labels
 
