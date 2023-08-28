@@ -1,6 +1,6 @@
+import numpy as np
 import torch
 from torch import nn
-import numpy as np
 
 
 def bbox2delta(proposals, ground_truth, means=(0.0, 0.0, 0.0, 0.0), stds=(1.0, 1.0, 1.0, 1.0)):

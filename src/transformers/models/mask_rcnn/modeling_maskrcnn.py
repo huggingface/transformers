@@ -21,7 +21,7 @@ import functools
 import warnings
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -39,12 +39,13 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_maskrcnn import MaskRCNNConfig
 from .bbox_coder import MaskRCNNDeltaXYWHBBoxCoder
+from .configuration_maskrcnn import MaskRCNNConfig
 
 
 if is_torchvision_available():
     import torchvision
+
     from transformers.models.mask_rcnn.image_processing_maskrcnn import batched_nms
 
 
@@ -469,9 +470,7 @@ class WeightedCrossEntropyLoss(nn.Module):
         else:
             self.cls_criterion = cross_entropy
 
-    def forward(
-        self, cls_score, label, weight=None, avg_factor=None, reduction_override=None, ignore_index=None, **kwargs
-    ):
+    def forward(self, cls_score, label, weight=None, avg_factor=None, reduction=None, ignore_index=None, **kwargs):
         """
         Args:
             cls_score (`torch.Tensor`):
@@ -482,7 +481,7 @@ class WeightedCrossEntropyLoss(nn.Module):
                 Sample-wise loss weight.
             avg_factor (int, *optional*)
                 Average factor that is used to average the loss.
-            reduction_override (`str`, *optional*):
+            reduction (`str`, *optional*):
                 The method used to reduce the loss. Options are `"none"`, `"mean"` and `"sum"`.
             ignore_index (`int`, *optional*):
                 The label index to be ignored. If not None, it will override the default value.
@@ -490,9 +489,9 @@ class WeightedCrossEntropyLoss(nn.Module):
         Returns:
             `torch.Tensor`: The calculated loss.
         """
-        if reduction_override not in (None, "none", "mean", "sum"):
-            raise ValueError(f"invalid reduction_override, got {reduction_override}")
-        reduction = reduction_override if reduction_override else self.reduction
+        if reduction not in (None, "none", "mean", "sum"):
+            raise ValueError(f"invalid reduction, got {reduction}")
+        reduction = reduction if reduction is not None else self.reduction
         if ignore_index is None:
             ignore_index = self.ignore_index
 
@@ -570,7 +569,7 @@ class WeightedL1Loss(nn.Module):
         self.reduction = reduction
         self.loss_weight = loss_weight
 
-    def forward(self, pred, target, weight=None, avg_factor=None, reduction_override=None):
+    def forward(self, pred, target, weight=None, avg_factor=None, reduction=None):
         """
         Args:
            pred (`torch.Tensor`):
@@ -581,12 +580,12 @@ class WeightedL1Loss(nn.Module):
                The weight of the loss for each prediction.
            avg_factor (`int`, *optional*):
                Average factor that is used to average the loss.
-           reduction_override (`str`, *optional*):
-               The reduction method used to override the original reduction method of the loss.
+           reduction (`str`, *optional*):
+               The reduction method to use. Will overwrite the default one if provided.
         """
-        if reduction_override not in (None, "none", "mean", "sum"):
-            raise ValueError(f"invalid reduction_override, got {reduction_override}")
-        reduction = reduction_override if reduction_override else self.reduction
+        if reduction not in (None, "none", "mean", "sum"):
+            raise ValueError(f"invalid reduction, got {reduction}")
+        reduction = reduction if reduction is not None else self.reduction
         loss_bbox = self.loss_weight * l1_loss(pred, target, weight, reduction=reduction, avg_factor=avg_factor)
         return loss_bbox
 
@@ -2741,16 +2740,12 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
             bbox_weights = torch.cat(bbox_weights, 0)
         return labels, label_weights, bbox_targets, bbox_weights
 
-    def loss(
-        self, cls_score, bbox_pred, rois, labels, label_weights, bbox_targets, bbox_weights, reduction_override=None
-    ):
+    def loss(self, cls_score, bbox_pred, rois, labels, label_weights, bbox_targets, bbox_weights, reduction=None):
         losses = {}
         if cls_score is not None:
             avg_factor = max(torch.sum(label_weights > 0).float().item(), 1.0)
             if cls_score.numel() > 0:
-                loss_cls_ = self.loss_cls(
-                    cls_score, labels, label_weights, avg_factor=avg_factor, reduction_override=reduction_override
-                )
+                loss_cls_ = self.loss_cls(cls_score, labels, label_weights, avg_factor=avg_factor, reduction=reduction)
                 if isinstance(loss_cls_, dict):
                     losses.update(loss_cls_)
                 else:
@@ -2779,7 +2774,7 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
                     bbox_targets[pos_indices.type(torch.bool)],
                     bbox_weights[pos_indices.type(torch.bool)],
                     avg_factor=bbox_targets.size(0),
-                    reduction_override=reduction_override,
+                    reduction=reduction,
                 )
             else:
                 losses["loss_bbox"] = bbox_pred[pos_indices].sum()

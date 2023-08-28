@@ -52,6 +52,7 @@ logger = logging.get_logger(__name__)
 AnnotationType = Dict[str, Union[int, str, List[Dict]]]
 ArrayType = Union[torch.Tensor, np.ndarray]
 
+
 class AnnotionFormat(ExplicitEnum):
     COCO_DETECTION = "coco_detection"
     COCO_PANOPTIC = "coco_panoptic"
@@ -940,7 +941,6 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
             images = [to_channel_dimension_format(image, data_format) for image in images]
             data = {"pixel_values": images}
 
-        [image.shape for image in images]
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         # add metadata
