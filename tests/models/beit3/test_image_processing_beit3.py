@@ -95,7 +95,7 @@ class Beit3ImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class Beit3ImageProcessingTest(ImageProcessingTestMixin,unittest.TestCase):
+class Beit3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Beit3ImageProcessor if is_vision_available() else None
 
     def setUp(self):
@@ -129,9 +129,7 @@ class Beit3ImageProcessingTest(ImageProcessingTestMixin,unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
-        image_inputs = self.image_processor_tester.prepare_image_inputs(
-            equal_resolution=False
-        )
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
 
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
@@ -164,9 +162,7 @@ class Beit3ImageProcessingTest(ImageProcessingTestMixin,unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(
-            equal_resolution=False, numpify=True
-        )
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
@@ -198,9 +194,7 @@ class Beit3ImageProcessingTest(ImageProcessingTestMixin,unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(
-            equal_resolution=False, torchify=True
-        )
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 

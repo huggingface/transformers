@@ -16,8 +16,8 @@
 
 from typing import Dict, List, Optional, Union
 
-import PIL
 import numpy as np
+import PIL
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
@@ -33,9 +33,11 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    infer_channel_dimension_format,
+    is_scaled_image,
     make_list_of_images,
     to_numpy_array,
-    valid_images, infer_channel_dimension_format, is_scaled_image,
+    valid_images,
 )
 from ...utils import TensorType, logging
 
