@@ -22,8 +22,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 from huggingface_hub import model_info
 from numpy import isin
 
-from transformers.pipelines.image_to_image import ImageToImagePipeline
-
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
@@ -66,6 +64,7 @@ from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
 from .image_segmentation import ImageSegmentationPipeline
+from .image_to_image import ImageToImagePipeline
 from .image_to_text import ImageToTextPipeline
 from .mask_generation import MaskGenerationPipeline
 from .object_detection import ObjectDetectionPipeline

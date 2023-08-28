@@ -115,12 +115,9 @@ class ImageToImagePipeline(Pipeline):
         if "reconstruction" in model_outputs.keys():
             outputs = model_outputs.reconstruction
         for output in outputs:
-            if hasattr(self.image_processor, "post_process"):
-                images.append(self.image_processor.post_process(output))
-            else:
-                output = output.data.squeeze().float().cpu().clamp_(0, 1).numpy()
-                output = np.moveaxis(output, source=0, destination=-1)
-                output = (output * 255.0).round().astype(np.uint8)  # float32 to uint8
-                images.append(Image.fromarray(output))
+            output = output.data.squeeze().float().cpu().clamp_(0, 1).numpy()
+            output = np.moveaxis(output, source=0, destination=-1)
+            output = (output * 255.0).round().astype(np.uint8)  # float32 to uint8
+            images.append(Image.fromarray(output))
 
         return images if len(images) > 1 else images[0]
