@@ -583,6 +583,14 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         tokens = self.tokenizer.tokenize(". Hello")
         self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
 
+        tokens = self.tokenizer.tokenize("")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, self.tokenizer.sp_model.encode("", out_type=str))
+
+        tokens = self.tokenizer.tokenize(" ")
+        self.assertEqual(tokens, ["▁▁"])
+        self.assertEqual(tokens, self.tokenizer.sp_model.encode(" ", out_type=str))
+
     def test_remove_extra_whitespaces(self):
         # make sure the extra spaces are eaten. Since the sample vocab does not have
         # `______`. sentencepiece.NormalizerSpec.remove_extra_whitespaces attribute is set to False
