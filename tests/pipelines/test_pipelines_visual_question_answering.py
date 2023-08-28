@@ -21,6 +21,7 @@ from transformers.testing_utils import (
     nested_simplify,
     require_tf,
     require_torch,
+    require_torch_gpu,
     require_vision,
     slow,
 )
@@ -137,7 +138,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         )
 
     @slow
-    @require_torch
+    @require_torch_gpu
     def test_large_model_pt_blip2(self):
         vqa_pipeline = pipeline("visual-question-answering", model="Salesforce/blip2-opt-2.7b")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
