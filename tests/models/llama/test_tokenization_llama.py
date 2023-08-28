@@ -555,6 +555,22 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertNotEqual(sp_tokens, tokens)
         self.assertEqual(tokens, ["<s>", ">"])
 
+        tokens = tokenizer.tokenize("")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, tokenizer.sp_model.encode("", out_type=str))
+
+        tokens = tokenizer.tokenize(" ")
+        self.assertEqual(tokens, ["▁▁"])
+        self.assertEqual(tokens, tokenizer.sp_model.encode(" ", out_type=str))
+
+        tokens = tokenizer.tokenize("▁")
+        self.assertEqual(tokens, ["▁▁"])
+        self.assertEqual(tokens, tokenizer.sp_model.encode("▁", out_type=str))
+
+        tokens = tokenizer.tokenize(" ▁")
+        self.assertEqual(tokens, ["▁▁▁"])
+        self.assertEqual(tokens, tokenizer.sp_model.encode("▁", out_type=str))
+
 
 @require_sentencepiece
 @require_tokenizers
@@ -588,8 +604,12 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(tokens, self.tokenizer.sp_model.encode("", out_type=str))
 
         tokens = self.tokenizer.tokenize(" ")
-        self.assertEqual(tokens, ["▁▁"])
+        self.assertEqual(tokens, [])
         self.assertEqual(tokens, self.tokenizer.sp_model.encode(" ", out_type=str))
+
+        tokens = self.tokenizer.tokenize("▁")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, self.tokenizer.sp_model.encode("▁", out_type=str))
 
     def test_remove_extra_whitespaces(self):
         # make sure the extra spaces are eaten. Since the sample vocab does not have
