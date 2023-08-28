@@ -246,7 +246,7 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
 
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        ds = ds.cast_column("audio", Audio(sampling_rate=24000))
+        ds = ds.cast_column("audio", Audio(sampling_rate=self.feat_extract_tester.sampling_rate))
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -262,13 +262,14 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
                 -5.6015, -5.6410, -5.4325, -5.6116, -5.3700, -5.7956, -5.3196, -5.3274,
                 -5.9655, -5.6057, -5.8382, -5.9602, -5.9005, -5.9123, -5.7669, -6.1441,
                 -5.5168, -5.1405, -5.3927, -6.0032, -5.5784, -5.3728
-            ]
+            ],
+            dtype=torch.float64,
         )
         # fmt: on
 
         input_speech, sr = self._load_datasamples(1)
 
-        feature_extractor = UnivNetFeatureExtractor.from_pretrained("susnato/clvp_dev")
+        feature_extractor = UnivNetFeatureExtractor()
         input_features = feature_extractor(input_speech, sampling_rate=sr[0], return_tensors="pt").input_features
 
         self.assertEqual(input_features.shape, (1, 100, 548))

@@ -216,25 +216,22 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             mode="reflect",
         )
 
-        # Get the power spectrogram.
+        # Get the amplitude spectrogram.
         # Note: waveform must be unbatched currently due to the implementation of spectrogram(...).
-        power_spectrogram = spectrogram(
+        amplitude_spectrogram = spectrogram(
             waveform,
             window=self.window,
             frame_length=self.n_fft,
             hop_length=self.hop_length,
             fft_length=self.n_fft,
-            power=2.0,
+            power=1.0,
             center=self.center,
             mel_filters=self.mel_filters,
             mel_floor=self.mel_floor,
         )
 
-        # Transpose the spectrogram to put the batch dimension first.
-        # power_spectrogram = power_spectrogram.T
-
         # Perform spectral normalization to get the log mel spectrogram.
-        log_mel_spectrogram = self.dynamic_range_compression(power_spectrogram)
+        log_mel_spectrogram = self.dynamic_range_compression(amplitude_spectrogram)
 
         return log_mel_spectrogram
 
