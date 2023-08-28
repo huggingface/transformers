@@ -284,7 +284,7 @@ the `num_beams` greater than 1, and set `do_sample=True` to use this decoding st
 >>> set_seed(0)  # For reproducibility
 
 >>> prompt = "translate English to German: The house is wonderful."
->>> checkpoint = "t5-base"
+>>> checkpoint = "t5-small"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> inputs = tokenizer(prompt, return_tensors="pt")
