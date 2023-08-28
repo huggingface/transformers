@@ -26,6 +26,7 @@ from seamless_communication.models.inference.translator import Translator
 
 from transformers.models.seamless_m4t.configuration_seamless_m4t import SeamlessM4TConfig
 from transformers.models.seamless_m4t.modeling_seamless_m4t import SeamlessM4TModel
+from transformers.models.seamless_m4t.tokenization_seamless_m4t import SeamlessM4TTokenizer
 from transformers.trainer_utils import set_seed
 from transformers.utils import logging
 
@@ -116,13 +117,48 @@ text_convert_list = [
 
 CUR_PATH = os.path.dirname(os.path.abspath(__file__))
 default_cache_dir = os.path.join(os.path.expanduser("~"), ".cache")
-CACHE_DIR = os.path.join(os.getenv("XDG_CACHE_HOME", default_cache_dir), "suno", "bark_v0")
+CACHE_DIR = os.path.join(os.getenv("XDG_CACHE_HOME", default_cache_dir), "huggingface", "hub")
 
 
-def _load_original_model(device):
-    unity_hub = Translator("multitask_unity", "vocoder_36langs", device)
+SAVE_DIR = "/home/ubuntu/weights"
+
+def _load_original_model(device, name = "seamlessM4T_medium"):
+    unity_hub = Translator(name, "vocoder_36langs", device, torch.float32)
 
     return unity_hub
+
+def _load_langs(model_type = "medium"):
+    if model_type == "medium":
+        # fmt: off
+        langs = ["ace","ace_Latn","acm","acq","aeb","afr","ajp","aka","amh","apc","arb","ars","ary","arz","asm","ast","awa","ayr","azb","azj","bak","bam","ban","bel","bem","ben","bho","bjn","bjn_Latn","bod","bos","bug","bul","cat","ceb","ces","cjk","ckb","crh","cym","dan","deu","dik","dyu","dzo","ell","eng","epo","est","eus","ewe","fao","pes","fij","fin","fon","fra","fur","fuv","gla","gle","glg","grn","guj","hat","hau","heb","hin","hne","hrv","hun","hye","ibo","ilo","ind","isl","ita","jav","jpn","kab","kac","kam","kan","kas","kas_Deva","kat","knc","knc_Latn","kaz","kbp","kea","khm","kik","kin","kir","kmb","kon","kor","kmr","lao","lvs","lij","lim","lin","lit","lmo","ltg","ltz","lua","lug","luo","lus","mag","mai","mal","mar","min","mkd","plt","mlt","mni","khk","mos","mri","zsm","mya","nld","nno","nob","npi","nso","nus","nya","oci","gaz","ory","pag","pan","pap","pol","por","prs","pbt","quy","ron","run","rus","sag","san","sat","scn","shn","sin","slk","slv","smo","sna","snd","som","sot","spa","als","srd","srp","ssw","sun","swe","swh","szl","tam","tat","tel","tgk","tgl","tha","tir","taq","taq_Tfng","tpi","tsn","tso","tuk","tum","tur","twi","tzm","uig","ukr","umb","urd","uzn","vec","vie","war","wol","xho","ydd","yor","yue","cmn","cmn_Hant","zul",]
+        # fmt: on
+        return langs
+    else:
+        # fmt: off
+        langs = ["afr","amh","arb","ary","arz","asm","azj","bel","ben","bos","bul","cat","ceb","ces","ckb","cmn","cmn_Hant","cym","dan","deu","ell","eng","est","eus","fin","fra","fuv","gaz","gle","glg","guj","heb","hin","hrv","hun","hye","ibo","ind","isl","ita","jav","jpn","kan","kat","kaz","khk","khm","kir","kor","lao","lit","lug","luo","lvs","mai","mal","mar","mkd","mlt","mni","mya","nld","nno","nob","npi","nya","ory","pan","pbt","pes","pol","por","ron","rus","sat","slk","slv","sna","snd","som","spa","srp","swe","swh","tam","tel","tgk","tgl","tha","tur","ukr","urd","uzn","vie","yor","yue","zlm","zul",]
+        # fmt: on
+        return langs
+    
+def _load_hf_config(model_type = "medium"):
+    if model_type == "medium":
+        
+#(model_dim=1024, w2v2_encoder_config=Wav2Vec2EncoderConfig(feature_dim=160, use_fbank=True, first_pass_dropout_p=0.0, layer_norm_features=False, feature_extractor_layer_descs=[], feature_extractor_bias=False, feature_extractor_layer_norm_convs=False, feature_grad_scale=0,pos_encoder_type='relative', pos_encoder_depth=0, pos_conv_kernel_size=0, num_pos_conv_groups=0, use_conformer=True, ffn_inner_dim=4096, dropout_p=0.0, attn_dropout_p=0.0, layer_drop_p=0.0, norm_order=<TransformerNormOrder.POST: 0>, depthwise_conv_kernel_size=31), nllb_config=NllbConfig(model_dim=1024, max_seq_len=1024,, pad_idx=0,dropout_p=0.1), t2u_config=UnitYT2UConfig(model_dim=1024, unit_max_seq_len=2048, unit_pad_idx=1, num_encoder_layers=4, num_decoder_layers=4, num_encoder_attn_heads=16, num_decoder_attn_heads=16, ffn_inner_dim=8192, dropout_p=0.1), use_text_encoder=True, use_conformer_adaptor=False, num_adaptor_layers=1, adaptor_kernel_size=8, adaptor_stride=8, adaptor_layer_norm=True, adaptor_dropout_p=0.1)
+        kwargs = {
+            "vocab_size": 256206,
+            "unit_vocab_size": 10082,
+            "hidden_size": 1024,
+            "max_position_embeddings":4096,
+            "encoder_layers": 12,
+            "decoder_layers": 12,
+            "encoder_ffn_dim": 4096,
+            "decoder_ffn_dim": 4096,
+            "t2u_encoder_layers": 4,
+            "t2u_decoder_layers": 4,
+            "num_hidden_layers":12,
+        }
+        return SeamlessM4TConfig(**kwargs)
+    else:
+        return SeamlessM4TConfig()
 
 
 def _convert_model(
@@ -187,30 +223,38 @@ def _convert_model(
     return hf_model
 
 
-def load_model(pytorch_dump_folder_path):
+def load_model(pytorch_dump_folder_path, model_type):
     """
-    Meta SeamlessM4T is made of 7 main components:
+    Meta SeamlessM4T is made of 8 main components:
     - speech_encoder (#1) and speech_encoder_frontend (#2)
     - t2u_model (#3)
     - text_encoder (#4) and text_encoder_frontend (#5)
     - text_decoder (#6) [and text_decoder_frontend (#5) = equals to text_encoder_frontend]
     - final_proj (#7)
+    - vocoder (#8) TODO
     """
     device = _grab_best_device()
-    original_model = _load_original_model(device)
+    if model_type == "medium":
+        name = "seamlessM4T_medium"
+    else:
+        name = "seamlessM4T_large"
+        
+    original_model = _load_original_model(device, name)
+    
+    # TODO : convert config
 
     # init model
-    hf_config = SeamlessM4TConfig()
+    hf_config = _load_hf_config(model_type)
     hf_model = SeamlessM4TModel(hf_config)
 
     # 1. take care of speech encoder
-    wav2vec = hf_model.input_model.model.speech_encoder
-    hf_model.input_model.model.speech_encoder = _convert_model(
+    wav2vec = hf_model.speech_encoder
+    hf_model.speech_encoder = _convert_model(
         original_model, wav2vec, wav2vec_convert_list, device, unwanted_prefix="model.", filter_state_dict="speech"
     )
 
     # verify same number of parameters speech encoder
-    count_1 = param_count(hf_model.input_model.model.speech_encoder)
+    count_1 = param_count(hf_model.speech_encoder)
     count_2 = param_count(original_model.model.speech_encoder_frontend) + param_count(
         original_model.model.speech_encoder
     )
@@ -235,9 +279,9 @@ def load_model(pytorch_dump_folder_path):
     assert count_1 == count_2, f"T2U model --- Count HF: {count_1} != Count Seamless: {count_2}"
 
     # 3. take care of text encoder
-    hf_model.input_model.model.text_encoder = _convert_model(
+    hf_model.text_encoder = _convert_model(
         original_model,
-        hf_model.input_model.model.text_encoder,
+        hf_model.text_encoder,
         text_convert_list,
         device,
         unwanted_prefix="model.",
@@ -246,15 +290,15 @@ def load_model(pytorch_dump_folder_path):
     )
 
     # verify same number of parameters text_encoder
-    count_1 = param_count(hf_model.input_model.model.text_encoder)
+    count_1 = param_count(hf_model.text_encoder)
     count_2 = param_count(original_model.model.text_encoder) + param_count(original_model.model.text_encoder_frontend)
 
     assert count_1 == count_2, f"Text encoder model --- Count HF: {count_1} != Count Seamless: {count_2}"
 
     # 4. take care of text decoder
-    hf_model.input_model.model.text_decoder = _convert_model(
+    hf_model.text_decoder = _convert_model(
         original_model,
-        hf_model.input_model.model.text_decoder,
+        hf_model.text_decoder,
         text_convert_list,
         device,
         unwanted_prefix="model.",
@@ -263,7 +307,7 @@ def load_model(pytorch_dump_folder_path):
     )
 
     # verify same number of parameters text_decoder
-    count_1 = param_count(hf_model.input_model.model.text_decoder)
+    count_1 = param_count(hf_model.text_decoder)
     count_2 = param_count(original_model.model.text_decoder) + param_count(original_model.model.text_decoder_frontend)
 
     # with tempfile.TemporaryDirectory() as tmpdirname:
@@ -273,9 +317,9 @@ def load_model(pytorch_dump_folder_path):
     assert count_1 == count_2, f"Text decoder model --- Count HF: {count_1} != Count Seamless: {count_2}"
 
     # 5. take care of final proj
-    hf_model.input_model.lm_head = _convert_model(
+    hf_model.lm_head = _convert_model(
         original_model,
-        hf_model.input_model.lm_head,
+        hf_model.lm_head,
         [("final_proj.", "")],
         device,
         unwanted_prefix="model.",
@@ -284,7 +328,7 @@ def load_model(pytorch_dump_folder_path):
     )
 
     # verify same number of parameters final proj
-    count_1 = param_count(hf_model.input_model.lm_head)
+    count_1 = param_count(hf_model.lm_head)
     count_2 = param_count(original_model.model.final_proj)
 
     assert count_1 == count_2, f"final proj --- Count HF: {count_1} != Count Seamless: {count_2}"
@@ -301,28 +345,53 @@ def load_model(pytorch_dump_folder_path):
     print(f"HF MODEL excluding embeddings:{hf_model.num_parameters(exclude_embeddings=True)}")
 
     del original_model
+    
+    save_dir = os.path.join(SAVE_DIR, name)
+    
+    ######### TOKENIZER
+    
+    langs = _load_langs(model_type)
+    vocab_file = os.path.join(os.path.expanduser("~"), "tokenizer", model_type, "tokenizer.model")
+    
+    tokenizer = SeamlessM4TTokenizer(vocab_file, language_code = langs)
+    
+    tokenizer.save_pretrained(save_dir)
+    tokenizer = SeamlessM4TTokenizer.from_pretrained(save_dir)
+    
+    
 
     hf_model.save_pretrained(
-        "/home/ubuntu/weights/seamlessM4T/"
+        save_dir
     )  # , push_to_hub=True, repo_id="ylacombe/test_seamlessM4T")
-    hf_model = SeamlessM4TModel.from_pretrained("/home/ubuntu/weights/seamlessM4T/")
+    hf_model = SeamlessM4TModel.from_pretrained(save_dir)
 
-    dummy_speech_encoder_inputs = torch.load("/home/ubuntu/input_speech_encoder.pt")
+    input_test_text = "This is something to be translated in French"
+    #dummy_speech_encoder_inputs = torch.load("/home/ubuntu/input_speech_encoder.pt")
+    # attention_mask = torch.ones(input_test_text.shape[:2]).bool()
+    # attention_mask[:, -1] = False
+    # del attention_mask
 
+    inputs = tokenizer([input_test_text],return_tensors="pt")
+    
+    #inputs["attention_mask"][:, -1] = 0
     set_seed(10)
-    attention_mask = torch.ones(dummy_speech_encoder_inputs.shape[:2]).bool()
 
-    attention_mask[:, -1] = False
     with torch.inference_mode():
-        output_new_model = hf_model.generate(input_values=dummy_speech_encoder_inputs, attention_mask=attention_mask)
+        output_new_model = hf_model.generate(**inputs)
 
-    del attention_mask
+    output_text_new_model = tokenizer.decode(output_new_model[0])
+    
+    del hf_model
 
     original_model = _load_original_model(device)
+    
 
-    text_out, wav, sr = original_model.predict(dummy_speech_encoder_inputs, "eng", synthesize_speech=False)
+    output_text_original_model, output_waveform_original_model, sr = original_model.predict(input_test_text, "T2ST",  src_lang="eng", tgt_lang="fra")
 
-    output_old_model = wav
+    output_old_model = output_waveform_original_model
+    
+    if output_text_original_model.__str__() != output_text_new_model:
+        raise ValueError(f"Not the same text output: {output_text_original_model.__str__()} VS {output_text_new_model}")
 
     torch.testing.assert_close(output_new_model, output_old_model)
 
@@ -346,7 +415,15 @@ if __name__ == "__main__":
         type=str,
         help="Path to the output PyTorch model.",
     )
+        
+    parser.add_argument(
+        "--model_type",
+        default="medium",
+        type=str,
+        help="Path to the output PyTorch model.",
+    )
+    
 
     args = parser.parse_args()
 
-    load_model(args.pytorch_dump_folder_path)
+    load_model(args.pytorch_dump_folder_path, args.model_type)
