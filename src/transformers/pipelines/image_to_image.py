@@ -49,7 +49,6 @@ class ImageToImagePipeline(Pipeline):
     (1552, 1040)
     ```
 
-
     This image to image pipeline can currently be loaded from [`pipeline`] using the following task identifier:
     `"image-to-image"`.
 
