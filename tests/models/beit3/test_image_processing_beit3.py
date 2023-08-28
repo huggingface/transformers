@@ -33,7 +33,7 @@ if is_vision_available():
     from transformers import Beit3ImageProcessor
 
 
-class Beit3ImageProcessingTester(ImageProcessingTestMixin, unittest.TestCase):
+class Beit3ImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -95,7 +95,7 @@ class Beit3ImageProcessingTester(ImageProcessingTestMixin, unittest.TestCase):
 
 @require_torch
 @require_vision
-class Beit3ImageProcessingTest(unittest.TestCase):
+class Beit3ImageProcessingTest(ImageProcessingTestMixin,unittest.TestCase):
     image_processing_class = Beit3ImageProcessor if is_vision_available() else None
 
     def setUp(self):
@@ -130,7 +130,7 @@ class Beit3ImageProcessingTest(unittest.TestCase):
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PIL images
         image_inputs = self.image_processor_tester.prepare_image_inputs(
-            self.image_processor_tester, equal_resolution=False
+            equal_resolution=False
         )
 
         for image in image_inputs:
@@ -165,7 +165,7 @@ class Beit3ImageProcessingTest(unittest.TestCase):
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
         image_inputs = self.image_processor_tester.prepare_image_inputs(
-            self.image_processor_tester, equal_resolution=False, numpify=True
+            equal_resolution=False, numpify=True
         )
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
@@ -199,7 +199,7 @@ class Beit3ImageProcessingTest(unittest.TestCase):
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
         image_inputs = self.image_processor_tester.prepare_image_inputs(
-            self.image_processor_tester, equal_resolution=False, torchify=True
+            equal_resolution=False, torchify=True
         )
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
