@@ -978,31 +978,31 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
             return bboxes, scores
         else:
             # it's here that we create a different amount of objects per image in a batch
-            det_bboxes, det_labels, _ = multiclass_nms(
+            detected_bboxes, detected_labels, _ = multiclass_nms(
                 bboxes, scores, cfg["score_thr"], cfg["nms"], cfg["max_per_img"]
             )
 
-            return det_bboxes, det_labels
+            return detected_bboxes, detected_labels
 
-    def get_seg_masks(self, mask_pred, det_bboxes, det_labels, rcnn_test_cfg, ori_shape, scale_factor, rescale):
+    def get_seg_masks(self, mask_pred, detected_bboxes, detected_labels, rcnn_test_cfg, original_shape, scale_factor, rescale):
         """Get segmentation masks from mask_pred and bboxes.
 
         Args:
             mask_pred (`torch.Tensor or ndarray` of shape `(n, #class, height, width)`).
                 For single-scale testing, mask_pred is the direct output of model, whose type is `torch.Tensor`, while
                 for multi-scale testing, it will be converted to numpy array outside of this method.
-            det_bboxes (`torch.Tensor` of shape `(n, 4/5)`):
+            detected_bboxes (`torch.Tensor` of shape `(n, 4/5)`):
                 Tensor containing detected bounding boxes.
-            det_labels (`torch.Tensor` of shape `(n,)`):
+            detected_labels (`torch.Tensor` of shape `(n,)`):
                 Tensor containing corresponding labels.
             rcnn_test_cfg (dict):
                 R-CNN testing config.
-            ori_shape (Tuple):
+            original_shape (Tuple):
                 Original image height and width, shape (2,)
             scale_factor(ndarray | Tensor):
-                If `rescale is True`, box coordinates are divided by this scale factor to fit `ori_shape`.
+                If `rescale is True`, box coordinates are divided by this scale factor to fit `original_shape`.
             rescale (bool):
-                If True, the resulting masks will be rescaled to `ori_shape`.
+                If True, the resulting masks will be rescaled to `original_shape`.
 
         Returns:
             list[list]: encoded masks. The c-th item in the outer list
@@ -1013,21 +1013,21 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
             mask_pred = mask_pred.sigmoid()
         else:
             # In AugTest, has been activated before
-            mask_pred = det_bboxes.new_tensor(mask_pred)
+            mask_pred = detected_bboxes.new_tensor(mask_pred)
 
         device = mask_pred.device
         cls_segms = [[] for _ in range(self.num_classes)]  # BG is not included in num_classes
-        bboxes = det_bboxes[:, :4]
-        labels = det_labels
+        bboxes = detected_bboxes[:, :4]
+        labels = detected_labels
 
         if rescale:
-            img_h, img_w = ori_shape[-2:]
+            img_h, img_w = original_shape[-2:]
             bboxes = bboxes / scale_factor.to(bboxes)
         else:
-            ori_shape = ori_shape[-2:]
+            original_shape = original_shape[-2:]
             w_scale, h_scale = scale_factor[0], scale_factor[1]
-            img_h = np.round(ori_shape[0] * h_scale.item()).astype(np.int32)
-            img_w = np.round(ori_shape[1] * w_scale.item()).astype(np.int32)
+            img_h = np.round(original_shape[0] * h_scale.item()).astype(np.int32)
+            img_w = np.round(original_shape[1] * w_scale.item()).astype(np.int32)
 
         num_masks = len(mask_pred)
         # The actual implementation split the input into chunks,
@@ -1128,19 +1128,19 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
             img_shapes.append(img_shape)
 
         # apply bbox post-processing to each image individually
-        det_bboxes = []
-        det_labels = []
+        detected_bboxes = []
+        detected_labels = []
         for i in range(len(proposals)):
             if rois[i].shape[0] == 0:
                 # There is no proposal in the single image
-                det_bbox = rois[i].new_zeros(0, 5)
-                det_label = rois[i].new_zeros((0,), dtype=torch.long)
+                detected_bbox = rois[i].new_zeros(0, 5)
+                detected_label = rois[i].new_zeros((0,), dtype=torch.long)
                 if self.test_cfg is None:
-                    det_bbox = det_bbox[:, :4]
-                    det_label = rois[i].new_zeros((0, self.bbox_head.fc_cls.out_features))
+                    detected_bbox = detected_bbox[:, :4]
+                    detected_label = rois[i].new_zeros((0, self.bbox_head.fc_cls.out_features))
 
             else:
-                det_bbox, det_label = self.get_bboxes(
+                detected_bbox, detected_label = self.get_bboxes(
                     rois[i],
                     cls_score[i],
                     bbox_pred[i],
@@ -1149,15 +1149,15 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
                     rescale=True,  # we rescale by default
                     cfg=self.test_cfg,
                 )
-            det_bboxes.append(det_bbox)
-            det_labels.append(det_label)
+            detected_bboxes.append(detected_bbox)
+            detected_labels.append(detected_label)
 
         # turn into COCO API
         results = []
-        for example_idx in range(len(det_bboxes)):
-            scores = det_bboxes[example_idx][:, -1]
-            boxes = det_bboxes[example_idx][:, :-1]
-            labels = det_labels[example_idx]
+        for example_idx in range(len(detected_bboxes)):
+            scores = detected_bboxes[example_idx][:, -1]
+            boxes = detected_bboxes[example_idx][:, :-1]
+            labels = detected_labels[example_idx]
             results.append(
                 {
                     "scores": scores[scores > threshold],
@@ -1175,33 +1175,33 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         target_sizes=None,
         scale_factors=None,
     ):
-        det_bboxes = [result["boxes"] for result in object_detection_results]
-        det_labels = [result["labels"] for result in object_detection_results]
+        detected_bboxes = [result["boxes"] for result in object_detection_results]
+        detected_labels = [result["labels"] for result in object_detection_results]
 
         # split batch mask prediction back to each image
-        num_mask_roi_per_img = [len(det_bbox) for det_bbox in det_bboxes]
+        num_mask_roi_per_img = [len(detected_bbox) for detected_bbox in detected_bboxes]
         mask_preds = mask_pred.split(num_mask_roi_per_img, 0)
 
         num_imgs = len(object_detection_results)
 
         rescale = True  # we rescale by default
-        scale_factors = [scale_factor.to(det_bboxes[0].device) for scale_factor in scale_factors]
+        scale_factors = [scale_factor.to(detected_bboxes[0].device) for scale_factor in scale_factors]
         _bboxes = [
-            # det_bboxes[i][:, :4] * scale_factors[i] if rescale else det_bboxes[i][:, :4]
-            det_bboxes[i] * scale_factors[i] if rescale else det_bboxes[i]
+            # detected_bboxes[i][:, :4] * scale_factors[i] if rescale else detected_bboxes[i][:, :4]
+            detected_bboxes[i] * scale_factors[i] if rescale else detected_bboxes[i]
             for i in range(num_imgs)
         ]
 
         # apply mask post-processing to each image individually
         segm_results = []
         for i in range(num_imgs):
-            if det_bboxes[i].shape[0] == 0:
+            if detected_bboxes[i].shape[0] == 0:
                 segm_results.append([[] for _ in range(self.num_classes)])
             else:
                 segm_result = self.get_seg_masks(
                     mask_preds[i],
                     _bboxes[i],
-                    det_labels[i],
+                    detected_labels[i],
                     self.test_cfg,
                     target_sizes[i],
                     scale_factors[i],

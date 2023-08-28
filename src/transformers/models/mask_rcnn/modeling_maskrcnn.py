@@ -249,7 +249,7 @@ def cross_entropy(
     avg_factor=None,
     class_weight=None,
     ignore_index=-100,
-    avg_non_ignore=False,
+    include_ignored=False,
 ):
     """Calculate the CrossEntropy loss.
 
@@ -261,14 +261,14 @@ def cross_entropy(
         weight (`torch.Tensor`, *optional*):
             Sample-wise loss weight.
         reduction (`str`, *optional*, defaults to `"mean"`):
-            The method used to reduce the loss.
+            The method used to reduce the loss. Options are `"none"`, `"mean"` and `"sum"`.
         avg_factor (`int`, *optional*):
             Average factor that is used to average the loss.
         class_weight (`List[float]`, *optional*):
             The weight for each class.
         ignore_index (`int`, *optional*, defaults to -100):
             The label index to be ignored.
-        avg_non_ignore (`bool`, *optional*, defaults to `False`):
+        include_ignored (`bool`, *optional*, defaults to `False`):
             The flag decides to whether the loss is only averaged over non-ignored targets.
 
     Returns:
@@ -282,7 +282,7 @@ def cross_entropy(
     # average loss over non-ignored elements
     # pytorch's official cross_entropy average loss over non-ignored elements
     # refer to https://github.com/pytorch/pytorch/blob/56b43f4fec1f76953f15a627694d4bba34588969/torch/nn/functional.py#L2660  # noqa
-    if (avg_factor is None) and avg_non_ignore and reduction == "mean":
+    if (avg_factor is None) and include_ignored and reduction == "mean":
         avg_factor = label.numel() - (label == ignore_index).sum().item()
 
     # apply weights and do the reduction
@@ -320,7 +320,7 @@ def binary_cross_entropy(
     avg_factor=None,
     class_weight=None,
     ignore_index=-100,
-    avg_non_ignore=False,
+    include_ignored=False,
 ):
     """Calculate the binary CrossEntropy loss.
 
@@ -340,7 +340,7 @@ def binary_cross_entropy(
             The weight for each class.
         ignore_index (`int`, *optional*, defaults to -100):
             The label index to be ignored.
-        avg_non_ignore (`bool`, *optional*, defaults to `False`):
+        include_ignored (`bool`, *optional*, defaults to `False`):
             The flag decides to whether the loss is only averaged over non-ignored targets.
 
     Returns:
@@ -363,7 +363,7 @@ def binary_cross_entropy(
             weight = valid_mask
 
     # average loss over non-ignored elements
-    if (avg_factor is None) and avg_non_ignore and reduction == "mean":
+    if (avg_factor is None) and include_ignored and reduction == "mean":
         avg_factor = valid_mask.sum().item()
 
     # weighted element-wise losses
@@ -404,7 +404,6 @@ def mask_cross_entropy(
     """
     if ignore_index is not None:
         raise ValueError("BCE loss does not support ignore_index")
-    # TODO: handle these two reserved arguments
     if reduction != "mean":
         raise ValueError("BCE loss only supports reduction == 'mean'")
     if avg_factor is not None:
@@ -426,7 +425,7 @@ class WeightedCrossEntropyLoss(nn.Module):
         class_weight=None,
         ignore_index=None,
         loss_weight=1.0,
-        avg_non_ignore=False,
+        include_ignored=False,
     ):
         """
         Args:
@@ -442,7 +441,7 @@ class WeightedCrossEntropyLoss(nn.Module):
                 Optional label index to be ignored.
             loss_weight (`float`, *optional*, defaults to 1.0):
                 Weight of the loss.
-            avg_non_ignore (`bool`, *optional*, defaults to `False`):
+            include_ignored (`bool`, *optional*, defaults to `False`):
                 The flag decides to whether the loss is only averaged over non-ignored targets.
         """
         super(WeightedCrossEntropyLoss, self).__init__()
@@ -454,13 +453,13 @@ class WeightedCrossEntropyLoss(nn.Module):
         self.loss_weight = loss_weight
         self.class_weight = class_weight
         self.ignore_index = ignore_index
-        self.avg_non_ignore = avg_non_ignore
-        if (ignore_index is not None) and not self.avg_non_ignore and self.reduction == "mean":
+        self.include_ignored = include_ignored
+        if (ignore_index is not None) and not self.include_ignored and self.reduction == "mean":
             warnings.warn(
-                "Default ``avg_non_ignore`` is False, if you would like to "
+                "Default ``include_ignored`` is False, if you would like to "
                 "ignore the certain label and average loss over non-ignore "
                 "labels, which is the same with PyTorch official "
-                "cross_entropy, set ``avg_non_ignore=True``."
+                "cross_entropy, set ``include_ignored=True``."
             )
 
         if self.use_sigmoid:
@@ -507,7 +506,7 @@ class WeightedCrossEntropyLoss(nn.Module):
             reduction=reduction,
             avg_factor=avg_factor,
             ignore_index=ignore_index,
-            avg_non_ignore=self.avg_non_ignore,
+            include_ignored=self.include_ignored,
             **kwargs,
         )
         return loss_cls
@@ -2750,7 +2749,7 @@ class MaskRCNNShared2FCBBoxHead(nn.Module):
                     losses.update(loss_cls_)
                 else:
                     losses["loss_cls"] = loss_cls_
-                losses["acc"] = accuracy(cls_score, labels)
+                losses["accuracy"] = accuracy(cls_score, labels)
         if bbox_pred is not None:
             bg_class_ind = self.num_classes
             # 0~self.num_classes-1 are FG, self.num_classes is BG
@@ -2943,13 +2942,13 @@ class MaskRCNNRoIHead(nn.Module):
 
         if rois.shape[0] == 0:
             batch_size = len(proposals)
-            det_bbox = rois.new_zeros(0, 5)
+            detected_bbox = rois.new_zeros(0, 5)
             det_label = rois.new_zeros((0,), dtype=torch.long)
             if rcnn_test_cfg is None:
-                det_bbox = det_bbox[:, :4]
+                detected_bbox = detected_bbox[:, :4]
                 det_label = rois.new_zeros((0, self.bbox_head.fc_cls.out_features))
             # There is no proposal in the whole batch
-            return [det_bbox] * batch_size, [det_label] * batch_size
+            return [detected_bbox] * batch_size, [det_label] * batch_size
 
         bbox_results = self._bbox_forward(feature_maps, rois)
         logits = bbox_results["cls_score"]
@@ -2996,14 +2995,14 @@ class MaskRCNNRoIHead(nn.Module):
         mask_results.update(loss_mask=loss_mask, mask_targets=mask_targets)
         return mask_results
 
-    def forward_test_mask(self, hidden_states, scale_factors, det_bboxes, rescale=True):
+    def forward_test_mask(self, hidden_states, scale_factors, detected_bboxes, rescale=True):
         """Simple test for mask head without augmentation."""
 
-        # if det_bboxes is rescaled to the original image size, we need to
+        # if detected_bboxes is rescaled to the original image size, we need to
         # rescale it back to the testing scale to obtain RoIs.
         if rescale:
-            scale_factors = [scale_factor.to(det_bboxes[0].device) for scale_factor in scale_factors]
-        _bboxes = [det_bboxes[i] * scale_factors[i] if rescale else det_bboxes[i] for i in range(len(det_bboxes))]
+            scale_factors = [scale_factor.to(detected_bboxes[0].device) for scale_factor in scale_factors]
+        _bboxes = [detected_bboxes[i] * scale_factors[i] if rescale else detected_bboxes[i] for i in range(len(detected_bboxes))]
         mask_rois = bbox2roi(_bboxes)
         mask_results = self._mask_forward(hidden_states, mask_rois)
         mask_pred = mask_results["mask_pred"]

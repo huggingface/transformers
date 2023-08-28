@@ -413,7 +413,7 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
         expected_loss_gpu = {
             "loss_cls": torch.tensor(0.1876, device=torch_device),
             "loss_bbox": torch.tensor(0.1139, device=torch_device),
-            "acc": torch.tensor([90.8203], device=torch_device),
+            "accuracy": torch.tensor([90.8203], device=torch_device),
             "loss_mask": torch.tensor([0.2180], device=torch_device),
         }
         for key, value in expected_loss_gpu.items():
