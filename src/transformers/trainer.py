@@ -2593,20 +2593,6 @@ class Trainer:
 
         return inputs
 
-    def compute_loss_context_manager(self):
-        """
-        A helper wrapper to group together context managers.
-        """
-        return self.autocast_smart_context_manager()
-
-    def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = True):
-        """
-        A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
-        arguments, depending on the situation.
-        """
-
-        return contextlib.nullcontext()
-
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
@@ -2632,8 +2618,7 @@ class Trainer:
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
-        with self.compute_loss_context_manager():
-            loss = self.compute_loss(model, inputs)
+        loss = self.compute_loss(model, inputs)
 
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
@@ -3323,8 +3308,7 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels or loss_without_labels:
-                    with self.compute_loss_context_manager():
-                        loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+                    loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                     loss = loss.mean().detach()
 
                     if isinstance(outputs, dict):
@@ -3333,8 +3317,7 @@ class Trainer:
                         logits = outputs[1:]
                 else:
                     loss = None
-                    with self.compute_loss_context_manager():
-                        outputs = model(**inputs)
+                    outputs = model(**inputs)
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
                     else:
