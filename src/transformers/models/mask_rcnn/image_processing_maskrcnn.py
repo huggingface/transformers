@@ -369,7 +369,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         self,
         format: Union[str, AnnotionFormat] = AnnotionFormat.COCO_DETECTION,
         do_resize: bool = True,
-        size: Dict[str, int] = {"shortest_edge": 800, "longest_edge": 1333},
+        size: Dict[str, int] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
@@ -392,7 +392,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
 
         self.format = format
         self.do_resize = do_resize
-        self.size = size
+        self.size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
         self.resample = resample
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
