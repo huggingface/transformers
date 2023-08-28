@@ -2264,6 +2264,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)
 
+        if getattr(self, "_chat_template", None) is not None:
+            tokenizer_config["chat_template"] = self._chat_template
+
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
         for file_id in self.vocab_files_names.keys():
