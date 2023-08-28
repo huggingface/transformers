@@ -206,7 +206,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 The input waveform. This must be a single real-valued, mono waveform.
 
         Returns:
-            `np.ndarray` containing a spectrogram of shape `(num_mel_bins, length)`.
+            `np.ndarray` containing a spectrogram of shape `(length, num_mel_bins)`.
         """
         # Do custom padding
         # See https://github.com/maum-ai/univnet/blob/master/utils/stft.py#L84
@@ -216,24 +216,29 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             mode="reflect",
         )
 
-        # Get the amplitude spectrogram.
+        # Get the complex spectrogram.
         # Note: waveform must be unbatched currently due to the implementation of spectrogram(...).
-        amplitude_spectrogram = spectrogram(
+        complex_spectrogram = spectrogram(
             waveform,
             window=self.window,
             frame_length=self.n_fft,
             hop_length=self.hop_length,
             fft_length=self.n_fft,
-            power=1.0,
+            power=None,
             center=self.center,
-            mel_filters=self.mel_filters,
-            mel_floor=self.mel_floor,
+            mel_filters=None,
+            mel_floor=None,
         )
+
+        # Apply the MEL filter bank and MEL floor manually.
+        amplitude_spectrogram = np.sqrt(np.real(complex_spectrogram) ** 2 + np.imag(complex_spectrogram) ** 2 + self.mel_floor)
+        amplitude_spectrogram = np.matmul(self.mel_filters.T, amplitude_spectrogram)
 
         # Perform spectral normalization to get the log mel spectrogram.
         log_mel_spectrogram = self.dynamic_range_compression(amplitude_spectrogram)
 
-        return log_mel_spectrogram
+        # Return spectrogram with num_mel_bins last
+        return log_mel_spectrogram.T
 
     def __call__(
         self,

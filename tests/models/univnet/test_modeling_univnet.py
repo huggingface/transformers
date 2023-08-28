@@ -209,9 +209,9 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         gc.collect()
         torch.cuda.empty_cache()
 
-    def _load_datasamples(self, num_samples):
+    def _load_datasamples(self, num_samples, sampling_rate=24000):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        ds = ds.cast_column("audio", Audio(sampling_rate=24000))
+        ds = ds.cast_column("audio", Audio(sampling_rate=sampling_rate))
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 
@@ -285,25 +285,23 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
 
         self.assertTrue(np.allclose(waveform_slice, expected_slice, atol=5e-4))
 
-    @unittest.skip(reason="Haven't gotten expected features yet")
     @torch.no_grad()
     def test_integration(self):
-        # TODO: upload feature extractor to hub
-        feature_extractor = UnivNetFeatureExtractor.from_pretrained("susnato/clvp_dev")
+        feature_extractor = UnivNetFeatureExtractor()
         model = UnivNetGan.from_pretrained("dg845/univnet-dev")
         model.to(torch_device)
 
-        input_speech, sr = self._load_datasamples(1)
+        audio, sr = self._load_datasamples(1, sampling_rate=feature_extractor.sampling_rate)
 
-        input_features = feature_extractor(input_speech, sampling_rate=sr[0], return_tensors="pt").input_features
+        input_features = feature_extractor(audio, sampling_rate=sr[0], return_tensors="pt").input_features
+        input_features = input_features.to(device=torch_device, dtype=torch.float)
 
-        input_speech = self.get_inputs(torch_device, num_samples=1)
+        input_speech = self.get_inputs(torch_device, num_samples=1, noise_length=input_features.shape[1])
         input_speech["spectrogram"] = input_features
 
         waveform = model(**input_speech)
         waveform_slice = waveform[-9:].detach().cpu().flatten().numpy()
 
-        # TODO: get expected features
-        expected_slice = np.array([0.0] * 9)
+        expected_slice = np.array([-4.3934e-04, -1.8203e-04, -3.3033e-04, -3.8716e-04, -1.6125e-04, 3.5389e-06, -3.3149e-04, -3.7613e-04, -2.3331e-04])
 
-        self.assertTrue(np.allclose(waveform_slice, expected_slice, atol=5e-4))
+        self.assertTrue(np.allclose(waveform_slice, expected_slice, atol=5e-6))

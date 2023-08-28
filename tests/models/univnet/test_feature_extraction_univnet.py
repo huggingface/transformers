@@ -194,7 +194,8 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         self.assertTrue(input_features.ndim == 3)
         # Note: for some reason I get a weird padding error when feature_size > 1
         # self.assertTrue(input_features.shape[-2] == feature_extractor.feature_size)
-        self.assertTrue(input_features.shape[-2] == feature_extractor.num_mel_bins)
+        # Note: we use the shape convention (batch_size, seq_len, num_mel_bins)
+        self.assertTrue(input_features.shape[-1] == feature_extractor.num_mel_bins)
 
         # Test not batched input
         encoded_sequences_1 = feature_extractor(speech_inputs[0], return_tensors="np").input_features
@@ -272,5 +273,5 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         feature_extractor = UnivNetFeatureExtractor()
         input_features = feature_extractor(input_speech, sampling_rate=sr[0], return_tensors="pt").input_features
 
-        self.assertEqual(input_features.shape, (1, 100, 548))
-        self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
+        self.assertEqual(input_features.shape, (1, 548, 100))
+        self.assertTrue(torch.allclose(input_features[0, :30, 0], EXPECTED_INPUT_FEATURES, atol=1e-4))
