@@ -72,18 +72,20 @@ class MaskRCNNRPNOutput(ModelOutput):
     Args:
         losses (`torch.FloatTensor`):
             Losses of the RPN head.
-        proposal_list (list[`torch.FloatTensor`]):
+        proposals (list[`torch.FloatTensor`]):
             List of proposals, for each example in the batch. Each proposal is a `torch.FloatTensor` of shape
             (num_proposals, 5). Each proposal is of the format (top_left_x, top_left_y, bottom_right_x, bottom_right_y,
             objectness_score).
-        outs (`tuple(List(torch.FloatTensor)`)):
-            Tuple of lists, the first list containing the class logits and the second list containing the box
-            predictions.
+        logits (`List[torch.FloatTensor]`):
+            List containing the class logits.
+        pred_boxes (`List[torch.FloatTensor]`):
+            List containing the predicted boxes.
     """
 
     losses: torch.FloatTensor = None
-    proposal_list: List[torch.FloatTensor] = None
-    outs: Optional[Tuple[torch.FloatTensor]] = None
+    proposals: List[torch.FloatTensor] = None
+    logits: Optional[Tuple[torch.FloatTensor]] = None
+    pred_boxes: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -1803,24 +1805,24 @@ class MaskRCNNRPN(nn.Module):
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outs = self.forward_features(hidden_states)
+        outputs = self.forward_features(hidden_states)
 
         losses = None
         if gt_bboxes is not None:
             if gt_labels is None:
-                loss_inputs = outs + (gt_bboxes, img_metas)
+                loss_inputs = outputs + (gt_bboxes, img_metas)
             else:
-                loss_inputs = outs + (gt_bboxes, gt_labels, img_metas)
+                loss_inputs = outputs + (gt_bboxes, gt_labels, img_metas)
 
             losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
 
-        proposal_list = self.get_bboxes(*outs, img_metas=img_metas, cfg=proposal_cfg)
+        proposals = self.get_bboxes(*outputs, img_metas=img_metas, cfg=proposal_cfg)
 
         if not return_dict:
-            output = (proposal_list, outs)
+            output = (proposals, outputs)
             return ((losses,) + output) if losses is not None else output
 
-        return MaskRCNNRPNOutput(losses=losses, proposal_list=proposal_list, outs=outs)
+        return MaskRCNNRPNOutput(losses=losses, proposals=proposals, logits=outputs[0], pred_boxes=outputs[1])
 
     def get_anchors(self, featmap_sizes, img_metas, device=None):
         """Get anchors according to feature map sizes.
@@ -3012,7 +3014,7 @@ class MaskRCNNRoIHead(nn.Module):
         self,
         feature_maps,
         img_metas,
-        proposal_list,
+        proposals,
         gt_bboxes,
         gt_labels,
         gt_bboxes_ignore=None,
@@ -3049,11 +3051,11 @@ class MaskRCNNRoIHead(nn.Module):
             sampling_results = []
             for i in range(num_imgs):
                 assign_result = self.bbox_assigner.assign(
-                    proposal_list[i], gt_bboxes[i], gt_bboxes_ignore[i], gt_labels[i]
+                    proposals[i], gt_bboxes[i], gt_bboxes_ignore[i], gt_labels[i]
                 )
                 sampling_result = self.bbox_sampler.sample(
                     assign_result,
-                    proposal_list[i],
+                    proposals[i],
                     gt_bboxes[i],
                     gt_labels[i],
                     feats=[lvl_feat[i][None] for lvl_feat in feature_maps],
@@ -3075,7 +3077,7 @@ class MaskRCNNRoIHead(nn.Module):
 
         return losses
 
-    def forward_test(self, hidden_states, proposal_list):
+    def forward_test(self, hidden_states, proposals):
         """Test without augmentation (originally called `simple_test`).
 
         Source:
@@ -3084,7 +3086,7 @@ class MaskRCNNRoIHead(nn.Module):
         Args:
             hidden_states (`Tuple[torch.Tensor]`):
                 Features from upstream network. Each has shape `(batch_size, num_channels, height, width)`.
-            proposal_list (`List[torch.Tensor`]):
+            proposals (`List[torch.Tensor`]):
                 Proposals from RPN head. Each has shape (num_proposals, 5), last dimension 5 represents (top_left_x,
                 top_left_y, bottom_right_x, bottom_right_y, score).
 
@@ -3095,7 +3097,7 @@ class MaskRCNNRoIHead(nn.Module):
             The outer list corresponds to each image, and first element of tuple is bbox results, second element is
             mask results.
         """
-        rois, proposals, logits, pred_boxes = self.forward_test_bboxes(hidden_states, proposal_list, self.test_cfg)
+        rois, proposals, logits, pred_boxes = self.forward_test_bboxes(hidden_states, proposals, self.test_cfg)
 
         return rois, proposals, logits, pred_boxes
 
@@ -3292,7 +3294,7 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
             roi_losses = self.roi_head.forward_train(
                 hidden_states,
                 img_metas,
-                rpn_outputs.proposal_list,
+                rpn_outputs.proposals,
                 gt_bboxes=[target["boxes"] for target in labels],
                 gt_labels=[target["class_labels"] for target in labels],
                 gt_bboxes_ignore=None,
@@ -3303,7 +3305,7 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
             loss = self.aggregate_loss(loss_dict)
         else:
             rpn_outputs = self.rpn_head(hidden_states, img_metas)
-            rois, proposals, logits, pred_boxes = self.roi_head.forward_test(hidden_states, rpn_outputs.proposal_list)
+            rois, proposals, logits, pred_boxes = self.roi_head.forward_test(hidden_states, rpn_outputs.proposals)
 
         if not return_dict:
             output = (logits, pred_boxes, rois, proposals, hidden_states) + outputs[2:]

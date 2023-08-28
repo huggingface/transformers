@@ -1033,7 +1033,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
 
             return detected_bboxes, detected_labels
 
-    def get_seg_masks(self, mask_pred, detected_bboxes, detected_labels, rcnn_test_cfg, original_shape, scale_factor, rescale):
+    def get_segmentation_masks(self, mask_pred, detected_bboxes, detected_labels, rcnn_test_cfg, original_shape, scale_factor, rescale):
         """Get segmentation masks from mask_pred and bboxes.
 
         Args:
@@ -1220,7 +1220,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
     def post_process_instance_segmentation(
         self,
         object_detection_results,
-        mask_pred,
+        predicted_masks,
         target_sizes=None,
         scale_factors=None,
     ):
@@ -1229,7 +1229,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
 
         # split batch mask prediction back to each image
         num_mask_roi_per_img = [len(detected_bbox) for detected_bbox in detected_bboxes]
-        mask_preds = mask_pred.split(num_mask_roi_per_img, 0)
+        predicted_masks = predicted_masks.split(num_mask_roi_per_img, 0)
 
         num_imgs = len(object_detection_results)
 
@@ -1247,8 +1247,8 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
             if detected_bboxes[i].shape[0] == 0:
                 segm_results.append([[] for _ in range(self.num_classes)])
             else:
-                segm_result = self.get_seg_masks(
-                    mask_preds[i],
+                segm_result = self.get_segmentation_masks(
+                    predicted_masks[i],
                     _bboxes[i],
                     detected_labels[i],
                     self.test_cfg,
