@@ -17,8 +17,8 @@ rendered properly in your Markdown viewer.
 # 파이프라인 [[pipelines]]
 
 파이프라인은 추론에 모델을 사용할 수 있는 훌륭하고 쉬운 방법입니다. 이러한 파이프라인은 라이브러리의 복잡한 코드를 대부분 추상화한 객체들로, 
-명명된 개체 인식(Named Entity Recognition), 마스크드 언어 모델링(Masked Language Modeling), 
-감정 분석(Sentiment Analysis), 특징 추출(Feature Extraction), 질문 응답(Question Answering)과 같은 여러 작업을 위한 간단한 API를 제공합니다. 
+개체명 인식(Named Entity Recognition), 마스크드 언어 모델링(Masked Language Modeling), 
+감정 분석(Sentiment Analysis), 특징 추출(Feature Extraction), 질의 응답(Question Answering)과 같은 여러 작업을 위한 간단한 API를 제공합니다. 
 사용 예제는 [작업 요약](../task_summary)에서 확인할 수 있습니다.
 
 파이프라인 추상화에는 두 가지 범주가 있습니다:
@@ -57,7 +57,7 @@ rendered properly in your Markdown viewer.
  {'label': 'NEGATIVE', 'score': 0.9996669292449951}]
 ```
 
-전체 데이터 세트를 반복하려면 `데이터셋`을 직접 사용하는 것이 좋습니다. 
+전체 데이터 세트를 반복하려면 `dataset`를 직접 사용하는 것이 좋습니다. 
 즉, 한 번에 전체 데이터 세트를 할당할 필요가 없고, 직접 일괄 처리할 필요도 없다는 것을 의미합니다.
 이것은 GPU에서의 사용자 정의 루프만큼 빠르게 작동해야 합니다. 그렇지 않다면 주저하지 말고 이슈를 생성하세요.
 
@@ -70,8 +70,8 @@ from tqdm.auto import tqdm
 pipe = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h", device=0)
 dataset = datasets.load_dataset("superb", name="asr", split="test")
 
-# KeyDataset(*pt*만 해당)은 단순히 데이터셋 항목이 반환한 딕셔너리의 항목을 반환합니다. 
-# 데이터셋의 *대상* 부분에는 관심이 없기 때문입니다. 문장 쌍의 경우 KeyPairDataset을 사용합니다.
+# KeyDataset(*pt*만 해당)은 단순히 데이터 세트 항목이 반환한 딕셔너리의 항목을 반환합니다. 
+# 데이터 세트의 *대상* 부분에는 관심이 없기 때문입니다. 문장 쌍의 경우 KeyPairDataset을 사용합니다.
 for out in tqdm(pipe(KeyDataset(dataset, "file"))):
     print(out)
     # {"text": "NUMBER TEN FRESH NELLY IS WAITING ON YOU GOOD NIGHT HUSBAND"}
@@ -225,16 +225,16 @@ RuntimeError: CUDA out of memory. Tried to allocate 376.00 MiB (GPU 0; 3.95 GiB 
 
 - **하드웨어와 함께 부하에 대한 성능을 측정하세요. 측정하고, 측정하고, 계속 측정하세요. 
   실제 숫자만이 해답입니다.**
-- 지연 시간 제약이 있는 경우(추론을 수행하는 실시간 상품), 일괄 처리하지 마세요.
+- 지연 시간에 제약이 있는 경우(추론을 수행하는 실시간 제품), 일괄 처리하지 마세요.
 - CPU를 사용하는 경우 일괄 처리하지 마세요.
 - 처리량이 중요한 경우(많은 정적 데이터에 대해 모델을 실행하려는 경우) GPU를 사용하세요:
 
   - sequence_length("원래"의 데이터)의 크기에 대한 단서가 없는 경우, 기본적으로 일괄 처리하지 말고 측정한 후
     임시로 추가를 시도하고, 실패할 때 복구하기 위해 OOM 검사를 추가합니다.
     (그리고 시퀀스 길이를 제어하지 않으면 언젠가는 실패할 것입니다).
-  - 시퀀스 길이가 매우 규칙적이라면, 일괄 처리가 아주 흥미롭게 보일 가능성이 큽니다. 
+  - 시퀀스 길이가 매우 규칙적이라면, 일괄 처리가 아주 효과적일 가능성이 큽니다. 
     OOM이 발생할 때까지 측정하고 푸시하세요.
-  - GPU가 클수록 일괄 처리 더 흥미롭게 보일 가능성이 큽니다.
+  - GPU가 클수록 일괄 처리 더 효과적일 가능성이 큽니다.
 - 일괄처리를 활성화하자마자 OOM을 잘 처리할 수 있는지 확인하세요.
  
 ## 파이프라인 청크 일괄처리 [[pipeline-chunk-batching]]
@@ -275,7 +275,7 @@ outputs = pipe.postprocess(all_model_outputs)
 특정 파이프라인을 재정의하려면.
 
 파이프라인의 목표는 사용하기 쉽고 대부분의 사용 사례를 지원하는 것이므로 이슈를 생성하는 것을 주저하지 마세요.
-그 결과 '트랜스포머'가 당신의 사용 사례를 지원할 수 있습니다.
+그 결과 `transformers`가 당신의 사용 사례를 지원할 수 있습니다.
 
 
 간단하게 시도하려면 다음을 수행할 수 있습니다:
@@ -331,7 +331,7 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
     - __call__
     - all
 
-## Computer vision [[Computer-vision]]
+## 컴퓨터 비전 [[computer-vision]]
 
 컴퓨터 비전 작업에 사용 가능한 파이프라인은 다음과 같습니다.
 
@@ -376,7 +376,7 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
     - __call__
     - all
 
-## Natural Language Processing
+## 자연어처리 [[natural-language-processing]]
 
 자연어 처리 작업에 사용할 수 있는 파이프라인은 다음과 같습니다.
 
@@ -394,7 +394,7 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
     - __call__
     - all
 
-### NerPipeline
+### NerPipeline [[nerpipiline]]
 
 [[autodoc]] NerPipeline
 
@@ -453,7 +453,7 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
     - __call__
     - all
 
-## Multimodal
+## Multimodal [[multimodal]]
 
 멀티모달 작업에 사용할 수 있는 파이프라인은 다음과 같습니다.
 
