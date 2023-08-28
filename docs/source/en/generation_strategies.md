@@ -134,10 +134,10 @@ one for summarization with beam search). You must have the right Hub permissions
 ... )
 
 >>> # Tip: add `push_to_hub=True` to push to the Hub
->>> translation_generation_config.save_pretrained("t5-small", "translation_generation_config.json")
+>>> translation_generation_config.save_pretrained("/tmp", "translation_generation_config.json")
 
 >>> # You could then use the named generation config file to parameterize generation
->>> generation_config = GenerationConfig.from_pretrained("t5-small", "translation_generation_config.json")
+>>> generation_config = GenerationConfig.from_pretrained("/tmp", "translation_generation_config.json")
 >>> inputs = tokenizer("translate English to French: Configuration files are easy to use!", return_tensors="pt")
 >>> outputs = model.generate(**inputs, generation_config=generation_config)
 >>> print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
@@ -284,7 +284,7 @@ the `num_beams` greater than 1, and set `do_sample=True` to use this decoding st
 >>> set_seed(0)  # For reproducibility
 
 >>> prompt = "translate English to German: The house is wonderful."
->>> checkpoint = "google/flan-t5-base"
+>>> checkpoint = "t5-base"
 
 >>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 >>> inputs = tokenizer(prompt, return_tensors="pt")
