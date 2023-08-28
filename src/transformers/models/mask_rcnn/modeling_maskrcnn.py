@@ -40,10 +40,12 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_maskrcnn import MaskRCNNConfig
+from .bbox_coder import MaskRCNNDeltaXYWHBBoxCoder
 
 
 if is_torchvision_available():
     import torchvision
+    from transformers.models.mask_rcnn.image_processing_maskrcnn import batched_nms
 
 
 logger = logging.get_logger(__name__)
@@ -59,8 +61,6 @@ MASK_RCNN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/convnext-tiny-maskrcnn",
     # See all MaskRCNN models at https://huggingface.co/models?filter=convnext_maskrcnn
 ]
-
-ArrayType = Union[torch.Tensor, np.ndarray]
 
 
 @dataclass
@@ -254,7 +254,7 @@ def cross_entropy(
 
     Args:
         pred (`torch.Tensor`):
-            The prediction with shape (N, C), C is the number of classes.
+            The prediction with shape (batch_size, num_classes).
         label (`torch.Tensor`):
             The learning label of the prediction.
         weight (`torch.Tensor`, *optional*):
@@ -865,139 +865,6 @@ def anchor_inside_flags(flat_anchors, valid_flags, img_shape, allowed_border=0):
     return inside_flags
 
 
-def bbox2delta(proposals, ground_truth, means=(0.0, 0.0, 0.0, 0.0), stds=(1.0, 1.0, 1.0, 1.0)):
-    """Compute deltas of proposals w.r.t. ground truth.
-
-    We usually compute the deltas of x, y, width, height of proposals w.r.t ground truth bboxes to get regression
-    target. This is the inverse function of [`delta2bbox`].
-
-    Args:
-        proposals (`torch.Tensor`):
-            Boxes to be transformed, shape (N, ..., 4) with N = number of proposals.
-        ground_truth (`torch.Tensor`):
-            Ground truth bboxes to be used as base, shape (N, ..., 4) with N = number of boxes.
-        means (`Sequence[float]`, *optional*, defaults to `(0.0, 0.0, 0.0, 0.0)`):
-            Denormalizing means for delta coordinates
-        stds (`Sequence[float]`, *optional*, defaults to `(1.0, 1.0, 1.0, 1.0)`):
-            Denormalizing standard deviation for delta coordinates
-
-    Returns:
-       `torch.Tensor`: deltas with shape (N, 4), where columns represent delta_x, delta_y, delta_width, delta_height.
-    """
-    if proposals.size() != ground_truth.size():
-        raise ValueError("Should have as many proposals as there are ground truths")
-
-    proposals = proposals.float()
-    ground_truth = ground_truth.float()
-
-    # predicted boxes
-    predicted_x = (proposals[..., 0] + proposals[..., 2]) * 0.5
-    predicted_y = (proposals[..., 1] + proposals[..., 3]) * 0.5
-    predicted_width = proposals[..., 2] - proposals[..., 0]
-    predicted_height = proposals[..., 3] - proposals[..., 1]
-
-    # ground truth boxes
-    ground_truth_x = (ground_truth[..., 0] + ground_truth[..., 2]) * 0.5
-    ground_truth_y = (ground_truth[..., 1] + ground_truth[..., 3]) * 0.5
-    ground_truth_width = ground_truth[..., 2] - ground_truth[..., 0]
-    ground_truth_height = ground_truth[..., 3] - ground_truth[..., 1]
-
-    delta_x = (ground_truth_x - predicted_x) / predicted_width
-    delta_y = (ground_truth_y - predicted_y) / predicted_height
-    delta_width = torch.log(ground_truth_width / predicted_width)
-    delta_height = torch.log(ground_truth_height / predicted_height)
-    deltas = torch.stack([delta_x, delta_y, delta_width, delta_height], dim=-1)
-
-    means = deltas.new_tensor(means).unsqueeze(0)
-    stds = deltas.new_tensor(stds).unsqueeze(0)
-    deltas = deltas.sub_(means).div_(stds)
-
-    return deltas
-
-
-def delta2bbox(
-    rois,
-    deltas,
-    means=(0.0, 0.0, 0.0, 0.0),
-    stds=(1.0, 1.0, 1.0, 1.0),
-    max_shape=None,
-    wh_ratio_clip=16 / 1000,
-    clip_border=True,
-    add_ctr_clamp=False,
-    ctr_clamp=32,
-):
-    """Apply deltas to shift/scale base boxes.
-
-    Typically the rois are anchor or proposed bounding boxes and the deltas are network outputs used to shift/scale
-    those boxes. This is the inverse function of [`bbox2delta`].
-
-    Args:
-        rois (`torch.Tensor`):
-            Boxes to be transformed. Has shape (N, 4) with N = num_base_anchors * width * height, when rois is a grid
-            of anchors.
-        deltas (`torch.Tensor`):
-            Encoded offsets relative to each roi. Has shape (N, num_classes * 4) or (N, 4) with N = num_base_anchors *
-            width * height. Offset encoding follows https://arxiv.org/abs/1311.2524.
-        means (`Sequence[float]`, *optional*, defaults to `(0., 0., 0., 0.)`):
-            Denormalizing means for delta coordinates.
-        stds (`Sequence[float]`, *optional*, defaults to `(1., 1., 1., 1.)`):
-            Denormalizing standard deviation for delta coordinates.
-        max_shape (`Tuple[int, int]`, *optional*):
-            Maximum bounds for boxes, specifies (H, W). Default None.
-        wh_ratio_clip (`float`, *optional*, defaults to 16 / 1000):
-            Maximum aspect ratio for boxes.
-        clip_border (`bool`, *optional*, defaults to `True`):
-            Whether to clip the objects outside the border of the image.
-        add_ctr_clamp (`bool`, *optional*, defaults to `False`):
-            Whether to add center clamp. When set to True, the center of the prediction bounding box will be clamped to
-            avoid being too far away from the center of the anchor. Only used by YOLOF.
-        ctr_clamp (`int`, *optional*, defaults to 32):
-            The maximum pixel shift to clamp. Only used by YOLOF.
-
-    Returns:
-        `torch.Tensor`: Boxes with shape (N, num_classes * 4) or (N, 4), where 4 represent top_left_x, top_left_y,
-        bottom_right_x, bottom_right_y.
-    """
-    num_bboxes, num_classes = deltas.size(0), deltas.size(1) // 4
-    if num_bboxes == 0:
-        return deltas
-
-    deltas = deltas.reshape(-1, 4)
-
-    means = deltas.new_tensor(means).view(1, -1)
-    stds = deltas.new_tensor(stds).view(1, -1)
-    denorm_deltas = deltas * stds + means
-
-    delta_x_y = denorm_deltas[:, :2]
-    delta_width_height = denorm_deltas[:, 2:]
-
-    # Compute width/height of each roi
-    rois_ = rois.repeat(1, num_classes).reshape(-1, 4)
-    predicted_x_y = (rois_[:, :2] + rois_[:, 2:]) * 0.5
-    predicted_width_height = rois_[:, 2:] - rois_[:, :2]
-
-    dxy_wh = predicted_width_height * delta_x_y
-
-    max_ratio = np.abs(np.log(wh_ratio_clip))
-    if add_ctr_clamp:
-        dxy_wh = torch.clamp(dxy_wh, max=ctr_clamp, min=-ctr_clamp)
-        delta_width_height = torch.clamp(delta_width_height, max=max_ratio)
-    else:
-        delta_width_height = delta_width_height.clamp(min=-max_ratio, max=max_ratio)
-
-    ground_truth_x_y = predicted_x_y + dxy_wh
-    ground_truth_width_height = predicted_width_height * delta_width_height.exp()
-    top_left_x_y = ground_truth_x_y - (ground_truth_width_height * 0.5)
-    bottom_right_x_y = ground_truth_x_y + (ground_truth_width_height * 0.5)
-    bboxes = torch.cat([top_left_x_y, bottom_right_x_y], dim=-1)
-    if clip_border and max_shape is not None:
-        max_shape = max_shape[-2:]
-        bboxes[..., 0::2].clamp_(min=0, max=max_shape[1])
-        bboxes[..., 1::2].clamp_(min=0, max=max_shape[0])
-    bboxes = bboxes.reshape(num_bboxes, -1)
-    return bboxes
-
-
 def bbox2roi(bbox_list):
     """Convert a list of bboxes to roi format.
 
@@ -1332,108 +1199,6 @@ class MaskRCNNAnchorGenerator(nn.Module):
         valid = valid_xx & valid_yy
         valid = valid[:, None].expand(valid.size(0), num_base_anchors).contiguous().view(-1)
         return valid
-
-
-class MaskRCNNDeltaXYWHBBoxCoder(nn.Module):
-    """Delta XYWH bounding box coder.
-
-    Following the practice in [R-CNN](https://arxiv.org/abs/1311.2524), this coder encodes a bounding box (x1, y1, x2,
-    y2) into deltas (delta_x, delta_y, delta_width, delta_height) and decodes delta (delta_x, delta_y, delta_width,
-    delta_height) back to original bounding box (x1, y1, x2, y2). This corresponds to (top_left_x, top_left_y,
-    bottom_right_x, bottom_right_y).
-
-    Args:
-        target_means (`Sequence[float]`):
-            Denormalizing means of target for delta coordinates.
-        target_stds (`Sequence[float]`):
-            Denormalizing standard deviation of target for delta coordinates.
-        clip_border (`bool`, *optional*, defaults to `True`):
-            Whether to clip the objects outside the border of the image.
-        add_ctr_clamp (`bool`, *optional*, defaults to `False`):
-            Whether to add center clamp, when added, the predicted box is clamped is its center is too far away from
-            the original anchor's center. Only used by YOLOF.
-        ctr_clamp (`int`, *optional*, defaults to 32):
-            The maximum pixel shift to clamp. Only used by YOLOF.
-    """
-
-    def __init__(
-        self,
-        target_means=(0.0, 0.0, 0.0, 0.0),
-        target_stds=(1.0, 1.0, 1.0, 1.0),
-        clip_border=True,
-        add_ctr_clamp=False,
-        ctr_clamp=32,
-    ):
-        super().__init__()
-        self.means = target_means
-        self.stds = target_stds
-        self.clip_border = clip_border
-        self.add_ctr_clamp = add_ctr_clamp
-        self.ctr_clamp = ctr_clamp
-
-    def encode(self, bboxes, gt_bboxes):
-        """Get box regression transformation deltas that can be used to transform the `bboxes` into the `gt_bboxes`.
-
-        Args:
-            bboxes (`torch.Tensor`):
-                Source boxes, e.g., object proposals.
-            gt_bboxes (`torch.Tensor`):
-                Target of the transformation, e.g., ground-truth boxes.
-
-        Returns:
-            `torch.Tensor`: Box transformation deltas
-        """
-
-        if bboxes.size(0) != gt_bboxes.size(0):
-            raise ValueError("bboxes and gt_bboxes should have same batch size")
-        if not (bboxes.size(-1) == gt_bboxes.size(-1) == 4):
-            raise ValueError("bboxes and gt_bboxes should have 4 elements in last dimension")
-        encoded_bboxes = bbox2delta(bboxes, gt_bboxes, self.means, self.stds)
-        return encoded_bboxes
-
-    def decode(self, bboxes, pred_bboxes, max_shape=None, wh_ratio_clip=16 / 1000):
-        """Apply transformation `pred_bboxes` to `boxes`.
-
-        Args:
-            bboxes (`torch.Tensor`):
-                Basic boxes. Shape (batch_size, N, 4) or (N, 4) with N = number of boxes.
-            pred_bboxes (`torch.Tensor`):
-                Encoded offsets with respect to each roi. Has shape (batch_size, N, num_classes * 4) or (batch_size, N,
-                4) or (N, num_classes * 4) or (N, 4). Note N = num_anchors * W * H when rois is a grid of anchors.
-                Offset encoding follows [1]_.
-            max_shape (`Sequence[int]` or `torch.Tensor` or `Sequence[Sequence[int]]`, *optional*):
-                Maximum bounds for boxes, specifies (H, W, C) or (H, W). If `bboxes` shape is (B, N, 4), then the
-                `max_shape` should be a Sequence[Sequence[int]] and the length of `max_shape` should also be B.
-            wh_ratio_clip (`float`, *optional*, defaults to 16 / 1000):
-                The allowed ratio between width and height.
-
-        Returns:
-            `torch.Tensor`: Decoded boxes.
-        """
-
-        if pred_bboxes.size(0) != bboxes.size(0):
-            raise ValueError("pred_bboxes and bboxes should have the same first dimension")
-        if pred_bboxes.ndim == 3:
-            if pred_bboxes.size(1) != bboxes.size(1):
-                raise ValueError("pred_bboxes and bboxes should have the same second dimension")
-
-        if pred_bboxes.ndim == 2:
-            # single image decode
-            decoded_bboxes = delta2bbox(
-                bboxes,
-                pred_bboxes,
-                self.means,
-                self.stds,
-                max_shape,
-                wh_ratio_clip,
-                self.clip_border,
-                self.add_ctr_clamp,
-                self.ctr_clamp,
-            )
-        else:
-            raise ValueError("Predicted boxes should have 2 dimensions")
-
-        return decoded_bboxes
 
 
 # Everything related to IoU calculator #
@@ -2167,7 +1932,7 @@ class MaskRCNNRPN(nn.Module):
             bbox_weights[pos_indices, :] = 1.0
             if gt_labels is None:
                 # Only rpn gives gt_labels as None
-                # Foreground is the first class since v2.5.0
+                # Foreground is the first class since v2.5.0 of mmdetection
                 labels[pos_indices] = 0
             else:
                 labels[pos_indices] = gt_labels[sampling_result.pos_assigned_gt_indices]
@@ -3562,246 +3327,3 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
-def nms(
-    boxes: ArrayType,
-    scores: ArrayType,
-    iou_threshold: float,
-    offset: int = 0,
-) -> Tuple[ArrayType, ArrayType]:
-    """Dispatch to either CPU or GPU NMS implementations.
-
-    Source: https://github.com/open-mmlab/mmcv/blob/main/mmcv/ops/nms.py. Removed the `score_threshold`and `max_num`
-    arguments as those are only supported by MMCV's NMS implementation and we are using torchvision.ops.nms. See also
-    https://github.com/open-mmlab/mmcv/blob/d71d067da19d71d79e7b4d7ae967891c7bb00c05/mmcv/ops/nms.py#L28.
-
-    The input can be either torch tensor or numpy array. GPU NMS will be used if the input is GPU tensor, otherwise
-    CPU: NMS will be used. The returned type will always be the same as the inputs.
-
-    Args:
-        boxes (`torch.Tensor` or `np.ndarray`):
-            Bounding boxes of shape (N, 4) with N = number of objects.
-        scores (`torch.Tensor` or `np.ndarray`):
-            Scores of shape (N, ).
-        iou_threshold (`float`):
-            IoU threshold for NMS.
-        offset (`int`, *optional*, defaults to 0):
-            If set, the bounding boxes' width or height is (x2 - x1 + offset). Can be set to 0 or 1.
-
-    Returns:
-        `Tuple`: kept detections (boxes and scores) and indices, which always have the same data type as the input.
-    """
-    if not isinstance(boxes, (torch.Tensor, np.ndarray)):
-        raise ValueError(f"Unsupported type {type(boxes)} for boxes.")
-    if not isinstance(scores, (torch.Tensor, np.ndarray)):
-        raise ValueError(f"Unsupported type {type(scores)} for scores.")
-    is_numpy = False
-    if isinstance(boxes, np.ndarray):
-        is_numpy = True
-        boxes = torch.from_numpy(boxes)
-    if isinstance(scores, np.ndarray):
-        scores = torch.from_numpy(scores)
-
-    if boxes.size(1) != 4:
-        raise ValueError(f"Bounding boxes should have shape (N, 4), but got {boxes.shape}")
-    if boxes.size(0) != scores.size(0):
-        raise ValueError(f"The number of boxes ({boxes.size(0)}) and scores ({scores.size(0)}) should be the same.")
-    if offset not in (0, 1):
-        raise ValueError(f"Offset should be either 0 or 1, but got {offset}.")
-
-    indices = torchvision.ops.nms(boxes, scores, iou_threshold)
-    detections = torch.cat((boxes[indices], scores[indices].reshape(-1, 1)), dim=1)
-    if is_numpy:
-        detections = detections.cpu().numpy()
-        indices = indices.cpu().numpy()
-    return detections, indices
-
-
-def batched_nms(
-    boxes: torch.Tensor,
-    scores: torch.Tensor,
-    idxs: torch.Tensor,
-    nms_cfg: Optional[Dict],
-    class_agnostic: bool = False,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    r"""
-    Performs non-maximum suppression (NMS) in a batched fashion.
-
-    Modified from [torchvision/ops/boxes.py#L39](https://github.com/pytorch/vision/blob/
-    505cd6957711af790211896d32b40291bea1bc21/torchvision/ops/boxes.py#L39). In order to perform NMS independently per
-    class, we add an offset to all the boxes. The offset is dependent only on the class idx, and is large enough so
-    that boxes from different classes do not overlap. Note:
-
-    In v1.4.1 and later, `batched_nms` supports skipping the NMS and returns sorted raw results when `nms_cfg` is None.
-
-    Args:
-        boxes (`torch.Tensor`):
-            Bounding boxes in shape (N, 4) or (N, 5) with N = number of objects.
-        scores (`torch.Tensor`):
-            Scores in shape (N,).
-        idxs (`torch.Tensor`):
-            Each index value corresponds to a bbox cluster, and NMS will not be applied between elements of different
-            idxs, shape (N, ).
-        nms_cfg (dict | optional):
-            Supports skipping the nms when *nms_cfg* is None, otherwise it should specify nms type and other parameters
-            like *iou_thr*. Possible keys includes the following.
-            - iou_threshold (float): IoU threshold used for NMS.
-            - split_threshold (float): threshold number of boxes. In some cases the number of boxes is large (e.g.,
-              200k). To avoid OOM during training, the users could set *split_threshold* to a small value. If the
-              number of boxes is greater than the threshold, it will perform NMS on each group of boxes separately and
-              sequentially. Defaults to 10000.
-        class_agnostic (`bool`, *optional*, defaults to `False`):
-            If `True`, NMS is class agnostic, i.e. IoU thresholding happens over all boxes, regardless of the predicted
-            class.
-
-    Returns:
-        `Tuple(torch.Tensor)` comprising various elements:
-        - **boxes** (`torch.Tensor`):
-            Bboxes with scores after NMS, has shape (num_bboxes, 5). Last dimension 5 arranges as (x1, y1, x2, y2,
-            score).
-        - **keep** (`torch.Tensor`):
-            The indices of remaining boxes in the input boxes.
-    """
-    # skip nms when nms_cfg is None
-    if nms_cfg is None:
-        scores, indices = scores.sort(descending=True)
-        boxes = boxes[indices]
-        return torch.cat([boxes, scores[:, None]], -1), indices
-
-    nms_cfg_ = nms_cfg.copy()
-    class_agnostic = nms_cfg_.pop("class_agnostic", class_agnostic)
-    if class_agnostic:
-        boxes_for_nms = boxes
-    else:
-        # When using rotated boxes, only apply offsets on center.
-        if boxes.size(-1) == 5:
-            # Strictly, the maximum coordinates of the rotating box
-            # (x,y,w,h,a) should be calculated by polygon coordinates.
-            # But the conversion from rotated box to polygon will
-            # slow down the speed.
-            # So we use max(x,y) + max(w,h) as max coordinate
-            # which is larger than polygon max coordinate
-            # max(x1, y1, x2, y2,x3, y3, x4, y4)
-            max_coordinate = boxes[..., :2].max() + boxes[..., 2:4].max()
-            offsets = idxs.to(boxes) * (max_coordinate + torch.tensor(1).to(boxes))
-            boxes_ctr_for_nms = boxes[..., :2] + offsets[:, None]
-            boxes_for_nms = torch.cat([boxes_ctr_for_nms, boxes[..., 2:5]], dim=-1)
-        else:
-            max_coordinate = boxes.max()
-            offsets = idxs.to(boxes) * (max_coordinate + torch.tensor(1).to(boxes))
-            boxes_for_nms = boxes + offsets[:, None]
-
-    nms_type = nms_cfg_.pop("type", "nms")
-    nms_op = eval(nms_type)
-
-    split_threshold = nms_cfg_.pop("split_threshold", 10000)
-    # Won't split to multiple nms nodes when exporting to onnx
-    if boxes_for_nms.shape[0] < split_threshold or torch.onnx.is_in_onnx_export():
-        detections, keep = nms_op(boxes_for_nms, scores, **nms_cfg_)
-        boxes = boxes[keep]
-
-        # This assumes `detections` has arbitrary dimensions where
-        # the last dimension is score.
-        # Currently it supports bounding boxes [x1, y1, x2, y2, score] or
-        # rotated boxes [cx, cy, w, h, angle_radian, score].
-
-        scores = detections[:, -1]
-    else:
-        max_num = nms_cfg_.pop("max_num", -1)
-        total_mask = scores.new_zeros(scores.size(), dtype=torch.bool)
-        # Some type of nms would reweight the score, such as SoftNMS
-        scores_after_nms = scores.new_zeros(scores.size())
-        for id in torch.unique(idxs):
-            mask = (idxs == id).nonzero(as_tuple=False).view(-1)
-            detections, keep = nms_op(boxes_for_nms[mask], scores[mask], **nms_cfg_)
-            total_mask[mask[keep]] = True
-            scores_after_nms[mask[keep]] = detections[:, -1]
-        keep = total_mask.nonzero(as_tuple=False).view(-1)
-
-        scores, indices = scores_after_nms[keep].sort(descending=True)
-        keep = keep[indices]
-        boxes = boxes[keep]
-
-        if max_num > 0:
-            keep = keep[:max_num]
-            boxes = boxes[:max_num]
-            scores = scores[:max_num]
-
-    boxes = torch.cat([boxes, scores[:, None]], -1)
-    return boxes, keep
-
-
-def multiclass_nms(multi_bboxes, multi_scores, score_thr, nms_cfg, max_num=-1, score_factors=None):
-    """NMS for multi-class bboxes.
-
-    Args:
-        multi_bboxes (`torch.Tensor`):
-            Shape (N, #class*4) or (N, 4) with N = number of objects.
-        multi_scores (`torch.Tensor`):
-            Shape (N, #class), where the last column contains scores of the background class, but this will be ignored.
-        score_thr (`float`):
-            Bounding box threshold, boxes with scores lower than it will not be considered.
-        nms_thr (`float`):
-            NMS IoU threshold.
-        max_num (`int`, *optional*, defaults to -1):
-            If there are more than `max_num` bounding boxes after NMS, only top `max_num` will be kept.
-        score_factors (`torch.Tensor`, *optional*):
-            The factors multiplied to scores before applying NMS.
-
-    Returns:
-        `Tuple`: (detections, labels, indices), tensors of shape (k, 5),
-            (k), and (k), and indices of boxes to keep. detections are boxes with scores. Labels are 0-based.
-    """
-    num_classes = multi_scores.size(1) - 1
-    # exclude background category
-    if multi_bboxes.shape[1] > 4:
-        bboxes = multi_bboxes.view(multi_scores.size(0), -1, 4)
-    else:
-        bboxes = multi_bboxes[:, None].expand(multi_scores.size(0), num_classes, 4)
-
-    scores = multi_scores[:, :-1]
-
-    labels = torch.arange(num_classes, dtype=torch.long, device=scores.device)
-    labels = labels.view(1, -1).expand_as(scores)
-
-    bboxes = bboxes.reshape(-1, 4)
-    scores = scores.reshape(-1)
-    labels = labels.reshape(-1)
-
-    if not torch.onnx.is_in_onnx_export():
-        # NonZero not supported in TensorRT
-        # remove low scoring boxes
-        valid_mask = scores > score_thr
-    # multiply score_factor after threshold to preserve more bboxes, improve
-    # mAP by 1% for YOLOv3
-    if score_factors is not None:
-        # expand the shape to match original shape of score
-        score_factors = score_factors.view(-1, 1).expand(multi_scores.size(0), num_classes)
-        score_factors = score_factors.reshape(-1)
-        scores = scores * score_factors
-
-    if not torch.onnx.is_in_onnx_export():
-        # NonZero not supported  in TensorRT
-        indices = valid_mask.nonzero(as_tuple=False).squeeze(1)
-        bboxes, scores, labels = bboxes[indices], scores[indices], labels[indices]
-    else:
-        # TensorRT NMS plugin has invalid output filled with -1
-        # add dummy data to make detection output correct.
-        bboxes = torch.cat([bboxes, bboxes.new_zeros(1, 4)], dim=0)
-        scores = torch.cat([scores, scores.new_zeros(1)], dim=0)
-        labels = torch.cat([labels, labels.new_zeros(1)], dim=0)
-
-    if bboxes.numel() == 0:
-        if torch.onnx.is_in_onnx_export():
-            raise RuntimeError("[ONNX Error] Can not record NMS as it has not been executed this time")
-        detections = torch.cat([bboxes, scores[:, None]], -1)
-        return detections, labels, indices
-
-    detections, keep = batched_nms(bboxes, scores, labels, nms_cfg)
-
-    if max_num > 0:
-        detections = detections[:max_num]
-        keep = keep[:max_num]
-
-    return detections, labels[keep], indices[keep]
