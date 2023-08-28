@@ -125,8 +125,9 @@ Effectively, the template does three things:
 2. Add the message content
 3. If the message is not the last message, add two spaces after it. After the final message, print the EOS token.
 
-This is a pretty simple template - it doesn't support system messages and it doesn't add any control tokens. But
-Jinja gives you a lot of flexibility to do those things! Here's the LLaMA template, again with newlines and
+This is a pretty simple template - it doesn't add any control tokens, and it doesn't support "system" messages, which 
+are a common way to give the model directives about how it should behave in the subsequent conversation.
+But Jinja gives you a lot of flexibility to do those things! Here's the LLaMA template, again with newlines and
 indentations added for readability:
 
 ```
