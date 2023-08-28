@@ -27,7 +27,7 @@ from transformers.modeling_outputs import BaseModelOutputWithNoAttention
 from transformers.utils import ModelOutput
 from torch.nn.modules.activation import MultiheadAttention
 # from transformers.models.patchtst.configuration_patchtst import PatchTSTConfig
-from patchtst.configuration_patchtst import PatchTSTConfig
+from transformers.models.patchtst.configuration_patchtst import PatchTSTConfig
 
 logger = logging.get_logger(__name__)
 
