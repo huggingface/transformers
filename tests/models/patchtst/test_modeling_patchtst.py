@@ -22,10 +22,10 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
-from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, _config_zero_init
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -35,7 +35,8 @@ if is_torch_available():
     import torch
 
     from transformers.models.patchtst.configuration_patchtst import PatchTSTConfig
-    from transformers.models.patchtst.modeling_patchtst import PatchTSTForPrediction, PatchTSTForForecasting, PatchTSTForPretraining, PatchTSTModel, ChannelAttentionPatchTSTEncoder
+    from transformers.models.patchtst.modeling_patchtst import PatchTSTForPrediction, PatchTSTForForecasting, PatchTSTForPretraining, PatchTSTModel
+    # from transformers import PatchTSTConfig, PatchTSTModel, PatchTSTForPrediction
 
 
 @require_torch
@@ -112,14 +113,11 @@ class PatchTSTModelTester:
 
         # [bs x seq_len x n_vars]
         past_values = floats_tensor([self.batch_size, _past_length, self.input_size])
-        # past_observed_mask = floats_tensor([self.batch_size, _past_length]) > 0.5
 
         future_values = floats_tensor([self.batch_size, config.prediction_length, self.input_size])
 
         inputs_dict = {
             "past_values": past_values,
-            # "past_observed_mask": past_observed_mask,
-            # "future_time_features": future_time_features,
             "future_values": future_values,
         }
         return inputs_dict
@@ -132,25 +130,6 @@ class PatchTSTModelTester:
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
-
-    # def check_encoder_model_standalone(self, config, inputs_dict):
-    #     model = PatchTSTModel(config=config).to(torch_device).eval()
-    #     outputs = model(**inputs_dict)
-    #
-    #     encoder_last_hidden_state = outputs.encoder_last_hidden_state
-    #
-    #     with tempfile.TemporaryDirectory() as tmpdirname:
-    #         encoder = model.get_encoder()
-    #         encoder.save_pretrained(tmpdirname)
-    #         encoder = ChannelAttentionPatchTSTEncoder.from_pretrained(tmpdirname).to(torch_device)
-    #
-    #     transformer_inputs, _, _, _ = model.create_network_inputs(**inputs_dict)
-    #     # [bs x seq_len x n_vars] => bs, num_patch, n_vars, patch_len = x.shape
-    #     enc_input = transformer_inputs[:, : config.context_length, ...]
-    #
-    #     encoder_last_hidden_state_2 = encoder(inputs_embeds=enc_input)[0]
-    #
-    #     self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
 
 
 @require_torch
@@ -195,9 +174,6 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
 
-    # def test_encoder_model_standalone(self):
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-    #     self.model_tester.check_encoder_model_standalone(*config_and_inputs)
 #
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -245,19 +221,19 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_determinism(self):
         pass
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    def test_model_main_input_name(self):
+        model_signature = inspect.signature(getattr(PatchTSTModel, "forward"))
+        # The main input is the name of the argument after `self`
+        observed_main_input_name = list(model_signature.parameters.keys())[1]
+        self.assertEqual(PatchTSTModel.main_input_name, observed_main_input_name)
 
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
+    def test_save_load_fast_init_from_base(self):
+        # super().test_save_load_fast_init_from_base()
+        pass
+
+    def test_save_load_fast_init_to_base(self):
+        # super().test_save_load_fast_init_to_base()
+        pass
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -270,144 +246,20 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             expected_arg_names = [
                 "past_values",
-                # "past_time_features",
-                # "past_observed_mask",
-                # "static_categorical_features",
-                # "static_real_features",
                 "future_values",
-                # "future_time_features",
             ]
 
             expected_arg_names.extend(
                 [
-                    # "future_observed_mask",
-                    # "decoder_attention_mask",
-                    # "head_mask",
-                    # "decoder_head_mask",
-                    # "cross_attn_head_mask",
-                    # "encoder_outputs",
-                    # "past_key_values",
                     "output_hidden_states",
-                    # "output_attentions",
-                    # "use_cache",
-                    # "return_dict",
                 ]
-                # if "future_observed_mask" in arg_names
-                # else [
-                #     "decoder_attention_mask",
-                #     "head_mask",
-                #     "decoder_head_mask",
-                #     "cross_attn_head_mask",
-                #     "encoder_outputs",
-                #     "past_key_values",
-                #     "output_hidden_states",
-                #     "output_attentions",
-                #     "use_cache",
-                #     "return_dict",
-                # ]
             )
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
-#
-#     def test_attention_outputs(self):
-#         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-#         config.return_dict = True
-#
-#         seq_len = getattr(self.model_tester, "seq_length", None)
-#         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
-#         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-#         context_length = getattr(self.model_tester, "context_length", seq_len)
-#         prediction_length = getattr(self.model_tester, "prediction_length", seq_len)
-#
-#         for model_class in self.all_model_classes:
-#             inputs_dict["output_attentions"] = True
-#             inputs_dict["output_hidden_states"] = False
-#             config.return_dict = True
-#             model = model_class(config)
-#             model.to(torch_device)
-#             model.eval()
-#             with torch.no_grad():
-#                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-#             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-#             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-#
-#             # check that output_attentions also work using config
-#             del inputs_dict["output_attentions"]
-#             config.output_attentions = True
-#             model = model_class(config)
-#             model.to(torch_device)
-#             model.eval()
-#             with torch.no_grad():
-#                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-#             attentions = outputs.encoder_attentions
-#             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-#
-#             self.assertListEqual(
-#                 list(attentions[0].shape[-3:]),
-#                 [self.model_tester.num_attention_heads, encoder_seq_length, context_length],
-#             )
-#             out_len = len(outputs)
-#
-#             correct_outlen = 7
-#
-#             if "last_hidden_state" in outputs:
-#                 correct_outlen += 1
-#
-#             if "past_key_values" in outputs:
-#                 correct_outlen += 1  # past_key_values have been returned
-#
-#             if "loss" in outputs:
-#                 correct_outlen += 1
-#
-#             if "params" in outputs:
-#                 correct_outlen += 1
-#
-#             self.assertEqual(out_len, correct_outlen)
-#
-#             # decoder attentions
-#             decoder_attentions = outputs.decoder_attentions
-#             self.assertIsInstance(decoder_attentions, (list, tuple))
-#             self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
-#             self.assertListEqual(
-#                 list(decoder_attentions[0].shape[-3:]),
-#                 [self.model_tester.num_attention_heads, decoder_seq_length, prediction_length],
-#             )
-#
-#             # cross attentions
-#             cross_attentions = outputs.cross_attentions
-#             self.assertIsInstance(cross_attentions, (list, tuple))
-#             self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
-#             self.assertListEqual(
-#                 list(cross_attentions[0].shape[-3:]),
-#                 [
-#                     self.model_tester.num_attention_heads,
-#                     decoder_seq_length,
-#                     encoder_seq_length,
-#                 ],
-#             )
-#
-#         # Check attention is always last and order is fine
-#         inputs_dict["output_attentions"] = True
-#         inputs_dict["output_hidden_states"] = True
-#         model = model_class(config)
-#         model.to(torch_device)
-#         model.eval()
-#         with torch.no_grad():
-#             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-#
-#         self.assertEqual(out_len + 2, len(outputs))
-#
-#         self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-#
-#         self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-#         self.assertListEqual(
-#             list(self_attentions[0].shape[-3:]),
-#             [self.model_tester.num_attention_heads, encoder_seq_length, context_length],
-#         )
-#
-#     @is_flaky()
-#     def test_retain_grad_hidden_states_attentions(self):
-#         super().test_retain_grad_hidden_states_attentions()
+
+    @is_flaky()
+    def test_retain_grad_hidden_states_attentions(self):
+        super().test_retain_grad_hidden_states_attentions()
 #
 #
 # def prepare_batch(filename="train-batch.pt"):

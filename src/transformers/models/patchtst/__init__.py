@@ -33,6 +33,7 @@ else:
     _import_structure["modeling_patchtst"] = [
         "PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST",
         "PatchTSTForPretraining",
+        "PatchTSTForPrediction"
         "PatchTSTModel",
         "PatchTSTPreTrainedModel",
     ]
@@ -51,6 +52,9 @@ if TYPE_CHECKING:
             PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST,
             PatchTSTForPretraining,
             PatchTSTModel,
+            PatchTSTForPrediction,
+            PatchTSTForForecasting,
+            PatchTSTForClassification,
             PatchTSTPreTrainedModel,
         )
 

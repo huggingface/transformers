@@ -169,10 +169,12 @@ def random_masking(
         unmasked_channel_indices: list = None,
         channel_consistent_masking: bool = False,
         mask_value=0,
+        seed_number: Optional[int] = None
 ):
     """random_masking: Mask the input considering the control variables.
 
     Args:
+        seed_number (int, optional): Value to set for the seed number
         xb (Tensor): Input to mask [ bs x nvars x num_patches x patch_length]
         mask_ratio (float): Mask ratio.
         unmasked_channel_indices (list, optional): indices of unmasked channels. These channels will not be masked. Defaults to None.
@@ -183,6 +185,9 @@ def random_masking(
         Tensor: xb_mask, masked input, same shape as input
         Tensor: Mask tensor of shape [bs x c x n]
     """
+    if seed_number:
+        set_seed(seed_number)
+
     bs, nvars, L, D = xb.shape
 
     len_keep = int(L * (1 - mask_ratio))
@@ -356,8 +361,8 @@ class PatchMasking(nn.Module):
             seed_number: Optional[int] = None
     ):
 
-        if seed_number:
-            set_seed(seed_number)
+        # if seed_number:
+        #     set_seed(seed_number)
         self.mask_ratio = mask_ratio
         self.channel_consistent_masking = channel_consistent_masking
         self.mask_type = mask_type
@@ -367,6 +372,7 @@ class PatchMasking(nn.Module):
         self.mask_value = mask_value
         if self.unmasked_channel_indices is not None:
             self.unmasked_channel_indices.sort()
+        self.seed_number = seed_number
 
         super().__init__()
 
@@ -390,6 +396,7 @@ class PatchMasking(nn.Module):
                 unmasked_channel_indices=self.unmasked_channel_indices,
                 channel_consistent_masking=self.channel_consistent_masking,
                 mask_value=self.mask_value,
+                seed_number=self.seed_number
             )
 
         else:
@@ -526,6 +533,18 @@ class PatchTSTPreTrainedModel(PreTrainedModel):
         """Initialize weights"""
         if self.config.use_cls_token:
             torch.nn.init.normal_(self.config.cls_token, std=0.02)
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, (nn.Linear, nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, MultiheadAttention):
+            module.in_proj_weight.data.normal_(mean=0.0, std=self.config.init_std)
+            module.bias_k.data.normal_(mean=0.0, std=self.config.init_std)
+            module.bias_v.data.normal_(mean=0.0, std=self.config.init_std)
+
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (ChannelAttentionPatchTSTEncoder)):
@@ -550,7 +569,6 @@ class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
                 self.w_p.append(nn.Linear(config.patch_length, config.d_model))
         else:
             self.w_p = nn.Linear(config.patch_length, config.d_model)
-
         # Positional encoding
         if config.use_cls_token:
             self.cls_token = nn.Parameter(torch.zeros(1, 1, 1, config.d_model))
@@ -832,6 +850,9 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
             self.masking = nn.Identity()
         self.encoder = ChannelAttentionPatchTSTEncoder(config)
 
+        # Initialize weights and apply final processing
+        self.post_init()
+
     def forward(self,
                 past_values: torch.Tensor,
                 future_values: Optional[torch.Tensor] = None,
@@ -911,6 +932,9 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         self.head = PretrainHead(config)
         self.loss = torch.nn.MSELoss(reduction='none')
 
+        # Initialize weights and apply final processing
+        self.post_init()
+
     def forward(
             self, past_values: torch.Tensor,
             future_values: Optional[torch.Tensor] = None,
@@ -944,6 +968,9 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         self.model = PatchTSTModel(config)
         self.head = ClassificationHead(config)
         self.loss = nn.CrossEntropyLoss()
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward(self, past_values, future_values=None, output_hidden_states: Optional[bool] = None):
         model_output = self.model(past_values)
@@ -1110,6 +1137,9 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         self.head = PredictionHead(config)
         self.loss = nn.MSELoss(reduction='mean')
 
+        # Initialize weights and apply final processing
+        self.post_init()
+
     def forward(self,
                 past_values: torch.Tensor,
                 future_values: Optional[torch.Tensor],
@@ -1226,6 +1256,9 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
         self.model = PatchTSTModel(config)
         self.head = ForecastHead(config)
         self.loss = nn.MSELoss(reduction='mean')
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward(self,
                 past_values: torch.Tensor,

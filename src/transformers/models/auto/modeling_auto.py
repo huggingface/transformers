@@ -152,6 +152,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("openai-gpt", "OpenAIGPTModel"),
         ("opt", "OPTModel"),
         ("owlvit", "OwlViTModel"),
+        ("patchtst", "PatchTSTModel"),
         ("pegasus", "PegasusModel"),
         ("pegasus_x", "PegasusXModel"),
         ("perceiver", "PerceiverModel"),

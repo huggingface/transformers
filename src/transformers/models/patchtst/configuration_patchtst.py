@@ -148,7 +148,7 @@ class PatchTSTConfig(PretrainedConfig):
         positional_encoding: str = "sincos",
         learn_pe: bool = False,
         use_cls_token: bool = False,
-
+        init_std: float = 0.02,
         individual: bool = False,
         seed_number= None,
         mask_input: Optional[bool] = None,
@@ -211,6 +211,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.use_cls_token = use_cls_token
         # self.patch_last = patch_last
         self.individual = individual
+        self.init_std = init_std
 
         # PatchTST
         self.patch_length = patch_length
