@@ -231,7 +231,9 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         )
 
         # Apply the MEL filter bank and MEL floor manually.
-        amplitude_spectrogram = np.sqrt(np.real(complex_spectrogram) ** 2 + np.imag(complex_spectrogram) ** 2 + self.mel_floor)
+        amplitude_spectrogram = np.sqrt(
+            np.real(complex_spectrogram) ** 2 + np.imag(complex_spectrogram) ** 2 + self.mel_floor
+        )
         amplitude_spectrogram = np.matmul(self.mel_filters.T, amplitude_spectrogram)
 
         # Perform spectral normalization to get the log mel spectrogram.

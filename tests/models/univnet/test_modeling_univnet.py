@@ -302,6 +302,18 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         waveform = model(**input_speech)
         waveform_slice = waveform[-9:].detach().cpu().flatten().numpy()
 
-        expected_slice = np.array([-4.3934e-04, -1.8203e-04, -3.3033e-04, -3.8716e-04, -1.6125e-04, 3.5389e-06, -3.3149e-04, -3.7613e-04, -2.3331e-04])
+        expected_slice = np.array(
+            [
+                -4.3934e-04,
+                -1.8203e-04,
+                -3.3033e-04,
+                -3.8716e-04,
+                -1.6125e-04,
+                3.5389e-06,
+                -3.3149e-04,
+                -3.7613e-04,
+                -2.3331e-04,
+            ]
+        )
 
         self.assertTrue(np.allclose(waveform_slice, expected_slice, atol=5e-6))
