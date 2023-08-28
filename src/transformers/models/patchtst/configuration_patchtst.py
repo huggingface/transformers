@@ -148,7 +148,7 @@ class PatchTSTConfig(PretrainedConfig):
         positional_encoding: str = "sincos",
         learn_pe: bool = False,
         use_cls_token: bool = False,
-        patch_last: bool = True,
+
         individual: bool = False,
         seed_number= None,
         mask_input: Optional[bool] = None,
@@ -156,7 +156,7 @@ class PatchTSTConfig(PretrainedConfig):
         mask_ratio=0.5,
         mask_patches: list = [2, 3],
         mask_patch_ratios: list = [1, 1],
-        channel_consistent_masking: bool = True,
+        channel_consistent_masking: bool = False,
         d_size: str = "4D",
         unmasked_channel_indices: list = None,
         mask_value=0,
@@ -209,7 +209,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.positional_encoding = positional_encoding
         self.learn_pe = learn_pe
         self.use_cls_token = use_cls_token
-        self.patch_last = patch_last
+        # self.patch_last = patch_last
         self.individual = individual
 
         # PatchTST
