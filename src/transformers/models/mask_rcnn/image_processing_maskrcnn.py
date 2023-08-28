@@ -842,8 +842,57 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         Preprocess an image or a batch of images so that it can be used by the model.
 
         Args:
-            ...
-
+            images (`ImageInput`):
+                Image or batch of images to preprocess. Expects a single or batch of images with pixel values ranging
+                from 0 to 255. If passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
+                List of annotations associated with the image or batch of images. If annotation is for object
+                detection, the annotations should be a dictionary with the following keys:
+                - "image_id" (`int`): The image id.
+                - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
+                  dictionary. An image can have no annotations, in which case the list should be empty.
+                If annotation is for segmentation, the annotations should be a dictionary with the following keys:
+                - "image_id" (`int`): The image id.
+                - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
+                  An image can have no segments, in which case the list should be empty.
+                - "file_name" (`str`): The file name of the image.
+            return_segmentation_masks (`bool`, *optional*, defaults to self.return_segmentation_masks):
+                Whether to return segmentation masks.
+            masks_path (`str` or `pathlib.Path`, *optional*):
+                Path to the directory containing the segmentation masks.
+            do_resize (`bool`, *optional*, defaults to self.do_resize):
+                Whether to resize the image.
+            size (`Dict[str, int]`, *optional*, defaults to self.size):
+                Size of the image after resizing.
+            resample (`PILImageResampling`, *optional*, defaults to self.resample):
+                Resampling filter to use when resizing the image.
+            do_rescale (`bool`, *optional*, defaults to self.do_rescale):
+                Whether to rescale the image.
+            rescale_factor (`float`, *optional*, defaults to self.rescale_factor):
+                Rescale factor to use when rescaling the image.
+            do_normalize (`bool`, *optional*, defaults to self.do_normalize):
+                Whether to normalize the image.
+            image_mean (`float` or `List[float]`, *optional*, defaults to self.image_mean):
+                Mean to use when normalizing the image.
+            image_std (`float` or `List[float]`, *optional*, defaults to self.image_std):
+                Standard deviation to use when normalizing the image.
+            do_pad (`bool`, *optional*, defaults to self.do_pad):
+                Whether to pad the image.
+            format (`str` or `AnnotionFormat`, *optional*, defaults to self.format):
+                Format of the annotations.
+            return_tensors (`str` or `TensorType`, *optional*, defaults to self.return_tensors):
+                Type of tensors to return. If `None`, will return the list of images.
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
+                The channel dimension format for the output image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - Unset: Use the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
 
         do_resize = self.do_resize if do_resize is None else do_resize

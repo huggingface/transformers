@@ -1839,7 +1839,6 @@ class MaskRCNNRPN(nn.Module):
             valid_flag_list (`List[torch.Tensor]`):
                 Valid flags of each image.
         """
-        print("Image metas:", img_metas[0].keys())
         num_images = len(img_metas)
 
         # since feature map sizes of all images are the same, we only compute
