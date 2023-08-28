@@ -72,18 +72,18 @@ class MaskRCNNRPNOutput(ModelOutput):
     Args:
         losses (`torch.FloatTensor`):
             Losses of the RPN head.
-        proposals (list[`torch.FloatTensor`]):
-            List of proposals, for each example in the batch. Each proposal is a `torch.FloatTensor` of shape
+        proposals (Tuple[`torch.FloatTensor`]):
+            Tuple of proposals, for each example in the batch. Each proposal is a `torch.FloatTensor` of shape
             (num_proposals, 5). Each proposal is of the format (top_left_x, top_left_y, bottom_right_x, bottom_right_y,
             objectness_score).
-        logits (`List[torch.FloatTensor]`):
-            List containing the class logits.
-        pred_boxes (`List[torch.FloatTensor]`):
-            List containing the predicted boxes.
+        logits (`Tuple[torch.FloatTensor]`):
+            Classification scores for all scale levels, each is a 4D-tensor, the channels number is num_base_priors * num_classes.
+        pred_boxes (`Tuple[torch.FloatTensor]`):
+            Box energies / deltas for all scale levels, each is a 4D-tensor, the channels number is num_base_priors * 4.
     """
 
     losses: torch.FloatTensor = None
-    proposals: List[torch.FloatTensor] = None
+    proposals: Tuple[torch.FloatTensor] = None
     logits: Optional[Tuple[torch.FloatTensor]] = None
     pred_boxes: Optional[torch.FloatTensor] = None
 
@@ -1775,10 +1775,10 @@ class MaskRCNNRPN(nn.Module):
                 Features from the upstream network, each being a 4D-tensor.
         Returns:
             tuple: A tuple of classification scores and bbox prediction.
-                - cls_scores (`List[torch.Tensor]`):
+                - cls_scores (`Tuple[torch.Tensor]`):
                     Classification scores for all scale levels, each is a 4D-tensor, the channels number is
                     num_base_priors * num_classes.
-                - bbox_preds (`List[torch.Tensor]`):
+                - bbox_preds (`Tuple[torch.Tensor]`):
                     Box energies / deltas for all scale levels, each is a 4D-tensor, the channels number is
                     num_base_priors * 4.
         """
@@ -1789,7 +1789,7 @@ class MaskRCNNRPN(nn.Module):
             cls_scores.append(cls_score)
             bbox_preds.append(bbox_pred)
 
-        return cls_scores, bbox_preds
+        return tuple(cls_scores), tuple(bbox_preds)
 
     def forward(
         self,
@@ -2286,7 +2286,7 @@ class MaskRCNNRPN(nn.Module):
                 cfg,
             )
             result_list.append(results)
-        return result_list
+        return tuple(result_list)
 
     def _get_bboxes_single(
         self,
