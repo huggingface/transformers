@@ -241,7 +241,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     @property
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.vocab_size
     def vocab_size(self):
-        return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 1  # Plus 1 for the mask token
+        return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 3  # Plus 3 for the XXX_DATA tokens
 
     @property
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang
