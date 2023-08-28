@@ -1659,7 +1659,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
 
         Returns:
-            List[int]: A list of token ids representing the tokenized chat so far, including control tokens. This
+            `List[int]`: A list of token ids representing the tokenized chat so far, including control tokens. This
             output is ready to pass to the model, either directly or via methods like `generate()`.
         """
 
