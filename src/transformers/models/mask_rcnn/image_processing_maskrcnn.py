@@ -549,10 +549,10 @@ def _do_paste_mask(masks, boxes, img_h, img_w, skip_empty=True):
     This implementation is modified from https://github.com/facebookresearch/detectron2/
 
     Args:
-        masks (Tensor):
-            N, 1, H, W
-        boxes (Tensor):
-            N, 4
+        masks (`torch.Tensor` of shape `(batch_size, 1, height, width)`:
+            Predicted masks.
+        boxes (`torch.Tensor` of shape `(batch_size, 4)`:
+            Predicted boxes.
         img_h (int):
             Height of the image to be pasted.
         img_w (int):
@@ -616,7 +616,42 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
     Constructs a Mask R-CNN image processor.
 
     Args:
-        TODO
+        format (`str`, *optional*, defaults to `"coco_detection"`):
+            Data format of the annotations. One of "coco_detection" or "coco_panoptic".
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Controls whether to resize the image's `(height, width)` dimensions to the specified `size`. Can be
+            overridden by the `do_resize` parameter in the `preprocess` method.
+        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 800, "longest_edge": 1333}`):
+            Size of the image's `(height, width)` dimensions after resizing. Can be overridden by the `size` parameter
+            in the `preprocess` method.
+        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+            Resampling filter to use if resizing the image.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Controls whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
+            `do_rescale` parameter in the `preprocess` method.
+        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
+            `preprocess` method.
+        do_normalize:
+            Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
+            `preprocess` method.
+        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
+            Mean values to use when normalizing the image. Can be a single value or a list of values, one for each
+            channel. Can be overridden by the `image_mean` parameter in the `preprocess` method.
+        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
+            Standard deviation values to use when normalizing the image. Can be a single value or a list of values, one
+            for each channel. Can be overridden by the `image_std` parameter in the `preprocess` method.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Controls whether to pad the image to the largest image in a batch and create a pixel mask. Can be
+            overridden by the `do_pad` parameter in the `preprocess` method.
+        test_cfg (`Dict`, *optional*, defaults to `{"score_thr": 0.05, "nms": {"type": "nms", "iou_threshold": 0.5},
+            "max_per_img": 100, "mask_thr_binary": 0.5}`): Test configuration.
+        num_classes (`int`, *optional*, defaults to 80):
+            Number of classes in the dataset.
+        bbox_head_bbox_coder_target_means (`List[float]`, *optional*, defaults to `[0.0, 0.0, 0.0, 0.0]`):
+            Means of the target for bbox head.
+        bbox_head_bbox_coder_target_stds (`List[float]`, *optional*, defaults to `[0.1, 0.1, 0.2, 0.2]`):
+            Standard deviation of the target for bbox head.
     """
 
     model_input_names = ["pixel_values"]
@@ -1039,9 +1074,9 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         """Get segmentation masks from mask_pred and bboxes.
 
         Args:
-            mask_pred (`torch.Tensor or ndarray` of shape `(n, #class, height, width)`).
+            mask_pred (`torch.Tensor or ndarray` of shape `(n, num_classes, height, width)`).
                 For single-scale testing, mask_pred is the direct output of model, whose type is `torch.Tensor`, while
-                for multi-scale testing, it will be converted to numpy array outside of this method.
+                for multi-scale testing, it will be converted to a NumPy array outside of this method.
             detected_bboxes (`torch.Tensor` of shape `(n, 4/5)`):
                 Tensor containing detected bounding boxes.
             detected_labels (`torch.Tensor` of shape `(n,)`):
@@ -1067,7 +1102,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
             mask_pred = detected_bboxes.new_tensor(mask_pred)
 
         device = mask_pred.device
-        cls_segms = [[] for _ in range(self.num_classes)]  # BG is not included in num_classes
+        cls_segms = [[] for _ in range(self.num_classes)]  # background is not included in num_classes
         bboxes = detected_bboxes[:, :4]
         labels = detected_labels
 
