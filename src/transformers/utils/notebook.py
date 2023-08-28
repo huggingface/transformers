@@ -235,14 +235,25 @@ class NotebookTrainingTracker(NotebookProgressBar):
             self.inner_table = [list(values.keys()), list(values.values())]
         else:
             columns = self.inner_table[0]
-            if len(self.inner_table) == 1:
-                # We give a chance to update the column names at the first iteration
-                for key in values.keys():
-                    if key not in columns:
-                        columns.append(key)
+            for key in values.keys():
+                if key not in columns:
+                    columns.append(key)
                 self.inner_table[0] = columns
-            self.inner_table.append([values[c] for c in columns])
-
+            if len(self.inner_table) > 1:
+                last_values = self.inner_table[-1]
+                first_column = self.inner_table[0][0]
+                if last_values[0] != values[first_column]:
+                    # write new line
+                    self.inner_table.append([values[c] if c in values else 'No Log' for c in columns])
+                else:
+                    # update last line
+                    new_values = values
+                    for c in columns:
+                        if c not in new_values.keys():
+                            new_values[c] = last_values[columns.index(c)]
+                    self.inner_table[-1] = [new_values[c] for c in columns]
+            else:
+                self.inner_table.append([values[c] for c in columns])
     def add_child(self, total, prefix=None, width=300):
         """
         Add a child progress bar displayed under the table of metrics. The child progress bar is returned (so it can be
@@ -280,8 +291,6 @@ class NotebookProgressCallback(TrainerCallback):
         self.training_loss = 0
         self.last_log = 0
         column_names = [self.first_column] + ["Training Loss"]
-        if args.evaluation_strategy != IntervalStrategy.NO:
-            column_names.append("Validation Loss")
         self.training_tracker = NotebookTrainingTracker(state.max_steps, column_names)
 
     def on_step_end(self, args, state, control, **kwargs):
@@ -320,7 +329,7 @@ class NotebookProgressCallback(TrainerCallback):
 
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
         if self.training_tracker is not None:
-            values = {"Training Loss": "No log", "Validation Loss": "No log"}
+            values = {"Training Loss": "No log"}
             for log in reversed(state.log_history):
                 if "loss" in log:
                     values["Training Loss"] = log["loss"]
@@ -341,12 +350,9 @@ class NotebookProgressCallback(TrainerCallback):
             _ = metrics.pop(f"{metric_key_prefix}_steps_per_second", None)
             _ = metrics.pop(f"{metric_key_prefix}_jit_compilation_time", None)
             for k, v in metrics.items():
-                if k == f"{metric_key_prefix}_loss":
-                    values["Validation Loss"] = v
-                else:
-                    splits = k.split("_")
-                    name = " ".join([part.capitalize() for part in splits[1:]])
-                    values[name] = v
+                splits = k.split("_")
+                name = " ".join([part.capitalize() for part in splits[1:]])
+                values[name] = v
             self.training_tracker.write_line(values)
             self.training_tracker.remove_child()
             self.prediction_bar = None
