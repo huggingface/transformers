@@ -106,7 +106,7 @@ class DPTImageProcessor(BaseImageProcessor):
         ensure_multiple_of (`int`, *optional*, defaults to 1):
             If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overidden
             by `ensure_multiple_of` in `preprocess`.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
             Defines the resampling filter to use if resizing the image. Can be overidden by `resample` in `preprocess`.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overidden by `do_rescale` in
@@ -130,7 +130,7 @@ class DPTImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
         do_rescale: bool = True,

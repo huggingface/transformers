@@ -130,7 +130,6 @@ class DPTModelTester:
 
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
-        print("Config:", config)
         model = DPTForDepthEstimation(config)
         model.to(torch_device)
         model.eval()
