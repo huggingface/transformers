@@ -561,15 +561,18 @@ class LlamaIntegrationTest(unittest.TestCase):
 
         tokens = tokenizer.tokenize(" ")
         self.assertEqual(tokens, ["▁▁"])
-        self.assertEqual(tokens, tokenizer.sp_model.encode(" ", out_type=str))
+        # a dummy prefix space is not added by the sp_model as it was de-activated
+        self.assertEqual(tokens, tokenizer.sp_model.encode("  ", out_type=str))
 
         tokens = tokenizer.tokenize("▁")
         self.assertEqual(tokens, ["▁▁"])
-        self.assertEqual(tokens, tokenizer.sp_model.encode("▁", out_type=str))
+        # a dummy prefix space is not added by the sp_model as it was de-activated
+        self.assertEqual(tokens, tokenizer.sp_model.encode("▁▁", out_type=str))
 
         tokens = tokenizer.tokenize(" ▁")
         self.assertEqual(tokens, ["▁▁▁"])
-        self.assertEqual(tokens, tokenizer.sp_model.encode("▁", out_type=str))
+        # a dummy prefix space is not added by the sp_model as it was de-activated
+        self.assertEqual(tokens, tokenizer.sp_model.encode("▁▁▁", out_type=str))
 
 
 @require_sentencepiece
