@@ -1697,12 +1697,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     @property
     def default_chat_template(self):
+        # Standard ChatML template
         return (
             "{% for message in messages %}"
-            "{% if message.role == 'system' %}{{ '[SYS]' }} {{message.text }} {{ '[/SYS]]' }}"
-            "{% elif message.role == 'user' %}{{ '[USER_MSG]' }} {{ message.text }} {{ '[/USER_MSG]' }}"
-            "{% elif message.role == 'assistant' %}{{ '[ASST_MSG]' }} {{ message.text }} {{ '[/ASST_MSG]' }}"
-            "{% endif %}"
+            "{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}"
             "{% endfor %}"
         )
 
