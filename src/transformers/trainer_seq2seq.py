@@ -307,8 +307,7 @@ class Seq2SeqTrainer(Trainer):
 
         with torch.no_grad():
             if has_labels:
-                with self.compute_loss_context_manager():
-                    outputs = model(**inputs)
+                outputs = model(**inputs)
                 if self.label_smoother is not None:
                     loss = self.label_smoother(outputs, inputs["labels"]).mean().detach()
                 else:
