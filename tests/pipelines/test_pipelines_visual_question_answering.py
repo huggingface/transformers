@@ -18,6 +18,7 @@ from transformers import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING, is_vision_
 from transformers.pipelines import pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
+    is_torch_available,
     nested_simplify,
     require_tf,
     require_torch,
@@ -27,6 +28,10 @@ from transformers.testing_utils import (
 )
 
 from .test_pipelines_common import ANY
+
+
+if is_torch_available():
+    import torch
 
 
 if is_vision_available():
@@ -86,6 +91,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         )
 
     @require_torch
+    @require_torch_gpu
     def test_small_model_pt_blip2(self):
         vqa_pipeline = pipeline(
             "visual-question-answering", model="hf-internal-testing/tiny-random-Blip2ForConditionalGeneration"
@@ -110,6 +116,23 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         self.assertEqual(
             outputs,
             [[{"answer": ANY(str)}]] * 2,
+        )
+
+        vqa_pipeline = pipeline(
+            "visual-question-answering",
+            model="hf-internal-testing/tiny-random-Blip2ForConditionalGeneration",
+            model_kwargs={"torch_dtype": torch.float16},
+            device=0,
+        )
+        self.assertEqual(vqa_pipeline.model.device, torch.device(0))
+        self.assertEqual(vqa_pipeline.model.language_model.dtype, torch.float16)
+        self.assertEqual(vqa_pipeline.model.vision_model.dtype, torch.float16)
+
+        outputs = vqa_pipeline(image=image, question=question)
+
+        self.assertEqual(
+            outputs,
+            [{"answer": ANY(str)}],
         )
 
     @slow
@@ -138,9 +161,18 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         )
 
     @slow
+    @require_torch
     @require_torch_gpu
     def test_large_model_pt_blip2(self):
-        vqa_pipeline = pipeline("visual-question-answering", model="Salesforce/blip2-opt-2.7b")
+        vqa_pipeline = pipeline(
+            "visual-question-answering",
+            model="Salesforce/blip2-opt-2.7b",
+            model_kwargs={"torch_dtype": torch.float16},
+            device=0,
+        )
+        self.assertEqual(vqa_pipeline.model.device, torch.device(0))
+        self.assertEqual(vqa_pipeline.model.language_model.dtype, torch.float16)
+
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
         question = "Question: how many cats are there? Answer:"
 
