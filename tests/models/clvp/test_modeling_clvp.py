@@ -63,7 +63,7 @@ class CLVPTransformerWithProjectionTester:
         is_training=True,
         use_input_mask=True,
         use_labels=True,
-        vocab_size=99,
+        vocab_size=300,
         hidden_size=32,
         projection_dim=32,
         num_hidden_layers=2,
