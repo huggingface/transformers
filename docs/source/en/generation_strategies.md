@@ -245,11 +245,8 @@ To enable multinomial sampling set `do_sample=True` and `num_beams=1`.
 
 >>> outputs = model.generate(**inputs, do_sample=True, num_beams=1, max_new_tokens=100)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Today was an amazing day because we are now in the final stages of our trip to New York City which was very tough.
-It is a difficult schedule and a challenging part of the year but still worth it. I have been taking things easier and
-I feel stronger and more motivated to be out there on their tour. Hopefully, that experience is going to help them with
-their upcoming events which are currently scheduled in Australia.\n\nWe love that they are here. They want to make a
-name for themselves and become famous for what they']
+['Today was an amazing day because when you go to the World Cup and you don\'t, or when you don\'t get invited,
+that\'s a terrible feeling."']
 ```
 
 ### Beam-search decoding
@@ -385,5 +382,5 @@ just like in multinomial sampling. However, in assisted decoding, reducing the t
 >>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
 >>> outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, temperature=0.5)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-["Alice and Bob are sitting on the sofa. Alice says, 'I'm going to my room"]
+['Alice and Bob, and the "Alice" is the one that you\'ve been playing.']
 ```
