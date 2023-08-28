@@ -16,7 +16,6 @@
 The Trainer class, to easily train a 🤗 Transformers from scratch or finetune it on a new task.
 """
 
-import contextlib
 import copy
 import functools
 import glob
