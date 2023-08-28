@@ -1644,9 +1644,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         **tokenizer_kwargs,
     ) -> Union[str, List[int]]:
         """
-        Converts a Conversation object or a list of {"role", "content"} dictionaries to a list of token ids. This
-        method is intended for use with chat models, and will read the tokenizers's chat_template attribute to
-        determine the format and control tokens to use when converting. When chat_template is None, it may fall back to
+        Converts a Conversation object or a list of dictionaries with `"role"` and `"content"` keys to a list of token
+        ids. This method is intended for use with chat models, and will read the tokenizer's chat_template attribute to
+        determine the format and control tokens to use when converting. When chat_template is None, it will fall back to
         the default_chat_template specified at the class level.
 
         Args:
@@ -1666,7 +1666,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         try:
             from jinja2.sandbox import ImmutableSandboxedEnvironment
         except ImportError:
-            raise ImportError("Chat formatting with build_conversation_input_ids requires jinja2 to be installed.")
+            raise ImportError("apply_chat_template requires jinja2 to be installed.")
 
         if hasattr(conversation, "messages"):
             # Indicates it's a Conversation object
