@@ -46,15 +46,13 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 # fmt: off
-FAIRSEQ_LANGUAGE_CODES = ['ace_Arab', 'ace_Latn', 'acm_Arab', 'acq_Arab', 'aeb_Arab', 'afr_Latn', 'ajp_Arab', 'aka_Latn', 'amh_Ethi', 'apc_Arab', 'arb_Arab', 'ars_Arab', 'ary_Arab', 'arz_Arab', 'asm_Beng', 'ast_Latn', 'awa_Deva', 'ayr_Latn', 'azb_Arab', 'azj_Latn', 'bak_Cyrl', 'bam_Latn', 'ban_Latn', 'bel_Cyrl', 'bem_Latn', 'ben_Beng', 'bho_Deva', 'bjn_Arab', 'bjn_Latn', 'bod_Tibt', 'bos_Latn', 'bug_Latn', 'bul_Cyrl', 'cat_Latn', 'ceb_Latn', 'ces_Latn', 'cjk_Latn', 'ckb_Arab', 'crh_Latn', 'cym_Latn', 'dan_Latn', 'deu_Latn', 'dik_Latn', 'dyu_Latn', 'dzo_Tibt', 'ell_Grek', 'eng_Latn', 'epo_Latn', 'est_Latn', 'eus_Latn', 'ewe_Latn', 'fao_Latn', 'pes_Arab', 'fij_Latn', 'fin_Latn', 'fon_Latn', 'fra_Latn', 'fur_Latn', 'fuv_Latn', 'gla_Latn', 'gle_Latn', 'glg_Latn', 'grn_Latn', 'guj_Gujr', 'hat_Latn', 'hau_Latn', 'heb_Hebr', 'hin_Deva', 'hne_Deva', 'hrv_Latn', 'hun_Latn', 'hye_Armn', 'ibo_Latn', 'ilo_Latn', 'ind_Latn', 'isl_Latn', 'ita_Latn', 'jav_Latn', 'jpn_Jpan', 'kab_Latn', 'kac_Latn', 'kam_Latn', 'kan_Knda', 'kas_Arab', 'kas_Deva', 'kat_Geor', 'knc_Arab', 'knc_Latn', 'kaz_Cyrl', 'kbp_Latn', 'kea_Latn', 'khm_Khmr', 'kik_Latn', 'kin_Latn', 'kir_Cyrl', 'kmb_Latn', 'kon_Latn', 'kor_Hang', 'kmr_Latn', 'lao_Laoo', 'lvs_Latn', 'lij_Latn', 'lim_Latn', 'lin_Latn', 'lit_Latn', 'lmo_Latn', 'ltg_Latn', 'ltz_Latn', 'lua_Latn', 'lug_Latn', 'luo_Latn', 'lus_Latn', 'mag_Deva', 'mai_Deva', 'mal_Mlym', 'mar_Deva', 'min_Latn', 'mkd_Cyrl', 'plt_Latn', 'mlt_Latn', 'mni_Beng', 'khk_Cyrl', 'mos_Latn', 'mri_Latn', 'zsm_Latn', 'mya_Mymr', 'nld_Latn', 'nno_Latn', 'nob_Latn', 'npi_Deva', 'nso_Latn', 'nus_Latn', 'nya_Latn', 'oci_Latn', 'gaz_Latn', 'ory_Orya', 'pag_Latn', 'pan_Guru', 'pap_Latn', 'pol_Latn', 'por_Latn', 'prs_Arab', 'pbt_Arab', 'quy_Latn', 'ron_Latn', 'run_Latn', 'rus_Cyrl', 'sag_Latn', 'san_Deva', 'sat_Beng', 'scn_Latn', 'shn_Mymr', 'sin_Sinh', 'slk_Latn', 'slv_Latn', 'smo_Latn', 'sna_Latn', 'snd_Arab', 'som_Latn', 'sot_Latn', 'spa_Latn', 'als_Latn', 'srd_Latn', 'srp_Cyrl', 'ssw_Latn', 'sun_Latn', 'swe_Latn', 'swh_Latn', 'szl_Latn', 'tam_Taml', 'tat_Cyrl', 'tel_Telu', 'tgk_Cyrl', 'tgl_Latn', 'tha_Thai', 'tir_Ethi', 'taq_Latn', 'taq_Tfng', 'tpi_Latn', 'tsn_Latn', 'tso_Latn', 'tuk_Latn', 'tum_Latn', 'tur_Latn', 'twi_Latn', 'tzm_Tfng', 'uig_Arab', 'ukr_Cyrl', 'umb_Latn', 'urd_Arab', 'uzn_Latn', 'vec_Latn', 'vie_Latn', 'war_Latn', 'wol_Latn', 'xho_Latn', 'ydd_Hebr', 'yor_Latn', 'yue_Hant', 'zho_Hans', 'zho_Hant', 'zul_Latn']
+LARGE_SEAMLESS_M4T_LANGUAGE_CODES = ["afr","amh","arb","ary","arz","asm","azj","bel","ben","bos","bul","cat","ceb","ces","ckb","cmn","cmn_Hant","cym","dan","deu","ell","eng","est","eus","fin","fra","fuv","gaz","gle","glg","guj","heb","hin","hrv","hun","hye","ibo","ind","isl","ita","jav","jpn","kan","kat","kaz","khk","khm","kir","kor","lao","lit","lug","luo","lvs","mai","mal","mar","mkd","mlt","mni","mya","nld","nno","nob","npi","nya","ory","pan","pbt","pes","pol","por","ron","rus","sat","slk","slv","sna","snd","som","spa","srp","swe","swh","tam","tel","tgk","tgl","tha","tur","ukr","urd","uzn","vie","yor","yue","zlm","zul",]
 # fmt: on
 
 # TODO: change repo/id -> repo id
-# TODO: dynamic fairseq_language_codes depending on the input model (different languages)
-# TODO: add copied from almost everywhere
 # TODO: resolve legacy behavior
+# TODO: add language code to docstrings
 
-# Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer with NllbTokenizer->SeamlessM4TTokenizer, NLLB->SeamlessM4T, facebook/nllb-200-distilled-600M->repo/id
 class SeamlessM4TTokenizer(PreTrainedTokenizer):
     """
     Construct an SeamlessM4T tokenizer.
@@ -137,6 +135,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     def __init__(
         self,
         vocab_file,
+        language_code: Optional[List]=None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -181,24 +180,30 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         
         # Vocab    |    0    |    1    |   2    |    3    |  4   |  5   |  6   |   7  |   8  |  9
         # -------- | ------- | ------- | ------ | ------- | ---- | ---- | ---- | ---- | ---- | ----
-        # fairseq  | '<pad>'   | '<unk>' | '<bos>' | '</s>' | 'an' | 'en' | '_d' | 'er' | 'in' | '_s'
-        
-        self.fairseq_tokens_to_ids = dict()
+        # spm  | '<unk>'   | '<s>' | '</s>' | 'an' | 'en' | '_d' | 'er' | 'in' | '_s' | '_a'
+        # fairseq  | '<pad>'   | '<unk>' | '<s>' | '</s>' | 'an' | 'en' | '▁d' | 'er' | 'in' | '▁s'
+
+        # Mimic fairseq token-to-id alignment for the first 4 token
+        self.fairseq_tokens_to_ids = {"<pad>": 0, "<unk>": 1, "<s>": 2, "</s>": 3}
 
         # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
         self.fairseq_offset = 1
 
         self.sp_model_size = len(self.sp_model)
+        
+        language_code = language_code if language_code is not None else LARGE_SEAMLESS_M4T_LANGUAGE_CODES
+        
         # update languages codes
-        # no mask (already at 1) also true for <msk> ??
         self.lang_code_to_id = {
-            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
+            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(language_code)
         }
         self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
         
-        # add other ids as well TODO
+        current_id = len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
+        self.fairseq_tokens_to_ids["<MINED_DATA>"] = current_id
+        self.fairseq_tokens_to_ids["<MMT_BT_DATA>"] = current_id + 1 
+        self.fairseq_tokens_to_ids["<SMT_BT_DATA>"] = current_id + 2
         
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
 
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
@@ -212,15 +217,17 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         self._src_lang = src_lang if src_lang is not None else "eng"
         self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
-        self.tgt_lang = tgt_lang # TODO: get rid or make optional
+        self.tgt_lang = tgt_lang
         self.set_src_lang_special_tokens(self._src_lang)
 
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.__getstate__
     def __getstate__(self):
         state = self.__dict__.copy()
         state["sp_model"] = None
         state["sp_model_proto"] = self.sp_model.serialized_model_proto()
         return state
 
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.__setstate__
     def __setstate__(self, d):
         self.__dict__ = d
 
@@ -232,18 +239,22 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
 
     @property
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.vocab_size
     def vocab_size(self):
         return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 1  # Plus 1 for the mask token
 
     @property
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang
     def src_lang(self) -> str:
         return self._src_lang
 
     @src_lang.setter
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang
     def src_lang(self, new_src_lang: str) -> None:
         self._src_lang = new_src_lang
         self.set_src_lang_special_tokens(self._src_lang)
 
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
@@ -274,6 +285,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
             return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
         return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -301,6 +313,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -326,6 +339,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer._build_translation_inputs
     def _build_translation_inputs(
         self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
     ):
@@ -338,14 +352,17 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         inputs["forced_bos_token_id"] = tgt_lang_id
         return inputs
 
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.get_vocab
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer._tokenize
     def _tokenize(self, text: str) -> List[str]:
         return self.sp_model.encode(text, out_type=str)
 
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer._convert_token_to_id
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         if token in self.fairseq_tokens_to_ids:
@@ -355,17 +372,20 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         # Need to return unknown token if the SP model returned 0
         return spm_id + self.fairseq_offset if spm_id else self.unk_token_id
 
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer._convert_id_to_token
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         if index in self.fairseq_ids_to_tokens:
             return self.fairseq_ids_to_tokens[index]
         return self.sp_model.IdToPiece(index - self.fairseq_offset)
 
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
 
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
@@ -383,6 +403,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.prepare_seq2seq_batch
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
@@ -395,12 +416,15 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         self.tgt_lang = tgt_lang
         return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
 
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer._switch_to_input_mode
     def _switch_to_input_mode(self):
         return self.set_src_lang_special_tokens(self.src_lang)
-
+    
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer._switch_to_target_mode
     def _switch_to_target_mode(self):
         return self.set_tgt_lang_special_tokens(self.tgt_lang)
 
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.set_src_lang_special_tokens
     def set_src_lang_special_tokens(self, src_lang) -> None:
         """Reset the special tokens to the source lang setting.
         - In legacy mode: No prefix and suffix=[eos, src_lang_code].
@@ -416,6 +440,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
     # NOTE: seems for target language that legacy behavior should be prefered
     # https://github.com/facebookresearch/fairseq2/blob/c53f18e6be6b8b46b722f2249b8397b7eccd7ad3/src/fairseq2/models/nllb/tokenizer.py#L112-L116
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.__getstate__
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
         """Reset the special tokens to the target lang setting.
         - In legacy mode: No prefix and suffix=[eos, tgt_lang_code].
