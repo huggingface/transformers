@@ -16,6 +16,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers.file_utils import is_vision_available
 from transformers.testing_utils import require_torch, require_vision
 
@@ -104,3 +106,13 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+
+    def test_keep_aspect_ratio(self):
+        size = {"height": 512, "width": 512}
+        image_processor = DPTImageProcessor(size=size, keep_aspect_ratio=True, ensure_multiple_of=32)
+
+        image = np.zeros((489, 640, 3))
+
+        pixel_values = image_processor(image, return_tensors="pt").pixel_values
+
+        self.assertEqual(list(pixel_values.shape), [1, 3, 512, 672])
