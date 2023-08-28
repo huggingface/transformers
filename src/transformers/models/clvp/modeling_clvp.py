@@ -184,7 +184,6 @@ class CLVPSpeechModelOutput(ModelOutput):
 
 
 @dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPTextModelOutput with CLIP->CLVP
 class CLVPTextModelOutput(ModelOutput):
     """
     Base class for text model's outputs that also contains a pooling of the last hidden states.
@@ -222,19 +221,19 @@ class CLVPOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
             Contrastive loss for speech-text similarity.
-        logits_per_speech:(`torch.FloatTensor` of shape `(speech_batch_size, text_batch_size)`):
+        logits_per_speech (`torch.FloatTensor` of shape `(speech_batch_size, text_batch_size)`):
             The scaled dot product scores between `speech_embeds` and `text_embeds`. This represents the speech-text
             similarity scores.
-        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, speech_batch_size)`):
+        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, speech_batch_size)`):
             The scaled dot product scores between `text_embeds` and `speech_embeds`. This represents the text-speech
             similarity scores.
-        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of the Text Model.
-        speech_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        speech_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The speech embeddings obtained by applying the projection layer to the pooled output of the Speech Model.
-        text_model_output(`BaseModelOutputWithPooling`):
+        text_model_output (`BaseModelOutputWithPooling`):
             The pooled output of the `last_hidden_state` of the Text Model.
-        speech_model_output(`BaseModelOutputWithPooling`):
+        speech_model_output (`BaseModelOutputWithPooling`):
             The pooled output of the `last_hidden_state` of the Speech Model.
     """
 
@@ -246,14 +245,6 @@ class CLVPOutput(ModelOutput):
     speech_embeds: torch.FloatTensor = None
     text_model_output: BaseModelOutputWithPooling = None
     speech_model_output: BaseModelOutputWithPooling = None
-
-
-
-    # def to_tuple(self) -> Tuple[Any]:
-    #     return tuple(
-    #         self[k] if k not in ["text_model_output", "speech_model_output"] else getattr(self, k).to_tuple()
-    #         for k in self.keys()
-    #     )
 
 
 class CLVPAttention(nn.Module):
@@ -368,14 +359,19 @@ class CLVPAttention(nn.Module):
 
 
 class CLVPGatedLinearUnit(nn.Module):
+    """
+    `CLVPGatedLinearUnit` uses the second half of the `hidden_states` to act as a gate for the first half of the
+    `hidden_states` which controls the flow of data from the first of the tensor.
+    """
+
     def __init__(self, config):
         super().__init__()
         self.activation_fn = ACT2FN[config.hidden_act]
         self.proj = nn.Linear(config.hidden_size, config.intermediate_size * 2)
 
-    def forward(self, x):
-        x, gate = self.proj(x).chunk(2, dim=-1)
-        return x * self.activation_fn(gate)
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+        hidden_states, gate = self.proj(hidden_states).chunk(2, dim=-1)
+        return hidden_states * self.activation_fn(gate)
 
 
 class CLVPMLP(nn.Module):
@@ -409,7 +405,7 @@ class CLVPRotaryPositionalEmbedding(nn.Module):
         self.cached_sequence_length = None
         self.cached_rotary_positional_embedding = None
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
         sequence_length = hidden_states.shape[1]
 
         if sequence_length == self.cached_sequence_length and self.cached_rotary_positional_embedding is not None:
@@ -482,8 +478,7 @@ class CLVPEncoderLayer(nn.Module):
 # This is mostly ported from T5Attention with some changes to ensure it behaves as expected.
 class CLVPRelativeAttention(nn.Module):
     """
-    CLVP Relative Attention is used in `CLVPConditioningEncoder` to process log-mel spectrograms.
-    This also uses relative position embeddings.
+    `CLVPRelativeAttention` is used in `CLVPConditioningEncoder` to process log-mel spectrograms.
     """
     def __init__(self, config: CLVPAutoRegressiveConfig, has_relative_attention_bias=False):
         super().__init__()
@@ -770,6 +765,7 @@ class CLVPConditioningEncoder(nn.Module):
 
         text_embeds = token_embeds + position_embeds
 
+        # broadcast it for multiple batches of text
         mel_spec = mel_spec.unsqueeze(1)
         mel_spec = mel_spec.repeat(text_embeds.shape[0], 1, 1)
 
@@ -832,12 +828,7 @@ class CLVPPreTrainedModel(PreTrainedModel):
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
         elif isinstance(module, CLVPAutoRegressiveLMHeadModel):
             for name, p in module.named_parameters():
-                # if isinstance(p, (nn.Linear, Conv1D)):
-                #     p.weight.data.normal_(mean=0.0, std=factor)
-                #     if p.bias is not None:
-                #         p.bias.data.zero_()
                 if name == "c_proj.weight":
-                    # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
                     p.data.normal_(mean=0.0, std=(self.config.initializer_range / math.sqrt(2 * self.config.n_layer)))
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -848,9 +839,8 @@ class CLVPPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, CLVPEncoder):
             module.gradient_checkpointing = value
-        #
-        # if isinstance(module, CLVPAutoRegressiveLMHeadModel):
-        #     module.gradient_checkpointing = value
+        if isinstance(module, CLVPAutoRegressiveLMHeadModel):
+            module.gradient_checkpointing = value
 
 
 CLVP_START_DOCSTRING = r"""
@@ -868,54 +858,6 @@ CLVP_START_DOCSTRING = r"""
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-CLVP_TEXT_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        use_causal_attention_mask (`bool`, *optional*, defaults to `False`):
-            Whether to use causal attention mask.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-CLVP_SPEECH_INPUTS_DOCSTRING = r"""
-    Args:
-        speech_ids (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Speech Tokens. Padding will be ignored by default should you provide it.
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        use_causal_attention_mask (`bool`, *optional*, defaults to `False`):
-            Whether to use causal attention mask.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
 
 CLVP_INPUTS_DOCSTRING = r"""
     Args:
@@ -927,17 +869,10 @@ CLVP_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        speech_ids (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Speech Tokens. Padding will be ignored by default should you provide it.
-        text_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, time_dim)`):
+            Indicates log-melspectrogram representations for audio returned by `CLVPFeatureExtractor`.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding text token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-        speech_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding speech token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -1146,6 +1081,10 @@ class CLVPTransformer(nn.Module):
 
 
 class CLVPAutoRegressiveLMHeadModel(CLVPPreTrainedModel):
+    """
+    `CLVPAutoRegressiveLMHeadModel` is a slightly customized `GPT2LMHead` model. Please see it's respective class to
+    know more about it.
+    """
     def __init__(self, config):
         super().__init__(config)
 
@@ -1462,60 +1401,17 @@ class CLVPModel(CLVPPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CLVP_TEXT_INPUTS_DOCSTRING)
-    def get_text_features(
-            self,
-            input_ids: Optional[torch.LongTensor] = None,
-            attention_mask: Optional[torch.LongTensor] = None,
-            use_causal_attention_mask: Optional[bool] = False,
-            output_attentions: Optional[bool] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
-    ) -> torch.FloatTensor:
-        r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim)`: The text embeddings obtained by
-            applying the projection layer to the pooled output of the CLVP Text Model.
+    # taken from the original repo,
+    # link : https://github.com/neonbjb/tortoise-tts/blob/4003544b6ff4b68c09856e04d3eff9da26d023c2/tortoise/api.py#L117
+    def fix_autoregressive_output(self, autoreg_output: torch.LongTensor) -> torch.LongTensor:
+        """
+        This method modifies the output of the autoregressive model, such as replacing the `eos_token_id` and
+        changing the last few tokens of each sequence.
 
-        Examples:
-
-        ```python
-        >>> from transformers import CLVPTokenizer, CLVPModel
-
-        >>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
-        >>> tokenizer = CLVPTokenizer.from_pretrained("susnato/clvp_dev")
-
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-        >>> text_features = model.get_text_features(**inputs)
-        ```"""
-
-        # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if return_dict:
-            return self.text_model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                use_causal_attention_mask=use_causal_attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            ).text_embeds
-
-        return self.text_model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            use_causal_attention_mask=use_causal_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )[0]
-
-    def fix_autoregressive_output(self, autoreg_output):
+        Args:
+            autoreg_output (`torch.LongTensor`):
+                This refers to the output of the autoregressive model.
+        """
         autoreg_output = autoreg_output[:, 1:]
 
         stop_token_indices = torch.where(autoreg_output==self.autoregressive_model.config.eos_token_id,  1, 0)
@@ -1536,62 +1432,196 @@ class CLVPModel(CLVPPreTrainedModel):
 
         return autoreg_output
 
-    # @add_start_docstrings_to_model_forward(CLVP_SPEECH_INPUTS_DOCSTRING)
-    # def get_speech_features(
-    #     self,
-    #         input_ids: torch.LongTensor = None,
-    #         input_features: torch.FloatTensor = None,
-    #         attention_mask: Optional[torch.Tensor] = None,
-    #     use_causal_attention_mask: Optional[bool] = False,
-    #     output_attentions: Optional[bool] = None,
-    #     output_hidden_states: Optional[bool] = None,
-    #     return_dict: Optional[bool] = None,
-    # ) -> torch.FloatTensor:
-    #     r"""
-    #     Returns:
-    #         speech_features (`torch.FloatTensor` of shape `(batch_size, output_dim)`: The speech embeddings obtained by
-    #         applying the projection layer to the pooled output of the CLVP Speech Model.
-    #
-    #     Examples:
-    #
-    #     ```python
-    #     >>> from transformers import CLVPModel
-    #
-    #     >>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
-    #
-    #     >>> # TODO : after FeatureExtractor is implemented we need to change it to something lik FE.__call__(...)
-    #     >>> inputs = {"speech_ids": torch.tensor([[56, 8, 48, 7, 11, 23]]).long()}
-    #
-    #     >>> speech_features = model.get_speech_features(**inputs)
-    #     ```"""
-    #
-    #     # Use CLVP model's config for some fields (if specified) instead of those of speech & text components.
-    #     output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-    #     output_hidden_states = (
-    #         output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-    #     )
-    #     return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-    #
-    #     if return_dict:
-    #         return self.speech_model(
-    #             input_features=input_features,
-    #             input_ids=input_ids,
-    #             attention_mask=attention_mask,
-    #             use_causal_attention_mask=use_causal_attention_mask,
-    #             output_attentions=output_attentions,
-    #             output_hidden_states=output_hidden_states,
-    #             return_dict=return_dict,
-    #         ).speech_embeds
-    #
-    #     return self.speech_model(
-    #         input_features=input_features,
-    #         input_ids=input_ids,
-    #         attention_mask=attention_mask,
-    #         use_causal_attention_mask=use_causal_attention_mask,
-    #         output_attentions=output_attentions,
-    #         output_hidden_states=output_hidden_states,
-    #         return_dict=return_dict,
-    #     )[0]
+    def get_text_features(
+            self,
+            input_ids: Optional[torch.LongTensor] = None,
+            attention_mask: Optional[torch.LongTensor] = None,
+            use_causal_attention_mask: Optional[bool] = False,
+    ) -> torch.FloatTensor:
+        r"""
+        This method can be used to extract text_embeds from a text. The text embeddings obtained by applying the
+        projection layer to the pooled output of the CLVP Text Model.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+                it.
+
+                [What are input IDs?](../glossary#input-ids)
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            use_causal_attention_mask (`bool`, *optional*, defaults to `False`):
+                Whether to use causal attention mask.
+
+        Returns:
+            `torch.FloatTensor` of shape `(batch_size, output_dim)`:
+                The text embeddings obtained by applying the projection layer to the pooled output of the CLVP Text Model.
+
+        Examples:
+
+        ```python
+        >>> from transformers import CLVPProcessor, CLVPModel
+
+        >>> # Define the Text
+        >>> text = "This is an example text."
+
+        >>> # Define processor and model
+        >>> processor = CLVPProcessor.from_pretrained("susnato/clvp_dev")
+        >>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
+
+        >>> # Generate processor output and text embeds
+        >>> processor_output = processor(text=text, return_tensors="pt")
+        >>> text_embeds = model.get_text_features(input_ids=processor_output["input_ids"])
+        ```
+        """
+
+        return self.text_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            use_causal_attention_mask=use_causal_attention_mask,
+        )[0]
+
+    def get_speech_features(
+        self,
+        speech_ids: torch.LongTensor = None,
+        input_features: torch.FloatTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        use_causal_attention_mask: Optional[bool] = False,
+    ) -> torch.FloatTensor:
+        r"""
+        This method can be used to extract speech_embeds from `speech_ids`. The speech embeddings obtained by applying the
+        projection layer to the pooled output of the CLVP Text Model.
+
+        Please note that these `speech_ids` are to be generated by an autoregressive model. If you want to add that model to
+        your pipeline then use the method `get_speech_features_with_autoreg_generate`.
+
+        Args:
+            speech_ids (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+                Speech Tokens. Padding will be ignored by default should you provide it.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            use_causal_attention_mask (`bool`, *optional*, defaults to `False`):
+                Whether to use causal attention mask.
+
+        Returns:
+            `torch.FloatTensor` of shape `(batch_size, output_dim)`:
+                The speech embeddings obtained by applying the projection layer to the pooled output of the CLVP Speech Model.
+
+        Examples:
+
+        ```python
+        >>> import torch
+        >>> from transformers import CLVPModel
+
+        >>> # Define model
+        >>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
+
+        >>> # These are supposed to be the `speech_ids` generated by another model
+        >>> speech_ids = {"speech_ids": torch.tensor([[56, 8, 48, 7, 11, 23]]).long()}
+
+        >>> speech_embeds = model.get_speech_features(speech_ids=speech_ids["speech_ids"])
+        ```
+        """
+
+        return self.speech_model(
+            input_ids=speech_ids,
+            attention_mask=attention_mask,
+            use_causal_attention_mask=use_causal_attention_mask,
+        )[0]
+
+    def get_speech_features_with_autoreg_generate(
+            self,
+            input_ids: torch.LongTensor = None,
+            input_features: torch.FloatTensor = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            use_causal_attention_mask: Optional[bool] = False,
+            generation_config: Optional[GenerationConfig] = None,
+            **kwargs,
+    ) -> torch.FloatTensor:
+        r"""
+        This method can be used to extract speech_embeds from audio. The speech embeddings obtained by applying the
+        projection layer to the pooled output of the CLVP Text Model.
+
+        Please note that this method uses the `CLVPConditioningEncoder` and `CLVPAutoRegressiveLMHeadModel` to generate
+        the `speech_ids` and then the CLVP Speech Model is applied to the generated `speech_ids`. Thus we need both the
+        `input_ids` and `input_features` for this method.
+
+        Args:
+            speech_ids (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+                Speech Tokens. Padding will be ignored by default should you provide it.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            use_causal_attention_mask (`bool`, *optional*, defaults to `False`):
+                Whether to use causal attention mask.
+
+        Returns:
+            `torch.FloatTensor` of shape `(num_return_sequences, output_dim)`:
+                The speech embeddings obtained by applying the projection layer to the pooled output of the CLVP Speech Model.
+                The `num_return_sequences` and the generation process can be controlled by passing a suitable
+                `generation_config` or directly passing them as kwargs.
+
+        Examples:
+
+        ```python
+        >>> import datasets
+        >>> from transformers import CLVPProcessor, CLVPModel
+
+        >>> # Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library)
+        >>> text = "This is an example text."
+        >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
+        >>> _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
+
+        >>> # Define processor and model
+        >>> processor = CLVPProcessor.from_pretrained("susnato/clvp_dev")
+        >>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
+
+        >>> # Generate processor output and model output
+        >>> processor_output = processor(raw_speech=audio, sampling_rate=sr, text=text, return_tensors="pt")
+        >>> speech_embeds = model.get_speech_features_with_autoreg_generate(input_ids=processor_output["input_ids"], input_features=processor_output["input_features"])
+        ```
+        """
+
+        if generation_config is None:
+            generation_config = self.generation_config
+        generation_config.update(**kwargs)
+
+        conditioning_embeds = self.conditioning_encoder(mel_spec=input_features,
+                                                        text_tokens=input_ids)
+
+        # Add the start mel token at the beginning
+        mel_start_token_id = torch.tensor([[self.autoregressive_model.config.bos_token_id]], device=conditioning_embeds.device)
+        mel_start_token_embedding = self.autoregressive_model.wte(mel_start_token_id)
+        mel_start_token_embedding = mel_start_token_embedding + self.autoregressive_model.wpe(
+            torch.tensor([[0]], device=conditioning_embeds.device))
+        mel_start_token_embedding = mel_start_token_embedding.repeat(conditioning_embeds.shape[0], 1, 1)
+        conditioning_embeds = torch.concat([conditioning_embeds, mel_start_token_embedding], dim=1)
+
+        speech_candidates = self.autoregressive_model.generate(inputs_embeds=conditioning_embeds,
+                                                               generation_config=generation_config,
+                                                               )
+        speech_candidates = self.fix_autoregressive_output(speech_candidates[0])
+
+        return self.speech_model(
+            input_ids=speech_candidates,
+            attention_mask=attention_mask,
+            use_causal_attention_mask=use_causal_attention_mask,
+        )[0]
 
     @add_start_docstrings_to_model_forward(CLVP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CLVPOutput, config_class=CLVPConfig)
@@ -1612,20 +1642,23 @@ class CLVPModel(CLVPPreTrainedModel):
         Examples:
 
         ```python
-        >>> import torch
-        >>> from transformers import CLVPModel, CLVPTokenizer
+        >>> import datasets
+        >>> from transformers import CLVPProcessor, CLVPModel
 
+        >>> # Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library)
+        >>> text = "This is an example text."
+
+        >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
+        >>> _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
+
+        >>> # Define processor and model
+        >>> processor = CLVPProcessor.from_pretrained("susnato/clvp_dev")
         >>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
-        >>> tokenizer = CLVPTokenizer.from_pretrained("susnato/clvp_dev")
 
-        >>> text = "This is a text."
-        >>> inputs = tokenizer(text, return_tensors="pt")
-        >>> # TODO : after FeatureExtractor is implemented we need to change it to something lik FE.__call__(...)
-        >>> inputs["speech_ids"] = torch.tensor([[10, 55, 101, 37, 21, 102, 41]]).long()
-
-        >>> outputs = model(**inputs)
-        >>> logits_per_speech = outputs.logits_per_speech  # this is the speech-text similarity score
-        >>> probs = logits_per_speech.softmax(dim=1)  # we can take the softmax to get the label probabilities
+        >>> # processor outputs and model output s
+        >>> processor_output = processor(raw_speech=audio, sampling_rate=sr, text=text, return_tensors="pt")
+        >>> outputs = model(input_ids=processor_output["input_ids"], input_features=processor_output["input_features"], return_dict=True)
         ```
         """
 
@@ -1651,7 +1684,6 @@ class CLVPModel(CLVPPreTrainedModel):
         # we must convert it to tokens, to make it compaitable with speech_transformer
         if speech_candidates.ndim == 3:
             speech_candidates = speech_candidates.argmax(2)
-
         speech_candidates = self.fix_autoregressive_output(speech_candidates)
 
         speech_outputs = self.speech_model(
@@ -1772,12 +1804,12 @@ class CLVPModel(CLVPPreTrainedModel):
         }
 
 
-# @add_start_docstrings(
-#     """
-#     CLVP Transformer with a projection layer on top (a linear layer on top of the pooled output).
-#     """,
-#     CLVP_START_DOCSTRING,
-# )
+@add_start_docstrings(
+    """
+    CLVP Transformer with a projection layer on top (a linear layer on top of the pooled output).
+    """,
+    CLVP_START_DOCSTRING,
+)
 class CLVPTransformerWithProjection(CLVPPreTrainedModel):
     config_class = CLVPTextConfig or CLVPSpeechConfig
     def __init__(self, config: Union[CLVPTextConfig, CLVPSpeechConfig]):
@@ -1798,9 +1830,6 @@ class CLVPTransformerWithProjection(CLVPPreTrainedModel):
     def set_input_embeddings(self, value):
         self.transformer.token_embedding = value
 
-    # @add_start_docstrings_to_model_forward(CLVP_TEXT_INPUTS_DOCSTRING)
-    # @replace_return_docstrings(output_type=Union[CLVPTextModelOutput, CLVPSpeechModelOutput],
-    #                            config_class=Union[CLVPTextConfig, CLVPSpeechConfig])
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1811,21 +1840,46 @@ class CLVPTransformerWithProjection(CLVPPreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, CLVPTextModelOutput, CLVPSpeechModelOutput]:
         r"""
-        Returns:
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+                it. This indicates both the text ids and the speech ids.
+
+                [What are input IDs?](../glossary#input-ids)
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            use_causal_attention_mask (`bool`, *optional*, defaults to `False`):
+                Whether to use causal attention mask.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+                tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+                more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         Examples:
 
-        ```python
-        >>> from transformers import CLVPTextModelWithProjection, CLVPTokenizer
+        - Using this model with Text Config
 
-        >>> model = CLVPTextModelWithProjection.from_pretrained("susnato/clvp_dev")
+        ```python
+        >>> from transformers import CLVPTransformerWithProjection, CLVPTextConfig, CLVPTokenizer
+
+        >>> text_config = CLVPTextConfig.from_pretrained("susnato/clvp_dev")
+        >>> model = CLVPTransformerWithProjection(text_config)
         >>> tokenizer = CLVPTokenizer.from_pretrained("susnato/clvp_dev")
 
-        >>> text = "This is a sample text."
+        >>> text = "This is an example text."
         >>> inputs = tokenizer(text, return_tensors="pt")
 
         >>> outputs = model(**inputs)
-        >>> text_embeds = outputs.text_embeds
         ```
         """
 
@@ -1864,7 +1918,3 @@ class CLVPTransformerWithProjection(CLVPPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
-
-
-
-

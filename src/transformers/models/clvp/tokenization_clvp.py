@@ -154,7 +154,10 @@ def convert_to_ascii(text: str) -> str:
     return text.encode("ascii", "ignore").decode("utf-8")
 
 
-def _expand_dollars(m):
+def _expand_dollars(m: str) -> str:
+    """
+    This method is used to expand numerical dollar values into spoken words.
+    """
     match = m.group(1)
     parts = match.split(".")
     if len(parts) > 2:
@@ -176,20 +179,36 @@ def _expand_dollars(m):
         return "zero dollars"
 
 
-def _remove_commas(m):
+def _remove_commas(m: str) -> str:
+    """This method is used to remove commas from sentences."""
     return m.group(1).replace(",", "")
 
 
-def _expand_decimal_point(m):
+def _expand_decimal_point(m: str) -> str:
+    """This method is used to expand '.' into spoken word ' point '."""
     return m.group(1).replace(".", " point ")
 
 
-def _expand_ordinal(m):
-    return number_to_words(int(m.group(0)))
+def _expand_ordinal(num: str) -> str:
+    """This method is used to expand ordinals such as '1st', '2nd' into spoken words."""
+    ordinal_suffixes = {1: 'st', 2: 'nd', 3: 'rd'}
+
+    num = int(num.group(0)[:-2])
+    if 10 <= num%100 and num%100 <= 20:
+        suffix = 'th'
+    else:
+        suffix = ordinal_suffixes.get(num % 10, 'th')
+    return number_to_words(num) + suffix
 
 
-def _expand_number(m):
+def _expand_number(m: str) -> str:
+    """
+    This method acts as a preprocessing step for numbers between 1000 and 3000 (same as the original repository,
+    link : https://github.com/neonbjb/tortoise-tts/blob/4003544b6ff4b68c09856e04d3eff9da26d023c2/tortoise/utils/tokenizer.py#L86)
+    """
+
     num = int(m.group(0))
+
     if num > 1000 and num < 3000:
         if num == 2000:
             return "two thousand"

@@ -66,6 +66,7 @@ class CLVPProcessor(ProcessorMixin):
             return encodings
         else:
             inputs["input_ids"] = encodings["input_ids"]
+            inputs["attention_mask"] = encodings["attention_mask"]
             return inputs
 
     def batch_decode(self, *args, **kwargs):
