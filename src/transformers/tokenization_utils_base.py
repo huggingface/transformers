@@ -1646,8 +1646,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """
         Converts a Conversation object or a list of dictionaries with `"role"` and `"content"` keys to a list of token
         ids. This method is intended for use with chat models, and will read the tokenizer's chat_template attribute to
-        determine the format and control tokens to use when converting. When chat_template is None, it will fall back to
-        the default_chat_template specified at the class level.
+        determine the format and control tokens to use when converting. When chat_template is None, it will fall back
+        to the default_chat_template specified at the class level.
 
         Args:
             conversation (Union[List[Dict[str, str]], "Conversation"]): A Conversation object or list of dicts
