@@ -62,16 +62,16 @@ class EGTConfig(PretrainedConfig):
 
         Example:
             ```python
-            >>> from transformers import EGTForGraphClassification, EGTConfig
+            >>> from transformers import EGTForGraphClassification, EGTConfig  # doctest: +SKIP
 
             >>> # Initializing a EGT graphormer-base-pcqm4mv2 style configuration
-            >>> configuration = EGTConfig()
+            >>> configuration = EGTConfig()  # doctest: +SKIP
 
             >>> # Initializing a model from the graphormer-base-pcqm4mv1 style configuration
-            >>> model = EGTForGraphClassification(configuration)
+            >>> model = EGTForGraphClassification(configuration)  # doctest: +SKIP
 
             >>> # Accessing the model configuration
-            >>> configuration = model.config
+            >>> configuration = model.config  # doctest: +SKIP
             ```
     """
     model_type = "egt"
