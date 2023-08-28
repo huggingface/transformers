@@ -270,6 +270,10 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
+    @unittest.skip(reason="BEiT does not support feedforward chunking yet")
+    def test_feed_forward_chunking(self):
+        pass
+
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 

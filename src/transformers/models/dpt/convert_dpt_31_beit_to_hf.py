@@ -206,10 +206,16 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     model.eval()
 
     # Check outputs on an image
-    processor = DPTImageProcessor(size={"height": image_size, "width": image_size})
+    processor = DPTImageProcessor(
+        size={"height": image_size, "width": image_size}, keep_aspect_ratio=True, ensure_multiple_of=32
+    )
 
     image = prepare_img()
-    processor(image, return_tensors="pt")
+    pixel_values = processor(image, return_tensors="pt").pixel_values
+
+    print("First values of pixel values:", pixel_values[0, 0, :3, :3])
+    print("Mean of pixel values:", pixel_values.mean().item())
+    print("Shape of pixel values:", pixel_values.shape)
 
     import requests
     from PIL import Image
