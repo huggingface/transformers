@@ -347,7 +347,7 @@ class LlavaMptConfig(PretrainedConfig):
         no_bias:bool = True,
         norm_type:str = "low_precision_layernorm",
         resid_pdrop:int = 0,
-        sep_image_conv_front:bool = false,
+        sep_image_conv_front:bool = False,
         tokenizer_name:str = "sam-mosaic/gpt-neox-20b-chatml",
         torch_dtype:str = "float16",
         tune_mm_mlp_adapter:bool = False,
@@ -355,6 +355,7 @@ class LlavaMptConfig(PretrainedConfig):
         use_mm_proj:bool = True,
         verbose:int = 0,
         vocab_size:int = 50282,
+        attn_config: MptAttentionConfig = None,
         **kwargs,
     ):
         if attn_config is None:
@@ -389,3 +390,4 @@ class LlavaMptConfig(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.use_cache = use_cache
         super().__init__(**kwargs)
+
