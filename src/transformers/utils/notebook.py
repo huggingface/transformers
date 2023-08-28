@@ -238,7 +238,7 @@ class NotebookTrainingTracker(NotebookProgressBar):
             for key in values.keys():
                 if key not in columns:
                     columns.append(key)
-                self.inner_table[0] = columns
+            self.inner_table[0] = columns
             if len(self.inner_table) > 1:
                 last_values = self.inner_table[-1]
                 first_column = self.inner_table[0][0]
