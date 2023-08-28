@@ -41,8 +41,6 @@ from ...test_modeling_common import (
     random_attention_mask,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-
 if is_torch_available():
     import torch
     from torch import nn
@@ -52,6 +50,8 @@ if is_torch_available():
         CLVPTransformerWithProjection,
     )
     from transformers.models.clvp.modeling_clvp import CLVP_PRETRAINED_MODEL_ARCHIVE_LIST
+
+from transformers import CLVPTokenizer, CLVPFeatureExtractor
 
 
 class CLVPTransformerWithProjectionTester:
@@ -210,8 +210,8 @@ class CLVPModelTester:
 
     def get_config(self):
         autoregressive_config = CLVPAutoRegressiveConfig(vocab_size=99,
-                                                         max_mel_tokens=100,
-                                                         max_text_tokens=100,
+                                                         max_mel_tokens=256,
+                                                         max_text_tokens=256,
                                                          n_embd=32,
                                                          n_layer=2,
                                                          n_head=2,
@@ -268,9 +268,8 @@ class CLVPModelTester:
 
 
 @require_torch
-class CLVPModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class CLVPModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (CLVPModel,) if is_torch_available() else ()
-    # all_generative_model_classes = (CLVPModel, ) if is_torch_available() else ()
 
     test_head_masking = False
     test_pruning = False
@@ -354,50 +353,80 @@ class CLVPModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
 
 
-# Since CLVP has a lot of different models connected with each other it's better to test each of them individually
-# along with a test_full_model_integration. If the model breaks in future, it could be of a great help to identify the
-# broken part.
+# Since CLVP has a lot of different models connected with each other it's better to test each of them individually along
+# with a test_full_model_integration. If the model breaks in future, it could be of a great help to identify the broken part.
 
+@slow
 @require_torch
 class CLVPModelIntegrationTest(unittest.TestCase):
-    @slow
+    def setUp(self):
+        self.text = "This is an example text."
+        ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
+        _, self.speech_samples, self.sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
+
+        self.model = CLVPModel.from_pretrained("susnato/clvp_dev").to(torch_device)
+        self.model.eval()
+        tokenizer = CLVPTokenizer.from_pretrained("susnato/clvp_dev")
+        feature_extractor = CLVPFeatureExtractor.from_pretrained("susnato/clvp_dev")
+
+        self.text_tokens = tokenizer(self.text, return_tensors="pt")["input_ids"].to(torch_device)
+        self.input_features = feature_extractor(raw_speech=self.speech_samples, sampling_rate=self.sr, return_tensors="pt")[
+            "input_features"].to(torch_device)
+
     def test_conditional_encoder(self):
-        # model_name = "susnato/clvp_dev"
-        # model = CLVPModel.from_pretrained(model_name).to(torch_device)
-        # model.eval()
-        #
-        # text = torch.tensor([[5, 241, 41, 22, 39, 105, 98], [8, 95, 46, 45, 159, 54, 6]]).long().to(torch_device)
-        # speech = torch.tensor([[11, 255, 25, 57, 10, 7, 41], [9, 20, 226, 15, 5, 97, 32]]).long().to(torch_device)
-        # inputs = {"input_ids": text, "speech_ids": speech}
-        #
-        # # forward pass
-        # with torch.no_grad():
-        #     outputs = model(**inputs)
-        #
-        # # verify the logits
-        # self.assertEqual(
-        #     outputs.logits_per_speech.shape,
-        #     torch.Size((inputs["speech_ids"].shape[0], inputs["input_ids"].shape[0])),
-        # )
-        # self.assertEqual(
-        #     outputs.logits_per_text.shape,
-        #     torch.Size((inputs["input_ids"].shape[0], inputs["speech_ids"].shape[0])),
-        # )
-        #
-        # expected_logits = torch.tensor([[32.028324, 11.421426], [4.789056, 7.113933]], device=torch_device)
-        #
-        # self.assertTrue(torch.allclose(outputs.logits_per_speech, expected_logits, atol=1e-3))
-        pass
+        with torch.no_grad():
+            conditioning_encoder_outputs = self.model.conditioning_encoder(mel_spec=self.input_features,
+                                 text_tokens=self.text_tokens).to("cpu")
 
-    @slow
+        self.assertEqual(
+            conditioning_encoder_outputs.shape,
+            torch.Size((self.input_features.shape[0], 18, self.model.config.autoregressive_config.n_embd)),
+        )
+
+        EXPECTED_OUTPUTS = torch.tensor([[-0.8582,  0.5228,  1.9944],
+        [-0.0465, -1.1017, -0.0093],
+        [-0.0466, -0.6030, -0.1280]])
+
+        self.assertTrue(
+            torch.allclose(conditioning_encoder_outputs[0, :3, :3], EXPECTED_OUTPUTS, atol=1e-4)
+        )
+
     def test_autoregressive_model_generate(self):
-        pass
+        autoregressive_model_output = self.model.autoregressive_model.generate(input_ids=self.text_tokens).cpu()
 
-    @slow
+        EXPECTED_OUTPUTS = torch.tensor([[ 147,    2,   54,    2,   43,    2,  169,  122,   29,   64,    2,  136,
+           37,   33,    9, 8193]])
+
+        self.assertTrue(torch.allclose(autoregressive_model_output, EXPECTED_OUTPUTS))
+
     def test_speech_and_text_projection_models(self):
-        pass
+        # check for text embeds
+        text_embeds = self.model.text_model(input_ids=self.text_tokens).text_embeds.cpu()
+        EXPECTED_TEXT_EMBEDS = torch.tensor([  1.4798,  -2.0005,   2.3902,  -0.5042,   1.6401,  -2.4135,  -1.4800,
+          3.0118,  -2.4422,   1.3267,   2.2339,   1.4761,  -4.8983,  -1.3592,
+          6.0251,   6.7364,   2.2576,   3.7229, -10.0436,   4.6676])
+        self.assertTrue(torch.allclose(text_embeds[0, :20], EXPECTED_TEXT_EMBEDS, atol=1e-4))
 
-    @slow
+        # check for speech embeds
+        speech_embeds = self.model.speech_model(input_ids=self.text_tokens).speech_embeds.cpu()
+        EXPECTED_SPEECH_EMBEDS = torch.tensor([ 3.1202, -3.1183, -1.4264, -6.1339,  1.8885, -0.1983,  0.9461, -1.7414,
+         0.3320, -3.8400, -1.5715,  1.5096, -1.7576,  0.2387,  4.9758,  5.8450,
+        -6.2534,  2.8586, -5.5816,  4.7821])
+        self.assertTrue(torch.allclose(speech_embeds[0, :20], EXPECTED_SPEECH_EMBEDS, atol=1e-4))
+
     def test_full_model_integration(self):
-        pass
+        full_model_output = self.model.generate(input_ids=self.text_tokens, input_features=self.input_features,
+                       do_sample=False,
+                       num_beams=4,
+                       num_return_sequences=4,
+                       max_new_tokens=16,
+                       ).speech_candidates.cpu()
+
+        EXPECTED_OUTPUTS = torch.tensor([[ 729,  155,  334],
+                                            [ 757,  729, 1305],
+                                            [ 729,  757,  334]])
+
+
+        self.assertTrue(torch.allclose(full_model_output[-3:, -3:], EXPECTED_OUTPUTS))
 
