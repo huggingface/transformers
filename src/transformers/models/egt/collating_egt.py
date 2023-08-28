@@ -1,8 +1,13 @@
 from typing import Any, Dict, List, Mapping
 
-import dgl
 import numpy as np
 import torch
+
+from ...utils import is_dgl_available, requires_backends
+
+
+if is_dgl_available():
+    import dgl
 
 
 def convert_to_single_node_emb(x, offset: int = 128):
@@ -20,6 +25,7 @@ def convert_to_single_edge_emb(x, offset: int = 8):
 
 
 def preprocess_item(item, keep_features=True):
+    requires_backends(preprocess_item, ["dgl"])
     if keep_features and "edge_attr" in item.keys():  # edge_attr
         edge_attr = np.asarray(item["edge_attr"], dtype=np.int64)
     else:

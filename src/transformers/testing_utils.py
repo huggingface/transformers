@@ -57,6 +57,7 @@ from .utils import (
     is_cython_available,
     is_decord_available,
     is_detectron2_available,
+    is_dgl_available,
     is_essentia_available,
     is_faiss_available,
     is_flax_available,
@@ -332,6 +333,13 @@ def require_jieba(test_case):
     Decorator marking a test that requires jieba. These tests are skipped when jieba isn't installed.
     """
     return unittest.skipUnless(is_jieba_available(), "test requires jieba")(test_case)
+
+
+def require_dgl(test_case):
+    """
+    Decorator marking a test that requires dgl. These tests are skipped when dgl isn't installed.
+    """
+    return unittest.skipUnless(is_dgl_available(), "test requires dgl")(test_case)
 
 
 def require_tf2onnx(test_case):

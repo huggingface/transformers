@@ -763,6 +763,13 @@ def is_jieba_available():
     return _jieba_available
 
 
+def is_dgl_available():
+    _dgl_available, _dgl_version = _is_package_available("dgl", return_version=True)
+    if _dgl_available and version.parse(_dgl_version) >= version.parse("1.1.2"):
+        return True
+    return False
+
+
 # docstyle-ignore
 DATASETS_IMPORT_ERROR = """
 {0} requires the 🤗 Datasets library but it was not found in your environment. You can install it with:
@@ -1051,6 +1058,13 @@ PEFT_IMPORT_ERROR = """
 peft`. Please note that you may need to restart your runtime after installation.
 """
 
+# docstyle-ignore
+DGL_IMPORT_ERROR = """
+{0} requires the DGL library with version >= 1.1.2 but it was not satisfied in your environment. Checkout the
+instructions on the installation page: https://www.dgl.ai/pages/start.html and follow the ones that match your
+environment. Please note that you may need to restart your runtime after installation.
+"""
+
 BACKENDS_MAPPING = OrderedDict(
     [
         ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
@@ -1088,6 +1102,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("cython", (is_cython_available, CYTHON_IMPORT_ERROR)),
         ("jieba", (is_jieba_available, JIEBA_IMPORT_ERROR)),
         ("peft", (is_peft_available, PEFT_IMPORT_ERROR)),
+        ("dgl", (is_dgl_available, DGL_IMPORT_ERROR)),
     ]
 )
 

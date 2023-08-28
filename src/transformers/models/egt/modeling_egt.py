@@ -5,7 +5,6 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dgl.nn import EGTLayer
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...modeling_outputs import (
@@ -13,7 +12,12 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
+from ...utils import is_dgl_available, requires_backends
 from .configuration_egt import EGTConfig
+
+
+if is_dgl_available():
+    from dgl.nn import EGTLayer
 
 
 NODE_FEATURES_OFFSET = 128
@@ -77,6 +81,10 @@ class EGTPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     main_input_name_nodes = "node_feat"
     main_input_name_edges = "featm"
+
+    def __init__(self, config, **kwargs):
+        requires_backends(self, "dgl")
+        super().__init__(config)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, EGTModel):

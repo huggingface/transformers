@@ -112,6 +112,7 @@ from .import_utils import (
     is_datasets_available,
     is_decord_available,
     is_detectron2_available,
+    is_dgl_available,
     is_essentia_available,
     is_faiss_available,
     is_flax_available,
