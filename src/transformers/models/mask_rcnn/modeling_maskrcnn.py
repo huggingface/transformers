@@ -19,7 +19,6 @@
 import copy
 import functools
 import warnings
-from collections import OrderedDict
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -3198,16 +3197,17 @@ class MaskRCNNForObjectDetection(MaskRCNNPreTrainedModel):
         Returns:
             `torch.Tensor`: The overall loss which is a weighted sum of all losses.
         """
-        log_vars = OrderedDict()
+        loss = 0
         for loss_name, loss_value in losses.items():
+            if "loss" not in loss_name:
+                continue
             if isinstance(loss_value, torch.Tensor):
-                log_vars[loss_name] = loss_value.mean()
+                loss += loss_value.mean()
             elif isinstance(loss_value, list):
-                log_vars[loss_name] = sum(_loss.mean() for _loss in loss_value)
+                for _loss in loss_value:
+                    loss += _loss.mean()
             else:
                 raise TypeError(f"{loss_name} is not a tensor or list of tensors")
-
-        loss = sum(_value for _key, _value in log_vars.items() if "loss" in _key)
 
         return loss
 
