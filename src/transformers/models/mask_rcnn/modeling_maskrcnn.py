@@ -3733,9 +3733,7 @@ def batched_nms(
     return boxes, keep
 
 
-def multiclass_nms(
-    multi_bboxes, multi_scores, score_thr, nms_cfg, max_num=-1, score_factors=None, return_indices=False
-):
+def multiclass_nms(multi_bboxes, multi_scores, score_thr, nms_cfg, max_num=-1, score_factors=None):
     """NMS for multi-class bboxes.
 
     Args:
@@ -3751,12 +3749,10 @@ def multiclass_nms(
             If there are more than `max_num` bounding boxes after NMS, only top `max_num` will be kept.
         score_factors (`torch.Tensor`, *optional*):
             The factors multiplied to scores before applying NMS.
-        return_indices (`bool`, *optional*, defaults to `False`):
-            Whether to return the indices of kept bounding boxes.
 
     Returns:
-        `Tuple`: (detections, labels, indices (optional)), tensors of shape (k, 5),
-            (k), and (k). detections are boxes with scores. Labels are 0-based.
+        `Tuple`: (detections, labels, indices), tensors of shape (k, 5),
+            (k), and (k), and indices of boxes to keep. detections are boxes with scores. Labels are 0-based.
     """
     num_classes = multi_scores.size(1) - 1
     # exclude background category
@@ -3801,10 +3797,7 @@ def multiclass_nms(
         if torch.onnx.is_in_onnx_export():
             raise RuntimeError("[ONNX Error] Can not record NMS as it has not been executed this time")
         detections = torch.cat([bboxes, scores[:, None]], -1)
-        if return_indices:
-            return detections, labels, indices
-        else:
-            return detections, labels
+        return detections, labels, indices
 
     detections, keep = batched_nms(bboxes, scores, labels, nms_cfg)
 
@@ -3812,7 +3805,4 @@ def multiclass_nms(
         detections = detections[:max_num]
         keep = keep[:max_num]
 
-    if return_indices:
-        return detections, labels[keep], indices[keep]
-    else:
-        return detections, labels[keep]
+    return detections, labels[keep], indices[keep]

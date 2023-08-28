@@ -687,7 +687,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
             return bboxes, scores
         else:
             # it's here that we create a different amount of objects per image in a batch
-            det_bboxes, det_labels = multiclass_nms(bboxes, scores, cfg["score_thr"], cfg["nms"], cfg["max_per_img"])
+            det_bboxes, det_labels, _ = multiclass_nms(bboxes, scores, cfg["score_thr"], cfg["nms"], cfg["max_per_img"])
 
             return det_bboxes, det_labels
 
