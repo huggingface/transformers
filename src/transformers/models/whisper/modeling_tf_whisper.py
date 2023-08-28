@@ -487,14 +487,14 @@ class TFWhisperPreTrainedModel(TFPreTrainedModel):
             self.main_input_name: tf.random.uniform(
                 [1, self.config.num_mel_bins, self.config.max_source_positions * 2 - 1], dtype=tf.float32
             ),
-            "decoder_input_ids": tf.constant([[1, 3]], dtype=tf.int32),
+            # "decoder_input_ids": tf.constant([[1, 3]], dtype=tf.int32),
         }
 
     @property
     def input_signature(self):
         return {
             "input_features": tf.TensorSpec((None, self.config.num_mel_bins, None), tf.float32, name="input_features"),
-            "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+            # "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
             "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
         }
 
@@ -628,6 +628,12 @@ class TFWhisperEncoder(tf.keras.layers.Layer):
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
+    
+    def get_input_embeddings(self):
+        return self.conv1
+
+    def set_input_embeddings(self, value):
+        self.conv1 = value
 
     @unpack_inputs
     def call(
@@ -1614,6 +1620,13 @@ class TFWhisperForAudioClassification(TFWhisperPreTrainedModel):
         self.classifier = tf.keras.layers.Dense(
             units=config.num_labels, input_shape=(config.classifier_proj_size,), activation=None
         )
+    
+    def get_input_embeddings(self):
+        return self.encoder.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.encoder.set_input_embeddings(value)
+
 
     @unpack_inputs
     def call(
