@@ -26,6 +26,16 @@ The abstract from the paper is the following:
 
 Checkout all CodeLlama models [here](https://huggingface.co/models?search=code_llama)
 
+<Tip warning={true}>
+
+The `Llama2` family models, on which Code Llama is based, were trained using `bfloat16`, but the original inference uses `float16. The checkpoints uploaded on the hub use `torch_dtype = 'float16'` which will be used by the `AutoModel` API to cast the checkpoints from `torch.float32` to `torch.float16`. 
+
+The `dtype` of the online weights is mostly irrelevant, unless you are using `torch_dtype="auto"` when initializing a model using `model = AutoModelForCausalLM.from_pretrained("path", torch_dtype = "auto")`. The reason is that the model will first be downloaded ( using the `dtype` of the checkpoints online) then it will be casted to the default `dtype` of `torch` (becomes `torch.float32`) and finally, if there is a `torch_dtype` provided in the config, it will be used. 
+
+Training the model in `float16` is not recommended and known to produce `nan`, as such the model should be trained in `bfloat16`.
+
+</Tip>
+
 Tips:
 
 - These models have the same architcture as the `Llama2` models
@@ -75,8 +85,8 @@ If you only want the infilled part:
 >>> from transformers import pipeline
 >>> import torch
 
->>> pipeline = pipeline("text-generation",model="codellama/CodeLlama-7b-hf",torch_dtype=torch.float16, device_map="auto")
->>> pipeline('def remove_non_ascii(s: str) -> str:\n    """ <FILL_ME>\n    return result', max_new_tokens = 128, return_type = 1)
+>>> generator = pipeline("text-generation",model="codellama/CodeLlama-7b-hf",torch_dtype=torch.float16, device_map="auto")
+>>> generator('def remove_non_ascii(s: str) -> str:\n    """ <FILL_ME>\n    return result', max_new_tokens = 128, return_type = 1)
 ```
 Note that executing the script requires enough CPU RAM to host the whole model in float16 precision (even if the biggest versions
 come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM). For the 75B model, it's thus 145GB of RAM needed.
