@@ -787,9 +787,9 @@ def mask_target_single(pos_proposals, pos_assigned_gt_inds, gt_masks, cfg):
 def unmap(data, count, indices, fill=0):
     """Unmap a subset of item (data) back to the original set of items (of size count)"""
     new_size = (count,) + data.size()[1:]
-    ret = data.new_full(new_size, fill)
-    ret[indices.type(torch.bool)] = data
-    return ret
+    result = data.new_full(new_size, fill)
+    result[indices.type(torch.bool)] = data
+    return result
 
 
 def select_single_multilevel(multilevel_tensors, batch_id, detach=True):
@@ -2010,10 +2010,10 @@ class MaskRCNNRPN(nn.Module):
                 Features from the upstream network, each being a 4D-tensor.
         Returns:
             tuple: A tuple of classification scores and bbox prediction.
-                - cls_scores (list[Tensor]):
+                - cls_scores (`List[torch.Tensor]`):
                     Classification scores for all scale levels, each is a 4D-tensor, the channels number is
                     num_base_priors * num_classes.
-                - bbox_preds (list[Tensor]):
+                - bbox_preds (`List[torch.Tensor]`):
                     Box energies / deltas for all scale levels, each is a 4D-tensor, the channels number is
                     num_base_priors * 4.
         """
@@ -2066,7 +2066,7 @@ class MaskRCNNRPN(nn.Module):
             featmap_sizes (`List[Tuple]`):
                 Multi-level feature map sizes.
             img_metas (`List[Dict]`):
-                Image meta info.
+                Image meta info. Each dictionary should contain the keys `img_shape` and `pad_shape`.
             device (`torch.device` or `"str"`, *optional*, defaults to `"cuda"`):
                 Device for returned tensors.
 
@@ -2076,6 +2076,7 @@ class MaskRCNNRPN(nn.Module):
             valid_flag_list (`List[torch.Tensor]`):
                 Valid flags of each image.
         """
+        print("Image metas:", img_metas[0].keys())
         num_images = len(img_metas)
 
         # since feature map sizes of all images are the same, we only compute
