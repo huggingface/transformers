@@ -377,15 +377,10 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
         do_pad: bool = True,
-        test_cfg={
-            "score_thr": 0.05,
-            "nms": {"type": "nms", "iou_threshold": 0.5},
-            "max_per_img": 100,
-            "mask_thr_binary": 0.5,
-        },
+        test_cfg: Dict = None,
         num_classes=80,
-        bbox_head_bbox_coder_target_means=[0.0, 0.0, 0.0, 0.0],
-        bbox_head_bbox_coder_target_stds=[0.1, 0.1, 0.2, 0.2],
+        bbox_head_bbox_coder_target_means: List[float] = None,
+        bbox_head_bbox_coder_target_stds: List[float] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -400,8 +395,15 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
-        self.test_cfg = test_cfg
+        self.test_cfg = test_cfg if test_cfg is not None else {
+            "score_thr": 0.05,
+            "nms": {"type": "nms", "iou_threshold": 0.5},
+            "max_per_img": 100,
+            "mask_thr_binary": 0.5,
+        }
         self.num_classes = num_classes
+        bbox_head_bbox_coder_target_means = bbox_head_bbox_coder_target_means if bbox_head_bbox_coder_target_means is not None else [0.0, 0.0, 0.0, 0.0]
+        bbox_head_bbox_coder_target_stds = bbox_head_bbox_coder_target_stds if bbox_head_bbox_coder_target_stds is not None else [0.1, 0.1, 0.2, 0.2]
         self.bbox_coder = MaskRCNNDeltaXYWHBBoxCoder(
             target_means=bbox_head_bbox_coder_target_means, target_stds=bbox_head_bbox_coder_target_stds
         )

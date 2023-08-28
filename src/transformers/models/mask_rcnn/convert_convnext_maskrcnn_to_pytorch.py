@@ -141,12 +141,6 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_url, pytorch_dump_folder_pat
 
     outputs = model(pixel_values, output_hidden_states=True)
 
-    # verify hidden states
-    # expected_slice = torch.tensor(
-    #     [[-0.0836, -0.1298, -0.1237], [-0.0743, -0.1090, -0.0873], [-0.0231, 0.0851, 0.0792]]
-    # )
-    # assert torch.allclose(outputs.hidden_states[-1][0, 0, :3, :3], expected_slice, atol=1e-3)
-
     # verify outputs
     expected_slice_logits = torch.tensor(
         [[-12.4785, -17.4976, -14.7001], [-10.9181, -16.7281, -13.2826], [-10.5053, -18.3817, -15.5554]],
