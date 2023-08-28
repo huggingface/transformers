@@ -26,13 +26,11 @@ from transformers.utils import add_start_docstrings, logging
 from transformers.modeling_outputs import BaseModelOutputWithNoAttention
 from transformers.utils import ModelOutput
 from torch.nn.modules.activation import MultiheadAttention
-# from transformers.models.patchtst.configuration_patchtst import PatchTSTConfig
 from transformers.models.patchtst.configuration_patchtst import PatchTSTConfig
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "PatchTSTConfig"
-
 
 PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "ibm/patchtst-base",
@@ -132,8 +130,9 @@ def coord2d_pos_encoding(q_len, d_model, exponential=False, normalize=True, eps=
     i = 0
     for i in range(100):
         cpe = (
-            2 * (torch.linspace(0, 1, q_len).reshape(-1, 1) ** x) * (torch.linspace(0, 1, d_model).reshape(1, -1) ** x)
-            - 1
+                2 * (torch.linspace(0, 1, q_len).reshape(-1, 1) ** x) * (
+                    torch.linspace(0, 1, d_model).reshape(1, -1) ** x)
+                - 1
         )
 
         if abs(cpe.mean()) <= eps:
@@ -164,13 +163,12 @@ def set_seed(x=42):
     if torch.cuda.is_available(): torch.cuda.manual_seed_all(x)
 
 
-
 def random_masking(
-    xb: torch.Tensor,
-    mask_ratio: float,
-    unmasked_channel_indices: list = None,
-    channel_consistent_masking: bool = False,
-    mask_value=0,
+        xb: torch.Tensor,
+        mask_ratio: float,
+        unmasked_channel_indices: list = None,
+        channel_consistent_masking: bool = False,
+        mask_value=0,
 ):
     """random_masking: Mask the input considering the control variables.
 
@@ -227,16 +225,16 @@ class Patchify(nn.Module):
     """
 
     def __init__(
-        self,
-        sequence_length: int,
-        patch_length: int,
-        stride: int,
-        padding: bool = False,  # TODO: use this to set whether we want to pad zeros to the sequence
+            self,
+            sequence_length: int,
+            patch_length: int,
+            stride: int,
+            padding: bool = False,  # TODO: use this to set whether we want to pad zeros to the sequence
     ):
         super().__init__()
 
         assert (
-            sequence_length > patch_length
+                sequence_length > patch_length
         ), f"Sequence length ({sequence_length}) has to be greater than the patch length ({patch_length})"
 
         self.sequence_length = sequence_length
@@ -276,17 +274,18 @@ class PatchEmbeddings(nn.Module):
     Returns:
         embeddings: output tensor data [bs x n_vars x num_patches x embed_dim]
     """
+
     def __init__(
-        self,
-        sequence_length: int,
-        patch_length: int,
-        stride: int,
-        embed_dim: int
+            self,
+            sequence_length: int,
+            patch_length: int,
+            stride: int,
+            embed_dim: int
     ):
         super().__init__()
 
         assert (
-            sequence_length > patch_length
+                sequence_length > patch_length
         ), f"Sequence length ({sequence_length}) has to be greater than the patch length ({patch_length})"
 
         # assert ((max(sequence_length, patch_length) - patch_length) % stride == 0), f"sequence length minus patch length has to be divisible to the stride"
@@ -320,14 +319,14 @@ class PatchEmbeddings(nn.Module):
 
         x = past_values[:, self.s_begin:, :]  # x: [bs x new_sequence_length x nvars]
         # convert past_values to shape [bs*n_vars x 1 x sequence_length ]
-        x = x.transpose(1, 2).reshape(bs*n_vars, 1, -1).contiguous()
+        x = x.transpose(1, 2).reshape(bs * n_vars, 1, -1).contiguous()
         # projection
-        embeddings = self.projection(x)   # embeddings: [bs*n_vars x emb_dim x num_patches]
+        embeddings = self.projection(x)  # embeddings: [bs*n_vars x emb_dim x num_patches]
         # reshape
-        embeddings = embeddings.transpose(1, 2).view(bs, n_vars, -1, self.embed_dim).contiguous() # embeddings: [bs x n_vars x num_patches x emb_dim]
+        embeddings = embeddings.transpose(1, 2).view(bs, n_vars, -1,
+                                                     self.embed_dim).contiguous()  # embeddings: [bs x n_vars x num_patches x emb_dim]
         # embeddings = embeddings.flatten(2).transpose(1, 2)
         return embeddings
-
 
 
 class PatchMasking(nn.Module):
@@ -344,16 +343,17 @@ class PatchMasking(nn.Module):
         channel_consistent_masking (bool, optional): When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary across channels. Defaults to True.
         mask_value (int, optional): Value to use for masking. Defaults to 0.
     """
+
     def __init__(
-        self,
-        mask_type: str = "random",
-        mask_ratio=0.5,
-        mask_patches: list = [2, 3],
-        mask_patch_ratios: list = [1, 1],
-        channel_consistent_masking: bool = False,
-        unmasked_channel_indices: list = None,
-        mask_value=0,
-        seed_number: Optional[int] = None
+            self,
+            mask_type: str = "random",
+            mask_ratio=0.5,
+            mask_patches: list = [2, 3],
+            mask_patch_ratios: list = [1, 1],
+            channel_consistent_masking: bool = False,
+            unmasked_channel_indices: list = None,
+            mask_value=0,
+            seed_number: Optional[int] = None
     ):
 
         if seed_number:
@@ -398,7 +398,6 @@ class PatchMasking(nn.Module):
         mask = mask.bool()  # mask: [bs x n_vars x num_patch]
 
         return x_mask, mask
-
 
 
 class ChannelAttentionTSTEncoder(nn.Module):
@@ -476,35 +475,43 @@ class ChannelAttentionTSTEncoderLayer(nn.Module):
         bs, n_vars, sequence_length, d_model = src.shape
 
         # First sublayer: attention across time
-        src = src.view(bs*n_vars, sequence_length, d_model)      # src: [(bs*nvars) x sequence_length x d_model]
+        src = src.view(bs * n_vars, sequence_length, d_model)  # src: [(bs*nvars) x sequence_length x d_model]
         if self.pre_norm:
             ## Norm and Multi-Head attention and Add residual connection
-            src = src + self.dropout_path1(self.self_attn(self.norm_sublayer1(src)) )  # Add: residual connection with residual dropout
+            src = src + self.dropout_path1(
+                self.self_attn(self.norm_sublayer1(src)))  # Add: residual connection with residual dropout
         else:
             ## Multi-Head attention and Add residual connection and Norm - Standard Transformer from BERT
-            src = self.norm_sublayer1( src + self.dropout_path1(self.self_attn(src) ) )     # src: [(bs*nvars) x sequence_length x d_model]
-        src = src.reshape(bs, n_vars, sequence_length, d_model)     # [bs x nvars x sequence_length x d_model]
+            src = self.norm_sublayer1(
+                src + self.dropout_path1(self.self_attn(src)))  # src: [(bs*nvars) x sequence_length x d_model]
+        src = src.reshape(bs, n_vars, sequence_length, d_model)  # [bs x nvars x sequence_length x d_model]
 
         # second sublayer: attention across variable at any given time
         # [bs x nvars x sequence_length x d_model] -> [bs x sequence_length x nvars x d_model] -> [(bs*sequence_length) x nvars x d_model]
-        src = src.transpose(2, 1).contiguous().view(bs*sequence_length, n_vars, d_model)        # [(bs*sequence_length) x nvars x d_model]
+        src = src.transpose(2, 1).contiguous().view(bs * sequence_length, n_vars,
+                                                    d_model)  # [(bs*sequence_length) x nvars x d_model]
         if self.pre_norm:
             ## Norm and Multi-Head attention and Add residual connection
-            src = src + self.dropout_path2(self.self_attn(self.norm_sublayer2(src)) )  # Add: residual connection with residual dropout
+            src = src + self.dropout_path2(
+                self.self_attn(self.norm_sublayer2(src)))  # Add: residual connection with residual dropout
         else:
             ## Multi-Head attention and Add residual connection and Norm - Standard Transformer from BERT
-            src = self.norm_sublayer2( src + self.dropout_path2(self.self_attn(src) ) )     # src: [(bs*sequence_length) x nvars x d_model]
-        src = src.reshape(bs, sequence_length, n_vars, d_model).transpose(1,2).contiguous()         # src: [bs x nvars x sequence_length x d_model]
+            src = self.norm_sublayer2(
+                src + self.dropout_path2(self.self_attn(src)))  # src: [(bs*sequence_length) x nvars x d_model]
+        src = src.reshape(bs, sequence_length, n_vars, d_model).transpose(1,
+                                                                          2).contiguous()  # src: [bs x nvars x sequence_length x d_model]
 
         # Third sublayer: mixing across hidden
-        src = src.view(bs*n_vars, sequence_length, d_model)      # src: [(bs*nvars) x sequence_length x d_model]
+        src = src.view(bs * n_vars, sequence_length, d_model)  # src: [(bs*nvars) x sequence_length x d_model]
         if self.pre_norm:
             ## Norm and Position-wise Feed-Forward and Add residual connection
-            src = src + self.dropout_path3(self.ff( self.norm_sublayer3(src) ))  # Add: residual connection with residual dropout
+            src = src + self.dropout_path3(
+                self.ff(self.norm_sublayer3(src)))  # Add: residual connection with residual dropout
         else:
             ## Position-wise Feed-Forward and Add residual connection and Norm - Standard Transformer from BERT
-            src = self.norm_sublayer3( src + self.dropout_path3(self.ff(src)) ) # Add: residual connection with residual dropout
-        src = src.reshape(bs, n_vars, sequence_length, d_model)     # [bs x nvars x sequence_length x d_model]
+            src = self.norm_sublayer3(
+                src + self.dropout_path3(self.ff(src)))  # Add: residual connection with residual dropout
+        src = src.reshape(bs, n_vars, sequence_length, d_model)  # [bs x nvars x sequence_length x d_model]
 
         return src
 
@@ -547,9 +554,11 @@ class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
         # Positional encoding
         if config.use_cls_token:
             self.cls_token = nn.Parameter(torch.zeros(1, 1, 1, config.d_model))
-            self.w_pos = positional_encoding(config.positional_encoding, config.learn_pe, config.num_patches + 1, config.d_model)
+            self.w_pos = positional_encoding(config.positional_encoding, config.learn_pe, config.num_patches + 1,
+                                             config.d_model)
         else:
-            self.w_pos = positional_encoding(config.positional_encoding, config.learn_pe, config.num_patches, config.d_model)
+            self.w_pos = positional_encoding(config.positional_encoding, config.learn_pe, config.num_patches,
+                                             config.d_model)
 
         # Positional dropout
         self.dropout = nn.Dropout(config.positional_dropout) if config.positional_dropout > 0 else nn.Identity()
@@ -560,7 +569,8 @@ class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def forward(self, past_values: torch.Tensor, output_hidden_states: Optional[bool] = None) -> torch.Tensor:
+    def forward(self, past_values: torch.Tensor,
+                output_hidden_states: Optional[bool] = None) -> BaseModelOutputWithNoAttention:
         """
         x: tensor [bs x nvars x num_patches x patch_length]
         return:
@@ -595,7 +605,7 @@ class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
         # Encoder
         past_values, hidden_states = self.encoder(
             past_values, output_hidden_states)  # x: [bs x nvars x num_patches x d_model]
-                                                # or [bs x nvars x (num_patches+1) x d_model] if use cls_token
+        # or [bs x nvars x (num_patches+1) x d_model] if use cls_token
 
         # return past_values, hidden_states
         return BaseModelOutputWithNoAttention(
@@ -779,8 +789,6 @@ PATCHTST_INPUTS_DOCSTRING = r"""
     "The bare PatchTST Model outputting raw hidden-states without any specific head on top.",
     PATCHTST_START_DOCSTRING,
 )
-
-
 class PatchTSTModelOutputWithNoAttention(ModelOutput):
     """
     Base class for model's outputs, with potential hidden states.
@@ -807,7 +815,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig, mask_input: bool = False):
         super().__init__(config)
         self.patching = Patchify(config.context_length, patch_length=config.patch_length, stride=config.stride)
-        self.mask_input = mask_input #config.mask_input
+        self.mask_input = mask_input  # config.mask_input
 
         if self.mask_input:
             self.masking = PatchMasking(
@@ -826,12 +834,13 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
 
     def forward(self,
                 past_values: torch.Tensor,
-                future_values: Optional[torch.Tensor]=None,
+                future_values: Optional[torch.Tensor] = None,
                 output_hidden_states: Optional[bool] = None):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        patched_values = self.patching(past_values)  # patched_values: [bs x n_vars x num_patches x patch_length] for pretrain
+        patched_values = self.patching(
+            past_values)  # patched_values: [bs x n_vars x num_patches x patch_length] for pretrain
         if self.mask_input:
             masked_values, mask = self.masking(patched_values)
         else:
@@ -903,7 +912,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         self.loss = torch.nn.MSELoss(reduction='none')
 
     def forward(
-        self, past_values: torch.Tensor,
+            self, past_values: torch.Tensor,
             future_values: Optional[torch.Tensor] = None,
             output_hidden_states: Optional[bool] = None
     ) -> PatchTSTForPreTrainingOutput:
@@ -911,8 +920,10 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         past_values (x): tensor [bs x sequence_length x n_vars ]
         future_values (y): labels
         """
-        model_output = self.model(past_values)  # x: [bs x nvars x num_patches x d_model] or [bs x nvars x (num_patches+1) x d_model] if use cls_token
-        x_hat = self.head(model_output[0])  # tensor [bs x nvars x num_patches x patch_length] or [bs x nvars x (num_patches+1) x patch_length] if use cls_token
+        model_output = self.model(
+            past_values)  # x: [bs x nvars x num_patches x d_model] or [bs x nvars x (num_patches+1) x d_model] if use cls_token
+        x_hat = self.head(model_output[
+                              0])  # tensor [bs x nvars x num_patches x patch_length] or [bs x nvars x (num_patches+1) x patch_length] if use cls_token
 
         # calculate masked_loss
         loss_val = self.loss(x_hat, model_output.patched_input)
@@ -1035,14 +1046,14 @@ class PredictionHead(nn.Module):
         output: [bs x forecast_len x nvars]
         """
         if self.use_cls_token:
-            y = x[:, :, 0, :]      # y: [bs x nvars x d_model]
+            y = x[:, :, 0, :]  # y: [bs x nvars x d_model]
         else:
             if self.pooling == 'mean':
                 y = x.mean(dim=2)  # y: [bs x nvars x d_model]
             elif self.pooling == 'max':
                 y = x.max(dim=2)  # y: [bs x nvars x d_model]
             else:
-                y = x       # y: [bs x nvars x num_patches x d_model]
+                y = x  # y: [bs x nvars x num_patches x d_model]
 
         if self.individual:
             x_out = []
@@ -1053,7 +1064,7 @@ class PredictionHead(nn.Module):
                 x_out.append(z)
             x = torch.stack(x_out, dim=1)  # x: [bs x nvars x forecast_len]
         else:
-            z = self.flatten(y)         # z: [bs x nvars x (d_model * num_patches)] or [bs x nvars x d_model)]
+            z = self.flatten(y)  # z: [bs x nvars x (d_model * num_patches)] or [bs x nvars x d_model)]
             z = self.dropout(z)
             x = self.linear(z)  # x: [bs x nvars x forecast_len]
 
@@ -1166,7 +1177,7 @@ class ForecastHead(nn.Module):
             for i in range(self.n_vars):
                 self.flattens.append(nn.Flatten(start_dim=2))
                 self.linears.append(nn.Linear(head_dim, config.prediction_length))
-                self.dropouts.append(nn.Dropout(head_dropout) if head_dropout > 0 else nn.Identity()
+                self.dropouts.append(nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
                                      )
         else:
             self.flatten = nn.Flatten(start_dim=2)
@@ -1181,14 +1192,14 @@ class ForecastHead(nn.Module):
         """
 
         if self.use_cls_token:
-            y = x[:, :, 0, :]      # y: [bs x nvars x d_model]
+            y = x[:, :, 0, :]  # y: [bs x nvars x d_model]
         else:
             if self.pooling == 'mean':
                 y = x.mean(dim=2)  # y: [bs x nvars x d_model]
             elif self.pooling == 'max':
                 y = x.max(dim=2)  # y: [bs x nvars x d_model]
             else:
-                y = x       # y: [bs x nvars x num_patches x d_model]
+                y = x  # y: [bs x nvars x num_patches x d_model]
 
         if self.individual:
             x_out = []
@@ -1199,7 +1210,7 @@ class ForecastHead(nn.Module):
                 x_out.append(z)
             x = torch.stack(x_out, dim=1)  # x: [bs x nvars x forecast_len]
         else:
-            z = self.flatten(y)         # z: [bs x nvars x (d_model * num_patches)] or [bs x nvars x d_model)]
+            z = self.flatten(y)  # z: [bs x nvars x (d_model * num_patches)] or [bs x nvars x d_model)]
             z = self.dropout(z)
             x = self.linear(z)  # x: [bs x nvars x forecast_len]
 
