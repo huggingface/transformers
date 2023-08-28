@@ -55,7 +55,7 @@ Let's make this concrete with a quick example using the `BlenderBot` model:
 Notice how the entire chat is condensed into a single string. If we use `tokenize=True`, which is the default setting,
 that string will also be tokenized for us. Blenderbot's chat template is very simple, however. To see a more complex
 template in action, let's use the `meta-llama/Llama-2-7b-chat-hf` model. Note that this model has gated access, so you
-will have to request access on the repo if you want to run this code yourself:
+will have to [request access on the repo](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf) if you want to run this code yourself:
 
 ```python
 >>> from transformers import AutoTokenizer
