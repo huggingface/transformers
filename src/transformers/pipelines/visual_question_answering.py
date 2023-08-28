@@ -1,6 +1,6 @@
 from typing import Union
 
-from ..utils import ExplicitEnum, add_end_docstrings, is_torch_available, is_vision_available, logging
+from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
@@ -13,11 +13,6 @@ if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
-
-
-class ModelType(ExplicitEnum):
-    CLASSIFIER = "classifier"
-    GENERATIVE = "generative"
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
@@ -59,11 +54,6 @@ class VisualQuestionAnsweringPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.check_model_type(MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES)
-
-        if self.model.config.__class__.__name__ in ["Blip2Config"]:
-            self.model_type = ModelType.GENERATIVE
-        elif self.model.config.__class__.__name__ in ["ViltConfig"]:
-            self.model_type = ModelType.CLASSIFIER
 
     def _sanitize_parameters(self, top_k=None, padding=None, truncation=None, timeout=None, **kwargs):
         preprocess_params, postprocess_params = {}, {}
@@ -134,14 +124,14 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         return model_inputs
 
     def _forward(self, model_inputs):
-        if self.model_type == ModelType.GENERATIVE:
+        if self.model.can_generate():
             model_outputs = self.model.generate(**model_inputs)
         else:
             model_outputs = self.model(**model_inputs)
         return model_outputs
 
     def postprocess(self, model_outputs, top_k=5):
-        if self.model_type == ModelType.GENERATIVE:
+        if self.model.can_generate():
             return [
                 {"answer": self.tokenizer.decode(output_ids, skip_special_tokens=True).strip()}
                 for output_ids in model_outputs
