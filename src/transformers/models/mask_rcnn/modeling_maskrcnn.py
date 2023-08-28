@@ -77,9 +77,11 @@ class MaskRCNNRPNOutput(ModelOutput):
             (num_proposals, 5). Each proposal is of the format (top_left_x, top_left_y, bottom_right_x, bottom_right_y,
             objectness_score).
         logits (`Tuple[torch.FloatTensor]`):
-            Classification scores for all scale levels, each is a 4D-tensor, the channels number is num_base_priors * num_classes.
+            Classification scores for all scale levels, each is a 4D-tensor, the channels number is num_base_priors *
+            num_classes.
         pred_boxes (`Tuple[torch.FloatTensor]`):
-            Box energies / deltas for all scale levels, each is a 4D-tensor, the channels number is num_base_priors * 4.
+            Box energies / deltas for all scale levels, each is a 4D-tensor, the channels number is num_base_priors *
+            4.
     """
 
     losses: torch.FloatTensor = None
@@ -3003,7 +3005,10 @@ class MaskRCNNRoIHead(nn.Module):
         # rescale it back to the testing scale to obtain RoIs.
         if rescale:
             scale_factors = [scale_factor.to(detected_bboxes[0].device) for scale_factor in scale_factors]
-        _bboxes = [detected_bboxes[i] * scale_factors[i] if rescale else detected_bboxes[i] for i in range(len(detected_bboxes))]
+        _bboxes = [
+            detected_bboxes[i] * scale_factors[i] if rescale else detected_bboxes[i]
+            for i in range(len(detected_bboxes))
+        ]
         mask_rois = bbox2roi(_bboxes)
         mask_results = self._mask_forward(hidden_states, mask_rois)
         mask_pred = mask_results["mask_pred"]
@@ -3078,24 +3083,26 @@ class MaskRCNNRoIHead(nn.Module):
         return losses
 
     def forward_test(self, hidden_states, proposals):
-        """Test without augmentation (originally called `simple_test`).
+        """Originally called `simple_test`. Inference is applied without applying any augmentations (this is something we could
+        also
+                support in the future).
 
-        Source:
-        https://github.com/open-mmlab/mmdetection/blob/ca11860f4f3c3ca2ce8340e2686eeaec05b29111/mmdet/models/roi_heads/standard_roi_head.py#L223.
+                Source:
+                https://github.com/open-mmlab/mmdetection/blob/ca11860f4f3c3ca2ce8340e2686eeaec05b29111/mmdet/models/roi_heads/standard_roi_head.py#L223.
 
-        Args:
-            hidden_states (`Tuple[torch.Tensor]`):
-                Features from upstream network. Each has shape `(batch_size, num_channels, height, width)`.
-            proposals (`List[torch.Tensor`]):
-                Proposals from RPN head. Each has shape (num_proposals, 5), last dimension 5 represents (top_left_x,
-                top_left_y, bottom_right_x, bottom_right_y, score).
+                Args:
+                    hidden_states (`Tuple[torch.Tensor]`):
+                        Features from upstream network. Each has shape `(batch_size, num_channels, height, width)`.
+                    proposals (`List[torch.Tensor`]):
+                        Proposals from RPN head. Each has shape (num_proposals, 5), last dimension 5 represents
+                        (top_left_x, top_left_y, bottom_right_x, bottom_right_y, score).
 
-        Returns:
-            `List[List[np.ndarray]]` or `List[Tuple]`: When no mask branch, it is bbox results of each image and
-            classes with type `List[List[np.ndarray]]`. The outer list corresponds to each image. The inner list
-            corresponds to each class. When the model has a mask branch, it contains the bbox results and mask results.
-            The outer list corresponds to each image, and first element of tuple is bbox results, second element is
-            mask results.
+                Returns:
+                    `List[List[np.ndarray]]` or `List[Tuple]`: When no mask branch, it is bbox results of each image
+                    and classes with type `List[List[np.ndarray]]`. The outer list corresponds to each image. The inner
+                    list corresponds to each class. When the model has a mask branch, it contains the bbox results and
+                    mask results. The outer list corresponds to each image, and first element of tuple is bbox results,
+                    second element is mask results.
         """
         rois, proposals, logits, pred_boxes = self.forward_test_bboxes(hidden_states, proposals, self.test_cfg)
 

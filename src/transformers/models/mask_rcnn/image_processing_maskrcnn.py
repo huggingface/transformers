@@ -1033,7 +1033,9 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
 
             return detected_bboxes, detected_labels
 
-    def get_segmentation_masks(self, mask_pred, detected_bboxes, detected_labels, rcnn_test_cfg, original_shape, scale_factor, rescale):
+    def get_segmentation_masks(
+        self, mask_pred, detected_bboxes, detected_labels, rcnn_test_cfg, original_shape, scale_factor, rescale
+    ):
         """Get segmentation masks from mask_pred and bboxes.
 
         Args:
