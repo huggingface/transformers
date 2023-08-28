@@ -13,7 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
+
+import torch
 
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
@@ -107,7 +109,12 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         pass
 
     def forward(
-        self, pixel_values, output_attentions=None, output_hidden_states=None, return_dict=None, **kwargs
+        self,
+        pixel_values: torch.FloatTensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[BackboneOutput, Tuple[Tensor, ...]]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
