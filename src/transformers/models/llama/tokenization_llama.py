@@ -208,8 +208,10 @@ class LlamaTokenizer(PreTrainedTokenizer):
         if self.legacy:
             return super().tokenize(text, **kwargs)
 
-        if len(text) > 0:
-            tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
+        if len(text) == 0:
+            return super().tokenize(text, **kwargs)
+
+        tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
 
         if tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
             tokens = tokens[1:]
