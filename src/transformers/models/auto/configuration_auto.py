@@ -57,8 +57,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("clap", "ClapConfig"),
         ("clip", "CLIPConfig"),
         ("clipseg", "CLIPSegConfig"),
-        ("code_llama", "LlamaConfig"),
         ("clvp", "CLVPConfig"),
+        ("code_llama", "LlamaConfig"),
         ("codegen", "CodeGenConfig"),
         ("conditional_detr", "ConditionalDetrConfig"),
         ("convbert", "ConvBertConfig"),
@@ -483,11 +483,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("clap", "CLAP"),
         ("clip", "CLIP"),
         ("clipseg", "CLIPSeg"),
-<<<<<<< HEAD
-        ("code_llama", "CodeLlama"),
-=======
         ("clvp", "CLVP"),
->>>>>>> 6d674490a (make commands done, tests and docs remaining)
+        ("code_llama", "CodeLlama"),
         ("codegen", "CodeGen"),
         ("conditional_detr", "Conditional DETR"),
         ("convbert", "ConvBERT"),

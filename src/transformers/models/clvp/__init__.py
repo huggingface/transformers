@@ -23,10 +23,10 @@ from ...utils import (
 _import_structure = {
     "configuration_clvp": [
         "CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CLVPAutoRegressiveConfig",
         "CLVPConfig",
         "CLVPSpeechConfig",
         "CLVPTextConfig",
-        "CLVPAutoRegressiveConfig",
     ],
     "feature_extraction_clvp": ["CLVPFeatureExtractor"],
     "processing_clvp": ["CLVPProcessor"],
@@ -45,16 +45,17 @@ else:
         "CLVPModel",
         "CLVPPreTrainedModel",
         "CLVPTransformerWithProjection",
+        "CLVPAutoRegressiveLMHeadModel",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_clvp import (
         CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CLVPAutoRegressiveConfig,
         CLVPConfig,
         CLVPSpeechConfig,
         CLVPTextConfig,
-        CLVPAutoRegressiveConfig,
     )
     from .feature_extraction_clvp import CLVPFeatureExtractor
     from .processing_clvp import CLVPProcessor
@@ -68,6 +69,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_clvp import (
             CLVP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CLVPAutoRegressiveLMHeadModel,
             CLVPModel,
             CLVPPreTrainedModel,
             CLVPTransformerWithProjection,

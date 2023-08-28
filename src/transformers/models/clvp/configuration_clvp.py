@@ -262,10 +262,10 @@ class CLVPSpeechConfig(PretrainedConfig):
 
 class CLVPAutoRegressiveConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLVPAutoRegressiveModel`]. It is used to instantiate a
-    CLVP Auto Regressive Model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Auto Regressive part of the CLVP
-    [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
+    This is the configuration class to store the configuration of a [`CLVPAutoRegressiveModel`]. It is used to
+    instantiate a CLVP Auto Regressive Model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Auto Regressive
+    part of the CLVP [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -276,11 +276,11 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 8194):
             Vocabulary size of the model.
         max_mel_tokens (`int`, *optional*, defaults to 608):
-            The maximum sequence length of mel tokens that this model might ever be used with.
-            Similar to `n_positions` in `GPT2Config`.
+            The maximum sequence length of mel tokens that this model might ever be used with. Similar to `n_positions`
+            in `GPT2Config`.
         max_text_tokens (`int`, *optional*, defaults to 404):
-            The maximum sequence length of text tokens that this model might ever be used with.
-            Similar to `n_positions` in `GPT2Config`.
+            The maximum sequence length of text tokens that this model might ever be used with. Similar to
+            `n_positions` in `GPT2Config`.
         n_embd (`int`, *optional*, defaults to 1024):
             Dimensionality of the embeddings and hidden states.
         n_layer (`int`, *optional*, defaults to 30):
@@ -333,7 +333,8 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
             The number of buckets to use for each attention layer. This value is used in `CLVPRelativeAttention`.
         relative_attention_max_distance (`int`, *optional*, defaults to 128):
-            The maximum distance of the longer sequences for the bucket separation. This value is used in `CLVPRelativeAttention`.
+            The maximum distance of the longer sequences for the bucket separation. This value is used in
+            `CLVPRelativeAttention`.
         initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
@@ -348,39 +349,39 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
     }
 
     def __init__(
-            self,
-            vocab_size=8194,
-            max_mel_tokens=608,
-            max_text_tokens=404,
-            n_embd=1024,
-            n_layer=30,
-            n_head=16,
-            n_inner=None,
-            activation_function="gelu_new",
-            resid_pdrop=0.1,
-            embd_pdrop=0.1,
-            attn_pdrop=0.1,
-            layer_norm_epsilon=1e-5,
-            initializer_range=0.02,
-            summary_type="cls_index",
-            summary_use_proj=True,
-            summary_activation=None,
-            summary_proj_to_labels=True,
-            summary_first_dropout=0.1,
-            scale_attn_weights=True,
-            use_cache=True,
-            bos_token_id=8192,
-            eos_token_id=8193,
-            scale_attn_by_inverse_layer_idx=False,
-            reorder_and_upcast_attn=False,
-            feature_size=80,
-            relative_attention_num_buckets=32,
-            relative_attention_max_distance=128,
-            initializer_factor=1.0,
-            **kwargs,
+        self,
+        vocab_size=8194,
+        max_mel_tokens=608,
+        max_text_tokens=404,
+        n_embd=1024,
+        n_layer=30,
+        n_head=16,
+        n_inner=None,
+        activation_function="gelu_new",
+        resid_pdrop=0.1,
+        embd_pdrop=0.1,
+        attn_pdrop=0.1,
+        layer_norm_epsilon=1e-5,
+        initializer_range=0.02,
+        summary_type="cls_index",
+        summary_use_proj=True,
+        summary_activation=None,
+        summary_proj_to_labels=True,
+        summary_first_dropout=0.1,
+        scale_attn_weights=True,
+        use_cache=True,
+        bos_token_id=8192,
+        eos_token_id=8193,
+        scale_attn_by_inverse_layer_idx=False,
+        reorder_and_upcast_attn=False,
+        feature_size=80,
+        relative_attention_num_buckets=32,
+        relative_attention_max_distance=128,
+        initializer_factor=1.0,
+        **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.max_mel_tokens=max_mel_tokens
+        self.max_mel_tokens = max_mel_tokens
         self.max_text_tokens = max_text_tokens
         self.n_embd = n_embd
         self.n_layer = n_layer
@@ -483,7 +484,13 @@ class CLVPConfig(PretrainedConfig):
     is_composition = True
 
     def __init__(
-        self, text_config=None, speech_config=None, autoregressive_config=None, projection_dim=768, logit_scale_init_value=2.6592, **kwargs
+        self,
+        text_config=None,
+        speech_config=None,
+        autoregressive_config=None,
+        projection_dim=768,
+        logit_scale_init_value=2.6592,
+        **kwargs,
     ):
         # If `_config_dict` exist, we use them for the backward compatibility.
         # We pop out these 3 attributes before calling `super().__init__` to avoid them being saved (which causes a lot
@@ -570,7 +577,11 @@ class CLVPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_autoregressive_config_dict` and `autoregressive_config` but being different.
             for key, value in _autoregressive_config_dict.items():
-                if key in autoregressive_config and value != autoregressive_config[key] and key not in ["transformers_version"]:
+                if (
+                    key in autoregressive_config
+                    and value != autoregressive_config[key]
+                    and key not in ["transformers_version"]
+                ):
                     # If specified in `autoregressive_config_dict`
                     if key in autoregressive_config_dict:
                         message = (
@@ -598,7 +609,9 @@ class CLVPConfig(PretrainedConfig):
 
         if autoregressive_config is None:
             autoregressive_config = {}
-            logger.info("`autoregressive_config` is `None`. initializing the `CLVPAutoRegressiveConfig` with default values.")
+            logger.info(
+                "`autoregressive_config` is `None`. initializing the `CLVPAutoRegressiveConfig` with default values."
+            )
 
         self.text_config = CLVPTextConfig(**text_config)
         self.speech_config = CLVPSpeechConfig(**speech_config)
@@ -609,11 +622,13 @@ class CLVPConfig(PretrainedConfig):
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_speech_autoregressive_configs(cls,
-                                                text_config: CLVPTextConfig,
-                                                speech_config: CLVPSpeechConfig,
-                                                autoregressive_config: CLVPAutoRegressiveConfig,
-                                                **kwargs):
+    def from_text_speech_autoregressive_configs(
+        cls,
+        text_config: CLVPTextConfig,
+        speech_config: CLVPSpeechConfig,
+        autoregressive_config: CLVPAutoRegressiveConfig,
+        **kwargs,
+    ):
         r"""
         Instantiate a [`CLVPConfig`] (or a derived class) from clvp text model configuration, clvp speech model
         configuration and clvp autoregressive model configuration.
@@ -622,10 +637,12 @@ class CLVPConfig(PretrainedConfig):
             [`CLVPConfig`]: An instance of a configuration object
         """
 
-        return cls(text_config=text_config.to_dict(),
-                   speech_config=speech_config.to_dict(),
-                   autoregressive_config=autoregressive_config.to_dict(),
-                   **kwargs)
+        return cls(
+            text_config=text_config.to_dict(),
+            speech_config=speech_config.to_dict(),
+            autoregressive_config=autoregressive_config.to_dict(),
+            **kwargs,
+        )
 
     def to_dict(self):
         """

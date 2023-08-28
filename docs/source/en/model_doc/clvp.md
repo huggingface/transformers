@@ -80,7 +80,7 @@ Example :
 ## CLVPConfig
 
 [[autodoc]] CLVPConfig
-    - from_text_speech_configs
+    - from_text_speech_autoregressive_configs
 
 ## CLVPTextConfig
 
@@ -120,8 +120,13 @@ Example :
     - get_speech_features
     - get_speech_features_with_autoreg_generate
 
-## CLVPModelWithProjection
+## CLVPTransformerWithProjection
 
-[[autodoc]] CLVPModelWithProjection
+[[autodoc]] CLVPTransformerWithProjection
     - forward
+
+## CLVPAutoRegressiveLMHeadModel
+
+[[autodoc]] CLVPAutoRegressiveLMHeadModel
+
 

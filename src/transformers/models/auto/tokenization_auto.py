@@ -121,6 +121,7 @@ else:
                     "CLIPTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("clvp", ("CLVPTokenizer", None)),
             (
                 "code_llama",
                 (
@@ -128,7 +129,6 @@ else:
                     "CodeLlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
-            ("clvp", ("CLVPTokenizer", None)),
             ("codegen", ("CodeGenTokenizer", "CodeGenTokenizerFast" if is_tokenizers_available() else None)),
             ("convbert", ("ConvBertTokenizer", "ConvBertTokenizerFast" if is_tokenizers_available() else None)),
             (
