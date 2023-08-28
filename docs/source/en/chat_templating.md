@@ -163,7 +163,7 @@ above and add "[ASST]" and "[/ASST]" to assistant messages:
 {% endfor %}
 ```
 
-Now, simply set the `tokenizer.chat_template` attribute. Next time you use [`PreTrainedTokenizer.apply_chat_template`], it will
+Now, simply set the `tokenizer.chat_template` attribute. Next time you use [`~PreTrainedTokenizer.apply_chat_template`], it will
 use your new template! This attribute will be saved with the tokenizer, so you can use
 [`~utils.PushToHubMixin.push_to_hub`] to upload your new template to the Hub:
 
@@ -174,7 +174,7 @@ tokenizer.chat_template = template  # Set the new template
 tokenizer.push_to_hub("model_name")  # Upload your new template to the Hub!
 ```
 
-The method [`PreTrainedTokenizer.apply_chat_template`] which uses your chat template is called by the [`ConversationalPipeline`] class, so 
+The method [`~PreTrainedTokenizer.apply_chat_template`] which uses your chat template is called by the [`ConversationalPipeline`] class, so 
 once you set the correct chat template, your model will automatically become compatible with [`ConversationalPipeline`].
 
 ## What template should I use?
