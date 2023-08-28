@@ -24,6 +24,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
+    "processing_llva": ["LlavaProcessor"]
 }
 
 try:
@@ -58,7 +59,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaConfig
+    from .configuration_llava import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlavaConfig
 
     try:
         if not is_sentencepiece_available():
@@ -89,3 +90,4 @@ else:
     import sys
 
     sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+

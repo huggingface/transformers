@@ -28,7 +28,7 @@ logger = logging.get_logger(__name__)
 LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
-class LlamaConfig(PretrainedConfig):
+class LlavaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LlamaModel`]. It is used to instantiate an LLaMA
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -176,3 +176,4 @@ class LlamaConfig(PretrainedConfig):
             )
         if rope_scaling_factor is None or not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
             raise ValueError(f"`rope_scaling`'s factor field must be an float > 1, got {rope_scaling_factor}")
+
