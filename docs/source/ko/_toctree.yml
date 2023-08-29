@@ -184,6 +184,8 @@
     title: 고정 길이 모델의 펄플렉서티(Perplexity)
   - local: pipeline_webserver
     title: 추론 웹 서버를 위한 파이프라인
+  - local: model_memory_anatomy
+    title: 모델 학습 해부하기
   title: (번역중) 개념 가이드
 - sections:
   - sections:
