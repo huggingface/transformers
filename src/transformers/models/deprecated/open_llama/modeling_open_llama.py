@@ -199,6 +199,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
+
 class OpenLlamaMLP(nn.Module):
     def __init__(
         self,
