@@ -386,9 +386,9 @@ class LlamaTokenizer(PreTrainedTokenizer):
             template = template.replace("sys_prompt", prompt)  # Use replace to avoid f-string + Jinja interaction
         template += (
             "{% if message['role'] == 'user' %}"
-            "{{ bos_token + '[INST]' + message['content'] + '[/INST]' }}"
+            "{{ bos_token + '[INST] ' + message['content'].strip() + ' [/INST]' }}"
             "{% elif message['role'] == 'system' %}"
-            "{{ '<<SYS>>\\n' + message['content'] + '\\n<</SYS>>\\n\\n' }}"
+            "{{ '<<SYS>>\\n' + message['content'].strip() + '\\n<</SYS>>\\n\\n' }}"
             "{% elif message['role'] == 'assistant' %}"
             "{{ ' '  + message['content'] + ' ' + eos_token }}"
             "{% endif %}"
