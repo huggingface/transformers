@@ -212,6 +212,7 @@ from . import (
     vit_msn,
     vitdet,
     vits,
+    vitmatte,
     vivit,
     wav2vec2,
     wav2vec2_conformer,

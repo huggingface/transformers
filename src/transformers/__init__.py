@@ -592,6 +592,7 @@ _import_structure = {
         "VitsConfig",
         "VitsTokenizer",
     ],
+    "models.vitmatte": ["VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitMatteConfig"],
     "models.vivit": [
         "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VivitConfig",
@@ -983,6 +984,7 @@ else:
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
     _import_structure["models.vit_hybrid"].extend(["ViTHybridImageProcessor"])
+    _import_structure["models.vitmatte"].append("VitMatteImageProcessor")
     _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
 
@@ -2946,6 +2948,11 @@ else:
             "VITS_PRETRAINED_MODEL_ARCHIVE_LIST",
             "VitsModel",
             "VitsPreTrainedModel",
+    _import_structure["models.vitmatte"].extend(
+        [
+            "VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VitMatteForImageMatting",
+            "VitMattePreTrainedModel",
         ]
     )
     _import_structure["models.vivit"].extend(
@@ -4662,6 +4669,7 @@ if TYPE_CHECKING:
         VitsConfig,
         VitsTokenizer,
     )
+    from .models.vitmatte import VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP, VitMatteConfig
     from .models.vivit import VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, VivitConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5011,6 +5019,7 @@ if TYPE_CHECKING:
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
         from .models.vit_hybrid import ViTHybridImageProcessor
+        from .models.vitmatte import VitMatteImageProcessor
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
 
@@ -6619,6 +6628,10 @@ if TYPE_CHECKING:
             VITS_PRETRAINED_MODEL_ARCHIVE_LIST,
             VitsModel,
             VitsPreTrainedModel,
+        from .models.vitmatte import (
+            VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VitMatteForImageMatting,
+            VitMattePreTrainedModel,
         )
         from .models.vivit import (
             VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
