@@ -100,23 +100,13 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         question = "How many cats are there?"
 
         outputs = vqa_pipeline(image=image, question=question)
-
-        self.assertEqual(
-            outputs,
-            [{"answer": ANY(str)}],
-        )
+        self.assertEqual(outputs, [{"answer": ANY(str)}])
 
         outputs = vqa_pipeline({"image": image, "question": question})
-        self.assertEqual(
-            outputs,
-            [{"answer": ANY(str)}],
-        )
+        self.assertEqual(outputs, [{"answer": ANY(str)}])
 
         outputs = vqa_pipeline([{"image": image, "question": question}, {"image": image, "question": question}])
-        self.assertEqual(
-            outputs,
-            [[{"answer": ANY(str)}]] * 2,
-        )
+        self.assertEqual(outputs, [[{"answer": ANY(str)}]] * 2)
 
         vqa_pipeline = pipeline(
             "visual-question-answering",
@@ -129,11 +119,7 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         self.assertEqual(vqa_pipeline.model.vision_model.dtype, torch.float16)
 
         outputs = vqa_pipeline(image=image, question=question)
-
-        self.assertEqual(
-            outputs,
-            [{"answer": ANY(str)}],
-        )
+        self.assertEqual(outputs, [{"answer": ANY(str)}])
 
     @slow
     @require_torch
@@ -177,26 +163,13 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase):
         question = "Question: how many cats are there? Answer:"
 
         outputs = vqa_pipeline(image=image, question=question)
-
-        self.assertEqual(
-            outputs,
-            [{"answer": "two"}],
-        )
+        self.assertEqual(outputs, [{"answer": "two"}])
 
         outputs = vqa_pipeline({"image": image, "question": question})
-        self.assertEqual(
-            outputs,
-            [{"answer": "two"}],
-        )
+        self.assertEqual(outputs, [{"answer": "two"}])
 
         outputs = vqa_pipeline([{"image": image, "question": question}, {"image": image, "question": question}])
-        self.assertEqual(
-            outputs,
-            [
-                [{"answer": "two"}],
-            ]
-            * 2,
-        )
+        self.assertEqual(outputs, [[{"answer": "two"}]] * 2)
 
     @require_tf
     @unittest.skip("Visual question answering not implemented in TF")

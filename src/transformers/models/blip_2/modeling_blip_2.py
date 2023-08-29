@@ -1789,13 +1789,6 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel):
             language_model_outputs=outputs,
         )
 
-    def can_generate(self) -> bool:
-        """
-        Returns True. This model can `generate` and must therefore have this property set to True in order to be used
-        in the visual-question-answering pipeline.
-        """
-        return True
-
     @torch.no_grad()
     def generate(
         self,
