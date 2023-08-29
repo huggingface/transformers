@@ -15,7 +15,7 @@
 """Tokenization classes for Whisper."""
 import json
 import os
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import numpy as np
 from tokenizers import pre_tokenizers, processors
@@ -25,6 +25,10 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .english_normalizer import EnglishTextNormalizer
 from .tokenization_whisper import LANGUAGES, TASK_IDS, TO_LANGUAGE_CODE, WhisperTokenizer, _decode_asr
+
+
+if TYPE_CHECKING:
+    from ...pipelines.conversational import Conversation
 
 
 logger = logging.get_logger(__name__)
@@ -105,8 +109,9 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str`, *optional*, defaults to `<|startoftranscript|>`):
-            The beginning of sequence token.
+        bos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+            The beginning of sequence token. The `decoder_start_token_id` is used to set the first token as
+            `"<|startoftranscript|>"` when generating.
         eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The end of sequence token.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
@@ -138,7 +143,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         normalizer_file=None,
         tokenizer_file=None,
         unk_token="<|endoftext|>",
-        bos_token="<|startoftranscript|>",
+        bos_token="<|endoftext|>",
         eos_token="<|endoftext|>",
         add_prefix_space=False,
         language=None,
@@ -294,7 +299,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
                 Whether or not to output the offsets of the tokens. This should only be set if the model predicted
                 timestamps.
             decode_with_timestamps (`bool`, *optional*, defaults to `False`):
-                WHether or not to decode with timestamps included in the raw text.
+                Whether or not to decode with timestamps included in the raw text.
         Returns:
             `str`: The decoded sentence.
         """
@@ -467,7 +472,7 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._build_conversation_input_ids
-    def _build_conversation_input_ids(self, conversation) -> List[int]:
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         input_ids = []
         for is_user, text in conversation.iter_texts():
             input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])

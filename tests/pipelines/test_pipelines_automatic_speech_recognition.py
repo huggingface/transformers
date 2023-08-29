@@ -136,7 +136,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         else:
             # Non CTC models cannot use return_timestamps
             with self.assertRaisesRegex(
-                ValueError, "^We cannot return_timestamps yet on non-ctc models apart from Whisper !$"
+                ValueError, "^We cannot return_timestamps yet on non-CTC models apart from Whisper!$"
             ):
                 outputs = speech_recognizer(audio, return_timestamps="char")
 
@@ -161,7 +161,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
 
         # Non CTC models cannot use return_timestamps
         with self.assertRaisesRegex(
-            ValueError, "^We cannot return_timestamps yet on non-ctc models apart from Whisper !$"
+            ValueError, "^We cannot return_timestamps yet on non-CTC models apart from Whisper!$"
         ):
             _ = speech_recognizer(waveform, return_timestamps="char")
 
@@ -261,6 +261,11 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 ],
             },
         )
+        # CTC + LM models cannot use return_timestamps="char"
+        with self.assertRaisesRegex(
+            ValueError, "^CTC with LM can only predict word level timestamps, set `return_timestamps='word'`$"
+        ):
+            _ = speech_recognizer(filename, return_timestamps="char")
 
     @require_tf
     def test_small_model_tf(self):
@@ -316,6 +321,79 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 "chunks": [{"text": " Conquered returned to its place amidst the tents.", "timestamp": (0.0, 3.36)}],
             },
         )
+        pipe.model.generation_config.alignment_heads = [[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]]
+        res = pipe(sample["audio"]["array"], return_timestamps="word")
+        # fmt: off
+        # Note that the word-level timestamps predicted here are pretty bad.
+        self.assertEqual(
+            res,
+            {
+                "text": " Conquered returned to its place amidst the tents.",
+                "chunks": [
+                    {'text': ' Conquered', 'timestamp': (29.78, 29.9)},
+                    {'text': ' returned', 'timestamp': (29.9, 29.9)},
+                    {'text': ' to', 'timestamp': (29.9, 29.9)},
+                    {'text': ' its', 'timestamp': (29.9, 29.9)},
+                    {'text': ' place', 'timestamp': (29.9, 29.9)},
+                    {'text': ' amidst', 'timestamp': (29.9, 29.9)},
+                    {'text': ' the', 'timestamp': (29.9, 29.9)},
+                    {'text': ' tents.', 'timestamp': (29.9, 29.9)}
+                ]
+            }
+        )
+        # fmt: on
+
+    @require_torch
+    def test_return_timestamps_in_init(self):
+        # segment-level timestamps are accepted
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        tokenizer = AutoTokenizer.from_pretrained("openai/whisper-tiny")
+        feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-tiny")
+
+        dummy_speech = np.ones(100)
+
+        pipe = pipeline(
+            task="automatic-speech-recognition",
+            model=model,
+            feature_extractor=feature_extractor,
+            tokenizer=tokenizer,
+            chunk_length_s=8,
+            stride_length_s=1,
+            return_timestamps=True,
+        )
+
+        _ = pipe(dummy_speech)
+
+        # word-level timestamps are accepted
+        pipe = pipeline(
+            task="automatic-speech-recognition",
+            model=model,
+            feature_extractor=feature_extractor,
+            tokenizer=tokenizer,
+            chunk_length_s=8,
+            stride_length_s=1,
+            return_timestamps="word",
+        )
+
+        _ = pipe(dummy_speech)
+
+        # char-level timestamps are not accepted
+        with self.assertRaisesRegex(
+            ValueError,
+            "^Whisper cannot return `char` timestamps, only word level or segment level timestamps. "
+            "Use `return_timestamps='word'` or `return_timestamps=True` respectively.$",
+        ):
+            pipe = pipeline(
+                task="automatic-speech-recognition",
+                model=model,
+                feature_extractor=feature_extractor,
+                tokenizer=tokenizer,
+                chunk_length_s=8,
+                stride_length_s=1,
+                return_timestamps="char",
+            )
+
+            _ = pipe(dummy_speech)
 
     @require_torch
     @slow
@@ -699,6 +777,43 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 ],
             },
         )
+        speech_recognizer.model.generation_config.alignment_heads = [[2, 2], [3, 0], [3, 2], [3, 3], [3, 4], [3, 5]]
+        output = speech_recognizer(filename, return_timestamps="word")
+        # fmt: off
+        self.assertEqual(
+            output,
+            {
+                "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+                "chunks": [
+                    {'text': ' Mr.', 'timestamp': (0.0, 1.02)},
+                    {'text': ' Quilter', 'timestamp': (1.02, 1.18)},
+                    {'text': ' is', 'timestamp': (1.18, 1.44)},
+                    {'text': ' the', 'timestamp': (1.44, 1.58)},
+                    {'text': ' apostle', 'timestamp': (1.58, 1.98)},
+                    {'text': ' of', 'timestamp': (1.98, 2.3)},
+                    {'text': ' the', 'timestamp': (2.3, 2.46)},
+                    {'text': ' middle', 'timestamp': (2.46, 2.56)},
+                    {'text': ' classes,', 'timestamp': (2.56, 3.38)},
+                    {'text': ' and', 'timestamp': (3.38, 3.52)},
+                    {'text': ' we', 'timestamp': (3.52, 3.6)},
+                    {'text': ' are', 'timestamp': (3.6, 3.72)},
+                    {'text': ' glad', 'timestamp': (3.72, 4.0)},
+                    {'text': ' to', 'timestamp': (4.0, 4.26)},
+                    {'text': ' welcome', 'timestamp': (4.26, 4.54)},
+                    {'text': ' his', 'timestamp': (4.54, 4.92)},
+                    {'text': ' gospel.', 'timestamp': (4.92, 6.66)},
+                ],
+            },
+        )
+        # fmt: on
+
+        # Whisper can only predict segment level timestamps or word level, not character level
+        with self.assertRaisesRegex(
+            ValueError,
+            "^Whisper cannot return `char` timestamps, only word level or segment level timestamps. "
+            "Use `return_timestamps='word'` or `return_timestamps=True` respectively.$",
+        ):
+            _ = speech_recognizer(filename, return_timestamps="char")
 
     @slow
     @require_torch
@@ -1032,6 +1147,13 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
                 ],
             },
         )
+        # CTC models must specify return_timestamps type - cannot set `return_timestamps=True` blindly
+        with self.assertRaisesRegex(
+            ValueError,
+            "^CTC can either predict character level timestamps, or word level timestamps."
+            "Set `return_timestamps='char'` or `return_timestamps='word'` as required.$",
+        ):
+            _ = speech_recognizer(audio, return_timestamps=True)
 
     @require_torch
     @slow

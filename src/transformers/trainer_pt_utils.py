@@ -35,7 +35,7 @@ from torch import nn
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
-from .deepspeed import is_deepspeed_zero3_enabled
+from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .tokenization_utils_base import BatchEncoding
 from .utils import is_sagemaker_mp_enabled, is_torch_tpu_available, is_training_run_on_sagemaker, logging
 
@@ -257,7 +257,7 @@ class DistributedSamplerWithLoop(DistributedSampler):
             Dataset used for sampling.
         batch_size (`int`):
             The batch size used with this sampler
-        kwargs:
+        kwargs (`Dict[str, Any]`, *optional*):
             All other keyword arguments passed to `DistributedSampler`.
     """
 
@@ -1043,7 +1043,7 @@ def get_model_param_count(model, trainable_only=False):
     if is_deepspeed_zero3_enabled():
 
         def numel(p):
-            return p.ds_numel
+            return p.ds_numel if hasattr(p, "ds_numel") else p.numel()
 
     else:
 

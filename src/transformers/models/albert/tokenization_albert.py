@@ -183,10 +183,10 @@ class AlbertTokenizer(PreTrainedTokenizer):
         self.sp_model.Load(vocab_file)
 
     @property
-    def vocab_size(self):
+    def vocab_size(self) -> int:
         return len(self.sp_model)
 
-    def get_vocab(self):
+    def get_vocab(self) -> Dict[str, int]:
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab

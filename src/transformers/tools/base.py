@@ -264,7 +264,7 @@ class Tool:
         if len(tool_class.name) == 0:
             tool_class.name = custom_tool["name"]
         if tool_class.name != custom_tool["name"]:
-            logger.warn(
+            logger.warning(
                 f"{tool_class.__name__} implements a different name in its configuration and class. Using the tool "
                 "configuration name."
             )
@@ -273,7 +273,7 @@ class Tool:
         if len(tool_class.description) == 0:
             tool_class.description = custom_tool["description"]
         if tool_class.description != custom_tool["description"]:
-            logger.warn(
+            logger.warning(
                 f"{tool_class.__name__} implements a different description in its configuration and class. Using the "
                 "tool configuration description."
             )
@@ -506,7 +506,7 @@ class PipelineTool(Tool):
         if device_map is not None:
             self.model_kwargs["device_map"] = device_map
         self.hub_kwargs = hub_kwargs
-        self.hub_kwargs["use_auth_token"] = token
+        self.hub_kwargs["token"] = token
 
         super().__init__()
 

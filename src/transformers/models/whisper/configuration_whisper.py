@@ -127,7 +127,7 @@ class WhisperConfig(PretrainedConfig):
             Padding token id.
         bos_token_id (`int`, *optional*, defaults to 50256):
             Begin of stream token id.
-        eos_token_id (`int`, *optional*, defaults to 50257):
+        eos_token_id (`int`, *optional*, defaults to 50256):
             End of stream token id.
         suppress_tokens (`List[int]`, *optional*):
             A list containing the non-speech tokens that will be used by the logit processor in the `generate`
@@ -171,7 +171,9 @@ class WhisperConfig(PretrainedConfig):
             The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
             step, irrespectively of `mask_feature_prob`. Only relevant if
             `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`.
-
+        median_filter_width (`int`, *optional*, defaults to 7):
+            Width of the median filter used to smoothen to cross-attention outputs when computing token timestamps.
+            Should be an odd number.
 
     Example:
 
@@ -216,7 +218,7 @@ class WhisperConfig(PretrainedConfig):
         max_source_positions=1500,
         max_target_positions=448,
         pad_token_id=50256,
-        bos_token_id=50257,
+        bos_token_id=50256,
         eos_token_id=50256,
         suppress_tokens=None,
         begin_suppress_tokens=[220, 50256],
@@ -229,6 +231,7 @@ class WhisperConfig(PretrainedConfig):
         mask_feature_prob=0.0,
         mask_feature_length=10,
         mask_feature_min_masks=0,
+        median_filter_width=7,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -265,6 +268,9 @@ class WhisperConfig(PretrainedConfig):
         self.mask_feature_prob = mask_feature_prob
         self.mask_feature_length = mask_feature_length
         self.mask_feature_min_masks = mask_feature_min_masks
+
+        self.median_filter_width = median_filter_width
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

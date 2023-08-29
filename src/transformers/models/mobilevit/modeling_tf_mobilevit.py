@@ -98,7 +98,7 @@ class TFMobileViTConvLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         logger.warning(
             f"\n{self.__class__.__name__} has backpropagation operations that are NOT supported on CPU. If you wish "
-            "to train/fine-tine this model, you need a GPU or a TPU"
+            "to train/fine-tune this model, you need a GPU or a TPU"
         )
 
         padding = int((kernel_size - 1) / 2) * dilation

@@ -23,14 +23,13 @@ import re
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from itertools import product
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import numpy as np
-from huggingface_hub import HfFolder, Repository, delete_repo
+from huggingface_hub import HfFolder, delete_repo, list_repo_commits
 from parameterized import parameterized
 from requests.exceptions import HTTPError
 
@@ -42,12 +41,14 @@ from transformers import (
     is_torch_available,
     logging,
 )
+from transformers.hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS
 from transformers.testing_utils import (
     ENDPOINT_STAGING,
     TOKEN,
     USER,
     CaptureLogger,
     TestCasePlus,
+    execute_subprocess_async,
     get_gpu_count,
     get_tests_dir,
     is_staging_test,
@@ -72,7 +73,7 @@ from transformers.testing_utils import (
     require_wandb,
     slow,
 )
-from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR, HPSearchBackend
 from transformers.training_args import OptimizerNames
 from transformers.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
@@ -138,9 +139,9 @@ class RegressionTrainingArguments(TrainingArguments):
     b: float = 0.0
 
     def __post_init__(self):
-        super().__post_init__()
         # save resources not dealing with reporting (also avoids the warning when it's not set)
         self.report_to = []
+        super().__post_init__()
 
 
 class RepeatDataset:
@@ -528,7 +529,8 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         self.check_trained_model(trainer.model)
 
         # Re-training should restart from scratch, thus lead the same results and new seed should be used.
-        trainer.args.seed = 314
+        args = TrainingArguments("./regression", learning_rate=0.1, seed=314)
+        trainer = Trainer(args=args, train_dataset=train_dataset, model_init=lambda: RegressionModel())
         trainer.train()
         self.check_trained_model(trainer.model, alternate_seed=True)
 
@@ -2097,6 +2099,51 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertListEqual(trainer.optimizer.param_groups[0]["params"], wd_params)
         self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
 
+    @slow
+    @require_torch_multi_gpu
+    def test_end_to_end_example(self):
+        # Tests that `translation.py` will run without issues
+        script_path = os.path.abspath(
+            os.path.join(
+                os.path.dirname(__file__), "..", "..", "examples", "pytorch", "translation", "run_translation.py"
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            command = [
+                "accelerate",
+                "launch",
+                script_path,
+                "--model_name_or_path",
+                "t5-small",
+                "--per_device_train_batch_size",
+                "1",
+                "--output_dir",
+                tmpdir,
+                "--overwrite_output_dir",
+                "--do_train",
+                "--max_train_samples",
+                "64",
+                "--num_train_epochs",
+                "1",
+                "--dataset_name",
+                "wmt16",
+                "--dataset_config",
+                "ro-en",
+                "--source_lang",
+                "en",
+                "--target_lang",
+                "ro",
+                "--do_predict",
+                "--max_predict_samples",
+                "64",
+                "--predict_with_generate",
+                "--ddp_timeout",
+                "60",
+            ]
+            execute_subprocess_async(command)
+            # successful return here == success - any errors would have caused an error or a timeout in the sub-call
+
 
 @require_torch
 @is_staging_test
@@ -2179,21 +2226,17 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                 output_dir=os.path.join(tmp_dir, "test-trainer-epoch"),
                 push_to_hub=True,
                 hub_token=self._token,
+                # To avoid any flakiness if the training goes faster than the uploads.
+                hub_always_push=True,
                 save_strategy="epoch",
             )
             trainer.train()
 
-            # Wait for the async pushes to be finished
-            while trainer.push_in_progress is not None and not trainer.push_in_progress.is_done:
-                time.sleep(0.5)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-epoch", token=self._token)
-            commits = self.get_commit_history(tmp_dir)
-            self.assertIn("initial commit", commits)
-            # We can't test that epoch 2 and 3 are in the commits without being flaky as those might be skipped if
-            # the push for epoch 1 wasn't finished at the time.
-            self.assertIn("Training in progress, epoch 1", commits)
+        commits = list_repo_commits(f"{USER}/test-trainer-epoch", token=self._token)
+        commits = [c.title for c in commits]
+        self.assertIn("initial commit", commits)
+        for i in range(1, 4):
+            self.assertIn(f"Training in progress, epoch {i}", commits)
 
     def test_push_to_hub_with_saves_each_n_steps(self):
         num_gpus = max(1, get_gpu_count())
@@ -2205,22 +2248,21 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
                 output_dir=os.path.join(tmp_dir, "test-trainer-step"),
                 push_to_hub=True,
                 hub_token=self._token,
+                # To avoid any flakiness if the training goes faster than the uploads.
+                hub_always_push=True,
                 save_strategy="steps",
                 save_steps=5,
             )
             trainer.train()
 
-            # Wait for the async pushes to be finished
-            while trainer.push_in_progress is not None and not trainer.push_in_progress.is_done:
-                time.sleep(0.5)
+        commits = list_repo_commits(f"{USER}/test-trainer-step", token=self._token)
+        commits = [c.title for c in commits]
+        self.assertIn("initial commit", commits)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            _ = Repository(tmp_dir, clone_from=f"{USER}/test-trainer-step", token=self._token)
-            commits = self.get_commit_history(tmp_dir)
-            self.assertIn("initial commit", commits)
-            # We can't test that epoch 2 and 3 are in the commits without being flaky as those might be skipped if
-            # the push for epoch 1 wasn't finished at the time.
-            self.assertIn("Training in progress, step 5", commits)
+        # max_steps depend on the number of available GPUs
+        max_steps = math.ceil(trainer.args.num_train_epochs * len(trainer.get_train_dataloader()))
+        for i in range(5, max_steps, 5):
+            self.assertIn(f"Training in progress, step {i}", commits)
 
 
 @require_torch
@@ -2803,3 +2845,11 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
             trainer.hyperparameter_search(
                 direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="wandb", n_trials=4, anonymous="must"
             )
+
+
+class HyperParameterSearchBackendsTest(unittest.TestCase):
+    def test_hyperparameter_search_backends(self):
+        self.assertEqual(
+            list(ALL_HYPERPARAMETER_SEARCH_BACKENDS.keys()),
+            list(HPSearchBackend),
+        )

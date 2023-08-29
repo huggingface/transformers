@@ -183,8 +183,8 @@ class AddNewModelCommand(BaseTransformersCLICommand):
             os.remove(f"{directory}/test_modeling_flax_{lowercase_model_name}.py")
 
         shutil.move(
-            f"{directory}/{lowercase_model_name}.mdx",
-            f"{path_to_transformer_root}/docs/source/en/model_doc/{lowercase_model_name}.mdx",
+            f"{directory}/{lowercase_model_name}.md",
+            f"{path_to_transformer_root}/docs/source/en/model_doc/{lowercase_model_name}.md",
         )
 
         shutil.move(

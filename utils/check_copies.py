@@ -12,11 +12,35 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+Utility that checks whether the copies defined in the library match the original or not. This includes:
+- All code commented with `# Copied from` comments,
+- The list of models in the main README.md matches the ones in the localized READMEs and in the index.md,
+- Files that are registered as full copies of one another in the `FULL_COPIES` constant of this script.
+
+This also checks the list of models in the README is complete (has all models) and add a line to complete if there is
+a model missing.
+
+Use from the root of the repo with:
+
+```bash
+python utils/check_copies.py
+```
+
+for a check that will error in case of inconsistencies (used by `make repo-consistency`) or
+
+```bash
+python utils/check_copies.py --fix_and_overwrite
+```
+
+for a check that will fix all inconsistencies automatically (used by `make fix-copies`).
+"""
 
 import argparse
 import glob
 import os
 import re
+from typing import List, Optional, Tuple
 
 import black
 from doc_builder.style_doc import style_docstrings_in_code
@@ -102,12 +126,22 @@ LOCALIZED_READMES = {
 transformers_module = direct_transformers_import(TRANSFORMERS_PATH)
 
 
-def _should_continue(line, indent):
-    return line.startswith(indent) or len(line) <= 1 or re.search(r"^\s*\)(\s*->.*:|:)\s*$", line) is not None
+def _should_continue(line: str, indent: str) -> bool:
+    # Helper function. Returns `True` if `line` is empty, starts with the `indent` or is the end parenthesis of a
+    # function definition
+    return line.startswith(indent) or len(line.strip()) == 0 or re.search(r"^\s*\)(\s*->.*:|:)\s*$", line) is not None
 
 
-def find_code_in_transformers(object_name):
-    """Find and return the code source code of `object_name`."""
+def find_code_in_transformers(object_name: str) -> str:
+    """
+    Find and return the source code of an object.
+
+    Args:
+        object_name (`str`): The name of the object we want the source code of.
+
+    Returns:
+        `str`: The source code of the object.
+    """
     parts = object_name.split(".")
     i = 0
 
@@ -140,7 +174,7 @@ def find_code_in_transformers(object_name):
         raise ValueError(f" {object_name} does not match any function or class in {module}.")
 
     # We found the beginning of the class / func, now let's find the end (when the indent diminishes).
-    start_index = line_index
+    start_index = line_index - 1
     while line_index < len(lines) and _should_continue(lines[line_index], indent):
         line_index += 1
     # Clean up empty lines at the end (if any).
@@ -156,7 +190,16 @@ _re_replace_pattern = re.compile(r"^\s*(\S+)->(\S+)(\s+.*|$)")
 _re_fill_pattern = re.compile(r"<FILL\s+[^>]*>")
 
 
-def get_indent(code):
+def get_indent(code: str) -> str:
+    """
+    Find the indent in the first non empty line in a code sample.
+
+    Args:
+        code (`str`): The code to inspect.
+
+    Returns:
+        `str`: The indent looked at (as string).
+    """
     lines = code.split("\n")
     idx = 0
     while idx < len(lines) and len(lines[idx]) == 0:
@@ -166,9 +209,15 @@ def get_indent(code):
     return ""
 
 
-def blackify(code):
+def blackify(code: str) -> str:
     """
-    Applies the black part of our `make style` command to `code`.
+    Applies the black part of our `make style` command to some code.
+
+    Args:
+        code (`str`): The code to format.
+
+    Returns:
+        `str`: The formatted code.
     """
     has_indent = len(get_indent(code)) > 0
     if has_indent:
@@ -179,11 +228,55 @@ def blackify(code):
     return result[len("class Bla:\n") :] if has_indent else result
 
 
-def is_copy_consistent(filename, overwrite=False):
+def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int]:
     """
-    Check if the code commented as a copy in `filename` matches the original.
+    Checks if two version of a code match with the exception of the class/function name.
 
-    Return the differences or overwrites the content depending on `overwrite`.
+    Args:
+        observed_code (`str`): The code found.
+        theoretical_code (`str`): The code to match.
+
+    Returns:
+        `Optional[int]`: The index of the first line where there is a difference (if any) and `None` if the codes
+        match.
+    """
+    observed_code_header = observed_code.split("\n")[0]
+    theoretical_code_header = theoretical_code.split("\n")[0]
+
+    # Catch the function/class name: it is expected that those do not match.
+    _re_class_match = re.compile(r"class\s+([^\(:]+)(?:\(|:)")
+    _re_func_match = re.compile(r"def\s+([^\(]+)\(")
+    for re_pattern in [_re_class_match, _re_func_match]:
+        if re_pattern.match(observed_code_header) is not None:
+            observed_obj_name = re_pattern.search(observed_code_header).groups()[0]
+            theoretical_name = re_pattern.search(theoretical_code_header).groups()[0]
+            theoretical_code_header = theoretical_code_header.replace(theoretical_name, observed_obj_name)
+
+    # Find the first diff. Line 0 is special since we need to compare with the function/class names ignored.
+    diff_index = 0
+    if theoretical_code_header != observed_code_header:
+        return 0
+
+    diff_index = 1
+    for observed_line, theoretical_line in zip(observed_code.split("\n")[1:], theoretical_code.split("\n")[1:]):
+        if observed_line != theoretical_line:
+            return diff_index
+        diff_index += 1
+
+
+def is_copy_consistent(filename: str, overwrite: bool = False) -> Optional[List[Tuple[str, int]]]:
+    """
+    Check if the code commented as a copy in a file matches the original.
+
+    Args:
+        filename (`str`):
+            The name of the file to check.
+        overwrite (`bool`, *optional*, defaults to `False`):
+            Whether or not to overwrite the copies when they don't match.
+
+    Returns:
+        `Optional[List[Tuple[str, int]]]`: If `overwrite=False`, returns the list of differences as tuples `(str, int)`
+        with the name of the object having a diff and the line number where theere is the first diff.
     """
     with open(filename, "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
@@ -201,10 +294,11 @@ def is_copy_consistent(filename, overwrite=False):
         theoretical_code = find_code_in_transformers(object_name)
         theoretical_indent = get_indent(theoretical_code)
 
-        start_index = line_index + 1 if indent == theoretical_indent else line_index + 2
-        indent = theoretical_indent
-        line_index = start_index
+        start_index = line_index + 1 if indent == theoretical_indent else line_index
+        line_index = start_index + 1
 
+        subcode = "\n".join(theoretical_code.split("\n")[1:])
+        indent = get_indent(subcode)
         # Loop to check the observed code, stop when indentation diminishes or if we see a End copy comment.
         should_continue = True
         while line_index < len(lines) and should_continue:
@@ -212,6 +306,8 @@ def is_copy_consistent(filename, overwrite=False):
             if line_index >= len(lines):
                 break
             line = lines[line_index]
+            # There is a special pattern `# End copy` to stop early. It's not documented cause it shouldn't really be
+            # used.
             should_continue = _should_continue(line, indent) and re.search(f"^{indent}# End copy", line) is None
         # Clean up empty lines at the end (if any).
         while len(lines[line_index - 1]) <= 1:
@@ -233,19 +329,12 @@ def is_copy_consistent(filename, overwrite=False):
                     theoretical_code = re.sub(obj1.lower(), obj2.lower(), theoretical_code)
                     theoretical_code = re.sub(obj1.upper(), obj2.upper(), theoretical_code)
 
-            # Blackify after replacement. To be able to do that, we need the header (class or function definition)
-            # from the previous line
-            theoretical_code = blackify(lines[start_index - 1] + theoretical_code)
-            theoretical_code = theoretical_code[len(lines[start_index - 1]) :]
+            theoretical_code = blackify(theoretical_code)
 
         # Test for a diff and act accordingly.
-        if observed_code != theoretical_code:
-            diff_index = start_index + 1
-            for observed_line, theoretical_line in zip(observed_code.split("\n"), theoretical_code.split("\n")):
-                if observed_line != theoretical_line:
-                    break
-                diff_index += 1
-            diffs.append([object_name, diff_index])
+        diff_index = check_codes_match(observed_code, theoretical_code)
+        if diff_index is not None:
+            diffs.append([object_name, diff_index + start_index + 1])
             if overwrite:
                 lines = lines[:start_index] + [theoretical_code] + lines[line_index:]
                 line_index = start_index + 1
@@ -259,6 +348,14 @@ def is_copy_consistent(filename, overwrite=False):
 
 
 def check_copies(overwrite: bool = False):
+    """
+    Check every file is copy-consistent with the original. Also check the model list in the main README and other
+    READMEs/index.md are consistent.
+
+    Args:
+        overwrite (`bool`, *optional*, defaults to `False`):
+            Whether or not to overwrite the copies when they don't match.
+    """
     all_files = glob.glob(os.path.join(TRANSFORMERS_PATH, "**/*.py"), recursive=True)
     diffs = []
     for filename in all_files:
@@ -275,6 +372,13 @@ def check_copies(overwrite: bool = False):
 
 
 def check_full_copies(overwrite: bool = False):
+    """
+    Check the files that are full copies of others (as indicated in `FULL_COPIES`) are copy-consistent.
+
+    Args:
+        overwrite (`bool`, *optional*, defaults to `False`):
+            Whether or not to overwrite the copies when they don't match.
+    """
     diffs = []
     for target, source in FULL_COPIES.items():
         with open(source, "r", encoding="utf-8") as f:
@@ -298,8 +402,18 @@ def check_full_copies(overwrite: bool = False):
         )
 
 
-def get_model_list(filename, start_prompt, end_prompt):
-    """Extracts the model list from the README."""
+def get_model_list(filename: str, start_prompt: str, end_prompt: str) -> str:
+    """
+    Extracts the model list from a README.
+
+    Args:
+        filename (`str`): The name of the README file to check.
+        start_prompt (`str`): The string to look for that introduces the model list.
+        end_prompt (`str`): The string to look for that ends the model list.
+
+    Returns:
+        `str`: The model list.
+    """
     with open(os.path.join(REPO_PATH, filename), "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
     # Find the start of the list.
@@ -312,6 +426,7 @@ def get_model_list(filename, start_prompt, end_prompt):
     current_line = ""
     end_index = start_index
 
+    # Keep going until the end of the list.
     while not lines[end_index].startswith(end_prompt):
         if lines[end_index].startswith("1."):
             if len(current_line) > 1:
@@ -326,8 +441,21 @@ def get_model_list(filename, start_prompt, end_prompt):
     return "".join(result)
 
 
-def convert_to_localized_md(model_list, localized_model_list, format_str):
-    """Convert `model_list` to each localized README."""
+def convert_to_localized_md(model_list: str, localized_model_list: str, format_str: str) -> Tuple[bool, str]:
+    """
+    Compare the model list from the main README to the one in a localized README.
+
+    Args:
+        model_list (`str`): The model list in the main README.
+        localized_model_list (`str`): The model list in one of the localized README.
+        format_str (`str`):
+            The template for a model entry in the localized README (look at the `format_model_list` in the entries of
+            `LOCALIZED_READMES` for examples).
+
+    Returns:
+        `Tuple[bool, str]`: A tuple where the first value indicates if the READMEs match or not, and the second value
+        is the correct localized README.
+    """
 
     def _rep(match):
         title, model_link, paper_affiliations, paper_title_link, paper_authors, supplements = match.groups()
@@ -341,7 +469,8 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
         )
 
     # This regex captures metadata from an English model description, including model title, model link,
-    # affiliations of the paper, title of the paper, authors of the paper, and supplemental data (see DistilBERT for example).
+    # affiliations of the paper, title of the paper, authors of the paper, and supplemental data (see DistilBERT for
+    # example).
     _re_capture_meta = re.compile(
         r"\*\*\[([^\]]*)\]\(([^\)]*)\)\*\* \(from ([^)]*)\)[^\[]*([^\)]*\)).*?by (.*?[A-Za-z\*]{2,}?)\. (.*)$"
     )
@@ -362,7 +491,7 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
     model_keys = [re.search(r"\*\*\[([^\]]*)", line).groups()[0] for line in model_list.strip().split("\n")]
 
     # We exclude keys in localized README not in the main one.
-    readmes_match = not any([k not in model_keys for k in localized_model_index])
+    readmes_match = not any(k not in model_keys for k in localized_model_index)
     localized_model_index = {k: v for k, v in localized_model_index.items() if k in model_keys}
 
     for model in model_list.strip().split("\n"):
@@ -388,15 +517,33 @@ def convert_to_localized_md(model_list, localized_model_list, format_str):
     return readmes_match, "\n".join((x[1] for x in sorted_index)) + "\n"
 
 
-def convert_readme_to_index(model_list):
+def convert_readme_to_index(model_list: str) -> str:
+    """
+    Converts the model list of the README to the index.md format (adapting links to the doc to relative links).
+
+    Args:
+        model_list (`str`): The model list of the main README.
+
+    Returns:
+        `str`: The model list in the format for the index.
+    """
+    # We need to replce both link to the main doc and stable doc (the order of the next two instructions is important).
     model_list = model_list.replace("https://huggingface.co/docs/transformers/main/", "")
     return model_list.replace("https://huggingface.co/docs/transformers/", "")
 
 
-def _find_text_in_file(filename, start_prompt, end_prompt):
+def _find_text_in_file(filename: str, start_prompt: str, end_prompt: str) -> Tuple[str, int, int, List[str]]:
     """
-    Find the text in `filename` between a line beginning with `start_prompt` and before `end_prompt`, removing empty
-    lines.
+    Find the text in a file between two prompts.
+
+    Args:
+        filename (`str`): The name of the file to look into.
+        start_prompt (`str`): The string to look for that introduces the content looked for.
+        end_prompt (`str`): The string to look for that ends the content looked for.
+
+    Returns:
+        Tuple[str, int, int, List[str]]: The content between the two prompts, the index of the start line in the
+        original file, the index of the end line in the original file and the list of lines of that file.
     """
     with open(filename, "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
@@ -419,8 +566,14 @@ def _find_text_in_file(filename, start_prompt, end_prompt):
     return "".join(lines[start_index:end_index]), start_index, end_index, lines
 
 
-def check_model_list_copy(overwrite=False, max_per_line=119):
-    """Check the model lists in the README and index.rst are consistent and maybe `overwrite`."""
+def check_model_list_copy(overwrite: bool = False):
+    """
+    Check the model lists in the README is consistent with the ones in the other READMES and also with `index.nmd`.
+
+    Args:
+        overwrite (`bool`, *optional*, defaults to `False`):
+            Whether or not to overwrite the copies when they don't match.
+    """
     # Fix potential doc links in the README
     with open(os.path.join(REPO_PATH, "README.md"), "r", encoding="utf-8", newline="\n") as f:
         readme = f.read()
@@ -440,7 +593,7 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
 
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
     index_list, start_index, end_index, lines = _find_text_in_file(
-        filename=os.path.join(PATH_TO_DOCS, "index.mdx"),
+        filename=os.path.join(PATH_TO_DOCS, "index.md"),
         start_prompt="<!--This list is updated automatically from the README",
         end_prompt="### Supported frameworks",
     )
@@ -450,6 +603,7 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
         end_prompt=LOCALIZED_READMES["README.md"]["end_prompt"],
     )
 
+    # Buld the converted Markdown.
     converted_md_lists = []
     for filename, value in LOCALIZED_READMES.items():
         _start_prompt = value["start_prompt"]
@@ -461,17 +615,19 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
 
         converted_md_lists.append((filename, readmes_match, converted_md_list, _start_prompt, _end_prompt))
 
+    # Build the converted index and compare it.
     converted_md_list = convert_readme_to_index(md_list)
     if converted_md_list != index_list:
         if overwrite:
-            with open(os.path.join(PATH_TO_DOCS, "index.mdx"), "w", encoding="utf-8", newline="\n") as f:
+            with open(os.path.join(PATH_TO_DOCS, "index.md"), "w", encoding="utf-8", newline="\n") as f:
                 f.writelines(lines[:start_index] + [converted_md_list] + lines[end_index:])
         else:
             raise ValueError(
-                "The model list in the README changed and the list in `index.mdx` has not been updated. Run "
+                "The model list in the README changed and the list in `index.md` has not been updated. Run "
                 "`make fix-copies` to fix this."
             )
 
+    # Compare the converted Markdowns
     for converted_md_list in converted_md_lists:
         filename, readmes_match, converted_md, _start_prompt, _end_prompt = converted_md_list
 
@@ -490,6 +646,7 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
             )
 
 
+# Map a model name with the name it has in the README for the check_readme check
 SPECIAL_MODEL_NAMES = {
     "Bert Generation": "BERT For Sequence Generation",
     "BigBird": "BigBird-RoBERTa",
@@ -522,14 +679,21 @@ MODELS_NOT_IN_README = [
     "VisionTextDualEncoder",
 ]
 
-
+# Template for new entries to add in the main README when we have missing models.
 README_TEMPLATE = (
     "1. **[{model_name}](https://huggingface.co/docs/main/transformers/model_doc/{model_type})** (from "
     "<FILL INSTITUTION>) released with the paper [<FILL PAPER TITLE>](<FILL ARKIV LINK>) by <FILL AUTHORS>."
 )
 
 
-def check_readme(overwrite=False):
+def check_readme(overwrite: bool = False):
+    """
+    Check if the main README contains all the models in the library or not.
+
+    Args:
+        overwrite (`bool`, *optional*, defaults to `False`):
+            Whether or not to add an entry for the missing models using `README_TEMPLATE`.
+    """
     info = LOCALIZED_READMES["README.md"]
     models, start_index, end_index, lines = _find_text_in_file(
         os.path.join(REPO_PATH, "README.md"),

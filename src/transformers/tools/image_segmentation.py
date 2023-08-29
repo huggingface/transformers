@@ -44,7 +44,6 @@ class ImageSegmentationTool(PipelineTool):
         super().__init__(*args, **kwargs)
 
     def encode(self, image: "Image", label: str):
-        self.pre_processor.image_processor.size = {"width": image.size[0], "height": image.size[1]}
         return self.pre_processor(text=[label], images=[image], padding=True, return_tensors="pt")
 
     def forward(self, inputs):

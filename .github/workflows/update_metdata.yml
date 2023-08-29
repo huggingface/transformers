@@ -24,4 +24,4 @@ jobs:
 
       - name: Update metadata
         run: |
-          python utils/update_metadata.py --token ${{ secrets.SYLVAIN_HF_TOKEN }} --commit_sha ${{ github.sha }}
+          python utils/update_metadata.py --token ${{ secrets.LYSANDRE_HF_TOKEN }} --commit_sha ${{ github.sha }}

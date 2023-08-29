@@ -61,7 +61,7 @@ class LukeModelTester:
         entity_vocab_size=10,
         entity_emb_size=6,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",

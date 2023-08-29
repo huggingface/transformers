@@ -208,7 +208,7 @@ def convert_efficientformer_checkpoint(
         )
         processor.push_to_hub(
             repo_id=f"Bearnardd/{pytorch_dump_path}",
-            commit_message="Add feature extractor",
+            commit_message="Add image processor",
             use_temp_dir=True,
         )
 
@@ -234,12 +234,12 @@ if __name__ == "__main__":
         "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
     )
 
-    parser.add_argument("--push_to_hub", action="store_true", help="Push model and feature extractor to the hub")
+    parser.add_argument("--push_to_hub", action="store_true", help="Push model and image processor to the hub")
     parser.add_argument(
         "--no-push_to_hub",
         dest="push_to_hub",
         action="store_false",
-        help="Do not push model and feature extractor to the hub",
+        help="Do not push model and image processor to the hub",
     )
     parser.set_defaults(push_to_hub=True)
 

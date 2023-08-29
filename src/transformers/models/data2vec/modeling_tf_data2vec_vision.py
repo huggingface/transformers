@@ -1383,11 +1383,11 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         # only keep certain features, and reshape
         # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
         features = [feature for idx, feature in enumerate(encoder_hidden_states) if idx + 1 in self.config.out_indices]
-        batch_size = shape_list(pixel_values)[0]
         patch_resolution = self.config.image_size // self.config.patch_size
 
         def reshape_features(x):
-            x = tf.reshape(x, (batch_size, patch_resolution, patch_resolution, -1))
+            # We do it this way so TF can always infer the non-batch dims at compile time
+            x = tf.reshape(x, (-1, patch_resolution, patch_resolution, self.config.hidden_size))
             return x
 
         features = [reshape_features(x[:, 1:, :]) for x in features]

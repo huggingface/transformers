@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_speech_available,
     is_torch_available,
     is_vision_available,
 )
@@ -28,6 +27,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_tvlt": ["TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP", "TvltConfig"],
+    "feature_extraction_tvlt": ["TvltFeatureExtractor"],
     "processing_tvlt": ["TvltProcessor"],
 }
 
@@ -53,17 +53,11 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["image_processing_tvlt"] = ["TvltImageProcessor"]
 
-try:
-    if not is_speech_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["feature_extraction_tvlt"] = ["TvltFeatureExtractor"]
 
 if TYPE_CHECKING:
     from .configuration_tvlt import TVLT_PRETRAINED_CONFIG_ARCHIVE_MAP, TvltConfig
     from .processing_tvlt import TvltProcessor
+    from .feature_extraction_tvlt import TvltFeatureExtractor
 
     try:
         if not is_torch_available():
@@ -87,13 +81,6 @@ if TYPE_CHECKING:
     else:
         from .image_processing_tvlt import TvltImageProcessor
 
-    try:
-        if not is_speech_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .feature_extraction_tvlt import TvltFeatureExtractor
 
 else:
     import sys

@@ -50,9 +50,6 @@ if is_torch_available():
         BridgeTowerModel,
     )
     from transformers.models.bridgetower.modeling_bridgetower import BRIDGETOWER_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10
-else:
-    is_torch_greater_or_equal_than_1_10 = False
 
 if is_vision_available():
     from PIL import Image
@@ -65,12 +62,12 @@ class BridgeTowerTextModelTester:
         self,
         parent,
         hidden_act="gelu",
-        hidden_size=128,
+        hidden_size=64,
         initializer_factor=1,
         layer_norm_eps=1e-05,
         num_attention_heads=4,
         num_hidden_layers=2,
-        intermediate_size=256,
+        intermediate_size=128,
         tie_word_embeddings=False,
         output_hidden_states=False,
     ):
@@ -108,6 +105,7 @@ class BridgeTowerTextModelTester:
             intermediate_size=self.intermediate_size,
             tie_word_embeddings=self.tie_word_embeddings,
             output_hidden_states=self.output_hidden_states,
+            vocab_size=self.vocab_size,
         )
 
 
@@ -115,7 +113,7 @@ class BridgeTowerImageModelTester:
     def __init__(
         self,
         parent,
-        hidden_size=128,
+        hidden_size=64,
         initializer_factor=1,
         layer_norm_eps=1e-05,
         num_hidden_layers=2,
@@ -171,10 +169,10 @@ class BridgeTowerModelTester:
         init_layernorm_from_vision_encoder=False,
         contrastive_hidden_size=512,
         logit_scale_init_value=2.6592,
-        hidden_size=128,
+        hidden_size=64,
         num_hidden_layers=2,
         num_attention_heads=4,
-        intermediate_size=256,
+        intermediate_size=128,
     ):
         if text_kwargs is None:
             text_kwargs = {}
@@ -283,7 +281,10 @@ class BridgeTowerModelTester:
         result = model(input_ids, attention_mask=attention_mask, pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(input_ids, attention_mask=attention_mask, pixel_values=pixel_values)
 
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.text_model_tester.seq_length, 50265))
+        self.parent.assertEqual(
+            result.logits.shape,
+            (self.batch_size, self.text_model_tester.seq_length, self.text_model_tester.vocab_size),
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -298,7 +299,6 @@ class BridgeTowerModelTester:
 
 
 @require_torch
-@unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "BridgeTower is only available in torch v1.10+")
 class BridgeTowerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
@@ -516,7 +516,6 @@ def prepare_img():
 
 @require_torch
 @require_vision
-@unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "BridgeTower is only available in torch v1.10+")
 class BridgeTowerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_processor(self):
@@ -601,7 +600,6 @@ class BridgeTowerModelIntegrationTest(unittest.TestCase):
 
 @slow
 @require_torch
-@unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "BridgeTower is only available in torch v1.10+")
 class BridgeTowerModelTrainingTest(unittest.TestCase):
     all_training_supported_model_classes = (
         (BridgeTowerForImageAndTextRetrieval, BridgeTowerForMaskedLM, BridgeTowerForContrastiveLearning)

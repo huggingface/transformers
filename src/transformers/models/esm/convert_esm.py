@@ -378,8 +378,8 @@ def convert_esm_checkpoint_to_pytorch(
     hf_tokenizer.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_repo:
-        model.push_to_hub(repo_id=push_to_repo, use_auth_token=auth_token)
-        hf_tokenizer.push_to_hub(repo_id=push_to_repo, use_auth_token=auth_token)
+        model.push_to_hub(repo_id=push_to_repo, token_token=auth_token)
+        hf_tokenizer.push_to_hub(repo_id=push_to_repo, token_token=auth_token)
 
 
 if __name__ == "__main__":

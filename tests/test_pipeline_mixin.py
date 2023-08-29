@@ -17,6 +17,7 @@ import copy
 import json
 import os
 import random
+import unittest
 from pathlib import Path
 
 from transformers.testing_utils import (
@@ -48,6 +49,7 @@ from .pipelines.test_pipelines_table_question_answering import TQAPipelineTests
 from .pipelines.test_pipelines_text2text_generation import Text2TextGenerationPipelineTests
 from .pipelines.test_pipelines_text_classification import TextClassificationPipelineTests
 from .pipelines.test_pipelines_text_generation import TextGenerationPipelineTests
+from .pipelines.test_pipelines_text_to_audio import TextToAudioPipelineTests
 from .pipelines.test_pipelines_token_classification import TokenClassificationPipelineTests
 from .pipelines.test_pipelines_translation import TranslationPipelineTests
 from .pipelines.test_pipelines_video_classification import VideoClassificationPipelineTests
@@ -77,6 +79,7 @@ pipeline_test_mapping = {
     "text2text-generation": {"test": Text2TextGenerationPipelineTests},
     "text-classification": {"test": TextClassificationPipelineTests},
     "text-generation": {"test": TextGenerationPipelineTests},
+    "text-to-audio": {"test": TextToAudioPipelineTests},
     "token-classification": {"test": TokenClassificationPipelineTests},
     "translation": {"test": TranslationPipelineTests},
     "video-classification": {"test": VideoClassificationPipelineTests},
@@ -314,7 +317,6 @@ class PipelineTesterMixin:
         run_batch_test(pipeline, examples)
 
     @is_pipeline_test
-    @require_torch
     def test_pipeline_audio_classification(self):
         self.run_task_tests(task="audio-classification")
 
@@ -366,6 +368,7 @@ class PipelineTesterMixin:
     def test_pipeline_image_to_text(self):
         self.run_task_tests(task="image-to-text")
 
+    @unittest.skip(reason="`run_pipeline_test` is currently not implemented.")
     @is_pipeline_test
     @require_vision
     @require_torch
@@ -403,6 +406,11 @@ class PipelineTesterMixin:
     @require_torch_or_tf
     def test_pipeline_text_generation(self):
         self.run_task_tests(task="text-generation")
+
+    @is_pipeline_test
+    @require_torch
+    def test_pipeline_text_to_audio(self):
+        self.run_task_tests(task="text-to-audio")
 
     @is_pipeline_test
     def test_pipeline_token_classification(self):

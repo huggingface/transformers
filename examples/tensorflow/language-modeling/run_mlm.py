@@ -28,6 +28,7 @@ import math
 import os
 import random
 import sys
+import warnings
 from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
@@ -110,12 +111,28 @@ class ModelArguments:
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
+    token: str = field(
+        default=None,
+        metadata={
+            "help": (
+                "The token to use as HTTP bearer authorization for remote files. If not specified, will use the token "
+                "generated when running `huggingface-cli login` (stored in `~/.huggingface`)."
+            )
+        },
+    )
     use_auth_token: bool = field(
+        default=None,
+        metadata={
+            "help": "The `use_auth_token` argument is deprecated and will be removed in v4.34. Please use `token`."
+        },
+    )
+    trust_remote_code: bool = field(
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
-                "with private models)."
+                "Whether or not to allow for custom models defined on the Hub in their own modeling files. This option"
+                "should only be set to `True` for repositories you trust and in which you have read the code, as it will"
+                "execute code present on the Hub on your local machine."
             )
         },
     )
@@ -226,6 +243,12 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    if model_args.use_auth_token is not None:
+        warnings.warn("The `use_auth_token` argument is deprecated and will be removed in v4.34.", FutureWarning)
+        if model_args.token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        model_args.token = model_args.use_auth_token
+
     # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
     # information sent is the one passed as arguments along with your Python/PyTorch versions.
     send_example_telemetry("run_mlm", model_args, data_args, framework="tensorflow")
@@ -242,7 +265,6 @@ def main():
             assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, json or txt file."
 
     if training_args.output_dir is not None:
-        training_args.output_dir = Path(training_args.output_dir)
         os.makedirs(training_args.output_dir, exist_ok=True)
 
     if isinstance(training_args.strategy, tf.distribute.TPUStrategy) and not data_args.pad_to_max_length:
@@ -254,8 +276,8 @@ def main():
     # Detecting last checkpoint.
     checkpoint = None
     if len(os.listdir(training_args.output_dir)) > 0 and not training_args.overwrite_output_dir:
-        config_path = training_args.output_dir / CONFIG_NAME
-        weights_path = training_args.output_dir / TF2_WEIGHTS_NAME
+        config_path = Path(training_args.output_dir) / CONFIG_NAME
+        weights_path = Path(training_args.output_dir) / TF2_WEIGHTS_NAME
         if config_path.is_file() and weights_path.is_file():
             checkpoint = training_args.output_dir
             logger.warning(
@@ -296,20 +318,20 @@ def main():
         raw_datasets = load_dataset(
             data_args.dataset_name,
             data_args.dataset_config_name,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[:{data_args.validation_split_percentage}%]",
-                use_auth_token=True if model_args.use_auth_token else None,
+                token=model_args.token,
             )
             raw_datasets["train"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[{data_args.validation_split_percentage}%:]",
-                use_auth_token=True if model_args.use_auth_token else None,
+                token=model_args.token,
             )
     else:
         data_files = {}
@@ -323,7 +345,7 @@ def main():
         raw_datasets = load_dataset(
             extension,
             data_files=data_files,
-            use_auth_token=True if model_args.use_auth_token else None,
+            token=model_args.token,
         )
 
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
@@ -335,19 +357,29 @@ def main():
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     if checkpoint is not None:
-        config = AutoConfig.from_pretrained(checkpoint)
+        config = AutoConfig.from_pretrained(
+            checkpoint, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+        )
     elif model_args.config_name:
-        config = AutoConfig.from_pretrained(model_args.config_name)
+        config = AutoConfig.from_pretrained(
+            model_args.config_name, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+        )
     elif model_args.model_name_or_path:
-        config = AutoConfig.from_pretrained(model_args.model_name_or_path)
+        config = AutoConfig.from_pretrained(
+            model_args.model_name_or_path, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+        )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
 
     if model_args.tokenizer_name:
-        tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name)
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.tokenizer_name, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+        )
     elif model_args.model_name_or_path:
-        tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path)
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_args.model_name_or_path, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+        )
     else:
         raise ValueError(
             "You are instantiating a new tokenizer from scratch. This is not supported by this script."
@@ -482,12 +514,21 @@ def main():
     with training_args.strategy.scope():
         # region Prepare model
         if checkpoint is not None:
-            model = TFAutoModelForMaskedLM.from_pretrained(checkpoint, config=config)
+            model = TFAutoModelForMaskedLM.from_pretrained(
+                checkpoint, config=config, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+            )
         elif model_args.model_name_or_path:
-            model = TFAutoModelForMaskedLM.from_pretrained(model_args.model_name_or_path, config=config)
+            model = TFAutoModelForMaskedLM.from_pretrained(
+                model_args.model_name_or_path,
+                config=config,
+                token=model_args.token,
+                trust_remote_code=model_args.trust_remote_code,
+            )
         else:
             logger.info("Training new model from scratch")
-            model = TFAutoModelForMaskedLM.from_config(config)
+            model = TFAutoModelForMaskedLM.from_config(
+                config, token=model_args.token, trust_remote_code=model_args.trust_remote_code
+            )
 
         # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
         # on a small vocab and want a smaller embedding size, remove this test.

@@ -122,3 +122,10 @@ class PythonInterpreterTester(unittest.TestCase):
         result = evaluate(code, {"add_two": add_two}, state=state)
         assert result == 5
         self.assertDictEqual(state, {"x": 3, "test_dict": {"x": 3, "y": 5}})
+
+    def test_evaluate_for(self):
+        code = "x = 0\nfor i in range(3):\n    x = i"
+        state = {}
+        result = evaluate(code, {"range": range}, state=state)
+        assert result == 2
+        self.assertDictEqual(state, {"x": 2, "i": 2})

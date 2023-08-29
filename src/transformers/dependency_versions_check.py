@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import sys
 
 from .dependency_versions_table import deps
 from .utils.versions import require_version, require_version_core
@@ -23,11 +22,20 @@ from .utils.versions import require_version, require_version_core
 # order specific notes:
 # - tqdm must be checked before tokenizers
 
-pkgs_to_check_at_runtime = "python tqdm regex requests packaging filelock numpy tokenizers".split()
-if sys.version_info < (3, 7):
-    pkgs_to_check_at_runtime.append("dataclasses")
-if sys.version_info < (3, 8):
-    pkgs_to_check_at_runtime.append("importlib_metadata")
+pkgs_to_check_at_runtime = [
+    "python",
+    "tqdm",
+    "regex",
+    "requests",
+    "packaging",
+    "filelock",
+    "numpy",
+    "tokenizers",
+    "huggingface-hub",
+    "safetensors",
+    "accelerate",
+    "pyyaml",
+]
 
 for pkg in pkgs_to_check_at_runtime:
     if pkg in deps:
@@ -36,6 +44,14 @@ for pkg in pkgs_to_check_at_runtime:
             from .utils import is_tokenizers_available
 
             if not is_tokenizers_available():
+                continue  # not required, check version only if installed
+        elif pkg == "accelerate":
+            # must be loaded here, or else tqdm check may fail
+            from .utils import is_accelerate_available
+
+            # Maybe switch to is_torch_available in the future here so that Accelerate is hard dep of
+            # Transformers with PyTorch
+            if not is_accelerate_available():
                 continue  # not required, check version only if installed
 
         require_version_core(deps[pkg])
