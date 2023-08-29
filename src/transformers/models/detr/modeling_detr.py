@@ -528,19 +528,64 @@ class DetrAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
         return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
-        return tensor if position_embeddings is None else tensor + position_embeddings
+    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Optional[Tensor], **kwargs):
+        position_embeddings = kwargs.pop("position_embeddings", None)
+
+        if kwargs:
+            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
+
+        if position_embeddings is not None and object_queries is not None:
+            raise ValueError(
+                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
+            )
+
+        if position_embeddings is not None:
+            logger.warning_once(
+                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
+            )
+            object_queries = position_embeddings
+
+        return tensor if object_queries is None else tensor + object_queries
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        object_queries: Optional[torch.Tensor] = None,
         key_value_states: Optional[torch.Tensor] = None,
-        key_value_position_embeddings: Optional[torch.Tensor] = None,
+        spatial_position_embeddings: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
+
+        position_embeddings = kwargs.pop("position_ebmeddings", None)
+        key_value_position_embeddings = kwargs.pop("key_value_position_embeddings", None)
+
+        if kwargs:
+            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
+
+        if position_embeddings is not None and object_queries is not None:
+            raise ValueError(
+                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
+            )
+
+        if key_value_position_embeddings is not None and spatial_position_embeddings is not None:
+            raise ValueError(
+                "Cannot specify both key_value_position_embeddings and spatial_position_embeddings. Please use just spatial_position_embeddings"
+            )
+
+        if position_embeddings is not None:
+            logger.warning_once(
+                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
+            )
+            object_queries = position_embeddings
+
+        if key_value_position_embeddings is not None:
+            logger.warning_once(
+                "key_value_position_embeddings has been deprecated and will be removed in v4.34. Please use spatial_position_embeddings instead"
+            )
+            spatial_position_embeddings = key_value_position_embeddings
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
@@ -548,14 +593,14 @@ class DetrAttention(nn.Module):
         batch_size, target_len, embed_dim = hidden_states.size()
 
         # add position embeddings to the hidden states before projecting to queries and keys
-        if position_embeddings is not None:
+        if object_queries is not None:
             hidden_states_original = hidden_states
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = self.with_pos_embed(hidden_states, object_queries)
 
         # add key-value position embeddings to the key value states
-        if key_value_position_embeddings is not None:
+        if spatial_position_embeddings is not None:
             key_value_states_original = key_value_states
-            key_value_states = self.with_pos_embed(key_value_states, key_value_position_embeddings)
+            key_value_states = self.with_pos_embed(key_value_states, spatial_position_embeddings)
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
@@ -645,8 +690,9 @@ class DetrEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
+        object_queries: torch.Tensor = None,
         output_attentions: bool = False,
+        **kwargs,
     ):
         """
         Args:
@@ -654,16 +700,33 @@ class DetrEncoderLayer(nn.Module):
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
-            position_embeddings (`torch.FloatTensor`, *optional*): position embeddings, to be added to hidden_states.
+            object_queries (`torch.FloatTensor`, *optional*):
+                Object queries (also called content embeddings), to be added to the hidden states.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
+        position_embeddings = kwargs.pop("position_embeddings", None)
+
+        if kwargs:
+            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
+
+        if position_embeddings is not None and object_queries is not None:
+            raise ValueError(
+                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
+            )
+
+        if position_embeddings is not None:
+            logger.warning_once(
+                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
+            )
+            object_queries = position_embeddings
+
         residual = hidden_states
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            position_embeddings=position_embeddings,
+            object_queries=object_queries,
             output_attentions=output_attentions,
         )
 
@@ -723,11 +786,12 @@ class DetrDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        object_queries: Optional[torch.Tensor] = None,
         query_position_embeddings: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
+        **kwargs,
     ):
         """
         Args:
@@ -735,8 +799,8 @@ class DetrDecoderLayer(nn.Module):
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, target_len, source_len)` where padding elements are indicated by very large negative
                 values.
-            position_embeddings (`torch.FloatTensor`, *optional*):
-                position embeddings that are added to the queries and keys
+            object_queries (`torch.FloatTensor`, *optional*):
+                object_queries that are added to the hidden states
             in the cross-attention layer.
             query_position_embeddings (`torch.FloatTensor`, *optional*):
                 position embeddings that are added to the queries and keys
@@ -750,12 +814,28 @@ class DetrDecoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
+        position_embeddings = kwargs.pop("position_embeddings", None)
+
+        if kwargs:
+            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
+
+        if position_embeddings is not None and object_queries is not None:
+            raise ValueError(
+                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
+            )
+
+        if position_embeddings is not None:
+            logger.warning_once(
+                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
+            )
+            object_queries = position_embeddings
+
         residual = hidden_states
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=query_position_embeddings,
+            object_queries=query_position_embeddings,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
         )
@@ -771,10 +851,10 @@ class DetrDecoderLayer(nn.Module):
 
             hidden_states, cross_attn_weights = self.encoder_attn(
                 hidden_states=hidden_states,
-                position_embeddings=query_position_embeddings,
+                object_queries=query_position_embeddings,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                key_value_position_embeddings=position_embeddings,
+                spatial_position_embeddings=object_queries,
                 output_attentions=output_attentions,
             )
 
@@ -913,7 +993,7 @@ class DetrEncoder(DetrPreTrainedModel):
 
     Small tweak for DETR:
 
-    - position_embeddings are added to the forward pass.
+    - object_queries are added to the forward pass.
 
     Args:
         config: DetrConfig
@@ -936,10 +1016,11 @@ class DetrEncoder(DetrPreTrainedModel):
         self,
         inputs_embeds=None,
         attention_mask=None,
-        position_embeddings=None,
+        object_queries=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -954,8 +1035,8 @@ class DetrEncoder(DetrPreTrainedModel):
 
                 [What are attention masks?](../glossary#attention-mask)
 
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
+            object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Object queries that are added to the queries in each self-attention layer.
 
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -966,6 +1047,22 @@ class DetrEncoder(DetrPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
+        position_embeddings = kwargs.pop("position_embeddings", None)
+
+        if kwargs:
+            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
+
+        if position_embeddings is not None and object_queries is not None:
+            raise ValueError(
+                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
+            )
+
+        if position_embeddings is not None:
+            logger.warning_once(
+                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
+            )
+            object_queries = position_embeddings
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -995,11 +1092,11 @@ class DetrEncoder(DetrPreTrainedModel):
             if to_drop:
                 layer_outputs = (None, None)
             else:
-                # we add position_embeddings as extra input to the encoder_layer
+                # we add object_queries as extra input to the encoder_layer
                 layer_outputs = encoder_layer(
                     hidden_states,
                     attention_mask,
-                    position_embeddings=position_embeddings,
+                    object_queries=object_queries,
                     output_attentions=output_attentions,
                 )
 
@@ -1026,7 +1123,7 @@ class DetrDecoder(DetrPreTrainedModel):
 
     Some small tweaks for DETR:
 
-    - position_embeddings and query_position_embeddings are added to the forward pass.
+    - object_queries and query_position_embeddings are added to the forward pass.
     - if self.config.auxiliary_loss is set to True, also returns a stack of activations from all decoding layers.
 
     Args:
@@ -1052,11 +1149,12 @@ class DetrDecoder(DetrPreTrainedModel):
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        position_embeddings=None,
+        object_queries=None,
         query_position_embeddings=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1080,10 +1178,11 @@ class DetrDecoder(DetrPreTrainedModel):
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Position embeddings that are added to the queries and keys in each cross-attention layer.
+            object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Object queries that are added to the queries and keys in each cross-attention layer.
             query_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-                , *optional*): Position embeddings that are added to the queries and keys in each self-attention layer.
+                , *optional*): Position embeddings that are added to the values and keys in each self-attention layer.
+
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1093,6 +1192,22 @@ class DetrDecoder(DetrPreTrainedModel):
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
+        position_embeddings = kwargs.pop("position_embeddings", None)
+
+        if kwargs:
+            raise ValueError(f"Unexpected arguments {kwargs.keys()}")
+
+        if position_embeddings is not None and object_queries is not None:
+            raise ValueError(
+                "Cannot specify both position_embeddings and object_queries. Please use just object_queries"
+            )
+
+        if position_embeddings is not None:
+            logger.warning_once(
+                "position_embeddings has been deprecated and will be removed in v4.34. Please use object_queries instead"
+            )
+            object_queries = position_embeddings
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1155,7 +1270,7 @@ class DetrDecoder(DetrPreTrainedModel):
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=combined_attention_mask,
-                    position_embeddings=position_embeddings,
+                    object_queries=object_queries,
                     query_position_embeddings=query_position_embeddings,
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
@@ -1213,8 +1328,8 @@ class DetrModel(DetrPreTrainedModel):
 
         # Create backbone + positional encoding
         backbone = DetrConvEncoder(config)
-        position_embeddings = build_position_encoding(config)
-        self.backbone = DetrConvModel(backbone, position_embeddings)
+        object_queries = build_position_encoding(config)
+        self.backbone = DetrConvModel(backbone, object_queries)
 
         # Create projection layer
         self.input_projection = nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1)
@@ -1298,7 +1413,7 @@ class DetrModel(DetrPreTrainedModel):
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features
         # pixel_values should be of shape (batch_size, num_channels, height, width)
         # pixel_mask should be of shape (batch_size, height, width)
-        features, position_embeddings_list = self.backbone(pixel_values, pixel_mask)
+        features, object_queries_list = self.backbone(pixel_values, pixel_mask)
 
         # get final feature map and downsampled mask
         feature_map, mask = features[-1]
@@ -1312,7 +1427,7 @@ class DetrModel(DetrPreTrainedModel):
         # Third, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
         # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
         flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
-        position_embeddings = position_embeddings_list[-1].flatten(2).permute(0, 2, 1)
+        object_queries = object_queries_list[-1].flatten(2).permute(0, 2, 1)
 
         flattened_mask = mask.flatten(1)
 
@@ -1323,7 +1438,7 @@ class DetrModel(DetrPreTrainedModel):
             encoder_outputs = self.encoder(
                 inputs_embeds=flattened_features,
                 attention_mask=flattened_mask,
-                position_embeddings=position_embeddings,
+                object_queries=object_queries,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1336,7 +1451,7 @@ class DetrModel(DetrPreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        # Fifth, sent query embeddings + position embeddings through the decoder (which is conditioned on the encoder output)
+        # Fifth, sent query embeddings + object_queries through the decoder (which is conditioned on the encoder output)
         query_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)
         queries = torch.zeros_like(query_position_embeddings)
 
@@ -1344,7 +1459,7 @@ class DetrModel(DetrPreTrainedModel):
         decoder_outputs = self.decoder(
             inputs_embeds=queries,
             attention_mask=None,
-            position_embeddings=position_embeddings,
+            object_queries=object_queries,
             query_position_embeddings=query_position_embeddings,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=flattened_mask,
@@ -1640,7 +1755,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
             pixel_mask = torch.ones((batch_size, height, width), device=device)
 
         # First, get list of feature maps and position embeddings
-        features, position_embeddings_list = self.detr.model.backbone(pixel_values, pixel_mask=pixel_mask)
+        features, object_queries_list = self.detr.model.backbone(pixel_values, pixel_mask=pixel_mask)
 
         # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         feature_map, mask = features[-1]
@@ -1650,7 +1765,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
         # Third, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
         # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
         flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
-        position_embeddings = position_embeddings_list[-1].flatten(2).permute(0, 2, 1)
+        object_queries = object_queries_list[-1].flatten(2).permute(0, 2, 1)
 
         flattened_mask = mask.flatten(1)
 
@@ -1661,7 +1776,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
             encoder_outputs = self.detr.model.encoder(
                 inputs_embeds=flattened_features,
                 attention_mask=flattened_mask,
-                position_embeddings=position_embeddings,
+                object_queries=object_queries,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1684,7 +1799,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
         decoder_outputs = self.detr.model.decoder(
             inputs_embeds=queries,
             attention_mask=None,
-            position_embeddings=position_embeddings,
+            object_queries=object_queries,
             query_position_embeddings=query_position_embeddings,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=flattened_mask,
