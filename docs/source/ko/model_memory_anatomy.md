@@ -26,7 +26,7 @@ pip install transformers datasets accelerate nvidia-ml-py3
 
 `nvidia-ml-py3` 라이브러리는 Python 내부에서 모델의 메모리 사용량을 모니터링할 수 있게 해줍니다. 터미널의 `nvidia-smi` 명령어에 익숙할 수 있는데, 이 라이브러리는 Python에서 직접 동일한 정보에 접근할 수 있게 해줍니다.
 
-그 다음, 더미 데이터를 생성합니다: 100과 30000 사이의 무작위 토큰 ID와 분류기를 위한 이진 레이블입니다. 
+그 다음, 100과 30000 사이의 무작위 토큰 ID와 분류기를 위한 이진 레이블인 더미 데이터를 생성합니다.
 총 512 시퀀스의 길이를 각각 512로 만들고, PyTorch 형식의 [`~datasets.Dataset`]에 저장합니다.
 
 
