@@ -130,7 +130,6 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         use_default_system_prompt=False,
         **kwargs,
     ):
-
         # mark tokens special to skip them
         additional_special_tokens = additional_special_tokens or []
         for token in [prefix_token, middle_token, suffix_token, eot_token]:
@@ -323,36 +322,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
 
         return (out_vocab_file,)
 
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. The special tokens depend on calling set_lang.
-
-        An NLLB sequence has the following format, where `X` represents the sequence:
-
-        - `input_ids` (for encoder) `X [eos, src_lang_code]`
-        - `decoder_input_ids`: (for decoder) `X [eos, tgt_lang_code]`
-
-        BOS is never used. Pairs of sequences are not the expected use case, but they will be handled without a
-        separator.
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        # TODO process the ids for fast? Or update the template processing for infilling task when using `tokenize_infilling`
-        if token_ids_1 is None:
-            return self.prefix_tokens + token_ids_0 + self.suffix_tokens
-        return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
-
-    # Copied from CodeLlamaSlow
+    # Copied from transformers.models.code_llama.tokenization_code_llama.CodeLlamaTokenizer._build_conversation_input_ids
     def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         r"""Builds the input ids for a conversation.
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
@@ -367,7 +337,9 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         ```python
         >>> from transformers import Conversation
 
-        >>> Conversation("Complete the following function definition: `def remove_non_ascii(s: str) -> str:`")  # doctest: +IGNORE_RESULT
+        >>> Conversation(
+        ...     "Complete the following function definition: `def remove_non_ascii(s: str) -> str:`"
+        ... )  # doctest: +IGNORE_RESULT
         ```
         Args:
             conversation (`Conversation`):

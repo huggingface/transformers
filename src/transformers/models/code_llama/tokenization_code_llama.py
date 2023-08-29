@@ -64,8 +64,8 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
     Construct a CodeLlama tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as
     there is no padding token in the original model.
 
-    The default configuration match that of the model []() which supports prompt infilling.
     Args:
+    The default configuration match that of the model []() which supports prompt infilling.
         vocab_file (`str`):
             Path to the vocabulary file.
         eos_token (`str`, *optional*, defaults to `"</s>"`):
@@ -134,8 +134,8 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         add_bos_token=True,
         add_eos_token=False,
         clean_up_tokenization_spaces=False,
-        additional_special_tokens = None,
-        use_default_system_prompt = False,
+        additional_special_tokens=None,
+        use_default_system_prompt=False,
         **kwargs,
     ):
         requires_backends(self, "protobuf")
@@ -268,7 +268,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
             raise ValueError(
                 "Then input either includes a `prefix` and a `suffix` used for the infilling task,"
                 f"  or can be split on the {self.fill_token} token, creating a suffix an prefix,"
-                " but the model does not support `infilling`." 
+                " but the model does not support `infilling`."
             )
         suffix_tokens = self._tokenize(suffix)  # make sure CodeLlama sp model does not mess up
 
@@ -296,18 +296,18 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
         return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
 
-    # Copied from Llama
+    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer._convert_token_to_id
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         return self.sp_model.piece_to_id(token)
 
-    # Copied from Llama
+    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer._convert_id_to_token
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         token = self.sp_model.IdToPiece(index)
         return token
 
-    # Copied from Llama
+    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         # since we manually add the prefix space, we have to remove it when decoding
@@ -326,7 +326,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         out_string += self.sp_model.decode(current_sub_tokens)
         return out_string
 
-    # Copied from Llama
+    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.save_vocabulary
     def save_vocabulary(self, save_directory, filename_prefix: Optional[str] = None) -> Tuple[str]:
         """
         Save the vocabulary and special tokens file to a directory.
@@ -354,7 +354,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-    # Copied from Llama
+    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         bos_token_id = [self.bos_token_id] if self.add_bos_token else []
         eos_token_id = [self.eos_token_id] if self.add_eos_token else []
@@ -366,7 +366,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
 
         return output
 
-    # Copied from Llama
+    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
@@ -404,7 +404,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
             + eos_token_id
         )
 
-    # Copied from Llama
+    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -452,7 +452,9 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         ```python
         >>> from transformers import Conversation
 
-        >>> Conversation("Complete the following function definition: `def remove_non_ascii(s: str) -> str:`")  # doctest: +IGNORE_RESULT
+        >>> Conversation(
+        ...     "Complete the following function definition: `def remove_non_ascii(s: str) -> str:`"
+        ... )  # doctest: +IGNORE_RESULT
         ```
         Args:
             conversation (`Conversation`):
