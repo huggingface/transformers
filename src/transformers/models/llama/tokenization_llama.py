@@ -141,7 +141,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
             logger.warning_once(
                 f"You are using the default legacy behaviour of the {self.__class__}. If you see this, DO NOT PANIC! This is"
                 " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
-                " If you want to use the new behaviour, set `legacy=True`. This should only be set if you understand what it"
+                " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"
                 " means, and thouroughly read the reason why this was added as explained in"
                 " https://github.com/huggingface/transformers/pull/24565"
             )
