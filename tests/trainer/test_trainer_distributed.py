@@ -160,8 +160,8 @@ class TestTrainerDistributed(TestCasePlus):
         # successful return here == success - any errors would have caused an error in the sub-call
 
 
+@require_torch_multi_xpu
 class TestTrainerDistributedXPU(TestCasePlus):
-    @require_torch_multi_xpu
     def test_trainer(self):
         distributed_args = f"""--nproc_per_node={torch.xpu.device_count()}
             --master_port={get_torch_dist_unique_port()}
