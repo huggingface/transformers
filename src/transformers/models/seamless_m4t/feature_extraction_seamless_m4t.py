@@ -64,6 +64,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         padding_value=0.0,
         normalize_means=True,
         normalize_vars=True,
+        stride=2, # TODO: add to docstrings
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -71,6 +72,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         self.normalize_means = normalize_means
         self.normalize_vars = normalize_vars
         self.return_attention_mask = True
+        self.stride = stride
 
     def _extract_fbank_features(
         self,
@@ -190,7 +192,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         if self.normalize_means:
             features = [feature - feature.mean(axis=0) for feature in features]
         if self.normalize_vars:
-            features = [np.divide(feature, feature.std(axis=0)) for feature in features]
+            features = [torch.divide(feature, feature.std(axis=0)) for feature in features]
 
         # convert into correct format for padding
         encoded_inputs = BatchFeature({"input_features": features})
@@ -204,15 +206,27 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=return_attention_mask,
             **kwargs,
         )
-
-        # make sure list is in array format
+        
+        # SeamlessM4T needs to process extracted features
         input_features = padded_inputs.get("input_features")
-        if isinstance(input_features[0], list):
-            padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
-
         attention_mask = padded_inputs.get("attention_mask")
-        if attention_mask is not None:
-            padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
+        
+        batch_size, num_frames, num_channels = input_features.shape
+        
+        remainder = num_frames % self.stride
+        if remainder != 0:
+            input_features = input_features[:, :num_frames, :]
+            attention_mask = attention_mask[:, :num_frames]
+            
+        input_features = input_features.view(batch_size, num_frames//self.stride, num_channels*self.stride)
+        
+        
+        indices = torch.arange(0, num_frames, device=attention_mask[0].device)
+        attention_mask = attention_mask[:, indices % self.stride == 0]
+        
+        padded_inputs["input_features"] = input_features
+        padded_inputs["attention_mask"] = attention_mask   
+
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
