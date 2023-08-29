@@ -2122,7 +2122,9 @@ class Trainer:
                 self._issue_warnings_after_load(load_result)
 
     def _load_best_model(self):
-        logger.info(f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric}).")
+        logger.info(
+            f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric_value})."
+        )
         best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
         best_safe_model_path = os.path.join(self.state.best_model_checkpoint, SAFE_WEIGHTS_NAME)
         best_adapter_model_path = os.path.join(self.state.best_model_checkpoint, ADAPTER_WEIGHTS_NAME)
@@ -2385,11 +2387,12 @@ class Trainer:
 
             operator = np.greater if self.args.greater_is_better else np.less
             if (
-                self.state.best_metric is None
+                self.state.best_metric_value is None
                 or self.state.best_model_checkpoint is None
-                or operator(metric_value, self.state.best_metric)
+                or operator(metric_value, self.state.best_metric_value)
             ):
-                self.state.best_metric = metric_value
+                self.state.best_metrics = metrics.copy()
+                self.state.best_metric_value = metric_value
                 self.state.best_model_checkpoint = output_dir
 
         # Save the Trainer state
@@ -2514,6 +2517,7 @@ class Trainer:
         direction: str = "minimize",
         backend: Optional[Union["str", HPSearchBackend]] = None,
         hp_name: Optional[Callable[["optuna.Trial"], str]] = None,
+        use_best_model: bool = False,
         **kwargs,
     ) -> BestRun:
         """
@@ -2548,6 +2552,8 @@ class Trainer:
                 on which one is installed. If all are installed, will default to optuna.
             hp_name (`Callable[["optuna.Trial"], str]]`, *optional*):
                 A function that defines the trial/run name. Will default to None.
+            use_best_model (`bool`, *optional*, defaults to False):
+                When set to True, will use the best model checkpoint for each trial for objective computation.
             kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to `optuna.create_study` or `ray.tune.run`. For more
                 information see:
@@ -2576,7 +2582,7 @@ class Trainer:
         self.hp_name = hp_name
         self.compute_objective = default_compute_objective if compute_objective is None else compute_objective
 
-        best_run = backend_obj.run(self, n_trials, direction, **kwargs)
+        best_run = backend_obj.run(self, n_trials, direction, use_best_model, **kwargs)
 
         self.hp_search_backend = None
         return best_run

@@ -64,7 +64,10 @@ class TrainerState:
             to avoid overflow).
         log_history (`List[Dict[str, float]]`, *optional*):
             The list of logs done since the beginning of training.
-        best_metric (`float`, *optional*):
+        best_metrics (`Dict[str, float]`, *optional*):
+            When tracking the best model, the full metrics dictionary for the checkpoint with the best metric value
+            encounted so far.
+        best_metric_value (`float`, *optional*):
             When tracking the best model, the value of the best metric encountered so far.
         best_model_checkpoint (`str`, *optional*):
             When tracking the best model, the value of the name of the checkpoint for the best model encountered so
@@ -89,7 +92,8 @@ class TrainerState:
     num_train_epochs: int = 0
     total_flos: float = 0
     log_history: List[Dict[str, float]] = None
-    best_metric: Optional[float] = None
+    best_metrics: Dict[str, float] = None
+    best_metric_value: Optional[float] = None
     best_model_checkpoint: Optional[str] = None
     is_local_process_zero: bool = True
     is_world_process_zero: bool = True
@@ -556,11 +560,11 @@ class EarlyStoppingCallback(TrainerCallback):
         self.early_stopping_patience_counter = 0
 
     def check_metric_value(self, args, state, control, metric_value):
-        # best_metric is set by code for load_best_model
+        # best_metric_value is set by code for load_best_model
         operator = np.greater if args.greater_is_better else np.less
-        if state.best_metric is None or (
-            operator(metric_value, state.best_metric)
-            and abs(metric_value - state.best_metric) > self.early_stopping_threshold
+        if state.best_metric_value is None or (
+            operator(metric_value, state.best_metric_value)
+            and abs(metric_value - state.best_metric_value) > self.early_stopping_threshold
         ):
             self.early_stopping_patience_counter = 0
         else:
