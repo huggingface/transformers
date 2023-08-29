@@ -92,10 +92,10 @@ def is_tensor(x):
     Tests if `x` is a `torch.Tensor`, `tf.Tensor`, `jaxlib.xla_extension.DeviceArray` or `np.ndarray`.
     """
     framework_tests = {
-        "pt": _is_torch,
-        "tf": _is_tensorflow,
-        "jax": _is_jax,
-        "np": _is_numpy,
+        "pt": is_torch_tensor,
+        "tf": is_tf_tensor,
+        "jax": is_jax_tensor,
+        "np": is_numpy_array,
     }
     preferred_framework = infer_framework_from_repr(x)
     # We will test this one first, then numpy, then the others.
