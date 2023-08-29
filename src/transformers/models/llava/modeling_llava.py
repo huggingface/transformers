@@ -23,17 +23,19 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
+from ..clip import CLIPVisionModel
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
+    CausalLMOutputWithPast,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from .configuration_mpt import MptConfig, LlavaMptConfig
+from .configuration_llava import LlavaMptConfig,MptConfig
 
 
 logger = logging.get_logger(__name__)
@@ -1010,12 +1012,10 @@ class MptForQuestionAnswering(MptPreTrainedModel):
         )
 
 class LlavaMptModel(MptModel):
+    from abc import abstractmethod
     def __init__(self, config: LlavaMptConfig):
         config.hidden_size = config.d_model 
-        super(LlavaMptModel,self).__init__(config
-
-    def embed_tokens(self, x)):
-        return self.wte(x)
+        super(LlavaMptModel,self).__init__(config)
 
     @abstractmethod
     def get_model(self):
@@ -1145,7 +1145,7 @@ class LlavaMptModel(MptModel):
         return None, attention_mask, past_key_values, new_input_embeds, new_labels
 
 
-class LlavaMptForCausalLM(MptPreTrainedModel, LlavaMptModel):
+class LlavaMptForCausalLM(LlavaMptModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: LlavaMptConfig):
@@ -1165,6 +1165,7 @@ class LlavaMptForCausalLM(MptPreTrainedModel, LlavaMptModel):
             self.logit_scale = logit_scale
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.vision_model = CLIPVisionModel.from_config(config.vision_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1212,6 +1213,7 @@ class LlavaMptForCausalLM(MptPreTrainedModel, LlavaMptModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        pixel_values: Optional[torch.FloatTensor]=None,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor], ...]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         prefix_mask: Optional[torch.ByteTensor]=None,
@@ -1221,7 +1223,7 @@ class LlavaMptForCausalLM(MptPreTrainedModel, LlavaMptModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        images = None,
+        
     ) -> Union[Tuple[torch.Tensor], CausalLMOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1231,6 +1233,14 @@ class LlavaMptForCausalLM(MptPreTrainedModel, LlavaMptModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = use_cache if use_cache is not None else self.config.use_cache
+
+        vision_outputs = self.vision_model(                                                      
+            pixel_values= pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        image_embeds = vision_outputs[0]
 
         input_ids, attention_mask, past_key_values, inputs_embeds, labels = self.prepare_inputs_labels_for_multimodal(input_ids, attention_mask, past_key_values, labels, images)
 
@@ -1302,3 +1312,4 @@ class LlavaMptForCausalLM(MptPreTrainedModel, LlavaMptModel):
             for layer_past in past
         )
         return reordered_past
+

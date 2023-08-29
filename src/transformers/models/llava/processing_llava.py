@@ -84,7 +84,7 @@ class LlavaProcessor(ProcessorMixin):
 
         encoding = BatchFeature()
         self.tokenizer.add_tokens([DEFAULT_IMAGE_PATCH_TOKEN], special_tokens=True)
-        self.tokenizer.add_tokens([DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN], special_tokens=True)a
+        self.tokenizer.add_tokens([DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN], special_tokens=True)
 
         if text is not None:
             text_encoding = self.tokenizer(
@@ -128,4 +128,5 @@ class LlavaProcessor(ProcessorMixin):
         to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
 
