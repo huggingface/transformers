@@ -71,31 +71,54 @@ def strtobool(val):
     raise ValueError(f"invalid truth value {val!r}")
 
 
+def infer_framework_from_repr(x):
+    """
+    Tries to guess the framework of an object `x` from its repr (brittle but will help in `is_tensor` to try the
+    frameworks in a smart order).
+    """
+    representation = repr(x)
+    if representation.startswith("tensor"):
+        return "pt"
+    elif "tf.Tensor" in representation:
+        return "tf"
+    elif representation.startswith("Array"):
+        return "jax"
+    elif representation.startswith("array"):
+        return "np"
+
+
 def is_tensor(x):
     """
     Tests if `x` is a `torch.Tensor`, `tf.Tensor`, `jaxlib.xla_extension.DeviceArray` or `np.ndarray`.
     """
+    framework_tests = {
+        "pt": _is_torch,
+        "tf": _is_tensorflow,
+        "jax": _is_jax,
+        "np": _is_numpy,
+    }
+    preferred_framework = infer_framework_from_repr(x)
+    # We will test this one first, then numpy, then the others.
+    frameworks = [] if preferred_framework is None else [preferred_framework]
+    if preferred_framework != "np":
+        frameworks.append("np")
+    frameworks.extend([f for f in framework_tests if f not in [preferred_framework, "np"]])
+
+    for framework in frameworks:
+        if framework_tests[framework](x):
+            return True
+
+    # Tracers
     if is_torch_fx_proxy(x):
         return True
-    if is_torch_available():
-        import torch
-
-        if isinstance(x, torch.Tensor):
-            return True
-    if is_tf_available():
-        import tensorflow as tf
-
-        if isinstance(x, tf.Tensor):
-            return True
 
     if is_flax_available():
-        import jax.numpy as jnp
         from jax.core import Tracer
 
-        if isinstance(x, (jnp.ndarray, Tracer)):
+        if isinstance(x, Tracer):
             return True
 
-    return isinstance(x, np.ndarray)
+    return False
 
 
 def _is_numpy(x):
