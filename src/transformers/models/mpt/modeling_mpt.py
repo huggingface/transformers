@@ -1017,6 +1017,18 @@ class LlavaMptModel(MptModel):
     def embed_tokens(self, x)):
         return self.wte(x)
 
+    @abstractmethod
+    def get_model(self):
+        pass
+
+    def get_vision_tower(self):
+        return self.get_model().get_vision_tower()
+
+    def encode_images(self, images):
+        image_features = self.get_model().get_vision_tower()(images)
+        image_features = self.get_model().mm_projector(image_features)
+        return image_features
+
     def prepare_inputs_labels_for_multimodal(
         self, input_ids, attention_mask, past_key_values, labels, images
     ):
@@ -1137,7 +1149,7 @@ class LlavaMptForCausalLM(MptPreTrainedModel, LlavaMptModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: LlavaMptConfig):
-        super(LlavaMptForCausalLM).__init__(config)
+        super(LlavaMptForCausalLM,self).__init__(config)
         if not config.tie_word_embeddings:  
             raise ValueError("MPTForCausalLM only supports tied word embeddings")
 
