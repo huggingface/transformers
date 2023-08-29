@@ -456,6 +456,10 @@ as the model saving with FSDP activated is only available with recent fixes.
     If `"True"`, FSDP explicitly prefetches the next upcoming all-gather while executing in the forward pass. 
   - `limit_all_gathers` can be specified in the config file. 
     If `"True"`, FSDP explicitly synchronizes the CPU thread to prevent too many in-flight all-gathers.
+  - `activation_checkpointing` can be specified in the config file.
+    If `"True"`, FSDP activation checkpointing is a technique to reduce memory usage by clearing activations of
+    certain layers and recomputing them during a backward pass. Effectively, this trades extra computation time
+    for reduced memory usage.
 
 **Few caveats to be aware of**
 - it is incompatible with `generate`, thus is incompatible with `--predict_with_generate` 
