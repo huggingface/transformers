@@ -484,8 +484,8 @@ class TrainingArguments:
                     fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap.
                 - activation_checkpointing (`bool`, *optional*, defaults to `False`):
                     If True, activation checkpointing is a technique to reduce memory usage by clearing activations of
-                    certain layers and recomputing them during a backward pass. Effectively, this trades extra computation time
-                    for reduced memory usage.
+                    certain layers and recomputing them during a backward pass. Effectively, this trades extra
+                    computation time for reduced memory usage.
 
         deepspeed (`str` or `dict`, *optional*):
             Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
