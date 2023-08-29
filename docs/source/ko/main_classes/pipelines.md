@@ -302,7 +302,7 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 
 [새로운 파이프라인 구현하기](../add_new_pipeline)
 
-## 오디오 [[Audio]]
+## 오디오 [[audio]]
 
 오디오 작업에 사용 가능한 파이프라인은 다음과 같습니다.
 
