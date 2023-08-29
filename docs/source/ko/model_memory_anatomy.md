@@ -183,7 +183,7 @@ GPU memory occupied: 14949 MB.
 
 3. **원소별 연산자(Element-wise Operators)**
 
-    그 외의 연산자들입니다: **편향(biases), 드롭아웃(dropout), 활성화 함수(activations), 그리고 잔여 연결(residual connections)**. 이들은 계산에 있어 가장 적은 부하를 주는 연산입니다.
+    그 외 연산자들, **편향(biases), 드롭아웃(dropout), 활성화 함수(activations), 잔차 연결(residual connections)**이 여기에 해당합니다. 이 연산들은 연산 강도가 가장 낮습니다.
 
 이러한 지식은 성능 병목 현상을 분석할 때 도움이 될 수 있습니다.
 
