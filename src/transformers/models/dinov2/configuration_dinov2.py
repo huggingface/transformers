@@ -22,6 +22,7 @@ from packaging import version
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
@@ -31,7 +32,7 @@ DINOV2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class Dinov2Config(PretrainedConfig):
+class Dinov2Config(PretrainedConfig, BackboneConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Dinov2Model`]. It is used to instantiate an
     Dinov2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -40,7 +41,6 @@ class Dinov2Config(PretrainedConfig):
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -76,6 +76,20 @@ class Dinov2Config(PretrainedConfig):
             Stochastic depth rate per sample (when applied in the main path of residual layers).
         use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
             Whether to use the SwiGLU feedforward neural network.
+        out_features (`List[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage.
+        out_indices (`List[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage.
+        apply_layernorm (`bool`, *optional*, defaults to `True`):
+            Whether to apply layer normalization to the feature maps in case the model is used as backbone.
+        reshape_hidden_states (`bool`, *optional*, defaults to `True`):
+            Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
+            case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
+            seq_len, hidden_size)`.
 
     Example:
 
@@ -111,6 +125,10 @@ class Dinov2Config(PretrainedConfig):
         layerscale_value=1.0,
         drop_path_rate=0.0,
         use_swiglu_ffn=False,
+        out_features=None,
+        out_indices=None,
+        apply_layernorm=True,
+        reshape_hidden_states=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -131,6 +149,12 @@ class Dinov2Config(PretrainedConfig):
         self.layerscale_value = layerscale_value
         self.drop_path_rate = drop_path_rate
         self.use_swiglu_ffn = use_swiglu_ffn
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_hidden_layers + 1)]
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )
+        self.apply_layernorm = apply_layernorm
+        self.reshape_hidden_states = reshape_hidden_states
 
 
 class Dinov2OnnxConfig(OnnxConfig):
