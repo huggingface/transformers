@@ -3574,11 +3574,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             if param.device == torch.device("meta"):
                                 if not (is_quantized):
                                     set_module_tensor_to_device(
-                                        model, key, "cpu", torch.empty(*param.size(), dtype=dtype)
+                                        model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
                                     )
                                 else:
                                     set_module_quantized_tensor_to_device(
-                                        model, key, "cpu", torch.empty(*param.size(), dtype=dtype)
+                                        model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
                                     )
                 else:
                     error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)
