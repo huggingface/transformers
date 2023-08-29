@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-
+from ..auto import CONFIG_MAPPING
 
 logger = logging.get_logger(__name__)
 
@@ -390,3 +390,4 @@ class LlavaMptConfig(PretrainedConfig):
         self.layer_norm_epsilon = layer_norm_epsilon
         self.use_cache = use_cache
         super().__init__(**kwargs)
+

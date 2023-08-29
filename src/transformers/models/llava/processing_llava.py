@@ -25,6 +25,7 @@ from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
 from ..auto import AutoTokenizer
+from ..clip import CLIPImageProcessor
 
 
 class LlavaProcessor(ProcessorMixin):
@@ -83,8 +84,8 @@ class LlavaProcessor(ProcessorMixin):
             raise ValueError("You have to specify at least images or text.")
 
         encoding = BatchFeature()
-        self.tokenizer.add_tokens([DEFAULT_IMAGE_PATCH_TOKEN], special_tokens=True)
-        self.tokenizer.add_tokens([DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN], special_tokens=True)
+        #self.tokenizer.add_tokens([DEFAULT_IMAGE_PATCH_TOKEN], special_tokens=True)
+        #self.tokenizer.add_tokens([DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN], special_tokens=True)
 
         if text is not None:
             text_encoding = self.tokenizer(
@@ -110,11 +111,12 @@ class LlavaProcessor(ProcessorMixin):
         if images is not None:
             image_encoding = self.image_processor(images, return_tensors=return_tensors)
             encoding.update(image_encoding)
-
         return encoding
+
 
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
     def batch_decode(self, *args, **kwargs):
+    
         """
         This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
@@ -128,5 +130,6 @@ class LlavaProcessor(ProcessorMixin):
         to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+
 
 
