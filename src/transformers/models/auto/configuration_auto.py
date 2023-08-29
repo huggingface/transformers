@@ -1046,7 +1046,7 @@ class AutoConfig:
         )
 
     @staticmethod
-    def register(model_type, config):
+    def register(model_type, config, exist_ok=False):
         """
         Register a new configuration for this class.
 
@@ -1060,4 +1060,4 @@ class AutoConfig:
                 f"you passed (config has {config.model_type} and you passed {model_type}. Fix one of those so they "
                 "match!"
             )
-        CONFIG_MAPPING.register(model_type, config)
+        CONFIG_MAPPING.register(model_type, config, exist_ok=exist_ok)
