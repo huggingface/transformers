@@ -160,6 +160,7 @@ else:
                 "tf-nightly",
                 "tf-nightly-cpu",
                 "tf-nightly-gpu",
+                "tf-nightly-rocm",
                 "intel-tensorflow",
                 "intel-tensorflow-avx512",
                 "tensorflow-rocm",
