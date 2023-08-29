@@ -124,13 +124,19 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         suffix_token="▁<SUF>",
         eot_token="▁<EOT>",
         fill_token="<FILL_ME>",
+        additional_special_tokens=None,
         add_bos_token=True,
         add_eos_token=False,
+        use_default_system_prompt=False,
         **kwargs,
     ):
+
         # mark tokens special to skip them
-        additional_special_tokens = kwargs.pop("additional_special_tokens", [])
-        additional_special_tokens += [prefix_token, middle_token, suffix_token, eot_token]
+        additional_special_tokens = additional_special_tokens or []
+        for token in [prefix_token, middle_token, suffix_token, eot_token]:
+            additional_special_tokens += [token] if token is not None else []
+        self.use_default_system_prompt = use_default_system_prompt
+
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
@@ -144,6 +150,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             suffix_token=suffix_token,
             eot_token=eot_token,
             fill_token=fill_token,
+            use_default_system_prompt=use_default_system_prompt,
             **kwargs,
         )
         self._add_bos_token = add_bos_token
@@ -345,7 +352,8 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             return self.prefix_tokens + token_ids_0 + self.suffix_tokens
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
-    def _build_conversation_input_ids(self, conversation: "Conversation"):
+    # Copied from CodeLlamaSlow
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         r"""Builds the input ids for a conversation.
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
         the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
@@ -359,9 +367,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         ```python
         >>> from transformers import Conversation
 
-        >>> Conversation(
-        ...     "<<SYS>>\n Only answer with emojis, and charades\n<</SYS>>\n\nHow can I build a house in 10 septs?"
-        ... )  # doctest: +IGNORE_RESULT
+        >>> Conversation("Complete the following function definition: `def remove_non_ascii(s: str) -> str:`")  # doctest: +IGNORE_RESULT
         ```
         Args:
             conversation (`Conversation`):
@@ -370,16 +376,20 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             `List[int]`:
                 Input ids for the conversation.
         """
-        if len(conversation.past_user_inputs) > 0:
-            if not conversation.past_user_inputs[0].startswith(B_SYS) or E_SYS not in conversation.past_user_inputs[0]:
-                conversation.past_user_inputs[0] = (
-                    B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
-                )
-        elif conversation.new_user_input:
-            if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
-                conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
-        else:
-            raise ValueError("Last message must be from user")
+        if self.use_default_system_prompt:
+            if len(conversation.past_user_inputs) > 0:
+                if (
+                    not conversation.past_user_inputs[0].startswith(B_SYS)
+                    or E_SYS not in conversation.past_user_inputs[0]
+                ):
+                    conversation.past_user_inputs[0] = (
+                        B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
+                    )
+            elif conversation.new_user_input:
+                if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
+                    conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
+            else:
+                raise ValueError("Last message must be from user")
 
         dialogue = list(conversation.iter_texts())
         if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
@@ -389,7 +399,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
                 "The model only supports 'user' and 'assistant' roles, starting with user and alternating (u/a/u/a/u...)"
             )
 
-        dialog_tokens = []
+        dialog_tokens: List[int] = []
         dialog_tokens += sum(
             [
                 [self.bos_token_id]
