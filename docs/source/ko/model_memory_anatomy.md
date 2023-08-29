@@ -179,7 +179,7 @@ GPU memory occupied: 14949 MB.
 
 2. **통계 정규화(Statistical Normalizations)**
 
-    Softmax와 레이어 정규화는 텐서 축약보다 계산 강도가 낮으며, 하나 이상의 **감소 연산(reduction operations)**을 포함하며, 그 결과는 map을 통해 적용됩니다.
+    소프트맥스와 레이어 정규화는 텐서 축약보다 연산 강도가 낮습니다. 하나 이상의 **감소 연산(reduction operations)**을 포함하며, 그 결과는 map을 통해 적용됩니다.
 
 3. **원소별 연산자(Element-wise Operators)**
 
