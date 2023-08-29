@@ -1412,7 +1412,7 @@ the full fp32 mode, by explicitly disabling the otherwise default fp16 mixed pre
 ```json
 {
     "fp16": {
-        "enabled": "false",
+        "enabled": false,
     }
 }
 ```
