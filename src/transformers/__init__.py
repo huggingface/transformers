@@ -1995,6 +1995,9 @@ else:
             "PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST",
             "PatchTSTModel",
             "PatchTSTPreTrainedModel",
+            "PatchTSTForPrediction",
+            "PatchTSTForForecasting",
+            "PatchTSTForPretraining"
         ]
     )
     _import_structure["models.instructblip"].extend(
@@ -5859,6 +5862,9 @@ if TYPE_CHECKING:
         from .models.patchtst import (
             PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST,
             PatchTSTModel,
+            PatchTSTForPrediction,
+            PatchTSTForForecasting,
+            PatchTSTForPretraining,
             PatchTSTPreTrainedModel,
         )
         from .models.instructblip import (

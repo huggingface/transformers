@@ -14,7 +14,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from transformers.utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
@@ -32,10 +32,11 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_patchtst"] = [
         "PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "PatchTSTForPretraining",
-        "PatchTSTForPrediction"
         "PatchTSTModel",
         "PatchTSTPreTrainedModel",
+        "PatchTSTForPrediction",
+        "PatchTSTForForecasting",
+        "PatchTSTForPretraining"
     ]
 
 

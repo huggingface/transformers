@@ -33,10 +33,9 @@ TOLERANCE = 1e-4
 
 if is_torch_available():
     import torch
+    from transformers import PatchTSTConfig
+    from transformers import PatchTSTModel, PatchTSTForPrediction, PatchTSTForForecasting, PatchTSTForPretraining
 
-    from transformers.models.patchtst.configuration_patchtst import PatchTSTConfig
-    from transformers.models.patchtst.modeling_patchtst import PatchTSTForPrediction, PatchTSTForForecasting, PatchTSTForPretraining, PatchTSTModel
-    # from transformers import PatchTSTConfig, PatchTSTModel, PatchTSTForPrediction
 
 
 @require_torch
@@ -226,14 +225,6 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         # The main input is the name of the argument after `self`
         observed_main_input_name = list(model_signature.parameters.keys())[1]
         self.assertEqual(PatchTSTModel.main_input_name, observed_main_input_name)
-
-    def test_save_load_fast_init_from_base(self):
-        # super().test_save_load_fast_init_from_base()
-        pass
-
-    def test_save_load_fast_init_to_base(self):
-        # super().test_save_load_fast_init_to_base()
-        pass
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
