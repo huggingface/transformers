@@ -44,7 +44,7 @@ class LlavaProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "CLIPImageProcessor"
     tokenizer_class = "AutoTokenizer"
-
+    
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
@@ -74,10 +74,17 @@ class LlavaProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
+        DEFAULT_IMAGE_TOKEN = "<image>"
+        DEFAULT_IMAGE_PATCH_TOKEN = "<im_patch>"
+        DEFAULT_IM_START_TOKEN = "<im_start>"
+        DEFAULT_IM_END_TOKEN = "<im_end>"
+
         if images is None and text is None:
             raise ValueError("You have to specify at least images or text.")
 
         encoding = BatchFeature()
+        self.tokenizer.add_tokens([DEFAULT_IMAGE_PATCH_TOKEN], special_tokens=True)
+        self.tokenizer.add_tokens([DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN], special_tokens=True)a
 
         if text is not None:
             text_encoding = self.tokenizer(

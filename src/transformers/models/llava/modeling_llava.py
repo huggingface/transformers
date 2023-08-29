@@ -1009,7 +1009,7 @@ class MptForQuestionAnswering(MptPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-class LlavaMptModel(MptPretrainedModel):
+class LlavaMptModel(MptModel):
     def __init__(self, config: LlavaMptConfig):
         config.hidden_size = config.d_model 
         super(LlavaMptModel,self).__init__(config
@@ -1145,7 +1145,7 @@ class LlavaMptModel(MptPretrainedModel):
         return None, attention_mask, past_key_values, new_input_embeds, new_labels
 
 
-class LlavaMptForCausalLM(LlavaMptModel):
+class LlavaMptForCausalLM(MptPreTrainedModel, LlavaMptModel):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: LlavaMptConfig):
