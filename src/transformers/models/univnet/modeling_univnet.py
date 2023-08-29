@@ -586,6 +586,37 @@ class UnivNetGan(PreTrainedModel):
         Returns:
             `torch.FloatTensor`: Tensor containing the speech waveform. IF the input spectrogram is batched, wil be of
             shape `(batch_size, num_frames)`. If un-batched, will be of shape `(num_frames,)`.
+
+        Example:
+
+         ```python
+         >>> import torch
+         >>> from transformers import UnivNetFeatureExtractor, UnivNetGan
+         >>> from datasets import load_dataset, Audio
+
+         >>> model = UnivNetGan.from_pretrained("dg845/univnet-dev")
+         >>> feature_extractor = UnivNetFeatureExtractor.from_pretrained("dg845/univnet-dev")
+
+         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+         >>> # Resample the audio to the feature extractor's sampling rate.
+         >>> ds = ds.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
+         >>> inputs = feature_extractor(
+         ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt"
+         ... )
+         >>> input_features = inputs.input_features.float()
+
+         >>> # Padding the input spectrogram with "zeros" reduces artifacts at the end of the generated sample.
+         >>> # See https://github.com/seungwonpark/melgan/issues/8
+         >>> pad_len = 10
+         >>> padding_zeros = torch.full((1, pad_len, model.config.num_mel_channels), -11.5129)
+         >>> input_features = torch.cat([input_features, padding_zeros], dim=1)
+         >>> # UnivNetGan also takes in standard Gaussian noise as input. If the noise argument is not supplied, it
+         >>> # be sampled inside the model call.
+         >>> noise = torch.randn((1, input_features.shape[1], model.config.model_in_channels))
+         >>> audio = model(input_features, noise)  # audio = model(input_features) also works
+         >>> # Remove the padding zeros.
+         >>> audio = audio[:-(feature_extractor.hop_length * pad_len)]
+         ```
         """
         # Resolve batch sizes for noise_waveform and spectrogram
         spectrogram_batched = spectrogram.dim() == 3
