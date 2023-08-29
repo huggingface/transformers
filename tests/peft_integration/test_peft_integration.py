@@ -179,6 +179,35 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     model_from_pretrained = transformers_class.from_pretrained(tmpdirname).to(torch_device)
                     self.assertTrue(self._check_lora_correctly_converted(model_from_pretrained))
 
+    def test_peft_add_adapter_training_gradient_checkpointing(self):
+        """
+        Simple test that tests if `add_adapter` works as expected when training with
+        gradient checkpointing.
+        """
+        from peft import LoraConfig
+
+        for model_id in self.transformers_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+
+                peft_config = LoraConfig(init_lora_weights=False)
+
+                model.add_adapter(peft_config)
+
+                self.assertTrue(self._check_lora_correctly_converted(model))
+
+                model.gradient_checkpointing_enable()
+
+                dummy_input = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device)
+                logits = model(dummy_input).logits
+                loss = logits.mean()
+                loss.backward()
+
+                for name, param in model.named_parameters():
+                    if param.requires_grad:
+                        self.assertTrue("lora" in name.lower())
+                        self.assertTrue(param.grad is not None)
+
     def test_peft_add_multi_adapter(self):
         """
         Simple test that tests the basic usage of PEFT model through `from_pretrained`. This test tests if
