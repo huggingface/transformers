@@ -405,7 +405,7 @@ class AutoImageProcessor:
         )
 
     @staticmethod
-    def register(config_class, image_processor_class):
+    def register(config_class, image_processor_class, exist_ok=False):
         """
         Register a new image processor for this class.
 
@@ -414,4 +414,4 @@ class AutoImageProcessor:
                 The configuration corresponding to the model to register.
             image_processor_class ([`ImageProcessingMixin`]): The image processor to register.
         """
-        IMAGE_PROCESSOR_MAPPING.register(config_class, image_processor_class)
+        IMAGE_PROCESSOR_MAPPING.register(config_class, image_processor_class, exist_ok=exist_ok)
