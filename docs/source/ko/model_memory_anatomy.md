@@ -175,7 +175,7 @@ GPU memory occupied: 14949 MB.
 
 1. **텐서 축약(Tensor Contractions)**
 
-    선형 레이어와 멀티헤드 어텐션의 구성 요소는 모두 **행렬-행렬 곱셈(matrix-matrix multiplications)**을 일괄적으로 처리합니다. 이 연산들은 트랜스포머를 훈련시키는 데 가장 연산이 집약적인 부분입니다.
+    선형 레이어와 멀티헤드 어텐션의 구성 요소는 모두 **행렬-행렬 곱셈(matrix-matrix multiplications)**을 일괄적으로 처리합니다. 이 연산은 트랜스포머 훈련에서 가장 연산 강도가 높은 부분입니다.
 
 2. **통계 정규화(Statistical Normalizations)**
 
