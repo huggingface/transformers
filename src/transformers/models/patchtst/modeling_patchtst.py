@@ -1142,7 +1142,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
 
     def forward(self,
                 past_values: torch.Tensor,
-                future_values: Optional[torch.Tensor],
+                future_values: Optional[torch.Tensor] = None,
                 output_hidden_states: Optional[bool] = None):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

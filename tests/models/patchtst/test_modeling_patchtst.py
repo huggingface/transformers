@@ -22,7 +22,7 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
-from transformers.testing_utils import is_flaky, require_torch, torch_device
+from transformers.testing_utils import is_flaky, require_torch, torch_device, slow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -251,79 +251,68 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     @is_flaky()
     def test_retain_grad_hidden_states_attentions(self):
         super().test_retain_grad_hidden_states_attentions()
-#
-#
-# def prepare_batch(filename="train-batch.pt"):
-#     file = hf_hub_download(repo_id="hf-internal-testing/tourism-monthly-batch", filename=filename, repo_type="dataset")
-#     batch = torch.load(file, map_location=torch_device)
-#     return batch
-#
-#
-# @require_torch
-# @slow
-# class PatchTSTModelIntegrationTests(unittest.TestCase):
-#     def test_inference_no_head(self):
-#         model = PatchTSTModel.from_pretrained("huggingface/patchtst-tourism-monthly").to(torch_device)
-#         batch = prepare_batch()
-#
-#         torch.manual_seed(0)
-#         with torch.no_grad():
-#             output = model(
-#                 past_values=batch["past_values"],
-#                 past_time_features=batch["past_time_features"],
-#                 past_observed_mask=batch["past_observed_mask"],
-#                 static_categorical_features=batch["static_categorical_features"],
-#                 future_values=batch["future_values"],
-#                 future_time_features=batch["future_time_features"],
-#             ).last_hidden_state
-#         expected_shape = torch.Size((64, model.config.context_length, model.config.d_model))
-#         self.assertEqual(output.shape, expected_shape)
-#
-#         expected_slice = torch.tensor(
-#             [[0.4699, 0.7295, 0.8967], [0.4858, 0.3810, 0.9641], [-0.0233, 0.3608, 1.0303]],
-#             device=torch_device,
-#         )
-#         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
-#
-#     def test_inference_head(self):
-#         model = PatchTSTForPrediction.from_pretrained("huggingface/patchtst-tourism-monthly").to(torch_device)
-#         batch = prepare_batch("val-batch.pt")
-#
-#         torch.manual_seed(0)
-#         with torch.no_grad():
-#             output = model(
-#                 past_values=batch["past_values"],
-#                 past_time_features=batch["past_time_features"],
-#                 past_observed_mask=batch["past_observed_mask"],
-#                 static_categorical_features=batch["static_categorical_features"],
-#                 future_time_features=batch["future_time_features"],
-#             ).encoder_last_hidden_state
-#
-#         # encoder distils the context length to 1/8th of the original length
-#         expected_shape = torch.Size((64, model.config.context_length // 8, model.config.d_model))
-#         self.assertEqual(output.shape, expected_shape)
-#
-#         expected_slice = torch.tensor(
-#             [[0.4170, 0.9067, 0.8153], [0.3004, 0.7574, 0.7066], [0.6803, -0.6323, 1.2802]], device=torch_device
-#         )
-#         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
-#
-#     def test_seq_to_seq_generation(self):
-#         model = PatchTSTForPrediction.from_pretrained("huggingface/patchtst-tourism-monthly").to(torch_device)
-#         batch = prepare_batch("val-batch.pt")
-#
-#         torch.manual_seed(0)
-#         with torch.no_grad():
-#             outputs = model.generate(
-#                 static_categorical_features=batch["static_categorical_features"],
-#                 past_time_features=batch["past_time_features"],
-#                 past_values=batch["past_values"],
-#                 future_time_features=batch["future_time_features"],
-#                 past_observed_mask=batch["past_observed_mask"],
-#             )
-#         expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
-#         self.assertEqual(outputs.sequences.shape, expected_shape)
-#
-#         expected_slice = torch.tensor([3400.8005, 4289.2637, 7101.9209], device=torch_device)
-#         mean_prediction = outputs.sequences.mean(dim=1)
-#         self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=1e-1))
+
+
+def prepare_batch(repo_id="diepi/test-etth1", file='train-batch.pt'):
+    file = hf_hub_download(repo_id=repo_id, filename=file, repo_type="dataset")
+    batch = torch.load(file, map_location=torch_device)
+    return batch
+
+
+@require_torch
+@slow
+class PatchTSTModelIntegrationTests(unittest.TestCase):
+    def test_pretrain_head(self):
+        model = PatchTSTForPretraining.from_pretrained('diepi/test_patchtst_pretrained_etth1').to(torch_device)
+        batch = prepare_batch()
+
+        torch.manual_seed(0)
+        with torch.no_grad():
+            output = model(
+                past_values=batch["past_values"].to(torch_device)
+            ).prediction_outputs
+        num_patch = (max(model.config.context_length,
+                         model.config.patch_length) - model.config.patch_length) // model.config.stride + 1
+        expected_shape = torch.Size([64, model.config.input_size, num_patch, model.config.patch_length])
+        self.assertEqual(output.shape, expected_shape)
+
+        expected_slice = torch.tensor([[[-0.0170]], [[0.0163]], [[0.0090]], [[0.0139]], [[0.0067]],
+                                       [[0.0246]], [[0.0090]]],
+                                      device=torch_device)
+        self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
+
+    # def test_classification_head(self):
+    #     # mock data, test
+    #     model = PatchTSTForClassification.from_pretrained('diepi/test_patchtst_classification_mock').to(torch_device)
+    #     batch = prepare_batch(repo_id="diepi/mock-data", file="test-mock-patchtst.pt")
+    #
+    #     torch.manual_seed(0)
+    #     with torch.no_grad():
+    #         output = model(
+    #             past_values=batch["past_values"].to(torch_device)
+    #         ).prediction_logits
+    #     expected_shape = torch.Size([1, model.config.num_classes])
+    #     self.assertEqual(output.shape, expected_shape)
+    #
+    #     expected_slice = torch.tensor([[-0.2774, -0.1081, 0.6771]],
+    #                                   device=torch_device,
+    #                                   )
+    #     self.assertTrue(torch.allclose(output, expected_slice, atol=TOLERANCE))
+
+    def test_prediction_head(self):
+        model = PatchTSTForPrediction.from_pretrained('diepi/test_patchtst_prediction_etth1').to(torch_device)
+        batch = prepare_batch(file="test-batch.pt")
+
+        torch.manual_seed(0)
+        with torch.no_grad():
+            output = model(
+                past_values=batch["past_values"].to(torch_device),
+                future_values=batch["future_values"].to(torch_device)
+            ).prediction_outputs
+        expected_shape = torch.Size([64, model.config.prediction_length, model.config.input_size])
+        self.assertEqual(output.shape, expected_shape)
+
+        expected_slice = torch.tensor([[-0.8200, 0.3741, -0.7543, 0.3971, -0.6659, -0.0124, -0.8308]],
+                                      device=torch_device,
+                                      )
+        self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))
