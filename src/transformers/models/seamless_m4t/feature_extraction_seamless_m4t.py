@@ -40,7 +40,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
     This class extracts mel-filter bank features from raw speech using TorchAudio
 
     Args:
-        feature_size (`int`, defaults to 80):
+        feature_size (`int`, defaults to 80): TODO: is it used ?
             The feature dimension of the extracted features.
         sampling_rate (`int`, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
@@ -81,18 +81,18 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         and hence the waveform should not be normalized before feature extraction.
         """
         waveform = waveform * (2**15)  # Kaldi compliance: 16-bit signed integers
-        waveform = torch.from_numpy(waveform).unsqueeze(0)
+        waveform = torch.from_numpy(waveform).unsqueeze(0) if len(waveform.shape) == 1 else torch.from_numpy(waveform)
         features = ta_kaldi.fbank(waveform, num_mel_bins=self.num_mel_bins, sample_frequency=self.sampling_rate)
-        return features.numpy() # TODO: return numpy ?
+        return features
 
 
     def __call__(
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        padding: Union[bool, str, PaddingStrategy] = False,
+        padding: Union[bool, str, PaddingStrategy] = True,
+        pad_to_multiple_of: Optional[int] = 2,
         max_length: Optional[int] = None,
         truncation: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
@@ -102,10 +102,11 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
+            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, `List[List[List[float]]]`): TODO: change description
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values. Must be mono channel audio, not
-                stereo, i.e. single float per timestep.
+                values, a list of numpy arrays, a list of list of float values or a list of a list of list of float values. 
+                If `raw_speech` is a one-dimensional `np.ndarray` or a `List[float]`, `raw_speech` is considered a single-channel, single-sample sound.
+                In all other cases, the first dimension of `raw_speech`, whether from an `np.ndarray` or a `List[...]`, corresponds to the number of samples in the batch, and the number of channels (i.e. mono or stereo character) is derived from the other dimensions (1D -> single-channel waveform batches; 2D-> stereo-channel waveform batches).
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
@@ -116,15 +117,15 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
                   acceptable input length for the model if that argument is not provided.
                 - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
                   lengths).
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`):
-                Activates truncation to cut input sequences longer than *max_length* to *max_length*.
-            pad_to_multiple_of (`int`, *optional*):
+            pad_to_multiple_of (`int`, *optional*, defaults to 2):
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+            max_length (`int`, *optional*):
+                Maximum length of the returned list and optionally padding length (see above).
+            truncation (`bool`):
+                Activates truncation to cut input sequences longer than *max_length* to *max_length*.
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.
@@ -165,8 +166,9 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             )
 
         is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
-        if is_batched_numpy and len(raw_speech.shape) > 2:
-            raise ValueError(f"Only mono-channel audio is supported for input to {self}")
+        if is_batched_numpy and len(raw_speech.shape) > 3:
+            raise ValueError(f"Only mono-channel or stereo-channel audio is supported for input to {self}")
+        
         is_batched = is_batched_numpy or (
             isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
         )
