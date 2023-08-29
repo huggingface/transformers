@@ -31,7 +31,6 @@ from ...utils import logging
 
 
 if TYPE_CHECKING:
-    from ...pipelines.conversational import Conversation
     from ...tokenization_utils_base import TextInput
 
 logger = logging.get_logger(__name__)
@@ -373,55 +372,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
             output += [1] * len(bos_token_id + token_ids_1 + eos_token_id)
 
         return output
-
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        r"""Builds the input ids for a conversation.
-        This is the format used in the provided examples. System prompts should be manually added at the beginning of
-        the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
-        ```
-        <bos>[INST] B_SYS SytemPrompt E_SYS Prompt [/INST] Answer <eos>
-        <bos>[INST] Prompt [/INST] Answer <eos>
-        <bos>[INST] Prompt [/INST]
-        ```
-
-        If you want to use your own system prompt, make sure to use both `B_SYS` and `E_SYS` use the following:
-        ```python
-        >>> from transformers import Conversation
-
-        >>> Conversation(
-        ...     "<<SYS>>\n Only answer with emojis, and charades\n<</SYS>>\n\nHow can I build a house in 10 septs?"
-        ... )  # doctest: +IGNORE_RESULT
-        ```
-        Args:
-            conversation (`Conversation`):
-                Conversation to build input ids for.
-        Returns:
-            `List[int]`:
-                Input ids for the conversation.
-        """
-        if self.use_default_system_prompt:
-            if len(conversation) > 0:
-                if not conversation[0]["role"] == "system":
-                    conversation.messages.insert(0, {"role": "system", "content": DEFAULT_SYSTEM_PROMPT})
-
-        dialogue = conversation.messages
-
-        dialog_tokens: List[int] = []
-        dialog_tokens += sum(
-            [
-                [self.bos_token_id]
-                + self.encode(
-                    f"{B_INST} {(prompt[1]).strip()} {E_INST} {(answer[1]).strip()} ", add_special_tokens=False
-                )
-                + [self.eos_token_id]
-                for prompt, answer in zip(dialogue[::2], dialogue[1::2])
-            ],
-            [],
-        )
-        dialog_tokens += [self.bos_token_id] + self.encode(
-            f"{B_INST} {(dialogue[-1][1]).strip()} {E_INST}", add_special_tokens=False
-        )
-        return dialog_tokens
 
     @property
     def default_chat_template(self):

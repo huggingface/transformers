@@ -24,7 +24,7 @@ from ...utils.versions import require_version
 
 
 if TYPE_CHECKING:
-    from transformers.pipelines.conversational import Conversation
+    pass
 
 require_version("tokenizers>=0.13.3")
 
@@ -344,6 +344,29 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
 
         return (out_vocab_file,)
 
+    @property
+    def default_chat_template(self):
+        template = "{% for message in messages %}"
+        if self.use_default_system_prompt:
+            prompt = DEFAULT_SYSTEM_PROMPT.replace("\n", "\\n").replace("'", "\\'")
+            template += (
+                "{% if loop.index == 0 and message['role'] != 'system' %}"
+                "{{ '<<SYS>>\\n' + 'sys_prompt' + '\\n<</SYS>>\\n\\n' }}"
+                "{% endif %}"
+            )
+            template = template.replace("sys_prompt", prompt)  # Use replace to avoid f-string + Jinja interaction
+        template += (
+            "{% if message['role'] == 'user' %}"
+            "{{ bos_token + '[INST]' + message['content'] + '[/INST]' }}"
+            "{% elif message['role'] == 'system' %}"
+            "{{ '<<SYS>>\\n' + message['content'] + '\\n<</SYS>>\\n\\n' }}"
+            "{% elif message['role'] == 'assistant' %}"
+            "{{ ' '  + message['content'] + ' ' + eos_token }}"
+            "{% endif %}"
+            "{% endfor %}"
+        )
+        return template
+
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -371,69 +394,3 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return self.bos_token_id + token_ids_0 + self.eos_token_id
         return self.bos_token_id + token_ids_0 + token_ids_1 + self.eos_token_id
-
-    # Copied from transformers.models.code_llama.tokenization_code_llama.CodeLlamaTokenizer._build_conversation_input_ids
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        r"""Builds the input ids for a conversation.
-        This is the format used in the provided examples. System prompts should be manually added at the beginning of
-        the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
-        ```
-        <bos>[INST] B_SYS SytemPrompt E_SYS Prompt [/INST] Answer <eos>
-        <bos>[INST] Prompt [/INST] Answer <eos>
-        <bos>[INST] Prompt [/INST]
-        ```
-
-        If you want to use your own system prompt, make sure to use both `B_SYS` and `E_SYS` use the following:
-        ```python
-        >>> from transformers import Conversation
-
-        >>> Conversation(
-        ...     "<<SYS>>\n Complete the functions without any documentation\n<</SYS>>\n\n `def remove_non_ascii(s: str) -> str:`"
-        ... )  # doctest: +IGNORE_RESULT
-        ```
-        Args:
-            conversation (`Conversation`):
-                Conversation to build input ids for.
-        Returns:
-            `List[int]`:
-                Input ids for the conversation.
-        """
-        if self.use_default_system_prompt:
-            if len(conversation.past_user_inputs) > 0:
-                if (
-                    not conversation.past_user_inputs[0].startswith(B_SYS)
-                    or E_SYS not in conversation.past_user_inputs[0]
-                ):
-                    conversation.past_user_inputs[0] = (
-                        B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
-                    )
-            elif conversation.new_user_input:
-                if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
-                    conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
-            else:
-                raise ValueError("Last message must be from user")
-
-        dialogue = list(conversation.iter_texts())
-        if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
-            [not is_user for is_user, msg in dialogue[1::2]]
-        ):
-            raise ValueError(
-                "The model only supports 'user' and 'assistant' roles, starting with user and alternating (u/a/u/a/u...)"
-            )
-
-        dialog_tokens: List[int] = []
-        dialog_tokens += sum(
-            [
-                [self.bos_token_id]
-                + self.encode(
-                    f"{B_INST} {(prompt[1]).strip()} {E_INST} {(answer[1]).strip()} ", add_special_tokens=False
-                )
-                + [self.eos_token_id]
-                for prompt, answer in zip(dialogue[::2], dialogue[1::2])
-            ],
-            [],
-        )
-        dialog_tokens += [self.bos_token_id] + self.encode(
-            f"{B_INST} {(dialogue[-1][1]).strip()} {E_INST}", add_special_tokens=False
-        )
-        return dialog_tokens

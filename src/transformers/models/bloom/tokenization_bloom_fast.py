@@ -16,15 +16,11 @@
 
 
 import pickle
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import Optional, Tuple
 
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-
-
-if TYPE_CHECKING:
-    from ...pipelines.conversational import Conversation
 
 
 logger = logging.get_logger(__name__)
@@ -165,16 +161,6 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
-
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        """This corresponds to DialoGPT variants of models."""
-        input_ids = []
-        for is_user, text in conversation.iter_texts():
-            input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
-
-        if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
-        return input_ids
 
     @property
     def default_chat_template(self):

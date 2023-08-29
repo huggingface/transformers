@@ -17,7 +17,7 @@ import collections
 import json
 import os
 import re
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -31,10 +31,6 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import PaddingStrategy, logging
-
-
-if TYPE_CHECKING:
-    from ...pipelines.conversational import Conversation
 
 
 logger = logging.get_logger(__name__)
@@ -257,17 +253,6 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
             words.append(bytearray(byte_tokens).decode("utf-8", errors="replace"))
         text = "".join(words)
         return text
-
-    # Copied from tokenization_gpt_neox_japanese.GPTNeoXJapaneseTokenizer._build_conversation_input_ids
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        """This corresponds to DialoGPT variants of models."""
-        input_ids = []
-        for is_user, text in conversation.iter_texts():
-            input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
-
-        if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
-        return input_ids
 
     @property
     def default_chat_template(self):

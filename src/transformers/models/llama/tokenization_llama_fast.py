@@ -14,7 +14,7 @@
 # limitations under the License.
 import os
 from shutil import copyfile
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import Optional, Tuple
 
 from tokenizers import processors
 
@@ -22,9 +22,6 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import is_sentencepiece_available, logging
 from ...utils.versions import require_version
 
-
-if TYPE_CHECKING:
-    from ...pipelines.conversational import Conversation
 
 require_version("tokenizers>=0.13.3")
 
@@ -191,58 +188,6 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
-
-    def _build_conversation_input_ids(self, conversation: "Conversation"):
-        """Builds the input ids for a conversation.
-        This is the format used in the provided examples. System prompts should be manually added at the beginning of
-        the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
-        ```
-        <bos>[INST] B_SYS SytemPrompt E_SYS Prompt [/INST] Answer <eos>
-        <bos>[INST] Prompt [/INST] Answer <eos>
-        <bos>[INST] Prompt [/INST]
-        ```
-
-        If you want to use your own system prompt, make sure to use both `B_SYS` and `E_SYS` use the following:
-        ```python
-        >>> from transformers import Conversation
-
-        >>> Conversation(
-        ...     "<<SYS>>\n Only answer with emojis, and charades\n<</SYS>>\n\nHow can I build a house in 10 septs?"
-        ... )
-        ```
-        Args:
-            conversation (`Conversation`):
-                Conversation to build input ids for.
-        Returns:
-            `List[int]`:
-                Input ids for the conversation.
-        """
-        if not len(conversation) > 0 or conversation[-1]["role"] != "user":
-            raise ValueError("Most recent conversation message must be from 'user'!")
-        if self.use_default_system_prompt and conversation[0]["role"] != "system":
-            conversation.messages.insert(0, {"role": "system", "content": DEFAULT_SYSTEM_PROMPT})
-
-        dialogue = conversation.messages[:]
-        system_message = dialogue.pop(0) if dialogue[0]["role"] == "system" else None
-        dialog_tokens = []
-        if system_message is not None:
-            dialog_tokens += self.encode(f"{B_SYS}{system_message['content']}{E_SYS}", add_special_tokens=False)
-        dialog_tokens += sum(
-            [
-                [self.bos_token_id]
-                + self.encode(
-                    f"{B_INST} {(prompt['content']).strip()} {E_INST} {(answer['content']).strip()} ",
-                    add_special_tokens=False,
-                )
-                + [self.eos_token_id]
-                for prompt, answer in zip(dialogue[::2], dialogue[1::2])
-            ],
-            [],
-        )
-        dialog_tokens += [self.bos_token_id] + self.encode(
-            f"{B_INST} {(dialogue[-1]['content']).strip()} {E_INST}", add_special_tokens=False
-        )
-        return dialog_tokens
 
     @property
     def default_chat_template(self):

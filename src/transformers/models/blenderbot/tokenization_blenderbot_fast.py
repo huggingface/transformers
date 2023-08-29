@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Tokenization class for Blenderbot."""
 import json
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from tokenizers import pre_tokenizers, processors
 
@@ -23,9 +23,6 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 from .tokenization_blenderbot import BlenderbotTokenizer
 
-
-if TYPE_CHECKING:
-    from ...pipelines.conversational import Conversation
 
 logger = logging.get_logger(__name__)
 
@@ -296,23 +293,6 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
             `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
         return token_ids_0 + [self.eos_token_id]
-
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
-        inputs = []
-        for is_user, text in conversation.iter_texts():
-            if is_user:
-                # We need to space prefix as it's being done within blenderbot
-                inputs.append(" " + text)
-            else:
-                # Generated responses should contain them already.
-                inputs.append(text)
-
-        full_string = "  ".join(inputs)
-        input_ids = self.encode(full_string)
-        if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
-            logger.warning(f"Trimmed input from conversation as it was longer than {self.model_max_length} tokens.")
-        return input_ids
 
     @property
     def default_chat_template(self):
