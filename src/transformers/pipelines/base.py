@@ -34,7 +34,7 @@ from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import ModelOutput, add_end_docstrings, infer_framework, is_tf_available, is_torch_available, logging
+from ..utils import ModelOutput, add_end_docstrings, infer_framework, is_tf_available, is_torch_available, is_torch_npu_available, logging
 
 
 GenericTensor = Union[List["GenericTensor"], "torch.Tensor", "tf.Tensor"]
@@ -722,8 +722,8 @@ PIPELINE_INIT_ARGS = r"""
         args_parser ([`~pipelines.ArgumentHandler`], *optional*):
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (`int`, *optional*, defaults to -1):
-            Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id. You can pass native `torch.device` or a `str` too.
+            Device ordinal for CPU/GPU/NPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
+            the associated CUDA/NPU device id. You can pass native `torch.device` or a `str` too.
         binary_output (`bool`, *optional*, defaults to `False`):
             Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
 """
@@ -748,7 +748,7 @@ class Pipeline(_ScikitCompat):
 
         Input -> Tokenization -> Model Inference -> Post-Processing (task dependent) -> Output
 
-    Pipeline supports running on CPU or GPU through the device argument (see below).
+    Pipeline supports running on CPU/GPU/NPU through the device argument (see below).
 
     Some pipeline, like for instance [`FeatureExtractionPipeline`] (`'feature-extraction'`) output large tensor object
     as nested-lists. In order to avoid dumping such large structure as textual data we provide the `binary_output`
@@ -811,7 +811,7 @@ class Pipeline(_ScikitCompat):
             elif device < 0:
                 self.device = torch.device("cpu")
             else:
-                self.device = torch.device(f"cuda:{device}")
+                self.device = torch.device(f"npu:{device}" if is_torch_npu_available() else f"cuda:{device}")
         else:
             self.device = device if device is not None else -1
         self.torch_dtype = torch_dtype
