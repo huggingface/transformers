@@ -359,7 +359,61 @@ class FastViTAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->FastViT
+class FastViTCPE(nn.Module):
+    """Implementation of conditional positional encoding.
+
+    For more details refer to paper:
+    `Conditional Positional Encodings for Vision Transformers <https://arxiv.org/abs/2102.10882>`
+
+    In our implementation, we can reparameterize this module to eliminate a skip connection for Inference step.
+
+    """
+    def __init__(self, 
+                 in_channels: int, 
+                 embed_dim: int = 768,
+                 spatial_shape: Union[int, Tuple[int, int]] = (7, 7),
+                 inference_mode=False
+                 ) -> None:
+        super().__init__()
+        if isinstance(spatial_shape, int):
+            spatial_shape = tuple([spatial_shape] * 2)
+
+        assert isinstance(spatial_shape, Tuple), (
+            f'"spatial_shape" must by a sequence or int, '
+            f"get {type(spatial_shape)} instead."
+        )
+
+        assert len(spatial_shape) == 2, (
+            f'Length of "spatial_shape" should be 2, '
+            f"got {len(spatial_shape)} instead."
+        )
+        
+        self.spatial_shape = spatial_shape
+        self.embed_dim = embed_dim
+        self.in_channels = in_channels
+        self.groups = embed_dim
+        self.inference = inference_mode
+
+        self.pe = nn.Conv2d(
+                in_channels=self.in_channels,
+                out_channels=self.embed_dim,
+                kernel_size=self.spatial_shape,
+                stride=1,
+                padding=int(self.spatial_shape[0] // 2),
+                groups=self.embed_dim,
+                bias=True,
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.inference_mode:
+            CPE = self.pe(hidden_states)
+        else:
+            CPE = self.pe(hidden_states) + hidden_states
+
+        return CPE
+
+
+
 class FastViTIntermediate(nn.Module):
     def __init__(self, config: FastViTConfig) -> None:
         super().__init__()
@@ -392,19 +446,25 @@ class FastViTOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->FastViT
+
 class FastViTLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
-    def __init__(self, config: FastViTConfig) -> None:
+    def __init__(self, config: FastViTConfig, stage: int) -> None:
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
-        self.attention = FastViTAttention(config)
-        self.intermediate = FastViTIntermediate(config)
+        self.stage = stage
+        if config.pos_embs is None:
+            pos_embs = [None] * len(config.depths)
+
+        self.position_emb = None
+        if pos_embs[stage] is not None:
+            self.position_emb = FastViTCPE(config.embed_dims[stage], config.embed_dims[stage], spatial_shape=(7, 7), inference_mode = False)
+
+        self.stage = FastViTIntermediate(config, stage)
+
         self.output = FastViTOutput(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        self.downsample = FastViTDownsample(config)
 
     def forward(
         self,
@@ -440,7 +500,7 @@ class FastViTEncoder(nn.Module):
     def __init__(self, config: FastViTConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([FastViTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([FastViTLayer(config, i) for i in range(len(config.depths))])
         self.gradient_checkpointing = False
 
     def forward(
