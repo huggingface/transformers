@@ -268,7 +268,7 @@ class SeamlessM4TModelTester:
             lm_labels,
         ) = config_and_inputs
 
-        input_name = "input_ids" if self.input_modality == "text" else "input_values"
+        input_name = "input_ids" if self.input_modality == "text" else "input_features"
 
         inputs_dict = {input_name: input_ids, "attention_mask": input_mask, "labels": lm_labels}
         return config, inputs_dict
@@ -300,7 +300,7 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
 
-    input_name = "input_values"
+    input_name = "input_features"
 
     def setUp(self):
         self.model_tester = SeamlessM4TModelTester(self, input_modality="speech")
@@ -500,5 +500,30 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
         )
+        
+        # sentence: "This is something to be translated in French"
+        # fmt: off
+        input_text_ids = [256047, 9680, 248, 21347, 202, 280, 3292, 99278, 108, 56422, 3, 0] 
+        # fmt:on
 
+        # beam_size = 1
+        # fmt: off
+        expected_text_output_ids = [3, 256057, 152, 248116, 354, 43688, 26759, 679, 66415, 633, 153, 224812, 248075, 3]
+        # fmt: on
+        
+        # fmt: off
+        expected_units_output_ids = [2, 10054,  5729,  7947,  1851,  5202,  9312,  3149,  8460,  9576,
+          7979,  4052,  2984,  4812,  5850,  3205,  1476,   242,  7849,  8336,
+          1605,  2984,  4812,  6176,  2390,  4044,  2820,  7527,  1667,  5723,
+          1933,  4378,  8332,  2798,  6276,  6116,  3206,  7960,  8428,   713,
+          8211,  9285,  7714,  1208,  9051,  5817,  8157,  2717,  9351,  2080,
+          3022,  8400,  5864,   845,  2337,  1172,  9342,  4056,  6268,  2149,
+          2770,   188,  9424,  7234,  2958,  5782,  2128,  5919,  6075,  5919,
+          3672,  1106,  2843,  5956,  5520,  7437,  6005,  9150,  1472,  4102,
+          7515,  3459,  7989,  3058,  7554,  5340,  4350,  1495,  9989,   620,
+          8613,  2766,  7889,  3133,  1063,  3185,  8134,  4260,  2825,  4166,
+          8057,  8791,   301,  6563,   376,  3997,  8704,  4281,  9286,  1729,
+           640,  3200,  8355,  1346,  1353,  9765,  8741,  7335,     2,     1]
+        # fmt: on
+        
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
