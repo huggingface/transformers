@@ -27,7 +27,8 @@ The abstract from the paper is the following:
 
 Tips:
 
-- The `noise_waveform` argument for [`UnivNetGan.forward`] should be standard Gaussian noise (such as from `torch.randn`) of shape `([batch_size], noise_length, config.model_in_channels)`. If not supplied, it will be randomly generated; you will most likely want to supply a `noise_length` argument in this case to get a waveform of the desired length. A `generator` can also be specified for reproducibility.
+- The `noise_waveform` argument for [`UnivNetGan.forward`] should be standard Gaussian noise (such as from `torch.randn`) of shape `([batch_size], noise_length, model.config.model_in_channels)`, where `noise_length` should match the length dimension (dimension 1) of the input `spectrogram`. If not supplied, it will be randomly generated; a `torch.Generator` can be supplied to the `generator` argument so that the forward pass can be reproduced.
+- Padding the end of the input audio with zeros can reduce artifacting at the end of the generated sample. See [this issue](https://github.com/seungwonpark/melgan/issues/8) for more details.
 - When creating a [`UnivNetGanConfig`], the `resblock_kernel_sizes`, `resblock_stride_sizes`, and `resblock_dilation_sizes` arguments should have the same length (which corresponds to the number of outer resnet blocks in the vocoder).
 
 This model was contributed by [dg845](https://huggingface.co/dg845).
