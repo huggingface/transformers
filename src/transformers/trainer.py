@@ -471,7 +471,6 @@ class Trainer:
             if self.args.fsdp_config.get("limit_all_gathers", False):
                 self.limit_all_gathers = True
 
-
         # one place to sort out whether to place the model on device or not
         # postpone switching model to cuda when:
         # 1. MP - since we are trying to fit a much bigger than 1 gpu model
