@@ -58,9 +58,9 @@ from . import __version__
 from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
-from .deepspeed import deepspeed_init, deepspeed_load_checkpoint
 from .dependency_versions_check import dep_version_check
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
+from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
@@ -1197,7 +1197,7 @@ class Trainer:
             # Rebuild the deepspeed config to reflect the updated training parameters
             from accelerate.utils import DeepSpeedPlugin
 
-            from transformers.deepspeed import HfTrainerDeepSpeedConfig
+            from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
             self.args.hf_deepspeed_config = HfTrainerDeepSpeedConfig(self.args.deepspeed)
             self.args.hf_deepspeed_config.trainer_config_process(self.args)
@@ -3896,10 +3896,19 @@ class Trainer:
             fsdp_plugin.limit_all_gathers = self.args.fsdp_config.get(
                 "limit_all_gathers", fsdp_plugin.limit_all_gathers
             )
+            fsdp_plugin.activation_checkpointing = self.args.fsdp_config.get(
+                "activation_checkpointing", fsdp_plugin.activation_checkpointing
+            )
+            if fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
+                raise ValueError(
+                    "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
+                    "can't be set to True simultaneously. Please use FSDP's activation_checkpointing logic "
+                    "when using FSDP."
+                )
 
         if self.is_deepspeed_enabled:
             if getattr(self.args, "hf_deepspeed_config", None) is None:
-                from transformers.deepspeed import HfTrainerDeepSpeedConfig
+                from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
 
                 ds_plugin = self.accelerator.state.deepspeed_plugin
 

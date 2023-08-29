@@ -23,7 +23,7 @@ import torch
 import torch.nn as nn
 from torch.nn import LayerNorm
 
-from ...deepspeed import is_deepspeed_available
+from ...integrations.deepspeed import is_deepspeed_available
 from ...modeling_outputs import ModelOutput
 from ...utils import (
     ContextManagers,
@@ -2086,11 +2086,11 @@ class EsmForProteinFolding(EsmPreTrainedModel):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: torch.Tensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         masking_pattern: Optional[torch.Tensor] = None,
         num_recycles: Optional[int] = None,
-    ):
+    ) -> EsmForProteinFoldingOutput:
         r"""
         Returns:
 
