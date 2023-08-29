@@ -371,7 +371,7 @@ just like in multinomial sampling. However, in assisted decoding, reducing the t
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
->>> set_seed(0)  # For reproducibility
+>>> set_seed(42)  # For reproducibility
 
 >>> prompt = "Alice and Bob"
 >>> checkpoint = "EleutherAI/pythia-1.4b-deduped"
@@ -384,5 +384,5 @@ just like in multinomial sampling. However, in assisted decoding, reducing the t
 >>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
 >>> outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, temperature=0.5)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Alice and Bob, and the "Alice" is the one that you\'ve been playing.']
+['Alice and Bob are going to the same party. It is a small party, in a small']
 ```
