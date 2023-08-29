@@ -346,16 +346,8 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
 
     @property
     def default_chat_template(self):
-        template = "{% for message in messages %}"
-        if self.use_default_system_prompt:
-            prompt = DEFAULT_SYSTEM_PROMPT.replace("\n", "\\n").replace("'", "\\'")
-            template += (
-                "{% if loop.index == 0 and message['role'] != 'system' %}"
-                "{{ '<<SYS>>\\n' + 'sys_prompt' + '\\n<</SYS>>\\n\\n' }}"
-                "{% endif %}"
-            )
-            template = template.replace("sys_prompt", prompt)  # Use replace to avoid f-string + Jinja interaction
-        template += (
+        return (
+            "{% for message in messages %}"
             "{% if message['role'] == 'user' %}"
             "{{ bos_token + '[INST] ' + message['content'].strip() + ' [/INST]' }}"
             "{% elif message['role'] == 'system' %}"
@@ -365,7 +357,6 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             "{% endif %}"
             "{% endfor %}"
         )
-        return template
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
