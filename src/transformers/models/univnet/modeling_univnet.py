@@ -615,7 +615,7 @@ class UnivNetGan(PreTrainedModel):
          >>> noise = torch.randn((1, input_features.shape[1], model.config.model_in_channels))
          >>> audio = model(input_features, noise)  # audio = model(input_features) also works
          >>> # Remove the padding zeros.
-         >>> audio = audio[:-(feature_extractor.hop_length * pad_len)]
+         >>> audio = audio[: -(feature_extractor.hop_length * pad_len)]
          ```
         """
         # Resolve batch sizes for noise_waveform and spectrogram

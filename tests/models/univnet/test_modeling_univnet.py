@@ -287,7 +287,7 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
 
     @torch.no_grad()
     def test_integration(self):
-        feature_extractor = UnivNetFeatureExtractor()
+        feature_extractor = UnivNetFeatureExtractor.from_pretrained("dg845/univnet-dev")
         model = UnivNetGan.from_pretrained("dg845/univnet-dev")
         model.to(torch_device)
 
