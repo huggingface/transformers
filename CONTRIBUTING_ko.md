@@ -14,129 +14,110 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Contribute to 🤗 Transformers
+# 🤗 트랜스포머에 기여하기 [[contribute-to-transformers]]
 
-Everyone is welcome to contribute, and we value everybody's contribution. Code
-contributions are not the only way to help the community. Answering questions, helping
-others, and improving the documentation are also immensely valuable.
+누구든 기여할 수 있으며, 우리는 모든 사람의 기여를 소중히 생각합니다. 코드 기여는 커뮤니티를 돕는 유일한 방법이 아닙니다. 질문에 답하거나 다른 사람을 도와 문서를 개선하는 것도 매우 가치 있습니다.
 
-It also helps us if you spread the word! Reference the library in blog posts
-about the awesome projects it made possible, shout out on Twitter every time it has
-helped you, or simply ⭐️ the repository to say thank you.
+또한 당신이 알려주시면 우리에게 큰 도움이 됩니다! 이 멋진 프로젝트들이 가능하게 한 라이브러리에 대해 블로그 글에서 언급하거나, 도움이 되었을 때마다 Twitter에서 소개해 주시거나, 단순히 저장소에 ⭐️ 를 표시하여 감사의 뜻을 표현해주세요.
 
-However you choose to contribute, please be mindful and respect our
-[code of conduct](https://github.com/huggingface/transformers/blob/main/CODE_OF_CONDUCT.md).
+기여하는 방식에 상관없이 우리의 [행동 규칙](https://github.com/huggingface/transformers/blob/main/CODE_OF_CONDUCT.md)을 숙지하고 존중해주시기 바랍니다.
 
-**This guide was heavily inspired by the awesome [scikit-learn guide to contributing](https://github.com/scikit-learn/scikit-learn/blob/main/CONTRIBUTING.md).**
+**이 안내서는 멋진 [scikit-learn 기여 안내서](https://github.com/scikit-learn/scikit-learn/blob/main/CONTRIBUTING.md)에서 큰 영감을 받았습니다.**
 
-## Ways to contribute
+## 기여하는 방법들 [[ways-to-contribute]]
 
-There are several ways you can contribute to 🤗 Transformers:
+여러 가지 방법으로 🤗 트랜스포머에 기여할 수 있습니다:
 
-* Fix outstanding issues with the existing code.
-* Submit issues related to bugs or desired new features.
-* Implement new models.
-* Contribute to the examples or to the documentation.
+* 기존 코드의 미해결된 문제를 수정합니다.
+* 버그 또는 원하는 새로운 기능과 관련된 이슈를 제출합니다.
+* 새로운 모델을 구현합니다.
+* 예제나 문서에 기여합니다.
 
-If you don't know where to start, there is a special [Good First
-Issue](https://github.com/huggingface/transformers/contribute) listing. It will give you a list of
-open issues that are beginner-friendly and help you start contributing to open-source. Just comment in the issue that you'd like to work
-on it. 
+어디서부터 시작할지 모르겠다면, [처음으로 좋은 이슈](https://github.com/huggingface/transformers/contribute) 목록을 확인해보세요. 이 목록은 초보자도 참여하기 쉬운 오픈 이슈 목록을 제공하며, 해당 이슈에서 작업하고 싶다는 의사를 댓글로 달아주시면 됩니다.
 
-For something slightly more challenging, you can also take a look at the [Good Second Issue](https://github.com/huggingface/transformers/labels/Good%20Second%20Issue) list. In general though, if you feel like you know what you're doing, go for it and we'll help you get there! 🚀
+더 조금 도전적인 작업을 원한다면, [두 번째로 좋은 이슈](https://github.com/huggingface/transformers/labels/Good%20Second%20Issue) 목록도 확인해보세요. 일반적으로, 당신이 무엇을 하고 있는지 알고 있다고 생각한다면, 도전해보세요. 우리는 당신이 달성하는 데 도움을 드릴 것입니다! 🚀
 
-> All contributions are equally valuable to the community. 🥰
+> 모든 기여는 커뮤니티에게 동등한 가치가 있습니다. 🥰
 
-## Fixing outstanding issues
+## 미해결된 문제 수정하기 [[fixing-outstanding-issues]]
 
-If you notice an issue with the existing code and have a fix in mind, feel free to [start contributing](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md/#create-a-pull-request) and open a Pull Request!
+기존 코드에 문제점을 발견하고 해결책이 떠오른 경우, 언제든지 [기여를 시작](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md/#create-a-pull-request)하고 풀 리퀘스트를 열어주세요!
 
-## Submitting a bug-related issue or feature request
+## 버그 관련 이슈나 기능 요청 제출하기 [[submitting-a-bugrelated-issue-or-feature-request]]
 
-Do your best to follow these guidelines when submitting a bug-related issue or a feature
-request. It will make it easier for us to come back to you quickly and with good
-feedback.
+버그 관련 이슈나 새로운 기능 요청을 제출할 때는 다음 가이드라인을 최대한 따르시기 바랍니다. 이렇게 하면 우리가 빠르고 좋은 피드백과 함께 빠르게 답변해 드릴 수 있습니다.
 
-### Did you find a bug?
+### 버그를 발견하셨나요? [[did-you-find-a-bug]]
 
-The 🤗 Transformers library is robust and reliable thanks to users who report the problems they encounter.
+🤗 트랜스포머 라이브러리는 사용자들이 겪는 문제들을 보고해주는 사용자들 덕분에 견고하고 신뢰할 수 있습니다.
 
-Before you report an issue, we would really appreciate it if you could **make sure the bug was not
-already reported** (use the search bar on GitHub under Issues). Your issue should also be related to bugs in the library itself, and not your code. If you're unsure whether the bug is in your code or the library, please ask on the [forum](https://discuss.huggingface.co/) first. This helps us respond quicker to fixing issues related to the library versus general questions.
+이슈를 보고하기 전에, 버그가 이미 [보고되지 않았는지](https://github.com/huggingface/transformers/contribute) 확인해 주시기를 부탁드립니다 (GitHub의 이슈 탭 아래의 검색 바를 사용하세요). 당신의 이슈는 라이브러리 자체의 버그와 관련되어야 하며, 당신의 코드와 관련된 것이 아니어야 합니다. 버그가 코드인지 라이브러리인지 확신이 없다면, 먼저 [포럼](https://discuss.huggingface.co/)에서 물어보세요. 이는 라이브러리와 관련된 문제를 해결할 때 우리가 일반적인 질문보다 빠르게 대응할 수 있도록 도와줍니다.
 
-Once you've confirmed the bug hasn't already been reported, please include the following information in your issue so we can quickly resolve it:
+버그가 이미 보고되지 않았다는 것을 확인한 후에, 다음 정보를 이슈에 포함해 주세요. 그러면 우리가 빠르게 해결할 수 있습니다:
 
-* Your **OS type and version** and **Python**, **PyTorch** and
-  **TensorFlow** versions when applicable.
-* A short, self-contained, code snippet that allows us to reproduce the bug in
-  less than 30s.
-* The *full* traceback if an exception is raised.
-* Attach any other additional information, like screenshots, you think may help.
+* 사용 중인 **운영체제 종류와 버전**, 그리고 **Python**, **PyTorch** 및 **TensorFlow** 버전(해당되는 경우).
+* 버그를 30초 이내로 재현할 수 있는 간단하고 자체 포함된 코드 스니펫.
+* 예외가 발생한 경우 *전체* 트레이스백.
+* 도움이 될 것으로 생각되는 스크린샷과 같은 추가 정보를 첨부해 주세요.
 
-To get the OS and software versions automatically, run the following command:
+운영체제와 소프트웨어 버전을 자동으로 가져오려면 다음 명령을 실행하세요:
 
 ```bash
 transformers-cli env
 ```
 
-You can also run the same command from the root of the repository:
+저장소 루트에서도 같은 명령을 실행할 수 있습니다:
 
 ```bash
 python src/transformers/commands/transformers_cli.py env
 ```
 
-### Do you want a new feature?
 
-If there is a new feature you'd like to see in 🤗 Transformers, please open an issue and describe:
+### 새로운 기능을 원하시나요? [[do-you-want-a-new-feature]]
 
-1. What is the *motivation* behind this feature? Is it related to a problem or frustration with the library? Is it a feature related to something you need for a project? Is it something you worked on and think it could benefit the community?
+🤗 트랜스포머에서 보고 싶은 새로운 기능이 있다면, 이슈를 열어서 다음을 설명해 주세요:
 
-   Whatever it is, we'd love to hear about it!
+1. 이 기능의 *동기*는 무엇인가요? 이 라이브러리와 관련된 문제나 당신이 프로젝트에 필요한 기능인가요? 당신이 작업한 내용 중 라이브러리 커뮤니티에 도움이 될 수 있는 기능인가요?
 
-2. Describe your requested feature in as much detail as possible. The more you can tell us about it, the better we'll be able to help you.
-3. Provide a *code snippet* that demonstrates the features usage.
-4. If the feature is related to a paper, please include a link.
+   무엇이든지 듣고 싶습니다!
 
-If your issue is well written we're already 80% of the way there by the time you create it.
+2. 가능한 한 자세하게 요청하는 기능을 설명해 주세요. 더 많은 정보를 제공할수록 더 나은 도움을 드릴 수 있습니다.
+3. 해당 기능 사용법을 보여주는 *코드 스니펫*을 제공해 주세요.
+4. 기능이 논문과 관련된 경우 링크를 포함해 주세요.
 
-We have added [templates](https://github.com/huggingface/transformers/tree/main/templates) to help you get started with your issue.
+당신이 잘 쓴 이슈라면 이미 80% 정도의 작업이 완료된 것입니다. 
 
-## Do you want to implement a new model?
+당신이 이슈를 작성하는 시점에서 [템플릿](https://github.com/huggingface/transformers/tree/main/templates)을 추가해 놓았습니다.
 
-New models are constantly released and if you want to implement a new model, please provide the following information
+## 새로운 모델을 구현하고 싶으신가요? [[do-you-want-to-implement-a-new-model]]
 
-* A short description of the model and link to the paper.
-* Link to the implementation if it is open-sourced.
-* Link to the model weights if they are available.
+새로운 모델들은 계속해서 출시되며, 만약 새로운 모델을 구현하고 싶다면, 다음 정보를 제공해 주세요.
 
-If you are willing to contribute the model yourself, let us know so we can help you add it to 🤗 Transformers!
+* 모델에 대한 간단한 설명과 논문 링크.
+* 구현이 공개되어 있다면 구현 링크.
+* 모델 가중치가 사용 가능하다면 가중치 링크.
 
-We have added a [detailed guide and templates](https://github.com/huggingface/transformers/tree/main/templates) to help you get started with adding a new model, and we also have a more technical guide for [how to add a model to 🤗 Transformers](https://huggingface.co/docs/transformers/add_new_model).
+만약 모델을 직접 기여하려는 의사가 있다면, 알려주시면 우리가 당신을 도와 🤗 트랜스포머에 추가할 수 있도록 도와드리겠습니다!
 
-## Do you want to add documentation?
+새로운 모델을 추가하는 방법에 대한 [상세 안내서와 템플릿](https://github.com/huggingface/transformers/tree/main/templates)을 제공하였으며, [🤗 트랜스포머에 모델 추가하는 방법](https://huggingface.co/docs/transformers/add_new_model)에 대한 더 기술적인 안내서도 있습니다.
 
-We're always looking for improvements to the documentation that make it more clear and accurate. Please let us know how the documentation can be improved such as typos and any content that is missing, unclear or inaccurate. We'll be happy to make the changes or help you make a contribution if you're interested!
+## 문서를 추가하고 싶으신가요? [[do-you-want-to-add-documentation]]
 
-For more details about how to generate, build, and write the documentation, take a look at the documentation [README](https://github.com/huggingface/transformers/tree/main/docs).
+우리는 언제나 더 명확하고 정확한 문서를 위한 개선을 찾고 있습니다. 오탈자나 부족한 내용, 분명하지 않거나 부정확한 내용 등을 알려주시면 개선하는 데 도움이 됩니다. 변경 사항을 만들거나 관심 있으신 분들의 기여를 도와드릴 준비가 되어 있습니다!
 
-## Create a Pull Request
+문서를 생성, 빌드 및 작성하는 방법에 대한 자세한 내용은 문서의 [README](https://github.com/huggingface/transformers/tree/main/docs)를 확인해 주세요.
 
-Before writing any code, we strongly advise you to search through the existing PRs or
-issues to make sure nobody is already working on the same thing. If you are
-unsure, it is always a good idea to open an issue to get some feedback.
+## 풀 리퀘스트(Pull Request) 생성하기 [[create-a-pull-request]]
 
-You will need basic `git` proficiency to contribute to
-🤗 Transformers. While `git` is not the easiest tool to use, it has the greatest
-manual. Type `git --help` in a shell and enjoy! If you prefer books, [Pro
-Git](https://git-scm.com/book/en/v2) is a very good reference.
+코드를 작성하기 전에 기존의 풀 리퀘스트나 이슈를 검색하여 누구도 이미 동일한 작업을 하고 있는지 확인하는 것이 좋습니다. 확실하지 않다면 피드백을 받기 위해 이슈를 열어보는 것이 항상 좋은 아이디어입니다.
 
-You'll need **[Python 3.8]((https://github.com/huggingface/transformers/blob/main/setup.py#L426))** or above to contribute to 🤗 Transformers. Follow the steps below to start contributing:
+🤗 트랜스포머에 기여하기 위해서는 기본적인 `git` 사용 능력이 필요합니다. `git`은 사용하기 쉬운 도구는 아니지만, 가장 훌륭한 매뉴얼을 제공합니다. 쉘(shell)에서 `git --help`을 입력하여 확인하세요! 만약 책을 선호한다면, [Pro Git](https://git-scm.com/book/en/v2)은 매우 좋은 참고 자료입니다.
 
-1. Fork the [repository](https://github.com/huggingface/transformers) by
-   clicking on the **[Fork](https://github.com/huggingface/transformers/fork)** button on the repository's page. This creates a copy of the code
-   under your GitHub user account.
+🤗 트랜스포머에 기여하려면 **[Python 3.8]((https://github.com/huggingface/transformers/blob/main/setup.py#L426))** 버전 이상이 필요합니다. 기여를 시작하려면 아래 단계를 따르세요:
 
-2. Clone your fork to your local disk, and add the base repository as a remote:
+1. 저장소 페이지에서 **[Fork](https://github.com/huggingface/transformers/fork)** 버튼을 클릭하여 저장소를 포크하세요. 이렇게 하면 코드의 복사본이 귀하의 GitHub 사용자 계정 아래에 생성됩니다.
+
+2. 포크한 저장소를 로컬 디스크로 클론하고, 기본 저장소를 원격(remote)으로 추가하세요:
 
    ```bash
    git clone git@github.com:<your Github handle>/transformers.git
@@ -144,193 +125,152 @@ You'll need **[Python 3.8]((https://github.com/huggingface/transformers/blob/mai
    git remote add upstream https://github.com/huggingface/transformers.git
    ```
 
-3. Create a new branch to hold your development changes:
+3. 개발 변경 사항을 보유할 새 브랜치를 생성하세요:
 
    ```bash
    git checkout -b a-descriptive-name-for-my-changes
    ```
 
-   🚨 **Do not** work on the `main` branch!
+   🚨 `main` 브랜치에서 작업하지 **마세요!**
 
-4. Set up a development environment by running the following command in a virtual environment:
+4. 다음 명령을 가상 환경에서 실행하여 개발 환경을 설정하세요:
 
    ```bash
    pip install -e ".[dev]"
    ```
 
-   If 🤗 Transformers was already installed in the virtual environment, remove
-   it with `pip uninstall transformers` before reinstalling it in editable
-   mode with the `-e` flag.
+   만약 이미 가상 환경에 🤗 트랜스포머가 설치되어 있다면, `-e` 플래그를 사용하여 설치하기 전에 `pip uninstall transformers`로 제거해주세요.
    
-   Depending on your OS, and since the number of optional dependencies of Transformers is growing, you might get a
-   failure with this command. If that's the case make sure to install the Deep Learning framework you are working with
-   (PyTorch, TensorFlow and/or Flax) then do:
+   여러분의 운영체제에 따라서, 그리고 트랜스포머의 선택적 의존성이 증가하면서, 이 명령이 실패할 수도 있습니다. 그럴 경우 사용하려는 딥 러닝 프레임워크(PyTorch, TensorFlow, 그리고/또는 Flax)를 설치한 다음 다음 명령을 실행해주세요:
 
    ```bash
    pip install -e ".[quality]"
    ```
 
-   which should be enough for most use cases.
+   대부분의 사용 사례에는 충분할 것입니다.
 
-5. Develop the features on your branch.
+5. 브랜치에서 기능을 개발하세요.
 
-   As you work on your code, you should make sure the test suite
-   passes. Run the tests impacted by your changes like this:
+   코드를 작업하는 동안 테스트 스위트가 통과하는지 확인하세요. 다음과 같이 변경 사항에 영향을 받는 테스트를 실행하세요:
 
    ```bash
    pytest tests/<TEST_TO_RUN>.py
    ```
 
-   For more information about tests, check out the
-   [Testing](https://huggingface.co/docs/transformers/testing) guide.
+   테스트에 대한 더 많은 정보는 [테스팅](https://huggingface.co/docs/transformers/testing) 가이드를 확인하세요.
 
-   🤗 Transformers relies on `black` and `ruff` to format its source code
-   consistently. After you make changes, apply automatic style corrections and code verifications
-   that can't be automated in one go with:
+   🤗 트랜스포머는 `black`과 `ruff`를 사용하여 소스 코드를 일관되게 서식 지정하고 확인합니다. 변경 사항을 만든 후에는 다음 명령으로 자동 스타일 교정 및 코드 확인을 적용하세요:
 
    ```bash
    make fixup
    ```
 
-   This target is also optimized to only work with files modified by the PR you're working on.
+   이 목표는 주로 PR에서 수정된 파일에만 작동합니다.
 
-   If you prefer to run the checks one after the other, the following command applies the
-   style corrections:
+   하나씩 검사를 실행하려는 경우, 다음 명령으로 스타일 교정을 적용할 수 있습니다:
 
    ```bash
    make style
    ```
 
-   🤗 Transformers also uses `ruff` and a few custom scripts to check for coding mistakes. Quality
-   controls are run by the CI, but you can run the same checks with:
+   🤗 트랜스포머는 또한 `ruff`와 몇 가지 사용자 정의 스크립트를 사용하여 코딩 실수를 확인합니다. 품질 컨트롤은 CI에서 실행되지만, 다음 명령으로 동일한 검사를 실행할 수 있습니다:
 
    ```bash
    make quality
    ```
 
-   Finally, we have a lot of scripts to make sure we didn't forget to update
-   some files when adding a new model. You can run these scripts with:
+   마지막으로, 새로운 모델을 추가할 때 어떤 파일을 업데이트하지 않았는지 확인하는 스크립트가 많이 있습니다. 다음 명령으로 이러한 스크립트를 실행할 수 있습니다:
 
    ```bash
    make repo-consistency
    ```
 
-   To learn more about those checks and how to fix any issues with them, check out the
-   [Checks on a Pull Request](https://huggingface.co/docs/transformers/pr_checks) guide.
+   이러한 검사에 대해 더 알아보고 문제를 해결하는 방법은 [풀 리퀘스트에서의 검사](https://huggingface.co/docs/transformers/pr_checks) 가이드를 확인하세요.
 
-   If you're modifying documents under `docs/source` directory, make sure the documentation can still be built. This check will also run in the CI when you open a pull request. To run a local check
-   make sure you install the documentation builder:
+   만약 `docs/source` 디렉터리 아래의 문서를 수정하는 경우, 문서가 여전히 빌드될 수 있는지 확인하세요. 이 검사는 풀 리퀘스트를 열 때 CI에서도 실행됩니다. 로컬 검사를 실행하려면 문서 빌더를 설치해야 합니다:
    
    ```bash
    pip install ".[docs]"
    ```
 
-   Run the following command from the root of the repository:
+   저장소 루트에서 다음 명령을 실행하세요:
 
    ```bash
    doc-builder build transformers docs/source/en --build_dir ~/tmp/test-build
    ```
 
-   This will build the documentation in the `~/tmp/test-build` folder where you can inspect the generated
-   Markdown files with your favorite editor. You can also preview the docs on GitHub when you open a pull request.
+   이 명령은 `~/tmp/test-build` 폴더에 문서를 빌드하며, 생성된 Markdown 파일을 선호하는 편집기로 확인할 수 있습니다. 풀 리퀘스트를 열 때 문서를 GitHub에서도 미리 볼 수 있습니다.
 
-   Once you're happy with your changes, add changed files with `git add` and
-   record your changes locally with `git commit`:
+   변경 사항에 만족하면 `git add`로 변경된 파일을 추가하고, `git commit`으로 변경 사항을 로컬에 기록하세요:
 
    ```bash
    git add modified_file.py
    git commit
    ```
 
-   Please remember to write [good commit
-   messages](https://chris.beams.io/posts/git-commit/) to clearly communicate the changes you made!
+   부디 [좋은 커밋 메시지](https://chris.beams.io/posts/git-commit/)를 작성하여 변경 사항을 명확하게 전달하세요!
 
-   To keep your copy of the code up to date with the original
-   repository, rebase your branch on `upstream/branch` *before* you open a pull request or if requested by a maintainer:
+   변경 사항을 프로젝트 원본 저장소와 동기화하려면, PR을 *열기 전에* 브랜치를 `upstream/branch` 위로 리베이스(rebase)하세요. 또는 유지 관리자의 요청에 따라 진행할 수 있습니다:
 
    ```bash
    git fetch upstream
    git rebase upstream/main
    ```
-
-   Push your changes to your branch:
+   
+   변경 사항을 브랜치에 푸시하세요:
 
    ```bash
    git push -u origin a-descriptive-name-for-my-changes
    ```
 
-   If you've already opened a pull request, you'll need to force push with the `--force` flag. Otherwise, if the pull request hasn't been opened yet, you can just push your changes normally.
+   이미 PR을 열었다면, `--force` 플래그와 함께 강제 푸시해야 합니다. 그렇지 않은 경우, 아직 PR이 열리지 않았다면 일반적으로 변경 사항을 푸시할 수 있습니다.
 
-6. Now you can go to your fork of the repository on GitHub and click on **Pull request** to open a pull request. Make sure you tick off all the boxes in our [checklist](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md/#pull-request-checklist) below. When you're ready, you can send your changes to the project maintainers for review.
+6. 이제 GitHub에서 저장소 포크로 이동하여 **Pull request(풀 리퀘스트)**를 클릭하여 풀 리퀘스트를 열 수 있습니다. 아래의 [체크리스트](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md/#pull-request-checklist)에서 모든 항목에 체크하도록 하세요. 준비가 되었다면, 변경 사항을 프로젝트 유지 관리자에게 검토 요청할 수 있습니다.
 
-7. It's ok if maintainers request changes, it happens to our core contributors
-   too! So everyone can see the changes in the pull request, work in your local
-   branch and push the changes to your fork. They will automatically appear in
-   the pull request.
+7. 유지 관리자가 변경 사항을 요청하면 괜찮습니다. 우리의 핵심 기여자들도 동일한 상황을 겪기 때문입니다! 모두가 변경 사항을 풀 리퀘스트에서 볼 수 있도록, 로컬 브랜치에서 작업하고 변경 사항을 포크로 푸시하세요. 그러면 변경 사항이 자동으로 풀 리퀘스트에 나타납니다.
 
-### Pull request checklist
+### 풀 리퀘스트 체크리스트 [[pull-request-checklist]]
 
-☐ The pull request title should summarize your contribution.<br>
-☐ If your pull request addresses an issue, please mention the issue number in the pull
-request description to make sure they are linked (and people viewing the issue know you
-are working on it).<br>
-☐ To indicate a work in progress please prefix the title with `[WIP]`. These are
-useful to avoid duplicated work, and to differentiate it from PRs ready to be merged.<br>
-☐ Make sure existing tests pass.<br>
-☐ If adding a new feature, also add tests for it.<br>
-   - If you are adding a new model, make sure you use
-     `ModelTester.all_model_classes = (MyModel, MyModelWithLMHead,...)` to trigger the common tests.
-   - If you are adding new `@slow` tests, make sure they pass using
-     `RUN_SLOW=1 python -m pytest tests/models/my_new_model/test_my_new_model.py`.
-   - If you are adding a new tokenizer, write tests and make sure
-     `RUN_SLOW=1 python -m pytest tests/models/{your_model_name}/test_tokenization_{your_model_name}.py` passes.
-   - CircleCI does not run the slow tests, but GitHub Actions does every night!<br>
+☐ 풀 리퀘스트 제목은 기여 내용을 요약해야 합니다.<br>
+☐ 풀 리퀘스트가 이슈를 해결하는 경우, 풀 리퀘스트 설명에 이슈 번호를 언급하여 연결됨을 보장하세요 (이슈를 보는 사람들이 해당 작업을 수행 중임을 알 수 있게 합니다).<br>
+☐ 진행 중인 작업을 나타내려면 제목 앞에 `[WIP]`를 붙여주세요. 이것은 중복 작업을 피하고 병합 준비가 된 PR과 구분하기에 유용합니다.<br>
+☐ 기존 테스트가 통과되는지 확인하세요.<br>
+☐ 새로운 기능을 추가하는 경우, 해당 기능에 대한 테스트도 추가하세요.<br>
+   - 새 모델을 추가하는 경우, `ModelTester.all_model_classes = (MyModel, MyModelWithLMHead,...)`을 사용하여 일반적인 테스트를 활성화하세요.
+   - 새 `@slow` 테스트를 추가하는 경우, 다음 명령으로 테스트가 통과되는지 확인하세요: `RUN_SLOW=1 python -m pytest tests/models/my_new_model/test_my_new_model.py`.
+   - 새 토크나이저를 추가하는 경우, 테스트를 작성하고 다음 명령으로 테스트가 통과되는지 확인하세요: `RUN_SLOW=1 python -m pytest tests/models/{your_model_name}/test_tokenization_{your_model_name}.py`. CircleCI에서는 느린 테스트를 실행하지 않지만, GitHub Actions에서는 매일 밤 실행됩니다!<br>
 
-☐ All public methods must have informative docstrings (see
-[`modeling_bert.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py)
-for an example).<br>
-☐ Due to the rapidly growing repository, don't add any images, videos and other
-non-text files that'll significantly weigh down the repository. Instead, use a Hub
-repository such as [`hf-internal-testing`](https://huggingface.co/hf-internal-testing)
-to host these files and reference them by URL. We recommend placing documentation
-related images in the following repository:
-[huggingface/documentation-images](https://huggingface.co/datasets/huggingface/documentation-images).
-You can open a PR on this dataset repostitory and ask a Hugging Face member to merge it.
+☐ 모든 공개 메서드는 유용한 docstring을 가져야 합니다 (예: [`modeling_bert.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py) 참조).<br>
+☐ 빠르게 성장하는 저장소로 인해, 저장소의 무게를 크게 증가시킬 수 있는 이미지, 비디오 및 기타 비텍스트 파일을 추가하지 마세요. 대신 [`hf-internal-testing`](https://huggingface.co/hf-internal-testing)과 같은 Hub 저장소를 사용하여 이러한 파일을 호스팅하고 URL을 통해 참조하세요. 관련 문서 이미지를 다음 저장소에 배치하는 것을 권장합니다: [huggingface/documentation-images](https://huggingface.co/datasets/huggingface/documentation-images). 이 데이터셋 저장소에서 PR을 열어서 Hugging Face 멤버에게 병합을 요청할 수 있습니다.
 
-For more information about the checks run on a pull request, take a look at our [Checks on a Pull Request](https://huggingface.co/docs/transformers/pr_checks) guide.
+풀 리퀘스트에서 실행되는 검사에 대한 자세한 정보는 [풀 리퀘스트에서의 검사](https://huggingface.co/docs/transformers/pr_checks) 가이드를 확인하세요.
 
-### Tests
+### 테스트 [[tests]]
 
-An extensive test suite is included to test the library behavior and several examples. Library tests can be found in
-the [tests](https://github.com/huggingface/transformers/tree/main/tests) folder and examples tests in the
-[examples](https://github.com/huggingface/transformers/tree/main/examples) folder.
+풀 리퀘스트를 위한 포괄적인 테스트 스위트가 포함되어 있으며, 라이브러리 동작 및 여러 예제를 테스트합니다. 라이브러리 테스트는 [tests](https://github.com/huggingface/transformers/tree/main/tests) 폴더에, 예제 테스트는 [examples](https://github.com/huggingface/transformers/tree/main/examples) 폴더에 있습니다.
 
-We like `pytest` and `pytest-xdist` because it's faster. From the root of the
-repository, specify a *path to a subfolder or a test file* to run the test.
+빠른 실행과 분산 실행을 지원하는 `pytest`와 `pytest-xdist`를 선호합니다. 저장소 루트에서 테스트를 실행하려면 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요.
 
 ```bash
 python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
 ```
 
-Similarly, for the `examples` directory, specify a *path to a subfolder or test file* to run the test. For example, the following command tests the text classification subfolder in the PyTorch `examples` directory:
+마찬가지로 `examples` 디렉토리에서도 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요. 예를 들어, 다음 명령은 PyTorch `examples` 디렉토리의 텍스트 분류 하위 폴더를 테스트합니다:
 
 ```bash
 pip install -r examples/xxx/requirements.txt  # only needed the first time
 python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
 ```
 
-In fact, this is actually how our `make test` and `make test-examples` commands are implemented (not including the `pip install`)!
+사실, 이것이 실제로 `make test` 및 `make test-examples` 명령의 구현 방식입니다 (`pip install`은 제외합니다)!
 
-You can also specify a smaller set of tests in order to test only the feature
-you're working on.
+또한 특정 기능만 테스트하려면 더 작은 일부 테스트를 지정할 수 있습니다.
 
-By default, slow tests are skipped but you can set the `RUN_SLOW` environment variable to
-`yes` to run them. This will download many gigabytes of models so make sure you
-have enough disk space, a good internet connection or a lot of patience!
+기본적으로 느린 테스트는 건너뛰지만 `RUN_SLOW` 환경 변수를 `yes`로 설정하여 실행할 수 있습니다. 이렇게 하면 많은 기가바이트의 모델이 다운로드되므로 충분한 디스크 공간, 좋은 인터넷 연결 또는 많은 인내가 필요합니다!
 
 <Tip warning={true}>
 
-Remember to specify a *path to a subfolder or a test file* to run the test. Otherwise, you'll run all the tests in the `tests` or `examples` folder, which will take a very long time!
+테스트를 실행하려면 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요. 그렇지 않으면 `tests` 또는 `examples` 폴더의 모든 테스트를 실행하게 되어 매우 긴 시간이 걸립니다!
 
 </Tip>
 
@@ -339,53 +279,49 @@ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_ne
 RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
 ```
 
-Like the slow tests, there are other environment variables available which not enabled by default during testing:
-- `RUN_CUSTOM_TOKENIZERS`: Enables tests for custom tokenizers.
-- `RUN_PT_FLAX_CROSS_TESTS`: Enables tests for PyTorch + Flax integration.
-- `RUN_PT_TF_CROSS_TESTS`: Enables tests for TensorFlow + PyTorch integration.
+느린 테스트와 마찬가지로, 다음과 같이 테스트 중에 기본적으로 활성화되지 않는 다른 환경 변수도 있습니다:
+- `RUN_CUSTOM_TOKENIZERS`: 사용자 정의 토크나이저 테스트를 활성화합니다.
+- `RUN_PT_FLAX_CROSS_TESTS`: PyTorch + Flax 통합 테스트를 활성화합니다.
+- `RUN_PT_TF_CROSS_TESTS`: TensorFlow + PyTorch 통합 테스트를 활성화합니다.
 
-More environment variables and additional information can be found in the [testing_utils.py](src/transformers/testing_utils.py).
+더 많은 환경 변수와 추가 정보는 [testing_utils.py](src/transformers/testing_utils.py)에서 찾을 수 있습니다.
 
-🤗 Transformers uses `pytest` as a test runner only. It doesn't use any
-`pytest`-specific features in the test suite itself.
+🤗 Transformers는 테스트 실행기로 `pytest`를 사용합니다. 그러나 테스트 스위트 자체에서는 `pytest` 특정 기능을 사용하지 않습니다.
 
-This means `unittest` is fully supported. Here's how to run tests with
-`unittest`:
+이것은 `unittest`가 완전히 지원된다는 것을 의미합니다. 다음은 `unittest`로 테스트를 실행하는 방법입니다:
 
 ```bash
 python -m unittest discover -s tests -t . -v
 python -m unittest discover -s examples -t examples -v
 ```
 
-### Style guide
+### 스타일 가이드 [[style-guide]]
 
-For documentation strings, 🤗 Transformers follows the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html).
-Check our [documentation writing guide](https://github.com/huggingface/transformers/tree/main/docs#writing-documentation---specification)
-for more information.
+문서 문자열은 [Google Python 스타일 가이드](https://google.github.io/styleguide/pyguide.html)를 따릅니다. 자세한 정보는 [문서 작성 가이드](https://github.com/huggingface/transformers/tree/main/docs#writing-documentation---specification)를 확인하세요.
 
-### Develop on Windows
+### Windows에서 개발 [[develop-on-windows]]
 
-On Windows (unless you're working in [Windows Subsystem for Linux](https://learn.microsoft.com/en-us/windows/wsl/) or WSL), you need to configure git to transform Windows `CRLF` line endings to Linux `LF` line endings:
+Windows에서 (Windows Subsystem for Linux 또는 WSL에서 작업하지 않는 한) Windows `CRLF` 줄 바꿈을 Linux `LF` 줄 바꿈으로 변환하도록 git을 구성해야 합니다:
 
 ```bash
 git config core.autocrlf input
 ```
 
-One way to run the `make` command on Windows is with MSYS2:
+Windows에서 `make` 명령을 실행하는 한 가지 방법은 MSYS2를 사용하는 것입니다:
 
-1. [Download MSYS2](https://www.msys2.org/), and we assume it's installed in `C:\msys64`.
-2. Open the command line `C:\msys64\msys2.exe` (it should be available from the **Start** menu).
-3. Run in the shell: `pacman -Syu` and install `make` with `pacman -S make`.
-4. Add `C:\msys64\usr\bin` to your PATH environment variable.
+1. [MSYS2 다운로드](https://www.msys2.org/)하고 `C:\msys64`에 설치되었다고 가정합니다.
+2. 명령 줄에서 `C:\msys64\msys2.exe`를 열어봅니다 (시작 메뉴에서 사용 가능해야 함).
+3. 쉘에서 실행: `pacman -Syu` 및 `pacman -S make`로 `make`를 설치합니다.
+4. 환경 변수 PATH에 `C:\msys64\usr\bin`을 추가하세요.
 
-You can now use `make` from any terminal (Powershell, cmd.exe, etc.)! 🎉
+이제 모든 터미널 (Powershell, cmd.exe 등)에서 `make`를 사용할 수 있습니다! 🎉
 
-### Sync a forked repository with upstream main (the Hugging Face repository)
+### 포크한 저장소를 상위 원본 브랜치(main)과 동기화하기 (Hugging Face 저장소) [[sync-a-forked-repository-with-upstream-main-the-hugging-face-repository]]
 
-When updating the main branch of a forked repository, please follow these steps to avoid pinging the upstream repository which adds reference notes to each upstream PR, and sends unnecessary notifications to the developers involved in these PRs.
+포크한 저장소의 main 브랜치를 업데이트할 때, 다음 단계를 따라 upstream 저장소에 참조 노트를 추가하지 않고 동기화하세요. 이렇게 하면 각 upstream PR에 참조 노트가 추가되는 것을 피하고 이러한 PR에 관여하는 개발자들에게 불필요한 알림이 전송되는 것을 방지할 수 있습니다.
 
-1. When possible, avoid syncing with the upstream using a branch and PR on the forked repository. Instead, merge directly into the forked main.
-2. If a PR is absolutely necessary, use the following steps after checking out your branch:
+1. 가능한 경우, 포크된 main에 직접 병합하면서 upstream과 동기화하는 것을 피하세요.
+2. PR이 반드시 필요한 경우, 브랜치를 확인한 후 다음 단계를 사용하세요:
 
 ```bash
 git checkout -b your-branch-for-syncing
