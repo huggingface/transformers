@@ -2125,10 +2125,10 @@ def _device_agnostic_dispatch(device, dispatch_table, *args, **kwargs):
 
     fn = dispatch_table[device]
 
-    # TODO: intended to be noop, but are there any edge cases to this approach?
-    # eg. returning None when expected at least something.
+    # Some device agnostic functions return values. Need to guard against `None`
+    # instead at user level.
     if fn is None:
-        return
+        return None
     return fn(*args, **kwargs)
 
 
@@ -2175,11 +2175,18 @@ if "TRANSFORMERS_TEST_DEVICE_SPEC" in os.environ:
     except AttributeError as e:
         raise AttributeError("Device spec file did not contain `DEVICE_NAME`") from e
 
+    if "TRANSFORMERS_TEST_DEVICE" in os.environ and torch_device != device_name:
+        msg = f"Mistmatch between environment variable `TRANSFORMERS_TEST_DEVICE` '{torch_device}' and device found in spec '{device_name}'\n"
+        msg += "Either unset `TRANSFORMERS_TEST_DEVICE` or ensure it matches device spec name."
+        raise ValueError(msg)
+
+    torch_device = device_name
+
     def update_mapping_from_spec(device_fn_dict: Dict[str, Callable], attribute_name: str):
         try:
             # Try to import the function directly
             spec_fn = getattr(device_spec_module, attribute_name)
-            device_fn_dict[device_name] = spec_fn
+            device_fn_dict[torch_device] = spec_fn
         except AttributeError as e:
             # If the function doesn't exist, and there is no default, throw an error
             if "default" not in device_fn_dict:
