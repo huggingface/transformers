@@ -89,7 +89,7 @@ class Conversation:
     def add_user_input(self, text: str, overwrite: bool = False):
         """
         Args:
-        Add a user input to the conversation for the next round. This is a legacy function that assumes that inputs
+        Add a user input to the conversation for the next round. This is a legacy method that assumes that inputs
         must alternate user/assistant/user/assistant, and so will not add multiple user messages in succession.
             text (`str`): The user input for the next conversation round. overwrite (`bool`, *optional*, defaults to
             `False`):
@@ -108,7 +108,14 @@ class Conversation:
                     f'ignored: "{text}". Set `overwrite` to True to overwrite unprocessed user input'
                 )
         else:
-            self.new_user_input = text
+            self.messages.append({"role": "user", "content": text})
+
+    def mark_processed(self):
+        """
+        This is a legacy method that no longer has any effect, as the Conversation no longer distinguishes between
+        processed and unprocessed user input.
+        """
+        pass
 
     def __iter__(self):
         for message in self.messages:
