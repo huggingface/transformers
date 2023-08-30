@@ -565,7 +565,7 @@ class TFRagModel(TFRagPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,
-    ):
+    ) -> TFRetrievAugLMOutput:
         r"""
         Returns:
 
@@ -864,7 +864,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,  # needs kwargs for generation
-    ):
+    ) -> TFRetrievAugLMMarginOutput:
         r"""
         do_marginalize (`bool`, *optional*):
             If `True`, the logits are marginalized over all documents by making use of
