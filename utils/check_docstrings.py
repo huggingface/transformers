@@ -34,6 +34,7 @@ like argument descriptions).
 """
 import argparse
 import ast
+import enum
 import inspect
 import operator as op
 import re
@@ -96,8 +97,11 @@ def stringify_default(default: Any) -> str:
         `str`: The string representation of that default.
     """
     if isinstance(default, bool):
-        # We need to test for fool first as a bool passes isinstance(xxx, (int, float))
+        # We need to test for bool first as a bool passes isinstance(xxx, (int, float))
         return f"`{default}`"
+    elif isinstance(default, enum.Enum):
+        # We need to test for enum first as an enum with int values will pass isinstance(xxx, (int, float))
+        return f"`{str(default)}`"
     elif isinstance(default, (int, float)):
         return str(default)
     elif isinstance(default, str):
