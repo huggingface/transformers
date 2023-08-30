@@ -36,7 +36,8 @@ and `content` keys, and represents a single chat message. Chat templates are str
 specifies how to format a conversation for a given model into a single tokenizable sequence. By storing this information
 with the tokenizer, we can ensure that models get input data in the format they expect.
 
-Let's make this concrete with a quick example using the `BlenderBot` model:
+Let's make this concrete with a quick example using the `BlenderBot` model. Blenderbot has an extremely simple template,
+which mostly just adds whitespace between rounds of dialogue:
 
 ```python
 >>> from transformers import AutoTokenizer
@@ -53,9 +54,9 @@ Let's make this concrete with a quick example using the `BlenderBot` model:
 ```
 
 Notice how the entire chat is condensed into a single string. If we use `tokenize=True`, which is the default setting,
-that string will also be tokenized for us. Blenderbot's chat template is very simple, however. To see a more complex
-template in action, let's use the `meta-llama/Llama-2-7b-chat-hf` model. Note that this model has gated access, so you
-will have to [request access on the repo](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf) if you want to run this code yourself:
+that string will also be tokenized for us. To see a more complex template in action, though, let's use the 
+`meta-llama/Llama-2-7b-chat-hf` model. Note that this model has gated access, so you will have to
+[request access on the repo](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf) if you want to run this code yourself:
 
 ```python
 >>> from transformers import AutoTokenizer
@@ -72,7 +73,7 @@ will have to [request access on the repo](https://huggingface.co/meta-llama/Llam
 ```
 
 Note that this time, the tokenizer has added the control tokens [INST] and [/INST] to indicate the start and end of 
-user messages (but not assistant messages!). 
+user messages (but not assistant messages!)
 
 ## How do chat templates work?
 
@@ -115,7 +116,7 @@ for idx, message in enumerate(messages):
     if message['role'] == 'user':
         print(' ')
     print(message['content'])
-    if not idx == len(messages) - 1:
+    if not idx == len(messages) - 1:  # This checks for the last message in the conversation
         print('  ')
 print(eos_token)
 ```
@@ -165,8 +166,9 @@ above and add "[ASST]" and "[/ASST]" to assistant messages:
 ```
 
 Now, simply set the `tokenizer.chat_template` attribute. Next time you use [`~PreTrainedTokenizer.apply_chat_template`], it will
-use your new template! This attribute will be saved with the tokenizer, so you can use
-[`~utils.PushToHubMixin.push_to_hub`] to upload your new template to the Hub:
+use your new template! This attribute will be saved in the `tokenizer_config.json` file, so you can use
+[`~utils.PushToHubMixin.push_to_hub`] to upload your new template to the Hub and make sure everyone's using the right
+template for your model!
 
 ```python
 template = tokenizer.chat_template
@@ -183,6 +185,42 @@ once you set the correct chat template, your model will automatically become com
 When setting the template for a model that's already been trained for chat, you should ensure that the template
 exactly matches the message formatting that the model saw during training, or else you will probably experience
 performance degradation. If you're training a model from scratch, or fine-tuning a base language model for chat,
-you can do whatever you like! LLMs are smart enough to learn to handle lots of different formats. You also are not
-limited to the "user", "system" and "assistant" roles - although these are the standard for chat, and we recommend
-using them when it makes sense, particularly if you want your model to operate well with [`ConversationalPipeline`].
+you can do whatever you like! LLMs are smart enough to learn to handle lots of different formats. Our default
+template for models that don't have a class-specific template follows the 
+[ChatML format](https://github.com/openai/openai-python/blob/main/chatml.md), and this is a good, flexible
+choice for many use-cases. It looks like this:
+
+```
+{% for message in messages %}
+{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}
+{% endfor %}
+```
+
+This wraps each message in `<|im_start|>` and `<|im_end|>` tokens, and simply writes the role as a string, which
+allows for flexibility in the roles you train with. The output looks like this:
+
+```
+<|im_start|>system
+You are a helpful chatbot who will do its best not to say anything so stupid that people tweet about it.<|im_end|>
+<|im_start|>user
+How are you?<|im_end|>
+<|im_start|>assistant
+I'm doing great!<|im_end|>
+```
+
+The "user", "system" and "assistant" roles are the standard for chat, and we recommend using them when it makes sense,
+particularly if you want your model to operate well with [`ConversationalPipeline`]. However, you are not limited
+to these roles - templating is extremely flexible, and any string can be a role.
+
+## I want to use chat templates! What should I do?
+
+If you have any chat models, you should check their `tokenizer.chat_template` attribute. It will be set
+to a default value based on the model class - if this doesn't match the format you used to train the model, then you
+should set it to a template that does, and test it using [`~PreTrainedTokenizer.apply_chat_template`]. 
+This applies even if you're not the model owner - if you're using a model with an incorrect chat template, please open 
+a [pull request](https://huggingface.co/docs/hub/repositories-pull-requests-discussions) to the model repository so that
+this attribute can be set properly!
+
+By ensuring that models have this attribute, we can make sure that the whole community gets to use the full power of
+open-source models. Formatting mismatches have been haunting the field and silently harming performance for too long - 
+it's time to put an end to them!
