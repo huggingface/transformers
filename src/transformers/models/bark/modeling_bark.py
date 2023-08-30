@@ -1086,16 +1086,13 @@ class BarkFineModel(BarkPreTrainedModel):
             ]
         )
         self.set_input_embeddings(new_embeddings_list)
-        new_num_tokens = [embed.weight.shape[0] for embed in new_embeddings_list]
+        new_num_tokens = new_embeddings_list[0].weight.shape[0]
 
         # if word embeddings are not tied, make sure that lm head is resized as well
         if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
             old_lm_head_list = self.get_output_embeddings()
             new_lm_head_list = nn.ModuleList(
-                [
-                    self._get_resized_lm_head(old_lm_head, new_num_token)
-                    for old_lm_head, new_num_token in zip(old_lm_head_list, new_num_tokens)
-                ]
+                [self._get_resized_lm_head(old_lm_head, new_num_tokens) for old_lm_head in old_lm_head_list]
             )
             self.set_output_embeddings(new_lm_head_list)
 
@@ -1130,8 +1127,8 @@ class BarkFineModel(BarkPreTrainedModel):
             return model_embeds
 
         # Update base model and current model config
-        self.config.output_vocab_size = model_embeds[-1].weight.shape[0]
-        self.output_vocab_size = model_embeds[-1].weight.shape[0]
+        self.config.output_vocab_size = model_embeds[0].weight.shape[0]
+        self.output_vocab_size = model_embeds[0].weight.shape[0]
 
         # Tie weights again if needed
         self.tie_weights()
