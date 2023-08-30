@@ -28,10 +28,6 @@ class Conversation:
         conversation_id (`uuid.UUID`, *optional*):
             Unique identifier for the conversation. If not provided, a random UUID4 id will be assigned to the
             conversation.
-        past_user_inputs (`List[str]`, *optional*):
-            This is a legacy argument that should not be used in new code. It is kept only for backward compatibility.
-        generated_responses (`List[str]`, *optional*):
-            This is a legacy argument that should not be used in new code. It is kept only for backward compatibility.
 
     Usage:
 
@@ -42,21 +38,24 @@ class Conversation:
     ```"""
 
     def __init__(
-        self,
-        messages: Union[str, List[Dict[str, str]]] = None,
-        conversation_id: uuid.UUID = None,
-        past_user_inputs=None,
-        generated_responses=None,
+        self, messages: Union[str, List[Dict[str, str]]] = None, conversation_id: uuid.UUID = None, **deprecated_kwargs
     ):
         if not conversation_id:
             conversation_id = uuid.uuid4()
+
         if messages is None:
-            messages = []
+            text = deprecated_kwargs.pop("text", None)
+            if text is not None:
+                messages = [{"role": "user", "content": text}]
+            else:
+                messages = []
         elif isinstance(messages, str):
             messages = [{"role": "user", "content": messages}]
 
         # This block deals with the legacy args - new code should just totally
         # avoid past_user_inputs and generated_responses
+        generated_responses = deprecated_kwargs.pop("generated_responses", None)
+        past_user_inputs = deprecated_kwargs.pop("past_user_inputs", None)
         if generated_responses is not None and past_user_inputs is None:
             raise ValueError("generated_responses cannot be passed without past_user_inputs!")
         if past_user_inputs is not None:
