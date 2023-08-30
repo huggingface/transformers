@@ -2979,11 +2979,11 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
         # Compute decoder_input_ids if necessary
         tgt_lang_id = kwargs_speech.pop("tgt_lang_id", None)
         if "decoder_input_ids" not in kwargs_speech:
-            if tgt_lang_id is None:
-                raise ValueError(f"You must specify a `speech_tgt_lang_id` to get a proper speech synthesis. Enter a valid `speech_tgt_lang_id` which must be among this list: {'', ''.join(UNIT_SUPPORTED_LANGUAGES)}.")
+            if tgt_lang_id is None or tgt_lang_id > self.config.t2u_num_langs:
+                raise ValueError(f"You must specify a supported `speech_tgt_lang_id` to get a proper speech synthesis. Enter a valid `speech_tgt_lang_id` which must be among this list: {'', ''.join(UNIT_SUPPORTED_LANGUAGES)}.")
             
             # + 5 for EOS/PAD/BOS/UNK token + mask token
-            tgt_lang_id = tgt_lang_id + self.config.unit_hifi_gan_vocab_size + len(UNIT_SUPPORTED_LANGUAGES) + 5 
+            tgt_lang_id = tgt_lang_id + self.config.unit_hifi_gan_vocab_size + self.config.t2u_num_langs + 5 
             kwargs_speech["decoder_input_ids"] = torch.tensor([[self.config.t2u_eos_token_id, tgt_lang_id]]).to(self.device) # TODO: batch
 
         t2u_generation_output = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
@@ -3151,11 +3151,11 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
         # Compute decoder_input_ids if necessary
         tgt_lang_id = kwargs_speech.pop("tgt_lang_id", None)
         if "decoder_input_ids" not in kwargs_speech:
-            if tgt_lang_id is None:
-                raise ValueError(f"You must specify a `speech_tgt_lang_id` to get a proper speech synthesis. Enter a valid `speech_tgt_lang_id` which must be among this list: {'', ''.join(UNIT_SUPPORTED_LANGUAGES)}.")
+            if tgt_lang_id is None or tgt_lang_id > self.config.t2u_num_langs:
+                raise ValueError(f"You must specify a supported `speech_tgt_lang_id` to get a proper speech synthesis. Enter a valid `speech_tgt_lang_id` which must be among this list: {'', ''.join(UNIT_SUPPORTED_LANGUAGES)}.")
             
             # + 5 for EOS/PAD/BOS/UNK token + mask token
-            tgt_lang_id = tgt_lang_id + self.config.unit_hifi_gan_vocab_size + len(UNIT_SUPPORTED_LANGUAGES) + 5 
+            tgt_lang_id = tgt_lang_id + self.config.unit_hifi_gan_vocab_size + self.config.t2u_num_langs + 5 
             kwargs_speech["decoder_input_ids"] = torch.tensor([[self.config.t2u_eos_token_id, tgt_lang_id]]).to(self.device) # TODO: batch
 
         t2u_generation_output = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
@@ -3526,13 +3526,13 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         # Compute decoder_input_ids if necessary
         tgt_lang_id = kwargs_speech.pop("tgt_lang_id", None)
         if "decoder_input_ids" not in kwargs_speech:
-            if tgt_lang_id is None:
-                raise ValueError(f"You must specify a `speech_tgt_lang_id` to get a proper speech synthesis. Enter a valid `speech_tgt_lang_id` which must be among this list: {'', ''.join(UNIT_SUPPORTED_LANGUAGES)}.")
+            if tgt_lang_id is None or tgt_lang_id > self.config.t2u_num_langs:
+                raise ValueError(f"You must specify a supported `speech_tgt_lang_id` to get a proper speech synthesis. Enter a valid `speech_tgt_lang_id` which must be among this list: {'', ''.join(UNIT_SUPPORTED_LANGUAGES)}.")
             
             # TODO: raise value error if language not supported
             
             # + 5 for EOS/PAD/BOS/UNK token + mask token
-            tgt_lang_id = tgt_lang_id + self.config.unit_hifi_gan_vocab_size + len(UNIT_SUPPORTED_LANGUAGES) + 5 
+            tgt_lang_id = tgt_lang_id + self.config.unit_hifi_gan_vocab_size + self.config.t2u_num_langs + 5 
             kwargs_speech["decoder_input_ids"] = torch.tensor([[self.config.t2u_eos_token_id, tgt_lang_id]]).to(self.device) # TODO: batch
 
         t2u_generation_output = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
@@ -3832,8 +3832,8 @@ class SeamlessM4TCodeHifiGan(SeamlessM4THifiGan):
         super().__init__(config)
 
         self.unit_embeds_layer = nn.Embedding(config.unit_hifi_gan_vocab_size, config.unit_embed_dim)
-        self.spkr_embeds_layer = nn.Embedding(config.num_spkrs, config.spkr_embed_dim)
-        self.lang_embeds_layer = nn.Embedding(config.num_langs, config.lang_embed_dim)
+        self.spkr_embeds_layer = nn.Embedding(config.vocoder_num_spkrs, config.spkr_embed_dim)
+        self.lang_embeds_layer = nn.Embedding(config.vocoder_num_langs, config.lang_embed_dim)
 
         if config.use_dur_predictor:
             self.dur_predictor = SeamlessM4TVariancePredictor(config)

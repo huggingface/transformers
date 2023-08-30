@@ -178,6 +178,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         t2u_decoder_layers=6,  # works
         t2u_decoder_ffn_dim=8192,  # works
         t2u_decoder_attention_heads=16,  # works
+        t2u_num_langs=38,
         hidden_act="gelu",
         attention_probs_dropout_prob=0.1,
         pad_token_id=0,
@@ -198,8 +199,8 @@ class SeamlessM4TConfig(PretrainedConfig):
         unit_embed_dim = 1280,
         lang_embed_dim = 256,
         spkr_embed_dim = 256,
-        num_langs = 36,
-        num_spkrs = 200,
+        vocoder_num_langs = 36,
+        vocoder_num_spkrs = 200,
         use_dur_predictor = True,
         var_pred_kernel_size = 3,
         var_pred_dropout = 0.5,
@@ -266,6 +267,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.t2u_decoder_start_token_id = t2u_decoder_start_token_id
         self.t2u_max_new_tokens = t2u_max_new_tokens
         self.hidden_act = hidden_act
+        self.t2u_num_langs=t2u_num_langs
         # self.type_vocab_size = type_vocab_size
         self.t2u_encoder_layers = t2u_encoder_layers
         self.t2u_encoder_ffn_dim = t2u_encoder_ffn_dim
@@ -296,8 +298,8 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.unit_embed_dim = unit_embed_dim
         self.lang_embed_dim = lang_embed_dim
         self.spkr_embed_dim = spkr_embed_dim
-        self.num_langs = num_langs
-        self.num_spkrs = num_spkrs
+        self.vocoder_num_langs = vocoder_num_langs
+        self.vocoder_num_spkrs = vocoder_num_spkrs
         self.use_dur_predictor = use_dur_predictor
         self.var_pred_kernel_size = var_pred_kernel_size
         self.var_pred_dropout = var_pred_dropout

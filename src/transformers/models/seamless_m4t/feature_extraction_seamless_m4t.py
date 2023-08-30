@@ -65,6 +65,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         normalize_means=True,
         normalize_vars=True,
         stride=2,  # TODO: add to docstrings
+        lang_start_idx=256001,  # TODO: add to docstrings
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -73,6 +74,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         self.normalize_vars = normalize_vars
         self.return_attention_mask = True
         self.stride = stride
+        self.lang_start_idx=lang_start_idx
 
     def _extract_fbank_features(
         self,
