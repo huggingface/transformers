@@ -1354,4 +1354,3 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             forecast_outputs=y_hat,
             hidden_states=model_output.hidden_states
         )
-    
