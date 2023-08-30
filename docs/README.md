@@ -147,7 +147,7 @@ When adding a new model:
 - Add the classes that should be linked in the model. This generally includes the configuration, the tokenizer, and
   every model of that class (the base model, alongside models with additional heads), both in PyTorch and TensorFlow.
   The order is generally:
-    - Configuration,
+    - Configuration
     - Tokenizer
     - PyTorch base model
     - PyTorch head models
