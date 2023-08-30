@@ -163,7 +163,7 @@ class PatchTSTConfig(PretrainedConfig):
         pooling: str = 'mean',
         num_classes: int = 1,
         head_dropout: float = 0.0,
-        proj_dropout: float = 0.0,
+        # proj_dropout: float = 0.0,
         qkv_bias: bool = True,
         num_dynamic_real_features: int = 0,
         num_static_real_features: int = 0,
@@ -211,9 +211,8 @@ class PatchTSTConfig(PretrainedConfig):
         self.positional_encoding = positional_encoding
         self.learn_pe = learn_pe
         self.use_cls_token = use_cls_token
-        # self.patch_last = patch_last
-        self.individual = individual
         self.init_std = init_std
+        self.qkv_bias = qkv_bias
 
         # PatchTST
         self.patch_length = patch_length
@@ -235,14 +234,16 @@ class PatchTSTConfig(PretrainedConfig):
         self.unmasked_channel_indices = unmasked_channel_indices
         self.mask_value = mask_value
 
-        # Classification
+        # general head params
+        self.individual = individual
         self.pooling = pooling
-        self.num_classes = num_classes
         self.head_dropout = head_dropout
-        self.proj_dropout = proj_dropout
-        self.qkv_bias = qkv_bias
 
-        # Forcasting
+        # Classification
+        self.num_classes = num_classes
+        # self.proj_dropout = proj_dropout
+
+        # Forcasting and prediction
         self.prediction_length = prediction_length
 
         # Regression
