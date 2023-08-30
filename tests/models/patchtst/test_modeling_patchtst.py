@@ -307,7 +307,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             output = model(
                 past_values=batch["past_values"].to(torch_device)
-            ).prediction_outputs
+            ).prediction_output
         num_patch = (max(model.config.context_length,
                          model.config.patch_length) - model.config.patch_length) // model.config.stride + 1
         expected_shape = torch.Size([64, model.config.input_size, num_patch, model.config.patch_length])
@@ -345,7 +345,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
             output = model(
                 past_values=batch["past_values"].to(torch_device),
                 future_values=batch["future_values"].to(torch_device)
-            ).prediction_outputs
+            ).prediction_output
         expected_shape = torch.Size([64, model.config.prediction_length, model.config.input_size])
         self.assertEqual(output.shape, expected_shape)
 
@@ -363,7 +363,7 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
     #         outputs = model.generate(
     #             past_values=batch["past_values"].to(torch_device),
     #             future_values=batch["future_values"].to(torch_device)
-    #         ).prediction_outputs
+    #         ).prediction_output
     #     expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
     #     # self.assertEqual(outputs.sequences.shape, expected_shape)
     #     #

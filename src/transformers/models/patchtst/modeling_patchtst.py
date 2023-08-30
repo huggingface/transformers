@@ -893,16 +893,15 @@ class PretrainHead(nn.Module):
         return x
 
 
-class PatchTSTForPreTrainingOutput(ModelOutput):
+class PatchTSTOutput(ModelOutput):
     """
-    Output type of [`BertForPreTraining`].
+    Output type of [`PatchTSTForPredictiontion`].
 
     Args:
         loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            Total loss as the sum of the masked language modeling loss and the next sequence prediction
-            (classification) loss.
-        prediction_outputs (`torch.FloatTensor` of shape `(batch_size, nvars, num_patches, patch_length )`):
-            Prediction outputs of the modeling head.
+            MSE loss.
+        prediction_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction outputs of the time series modeling heads.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`.
@@ -917,7 +916,7 @@ class PatchTSTForPreTrainingOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    prediction_outputs: torch.FloatTensor = None
+    prediction_output: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -939,7 +938,7 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
             self, past_values: torch.Tensor,
             future_values: Optional[torch.Tensor] = None,
             output_hidden_states: Optional[bool] = None
-    ) -> PatchTSTForPreTrainingOutput:
+    ) -> PatchTSTOutput:
         """
         past_values (x): tensor [bs x sequence_length x n_vars ]
         future_values (y): labels
@@ -956,9 +955,9 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         loss_val = self.loss(x_hat, model_output.patched_input)
         masked_loss = (loss_val.mean(dim=-1) * model_output.mask).sum() / (model_output.mask.sum() + 1e-10)
 
-        return PatchTSTForPreTrainingOutput(
+        return PatchTSTOutput(
             loss=masked_loss,
-            prediction_outputs=x_hat,
+            prediction_output=x_hat,
             hidden_states=model_output.hidden_states
         )
 
@@ -1107,34 +1106,6 @@ class PredictionHead(nn.Module):
         return x
 
 
-class PatchTSTForPredictionOutput(ModelOutput):
-    """
-    Output type of [`PatchTSTForPredictiontion`].
-
-    Args:
-        loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
-            MSE loss.
-        prediction_outputs (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction outputs of the time series modeling heads.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    prediction_outputs: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
 class PatchTSTForPrediction(PatchTSTPreTrainedModel):
     # PatchTST model + prediction head
     def __init__(self, config: PatchTSTConfig):
@@ -1160,9 +1131,9 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         loss_val = None
         if future_values is not None:
             loss_val = self.loss(y_hat, future_values)
-        return PatchTSTForPredictionOutput(
+        return PatchTSTOutput(
             loss=loss_val,
-            prediction_outputs=y_hat,
+            prediction_output=y_hat,
             hidden_states=model_output.hidden_states
         )
 
@@ -1349,8 +1320,8 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         loss_val = None
         if labels is not None:
             loss_val = self.loss(y_hat, labels)
-        return PatchTSTForForecastingOutput(
+        return PatchTSTOutput(
             loss=loss_val,
-            forecast_outputs=y_hat,
+            prediction_output=y_hat,
             hidden_states=model_output.hidden_states
         )
