@@ -536,14 +536,14 @@ class TrainerMemoryTracker:
                 self.gpu_mem_used_peak = self.torch.xpu.max_memory_allocated()
             else:
                 raise ValueError("No available GPU device found!")
-
-        self.gpu[self.cur_stage] = {
-            "begin": self.gpu_mem_used_at_start,
-            "end": self.gpu_mem_used_now,
-            "alloc": (self.gpu_mem_used_now - self.gpu_mem_used_at_start),
-            "peaked": max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now),
-        }
-
+                
+            self.gpu[self.cur_stage] = {
+                "begin": self.gpu_mem_used_at_start,
+                "end": self.gpu_mem_used_now,
+                "alloc": (self.gpu_mem_used_now - self.gpu_mem_used_at_start),
+                "peaked": max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now),
+            }
+        
         # cpu
         self.cpu_mem_used_now = self.cpu_mem_used()
         self.cpu[self.cur_stage] = {
