@@ -293,6 +293,7 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
     lines = content.split("\n")
     lines = lines[:line_number + start_idx - 1] + [new_doc_args] + lines[line_number + idx - 1:]
 
+    print(f"Fixing the docstring of {obj.__name__} in {obj_file}.")
     with open(obj_file, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
