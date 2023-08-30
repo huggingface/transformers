@@ -637,8 +637,8 @@ def require_torch_xpu(test_case):
 
 def require_torch_multi_xpu(test_case):
     """
-    Decorator marking a test that requires a multi-XPU setup with IPEX and atleast one XPU device. These tests are skipped
-    on a machine without IPEX or multiple XPUs.
+    Decorator marking a test that requires a multi-XPU setup with IPEX and atleast one XPU device. These tests are
+    skipped on a machine without IPEX or multiple XPUs.
 
     To run *only* the multi_xpu tests, assuming all test names contain multi_xpu: $ pytest -sv ./tests -k "multi_xpu"
     """

@@ -29,6 +29,7 @@ from itertools import chain
 from types import ModuleType
 from typing import Any, Tuple, Union
 
+import torch
 from packaging import version
 
 from . import logging
