@@ -1193,7 +1193,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,
-    ):
+    ) -> Tuple[tf.Tensor] | TFSeq2SeqModelOutput:
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1321,7 +1321,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         return_dict: Optional[bool] = None,
         labels: tf.Tensor | None = None,
         training: bool = False,
-    ):
+    ) -> Tuple[tf.Tensor] | TFSeq2SeqLMOutput:
         r"""
         labels (`tf.tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
