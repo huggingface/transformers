@@ -86,6 +86,30 @@ class Conversation:
             raise ValueError("Only 'user', 'assistant' and 'system' roles are supported for now!")
         self.messages.append(message)
 
+    def add_user_input(self, text: str, overwrite: bool = False):
+        """
+        Args:
+        Add a user input to the conversation for the next round. This is a legacy function that assumes that inputs
+        must alternate user/assistant/user/assistant, and so will not add multiple user messages in succession.
+            text (`str`): The user input for the next conversation round. overwrite (`bool`, *optional*, defaults to
+            `False`):
+                Whether existing and unprocessed user input should be overwritten when this function is called.
+        """
+        if len(self) > 0 and self[-1]["role"] == "user":
+            if overwrite:
+                logger.warning(
+                    f'User input added while unprocessed input was existing: "{self.new_user_input}" was overwritten '
+                    f'with: "{text}".'
+                )
+                self.new_user_input = text
+            else:
+                logger.warning(
+                    f'User input added while unprocessed input was existing: "{self.new_user_input}" new input '
+                    f'ignored: "{text}". Set `overwrite` to True to overwrite unprocessed user input'
+                )
+        else:
+            self.new_user_input = text
+
     def __iter__(self):
         for message in self.messages:
             yield message
@@ -116,8 +140,8 @@ class Conversation:
         return output
 
     def iter_texts(self):
-        # Legacy method to keep the old methods happy for now
-        # TODO Remove this method and move the old _build_conversation methods to using the proper iterator
+        # This is a legacy method for backwards compatibility. It is recommended to just directly access
+        # conversation.messages instead.
         for message in self.messages:
             yield message["role"] == "user", message["content"]
 
@@ -229,13 +253,7 @@ class ConversationalPipeline(Pipeline):
         return outputs
 
     def preprocess(self, conversation: Conversation, min_length_for_response=32) -> Dict[str, Any]:
-        if not isinstance(conversation, Conversation):
-            raise ValueError("ConversationalPipeline expects Conversation as inputs")
-        if hasattr(self.tokenizer, "_build_conversation_input_ids"):
-            input_ids = self.tokenizer._build_conversation_input_ids(conversation)
-        else:
-            # If the tokenizer cannot handle conversations, we default to only the old version
-            input_ids = self._legacy_parse_and_tokenize(conversation)
+        input_ids = self.tokenizer.apply_chat_template(conversation)
 
         if self.framework == "pt":
             input_ids = torch.LongTensor([input_ids])
@@ -272,16 +290,3 @@ class ConversationalPipeline(Pipeline):
         conversation = model_outputs["conversation"]
         conversation.add_message({"role": "assistant", "content": answer})
         return conversation
-
-    def _legacy_parse_and_tokenize(self, conversation: Conversation) -> Dict:
-        eos_token_id = self.tokenizer.eos_token_id
-        input_ids = []
-        for is_user, text in conversation.iter_texts():
-            if eos_token_id is not None:
-                input_ids.extend(self.tokenizer.encode(text, add_special_tokens=False) + [eos_token_id])
-            else:
-                input_ids.extend(self.tokenizer.encode(text, add_special_tokens=False))
-
-        if len(input_ids) > self.tokenizer.model_max_length:
-            input_ids = input_ids[-self.tokenizer.model_max_length :]
-        return input_ids
