@@ -419,7 +419,7 @@ class TopKLogitsWarper(LogitsWarper):
     Args:
         top_k (`int`):
             The number of highest probability vocabulary tokens to keep for top-k-filtering.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -449,7 +449,7 @@ class TypicalLogitsWarper(LogitsWarper):
     Args:
         mass (`float`):
             Value of typical_p between 0 and 1 inclusive, defaults to 0.9.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -499,7 +499,7 @@ class EpsilonLogitsWarper(LogitsWarper):
     Args:
         epsilon (`float`):
             If set to > 0, only the most tokens with probabilities `epsilon` or higher are kept for generation.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
