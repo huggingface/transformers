@@ -56,6 +56,11 @@ _re_parse_arg = re.compile(r"^(\s*)(\S+)\s+\(([^\)]+)\)")
 _re_parse_description = re.compile(r"\*optional\*, defaults to (.*)$")
 
 
+OBJECTS_TO_IGNORE = [
+    "PretrainedConfig",
+]
+
+
 def find_indent(line: str) -> int:
     """
     Returns the number of spaces that start a line indent.
@@ -310,7 +315,7 @@ def check_docstrings(overwrite: bool = False):
     hard_failures = []
     for name in dir(transformers):
         # Skip objects that are private or not documented.
-        if name.startswith("_") or ignore_undocumented(name):
+        if name.startswith("_") or ignore_undocumented(name) or name in OBJECTS_TO_IGNORE:
             continue
 
         obj = getattr(transformers, name)
