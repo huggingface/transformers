@@ -1100,8 +1100,9 @@ class BarkFineModel(BarkPreTrainedModel):
             self.set_output_embeddings(new_lm_head_list)
 
         return self.get_input_embeddings()
-    
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of: Optional[int] = None
+
+    def resize_token_embeddings(
+        self, new_num_tokens: Optional[int] = None, pad_to_multiple_of: Optional[int] = None
     ) -> nn.Embedding:
         """
         Resizes input token embeddings matrix of the model if `new_num_tokens != config.vocab_size`.
@@ -1129,8 +1130,8 @@ class BarkFineModel(BarkPreTrainedModel):
             return model_embeds
 
         # Update base model and current model config
-        self.config.output_vocab_size = model_embeds[0].weight.shape[0]
-        self.output_vocab_size = model_embeds[0].weight.shape[0]
+        self.config.output_vocab_size = model_embeds[-1].weight.shape[0]
+        self.output_vocab_size = model_embeds[-1].weight.shape[0]
 
         # Tie weights again if needed
         self.tie_weights()
