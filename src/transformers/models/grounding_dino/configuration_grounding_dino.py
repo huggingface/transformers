@@ -177,7 +177,7 @@ class GroundingDINOConfig(PretrainedConfig):
         return_intermediate=True,
         auxiliary_loss=False,
         position_embedding_type="sine",
-        backbone="resnet50",
+        backbone="swin",
         use_pretrained_backbone=True,
         dilation=False,
         num_feature_levels=4,
@@ -196,6 +196,9 @@ class GroundingDINOConfig(PretrainedConfig):
         eos_coefficient=0.1,
         focal_alpha=0.25,
         disable_custom_kernels=False,
+        #other parameters
+        max_text_len = 256,
+        sub_sentence_present = True,
         **kwargs,
     ):
         if backbone_config is not None and use_timm_backbone:
@@ -256,6 +259,8 @@ class GroundingDINOConfig(PretrainedConfig):
         self.disable_custom_kernels = disable_custom_kernels
         # Text backbone
         self.text_backbone_config = AutoConfig.from_pretrained(text_backbone_config)
+        self.max_text_len = max_text_len
+        self.sub_sentence_present = sub_sentence_present
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
