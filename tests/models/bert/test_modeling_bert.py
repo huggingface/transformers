@@ -485,6 +485,9 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_save_load(self):
+        super().test_save_load()
+
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:

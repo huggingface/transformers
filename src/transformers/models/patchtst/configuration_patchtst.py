@@ -172,6 +172,8 @@ class PatchTSTConfig(PretrainedConfig):
         is_encoder_decoder: bool = False,
         encoder_layerdrop: float = 0.1,
         prediction_length: int = 24,
+        prediction_range: List = [0, 1],
+        target_dimension: int = 1,
 
         # PatchTST arguments
         attention_type: str = "prob",
@@ -242,6 +244,10 @@ class PatchTSTConfig(PretrainedConfig):
 
         # Forcasting
         self.prediction_length = prediction_length
+
+        # Regression
+        self.target_dimension = target_dimension
+        self.prediction_range = prediction_range
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 

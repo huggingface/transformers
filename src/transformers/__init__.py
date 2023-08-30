@@ -1142,6 +1142,8 @@ else:
             "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
             "MODEL_MAPPING",
             "MODEL_WITH_LM_HEAD_MAPPING",
+            "MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING",
             "AutoBackbone",
             "AutoModel",
             "AutoModelForAudioClassification",
@@ -1997,7 +1999,9 @@ else:
             "PatchTSTPreTrainedModel",
             "PatchTSTForPrediction",
             "PatchTSTForForecasting",
-            "PatchTSTForPretraining"
+            "PatchTSTForPretraining",
+            "PatchTSTForClassification",
+            "PatchTSTForRegression",
         ]
     )
     _import_structure["models.instructblip"].extend(
@@ -5163,6 +5167,8 @@ if TYPE_CHECKING:
             MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
+            MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING,
+            MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING,
             AutoBackbone,
             AutoModel,
             AutoModelForAudioClassification,
@@ -5866,6 +5872,8 @@ if TYPE_CHECKING:
             PatchTSTForForecasting,
             PatchTSTForPretraining,
             PatchTSTPreTrainedModel,
+            PatchTSTForClassification,
+            PatchTSTForRegression,
         )
         from .models.instructblip import (
             INSTRUCTBLIP_PRETRAINED_MODEL_ARCHIVE_LIST,

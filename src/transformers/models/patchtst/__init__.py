@@ -36,7 +36,9 @@ else:
         "PatchTSTPreTrainedModel",
         "PatchTSTForPrediction",
         "PatchTSTForForecasting",
-        "PatchTSTForPretraining"
+        "PatchTSTForPretraining",
+        "PatchTSTForRegression",
+        "PatchTSTForClassification"
     ]
 
 
@@ -56,6 +58,7 @@ if TYPE_CHECKING:
             PatchTSTForPrediction,
             PatchTSTForForecasting,
             PatchTSTForClassification,
+            PatchTSTForRegression,
             PatchTSTPreTrainedModel,
         )
 

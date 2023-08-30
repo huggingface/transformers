@@ -944,8 +944,11 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         past_values (x): tensor [bs x sequence_length x n_vars ]
         future_values (y): labels
         """
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         model_output = self.model(
-            past_values)  # x: [bs x nvars x num_patches x d_model] or [bs x nvars x (num_patches+1) x d_model] if use cls_token
+            past_values, output_hidden_states=output_hidden_states)  # x: [bs x nvars x num_patches x d_model] or [bs x nvars x (num_patches+1) x d_model] if use cls_token
         x_hat = self.head(model_output[
                               0])  # tensor [bs x nvars x num_patches x patch_length] or [bs x nvars x (num_patches+1) x patch_length] if use cls_token
 
@@ -972,13 +975,17 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def forward(self, past_values, future_values=None, output_hidden_states: Optional[bool] = None):
-        model_output = self.model(past_values)
+    def forward(self, past_values, labels=None, output_hidden_states: Optional[bool] = None):
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        model_output = self.model(past_values, output_hidden_states=output_hidden_states)
         y_hat = self.head(model_output[0])
 
         loss_val = None
-        if future_values is not None:
-            loss_val = self.loss(y_hat, future_values)
+        if labels is not None:
+            loss_val = self.loss(y_hat, labels)
         return PatchTSTForClassificationOutput(
             loss=loss_val,
             prediction_logits=y_hat,
@@ -1129,7 +1136,7 @@ class PatchTSTForPredictionOutput(ModelOutput):
 
 
 class PatchTSTForPrediction(PatchTSTPreTrainedModel):
-    # PatchTST model + classification head
+    # PatchTST model + prediction head
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
@@ -1250,7 +1257,7 @@ class ForecastHead(nn.Module):
 
 
 class PatchTSTForForecasting(PatchTSTPreTrainedModel):
-    # PatchTST model + classification head
+    # PatchTST model + Forecasting head
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
         self.model = PatchTSTModel(config)
@@ -1279,3 +1286,72 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
             hidden_states=model_output.hidden_states
         )
 
+
+class RegressionHead(nn.Module):
+    def __init__(self, config: PatchTSTConfig):
+        super().__init__()
+        self.y_range = config.prediction_range
+        self.use_cls_token = config.use_cls_token
+        self.pooling = config.pooling
+        # self.is_flatten = is_flatten
+
+        self.flatten = nn.Flatten(start_dim=1)
+        self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
+        input_dim = config.input_size * config.d_model
+        # if is_flatten: input_dim *= num_patch
+        self.linear = nn.Linear(input_dim, config.target_dimension)
+
+    def forward(self, past_values):
+        """
+        x: [bs x nvars x num_patch x d_model]
+            or [bs x nvars x (num_patch+1) x d_model] if use cls_token
+        output: [bs x output_dim]
+        """
+
+        if self.use_cls_token:
+            past_values = past_values[:, :, 0, :]  # use the first output token, x: [bs x nvars x d_model]
+        elif self.pooling == 'mean':
+            past_values = past_values.mean(dim=2)  # x: [bs x nvars x d_model]
+        elif self.pooling == 'max':
+            past_values = past_values.max(dim=2)  # x: [bs x nvars x d_model]
+        else:
+            raise Exception(f'pooling operator {self.pooling} is not implemented yet')
+        # flatten the input
+        past_values = self.flatten(past_values)  # x: bs x nvars * d_model
+        y = self.linear(self.dropout(past_values))  # y: bs x output_dim
+
+        if self.y_range:
+            y = torch.sigmoid(y) * (self.y_range[1] - self.y_range[0]) + self.y_range[0]
+
+        return y
+
+
+class PatchTSTForRegression(PatchTSTPreTrainedModel):
+    # PatchTST model + Regression head
+    def __init__(self, config: PatchTSTConfig):
+        super().__init__(config)
+        self.model = PatchTSTModel(config)
+        self.head = RegressionHead(config)
+        self.loss = nn.MSELoss(reduction='mean')
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(self,
+                past_values: torch.Tensor,
+                labels: Optional[torch.Tensor],
+                output_hidden_states: Optional[bool] = None):
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        model_output = self.model(past_values, output_hidden_states=output_hidden_states)
+        y_hat = self.head(model_output[0])
+        loss_val = None
+        if labels is not None:
+            loss_val = self.loss(y_hat, labels)
+        return PatchTSTForForecastingOutput(
+            loss=loss_val,
+            forecast_outputs=y_hat,
+            hidden_states=model_output.hidden_states
+        )
+    

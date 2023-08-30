@@ -23,9 +23,10 @@ from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
 from transformers.testing_utils import is_flaky, require_torch, torch_device, slow
-
+from transformers.models.auto import get_values
+import random
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -33,8 +34,9 @@ TOLERANCE = 1e-4
 
 if is_torch_available():
     import torch
-    from transformers import PatchTSTConfig
-    from transformers import PatchTSTModel, PatchTSTForPrediction, PatchTSTForForecasting, PatchTSTForPretraining
+    from transformers import PatchTSTConfig, MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING, MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
+    from transformers import PatchTSTModel, PatchTSTForPrediction, PatchTSTForForecasting, PatchTSTForPretraining, \
+        PatchTSTForClassification, PatchTSTForRegression
 
 
 
@@ -61,7 +63,9 @@ class PatchTSTModelTester:
         lags_sequence=[1, 2, 3, 4, 5],
         sampling_factor=10,
         distil=False,
-        seed_number=42
+        seed_number=42,
+        num_classes=2,
+        target_dimension=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -85,9 +89,11 @@ class PatchTSTModelTester:
             sampling_factor * np.ceil(np.log1p(context_length)).astype("int").item(), context_length
         )
         self.seed_number = seed_number
+        self.num_classes = num_classes
+        self.target_dimension = target_dimension
         self.sampling_factor = sampling_factor
         self.distil = distil
-        self.num_patch = (max(self.context_length, self.patch_length) - self.patch_length) // self.stride + 1
+        self.num_patches = (max(self.context_length, self.patch_length) - self.patch_length) // self.stride + 1
 
     def get_config(self):
         return PatchTSTConfig(
@@ -103,7 +109,9 @@ class PatchTSTModelTester:
             attention_dropout=self.attention_probs_dropout_prob,
             context_length=self.context_length,
             activation_function=self.hidden_act,
-            seed_number=self.seed_number
+            seed_number=self.seed_number,
+            num_classes=self.num_classes,
+            target_dimension=self.target_dimension
         )
 
     def prepare_patchtst_inputs_dict(self, config):
@@ -133,7 +141,16 @@ class PatchTSTModelTester:
 
 @require_torch
 class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (PatchTSTModel, PatchTSTForPrediction, PatchTSTForForecasting, PatchTSTForPretraining) if is_torch_available() else ()
+    all_model_classes = (
+        (PatchTSTModel,
+         PatchTSTForPrediction,
+         PatchTSTForForecasting,
+         PatchTSTForPretraining,
+         PatchTSTForClassification,
+         PatchTSTForRegression)
+        if is_torch_available()
+        else ()
+    )
     all_generative_model_classes = (PatchTSTForPrediction, PatchTSTForForecasting, PatchTSTForPretraining) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": PatchTSTModel} if is_torch_available() else {}
     is_encoder_decoder = False
@@ -163,6 +180,22 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        # if classification model:
+        if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING):
+            rng = random.Random(self.model_tester.seed_number)
+            labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_classes, rng=rng)
+            inputs_dict["labels"] = labels
+            inputs_dict.pop("future_values")
+        elif model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
+            rng = random.Random(self.model_tester.seed_number)
+            labels = floats_tensor([self.model_tester.batch_size, self.model_tester.target_dimension], rng=rng)
+            inputs_dict["labels"] = labels
+            inputs_dict.pop("future_values")
+        return inputs_dict
+
     def test_save_load_strict(self):
         config, _ = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
@@ -190,7 +223,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            num_patch = self.model_tester.num_patch
+            num_patch = self.model_tester.num_patches
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
                 [num_patch, self.model_tester.hidden_size],
@@ -211,12 +244,13 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             check_hidden_states_output(inputs_dict, config, model_class)
 #
 #     # Ignore since we have no tokens embeddings
+
     def test_resize_tokens_embeddings(self):
         pass
 
     def test_model_outputs_equivalence(self):
         pass
-#
+
     def test_determinism(self):
         pass
 
@@ -239,7 +273,10 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 "past_values",
                 "future_values",
             ]
-
+            if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or \
+                    model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
+                expected_arg_names.remove("future_values")
+                expected_arg_names.append("labels")
             expected_arg_names.extend(
                 [
                     "output_hidden_states",
@@ -316,3 +353,29 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
                                       device=torch_device,
                                       )
         self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))
+
+    # def test_seq_to_seq_generation(self):
+    #     model = PatchTSTForPrediction.from_pretrained("diepi/test_patchtst_prediction_etth1").to(torch_device)
+    #     batch = prepare_batch("val-batch.pt")
+    #
+    #     torch.manual_seed(0)
+    #     with torch.no_grad():
+    #         outputs = model.generate(
+    #             past_values=batch["past_values"].to(torch_device),
+    #             future_values=batch["future_values"].to(torch_device)
+    #         ).prediction_outputs
+    #     expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
+    #     # self.assertEqual(outputs.sequences.shape, expected_shape)
+    #     #
+    #     # expected_slice = torch.tensor([3400.8005, 4289.2637, 7101.9209], device=torch_device)
+    #     # mean_prediction = outputs.sequences.mean(dim=1)
+    #     # self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=1e-1))
+    #
+    #     # expected_shape = torch.Size([64, model.config.prediction_length, model.config.input_size])
+    #     self.assertEqual(outputs.shape, expected_shape)
+    #
+    #     expected_slice = torch.tensor([[-0.8200, 0.3741, -0.7543, 0.3971, -0.6659, -0.0124, -0.8308]],
+    #                                   device=torch_device,
+    #                                   )
+    #     self.assertTrue(torch.allclose(outputs[0, :1, :7], expected_slice, atol=TOLERANCE))
+
