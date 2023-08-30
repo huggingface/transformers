@@ -190,6 +190,7 @@ class LlamaTokenizerFast(PreTrainedTokenizerFast):
         return (out_vocab_file,)
 
     @property
+    # Copied from models.llama.tokenization_llama.LlamaTokenizer.default_chat_template
     def default_chat_template(self):
         template = "{% for message in messages %}"
         if self.use_default_system_prompt:

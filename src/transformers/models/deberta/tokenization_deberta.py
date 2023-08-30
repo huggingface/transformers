@@ -430,7 +430,3 @@ class DebertaTokenizer(PreTrainedTokenizer):
         if (is_split_into_words or add_prefix_space) and (len(text) > 0 and not text[0].isspace()):
             text = " " + text
         return (text, kwargs)
-
-    @property
-    def default_chat_template(self):
-        return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"

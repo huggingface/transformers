@@ -345,6 +345,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         return (out_vocab_file,)
 
     @property
+    # Copied from models.code_llama.tokenization_code_llama.CodeLlamaTokenizer.default_chat_template
     def default_chat_template(self):
         return (
             "{% for message in messages %}"

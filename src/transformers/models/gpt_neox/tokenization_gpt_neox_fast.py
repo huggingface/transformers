@@ -130,5 +130,6 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
         return tuple(files)
 
     @property
+    # Copied from models.gpt2.tokenization_gpt2.GPT2Tokenizer.default_chat_template
     def default_chat_template(self):
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"

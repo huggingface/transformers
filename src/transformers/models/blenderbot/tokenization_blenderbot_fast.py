@@ -295,6 +295,7 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         return token_ids_0 + [self.eos_token_id]
 
     @property
+    # Copied from models.blenderbot.tokenization_blenderbot.BlenderbotTokenizer.default_chat_template
     def default_chat_template(self):
         # BlenderBot actually tokenizes messages together with a "  " separator between them, so we try to imitate that
         return (
