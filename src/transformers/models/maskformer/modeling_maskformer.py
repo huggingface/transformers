@@ -1789,13 +1789,15 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             class_queries_logits = classes[-1]
             # get the masks
             mask_embeddings = self.mask_embedder(stacked_transformer_decoder_outputs)
-            # sum up over the channels for each embedding
-            # (num_embeddings, batch_size, num_queries, num_channels, 1, 1)
-            mask_embeddings = mask_embeddings.unsqueeze(-1).unsqueeze(-1)
-            # (1, batch_size, 1, num_channels, height, width)
-            pixel_embeddings = pixel_embeddings.unsqueeze(0).unsqueeze(2)
-            # (num_embeddings, batch_size, num_queries, height, width)
-            binaries_masks = (mask_embeddings * pixel_embeddings).sum(dim=3)
+
+            # Equivalent to einsum('lbqc, bchw -> lbqhw') but jit friendly
+            num_embeddings, batch_size, num_queries, num_channels = mask_embeddings.shape
+            _, _, height, width = pixel_embeddings.shape
+            binaries_masks = torch.zeros(
+                (num_embeddings, batch_size, num_queries, height, width), device=mask_embeddings.device
+            )
+            for c in range(num_channels):
+                binaries_masks += mask_embeddings[..., c][..., None, None] * pixel_embeddings[None, :, None, c]
 
             masks_queries_logits = binaries_masks[-1]
             # go til [:-1] because the last one is always used
@@ -1811,12 +1813,13 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             # get the masks
             mask_embeddings = self.mask_embedder(transformer_decoder_hidden_states)
             # sum up over the channels
-            # (batch_size, num_queries, num_channels, 1, 1)
-            mask_embeddings = mask_embeddings.unsqueeze(-1).unsqueeze(-1)
-            # (batch_size, 1, num_channels, height, width)
-            pixel_embeddings = pixel_embeddings.unsqueeze(1)
-            # (batch_size, num_queries, height, width)
-            masks_queries_logits = (mask_embeddings * pixel_embeddings).sum(dim=2)
+
+            # Equivalent to einsum('bqc, bchw -> bqhw') but jit friendly
+            batch_size, num_queries, num_channels = mask_embeddings.shape
+            _, _, height, width = pixel_embeddings.shape
+            masks_queries_logits = torch.zeros((batch_size, num_queries, height, width), device=mask_embeddings.device)
+            for c in range(num_channels):
+                masks_queries_logits += mask_embeddings[..., c][..., None, None] * pixel_embeddings[:, None, c]
 
         return class_queries_logits, masks_queries_logits, auxiliary_logits
 
