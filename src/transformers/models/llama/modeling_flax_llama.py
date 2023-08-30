@@ -165,6 +165,28 @@ class FlaxLlamaRMSNorm(nn.Module):
         return self.weight * jnp.asarray(hidden_states, dtype=input_dtype)
 
 
+class FlaxLlamaRotaryEmbedding(nn.Module):
+    config: LlamaConfig
+
+    def setup(self):
+        head_dim = self.config.hidden_size // self.config.num_attention_heads
+        self.sincos = create_sinusoidal_positions(self.config.max_position_embeddings, head_dim)
+
+        # inv_freq is unused but create it here to avoid mismatch when loading
+        # from pt checkpoint.
+        inv_freq = 1.0 / (10000 ** (jnp.arange(0, head_dim, 2) / head_dim))
+        self.inv_freq = self.param("inv_freq", lambda _: inv_freq)
+
+    def __call__(self, key, query, position_ids):
+        sincos = self.sincos[position_ids]
+        sincos = jnp.split(sincos, 2, axis=-1)
+
+        key = apply_rotary_pos_emb(key, sincos)
+        query = apply_rotary_pos_emb(query, sincos)
+
+        return key, query
+
+
 class FlaxLlamaAttention(nn.Module):
     config: LlamaConfig
     dtype: jnp.dtype = jnp.float32
@@ -189,7 +211,7 @@ class FlaxLlamaAttention(nn.Module):
         self.o_proj = dense()
 
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
-        self.embed_positions = create_sinusoidal_positions(config.max_position_embeddings, self.head_dim)
+        self.rotary_emb = FlaxLlamaRotaryEmbedding(config)
 
     def _split_heads(self, hidden_states):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.num_heads, self.head_dim))
@@ -247,11 +269,7 @@ class FlaxLlamaAttention(nn.Module):
         key = self._split_heads(key)
         value = self._split_heads(value)
 
-        sincos = self.embed_positions[position_ids]
-        sincos = jnp.split(sincos, 2, axis=-1)
-
-        key = apply_rotary_pos_emb(key, sincos)
-        query = apply_rotary_pos_emb(query, sincos)
+        key, query = self.rotary_emb(key, query, position_ids)
 
         query_length, key_length = query.shape[1], key.shape[1]
 
@@ -370,7 +388,7 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
     """
 
     config_class = LlamaConfig
-    base_model_prefix = "transformer"
+    base_model_prefix = "model"
     module_class: nn.Module = None
 
     def __init__(
@@ -424,7 +442,7 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         )
         return unfreeze(init_variables["cache"])
 
-    @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     def __call__(
         self,
         input_ids,
