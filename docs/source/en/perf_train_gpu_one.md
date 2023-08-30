@@ -240,8 +240,8 @@ fastest training experience among all supported AdamW optimizers.
 `adamw_apex_fused`, `adamw_anyprecision`, `adafactor`, or `adamw_bnb_8bit`. More optimizers can be plugged in via a third-party implementation.
 
 Let's take a closer look at two alternatives to AdamW optimizer:
-1. `Adafactor`, available in Trainer
-2. `8bit BNB quantized optimizer` which is [now](https://github.com/huggingface/transformers/issues/14819) available in Trainer, but for which a third-party integration is provided below for demonstration.
+1. `adafactor` which is available in [`Trainer`]
+2. `adamw_bnb_8bit` is also available in Trainer, but a third-party integration is provided below for demonstration.
 
 For comparison, for a 3B-parameter model, like “t5-3b”: 
 * A standard AdamW optimizer will need 24GB of GPU memory because it uses 8 bytes for each parameter (8*3 => 24GB)
@@ -270,13 +270,13 @@ Instead of aggregating optimizer states like Adafactor, 8-bit Adam keeps the ful
 means that it stores the state with lower precision and dequantizes it only for the optimization. This is similar to the 
 idea behind mixed precision training.
 
-To use the 8-bit optimizer, similar to Adafactor, you simply need to set `optim="adamw_bnb_8bit"` in [`TrainingArguments`]:
+To use `adamw_bnb_8bit`, you simply need to set `optim="adamw_bnb_8bit"` in [`TrainingArguments`]:
 
 ```py
 training_args = TrainingArguments(per_device_train_batch_size=4, optim="adamw_bnb_8bit", **default_args)
 ```
 
-However, for demonstration purposes, we can also use a third-party implementation of the 8-bit optimizer, to see how that can be integrated. In that case, we need to install it separately and then pass it as a custom optimizer to the [`Trainer`]. 
+However, we can also use a third-party implementation of the 8-bit optimizer for demonstration purposes to see how that can be integrated.
 
 First, follow the installation guide in the GitHub [repo](https://github.com/TimDettmers/bitsandbytes) to install the `bitsandbytes` library 
 that implements the 8-bit Adam optimizer.
