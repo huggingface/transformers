@@ -87,11 +87,12 @@ def infer_framework_from_repr(x):
         return "np"
 
 
-def is_tensor(x):
+def _get_frameworks_and_tests(x):
     """
-    Tests if `x` is a `torch.Tensor`, `tf.Tensor`, `jaxlib.xla_extension.DeviceArray` or `np.ndarray`.
+    Returns an (ordered since we are in Python 3.7+) dictionary framework to test function, which places the framework
+    we can guess from the repr first, then Numpy, then the others.
     """
-    framework_tests = {
+    framework_to_test = {
         "pt": is_torch_tensor,
         "tf": is_tf_tensor,
         "jax": is_jax_tensor,
@@ -102,10 +103,18 @@ def is_tensor(x):
     frameworks = [] if preferred_framework is None else [preferred_framework]
     if preferred_framework != "np":
         frameworks.append("np")
-    frameworks.extend([f for f in framework_tests if f not in [preferred_framework, "np"]])
+    frameworks.extend([f for f in framework_to_test if f not in [preferred_framework, "np"]])
+    return {f: framework_to_test[f] for f in frameworks}
 
-    for framework in frameworks:
-        if framework_tests[framework](x):
+
+def is_tensor(x):
+    """
+    Tests if `x` is a `torch.Tensor`, `tf.Tensor`, `jaxlib.xla_extension.DeviceArray` or `np.ndarray`.
+    """
+    # This gives us a smart order to test the frameworks with the corresponding tests.
+    framework_tests = _get_frameworks_and_tests(x)
+    for test in framework_tests.values():
+        if test(x):
             return True
 
     # Tracers
@@ -223,17 +232,39 @@ def to_py_obj(obj):
     """
     Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a python list.
     """
+
+    def _torch_to_py_obj(obj):
+        return obj.detach().cpu().tolist()
+
+    def _tf_to_py_obj(obj):
+        return obj.numpy().tolist()
+
+    def _jax_to_py_obj(obj):
+        return np.asarray(obj).tolist()
+
+    def _np_to_py_obj(obj):
+        return obj.tolist()
+
+    framework_to_py_obj = {
+        "pt": _torch_to_py_obj,
+        "tf": _tf_to_py_obj,
+        "jax": _jax_to_py_obj,
+        "np": _np_to_py_obj,
+    }
+
     if isinstance(obj, (dict, UserDict)):
         return {k: to_py_obj(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return [to_py_obj(o) for o in obj]
-    elif is_tf_tensor(obj):
-        return obj.numpy().tolist()
-    elif is_torch_tensor(obj):
-        return obj.detach().cpu().tolist()
-    elif is_jax_tensor(obj):
-        return np.asarray(obj).tolist()
-    elif isinstance(obj, (np.ndarray, np.number)):  # tolist also works on 0d np arrays
+
+    # This gives us a smart order to test the frameworks with the corresponding tests.
+    framework_tests = _get_frameworks_and_tests(obj)
+    for framework, test in framework_tests.items():
+        if test(obj):
+            return framework_to_py_obj[framework](obj)
+
+    # tolist also works on 0d np arrays
+    if isinstance(obj, np.number):
         return obj.tolist()
     else:
         return obj
@@ -243,18 +274,38 @@ def to_numpy(obj):
     """
     Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a Numpy array.
     """
+
+    def _torch_to_numpy(obj):
+        return obj.detach().cpu().numpy()
+
+    def _tf_to_numpy(obj):
+        return obj.numpy()
+
+    def _jax_to_numpy(obj):
+        return np.asarray(obj)
+
+    def _np_to_numpy(obj):
+        return obj
+
+    framework_to_numpy = {
+        "pt": _torch_to_numpy,
+        "tf": _tf_to_numpy,
+        "jax": _jax_to_numpy,
+        "np": _np_to_numpy,
+    }
+
     if isinstance(obj, (dict, UserDict)):
         return {k: to_numpy(v) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return np.array(obj)
-    elif is_tf_tensor(obj):
-        return obj.numpy()
-    elif is_torch_tensor(obj):
-        return obj.detach().cpu().numpy()
-    elif is_jax_tensor(obj):
-        return np.asarray(obj)
-    else:
-        return obj
+
+    # This gives us a smart order to test the frameworks with the corresponding tests.
+    framework_tests = _get_frameworks_and_tests(obj)
+    for framework, test in framework_tests.items():
+        if test(obj):
+            return framework_to_numpy[framework](obj)
+
+    return obj
 
 
 class ModelOutput(OrderedDict):
