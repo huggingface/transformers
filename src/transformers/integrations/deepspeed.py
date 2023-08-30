@@ -274,7 +274,7 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
     # 1. DS scheduler + DS optimizer: Yes
     # 2. HF scheduler + HF optimizer: Mostly*
     # 3. DS scheduler + HF optimizer: Mostly*
-    # 4. HF scheduler + DS optimizer: No
+    # 4. HF scheduler + DS optimizer: Yes
     #
     # Mostly*: All non-native DeepSpeed optimizers that have both CPU and GPU implementation should work (except LAMB)
 
@@ -304,11 +304,13 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
         lr_scheduler = DummyScheduler(optimizer)
     else:
         if isinstance(optimizer, DummyOptim):
-            raise ValueError(
-                "Found `optimizer` configured in the DeepSpeed config, but no `scheduler`. "
-                "Please configure a scheduler in the DeepSpeed config."
-            )
-        lr_scheduler = trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
+
+            def _lr_scheduler_callable(optimizer):
+                return trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
+
+            lr_scheduler = DummyScheduler(optimizer, lr_scheduler_callable=_lr_scheduler_callable)
+        else:
+            lr_scheduler = trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
 
     return optimizer, lr_scheduler
 
