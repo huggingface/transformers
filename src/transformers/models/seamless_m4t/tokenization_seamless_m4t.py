@@ -57,8 +57,10 @@ LARGE_SEAMLESS_M4T_LANGUAGE_CODES = ["afr","amh","arb","ary","arz","asm","azj","
 UNIT_SUPPORTED_LANGUAGES = ["__arb__", "__ben__", "__cat__", "__ces__", "__cmn__", "__cym__", "__dan__", "__deu__", "__eng__", "__est__", "__fin__", "__fra__", "__hin__", "__ind__", "__ita__", "__jpn__", "__kan__", "__kor__", "__mlt__", "__nld__", "__pes__", "__pol__", "__por__", "__ron__", "__rus__", "__slk__", "__spa__", "__swe__", "__swh__", "__tam__", "__tel__", "__tgl__", "__tha__", "__tur__", "__ukr__", "__urd__", "__uzn__", "__vie__", ]
 # fmt: on
 
-        
-#t2u_hifi_gan_offset=4,
+# fmt: off
+VOCODER_SUPPORTED_LANGUAGES = ["__arb__", "__ben__", "__cat__", "__ces__", "__cmn__", "__cym__", "__dan__", "__deu__", "__eng__", "__est__", "__fin__", "__fra__", "__hin__", "__ind__", "__ita__", "__jpn__", "__kor__", "__mlt__", "__nld__", "__pes__", "__pol__", "__por__", "__ron__", "__rus__", "__slk__", "__spa__", "__swe__", "__swh__", "__tel__", "__tgl__", "__tha__", "__tur__", "__ukr__", "__urd__", "__uzn__", "__vie__",]
+# fmt: on
+
 
 
 # TODO: change repo/id -> repo id
@@ -159,7 +161,6 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         tgt_lang="fra",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         additional_special_tokens=None,
-        t2u_offset_lang_id=5,
         **kwargs,
     ):
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -232,12 +233,17 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         self.set_tgt_lang_special_tokens(self._tgt_lang)
         
         
-        self.t2u_offset_lang_id=t2u_offset_lang_id
         self.t2u_language_code=UNIT_SUPPORTED_LANGUAGES
         self.t2u_lang_code_to_id = {
             code: i for i, code in enumerate(self.t2u_language_code)
         }
         self.t2u_id_to_lang_code = {v: k for k, v in self.t2u_lang_code_to_id.items()}
+        
+        self.vocoder_language_code=VOCODER_SUPPORTED_LANGUAGES
+        self.vocoder_lang_code_to_id = {
+            code: i for i, code in enumerate(self.vocoder_language_code)
+        }
+        self.vocoder_id_to_lang_code = {v: k for k, v in self.vocoder_lang_code_to_id.items()}
 
     @classmethod
     def _from_pretrained(
@@ -323,6 +329,9 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         
         if self._tgt_lang in self.t2u_lang_code_to_id:
             output["speech_tgt_lang_id"] = [[self.t2u_lang_code_to_id[self._tgt_lang]]] # TODO: check batch behavior
+            
+        if self._tgt_lang in self.vocoder_lang_code_to_id:
+            output["vocoder_tgt_lang_id"] = [[self.vocoder_lang_code_to_id[self._tgt_lang]]] # TODO: check batch behavior
 
         return BatchEncoding(output, tensor_type=kwargs.get("return_tensors"))
 

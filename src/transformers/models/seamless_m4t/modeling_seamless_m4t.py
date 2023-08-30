@@ -2945,22 +2945,22 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
         kwargs_text["return_dict_in_generate"] = True
         kwargs_text["output_scores"] = True
 
-        generation_outputs = super().generate(input_ids, **kwargs_text)
+        text_generation_output = super().generate(input_ids, **kwargs_text)
 
         batch_size = len(input_ids)
-        num_return_sequences = len(generation_outputs.sequences) // batch_size
-        sequences = generation_outputs.sequences
+        num_return_sequences = len(text_generation_output.sequences) // batch_size
+        sequences = text_generation_output.sequences
 
         # compute last hidden state
         t2u_input_embeds = self.compute_last_hidden_states_per_sample(
-            generation_outputs.decoder_hidden_states, generation_outputs.get("beam_indices")
+            text_generation_output.decoder_hidden_states, text_generation_output.get("beam_indices")
         )
 
         # take care of num_return_sequences
         # take most probable hidden states per batch of return_sequences
         # (batch_size*num_return_sequences, ...) -> (batch_size,...)
         if num_return_sequences > 1:
-            idx_most_probable_sequences_per_batch = generation_outputs.sequences_scores.view(batch_size, -1).argmax(-1)
+            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores.view(batch_size, -1).argmax(-1)
             idx_most_probable_sequences_per_batch = (
                 idx_most_probable_sequences_per_batch + torch.arange(batch_size) * num_return_sequences
             )
@@ -2986,15 +2986,32 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
             tgt_lang_id = tgt_lang_id + self.config.unit_hifi_gan_vocab_size + len(UNIT_SUPPORTED_LANGUAGES) + 5 
             kwargs_speech["decoder_input_ids"] = torch.tensor([[self.config.t2u_eos_token_id, tgt_lang_id]]).to(self.device) # TODO: batch
 
-        output_speech = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
+        t2u_generation_output = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
         
+        
+        # TODO: adapt if return_generate dict
+        
+        unit_ids = t2u_generation_output
+        
+        # get rid of t2u_decoder_input_ids
+        unit_ids = unit_ids[:, kwargs_speech["decoder_input_ids"].shape[1]:]
+        # replace eos per pad
+        unit_ids[unit_ids == self.config.t2u_eos_token_id] = self.config.t2u_pad_token_id
+        # offset pad
+        unit_ids[unit_ids == self.config.t2u_pad_token_id] = self.config.t2u_pad_token_id + 4
+        # offset of control symbols
+        unit_ids = unit_ids - 4
+        
+        vocoder_speaker_id = torch.tensor([[0]]).to(self.device) # TODO: batch and parameter
+        waveforms = self.vocoder(input_ids = unit_ids, speaker_id = vocoder_speaker_id, lang_id = vocoder_tgt_lang_id, use_dur_prediction=True)
+     
         
         if return_intermediate_token_ids:
             return SeamlessM4TGenerationOutput(sequences=sequences,
-                                               unit_sequences=output_speech)
+                                               unit_sequences=t2u_generation_output,
+                                               waveforms=waveforms)
 
-        return output_speech
-
+        return waveforms
 
 @add_start_docstrings(
     "The speech-to-speech SeamlessM4T Model transformer which can be used for S2ST.",
@@ -3100,22 +3117,22 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
         kwargs_text["return_dict_in_generate"] = True
         kwargs_text["output_scores"] = True
 
-        generation_outputs = super().generate(input_features, **kwargs_text)
+        text_generation_output = super().generate(input_features, **kwargs_text)
 
         batch_size = len(input_features)
-        num_return_sequences = len(generation_outputs.sequences) // batch_size
-        sequences = generation_outputs.sequences
+        num_return_sequences = len(text_generation_output.sequences) // batch_size
+        sequences = text_generation_output.sequences
 
         # compute last hidden state
         t2u_input_embeds = self.compute_last_hidden_states_per_sample(
-            generation_outputs.decoder_hidden_states, generation_outputs.get("beam_indices", None)
+            text_generation_output.decoder_hidden_states, text_generation_output.get("beam_indices", None)
         )
 
         # take care of num_return_sequences
         # take most probable hidden states per batch of return_sequences
         # (batch_size*num_return_sequences, ...) -> (batch_size,...)
         if num_return_sequences > 1:
-            idx_most_probable_sequences_per_batch = generation_outputs.sequences_scores.view(batch_size, -1).argmax(-1)
+            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores.view(batch_size, -1).argmax(-1)
             idx_most_probable_sequences_per_batch = (
                 idx_most_probable_sequences_per_batch + torch.arange(batch_size) * num_return_sequences
             )
@@ -3141,17 +3158,32 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
             tgt_lang_id = tgt_lang_id + self.config.unit_hifi_gan_vocab_size + len(UNIT_SUPPORTED_LANGUAGES) + 5 
             kwargs_speech["decoder_input_ids"] = torch.tensor([[self.config.t2u_eos_token_id, tgt_lang_id]]).to(self.device) # TODO: batch
 
-        output_speech = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
-
-        # TODO: proper output form
-
-        # units = unit_out.units[:, 1:][0].cpu().numpy().tolist()
-        # wav_out = self.vocoder(units, tgt_lang, spkr, dur_prediction=True)
+        t2u_generation_output = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
+        
+        
+        # TODO: adapt if return_generate dict
+        
+        unit_ids = t2u_generation_output
+        
+        # get rid of t2u_decoder_input_ids
+        unit_ids = unit_ids[:, kwargs_speech["decoder_input_ids"].shape[1]:]
+        # replace eos per pad
+        unit_ids[unit_ids == self.config.t2u_eos_token_id] = self.config.t2u_pad_token_id
+        # offset pad
+        unit_ids[unit_ids == self.config.t2u_pad_token_id] = self.config.t2u_pad_token_id + 4
+        # offset of control symbols
+        unit_ids = unit_ids - 4
+        
+        vocoder_speaker_id = torch.tensor([[0]]).to(self.device) # TODO: batch and parameter
+        waveforms = self.vocoder(input_ids = unit_ids, speaker_id = vocoder_speaker_id, lang_id = vocoder_tgt_lang_id, use_dur_prediction=True)
+     
+        
         if return_intermediate_token_ids:
             return SeamlessM4TGenerationOutput(sequences=sequences,
-                                               unit_sequences=output_speech)
+                                               unit_sequences=t2u_generation_output,
+                                               waveforms=waveforms)
 
-        return output_speech
+        return waveforms
 
 
 
@@ -3182,6 +3214,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         self.register_buffer("final_logits_bias", torch.zeros((1, config.vocab_size)))
 
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
+        self.vocoder = SeamlessM4TCodeHifiGan(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -3383,6 +3416,8 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         return_intermediate_token_ids: Optional[bool] = None,
         **kwargs,
     ) -> Union[torch.Tensor, SeamlessM4TGenerationOutput]:
+        vocoder_tgt_lang_id = kwargs.pop("vocoder_tgt_lang_id", None)
+        
         kwargs_text = {"decoder_input_ids": kwargs.pop("decoder_input_ids", None)}
         kwargs_speech = {}
         for key, value in kwargs.items():
@@ -3409,7 +3444,6 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         kwargs_text["return_dict_in_generate"] = True
         kwargs_text["output_scores"] = True
 
-        # TODO: take care of multiple same paramteres
         if input_features is not None:
             self.set_modality("speech")
             if input_ids is not None:
@@ -3417,19 +3451,20 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                     "`input_features` and `input_ids` are both non empty. `input_features` will be used in priority through the speech encoder."
                     "Make sure `input_features=None` if you want to use the text encoder."
                 )
-            generation_outputs = super().generate(input_features=input_features, **kwargs_text)
+            text_generation_output = super().generate(input_features=input_features, **kwargs_text)
             batch_size = len(input_features)
         else:
             self.set_modality("text")
-            generation_outputs = super().generate(input_ids=input_ids, input_features=None, **kwargs_text)
+            text_generation_output = super().generate(input_ids=input_ids, input_features=None, **kwargs_text)
             batch_size = len(input_ids)
+            
 
-        num_return_sequences = len(generation_outputs.sequences) // batch_size
-        sequences = generation_outputs.sequences
+        num_return_sequences = len(text_generation_output.sequences) // batch_size
+        sequences = text_generation_output.sequences
 
         # compute last hidden state
         t2u_input_embeds = self.compute_last_hidden_states_per_sample(
-            generation_outputs.decoder_hidden_states, generation_outputs.get("beam_indices", None)
+            text_generation_output.decoder_hidden_states, text_generation_output.get("beam_indices", None)
         )
 
         attention_mask = kwargs_speech.get(
@@ -3438,7 +3473,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         # input modality = speech so new attention mask
         if self.current_modality == "speech" and attention_mask is not None:
             _compute_new_attention_mask(
-                generation_outputs.encoder_hidden_states[-1],
+                text_generation_output.encoder_hidden_states[-1],
                 attention_mask,
                 self.config.adaptor_kernel_size,
                 self.config.adaptor_stride,
@@ -3449,7 +3484,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             input_ids=input_ids,
             input_features=input_features,
             attention_mask=attention_mask,
-            decoder_input_ids=generation_outputs.sequences,
+            decoder_input_ids=text_generation_output.sequences,
             head_mask=kwargs_text.get("head_mask"),
             decoder_head_mask=kwargs_text.get("decoder_head_mask"),
             cross_attn_head_mask=kwargs_text.get("cross_attn_head_mask"),
@@ -3457,8 +3492,8 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             output_hidden_states=kwargs_text.get("output_hidden_states"),
             return_dict=kwargs_text.get("return_dict"),
         )
-        # input_ids=generation_outputs.sequences,
-        # encoder_hidden_states=generation_outputs.encoder_hidden_states[-1],
+        # input_ids=text_generation_output.sequences,
+        # encoder_hidden_states=text_generation_output.encoder_hidden_states[-1],
         # encoder_attention_mask=encoder_attention_mask,
         # head_mask=decoder_head_mask,
         # cross_attn_head_mask=cross_attn_head_mask,
@@ -3473,7 +3508,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         # take most probable hidden states per batch of return_sequences
         # (batch_size*num_return_sequences, ...) -> (batch_size,...)
         if num_return_sequences > 1:
-            idx_most_probable_sequences_per_batch = generation_outputs.sequences_scores.view(batch_size, -1).argmax(-1)
+            idx_most_probable_sequences_per_batch = text_generation_output.sequences_scores.view(batch_size, -1).argmax(-1)
             idx_most_probable_sequences_per_batch = (
                 idx_most_probable_sequences_per_batch + torch.arange(batch_size) * num_return_sequences
             )
@@ -3494,17 +3529,38 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             if tgt_lang_id is None:
                 raise ValueError(f"You must specify a `speech_tgt_lang_id` to get a proper speech synthesis. Enter a valid `speech_tgt_lang_id` which must be among this list: {'', ''.join(UNIT_SUPPORTED_LANGUAGES)}.")
             
+            # TODO: raise value error if language not supported
+            
             # + 5 for EOS/PAD/BOS/UNK token + mask token
             tgt_lang_id = tgt_lang_id + self.config.unit_hifi_gan_vocab_size + len(UNIT_SUPPORTED_LANGUAGES) + 5 
             kwargs_speech["decoder_input_ids"] = torch.tensor([[self.config.t2u_eos_token_id, tgt_lang_id]]).to(self.device) # TODO: batch
 
-        output_speech = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
+        t2u_generation_output = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
+        
+        
+        # TODO: adapt if return_generate dict
+        
+        unit_ids = t2u_generation_output
+        
+        # get rid of t2u_decoder_input_ids
+        unit_ids = unit_ids[:, kwargs_speech["decoder_input_ids"].shape[1]:]
+        # replace eos per pad
+        unit_ids[unit_ids == self.config.t2u_eos_token_id] = self.config.t2u_pad_token_id
+        # offset pad
+        unit_ids[unit_ids == self.config.t2u_pad_token_id] = self.config.t2u_pad_token_id + 4
+        # offset of control symbols
+        unit_ids = unit_ids - 4
+        
+        vocoder_speaker_id = torch.tensor([[0]]).to(self.device) # TODO: batch and parameter
+        waveforms = self.vocoder(input_ids = unit_ids, speaker_id = vocoder_speaker_id, lang_id = vocoder_tgt_lang_id, use_dur_prediction=True)
+     
         
         if return_intermediate_token_ids:
             return SeamlessM4TGenerationOutput(sequences=sequences,
-                                               unit_sequences=output_speech)
+                                               unit_sequences=t2u_generation_output,
+                                               waveforms=waveforms)
 
-        return output_speech
+        return waveforms
 
 
     def prepare_inputs_for_generation(
