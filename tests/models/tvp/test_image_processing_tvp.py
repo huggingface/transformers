@@ -112,6 +112,18 @@ class TVPImageProcessingTester(unittest.TestCase):
 
         return expected_height, expected_width
 
+    def prepare_video_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+        return prepare_video_inputs(
+            batch_size=self.batch_size,
+            num_frames=self.num_frames,
+            num_channels=self.num_channels,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
+            equal_resolution=equal_resolution,
+            numpify=numpify,
+            torchify=torchify,
+        )
+
 
 @require_torch
 @require_vision
@@ -152,7 +164,7 @@ class TVPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PIL videos
-        video_inputs = prepare_video_inputs(self.image_processor_tester, equal_resolution=False)
+        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False)
         for video in video_inputs:
             self.assertIsInstance(video, list)
             self.assertIsInstance(video[0], Image.Image)
@@ -189,7 +201,7 @@ class TVPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random numpy tensors
-        video_inputs = prepare_video_inputs(self.image_processor_tester, equal_resolution=False, numpify=True)
+        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
         for video in video_inputs:
             self.assertIsInstance(video, list)
             self.assertIsInstance(video[0], np.ndarray)
@@ -222,11 +234,53 @@ class TVPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             ),
         )
 
+    def test_call_numpy_4_channels(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # create random numpy tensors
+        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
+        for video in video_inputs:
+            self.assertIsInstance(video, list)
+            self.assertIsInstance(video[0], np.ndarray)
+
+        # Test not batched input
+        expected_height, expected_width = self.image_processor_tester.get_expected_values(video_inputs)
+        encoded_videos = image_processing(
+            video_inputs[0], return_tensors="pt", image_mean=0, image_std=1, input_data_format="channels_first"
+        ).pixel_values
+        self.assertEqual(
+            encoded_videos.shape,
+            (
+                1,
+                self.image_processor_tester.num_frames,
+                self.image_processor_tester.num_channels,
+                expected_height,
+                expected_width,
+            ),
+        )
+
+        # Test batched
+        expected_height, expected_width = self.image_processor_tester.get_expected_values(video_inputs, batched=True)
+        encoded_videos = image_processing(
+            video_inputs, return_tensors="pt", image_mean=0, image_std=1, input_data_format="channels_first"
+        ).pixel_values
+        self.assertEqual(
+            encoded_videos.shape,
+            (
+                self.image_processor_tester.batch_size,
+                self.image_processor_tester.num_frames,
+                self.image_processor_tester.num_channels,
+                expected_height,
+                expected_width,
+            ),
+        )
+        self.image_processor_tester.num_channels = 3
+
     def test_call_pytorch(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
-        video_inputs = prepare_video_inputs(self.image_processor_tester, equal_resolution=False, torchify=True)
+        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=False, torchify=True)
         for video in video_inputs:
             self.assertIsInstance(video, list)
             self.assertIsInstance(video[0], torch.Tensor)
