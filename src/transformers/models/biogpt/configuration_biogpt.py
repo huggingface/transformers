@@ -78,7 +78,8 @@ class BioGptConfig(PretrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 2)
             End of stream token id.
-        Example:
+    
+    Example:
 
     ```python
     >>> from transformers import BioGptModel, BioGptConfig

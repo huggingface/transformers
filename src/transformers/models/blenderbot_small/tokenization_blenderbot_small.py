@@ -87,7 +87,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (`str`, *optional*, defaults to `"__pad__"`):
             The token used for padding, for example when batching sequences of different lengths.
-        **kwargs
+        kwargs
             Additional keyword arguments passed along to [`PreTrainedTokenizer`]
     """
 
