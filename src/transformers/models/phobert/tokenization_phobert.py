@@ -327,7 +327,9 @@ class PhobertTokenizer(PreTrainedTokenizer):
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
         elif not os.path.isfile(self.vocab_file):
-            logger.warn(f"The original {self.vocab_file} was deleted and will not be saved with the tokenizer.")
+            with open(out_vocab_file, "wb") as fi:
+                content_spiece_model = self.sp_model.serialized_model_proto()
+                fi.write(content_spiece_model)
 
         if os.path.abspath(self.merges_file) != os.path.abspath(out_merge_file):
             copyfile(self.merges_file, out_merge_file)
