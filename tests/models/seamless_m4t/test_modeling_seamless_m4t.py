@@ -21,9 +21,14 @@ from transformers import SeamlessM4TConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
-from transformers.generation import InfNanRemoveLogitsProcessor, LogitsProcessorList,StoppingCriteria,StoppingCriteriaList
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask, _config_zero_init
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    _config_zero_init,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+)
 
 
 if is_torch_available():
@@ -292,13 +297,7 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (
-        (
-            SeamlessM4TForSpeechToText,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_generative_model_classes = (SeamlessM4TForSpeechToText,) if is_torch_available() else ()
 
     input_name = "input_features"
 
@@ -322,7 +321,7 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
         for model_name in SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = SeamlessM4TModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-            
+
     def _get_input_ids_and_config(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         input_ids = inputs_dict[self.input_name]
@@ -357,10 +356,12 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
         encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
             num_interleave, dim=0
         )
-        input_ids = torch.zeros(input_ids.shape[:2], dtype=torch.int64, layout=input_ids.layout, device=input_ids.device) + model._get_decoder_start_token_id()
+        input_ids = (
+            torch.zeros(input_ids.shape[:2], dtype=torch.int64, layout=input_ids.layout, device=input_ids.device)
+            + model._get_decoder_start_token_id()
+        )
         attention_mask = None
         return encoder_outputs, input_ids, attention_mask
-    
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -419,13 +420,7 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (
-        (
-            SeamlessM4TForTextToText,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_generative_model_classes = (SeamlessM4TForTextToText,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = SeamlessM4TModelTester(self, input_modality="text")
@@ -443,7 +438,7 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
         for model_name in SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = SeamlessM4TModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-            
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -482,6 +477,7 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
+
 @require_torch
 class SeamlessM4TModelIntegrationTest(unittest.TestCase):
     @slow
@@ -500,30 +496,16 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
         )
-        
+
         # sentence: "This is something to be translated in French"
         # fmt: off
-        input_text_ids = [256047, 9680, 248, 21347, 202, 280, 3292, 99278, 108, 56422, 3, 0] 
         # fmt:on
 
         # beam_size = 1
         # fmt: off
-        expected_text_output_ids = [3, 256057, 152, 248116, 354, 43688, 26759, 679, 66415, 633, 153, 224812, 248075, 3]
         # fmt: on
-        
+
         # fmt: off
-        expected_units_output_ids = [2, 10054,  5729,  7947,  1851,  5202,  9312,  3149,  8460,  9576,
-          7979,  4052,  2984,  4812,  5850,  3205,  1476,   242,  7849,  8336,
-          1605,  2984,  4812,  6176,  2390,  4044,  2820,  7527,  1667,  5723,
-          1933,  4378,  8332,  2798,  6276,  6116,  3206,  7960,  8428,   713,
-          8211,  9285,  7714,  1208,  9051,  5817,  8157,  2717,  9351,  2080,
-          3022,  8400,  5864,   845,  2337,  1172,  9342,  4056,  6268,  2149,
-          2770,   188,  9424,  7234,  2958,  5782,  2128,  5919,  6075,  5919,
-          3672,  1106,  2843,  5956,  5520,  7437,  6005,  9150,  1472,  4102,
-          7515,  3459,  7989,  3058,  7554,  5340,  4350,  1495,  9989,   620,
-          8613,  2766,  7889,  3133,  1063,  3185,  8134,  4260,  2825,  4166,
-          8057,  8791,   301,  6563,   376,  3997,  8704,  4281,  9286,  1729,
-           640,  3200,  8355,  1346,  1353,  9765,  8741,  7335,     2,     1]
         # fmt: on
-        
+
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))

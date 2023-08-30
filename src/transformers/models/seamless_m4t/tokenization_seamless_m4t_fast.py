@@ -46,6 +46,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 LARGE_SEAMLESS_M4T_LANGUAGE_CODES = ["afr","amh","arb","ary","arz","asm","azj","bel","ben","bos","bul","cat","ceb","ces","ckb","cmn","cmn_Hant","cym","dan","deu","ell","eng","est","eus","fin","fra","fuv","gaz","gle","glg","guj","heb","hin","hrv","hun","hye","ibo","ind","isl","ita","jav","jpn","kan","kat","kaz","khk","khm","kir","kor","lao","lit","lug","luo","lvs","mai","mal","mar","mkd","mlt","mni","mya","nld","nno","nob","npi","nya","ory","pan","pbt","pes","pol","por","ron","rus","sat","slk","slv","sna","snd","som","spa","srp","swe","swh","tam","tel","tgk","tgl","tha","tur","ukr","urd","uzn","vie","yor","yue","zlm","zul",]
 # fmt: on
 
+
 class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" NLLB tokenizer (backed by HuggingFace's *tokenizers* library). Based on
@@ -128,7 +129,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
     def __init__(
         self,
         vocab_file=None,
-        language_code: Optional[List]=None, # TODO: add to docstrings
+        language_code: Optional[List] = None,  # TODO: add to docstrings
         tokenizer_file=None,
         bos_token="<s>",
         eos_token="</s>",
@@ -177,9 +178,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
             )
 
         self.add_special_tokens({"additional_special_tokens": _additional_special_tokens})
-        self.lang_code_to_id = {
-            lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in language_code
-        }
+        self.lang_code_to_id = {lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in language_code}
 
         self._src_lang = src_lang if src_lang is not None else "eng"
         self.cur_lang_code = self.convert_tokens_to_ids(self._src_lang)

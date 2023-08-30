@@ -70,8 +70,8 @@ class SeamlessM4TConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-            
-            
+
+
         model_in_dim (`int`, *optional*, defaults to 80):
             The number of frequency bins in the input log-mel spectrogram.
         sampling_rate (`int`, *optional*, defaults to 16000):
@@ -142,6 +142,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         init_std=0.02,
         decoder_start_token_id=3,
         scale_embedding=True,
+        max_new_tokens=256,
         # speech_encoder
         speech_encoder_hidden_act="swish",
         speech_encoder_dropout=0.0,
@@ -165,7 +166,12 @@ class SeamlessM4TConfig(PretrainedConfig):
         conv_depthwise_kernel_size=31,
         conformer_conv_dropout=0.1,
         # t2u config
-        unit_pad_token_id=1,
+        t2u_bos_token_id=0,
+        t2u_pad_token_id=1,
+        t2u_eos_token_id=2,
+        t2u_decoder_start_token_id=2,
+        t2u_max_new_tokens=1024,
+        #t2u_unk_token_id=3,
         t2u_encoder_layers=6,  # works
         t2u_encoder_ffn_dim=8192,  # works
         t2u_encoder_attention_heads=16,  # works
@@ -178,7 +184,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         bos_token_id=2,
         eos_token_id=3,
         # unk_token_id=1, TODO
-        
         # hifi-gan vocoder config
         model_in_dim=1792,
         sampling_rate=16000,
@@ -188,7 +193,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         resblock_kernel_sizes=[3, 7, 11],
         resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
         leaky_relu_slope=0.1,
-        
         # specific to Code Hifi-Gan
         unit_hifi_gan_vocab_size = 10000,
         unit_embed_dim = 1280,
@@ -216,6 +220,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.use_cache = use_cache
         self.layerdrop = layerdrop
+        self.max_new_tokens = max_new_tokens
 
         # text|unit encoder|decoder
         self.encoder_layers = encoder_layers
@@ -255,7 +260,11 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.add_adapter = add_adapter
 
         # t2u config
-        self.unit_pad_token_id = unit_pad_token_id
+        self.t2u_bos_token_id = t2u_bos_token_id
+        self.t2u_pad_token_id = t2u_pad_token_id
+        self.t2u_eos_token_id = t2u_eos_token_id
+        self.t2u_decoder_start_token_id = t2u_decoder_start_token_id
+        self.t2u_max_new_tokens = t2u_max_new_tokens
         self.hidden_act = hidden_act
         # self.type_vocab_size = type_vocab_size
         self.t2u_encoder_layers = t2u_encoder_layers
@@ -265,6 +274,9 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.t2u_decoder_ffn_dim = t2u_decoder_ffn_dim
         self.t2u_decoder_attention_heads = t2u_decoder_attention_heads
         
+        
+        
+
         
         # hifi-gan vocoder config
         # original parameters specific to Hifi-Gan
@@ -278,7 +290,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.leaky_relu_slope = leaky_relu_slope
 
-        # TODO: add to docstrings        
+        # TODO: add to docstrings
         # specific to Code Hifi-Gan
         self.unit_hifi_gan_vocab_size = unit_hifi_gan_vocab_size
         self.unit_embed_dim = unit_embed_dim

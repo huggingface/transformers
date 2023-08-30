@@ -64,7 +64,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         padding_value=0.0,
         normalize_means=True,
         normalize_vars=True,
-        stride=2, # TODO: add to docstrings
+        stride=2,  # TODO: add to docstrings
         **kwargs,
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -87,7 +87,6 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         features = ta_kaldi.fbank(waveform, num_mel_bins=self.num_mel_bins, sample_frequency=self.sampling_rate)
         return features
 
-
     def __call__(
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
@@ -104,11 +103,14 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
-            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, `List[List[List[float]]]`): TODO: change description
-                The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays, a list of list of float values or a list of a list of list of float values. 
-                If `raw_speech` is a one-dimensional `np.ndarray` or a `List[float]`, `raw_speech` is considered a single-channel, single-sample sound.
-                In all other cases, the first dimension of `raw_speech`, whether from an `np.ndarray` or a `List[...]`, corresponds to the number of samples in the batch, and the number of channels (i.e. mono or stereo character) is derived from the other dimensions (1D -> single-channel waveform batches; 2D-> stereo-channel waveform batches).
+            raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, `List[List[List[float]]]`):
+                TODO: change description The sequence or batch of sequences to be padded. Each sequence can be a numpy
+                array, a list of float values, a list of numpy arrays, a list of list of float values or a list of a
+                list of list of float values. If `raw_speech` is a one-dimensional `np.ndarray` or a `List[float]`,
+                `raw_speech` is considered a single-channel, single-sample sound. In all other cases, the first
+                dimension of `raw_speech`, whether from an `np.ndarray` or a `List[...]`, corresponds to the number of
+                samples in the batch, and the number of channels (i.e. mono or stereo character) is derived from the
+                other dimensions (1D -> single-channel waveform batches; 2D-> stereo-channel waveform batches).
             padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
@@ -170,7 +172,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         is_batched_numpy = isinstance(raw_speech, np.ndarray) and len(raw_speech.shape) > 1
         if is_batched_numpy and len(raw_speech.shape) > 3:
             raise ValueError(f"Only mono-channel or stereo-channel audio is supported for input to {self}")
-        
+
         is_batched = is_batched_numpy or (
             isinstance(raw_speech, (list, tuple)) and (isinstance(raw_speech[0], (np.ndarray, tuple, list)))
         )
@@ -188,7 +190,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
 
         # extract fbank features
         features = [self._extract_fbank_features(waveform) for waveform in raw_speech]
-        
+
         if self.normalize_means:
             features = [feature - feature.mean(axis=0) for feature in features]
         if self.normalize_vars:
@@ -206,27 +208,25 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             return_attention_mask=return_attention_mask,
             **kwargs,
         )
-        
+
         # SeamlessM4T needs to process extracted features
         input_features = padded_inputs.get("input_features")
         attention_mask = padded_inputs.get("attention_mask")
-        
+
         batch_size, num_frames, num_channels = input_features.shape
-        
+
         remainder = num_frames % self.stride
         if remainder != 0:
             input_features = input_features[:, :num_frames, :]
             attention_mask = attention_mask[:, :num_frames]
-            
-        input_features = input_features.view(batch_size, num_frames//self.stride, num_channels*self.stride)
-        
-        
+
+        input_features = input_features.view(batch_size, num_frames // self.stride, num_channels * self.stride)
+
         indices = torch.arange(0, num_frames, device=attention_mask[0].device)
         attention_mask = attention_mask[:, indices % self.stride == 0]
-        
-        padded_inputs["input_features"] = input_features
-        padded_inputs["attention_mask"] = attention_mask   
 
+        padded_inputs["input_features"] = input_features
+        padded_inputs["attention_mask"] = attention_mask
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

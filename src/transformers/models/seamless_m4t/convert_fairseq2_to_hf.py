@@ -122,12 +122,14 @@ CACHE_DIR = os.path.join(os.getenv("XDG_CACHE_HOME", default_cache_dir), "huggin
 
 SAVE_DIR = "/home/ubuntu/weights"
 
-def _load_original_model(device, name = "seamlessM4T_medium"):
+
+def _load_original_model(device, name="seamlessM4T_medium"):
     unity_hub = Translator(name, "vocoder_36langs", device, torch.float32)
 
     return unity_hub
 
-def _load_langs(model_type = "medium"):
+
+def _load_langs(model_type="medium"):
     if model_type == "medium":
         # fmt: off
         langs = ["ace","ace_Latn","acm","acq","aeb","afr","ajp","aka","amh","apc","arb","ars","ary","arz","asm","ast","awa","ayr","azb","azj","bak","bam","ban","bel","bem","ben","bho","bjn","bjn_Latn","bod","bos","bug","bul","cat","ceb","ces","cjk","ckb","crh","cym","dan","deu","dik","dyu","dzo","ell","eng","epo","est","eus","ewe","fao","pes","fij","fin","fon","fra","fur","fuv","gla","gle","glg","grn","guj","hat","hau","heb","hin","hne","hrv","hun","hye","ibo","ilo","ind","isl","ita","jav","jpn","kab","kac","kam","kan","kas","kas_Deva","kat","knc","knc_Latn","kaz","kbp","kea","khm","kik","kin","kir","kmb","kon","kor","kmr","lao","lvs","lij","lim","lin","lit","lmo","ltg","ltz","lua","lug","luo","lus","mag","mai","mal","mar","min","mkd","plt","mlt","mni","khk","mos","mri","zsm","mya","nld","nno","nob","npi","nso","nus","nya","oci","gaz","ory","pag","pan","pap","pol","por","prs","pbt","quy","ron","run","rus","sag","san","sat","scn","shn","sin","slk","slv","smo","sna","snd","som","sot","spa","als","srd","srp","ssw","sun","swe","swh","szl","tam","tat","tel","tgk","tgl","tha","tir","taq","taq_Tfng","tpi","tsn","tso","tuk","tum","tur","twi","tzm","uig","ukr","umb","urd","uzn","vec","vie","war","wol","xho","ydd","yor","yue","cmn","cmn_Hant","zul",]
@@ -138,23 +140,23 @@ def _load_langs(model_type = "medium"):
         langs = ["afr","amh","arb","ary","arz","asm","azj","bel","ben","bos","bul","cat","ceb","ces","ckb","cmn","cmn_Hant","cym","dan","deu","ell","eng","est","eus","fin","fra","fuv","gaz","gle","glg","guj","heb","hin","hrv","hun","hye","ibo","ind","isl","ita","jav","jpn","kan","kat","kaz","khk","khm","kir","kor","lao","lit","lug","luo","lvs","mai","mal","mar","mkd","mlt","mni","mya","nld","nno","nob","npi","nya","ory","pan","pbt","pes","pol","por","ron","rus","sat","slk","slv","sna","snd","som","spa","srp","swe","swh","tam","tel","tgk","tgl","tha","tur","ukr","urd","uzn","vie","yor","yue","zlm","zul",]
         # fmt: on
         return langs
-    
-def _load_hf_config(model_type = "medium"):
+
+
+def _load_hf_config(model_type="medium"):
     if model_type == "medium":
-        
-#(model_dim=1024, w2v2_encoder_config=Wav2Vec2EncoderConfig(feature_dim=160, use_fbank=True, first_pass_dropout_p=0.0, layer_norm_features=False, feature_extractor_layer_descs=[], feature_extractor_bias=False, feature_extractor_layer_norm_convs=False, feature_grad_scale=0,pos_encoder_type='relative', pos_encoder_depth=0, pos_conv_kernel_size=0, num_pos_conv_groups=0, use_conformer=True, ffn_inner_dim=4096, dropout_p=0.0, attn_dropout_p=0.0, layer_drop_p=0.0, norm_order=<TransformerNormOrder.POST: 0>, depthwise_conv_kernel_size=31), nllb_config=NllbConfig(model_dim=1024, max_seq_len=1024,, pad_idx=0,dropout_p=0.1), t2u_config=UnitYT2UConfig(model_dim=1024, unit_max_seq_len=2048, unit_pad_idx=1, num_encoder_layers=4, num_decoder_layers=4, num_encoder_attn_heads=16, num_decoder_attn_heads=16, ffn_inner_dim=8192, dropout_p=0.1), use_text_encoder=True, use_conformer_adaptor=False, num_adaptor_layers=1, adaptor_kernel_size=8, adaptor_stride=8, adaptor_layer_norm=True, adaptor_dropout_p=0.1)
+        # (model_dim=1024, w2v2_encoder_config=Wav2Vec2EncoderConfig(feature_dim=160, use_fbank=True, first_pass_dropout_p=0.0, layer_norm_features=False, feature_extractor_layer_descs=[], feature_extractor_bias=False, feature_extractor_layer_norm_convs=False, feature_grad_scale=0,pos_encoder_type='relative', pos_encoder_depth=0, pos_conv_kernel_size=0, num_pos_conv_groups=0, use_conformer=True, ffn_inner_dim=4096, dropout_p=0.0, attn_dropout_p=0.0, layer_drop_p=0.0, norm_order=<TransformerNormOrder.POST: 0>, depthwise_conv_kernel_size=31), nllb_config=NllbConfig(model_dim=1024, max_seq_len=1024,, pad_idx=0,dropout_p=0.1), t2u_config=UnitYT2UConfig(model_dim=1024, unit_max_seq_len=2048, unit_pad_idx=1, num_encoder_layers=4, num_decoder_layers=4, num_encoder_attn_heads=16, num_decoder_attn_heads=16, ffn_inner_dim=8192, dropout_p=0.1), use_text_encoder=True, use_conformer_adaptor=False, num_adaptor_layers=1, adaptor_kernel_size=8, adaptor_stride=8, adaptor_layer_norm=True, adaptor_dropout_p=0.1)
         kwargs = {
             "vocab_size": 256206,
             "unit_vocab_size": 10082,
             "hidden_size": 1024,
-            "max_position_embeddings":4096,
+            "max_position_embeddings": 4096,
             "encoder_layers": 12,
             "decoder_layers": 12,
             "encoder_ffn_dim": 4096,
             "decoder_ffn_dim": 4096,
             "t2u_encoder_layers": 4,
             "t2u_decoder_layers": 4,
-            "num_hidden_layers":12,
+            "num_hidden_layers": 12,
         }
         return SeamlessM4TConfig(**kwargs)
     else:
@@ -238,24 +240,21 @@ def load_model(pytorch_dump_folder_path, model_type):
         name = "seamlessM4T_medium"
     else:
         name = "seamlessM4T_large"
-        
+
     original_model = _load_original_model(device, name)
-        
-        
+
     ######### TOKENIZER
-    
+
     langs = _load_langs(model_type)
     vocab_file = os.path.join(os.path.expanduser("~"), "tokenizer", model_type, "tokenizer.model")
-    
-    
-    save_dir = os.path.join(SAVE_DIR, name)
-    
 
-    tokenizer = SeamlessM4TTokenizer(vocab_file, language_code = langs)
-    
+    save_dir = os.path.join(SAVE_DIR, name)
+
+    tokenizer = SeamlessM4TTokenizer(vocab_file, language_code=langs)
+
     tokenizer.save_pretrained(save_dir)
     tokenizer = SeamlessM4TTokenizer.from_pretrained(save_dir)
-    
+
     # TODO : convert config
 
     # init model
@@ -361,40 +360,39 @@ def load_model(pytorch_dump_folder_path, model_type):
 
     del original_model
 
-    
-
-    hf_model.save_pretrained(
-        save_dir
-    )  # , push_to_hub=True, repo_id="ylacombe/test_seamlessM4T")
+    hf_model.save_pretrained(save_dir)  # , push_to_hub=True, repo_id="ylacombe/test_seamlessM4T")
     hf_model = SeamlessM4TModel.from_pretrained(save_dir)
 
     input_test_text = "This is something to be translated in French"
-    #dummy_speech_encoder_inputs = torch.load("/home/ubuntu/input_speech_encoder.pt")
+    # dummy_speech_encoder_inputs = torch.load("/home/ubuntu/input_speech_encoder.pt")
     # attention_mask = torch.ones(input_test_text.shape[:2]).bool()
     # attention_mask[:, -1] = False
     # del attention_mask
 
-    inputs = tokenizer([input_test_text],return_tensors="pt")
-    
-    #inputs["attention_mask"][:, -1] = 0
+    inputs = tokenizer([input_test_text], return_tensors="pt")
+
+    # inputs["attention_mask"][:, -1] = 0
     set_seed(10)
 
     with torch.inference_mode():
         output_new_model = hf_model.generate(**inputs)
 
     output_text_new_model = tokenizer.decode(output_new_model[0])
-    
+
     del hf_model
 
     original_model = _load_original_model(device)
-    
 
-    output_text_original_model, output_waveform_original_model, sr = original_model.predict(input_test_text, "T2ST",  src_lang="eng", tgt_lang="fra")
+    output_text_original_model, output_waveform_original_model, sr = original_model.predict(
+        input_test_text, "T2ST", src_lang="eng", tgt_lang="fra"
+    )
 
     output_old_model = output_waveform_original_model
-    
+
     if output_text_original_model.__str__() != output_text_new_model:
-        raise ValueError(f"Not the same text output: {output_text_original_model.__str__()} VS {output_text_new_model}")
+        raise ValueError(
+            f"Not the same text output: {output_text_original_model.__str__()} VS {output_text_new_model}"
+        )
 
     torch.testing.assert_close(output_new_model, output_old_model)
 
@@ -418,14 +416,13 @@ if __name__ == "__main__":
         type=str,
         help="Path to the output PyTorch model.",
     )
-        
+
     parser.add_argument(
         "--model_type",
         default="medium",
         type=str,
         help="Path to the output PyTorch model.",
     )
-    
 
     args = parser.parse_args()
 
