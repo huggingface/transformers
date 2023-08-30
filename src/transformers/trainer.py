@@ -1165,7 +1165,7 @@ class Trainer:
         """
         train_tokes = 0
         for step, batch in enumerate(train_dl):
-            tks = batch['input_ids'].size(0) * batch['input_ids'].size(1)
+            tks = batch["input_ids"].size(0) * batch["input_ids"].size(1)
             if max_steps:
                 return tks
             train_tokes += tks
@@ -1601,12 +1601,17 @@ class Trainer:
                 # May be slightly incorrect if the last batch in the training dataloader has a smaller size but it's
                 # the best we can do.
                 num_train_samples = args.max_steps * total_train_batch_size
-                num_train_tokens = args.max_steps * self.num_tokens(train_dataloader, True) * args.gradient_accumulation_steps * args.world_size
+                num_train_tokens = (
+                    args.max_steps
+                    * self.num_tokens(train_dataloader, True)
+                    * args.gradient_accumulation_steps
+                    * args.world_size
+                )
             else:
                 max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
                 num_train_epochs = math.ceil(args.num_train_epochs)
                 num_train_samples = self.num_examples(train_dataloader) * args.num_train_epochs
-                num_train_tokens = self.num_tokens(train_dataloader)
+                num_train_tokens = self.num_tokens(train_dataloader) * args.world_size
         elif args.max_steps > 0:  # Rely on max_steps when dataloader does not have a working size
             max_steps = args.max_steps
             # Setting a very large number of epochs so we go as many times as necessary over the iterator.
@@ -1614,7 +1619,12 @@ class Trainer:
             num_update_steps_per_epoch = max_steps
             num_examples = total_train_batch_size * args.max_steps
             num_train_samples = args.max_steps * total_train_batch_size
-            num_train_tokens = args.max_steps * self.num_tokens(train_dataloader, True) * args.gradient_accumulation_steps * args.world_size
+            num_train_tokens = (
+                args.max_steps
+                * self.num_tokens(train_dataloader, True)
+                * args.gradient_accumulation_steps
+                * args.world_size
+            )
         else:
             raise ValueError(
                 "args.max_steps must be set to a positive value if dataloader does not have a length, was"
@@ -1991,7 +2001,13 @@ class Trainer:
         self._total_loss_scalar += tr_loss.item()
         train_loss = self._total_loss_scalar / self.state.global_step
 
-        metrics = speed_metrics("train", start_time, num_samples=num_train_samples, num_steps=self.state.max_steps, num_tokens= num_train_tokens / args.world_size)
+        metrics = speed_metrics(
+            "train",
+            start_time,
+            num_samples=num_train_samples,
+            num_steps=self.state.max_steps,
+            num_tokens=num_train_tokens / args.world_size,
+        )
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos
         metrics["train_loss"] = train_loss
