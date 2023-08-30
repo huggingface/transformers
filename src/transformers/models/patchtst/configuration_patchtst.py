@@ -150,7 +150,8 @@ class PatchTSTConfig(PretrainedConfig):
         use_cls_token: bool = False,
         init_std: float = 0.02,
         individual: bool = False,
-        seed_number= None,
+        seed_number: int = None,
+        revin: Optional[bool] = True,
         mask_input: Optional[bool] = None,
         mask_type: str = "random",
         mask_ratio=0.5,
@@ -213,6 +214,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.use_cls_token = use_cls_token
         self.init_std = init_std
         self.qkv_bias = qkv_bias
+        self.revin = revin
 
         # PatchTST
         self.patch_length = patch_length

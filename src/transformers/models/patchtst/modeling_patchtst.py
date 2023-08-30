@@ -826,14 +826,75 @@ class PatchTSTModelOutputWithNoAttention(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     patched_input: torch.FloatTensor = None
     mask: torch.FloatTensor = None
+    revin_mean: torch.FloatTensor = None
+    revin_std: torch.FloatTensor = None
+
+
+class RevIN(nn.Module):
+    def __init__(self, start_dim=1, eps=1e-5, denorm_channels: list = None):
+        """
+        :param start_dim: it is 1 if [bs x seq_len x nvars], it is 3 is [bs x tsg1 x tsg2 x seq_len x n_vars]
+        :denorm_channels if the denorm input shape has less number of channels, mention the channels in the denorm input here.
+        """
+        super(RevIN, self).__init__()
+        self.stdev = None
+        self.mean = None
+        self.start_dim = start_dim
+        self.denorm_channels = denorm_channels
+        self.eps = eps
+
+    def set_statistics(self, mean, stdev):
+        self.mean = mean
+        self.stdev = stdev
+
+    def forward(self, x, mode: str):
+        if mode == 'norm':
+            self._get_statistics(x)
+            x = self._normalize(x)
+        elif mode == 'denorm':
+            x = self._denormalize(x)
+        elif mode == "transform":
+            x = self._normalize(x)
+
+        else:
+            raise NotImplementedError
+        return x
+
+    def _get_statistics(self, x):
+        dim2reduce = tuple(range(self.start_dim, x.ndim - 1))
+        self.mean = torch.mean(x, dim=dim2reduce, keepdim=True).detach()
+        self.stdev = torch.sqrt(torch.var(x, dim=dim2reduce, keepdim=True, unbiased=False) + self.eps).detach()
+
+    def _normalize(self, x):
+        x = x - self.mean
+        x = x / self.stdev
+        return x
+
+    def _denormalize(self, x):
+
+        if self.denorm_channels is None:
+            x = x * self.stdev
+            x = x + self.mean
+        else:
+            x = x * self.stdev[..., self.denorm_channels]
+            x = x + self.mean[..., self.denorm_channels]
+
+        return x
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerModel with TimeSeriesTransformer->PatchTST,TIME_SERIES_TRANSFORMER->PATCHTST,time-series-transformer->patchtst,TimeSeries->PatchTST
 class PatchTSTModel(PatchTSTPreTrainedModel):
-    def __init__(self, config: PatchTSTConfig, mask_input: bool = False):
+    def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
+        self.use_revin = config.revin
+
+        if self.use_revin:
+            self.revin = RevIN()
+        else:
+            self.revin = nn.Identity()
+
         self.patching = Patchify(config.context_length, patch_length=config.patch_length, stride=config.stride)
-        self.mask_input = mask_input  # config.mask_input
+        self.mask_input = config.mask_input
 
         if self.mask_input:
             self.masking = PatchMasking(
@@ -860,6 +921,9 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+
+        past_values = self.revin(past_values, mode="norm")  # x: tensor [bs x seq_len x in_channels]
+
         patched_values = self.patching(
             past_values)  # patched_values: [bs x n_vars x num_patches x patch_length] for pretrain
         if self.mask_input:
@@ -870,7 +934,9 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         return PatchTSTModelOutputWithNoAttention(last_hidden_state=encoder_output.last_hidden_state,
                                                   hidden_states=encoder_output.hidden_states,
                                                   patched_input=patched_values,
-                                                  mask=mask
+                                                  mask=mask,
+                                                  revin_mean=self.revin.mean,
+                                                  revin_stdev=self.revin.stdev
                                                   )
 
 
@@ -926,8 +992,8 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
-        # config.mask_input = True
-        self.model = PatchTSTModel(config=config, mask_input=True)
+        config.mask_input = True
+        self.model = PatchTSTModel(config=config)
         self.head = PretrainHead(config)
         self.loss = torch.nn.MSELoss(reduction='none')
 
@@ -946,10 +1012,14 @@ class PatchTSTForPretraining(PatchTSTPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        model_output = self.model(
-            past_values, output_hidden_states=output_hidden_states)  # x: [bs x nvars x num_patches x d_model] or [bs x nvars x (num_patches+1) x d_model] if use cls_token
-        x_hat = self.head(model_output[
-                              0])  # tensor [bs x nvars x num_patches x patch_length] or [bs x nvars x (num_patches+1) x patch_length] if use cls_token
+
+        # past_values: [bs x nvars x num_patches x d_model] or
+        # [bs x nvars x (num_patches+1) x d_model] if use cls_token
+        model_output = self.model(past_values, output_hidden_states=output_hidden_states)
+
+        # model_output[0]: [bs x nvars x num_patches x patch_length] or
+        # [bs x nvars x (num_patches+1) x patch_length] if use cls_token
+        x_hat = self.head(model_output[0])
 
         # calculate masked_loss
         loss_val = self.loss(x_hat, model_output.patched_input)
@@ -1097,6 +1167,11 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         self.model = PatchTSTModel(config)
         self.head = PredictionHead(config)
         self.loss = nn.MSELoss(reduction='mean')
+        self.use_revin = config.revin
+        if self.use_revin:
+            self.revin = RevIN()
+        else:
+            self.revin = nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1111,6 +1186,10 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         )
         model_output = self.model(past_values, output_hidden_states=output_hidden_states)
         y_hat = self.head(model_output.last_hidden_state)
+
+        if self.use_revin:
+            self.revin.set_statistics(mean=model_output.revin_mean, stdev=model_output.revin_stdev)
+            y_hat = self.revin(y_hat, mode="denorm")
 
         loss_val = None
         if future_values is not None:
@@ -1218,6 +1297,11 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
         self.model = PatchTSTModel(config)
         self.head = ForecastHead(config)
         self.loss = nn.MSELoss(reduction='mean')
+        self.use_revin = config.revin
+        if self.use_revin:
+            self.revin = RevIN()
+        else:
+            self.revin = nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1230,7 +1314,12 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         model_output = self.model(past_values, output_hidden_states=output_hidden_states)
-        y_hat = self.head(model_output[0])
+
+        y_hat = self.head(model_output.last_hidden_state)
+
+        if self.use_revin:
+            self.revin.set_statistics(mean=model_output.revin_mean, stdev=model_output.revin_stdev)
+            y_hat = self.revin(y_hat, mode="denorm")
 
         loss_val = None
         if future_values is not None:
@@ -1288,6 +1377,11 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         self.model = PatchTSTModel(config)
         self.head = RegressionHead(config)
         self.loss = nn.MSELoss(reduction='mean')
+        self.use_revin = config.revin
+        if self.use_revin:
+            self.revin = RevIN()
+        else:
+            self.revin = nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1300,7 +1394,12 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         model_output = self.model(past_values, output_hidden_states=output_hidden_states)
-        y_hat = self.head(model_output[0])
+        y_hat = self.head(model_output.last_hidden_state)
+
+        if self.use_revin:
+            self.revin.set_statistics(mean=model_output.revin_mean, stdev=model_output.revin_stdev)
+            y_hat = self.revin(y_hat, mode="denorm")
+
         loss_val = None
         if labels is not None:
             loss_val = self.loss(y_hat, labels)
