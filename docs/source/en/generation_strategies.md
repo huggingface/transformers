@@ -332,7 +332,8 @@ The diversily penalty ensures the outputs are distinct across groups, and beam s
 
 >>> outputs = model.generate(**inputs, num_beams=5, num_beam_groups=5, max_new_tokens=30, diversity_penalty=1.0)
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
-'The aim of this project is to create a new type of living system, one that is more sustainable and efficient than the current one.'
+'The Design Principles are a set of universal design principles that can be applied to any location, climate and
+culture, and they allow us to design the'
 ```
 
 This guide illustrates the main parameters that enable various decoding strategies. More advanced parameters exist for the
