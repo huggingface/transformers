@@ -32,8 +32,21 @@ class CheckDostringsTested(unittest.TestCase):
         desc_with_default = "`float`, *optional*, defaults to 2.0"
         self.assertEqual(replace_default_in_arg_description(desc_with_default, 2.0), "`float`, *optional*, defaults to 2.0")
         self.assertEqual(replace_default_in_arg_description(desc_with_default, 1.0), "`float`, *optional*, defaults to 1.0")
-        self.assertEqual(replace_default_in_arg_description(desc_with_default, None), "`float`, *optional*")
+        # If the default is None we do not erase the value in the docstring.
+        self.assertEqual(replace_default_in_arg_description(desc_with_default, None), "`float`, *optional*, defaults to 2.0")
         self.assertEqual(replace_default_in_arg_description(desc_with_default, inspect._empty), "`float`")
+
+        # If the default is None (and set as such in the docstring), we do not include it.
+        desc_with_default = "`float`, *optional*, defaults to None"
+        self.assertEqual(replace_default_in_arg_description(desc_with_default, None), "`float`, *optional*")
+        desc_with_default = "`float`, *optional*, defaults to `None`"
+        self.assertEqual(replace_default_in_arg_description(desc_with_default, None), "`float`, *optional*")
+
+        # Operations are not replaced, but put in backtiks.
+        desc_with_default = "`float`, *optional*, defaults to 1/255"
+        self.assertEqual(replace_default_in_arg_description(desc_with_default, 1/255), "`float`, *optional*, defaults to `1/255`")
+        desc_with_default = "`float`, *optional*, defaults to `1/255`"
+        self.assertEqual(replace_default_in_arg_description(desc_with_default, 1/255), "`float`, *optional*, defaults to `1/255`")
 
         desc_with_optional = "`float`, *optional*"
         self.assertEqual(replace_default_in_arg_description(desc_with_optional, 2.0), "`float`, *optional*, defaults to 2.0")

@@ -33,10 +33,12 @@ which is used by `make fix-copies` (note that this fills what it cans, you might
 like argument descriptions).
 """
 import argparse
+import ast
 import inspect
+import operator as op
 import re
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, Union
 
 from transformers.utils import direct_transformers_import
 from check_repo import ignore_undocumented
@@ -57,9 +59,20 @@ _re_parse_description = re.compile(r"\*optional\*, defaults to (.*)$")
 
 
 OBJECTS_TO_IGNORE = [
+    "GenerationConfig",
     "PretrainedConfig",
 ]
 
+# Supported math operations when interpreting the value of defaults.
+MATH_OPERATORS = {
+    ast.Add: op.add,
+    ast.Sub: op.sub,
+    ast.Mult: op.mul,
+    ast.Div: op.truediv,
+    ast.Pow: op.pow,
+    ast.BitXor: op.xor,
+    ast.USub: op.neg
+}
 
 def find_indent(line: str) -> int:
     """
@@ -95,6 +108,46 @@ def stringify_default(default: Any) -> str:
         return f"`{default}`"
 
 
+def eval_math_expression(expression: str) -> Optional[Union[float, int]]:
+    # Mainly taken from the excellent https://stackoverflow.com/a/9558001
+    """
+    Evaluate (safely) a mathematial expression and returns its value.
+
+    Args:
+        expression (`str`): The expression to evaluate.
+    
+    Returns:
+        `Optional[Union[float, int]]`: Returns `None` if the evaluation fails in any way and the value computed
+        otherwise.
+    
+    Example:
+
+    ```py
+    >>> eval_expr('2^6')
+    4
+    >>> eval_expr('2**6')
+    64
+    >>> eval_expr('1 + 2*3**(4^5) / (6 + -7)')
+    -5.0
+    ```
+    """
+    try:
+        return eval_node(ast.parse(expression, mode="eval").body)
+    except TypeError:
+        return
+
+
+def eval_node(node):
+    if isinstance(node, ast.Num): # <number>
+        return node.n
+    elif isinstance(node, ast.BinOp): # <left> <operator> <right>
+        return MATH_OPERATORS[type(node.op)](eval_node(node.left), eval_node(node.right))
+    elif isinstance(node, ast.UnaryOp): # <operator> <operand> e.g., -1
+        return MATH_OPERATORS[type(node.op)](eval_node(node.operand))
+    else:
+        raise TypeError(node)
+
+
 def replace_default_in_arg_description(description: str, default: Any) -> str:
     """
     Catches the default value in the description of an argument inside a docstring and replaces it by the value passed.
@@ -114,15 +167,32 @@ def replace_default_in_arg_description(description: str, default: Any) -> str:
             if description.endswith(","):
                 description = description[:-1].rstrip()
     elif default is None:
-        # Default None are not written, we just set `*optional*`
+        # Default None are not written, we just set `*optional*`. If there is default that is not None specified in the
+        # description, we do not erase it (as sometimes we set the default to `None` because the default is a mutable
+        # object).
         idx = description.find(OPTIONAL_KEYWORD)
         if idx == -1:
             description = f"{description}, {OPTIONAL_KEYWORD}"
-        else:
+        elif re.search(r"defaults to `?None`?", description) is not None:
             len_optional = len(OPTIONAL_KEYWORD)
             description = description[:idx + len_optional]
     else:
-        str_default = stringify_default(default)
+        str_default = None
+        # For numbers we may have a default that is given by a math operation (1/255 is really popular). We don't
+        # want to replace those by their actual values.
+        if isinstance(default, (int, float)) and re.search("defaults to `?(.*?)(?:`|$)", description) is not None:
+            # Grab the default and evaluate it.
+            current_default = re.search("defaults to `?(.*?)(?:`|$)", description).groups()[0]
+            if default == eval_math_expression(current_default):
+                try:
+                    # If it can be directly converted to the type of the default, it's a simple value
+                    str_default = str(type(default)(current_default))
+                except Exception:
+                    # Otherwise there is a math operator so we add a code block.
+                    str_default = f"`{current_default}`"
+
+        if str_default is None:
+            str_default = stringify_default(default)
         # Make sure default match
         if OPTIONAL_KEYWORD not in description:
             description = f"{description}, {OPTIONAL_KEYWORD}, defaults to {str_default}"
