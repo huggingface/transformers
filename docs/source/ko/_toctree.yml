@@ -205,7 +205,7 @@
       title: (번역중) Optimization
     - local: in_translation
       title: (번역중) Model outputs
-    - local: pipelines
+    - local: main_classes/pipelines
       title: 파이프라인
     - local: in_translation
       title: (번역중) Processors
