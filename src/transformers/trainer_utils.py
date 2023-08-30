@@ -531,21 +531,18 @@ class TrainerMemoryTracker:
             if torch.cuda.is_available():
                 self.gpu_mem_used_now = self.torch.cuda.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.cuda.max_memory_allocated()
-                self.gpu[self.cur_stage] = {
-                    "begin": self.gpu_mem_used_at_start,
-                    "end": self.gpu_mem_used_now,
-                    "alloc": (self.gpu_mem_used_now - self.gpu_mem_used_at_start),
-                    "peaked": max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now),
-                }
             elif is_torch_xpu_available():
                 self.gpu_mem_used_now = self.torch.xpu.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.xpu.max_memory_allocated()
-                self.gpu[self.cur_stage] = {
-                    "begin": self.gpu_mem_used_at_start,
-                    "end": self.gpu_mem_used_now,
-                    "alloc": (self.gpu_mem_used_now - self.gpu_mem_used_at_start),
-                    "peaked": max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now),
-                }
+            else:
+                raise ValueError("No available GPU device found!")
+
+        self.gpu[self.cur_stage] = {
+            "begin": self.gpu_mem_used_at_start,
+            "end": self.gpu_mem_used_now,
+            "alloc": (self.gpu_mem_used_now - self.gpu_mem_used_at_start),
+            "peaked": max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now),
+        }
 
         # cpu
         self.cpu_mem_used_now = self.cpu_mem_used()
