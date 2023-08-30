@@ -812,14 +812,20 @@ class PatchTSTModelOutputWithNoAttention(ModelOutput):
     Base class for model's outputs, with potential hidden states.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
             Sequence of hidden-states at the output of the last layer of the model.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, num_channels, height, width)`.
-
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        patched_input
+        patched_input (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, patch_length)`):
+            patched input to the Transformer
+        mask: (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches)`,*optional*)
+            Bool masked tensor indicating which patches are masked
+        revin_mean: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`,*optional*)
+            mean of the input data (batch_size, sequence_length, num_channels) over the sequence_length
+        revin_std: (`torch.FloatTensor` of shape `(batch_size, 1, num_channels)`,*optional*)
+            std of the input data (batch_size, sequence_length, num_channels) over the sequence_length
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -935,10 +941,9 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
                                                   hidden_states=encoder_output.hidden_states,
                                                   patched_input=patched_values,
                                                   mask=mask,
-                                                  revin_mean=self.revin.mean,
-                                                  revin_stdev=self.revin.stdev
+                                                  revin_mean=self.revin.mean if self.use_revin else None,
+                                                  revin_stdev=self.revin.stdev if self.use_revin else None
                                                   )
-
 
 class PretrainHead(nn.Module):
     def __init__(self, config):
