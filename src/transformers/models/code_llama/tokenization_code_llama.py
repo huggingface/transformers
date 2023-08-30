@@ -307,10 +307,10 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         token = self.sp_model.IdToPiece(index)
         return token
 
-    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         # since we manually add the prefix space, we have to remove it when decoding
+        # unless we were doing infilling!
         if tokens[0].startswith(SPIECE_UNDERLINE):
             tokens[0] = tokens[0][1:]
 
