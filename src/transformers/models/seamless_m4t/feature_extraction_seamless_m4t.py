@@ -72,7 +72,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         language_code: Optional[List] = None,
         **kwargs,
     ):
-        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+        
         self.num_mel_bins = num_mel_bins
         self.normalize_means = normalize_means
         self.normalize_vars = normalize_vars
@@ -99,6 +99,9 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         
         self._src_lang = f"__{src_lang}__"
         self._tgt_lang = f"__{tgt_lang}__"
+        
+        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+
         
         
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang

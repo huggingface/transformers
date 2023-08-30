@@ -27,6 +27,8 @@ from seamless_communication.models.inference.translator import Translator
 from transformers.models.seamless_m4t.configuration_seamless_m4t import SeamlessM4TConfig
 from transformers.models.seamless_m4t.modeling_seamless_m4t import SeamlessM4TModel
 from transformers.models.seamless_m4t.tokenization_seamless_m4t import SeamlessM4TTokenizer
+from transformers.models.seamless_m4t.feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
+
 from transformers.trainer_utils import set_seed
 from transformers.utils import logging
 
@@ -55,6 +57,12 @@ def _grab_best_device(use_gpu=True):
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
+vocoder_convert_list = [
+    ("ups", "upsampler"),
+    ("lang","lang_embeds_layer"),
+    ("spkr","spkr_embeds_layer"),
+    ("dict.","unit_embeds_layer."),
+]
 
 # order is important
 wav2vec_convert_list = [
@@ -249,17 +257,47 @@ def load_model(pytorch_dump_folder_path, model_type):
     vocab_file = os.path.join(os.path.expanduser("~"), "tokenizer", model_type, "tokenizer.model")
 
     save_dir = os.path.join(SAVE_DIR, name)
+    Path(save_dir).mkdir(exist_ok=True)
 
     tokenizer = SeamlessM4TTokenizer(vocab_file, language_code=langs)
+    
+    sanity_check_lang_id = tokenizer.lang_code_to_id["__fra__"]
 
     tokenizer.save_pretrained(save_dir)
     tokenizer = SeamlessM4TTokenizer.from_pretrained(save_dir)
+    
+    if sanity_check_lang_id != tokenizer.lang_code_to_id["__fra__"]:
+        raise ValueError(f"Error in tokenizer saving/loading - __fra__ lang id is not coherent: {sanity_check_lang_id} vs {tokenizer.lang_code_to_id['__fra__']}")
+    
+    ######### FE
+    
+    fe = SeamlessM4TFeatureExtractor(language_code=langs)
+    sanity_check_lang_id_fe = fe.lang_code_to_id["__fra__"]
+    
+    if sanity_check_lang_id != sanity_check_lang_id_fe:
+        raise ValueError(f"Not coherent lang id accross FE and tokenizer: {sanity_check_lang_id} vs {sanity_check_lang_id_fe}")
+    
+    fe.save_pretrained(save_dir)
+    fe = SeamlessM4TFeatureExtractor.from_pretrained(save_dir)
+    
+    if sanity_check_lang_id_fe != fe.lang_code_to_id["__fra__"]:
+        raise ValueError(f"Error in FE saving/loading - __fra__ lang id is not coherent: {sanity_check_lang_id_fe} vs {fe.lang_code_to_id['__fra__']}")
+    
 
-    # TODO : convert config
+    
+    ######## Model
 
     # init model
     hf_config = _load_hf_config(model_type)
     hf_model = SeamlessM4TModel(hf_config)
+    
+    # -1. take care of vocoder
+    # similarly to speech T5 must apply and remove weight norm
+    hf_model.vocoder.apply_weight_norm()
+    hf_model.vocoder = _convert_model(
+        original_model, hf_model.vocoder, vocoder_convert_list, device, unwanted_prefix="vocoder.code_generator.", filter_state_dict="vocoder"
+    )
+    hf_model.vocoder.remove_weight_norm()
 
     # 1. take care of speech encoder
     wav2vec = hf_model.speech_encoder
@@ -353,7 +391,7 @@ def load_model(pytorch_dump_folder_path, model_type):
     new_model = hf_model
 
     count_1 = param_count(hf_model)
-    count_2 = param_count(original_model.model)
+    count_2 = param_count(original_model)
 
     print(f"HF MODEL:{count_1}, ORIGINAL_MODEL: {count_2}, diff:{count_1 - count_2}")
     print(f"HF MODEL excluding embeddings:{hf_model.num_parameters(exclude_embeddings=True)}")
@@ -402,8 +440,8 @@ def load_model(pytorch_dump_folder_path, model_type):
     if (output_new_model - output_old_model).abs().max().item() > 1e-3:
         raise ValueError("initial and new outputs are not equal")
 
-    Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-    new_model.save_pretrained(pytorch_dump_folder_path)
+    #Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+    #new_model.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":

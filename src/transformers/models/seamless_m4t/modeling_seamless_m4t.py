@@ -2435,7 +2435,7 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
 )
 class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
     # base_model_prefix = ""
-    _keys_to_ignore_on_load_missing = ["final_logits_bias", "speech_encoder", "t2_model"]
+    _keys_to_ignore_on_load_missing = ["final_logits_bias", "speech_encoder", "t2_model", "vocoder"]
     main_input_name = "input_ids"
 
     _tied_weights_keys = [
@@ -2641,7 +2641,7 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
     SEAMLESS_M4T_START_DOCSTRING,
 )
 class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["final_logits_bias", "text_decoder", "t2_model"]
+    _keys_to_ignore_on_load_missing = ["final_logits_bias", "text_decoder", "t2_model", "vocoder"]
     main_input_name = "input_features"
 
     _tied_weights_keys = [
@@ -3716,7 +3716,7 @@ class SeamlessM4THifiGan(PreTrainedModel):
     config_class = SeamlessM4TConfig
     main_input_name = "input_embeds"
 
-    # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan.__init__ with SpeechT5->SeamlessM4TCode
+    # Almost the same as SpeechT5HifiGan.__init__ with SpeechT5->SeamlessM4TCode
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__(config)
         self.num_kernels = len(config.resblock_kernel_sizes)
@@ -3749,8 +3749,6 @@ class SeamlessM4THifiGan(PreTrainedModel):
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
 
-        self.register_buffer("mean", torch.zeros(config.model_in_dim))
-        self.register_buffer("scale", torch.ones(config.model_in_dim))
 
     # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan._init_weights
     def _init_weights(self, module):
