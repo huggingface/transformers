@@ -65,6 +65,11 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.save_pretrained(self.tmpdirname)
 
+    def test_no_infilling_init(self):
+        tokenizer = CodeLlamaTokenizer(SAMPLE_VOCAB, prefix_token = None,keep_accents=True)
+        with self.assertRaises(ValueError):
+            tokenizer.tokenize("This is <FILL_ME> prefix")
+
     def test_full_tokenizer(self):
         tokenizer = CodeLlamaTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
