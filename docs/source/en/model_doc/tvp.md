@@ -115,10 +115,13 @@ def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps
 
 
 file = hf_hub_download(repo_id="Intel/tvp_demo", filename="3MSZA.mp4", repo_type="dataset")
+
+model = AutoModel.from_pretrained("Intel/tvp-base")
+
 decoder_kwargs = dict(
     container=av.open(file, metadata_errors="ignore"),
     sampling_rate=1,
-    num_frames=48,
+    num_frames=model.config.num_frm,
     clip_idx=0,
     num_clips=1,
     target_fps=3,
@@ -130,7 +133,7 @@ processor = AutoProcessor.from_pretrained("Intel/tvp-base")
 data = processor(
     text=["person turn a light on."], videos=list(raw_sampled_frms.numpy()), return_tensors="pt", max_text_length=100
 )
-model = AutoModel.from_pretrained("Intel/tvp-base")
+
 output = model(**data)
 
 print(output)
