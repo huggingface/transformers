@@ -2132,8 +2132,8 @@ def _device_agnostic_dispatch(device, dispatch_table, *args, **kwargs):
     return fn(*args, **kwargs)
 
 
-# TODO: insert new entries in dicts from environment variable spec
-
+# Mappings from device names to callable functions to support device agnostic
+# testing.
 ACCELERATOR_MANUAL_SEED = {"cuda": torch.cuda.manual_seed, "default": torch.manual_seed}
 ACCELERATOR_EMPTY_CACHE = {"cuda": torch.cuda.empty_cache, "cpu": None}
 ACCELERATOR_DEVICE_COUNT = {"cuda": torch.cuda.device_count, "cpu": lambda: 0}
@@ -2151,6 +2151,8 @@ def accelerator_device_count(device):
     return _device_agnostic_dispatch(device, ACCELERATOR_DEVICE_COUNT)
 
 
+# If `TRANSFORMERS_TEST_DEVICE_SPEC` is enabled we need to import extra entries
+# into device to function mappings.
 if "TRANSFORMERS_TEST_DEVICE_SPEC" in os.environ:
     device_spec_path = os.environ["TRANSFORMERS_TEST_DEVICE_SPEC"]
     if not Path(device_spec_path).is_file():
@@ -2158,6 +2160,8 @@ if "TRANSFORMERS_TEST_DEVICE_SPEC" in os.environ:
             f"Specified path to device spec file is not a file or not found. Received '{device_spec_path}"
         )
 
+    # Try to strip extension for later import – also verifies we are importing a
+    # python file.
     try:
         import_name = device_spec_path[: device_spec_path.index(".py")]
     except ValueError as e:
@@ -2165,6 +2169,7 @@ if "TRANSFORMERS_TEST_DEVICE_SPEC" in os.environ:
 
     device_spec_module = importlib.import_module(import_name)
 
+    # Imported file must contain `DEVICE_NAME`. If it doesn't, terminate early.
     try:
         device_name = device_spec_module.DEVICE_NAME
     except AttributeError as e:
@@ -2172,14 +2177,17 @@ if "TRANSFORMERS_TEST_DEVICE_SPEC" in os.environ:
 
     def update_mapping_from_spec(device_fn_dict: Dict[str, Callable], attribute_name: str):
         try:
+            # Try to import the function directly
             spec_fn = getattr(device_spec_module, attribute_name)
             device_fn_dict[device_name] = spec_fn
         except AttributeError as e:
+            # If the function doesn't exist, and there is no default, throw an error
             if "default" not in device_fn_dict:
                 raise AttributeError(
                     f"`{attribute_name}` not found in '{device_spec_path}' and no default fallback function found."
                 ) from e
 
+    # Add one entry here for each `ACCELERATOR_*` dictionary.
     update_mapping_from_spec(ACCELERATOR_MANUAL_SEED, "MANUAL_SEED_FN")
     update_mapping_from_spec(ACCELERATOR_EMPTY_CACHE, "EMPTY_CACHE_FN")
     update_mapping_from_spec(ACCELERATOR_DEVICE_COUNT, "DEVICE_COUNT_FN")
