@@ -30,7 +30,6 @@ if is_pretty_midi_available():
 
 logger = logging.get_logger(__name__)
 
-## TODO : changing checkpoints from `susnato/pop2piano_dev` to `sweetcocoa/pop2piano` after the PR is approved
 
 VOCAB_FILES_NAMES = {
     "vocab": "vocab.json",
@@ -38,7 +37,7 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab": {
-        "susnato/pop2piano_dev": "https://huggingface.co/susnato/pop2piano_dev/blob/main/vocab.json",
+        "sweetcocoa/pop2piano": "https://huggingface.co/sweetcocoa/pop2piano/blob/main/vocab.json",
     },
 }
 
