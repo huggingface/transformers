@@ -19,9 +19,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
-from ...tokenization_utils import AddedToken, BatchEncoding, PreTrainedTokenizer
-from ...utils import logging
-
+from ...tokenization_utils import AddedToken, BatchEncoding, PreTrainedTokenizer, TextInput,PreTokenizedInput,EncodedInput,TextInputPair,PreTokenizedInputPair,EncodedInputPair
+from ...utils import logging, PaddingStrategy
+from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 
 
@@ -50,7 +50,6 @@ LARGE_SEAMLESS_M4T_LANGUAGE_CODES = ["afr","amh","arb","ary","arz","asm","azj","
 # fmt: on
 
 # TODO: change repo/id -> repo id
-# TODO: resolve legacy behavior
 # TODO: add language code to docstrings
 
 class SeamlessM4TTokenizer(PreTrainedTokenizer):
@@ -142,20 +141,15 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         cls_token="<s>",
         unk_token="<unk>",
         pad_token="<pad>",
-        mask_token="<mask>",
         tokenizer_file=None,
-        src_lang=None,
-        tgt_lang=None,
+        src_lang="eng",
+        tgt_lang="fra",
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         additional_special_tokens=None,
-        legacy_behaviour=False,
         **kwargs,
     ):
-        # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-        self.legacy_behaviour = legacy_behaviour
 
         super().__init__(
             bos_token=bos_token,
@@ -164,13 +158,11 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
             sep_token=sep_token,
             cls_token=cls_token,
             pad_token=pad_token,
-            mask_token=mask_token,
             tokenizer_file=tokenizer_file,
             src_lang=src_lang,
             tgt_lang=tgt_lang,
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
-            legacy_behaviour=legacy_behaviour,
             **kwargs,
         )
 
@@ -193,6 +185,9 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         
         language_code = language_code if language_code is not None else LARGE_SEAMLESS_M4T_LANGUAGE_CODES
         
+        language_code = [f"__{code}__" for code in language_code if "__" not in code]
+        
+
         # update languages codes
         self.lang_code_to_id = {
             code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(language_code)
@@ -205,20 +200,78 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         self.fairseq_tokens_to_ids["<SMT_BT_DATA>"] = current_id + 2
         
 
+        
+
         self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
-        self._additional_special_tokens = list(self.lang_code_to_id.keys())
+        
+        language_code.extend(["<MINED_DATA>", "<MMT_BT_DATA>", "<SMT_BT_DATA>"])
+        #language_code = []
+        # TODO: missing bos and everythin
 
+        self._additional_special_tokens = language_code #list(self.fairseq_tokens_to_ids.keys())
         if additional_special_tokens is not None:
             # Only add those special tokens if they are not already there.
             self._additional_special_tokens.extend(
                 [t for t in additional_special_tokens if t not in self._additional_special_tokens]
             )
 
-        self._src_lang = src_lang if src_lang is not None else "eng"
+        self._src_lang = f"__{src_lang}__"
         self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
-        self.tgt_lang = tgt_lang
+        self._tgt_lang = f"__{tgt_lang}__"
         self.set_src_lang_special_tokens(self._src_lang)
+        self.set_tgt_lang_special_tokens(self._tgt_lang)
+        
+        
+    @classmethod
+    def _from_pretrained(
+        cls,
+        resolved_vocab_files,
+        pretrained_model_name_or_path,
+        init_configuration,
+        *init_inputs,
+        token=None,
+        cache_dir=None,
+        local_files_only=False,
+        _commit_hash=None,
+        _is_local=False,
+        **kwargs,
+    ):
+        tokenizer = super()._from_pretrained(
+                    resolved_vocab_files,
+                    pretrained_model_name_or_path,
+                    init_configuration,
+                    *init_inputs,
+                    token=token,
+                    cache_dir=cache_dir,
+                    local_files_only=local_files_only,
+                    _commit_hash=_commit_hash,
+                    _is_local=_is_local,
+                    **kwargs,
+        )
+        
+        # needs to recompute after loading from pretrained
+        # Mimic fairseq token-to-id alignment for the first 4 token
+        
+        tokenizer.fairseq_tokens_to_ids = {"<pad>": 0, "<unk>": 1, "<s>": 2, "</s>": 3}
+        
+        language_code = tokenizer.additional_special_tokens
+        
+        # update languages codes
+        tokenizer.lang_code_to_id = {
+            code: tokenizer.sp_model_size + i + tokenizer.fairseq_offset for i, code in enumerate(language_code)
+        }
+        
+        tokenizer.id_to_lang_code = {v: k for k, v in tokenizer.lang_code_to_id.items()}
+        tokenizer.fairseq_tokens_to_ids.update(tokenizer.lang_code_to_id)
+        
+        tokenizer.fairseq_ids_to_tokens = {v: k for k, v in tokenizer.fairseq_tokens_to_ids.items()}
+        
+
+
+        tokenizer.src_lang = tokenizer._src_lang
+        tokenizer.tgt_lang = tokenizer._tgt_lang
+        return tokenizer
 
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.__getstate__
     def __getstate__(self):
@@ -241,18 +294,48 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     @property
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.vocab_size
     def vocab_size(self):
-        return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 3  # Plus 3 for the XXX_DATA tokens
-
-    @property
+        return len(self.sp_model) + len(self.additional_special_tokens) + self.fairseq_offset
+    
+    def __call__(self,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        padding: Union[bool, str, PaddingStrategy] = True,
+        pad_to_multiple_of: Optional[int] = 2,
+        **kwargs):
+        
+        output = super().__call__(text=text, padding=padding, pad_to_multiple_of=pad_to_multiple_of, **kwargs)
+        
+        
+        output["decoder_input_ids"] = [[self.lang_code_to_id[self.tgt_lang]]] # TODO: check batch behavior
+                
+        return BatchEncoding(output, tensor_type = kwargs.get("return_tensors"))
+    
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang
+    @property
     def src_lang(self) -> str:
         return self._src_lang
 
-    @src_lang.setter
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang
+    @src_lang.setter
     def src_lang(self, new_src_lang: str) -> None:
-        self._src_lang = new_src_lang
+        if "__" not in new_src_lang:
+            self._src_lang = f"__{new_src_lang}__"
+        else:
+            self._src_lang = new_src_lang
         self.set_src_lang_special_tokens(self._src_lang)
+        
+        
+    @property
+    def tgt_lang(self) -> str:
+        return self._tgt_lang
+    
+    @tgt_lang.setter
+    def tgt_lang(self, new_tgt_lang: str) -> None:
+        if "__" not in new_tgt_lang:
+            self._tgt_lang = f"__{new_tgt_lang}__"
+        else:
+            self._tgt_lang = new_tgt_lang
+        self.set_tgt_lang_special_tokens(self._tgt_lang)
+
 
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
@@ -427,29 +510,20 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.set_src_lang_special_tokens
     def set_src_lang_special_tokens(self, src_lang) -> None:
         """Reset the special tokens to the source lang setting.
-        - In legacy mode: No prefix and suffix=[eos, src_lang_code].
-        - In default mode: Prefix=[src_lang_code], suffix = [eos]
+        Prefix=[src_lang_code], suffix = [eos]
         """
         self.cur_lang_code = self.lang_code_to_id[src_lang]
-        if self.legacy_behaviour:
-            self.prefix_tokens = []
-            self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
-        else:
-            self.prefix_tokens = [self.cur_lang_code]
-            self.suffix_tokens = [self.eos_token_id]
 
-    # NOTE: seems for target language that legacy behavior should be prefered
+        self.prefix_tokens = [self.cur_lang_code]
+        self.suffix_tokens = [self.eos_token_id]
+
     # https://github.com/facebookresearch/fairseq2/blob/c53f18e6be6b8b46b722f2249b8397b7eccd7ad3/src/fairseq2/models/nllb/tokenizer.py#L112-L116
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.__getstate__
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
         """Reset the special tokens to the target lang setting.
-        - In legacy mode: No prefix and suffix=[eos, tgt_lang_code].
-        - In default mode: Prefix=[tgt_lang_code], suffix = [eos]
+        No prefix and suffix=[eos, tgt_lang_code].
         """
         self.cur_lang_code = self.lang_code_to_id[lang]
-        if self.legacy_behaviour:
-            self.prefix_tokens = []
-            self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
-        else:
-            self.prefix_tokens = [self.cur_lang_code]
-            self.suffix_tokens = [self.eos_token_id]
+        
+        self.prefix_tokens = []
+        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]

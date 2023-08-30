@@ -240,6 +240,21 @@ def load_model(pytorch_dump_folder_path, model_type):
         name = "seamlessM4T_large"
         
     original_model = _load_original_model(device, name)
+        
+        
+    ######### TOKENIZER
+    
+    langs = _load_langs(model_type)
+    vocab_file = os.path.join(os.path.expanduser("~"), "tokenizer", model_type, "tokenizer.model")
+    
+    
+    save_dir = os.path.join(SAVE_DIR, name)
+    
+
+    tokenizer = SeamlessM4TTokenizer(vocab_file, language_code = langs)
+    
+    tokenizer.save_pretrained(save_dir)
+    tokenizer = SeamlessM4TTokenizer.from_pretrained(save_dir)
     
     # TODO : convert config
 
@@ -345,19 +360,7 @@ def load_model(pytorch_dump_folder_path, model_type):
     print(f"HF MODEL excluding embeddings:{hf_model.num_parameters(exclude_embeddings=True)}")
 
     del original_model
-    
-    save_dir = os.path.join(SAVE_DIR, name)
-    
-    ######### TOKENIZER
-    
-    langs = _load_langs(model_type)
-    vocab_file = os.path.join(os.path.expanduser("~"), "tokenizer", model_type, "tokenizer.model")
-    
-    tokenizer = SeamlessM4TTokenizer(vocab_file, language_code = langs)
-    
-    tokenizer.save_pretrained(save_dir)
-    tokenizer = SeamlessM4TTokenizer.from_pretrained(save_dir)
-    
+
     
 
     hf_model.save_pretrained(

@@ -1621,7 +1621,7 @@ class SeamlessM4TEncoder(SeamlessM4TPreTrainedModel):
                 self.embed_tokens.weight = embed_tokens.weight
 
             self.embed_positions = SeamlessM4TSinusoidalPositionalEmbedding(
-                config.max_position_embeddings,
+                self.max_source_positions,
                 embed_dim,
                 self.padding_idx,
             )
@@ -2381,7 +2381,7 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
         }
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
-        return shift_tokens_right(labels, self.config.pad_token_id)
+        return shift_tokens_right(labels, self.config.unit_pad_token_id)
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
@@ -2896,7 +2896,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
         input_ids: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[str, torch.LongTensor]:  # TODO: output
-        kwargs_text_generation = {}
+        kwargs_text_generation = {"decoder_input_ids": kwargs.pop("decoder_input_ids", None)}
         kwargs_speech_generation = {}
         for key, value in kwargs.items():
             if key.startswith("text_generation_"):
@@ -3033,7 +3033,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
         input_features: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[str, torch.LongTensor]:
-        kwargs_text_generation = {}
+        kwargs_text_generation = {"decoder_input_ids": kwargs.pop("decoder_input_ids", None)}
         kwargs_speech_generation = {}
         for key, value in kwargs.items():
             if key.startswith("text_generation_"):
@@ -3127,7 +3127,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             self.current_modality = "text"
         elif modality == "speech":
             self.main_input_name = "input_features"
-            self.current_modality = "input_features"
+            self.current_modality = "speech"
         else:
             raise ValueError(f"`modality={modality}` is not a valid modality. It must be `text` or `speech`.")
 
@@ -3218,7 +3218,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(labels, self.config.unit_pad_token_id)
                 
-                
+        # TODO: keep it or not ? 
         logger.warning(
             "This calls the same method `forward` as `SeamlessM4TForTextToText` and `SeamlessM4TForSpeechToText` depending on the input modality. If you want to generate speech, use the `generate` method."
         )
@@ -3322,7 +3322,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         input_features: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[str, torch.LongTensor]:  # TODO: output
-        kwargs_text_generation = {}
+        kwargs_text_generation = {"decoder_input_ids": kwargs.pop("decoder_input_ids", None)}
         kwargs_speech_generation = {}
         for key, value in kwargs.items():
             if key.startswith("text_generation_"):
@@ -3350,16 +3350,18 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
         # TODO: take care of multiple same paramteres
         if input_features is not None:
+            self.set_modality("speech")
             if input_ids is not None:
                 logger.warning(
                     "`input_features` and `input_ids` are both non empty. `input_features` will be used in priority through the speech encoder."
                     "Make sure `input_features=None` if you want to use the text encoder."
                 )
             generation_outputs = super().generate(
-                input_ids=None, input_features=input_features, **kwargs_text_generation
+                input_features=input_features, **kwargs_text_generation
             )
             batch_size = len(input_features)
         else:
+            self.set_modality("text")
             generation_outputs = super().generate(input_ids=input_ids, input_features=None, **kwargs_text_generation)
             batch_size = len(input_ids)
         
@@ -3368,6 +3370,21 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
         # compute last hidden state 
         t2u_input_embeds = self.compute_last_hidden_states_per_sample(generation_outputs.decoder_hidden_states, generation_outputs.get("beam_indices", None))
+        
+        t2u_inputs = self.text_decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=encoder_outputs[0],
+            encoder_attention_mask=encoder_attention_mask,
+            head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         # take care of num_return_sequences
         # take most probable hidden states per batch of return_sequences

@@ -123,7 +123,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         intermediate_size=4096,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
-        max_position_embeddings=2048,
+        max_position_embeddings=1024,
         use_cache=True,
         is_encoder_decoder=True,
         # text|unit encoder|decoder
@@ -140,7 +140,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         attention_dropout=0.1,
         activation_dropout=0.0,
         init_std=0.02,
-        decoder_start_token_id=2,
+        decoder_start_token_id=3,
         scale_embedding=True,
         # speech_encoder
         speech_encoder_hidden_act="swish",
@@ -296,5 +296,6 @@ class SeamlessM4TConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             decoder_start_token_id=decoder_start_token_id,
             is_encoder_decoder=is_encoder_decoder,
+            max_position_embeddings=max_position_embeddings,
             **kwargs,
         )
