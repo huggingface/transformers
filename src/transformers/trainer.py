@@ -1163,13 +1163,17 @@ class Trainer:
         """
         Helper to get number of tokens in a [`~torch.utils.data.DataLoader`] by enumerating dataloader.
         """
-        train_tokes = 0
-        for step, batch in enumerate(train_dl):
-            tks = batch["input_ids"].size(0) * batch["input_ids"].size(1)
-            if max_steps:
-                return tks
-            train_tokes += tks
-        return train_tokes
+        try:
+            train_tokes = 0
+            for step, batch in enumerate(train_dl):
+                tks = batch["input_ids"].size(0) * batch["input_ids"].size(1)
+                if max_steps:
+                    return tks
+                train_tokes += tks
+            return train_tokes
+        except:
+            logger.warning(f"Cannot get num_tokens from dataloader")
+            return 0
 
     def _hp_search_setup(self, trial: Union["optuna.Trial", Dict[str, Any]]):
         """HP search setup code"""
