@@ -102,8 +102,10 @@ def stringify_default(default: Any) -> str:
     elif isinstance(default, enum.Enum):
         # We need to test for enum first as an enum with int values will pass isinstance(xxx, (int, float))
         return f"`{str(default)}`"
-    elif isinstance(default, (int, float)):
+    elif isinstance(default, int):
         return str(default)
+    elif isinstance(default, float):
+        return str(round(default, 2))
     elif isinstance(default, str):
         return str(default) if default.isnumeric() else f'`"{default}"`'
     elif isinstance(default, type):
