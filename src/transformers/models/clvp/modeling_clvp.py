@@ -1089,17 +1089,19 @@ class CLVPAutoRegressiveLMHeadModel(CLVPPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.embed_dim = config.hidden_size
+        self.config = config.autoregressive_config if hasattr(config, "autoregressive_config") else config
 
-        self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
-        self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
+        self.embed_dim = self.config.n_embd
 
-        self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([GPT2Block(config, layer_idx=i) for i in range(config.num_hidden_layers)])
-        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
+        self.wte = nn.Embedding(self.config.vocab_size, self.embed_dim)
+        self.wpe = nn.Embedding(self.config.max_mel_tokens, self.embed_dim)
 
-        self.final_norm = nn.LayerNorm(config.n_embd)
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=True)
+        self.drop = nn.Dropout(self.config.embd_pdrop)
+        self.h = nn.ModuleList([GPT2Block(self.config, layer_idx=i) for i in range(self.config.n_layer)])
+        self.ln_f = nn.LayerNorm(self.embed_dim, eps=self.config.layer_norm_epsilon)
+
+        self.final_norm = nn.LayerNorm(self.embed_dim)
+        self.lm_head = nn.Linear(self.config.n_embd, self.config.vocab_size, bias=True)
 
         self.gradient_checkpointing = False
 
@@ -1112,23 +1114,50 @@ class CLVPAutoRegressiveLMHeadModel(CLVPPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.wte = new_embeddings
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs):
-        position_ids = kwargs.get("position_ids", None)
-        position_ids = (
-            torch.arange(input_ids.shape[1], dtype=torch.long, device=input_ids.device).repeat(input_ids.shape[0], 1)
-            if position_ids is None
-            else position_ids
-        )
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, inputs_embeds=None, conditioning_embeds=None, **kwargs
+    ):
+        # for the first pass, so we must add the start token to the conditioning_embeds and return them as `inputs_embeds`
+        if conditioning_embeds is not None and past_key_values is None:
+            # Add the start mel token at the end
+            mel_start_token_id = torch.tensor([[self.config.bos_token_id]], device=conditioning_embeds.device)
+            mel_start_token_embedding = self.wte(mel_start_token_id) + self.wpe(
+                torch.tensor([[0]], device=conditioning_embeds.device)
+            )
+            mel_start_token_embedding = mel_start_token_embedding.repeat(conditioning_embeds.shape[0], 1, 1)
+            conditioning_embeds = torch.concat([conditioning_embeds, mel_start_token_embedding], dim=1)
+
+            # since we will add the position embeddings in the forward pass, we must subtract it here so that it cancells
+            # out. This decision was made to make sure that `test_generate_from_inputs_embeds_decoder_only` test does not fail.
+            position_ids = torch.range(0, conditioning_embeds.shape[1] - 1, device=conditioning_embeds.device)
+            position_ids = position_ids.unsqueeze(0).repeat(conditioning_embeds.shape[0], 1).long()
+            conditioning_embeds = conditioning_embeds - self.wpe(position_ids)
+
+            return {
+                "inputs_embeds": conditioning_embeds,
+                "past_key_values": None,
+                "use_cache": kwargs.get("use_cache"),
+                "position_ids": position_ids,
+            }
 
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values:
             input_ids = input_ids[:, -1].unsqueeze(-1)
-            position_ids = position_ids[:, -1].unsqueeze(-1)
             if token_type_ids is not None:
                 token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
 
         attention_mask = kwargs.get("attention_mask", None)
+        position_ids = kwargs.get("position_ids", None)
+
+        if attention_mask is not None and position_ids is None:
+            # create position_ids on the fly for batch generation
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values:
+                position_ids = position_ids[:, -1].unsqueeze(-1)
+        else:
+            position_ids = None
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
@@ -1141,7 +1170,6 @@ class CLVPAutoRegressiveLMHeadModel(CLVPPreTrainedModel):
                 "past_key_values": past_key_values,
                 "use_cache": kwargs.get("use_cache"),
                 "position_ids": position_ids,
-                "attention_mask": attention_mask,
                 "token_type_ids": token_type_ids,
             }
         )
@@ -1252,8 +1280,8 @@ class CLVPAutoRegressiveLMHeadModel(CLVPPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
-            position_embeds = self.wpe(position_ids)
-            inputs_embeds = inputs_embeds + position_embeds
+        position_embeds = self.wpe(position_ids)
+        inputs_embeds = inputs_embeds + position_embeds
 
         hidden_states = inputs_embeds
 
@@ -1342,7 +1370,8 @@ class CLVPAutoRegressiveLMHeadModel(CLVPPreTrainedModel):
 
         if not return_dict:
             output = (lm_logits, presents, all_hidden_states, all_self_attentions, all_cross_attentions)
-            return ((loss,) + output) if loss is not None else output
+            output = ((loss,) + output) if loss is not None else output
+            return tuple(v for v in output if v is not None)
 
         return CausalLMOutputWithCrossAttentions(
             loss=loss,
@@ -1395,7 +1424,7 @@ class CLVPModel(CLVPPreTrainedModel):
 
         self.conditioning_encoder = CLVPConditioningEncoder(config)
 
-        self.autoregressive_model = CLVPAutoRegressiveLMHeadModel(config.autoregressive_config)
+        self.autoregressive_model = CLVPAutoRegressiveLMHeadModel(config)
 
         self.text_model = CLVPTransformerWithProjection(config.text_config)
         self.speech_model = CLVPTransformerWithProjection(config.speech_config)
@@ -1611,21 +1640,11 @@ class CLVPModel(CLVPPreTrainedModel):
 
         conditioning_embeds = self.conditioning_encoder(mel_spec=input_features, text_tokens=input_ids)
 
-        # Add the start mel token at the beginning
-        mel_start_token_id = torch.tensor(
-            [[self.autoregressive_model.config.bos_token_id]], device=conditioning_embeds.device
-        )
-        mel_start_token_embedding = self.autoregressive_model.wte(mel_start_token_id)
-        mel_start_token_embedding = mel_start_token_embedding + self.autoregressive_model.wpe(
-            torch.tensor([[0]], device=conditioning_embeds.device)
-        )
-        mel_start_token_embedding = mel_start_token_embedding.repeat(conditioning_embeds.shape[0], 1, 1)
-        conditioning_embeds = torch.concat([conditioning_embeds, mel_start_token_embedding], dim=1)
-
         speech_candidates = self.autoregressive_model.generate(
-            inputs_embeds=conditioning_embeds,
+            conditioning_embeds=conditioning_embeds,
             generation_config=generation_config,
         )
+
         speech_candidates = self.fix_autoregressive_output(speech_candidates[0])
 
         return self.speech_model(
@@ -1770,21 +1789,11 @@ class CLVPModel(CLVPPreTrainedModel):
 
         conditioning_embeds = self.conditioning_encoder(mel_spec=input_features, text_tokens=input_ids)
 
-        # Add the start mel token at the beginning
-        mel_start_token_id = torch.tensor(
-            [[self.autoregressive_model.config.bos_token_id]], device=conditioning_embeds.device
-        )
-        mel_start_token_embedding = self.autoregressive_model.wte(mel_start_token_id)
-        mel_start_token_embedding = mel_start_token_embedding + self.autoregressive_model.wpe(
-            torch.tensor([[0]], device=conditioning_embeds.device)
-        )
-        mel_start_token_embedding = mel_start_token_embedding.repeat(conditioning_embeds.shape[0], 1, 1)
-        conditioning_embeds = torch.concat([conditioning_embeds, mel_start_token_embedding], dim=1)
-
         speech_candidates = self.autoregressive_model.generate(
-            inputs_embeds=conditioning_embeds,
+            conditioning_embeds=conditioning_embeds,
             generation_config=generation_config,
         )
+
         speech_candidates = self.fix_autoregressive_output(speech_candidates[0])
 
         speech_outputs = self.speech_model(

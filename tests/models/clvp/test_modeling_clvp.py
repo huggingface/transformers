@@ -29,6 +29,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_torch_available
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -41,10 +42,7 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from transformers import (
-        CLVPModel,
-        CLVPTransformerWithProjection,
-    )
+    from transformers import CLVPAutoRegressiveLMHeadModel, CLVPModel, CLVPTransformerWithProjection
     from transformers.models.clvp.modeling_clvp import CLVP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 from transformers import CLVPFeatureExtractor, CLVPTokenizer
@@ -253,7 +251,6 @@ class CLVPModelTester:
             "attention_mask": attention_mask.to(torch_device),
             "input_features": input_features.to(torch_device),
             "return_loss": False,
-            # "return_dict": True,
         }
         return config, inputs_dict
 
@@ -345,6 +342,143 @@ class CLVPModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
+class CLVPAutoRegressiveLMHeadModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=2,
+        seq_length=7,
+        is_training=True,
+        vocab_size=99,
+        max_mel_tokens=256,
+        max_text_tokens=256,
+        use_input_mask=True,
+        hidden_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        bos_token_id=97,
+        eos_token_id=98,
+        relative_attention_num_buckets=4,
+        relative_attention_max_distance=16,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.vocab_size = vocab_size
+        self.max_mel_tokens = max_mel_tokens
+        self.max_text_tokens = max_text_tokens
+        self.use_input_mask = use_input_mask
+        self.hidden_size = hidden_size
+        self.num_attention_heads = num_attention_heads
+        self.num_hidden_layers = num_hidden_layers
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.relative_attention_num_buckets = relative_attention_num_buckets
+        self.relative_attention_max_distance = relative_attention_max_distance
+
+    def get_config(self):
+        autoregressive_config = CLVPAutoRegressiveConfig(
+            vocab_size=self.vocab_size,
+            max_mel_tokens=self.max_mel_tokens,
+            max_text_tokens=self.max_text_tokens,
+            n_embd=self.hidden_size,
+            n_layer=self.num_hidden_layers,
+            n_head=self.num_attention_heads,
+            bos_token_id=self.bos_token_id,
+            eos_token_id=self.eos_token_id,
+            relative_attention_num_buckets=self.relative_attention_num_buckets,
+            relative_attention_max_distance=self.relative_attention_max_distance,
+        )
+
+        return autoregressive_config
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        input_mask = None
+        if self.use_input_mask:
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+
+        if input_mask is not None:
+            batch_size, seq_length = input_mask.shape
+            rnd_start_indices = np.random.randint(1, seq_length - 1, size=(batch_size,))
+            for batch_idx, start_index in enumerate(rnd_start_indices):
+                input_mask[batch_idx, :start_index] = 1
+                input_mask[batch_idx, start_index:] = 0
+
+        autoregressive_config = self.get_config()
+
+        return autoregressive_config, input_ids, input_mask
+
+    def create_and_check_model(self, config, input_ids, attention_mask):
+        model = CLVPAutoRegressiveLMHeadModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            result = model(input_ids=input_ids, attention_mask=attention_mask)
+
+        self.parent.assertEqual(result[0].shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, input_ids, attention_mask = config_and_inputs
+        inputs_dict = {
+            "input_ids": input_ids.to(torch_device),
+            "attention_mask": attention_mask.to(torch_device),
+        }
+        return config, inputs_dict
+
+
+@require_torch
+class CLVPAutoRegressiveLMHeadModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (CLVPAutoRegressiveLMHeadModel,) if is_torch_available() else ()
+    all_generative_model_classes = (CLVPAutoRegressiveLMHeadModel,) if is_torch_available() else ()
+
+    test_pruning = False
+
+    def setUp(self):
+        self.model_tester = CLVPAutoRegressiveLMHeadModelTester(self)
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        if return_labels:
+            inputs_dict["labels"] = torch.zeros(
+                [self.model_tester.batch_size, self.model_tester.seq_length], device=torch_device
+            ).long()
+
+        return inputs_dict
+
+    @unittest.skip(
+        "This test is not valid for CLVPAutoRegressiveLMHeadModel since save_pretrained and from_pretrained can"
+        "give errors in most cases."
+    )
+    def test_save_load(self):
+        pass
+
+    @unittest.skip(
+        "This test is not valid for CLVPAutoRegressiveLMHeadModel since save_pretrained and from_pretrained can"
+        "give errors in most cases."
+    )
+    def test_head_pruning_save_load_from_pretrained(self):
+        pass
+
+    @unittest.skip(
+        "This test is not valid for CLVPAutoRegressiveLMHeadModel since save_pretrained and from_pretrained can"
+        "give errors in most cases."
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
+
+    @unittest.skip(
+        "This test is not valid for CLVPAutoRegressiveLMHeadModel since save_pretrained and from_pretrained can"
+        "give errors in most cases."
+    )
+    def test_can_use_safetensors(self):
+        pass
+
+
 # Since CLVP has a lot of different models connected with each other it's better to test each of them individually along
 # with a test_full_model_integration. If the model breaks in future, it could be of a great help to identify the broken part.
 
@@ -394,7 +528,7 @@ class CLVPModelIntegrationTest(unittest.TestCase):
 
     def test_speech_and_text_projection_models(self):
         # check for text embeds
-        text_embeds = self.model.text_model(input_ids=self.text_tokens).text_embeds.cpu()
+        text_embeds = self.model.text_model(input_ids=self.text_tokens, return_dict=True).text_embeds.cpu()
         EXPECTED_TEXT_EMBEDS = torch.tensor(
             [
                 1.4798,
@@ -422,7 +556,7 @@ class CLVPModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(text_embeds[0, :20], EXPECTED_TEXT_EMBEDS, atol=1e-4))
 
         # check for speech embeds
-        speech_embeds = self.model.speech_model(input_ids=self.text_tokens).speech_embeds.cpu()
+        speech_embeds = self.model.speech_model(input_ids=self.text_tokens, return_dict=True).speech_embeds.cpu()
         EXPECTED_SPEECH_EMBEDS = torch.tensor(
             [
                 3.1202,
