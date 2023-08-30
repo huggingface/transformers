@@ -1,1 +1,1 @@
-../../../CONTRIBUTING.md
+../../../CONTRIBUTING_ko.md
