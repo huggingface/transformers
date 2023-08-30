@@ -1805,7 +1805,7 @@ class Trainer:
                         sampler = train_dataloader.batch_sampler.sampler
                     elif hasattr(train_dataloader, "batch_sampler") and hasattr(train_dataloader.batch_sampler, "batch_sampler") \
                          and isinstance(train_dataloader.batch_sampler.batch_sampler.sampler, RandomSampler):
-                             sampler = train_dataloader.batch_sampler.batch_sampler.sampler
+                        sampler = train_dataloader.batch_sampler.batch_sampler.sampler
                     _ = list(sampler)
                     
         total_batched_samples = 0
