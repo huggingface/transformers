@@ -141,7 +141,6 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
         self.remove_space = remove_space
         self.keep_accents = keep_accents
         self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
         try:
             import jieba
@@ -152,6 +151,10 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
             )
         self.jieba = jieba
         self.translator = str.maketrans(" \n", "\u2582\u2583")
+
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     # Copied from transformers.models.xlnet.tokenization_xlnet_fast.XLNetTokenizerFast.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
@@ -225,10 +228,8 @@ class CpmTokenizerFast(PreTrainedTokenizerFast):
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
 
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
-        elif not os.path.isfile(self.vocab_file):
-            logger.warn(f"The original {self.vocab_file} was deleted and will not be saved with the tokenizer.")
 
         return (out_vocab_file,)
 
