@@ -3014,7 +3014,7 @@ class GroundingDINOTextPooler(nn.Module):
         return pooled_output
 
 # Copied from transformers.models.bert.modeling_bert.BertModel with Bert->GroundingDINOText
-class GroundingDINOTextModel(nn.Module):
+class GroundingDINOTextModel(PreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -3028,8 +3028,7 @@ class GroundingDINOTextModel(nn.Module):
     """
 
     def __init__(self, config, add_pooling_layer=True):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
 
         self.embeddings = GroundingDINOTextEmbeddings(config)
         self.encoder = GroundingDINOTextEncoder(config)

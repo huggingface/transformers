@@ -25,7 +25,7 @@ from torchvision import transforms as T
 import torchvision.transforms.functional as F
 
 from transformers import (
-    GroundingDINOConfig, GroundingDINOForObjectDetection
+    GroundingDINOConfig, GroundingDINOForObjectDetection, AutoTokenizer
 )
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
@@ -166,6 +166,88 @@ def prepare_img():
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
     return image
 
+def text_processor(text: str, config):
+    def preprocess_caption(caption: str) -> str:
+        result = caption.lower().strip()
+        if result.endswith("."):
+            return result
+        return result + "."
+    def generate_masks_with_special_tokens_and_transfer_map(tokenized, special_tokens_list) -> list:
+        """Generate attention mask between each pair of special tokens
+        Args:
+            input_ids (torch.Tensor): input ids. Shape: [bs, num_token]
+            special_tokens_mask (list): special tokens mask.
+        Returns:
+            torch.Tensor: attention mask between each special tokens.
+        """
+        input_ids = tokenized["input_ids"]
+        bs, num_token = input_ids.shape
+        # special_tokens_mask: bs, num_token. 1 for special tokens. 0 for normal tokens
+        special_tokens_mask = torch.zeros((bs, num_token), device=input_ids.device).bool()
+        for special_token in special_tokens_list:
+            special_tokens_mask |= input_ids == special_token
+
+        # idxs: each row is a list of indices of special tokens
+        idxs = torch.nonzero(special_tokens_mask)
+
+        # generate attention mask and positional ids
+        attention_mask = (
+            torch.eye(num_token, device=input_ids.device).bool().unsqueeze(0).repeat(bs, 1, 1)
+        )
+        position_ids = torch.zeros((bs, num_token), device=input_ids.device)
+        cate_to_token_mask_list = [[] for _ in range(bs)]
+        previous_col = 0
+        for i in range(idxs.shape[0]):
+            row, col = idxs[i]
+            if (col == 0) or (col == num_token - 1):
+                attention_mask[row, col, col] = True
+                position_ids[row, col] = 0
+            else:
+                attention_mask[row, previous_col + 1 : col + 1, previous_col + 1 : col + 1] = True
+                position_ids[row, previous_col + 1 : col + 1] = torch.arange(
+                    0, col - previous_col, device=input_ids.device
+                )
+                c2t_maski = torch.zeros((num_token), device=input_ids.device).bool()
+                c2t_maski[previous_col + 1 : col] = True
+                cate_to_token_mask_list[row].append(c2t_maski)
+            previous_col = col
+
+        cate_to_token_mask_list = [
+            torch.stack(cate_to_token_mask_listi, dim=0)
+            for cate_to_token_mask_listi in cate_to_token_mask_list
+        ]
+
+        # # padding mask
+        # padding_mask = tokenized['attention_mask']
+        # attention_mask = attention_mask & padding_mask.unsqueeze(1).bool() & padding_mask.unsqueeze(2).bool()
+
+        return attention_mask, position_ids.to(torch.long)
+    tokenizer = AutoTokenizer.from_pretrained(config.text_backbone_config._name_or_path)
+    special_tokens = tokenizer.convert_tokens_to_ids(["[CLS]", "[SEP]", ".", "?"])
+    text = preprocess_caption(text)
+    tokenized = tokenizer([text], padding="longest", return_tensors="pt")
+    text_self_attention_masks, position_ids = generate_masks_with_special_tokens_and_transfer_map(
+        tokenized, special_tokens)
+    
+    max_text_len = config.max_text_len
+    sub_sentence_present = config.sub_sentence_present
+    if text_self_attention_masks.shape[1] > max_text_len:
+        text_self_attention_masks = text_self_attention_masks[
+            :, : max_text_len, : max_text_len
+        ]
+        position_ids = position_ids[:, : max_text_len]
+        tokenized["input_ids"] = tokenized["input_ids"][:, : max_text_len]
+        tokenized["attention_mask"] = tokenized["attention_mask"][:, : max_text_len]
+        tokenized["token_type_ids"] = tokenized["token_type_ids"][:, : max_text_len]
+
+    # extract text embeddings
+    if sub_sentence_present:
+        tokenized_for_encoder = {k: v for k, v in tokenized.items() if k != "attention_mask"}
+        tokenized_for_encoder["attention_mask"] = text_self_attention_masks
+        tokenized_for_encoder["position_ids"] = position_ids
+
+    return tokenized_for_encoder
+
 @torch.no_grad()
 def convert_grounding_dino_checkpoint(model_name, checkpoint_path):
     #Define default GroundingDINO configuation
@@ -187,6 +269,7 @@ def convert_grounding_dino_checkpoint(model_name, checkpoint_path):
 
     # Load and process test image
     image = prepare_img()
+    text = "a cat"
     image_processor = T.Compose(
         [
             T.Resize(size=800, max_size=1333),
@@ -194,13 +277,21 @@ def convert_grounding_dino_checkpoint(model_name, checkpoint_path):
             T.Normalize(IMAGENET_MEAN, IMAGENET_STD)
         ]
     )
-    inputs = image_processor(image)
-    pixel_mask = torch.ones(((1, inputs.shape[1], inputs.shape[2])), dtype=torch.long, device=inputs.device)
-    output = model.model.backbone.conv_encoder.model(pixel_values=inputs.unsqueeze(0))
+    image_inputs = image_processor(image)
+    text_inputs = text_processor(text, config)
 
-    for feature_map in output.feature_maps:
-        print(f"{feature_map.shape}")
-        print(f"\t {feature_map[:, :5, 0, 0].cpu().numpy()}")
+    pixel_mask = torch.ones(
+        ((1, image_inputs.shape[1], image_inputs.shape[2])), 
+        dtype=torch.long, 
+        device=image_inputs.device
+    )
+    # output = model.model.backbone.conv_encoder.model(pixel_values=image_inputs.unsqueeze(0))
+    output = model.model.text_backbone(**text_inputs)
+    print(output.last_hidden_state[:, :, :5])
+
+    # for feature_map in output.last_hidden_state:
+    #     print(f"{feature_map.shape}")
+    #     print(f"\t {feature_map[:, :5, 0, 0].cpu().numpy()}")
 
     # outputs = model(**inputs).logits
 
