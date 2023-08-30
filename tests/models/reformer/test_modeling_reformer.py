@@ -20,10 +20,10 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torch_fp16,
     require_torch_multi_gpu,
     slow,
     torch_device,
-    require_torch_fp16
 )
 
 from ...generation.test_utils import GenerationTesterMixin

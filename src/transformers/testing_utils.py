@@ -2119,7 +2119,7 @@ class HfDoctestModule(Module):
                 yield DoctestItem.from_parent(self, name=test.name, runner=runner, dtest=test)
 
 
-def _device_agnostic_dispatch(device, dispatch_table, *args, **kwargs):
+def _device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], *args, **kwargs):
     if device not in dispatch_table:
         return dispatch_table["default"](*args, **kwargs)
 
@@ -2134,20 +2134,20 @@ def _device_agnostic_dispatch(device, dispatch_table, *args, **kwargs):
 
 # Mappings from device names to callable functions to support device agnostic
 # testing.
-ACCELERATOR_MANUAL_SEED = {"cuda": torch.cuda.manual_seed, "default": torch.manual_seed}
+ACCELERATOR_MANUAL_SEED = {"cuda": torch.cuda.manual_seed, "cpu": None, "default": torch.manual_seed}
 ACCELERATOR_EMPTY_CACHE = {"cuda": torch.cuda.empty_cache, "cpu": None}
 ACCELERATOR_DEVICE_COUNT = {"cuda": torch.cuda.device_count, "cpu": lambda: 0}
 
 
-def accelerator_manual_seed(device, seed):
+def accelerator_manual_seed(device: str, seed: int):
     return _device_agnostic_dispatch(device, ACCELERATOR_MANUAL_SEED, seed)
 
 
-def accelerator_empty_cache(device):
+def accelerator_empty_cache(device: str):
     return _device_agnostic_dispatch(device, ACCELERATOR_EMPTY_CACHE)
 
 
-def accelerator_device_count(device):
+def accelerator_device_count(device: str):
     return _device_agnostic_dispatch(device, ACCELERATOR_DEVICE_COUNT)
 
 
@@ -2176,7 +2176,7 @@ if "TRANSFORMERS_TEST_DEVICE_SPEC" in os.environ:
         raise AttributeError("Device spec file did not contain `DEVICE_NAME`") from e
 
     if "TRANSFORMERS_TEST_DEVICE" in os.environ and torch_device != device_name:
-        msg = f"Mistmatch between environment variable `TRANSFORMERS_TEST_DEVICE` '{torch_device}' and device found in spec '{device_name}'\n"
+        msg = f"Mismatch between environment variable `TRANSFORMERS_TEST_DEVICE` '{torch_device}' and device found in spec '{device_name}'\n"
         msg += "Either unset `TRANSFORMERS_TEST_DEVICE` or ensure it matches device spec name."
         raise ValueError(msg)
 
