@@ -16,7 +16,8 @@
 
 
 import math
-from typing import Optional, Tuple, Union
+from dataclasses import dataclass
+from typing import Optional, Tuple, Union, Any
 import copy
 
 import torch
@@ -37,6 +38,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -60,6 +62,29 @@ SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST = [
 SPEECHT5_PRETRAINED_HIFIGAN_CONFIG_ARCHIVE_MAP = {
     "microsoft/speecht5_hifigan": "https://huggingface.co/microsoft/speecht5_hifigan/resolve/main/config.json",
 }
+
+@dataclass
+class SeamlessM4TGenerationOutput(ModelOutput):
+    """
+    Class defining the generated outputs from [`SeamlessM4TModel`], [`SeamlessM4TForTextToText`], [`SeamlessM4TForTextToSpeech`], [`SeamlessM4TForSpeechToSpeech`]
+    and [`SeamlessM4TForTextToSpeech`].
+
+    Args:
+        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            The generated translated sequences. This is the output of the text-to-text or the speech-to-text models.
+            The second dimension (sequence_length) is either equal to `max_length` or shorter
+            if all batches finished early due to the `eos_token_id`.
+        unit_sequences (`torch.LongTensor` of shape `(batch_size, unit_sequence_length)`):
+            The generated translated unit sequences. This is the output of the text-to-units model.
+            The second dimension (unit_sequence_length) is either equal to `t2u_max_length` or shorter
+            if all batches finished early due to the `t2u_eos_token_id`.
+        waveforms (`torch.LongTensor` of shape `(batch_size, nb_channels, sequence_length)`):
+            The generated translated speech waveforms.
+    """
+
+    sequences: Optional[Tuple[torch.FloatTensor]] = None
+    unit_sequences: Optional[Tuple[torch.FloatTensor]] = None
+    waveforms: Optional[torch.FloatTensor] = None
 
 
 SEAMLESS_M4T_START_DOCSTRING = r"""
@@ -2896,8 +2921,9 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
     def generate(
         self,
         input_ids: Optional[torch.Tensor] = None,
+        return_intermediate_token_ids: Optional[bool] = None,
         **kwargs,
-    ) -> Union[str, torch.LongTensor]:  # TODO: output
+    ) -> Union[torch.Tensor, SeamlessM4TGenerationOutput]:
         kwargs_text = {"decoder_input_ids": kwargs.pop("decoder_input_ids", None)}
         kwargs_speech = {}
         for key, value in kwargs.items():
@@ -2961,6 +2987,11 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
             kwargs_speech["decoder_input_ids"] = torch.tensor([[self.config.t2u_eos_token_id, tgt_lang_id]]).to(self.device) # TODO: batch
 
         output_speech = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
+        
+        
+        if return_intermediate_token_ids:
+            return SeamlessM4TGenerationOutput(sequences=sequences,
+                                               unit_sequences=output_speech)
 
         return output_speech
 
@@ -3045,8 +3076,9 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
     def generate(
         self,
         input_features: Optional[torch.Tensor] = None,
+        return_intermediate_token_ids: Optional[bool] = None,
         **kwargs,
-    ) -> Union[str, torch.LongTensor]:
+    ) -> Union[torch.Tensor, SeamlessM4TGenerationOutput]:
         kwargs_text = {"decoder_input_ids": kwargs.pop("decoder_input_ids", None)}
         kwargs_speech = {}
         for key, value in kwargs.items():
@@ -3115,8 +3147,12 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
 
         # units = unit_out.units[:, 1:][0].cpu().numpy().tolist()
         # wav_out = self.vocoder(units, tgt_lang, spkr, dur_prediction=True)
+        if return_intermediate_token_ids:
+            return SeamlessM4TGenerationOutput(sequences=sequences,
+                                               unit_sequences=output_speech)
 
         return output_speech
+
 
 
 @add_start_docstrings(
@@ -3344,8 +3380,9 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         input_features: Optional[torch.Tensor] = None,
+        return_intermediate_token_ids: Optional[bool] = None,
         **kwargs,
-    ) -> Union[str, torch.LongTensor]:  # TODO: output
+    ) -> Union[torch.Tensor, SeamlessM4TGenerationOutput]:
         kwargs_text = {"decoder_input_ids": kwargs.pop("decoder_input_ids", None)}
         kwargs_speech = {}
         for key, value in kwargs.items():
@@ -3462,8 +3499,13 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             kwargs_speech["decoder_input_ids"] = torch.tensor([[self.config.t2u_eos_token_id, tgt_lang_id]]).to(self.device) # TODO: batch
 
         output_speech = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
+        
+        if return_intermediate_token_ids:
+            return SeamlessM4TGenerationOutput(sequences=sequences,
+                                               unit_sequences=output_speech)
 
         return output_speech
+
 
     def prepare_inputs_for_generation(
         self,
