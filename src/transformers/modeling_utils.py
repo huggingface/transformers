@@ -75,6 +75,7 @@ from .utils import (
     is_peft_available,
     is_remote_url,
     is_safetensors_available,
+    is_torch_npu_available,
     is_torch_tpu_available,
     logging,
     replace_return_docstrings,
@@ -88,6 +89,9 @@ from .utils.versions import require_version_core
 
 XLA_USE_BF16 = os.environ.get("XLA_USE_BF16", "0").upper()
 XLA_DOWNCAST_BF16 = os.environ.get("XLA_DOWNCAST_BF16", "0").upper()
+
+if is_torch_npu_available():
+    import torch_npu  # noqa: F401
 
 if is_accelerate_available():
     from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights

@@ -34,7 +34,15 @@ from ..image_processing_utils import BaseImageProcessor
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import ModelOutput, add_end_docstrings, infer_framework, is_tf_available, is_torch_available, is_torch_npu_available, logging
+from ..utils import (
+    ModelOutput,
+    add_end_docstrings,
+    infer_framework,
+    is_tf_available,
+    is_torch_available,
+    is_torch_npu_available,
+    logging,
+)
 
 
 GenericTensor = Union[List["GenericTensor"], "torch.Tensor", "tf.Tensor"]
@@ -722,8 +730,8 @@ PIPELINE_INIT_ARGS = r"""
         args_parser ([`~pipelines.ArgumentHandler`], *optional*):
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (`int`, *optional*, defaults to -1):
-            Device ordinal for CPU/GPU/NPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA/NPU device id. You can pass native `torch.device` or a `str` too.
+            Device ordinal for CPU/GPU/NPU supports. Setting this to -1 will leverage CPU, a positive will run the
+            model on the associated CUDA/NPU device id. You can pass native `torch.device` or a `str` too.
         binary_output (`bool`, *optional*, defaults to `False`):
             Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
 """

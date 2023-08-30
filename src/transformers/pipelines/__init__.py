@@ -41,6 +41,7 @@ from ..utils import (
     is_pyctcdecode_available,
     is_tf_available,
     is_torch_available,
+    is_torch_npu_available,
     logging,
 )
 from .audio_classification import AudioClassificationPipeline
@@ -629,8 +630,8 @@ def pipeline(
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `huggingface-cli login` (stored in `~/.huggingface`).
         device (`int` or `str` or `torch.device`):
-            Defines the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"npu:1"`, `"mps"`, or a GPU/NPU ordinal rank like `1`) on which this
-            pipeline will be allocated.
+            Defines the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"npu:1"`, `"mps"`, or a GPU/NPU ordinal rank like `1`) on
+            which this pipeline will be allocated.
         device_map (`str` or `Dict[str, Union[int, str, torch.device]`, *optional*):
             Sent directly as `model_kwargs` (just a simpler shortcut). When `accelerate` library is present, set
             `device_map="auto"` to compute the most optimized `device_map` automatically (see
