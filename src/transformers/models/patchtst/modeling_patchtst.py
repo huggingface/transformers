@@ -1052,58 +1052,41 @@ class PatchTSTForClassificationOutput(ModelOutput):
 class PredictionHead(nn.Module):
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
-        self.individual = config.individual
-        self.n_vars = config.input_size
+
+        self.target_dimension = config.target_dimension
         self.use_cls_token = config.use_cls_token
         self.pooling = config.pooling
-        head_dimension = config.d_model if config.pooling else config.d_model * config.num_patches
 
-        if self.individual:
-            self.linears = nn.ModuleList()
-            self.dropouts = nn.ModuleList()
-            self.flattens = nn.ModuleList()
-            for i in range(self.n_vars):
-                self.flattens.append(nn.Flatten(start_dim=2))
-                self.linears.append(nn.Linear(head_dimension, config.prediction_length))
-                self.dropouts.append(nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
-                                     )
-        else:
-            self.flatten = nn.Flatten(start_dim=2)
-            self.linear = nn.Linear(head_dimension, config.prediction_length)
-            self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
+        head_dim = config.input_size * config.d_model
 
-    def forward(self, x: torch.Tensor):
+        self.flatten = nn.Flatten(start_dim=1)
+        self.linear = nn.Linear(head_dim, config.prediction_length * config.target_dimension)
+        self.dropout = nn.Dropout(config.head_dropout) if config.head_dropout > 0 else nn.Identity()
+
+    def forward(self, x):
         """
-        x: [bs x nvars x num_patches x d_model]
-            or [bs x nvars x (num_patches+1) x d_model] if use cls_token
-        output: [bs x forecast_len x nvars]
+        x: [bs x nvars x num_patch x d_model]
+            or [bs x nvars x (num_patch+1) x d_model] if use cls_token
+        output: [bs x pred_len x target_dimension]
         """
+        batch_size = x.shape[0]
         if self.use_cls_token:
-            y = x[:, :, 0, :]  # y: [bs x nvars x d_model]
+            x = x[:, :, 0, :]  # use the first output token, x: [bs x nvars x d_model]
+        elif self.pooling == 'mean':
+            x = x.mean(dim=2)  # x: [bs x nvars x d_model]
+        elif self.pooling == 'max':
+            x = x.max(dim=2)  # x: [bs x nvars x d_model]
         else:
-            if self.pooling == 'mean':
-                y = x.mean(dim=2)  # y: [bs x nvars x d_model]
-            elif self.pooling == 'max':
-                y = x.max(dim=2)  # y: [bs x nvars x d_model]
-            else:
-                y = x  # y: [bs x nvars x num_patches x d_model]
+            raise Exception(f'pooling operator {self.pooling} is not implemented yet')
 
-        if self.individual:
-            x_out = []
-            for i in range(self.n_vars):
-                z = self.flattens[i](y[:, i, :])  # y: [bs x (d_model * num_patches)] or [bs x d_model)]
-                z = self.linears[i](z)  # z: [bs x forecast_len]
-                z = self.dropouts[i](z)
-                x_out.append(z)
-            x = torch.stack(x_out, dim=1)  # x: [bs x nvars x forecast_len]
-        else:
-            z = self.flatten(y)  # z: [bs x nvars x (d_model * num_patches)] or [bs x nvars x d_model)]
-            z = self.dropout(z)
-            x = self.linear(z)  # x: [bs x nvars x forecast_len]
+        # flatten the input
+        x = self.flatten(x)  # x: bs x (nvars * d_model)
+        y = self.linear(self.dropout(x))  # y: bs x (pred_len * target_dimension)
 
-        x = x.transpose(2, 1)  # [bs x forecast_len x nvars]
+        # reshape the data
+        y = y.reshape(batch_size, -1, self.target_dimension)  # [bs x pred_len x target_dimension]
+        return y
 
-        return x
 
 
 class PatchTSTForPrediction(PatchTSTPreTrainedModel):
@@ -1122,6 +1105,7 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
                 past_values: torch.Tensor,
                 future_values: Optional[torch.Tensor] = None,
                 output_hidden_states: Optional[bool] = None):
+
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
