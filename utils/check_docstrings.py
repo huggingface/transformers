@@ -275,6 +275,8 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
                 current_arg = name
                 if name in signature:
                     default = signature[name].default
+                    if signature[name].kind is inspect._ParameterKind.VAR_KEYWORD:
+                        default = None
                     new_description = replace_default_in_arg_description(description, default)
                 else:
                     new_description = description
@@ -299,6 +301,7 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
     # Add missing arguments with a template
     for name in set(signature.keys()) - set(arguments.keys()):
         arg = signature[name]
+        # We ignore private arguments or *args/**kwargs (unless they are documented by the user)
         if name.startswith("_") or arg.kind in [inspect._ParameterKind.VAR_KEYWORD, inspect._ParameterKind.VAR_POSITIONAL]:
             arguments[name] = ""
         else:
