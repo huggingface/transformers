@@ -32,7 +32,7 @@ import unittest
 from collections.abc import Mapping
 from io import StringIO
 from pathlib import Path
-from typing import Iterable, Iterator, List, Optional, Union
+from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
 from unittest import mock
 
 import huggingface_hub
@@ -93,14 +93,14 @@ from .utils import (
     is_timm_available,
     is_tokenizers_available,
     is_torch_available,
+    is_torch_bf16_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_fp16_available,
     is_torch_neuroncore_available,
     is_torch_npu_available,
     is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
-    is_torch_bf16_available,
-    is_torch_fp16_available,
     is_torch_tpu_available,
     is_torchaudio_available,
     is_torchdynamo_available,
@@ -692,13 +692,16 @@ def require_torch_accelerator(test_case):
 
 def require_torch_fp16(test_case):
     """Decorator marking a test that requires a device that supports fp16"""
-    return unittest.skipUnless(is_torch_fp16_available(torch_device), "test requires device with fp16 support")(test_case)
+    return unittest.skipUnless(is_torch_fp16_available(torch_device), "test requires device with fp16 support")(
+        test_case
+    )
 
 
 def require_torch_bf16(test_case):
     """Decorator marking a test that requires a device that supports bf16"""
-    return unittest.skipUnless(is_torch_bf16_available(torch_device), "test requires device with bf16 support")(test_case)
-
+    return unittest.skipUnless(is_torch_bf16_available(torch_device), "test requires device with bf16 support")(
+        test_case
+    )
 
 
 def require_torch_bf16_gpu(test_case):
@@ -2115,42 +2118,68 @@ class HfDoctestModule(Module):
             if test.examples:  # skip empty doctests and cuda
                 yield DoctestItem.from_parent(self, name=test.name, runner=runner, dtest=test)
 
+
 def _device_agnostic_dispatch(device, dispatch_table, *args, **kwargs):
     if device not in dispatch_table:
         return dispatch_table["default"](*args, **kwargs)
 
     fn = dispatch_table[device]
-    
+
     # TODO: intended to be noop, but are there any edge cases to this approach?
     # eg. returning None when expected at least something.
     if fn is None:
-        return 
+        return
     return fn(*args, **kwargs)
+
 
 # TODO: insert new entries in dicts from environment variable spec
 
-ACCELERATOR_MANUAL_SEED = {
-    'cuda': torch.cuda.manual_seed,
-    'default': torch.manual_seed
-}
+ACCELERATOR_MANUAL_SEED = {"cuda": torch.cuda.manual_seed, "default": torch.manual_seed}
+ACCELERATOR_EMPTY_CACHE = {"cuda": torch.cuda.empty_cache, "cpu": None}
+ACCELERATOR_DEVICE_COUNT = {"cuda": torch.cuda.device_count, "cpu": lambda: 0}
+
 
 def accelerator_manual_seed(device, seed):
     return _device_agnostic_dispatch(device, ACCELERATOR_MANUAL_SEED, seed)
 
 
-ACCELERATOR_EMPTY_CACHE = {
-    'cuda': torch.cuda.empty_cache,
-    'cpu': None
-}
-
 def accelerator_empty_cache(device):
     return _device_agnostic_dispatch(device, ACCELERATOR_EMPTY_CACHE)
 
 
-ACCELERATOR_DEVICE_COUNT = {
-    'cuda': torch.cuda.device_count(),
-    'cpu': lambda: 0
-}
-
 def accelerator_device_count(device):
     return _device_agnostic_dispatch(device, ACCELERATOR_DEVICE_COUNT)
+
+
+if "TRANSFORMERS_TEST_DEVICE_SPEC" in os.environ:
+    device_spec_path = os.environ["TRANSFORMERS_TEST_DEVICE_SPEC"]
+    if not Path(device_spec_path).is_file():
+        raise ValueError(
+            f"Specified path to device spec file is not a file or not found. Received '{device_spec_path}"
+        )
+
+    try:
+        import_name = device_spec_path[: device_spec_path.index(".py")]
+    except ValueError as e:
+        raise ValueError("Provided device spec file was not a Python file! Received '{device_spec_path}") from e
+
+    device_spec_module = importlib.import_module(import_name)
+
+    try:
+        device_name = device_spec_module.DEVICE_NAME
+    except AttributeError as e:
+        raise AttributeError("Device spec file did not contain `DEVICE_NAME`") from e
+
+    def update_mapping_from_spec(device_fn_dict: Dict[str, Callable], attribute_name: str):
+        try:
+            spec_fn = getattr(device_spec_module, attribute_name)
+            device_fn_dict[device_name] = spec_fn
+        except AttributeError as e:
+            if "default" not in device_fn_dict:
+                raise AttributeError(
+                    f"`{attribute_name}` not found in '{device_spec_path}' and no default fallback function found."
+                ) from e
+
+    update_mapping_from_spec(ACCELERATOR_MANUAL_SEED, "MANUAL_SEED_FN")
+    update_mapping_from_spec(ACCELERATOR_EMPTY_CACHE, "EMPTY_CACHE_FN")
+    update_mapping_from_spec(ACCELERATOR_DEVICE_COUNT, "DEVICE_COUNT_FN")
