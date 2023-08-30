@@ -1799,13 +1799,12 @@ class Trainer:
                     # Otherwise we need to call the whooooole sampler cause there is some random operation added
                     # AT THE VERY END!
                     sampler = []
+                    
                     if hasattr(train_dataloader, "sampler") and isinstance(train_dataloader.sampler, RandomSampler):
                         sampler = train_dataloader.sampler
-                    elif hasattr(train_dataloader, "batch_sampler") and isinstance(train_dataloader.batch_sampler.sampler, RandomSampler):
-                        sampler = train_dataloader.batch_sampler.sampler
-                    elif hasattr(train_dataloader, "batch_sampler") and hasattr(train_dataloader.batch_sampler, "batch_sampler") \
-                         and isinstance(train_dataloader.batch_sampler.batch_sampler.sampler, RandomSampler):
-                        sampler = train_dataloader.batch_sampler.batch_sampler.sampler
+                    else:
+                        sampler = train_dataloader.batch_sampler
+                        
                     _ = list(sampler)
                     
         total_batched_samples = 0
