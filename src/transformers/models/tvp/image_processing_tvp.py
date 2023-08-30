@@ -17,7 +17,6 @@
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-import torch
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
@@ -275,7 +274,7 @@ class TVPImageProcessor(BaseImageProcessor):
         fill: int = 0,
         padding_mode: str = "constant",
         **kwargs,
-    ) -> torch.Tensor:
+    ):
         h, w = image.shape[-2:]
         max_w, max_h = padding_size["width"], padding_size["height"]
         pad_right, pad_bottom = max_w - w, max_h - h

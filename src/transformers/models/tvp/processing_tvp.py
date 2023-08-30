@@ -18,8 +18,6 @@ Image/Text processor class for TVP
 
 import warnings
 
-import torch
-
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
@@ -49,7 +47,7 @@ class TVPProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
 
-    def __call__(self, text=None, videos=None, return_tensors=None, dtype=torch.float32, **kwargs):
+    def __call__(self, text=None, videos=None, return_tensors=None, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to BertTokenizerFast's [`~BertTokenizerFast.__call__`] if `text` is not `None` to encode
@@ -75,13 +73,6 @@ class TVPProcessor(ProcessorMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
-
-            dtype: (`torch.dtype`):
-                The data type of pixel_values. Acceptable values are:
-
-                - `'torch.float32`
-                - `'torch.float16`
-                - `'torch.bfloat16`
 
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
@@ -111,7 +102,7 @@ class TVPProcessor(ProcessorMixin):
             image_features = self.image_processor(videos, return_tensors=return_tensors, **kwargs)
 
         if text is not None and videos is not None:
-            encoding["pixel_values"] = image_features.pixel_values.to(dtype)
+            encoding["pixel_values"] = image_features.pixel_values
             return encoding
         elif text is not None:
             return encoding
