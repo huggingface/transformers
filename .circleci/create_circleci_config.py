@@ -234,15 +234,14 @@ class CircleCIJob:
         py_command = f'import os; fp = open("reports/tests_{self.name}/summary_short.txt"); failed = os.linesep.join([x for x in fp.read().split(os.linesep) if x.startswith("FAILED ")]); fp.close(); fp = open("summary_short.txt", "w"); fp.write(failed); fp.close()'
         check_test_command += f"$(python3 -c '{py_command}'); "
 
-        check_test_command += f'cat summary_short.txt; exit -1; '
+        check_test_command += f'cat summary_short.txt; echo ""; exit -1; '
         check_test_command += f'elif [ -s reports/tests_{self.name}/stats.txt ]; then echo "All tests pass!"; '
 
         # return code `124` means the previous (pytest run) step is timeout
         if self.name == "pr_documentation_tests":
             check_test_command += 'elif [ -f 124.txt ]; then echo "doctest timeout!"; '
 
-        check_test_command += 'else echo "other fatal error"; exit -1; fi;'
-        check_test_command += 'echo ""; '
+        check_test_command += 'else echo "other fatal error"; echo ""; exit -1; fi;'
 
         steps.append({"run": {"name": "Check test results", "command": check_test_command}})
 
