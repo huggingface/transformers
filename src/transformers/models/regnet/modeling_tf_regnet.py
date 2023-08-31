@@ -14,7 +14,7 @@
 # limitations under the License.
 """ TensorFlow RegNet model."""
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -394,10 +394,10 @@ class TFRegNetModel(TFRegNetPreTrainedModel):
     def call(
         self,
         pixel_values: tf.Tensor,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> TFBaseModelOutputWithPoolingAndNoAttention | Tuple[tf.Tensor]:
+    ) -> Union[TFBaseModelOutputWithPoolingAndNoAttention, Tuple[tf.Tensor]]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -447,12 +447,12 @@ class TFRegNetForImageClassification(TFRegNetPreTrainedModel, TFSequenceClassifi
     )
     def call(
         self,
-        pixel_values: tf.Tensor | None = None,
-        labels: tf.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
+        pixel_values: Optional[tf.Tensor] = None,
+        labels: Optional[tf.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> TFSequenceClassifierOutput | Tuple[tf.Tensor]:
+    ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
