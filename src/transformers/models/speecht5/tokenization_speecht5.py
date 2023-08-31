@@ -105,13 +105,13 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
         **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-
         self.vocab_file = vocab_file
+        self.normalize = normalize
+        self._normalizer = None
 
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
-        self.normalize = normalize
-
+        
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
