@@ -15,7 +15,7 @@ specific language governing permissions and limitations under the License.
 ## Overview
 
 The TVP model was proposed in [Text-Visual Prompting for Efficient 2D Temporal Video Grounding](https://arxiv.org/abs/2209.14156) by Yimeng Zhang, Xin Chen, Jinghan Jia, Sijia Liu, Ke Ding. The goal of
-this model is to incorporate trainable prompts into both visual inputs and textual features to temporal video grounding(TVG) problems, so we need no more compute-heavy 3D visual encoders and still get SOTA
+this model is to incorporate trainable prompts into both visual inputs and textual features to temporal video grounding (TVG) problems, so we need no more compute-heavy 3D visual encoders and still get SOTA
 accuracy on TVG tasks which predicts the interval of clips which was described by a text sentence within a long untrimmed video.
 
 The paper has been accepted to the [CVPR'23](https://cvpr2023.thecvf.com/) conference.
@@ -102,7 +102,7 @@ def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps
     Returns:
         frames (tensor): decoded frames from the video.
     """
-    assert clip_idx >= -2, "Not valied clip_idx {}".format(clip_idx)
+    assert clip_idx >= -2, "Not a valied clip_idx {}".format(clip_idx)
     frames, fps = pyav_decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps)
     clip_size = sampling_rate * num_frames / target_fps * fps
     index = torch.linspace(0, clip_size - 1, num_frames)
