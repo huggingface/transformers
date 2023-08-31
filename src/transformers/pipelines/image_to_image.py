@@ -95,7 +95,7 @@ class ImageToImagePipeline(Pipeline):
 
         Return:
             An image (Image.Image) or a list of images (List["Image.Image"]) containing result(s). If the input is a
-            single image, the return will be also a single image, if the input is a list of several images, will return
+            single image, the return will be also a single image, if the input is a list of several images, it will return
             a list of transformed images.
         """
         return super().__call__(images, **kwargs)
