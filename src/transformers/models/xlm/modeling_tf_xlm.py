@@ -649,9 +649,8 @@ XLM_INPUTS_DOCSTRING = r"""
             also use *attention_mask* for the same result (see above), kept here for compatibility. Indices selected in
             `[0, ..., input_ids.size(-1)]`.
         cache (`Dict[str, tf.Tensor]`, *optional*):
-            Dictionary string to `tf.Tensor` that contains precomputed hidden states (key and values in the
-            attention blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential
-            decoding.
+            Dictionary string to `tf.Tensor` that contains precomputed hidden states (key and values in the attention
+            blocks) as computed by the model (see `cache` output below). Can be used to speed up sequential decoding.
 
             The dictionary object will be modified in-place during the forward pass to add newly computed
             hidden-states.
