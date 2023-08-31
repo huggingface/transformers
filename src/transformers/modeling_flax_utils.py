@@ -295,6 +295,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             params = unfreeze(params)
         param_keys = set(flatten_dict(params).keys())
         if len(self.required_params - param_keys) > 0:
+            import ipdb
+
+            ipdb.set_trace()
             raise ValueError(
                 "Some parameters are missing. Make sure that `params` include the following "
                 f"parameters {self.required_params - param_keys}"
