@@ -1334,7 +1334,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     Speech Recognition model. It facilitates the manipulation of log probabilities for a predefined list of tokens
     during text generation. By using this processor, you can effectively "force" certain tokens to be selected at
     specific positions in the generated sequence. When tokens are passed to this processor, their log probabilities are
-    set to `inf` (infinity),ensuring that they are chosen at their corresponding indices. This is particularly useful
+    set to `inf` (infinity), ensuring that they are chosen at their corresponding indices. This is particularly useful
     in scenarios where you want to have deterministic control over parts of the generated output.
 
 
