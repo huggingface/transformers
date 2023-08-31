@@ -39,30 +39,14 @@ class SeamlessM4TConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
+        vocab_size (`int`, *optional*, defaults to 256102):
             Vocabulary size of the SeamlessM4T model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`~SeamlessM4TModel`] or [`~TFSeamlessM4TModel`].
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimension of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`~SeamlessM4TModel`] or
-            [`~TFSeamlessM4TModel`].
+            the `inputs_ids` passed when calling [`~SeamlessM4TModel`], [`~SeamlessM4TForSpeechToSpeech`], [`~SeamlessM4TForSpeechToText`], [`~SeamlessM4TForTextToSpeech`] or [`~SeamlessM4TForTextToText`].
+        unit_vocab_size (`int`, *optional*, defaults to 10082):
+            Unit vocabulary size of the SeamlessM4T model. Defines the number of different unit tokens that can be represented by
+            the `inputs_ids` passed when calling the Text-To-Units sub-model of [`~SeamlessM4TModel`], [`~SeamlessM4TForSpeechToSpeech`], [`~SeamlessM4TForSpeechToText`], [`~SeamlessM4TForTextToSpeech`] or [`~SeamlessM4TForTextToText`].
+        hidden_size (`int`, *optional*, defaults to 1024):
+            Dimensionality of the "intermediate" layers in the architecture.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -70,6 +54,32 @@ class SeamlessM4TConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        max_position_embeddings (`int`, *optional*, defaults to 1024):
+            The maximum sequence length that this model text encoder and decoder might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
+            Whether the model is used as an encoder/decoder or not.
+            
+            
+            
+        speech_encoder_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer speech encoder.
+        speech_encoder_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer speech encoder.
+        speech_encoder_intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer speech encoder.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the attention probabilities.
+
+        type_vocab_size (`int`, *optional*, defaults to 2):
+            The vocabulary size of the `token_type_ids` passed when calling [`~SeamlessM4TModel`] or
+            [`~TFSeamlessM4TModel`].
+
 
 
         model_in_dim (`int`, *optional*, defaults to 80):
@@ -115,17 +125,15 @@ class SeamlessM4TConfig(PretrainedConfig):
         vocab_size=256102,
         unit_vocab_size=10082,
         # overall_config
-        hidden_size=1024,  # works for speech encoder
-        use_text_encoder=True,
-        use_speech_encoder=True,
-        num_hidden_layers=24,  # works for speech encoder
-        num_attention_heads=16,  # works for speech encoder
-        intermediate_size=4096,
+        hidden_size=1024,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
-        max_position_embeddings=1024,
         use_cache=True,
+        max_position_embeddings=1024,
         is_encoder_decoder=True,
+        
+        
+        # left to add
         # text|unit encoder|decoder
         encoder_layers=24,
         encoder_ffn_dim=8192,
@@ -144,6 +152,9 @@ class SeamlessM4TConfig(PretrainedConfig):
         scale_embedding=True,
         max_new_tokens=256,
         # speech_encoder
+        speech_encoder_layers=24,  # works for speech encoder
+        speech_encoder_attention_heads=16,  # works for speech encoder
+        speech_encoder_intermediate_size=4096,
         speech_encoder_hidden_act="swish",
         speech_encoder_dropout=0.0,
         add_adapter=True,
@@ -164,7 +175,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         rotary_embedding_base=10000,
         max_source_positions=4096,  # works
         conv_depthwise_kernel_size=31,
-        conformer_conv_dropout=0.1,
         # t2u config
         t2u_bos_token_id=0,
         t2u_pad_token_id=1,
@@ -180,7 +190,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         t2u_decoder_attention_heads=16,  # works
         t2u_num_langs=38,
         hidden_act="gelu",
-        attention_probs_dropout_prob=0.1,
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=3,
@@ -211,11 +220,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.unit_vocab_size = unit_vocab_size
         self.hidden_size = hidden_size
-        self.use_text_encoder = use_text_encoder
-        self.use_speech_encoder = use_speech_encoder
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
+        self.speech_encoder_intermediate_size = speech_encoder_intermediate_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.max_position_embeddings = max_position_embeddings
@@ -240,8 +245,11 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding
 
         # speech_encoder
+        self.speech_encoder_layers = speech_encoder_layers
         self.speech_encoder_hidden_act = speech_encoder_hidden_act
         self.speech_encoder_dropout = speech_encoder_dropout
+        self.speech_encoder_attention_heads = speech_encoder_attention_heads
+
         self.conv_dim = conv_dim
         self.conv_stride = conv_stride
         self.conv_kernel = conv_kernel
@@ -289,7 +297,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.upsample_kernel_sizes = upsample_kernel_sizes
         self.resblock_kernel_sizes = resblock_kernel_sizes
         self.resblock_dilation_sizes = resblock_dilation_sizes
-        self.initializer_range = initializer_range
         self.leaky_relu_slope = leaky_relu_slope
 
         # TODO: add to docstrings

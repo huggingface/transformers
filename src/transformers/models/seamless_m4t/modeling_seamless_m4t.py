@@ -317,7 +317,7 @@ class SeamlessM4TConformerRotaryPositionalEmbedding(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        dim = config.hidden_size // config.num_attention_heads
+        dim = config.hidden_size // config.speech_encoder_attention_heads
         base = config.rotary_embedding_base
 
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
@@ -427,7 +427,7 @@ class SeamlessM4TConformerFeedForward(nn.Module):
         super().__init__()
         self.intermediate_dropout = nn.Dropout(config.speech_encoder_dropout)
 
-        self.intermediate_dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.intermediate_dense = nn.Linear(config.hidden_size, config.speech_encoder_intermediate_size)
 
         if use_relu:
             self.intermediate_act_fn = nn.ReLU()
@@ -436,7 +436,7 @@ class SeamlessM4TConformerFeedForward(nn.Module):
         else:
             self.intermediate_act_fn = config.speech_encoder_hidden_act
 
-        self.output_dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.output_dense = nn.Linear(config.speech_encoder_intermediate_size, config.hidden_size)
         self.output_dropout = nn.Dropout(config.speech_encoder_dropout)
 
     def forward(self, hidden_states):
@@ -525,8 +525,8 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
     def __init__(self, config, use_position_embeddings=True):
         super().__init__()
 
-        self.head_size = config.hidden_size // config.num_attention_heads
-        self.num_heads = config.num_attention_heads
+        self.head_size = config.hidden_size // config.speech_encoder_attention_heads
+        self.num_heads = config.speech_encoder_attention_heads
         if use_position_embeddings:
             self.position_embeddings_type = config.position_embeddings_type
         else:
@@ -756,7 +756,7 @@ class SeamlessM4TConformerEncoder(nn.Module):
 
         self.dropout = nn.Dropout(config.speech_encoder_dropout)
         self.layers = nn.ModuleList(
-            [SeamlessM4TConformerEncoderLayer(config) for _ in range(config.num_hidden_layers)]
+            [SeamlessM4TConformerEncoderLayer(config) for _ in range(config.speech_encoder_layers)]
         )
 
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -1524,7 +1524,7 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
 # not exactly the same as Wav2Vec2ConformerModel
 class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
     """
-    Transformer speech encoder consisting of *config.num_hidden_layers* conformer self attention layers. Each layer is
+    Transformer speech encoder consisting of *config.speech_encoder_layers* conformer self attention layers. Each layer is
     a [`SeamlessM4TConformerEncoderLayer`].
 
     Args:
@@ -4029,9 +4029,9 @@ class SeamlessM4TModelOld(SeamlessM4TPreTrainedModel):
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        # input head_mask has shape [num_heads] or [speech_encoder_layers x num_heads]
+        # and head_mask is converted to shape [speech_encoder_layers x batch x num_heads x seq_length x seq_length]
+        head_mask = self.get_head_mask(head_mask, self.config.speech_encoder_layers)
 
         embedding_output = self.embeddings(
             input_ids=input_ids,

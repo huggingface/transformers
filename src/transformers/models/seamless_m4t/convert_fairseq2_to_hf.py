@@ -164,7 +164,7 @@ def _load_hf_config(model_type="medium"):
             "decoder_ffn_dim": 4096,
             "t2u_encoder_layers": 4,
             "t2u_decoder_layers": 4,
-            "num_hidden_layers": 12,
+            "speech_encoder_layers": 12,
         }
         return SeamlessM4TConfig(**kwargs)
     else:
