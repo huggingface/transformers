@@ -148,6 +148,18 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         # mark tokens special to skip them
         additional_special_tokens = kwargs.pop("additional_special_tokens", [])
         additional_special_tokens += [prefix_token, middle_token, suffix_token, eot_token]
+
+        self.vocab_file = vocab_file
+        self.add_bos_token = add_bos_token
+        self.add_eos_token = add_eos_token
+        self._prefix_token = prefix_token
+        self._middle_token = middle_token
+        self._suffix_token = suffix_token
+        self._eot_token = eot_token
+        self.fill_token = fill_token
+        self.suffix_first = suffix_first
+        self.sp_model = self.get_spm_processor()
+        
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -166,16 +178,6 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-        self.vocab_file = vocab_file
-        self.add_bos_token = add_bos_token
-        self.add_eos_token = add_eos_token
-        self._prefix_token = prefix_token
-        self._middle_token = middle_token
-        self._suffix_token = suffix_token
-        self._eot_token = eot_token
-        self.fill_token = fill_token
-        self.suffix_first = suffix_first
-        self.sp_model = self.get_spm_processor()
 
     @property
     def unk_token_length(self):
