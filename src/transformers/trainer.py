@@ -65,7 +65,7 @@ from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
-from .pytorch_utils import ALL_LAYERNORM_LAYERS
+from .pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_less_than_1_11
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -214,6 +214,15 @@ if is_accelerate_available():
 
 if TYPE_CHECKING:
     import optuna
+
+
+def get_dataloader_sampler(dataloader):
+    if hasattr(dataloader, "sampler") and isinstance(dataloader.sampler, RandomSampler):
+        return dataloader.sampler, True
+    if hasattr(dataloader, "batch_sampler"):
+        return get_dataloader_sampler(dataloader.batch_sampler)
+    return dataloader.sampler, False
+
 
 logger = logging.get_logger(__name__)
 
@@ -1782,32 +1791,16 @@ class Trainer:
         # Skip the first epochs_trained epochs to get the random state of the dataloader at the right point.
         if not args.ignore_data_skip:
             for epoch in range(epochs_trained):
-                is_random_sampler = (
-                    (hasattr(train_dataloader, "sampler") and isinstance(train_dataloader.sampler, RandomSampler))
-                    or (
-                        hasattr(train_dataloader, "batch_sampler")
-                        and isinstance(train_dataloader.batch_sampler.sampler, RandomSampler)
-                    )
-                    or (
-                        hasattr(train_dataloader, "batch_sampler")
-                        and hasattr(train_dataloader.batch_sampler, "batch_sampler")
-                        and isinstance(train_dataloader.batch_sampler.batch_sampler.sampler, RandomSampler)
-                    )
-                )
-                if not is_random_sampler:
+                sampler, is_random_sampler = get_dataloader_sampler(train_dataloader)
+
+                if is_torch_less_than_1_11 or not is_random_sampler:
                     # We just need to begin an iteration to create the randomization of the sampler.
                     for _ in train_dataloader:
                         break
                 else:
                     # Otherwise we need to call the whooooole sampler cause there is some random operation added
                     # AT THE VERY END!
-                    sampler = []
-
-                    if hasattr(train_dataloader, "sampler") and isinstance(train_dataloader.sampler, RandomSampler):
-                        sampler = train_dataloader.sampler
-                    else:
-                        sampler = train_dataloader.batch_sampler
-
+                    sampler = sampler if sampler is not None else []
                     _ = list(sampler)
 
         total_batched_samples = 0
