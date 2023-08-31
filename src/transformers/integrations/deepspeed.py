@@ -21,7 +21,7 @@ from functools import partialmethod
 
 from ..dependency_versions_check import dep_version_check
 from ..utils import is_accelerate_available, is_torch_available, logging
-
+from ..optimization import get_scheduler
 
 if is_torch_available():
     import torch
@@ -306,7 +306,12 @@ def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps
         if isinstance(optimizer, DummyOptim):
 
             def _lr_scheduler_callable(optimizer):
-                return trainer.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
+                return get_scheduler(
+                    trainer.args.lr_scheduler_type,
+                    optimizer=optimizer,
+                    num_warmup_steps=trainer.args.get_warmup_steps(num_training_steps),
+                    num_training_steps=num_training_steps,
+                )
 
             lr_scheduler = DummyScheduler(optimizer, lr_scheduler_callable=_lr_scheduler_callable)
         else:
