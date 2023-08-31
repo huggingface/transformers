@@ -172,11 +172,6 @@ class FlaxLlamaRotaryEmbedding(nn.Module):
         head_dim = self.config.hidden_size // self.config.num_attention_heads
         self.sincos = create_sinusoidal_positions(self.config.max_position_embeddings, head_dim)
 
-        # inv_freq is unused but create it here to avoid mismatch when loading
-        # from pt checkpoint.
-        inv_freq = 1.0 / (10000 ** (jnp.arange(0, head_dim, 2) / head_dim))
-        self.inv_freq = self.param("inv_freq", lambda _: inv_freq)
-
     def __call__(self, key, query, position_ids):
         sincos = self.sincos[position_ids]
         sincos = jnp.split(sincos, 2, axis=-1)
