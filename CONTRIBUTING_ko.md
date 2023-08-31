@@ -141,7 +141,7 @@ python src/transformers/commands/transformers_cli.py env
 
    만약 이미 가상 환경에 🤗 Transformers가 설치되어 있다면, `-e` 플래그를 사용하여 설치하기 전에 `pip uninstall transformers`로 제거해주세요.
    
-   여러분의 운영체제에 따라서, 그리고 🤗 Transformers의 선택적 의존성의 수가 증가하면서, 이 명령이 실패할 수도 있습니다. 그럴 경우 사용하려는 딥 러닝 프레임워크(PyTorch, TensorFlow, 그리고/또는 Flax)를 설치한 후 아래 명령을 실행해주세요:
+   여러분의 운영체제에 따라서, 그리고 🤗 Transformers의 선택적 의존성의 수가 증가하면서, 이 명령이 실패할 수도 있습니다. 그럴 경우 사용하려는 딥러닝 프레임워크(PyTorch, TensorFlow, 그리고/또는 Flax)를 설치한 후 아래 명령을 실행해주세요:
 
    ```bash
    pip install -e ".[quality]"
