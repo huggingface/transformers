@@ -64,9 +64,6 @@ VOCODER_SUPPORTED_LANGUAGES = ["__arb__", "__ben__", "__cat__", "__ces__", "__cm
 
 # TODO: change repo/id -> repo id
 # TODO: add language code to docstrings
-# TODO: add t2u_vocab_size and t2u_language_code and t2u_tokenizer_offset
-# TODO: is config loaded during tokenization ? maybe depends entirely of the vocoder  / t2u model so should be used by it
-
 
 class SeamlessM4TTokenizer(PreTrainedTokenizer):
     """
