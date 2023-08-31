@@ -1417,7 +1417,7 @@ class VitsModel(VitsPreTrainedModel):
         >>> with torch.no_grad():
         ...     outputs = model(inputs["input_ids"])
         >>> outputs.waveform.shape
-        torch.Size([1, 33280])
+        torch.Size([1, 45824])
         ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
