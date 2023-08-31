@@ -1406,7 +1406,7 @@ class VitsModel(VitsPreTrainedModel):
         >>> tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
         >>> model = VitsModel.from_pretrained("facebook/mms-tts-eng")
 
-        >>> inputs = tokenizer(text="Hello, my dog is cute", return_tensors="pt")
+        >>> inputs = tokenizer(text="Hello - my dog is cute", return_tensors="pt")
 
         >>> set_seed(555)  # make deterministic
 
@@ -1427,10 +1427,10 @@ class VitsModel(VitsPreTrainedModel):
         else:
             input_padding_mask = torch.ones_like(input_ids).unsqueeze(-1).float()
 
-        if self.config.num_speakers > 1:
-            if speaker_id is None:
+        if self.config.num_speakers > 1 and speaker_id is not None:
+            if not 0 <= speaker_id < self.config.num_speakers:
                 raise ValueError(
-                    f"Expected input `speaker_id` for a multispeaker model, set `speaker_id` in the range 0-{self.config.num_speakers - 1}."
+                    f"Set `speaker_id` in the range 0-{self.config.num_speakers - 1}."
                 )
             speaker_embeddings = self.embed_speaker(torch.tensor([speaker_id])).unsqueeze(-1)
         else:

@@ -56,14 +56,30 @@ from transformers import VitsTokenizer, VitsModel, set_seed
 tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
 model = VitsModel.from_pretrained("facebook/mms-tts-eng")
 
-inputs = tokenizer(text="Hello, my dog is cute", return_tensors="pt")
+inputs = tokenizer(text="Hello - my dog is cute", return_tensors="pt")
 
 set_seed(555)  # make deterministic
 
 with torch.no_grad():
    outputs = model(**inputs)
 
-outputs.audio.shape
+waveform = outputs.waveform[0]
+```
+
+The resulting waveform can be saved as a `.wav` file:
+
+```python
+import scipy
+
+scipy.io.wavfile.write("techno.wav", rate=model.config.sampling_rate, data=waveform)
+```
+
+Or displayed in a Jupyter Notebook / Google Colab:
+
+```python
+from IPython.display import Audio
+
+Audio(waveform, rate=model.config.sampling_rate)
 ```
 
 For certain languages with a non-Roman alphabet, such as Arabic, Mandarin or Hindi, the [`uroman`](https://github.com/isi-nlp/uroman) 
@@ -76,7 +92,7 @@ the pre-trained `tokenizer`:
 from transformers import VitsTokenizer
 
 tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
-tokenizer.is_uroman
+print(tokenizer.is_uroman)
 ```
 
 If required, you should apply the uroman package to your text inputs **prior** to passing them to the `VitsTokenizer`, 
