@@ -2023,7 +2023,6 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # TODO: here adapt expand_mask with modality
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
@@ -2857,7 +2856,6 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
         super().__init__(config)
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
 
-        # TODO: post init ?
 
     # @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     # @add_code_sample_docstrings(
@@ -2967,8 +2965,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
             t2u_input_embeds = t2u_input_embeds[idx_most_probable_sequences_per_batch]
             sequences = sequences[idx_most_probable_sequences_per_batch]
 
-        # TODO: is it the proper way, what's the priority with generation config and so on?
-        pad_token_id = self.config.pad_token_id
+        pad_token_id = self.generation_config.pad_token_id
 
         # Compute new attention mask
         seq_lens = (sequences != pad_token_id).int().sum(1)
@@ -3150,8 +3147,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
             t2u_input_embeds = t2u_input_embeds[idx_most_probable_sequences_per_batch]
             sequences = sequences[idx_most_probable_sequences_per_batch]
 
-        # TODO: is it the proper way, what's the priority with generation config and so on?
-        pad_token_id = self.config.pad_token_id
+        pad_token_id = self.generation_config.pad_token_id
 
         # Compute new attention mask
         seq_lens = (sequences != pad_token_id).int().sum(1)
@@ -3522,8 +3518,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             t2u_input_embeds = t2u_input_embeds[idx_most_probable_sequences_per_batch]
             sequences = sequences[idx_most_probable_sequences_per_batch]
 
-        # TODO: is it the proper way, what's the priority with generation config and so on?
-        pad_token_id = self.config.pad_token_id
+        pad_token_id = self.generation_config.pad_token_id
 
         # Compute new attention mask
         seq_lens = (sequences != pad_token_id).int().sum(1)
