@@ -33,7 +33,7 @@ from transformers import (
     ImageSegmentationPipeline,
     MaskFormerForInstanceSegmentation,
     is_vision_available,
-    pipeline, Pipeline,
+    pipeline,
 )
 from transformers.testing_utils import (
     is_pipeline_test,
@@ -722,10 +722,10 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         model = AutoModelForImageSegmentation.from_pretrained(model_id)
         image_processor = AutoImageProcessor.from_pretrained(model_id)
         image_segmenter = pipeline(
-            task='image-segmentation',
+            task="image-segmentation",
             model=model,
             image_processor=image_processor,
         )
         with tempfile.TemporaryDirectory() as tmpdirname:
             image_segmenter.save_pretrained(tmpdirname)
-            loaded_image_segmenter = pipeline(task = 'image-segmentation',model=tmpdirname)
+            pipeline(task="image-segmentation", model=tmpdirname)
