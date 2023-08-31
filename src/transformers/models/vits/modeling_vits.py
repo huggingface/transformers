@@ -1429,9 +1429,7 @@ class VitsModel(VitsPreTrainedModel):
 
         if self.config.num_speakers > 1 and speaker_id is not None:
             if not 0 <= speaker_id < self.config.num_speakers:
-                raise ValueError(
-                    f"Set `speaker_id` in the range 0-{self.config.num_speakers - 1}."
-                )
+                raise ValueError(f"Set `speaker_id` in the range 0-{self.config.num_speakers - 1}.")
             speaker_embeddings = self.embed_speaker(torch.tensor([speaker_id])).unsqueeze(-1)
         else:
             speaker_embeddings = None

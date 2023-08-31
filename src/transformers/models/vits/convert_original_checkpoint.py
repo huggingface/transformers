@@ -367,7 +367,9 @@ if __name__ == "__main__":
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument("--language", default=None, type=str, help="Tokenizer language (three-letter code)")
     parser.add_argument("--num_speakers", default=None, type=int, help="Number of speakers")
-    parser.add_argument("--sampling_rate", default=None, type=int, help="Sampling rate on which the model was trained.")
+    parser.add_argument(
+        "--sampling_rate", default=None, type=int, help="Sampling rate on which the model was trained."
+    )
     parser.add_argument(
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
     )
