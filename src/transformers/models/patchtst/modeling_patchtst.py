@@ -38,6 +38,7 @@ PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+
 class PatchTSTAttention(nn.Module):
     def __init__(self, config: PatchTSTConfig):
         super().__init__()
@@ -850,6 +851,7 @@ class RevIN(nn.Module):
         self.eps = eps
 
     def set_statistics(self, mean, stdev):
+        # get statistics
         self.mean = mean
         self.stdev = stdev
 
@@ -861,7 +863,6 @@ class RevIN(nn.Module):
             x = self._denormalize(x)
         elif mode == "transform":
             x = self._normalize(x)
-
         else:
             raise NotImplementedError
         return x
@@ -877,7 +878,7 @@ class RevIN(nn.Module):
         return x
 
     def _denormalize(self, x):
-
+        # denormalize the data
         if self.denorm_channels is None:
             x = x * self.stdev
             x = x + self.mean
@@ -945,7 +946,7 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
                                                   revin_stdev=self.revin.stdev if self.use_revin else None
                                                   )
 
-class PretrainHead(nn.Module):
+class MaskPretrainHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dropout = nn.Dropout(config.dropout)
@@ -992,14 +993,14 @@ class PatchTSTOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class PatchTSTForPretraining(PatchTSTPreTrainedModel):
+class PatchTSTForMaskPretraining(PatchTSTPreTrainedModel):
     # PatchTSTModel + Pretraining Head
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
 
         config.mask_input = True
         self.model = PatchTSTModel(config=config)
-        self.head = PretrainHead(config)
+        self.head = MaskPretrainHead(config)
         self.loss = torch.nn.MSELoss(reduction='none')
 
         # Initialize weights and apply final processing
@@ -1172,11 +1173,6 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         self.model = PatchTSTModel(config)
         self.head = PredictionHead(config)
         self.loss = nn.MSELoss(reduction='mean')
-        self.use_revin = config.revin
-        if self.use_revin:
-            self.revin = RevIN()
-        else:
-            self.revin = nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1191,10 +1187,6 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         )
         model_output = self.model(past_values, output_hidden_states=output_hidden_states)
         y_hat = self.head(model_output.last_hidden_state)
-
-        if self.use_revin:
-            self.revin.set_statistics(mean=model_output.revin_mean, stdev=model_output.revin_stdev)
-            y_hat = self.revin(y_hat, mode="denorm")
 
         loss_val = None
         if future_values is not None:
@@ -1356,7 +1348,6 @@ class RegressionHead(nn.Module):
             or [bs x nvars x (num_patch+1) x d_model] if use cls_token
         output: [bs x output_dim]
         """
-
         if self.use_cls_token:
             past_values = past_values[:, :, 0, :]  # use the first output token, x: [bs x nvars x d_model]
         elif self.pooling == 'mean':
@@ -1382,11 +1373,6 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         self.model = PatchTSTModel(config)
         self.head = RegressionHead(config)
         self.loss = nn.MSELoss(reduction='mean')
-        self.use_revin = config.revin
-        if self.use_revin:
-            self.revin = RevIN()
-        else:
-            self.revin = nn.Identity()
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1400,10 +1386,6 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         )
         model_output = self.model(past_values, output_hidden_states=output_hidden_states)
         y_hat = self.head(model_output.last_hidden_state)
-
-        if self.use_revin:
-            self.revin.set_statistics(mean=model_output.revin_mean, stdev=model_output.revin_stdev)
-            y_hat = self.revin(y_hat, mode="denorm")
 
         loss_val = None
         if labels is not None:
