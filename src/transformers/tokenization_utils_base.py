@@ -2122,6 +2122,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         else:
                             init_kwargs[key] = value
             # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.
+            # TODO this is useless for a fast tokenizer ? Unless you have from_slow = True
             if added_tokens_file is not None:
                 with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                     added_tok_encoder = json.load(added_tokens_handle)
@@ -2132,8 +2133,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             # end legacy
 
         # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens!
-        # TODO 3 models are still failing because they need to have from_slow = True but still read the added_tokens file
-        slow_to_fast = slow_tokenizer is not None and added_tokens_file is not None and "Fast" in cls.__name__
+        # TODO 3 models are still failing because they need to have from_slow = False but still read the added_tokens file
         slow_to_fast = from_slow and added_tokens_file is not None and "Fast" in cls.__name__
         init_kwargs["slow_to_fast"] = slow_to_fast
 
@@ -2151,7 +2151,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens! Only time we need to check
         # We should deprecate this since you need a `convert_slow_tokenizer` method anyway, better to add the tokens then! (consistency)
-        if slow_to_fast:
+        if slow_to_fast or slow_tokenizer is not None and added_tokens_file is not None and "Fast" in cls.__name__:
             tokens = []
             special_tokens = tokenizer.all_special_tokens
             is_last_special = None

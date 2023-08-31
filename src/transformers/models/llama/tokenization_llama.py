@@ -156,7 +156,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-
     @property
     def unk_token_length(self):
         return len(self.sp_model.encode(str(self.unk_token)))
