@@ -151,7 +151,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
 
         Args:
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`, `List[List[List[float]]]`):
-                TODO: change description The sequence or batch of sequences to be padded. Each sequence can be a numpy
+                The sequence or batch of sequences to be padded. Each sequence can be a numpy
                 array, a list of float values, a list of numpy arrays, a list of list of float values or a list of a
                 list of list of float values. If `raw_speech` is a one-dimensional `np.ndarray` or a `List[float]`,
                 `raw_speech` is considered a single-channel, single-sample sound. In all other cases, the first
