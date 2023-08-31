@@ -855,30 +855,28 @@ class GroundingDINOMultiheadAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 # Repeting some code to avoid convert nn.MultiheadAttention later
-class GroundingDINOEncoderTextLayer(nn.Module):
-    def __init__(
-            self, 
-            embed_dim,
-            num_heads,
-            ffn_dim: int,
-            dropout: float = 0.0,
-            bias: bool = True,
-            activation: str = 'relu'
-            ):
+#TODO is this an approriate way to name this?
+class GroundingDINOTextEnhancerLayer(nn.Module):
+    """Vanilla Transformer with text embeddings as input"""
+    def __init__(self, config):
         super().__init__()
-        self.self_attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout)
+        self.self_attn = nn.MultiheadAttention(
+            embed_dim=config.d_model, 
+            num_heads=config.num_heads // 2, 
+            dropout=config.text_enhancer_dropout
+            )
         # Implementation of Feedforward model
-        self.fc1 = nn.Linear(embed_dim, ffn_dim)
-        self.dropout = nn.Dropout(dropout)
-        self.fc2 = nn.Linear(ffn_dim, embed_dim)
+        self.fc1 = nn.Linear(config.d_model, config.encoder_ffn_dim // 2)
+        self.dropout = nn.Dropout(config.text_enhancer_dropout)
+        self.fc2 = nn.Linear(config.encoder_ffn_dim // 2, config.d_model)
 
-        self.layer_norm_before = nn.LayerNorm(embed_dim)
-        self.layer_norm_after = nn.LayerNorm(embed_dim)
-        self.dropout1 = nn.Dropout(dropout)
-        self.dropout2 = nn.Dropout(dropout)
+        self.layer_norm_before = nn.LayerNorm(config.d_model)
+        self.layer_norm_after = nn.LayerNorm(config.d_model)
+        self.dropout1 = nn.Dropout(config.text_enhancer_dropout)
+        self.dropout2 = nn.Dropout(config.text_enhancer_dropout)
 
-        self.activation = ACT2FN[activation]
-        self.num_heads = num_heads
+        self.activation = ACT2FN[config.activation_fuction]
+        self.num_heads = config.num_heads // 2
 
     def with_pos_embed(self, hidden_state: Tensor, position_embeddings: Optional[Tensor]):
         return hidden_state if position_embeddings is None else hidden_state + position_embeddings
@@ -903,8 +901,8 @@ class GroundingDINOEncoderTextLayer(nn.Module):
         hidden_states = hidden_states + self.dropout2(attention_output)
         hidden_states = self.layer_norm_after(hidden_states)
         return hidden_states
-
-class BiMultiHeadAttention(nn.Module):
+    
+class GroundingDINOBiMultiHeadAttention(nn.Module):
     def __init__(
             self,
             vision_dim: int,
@@ -1106,38 +1104,26 @@ class GroundingDINODropPath(nn.Module):
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
     
-class GroundingDINOBiAttention(nn.Module):
-    def __init__(
-        self,
-        vision_dim,
-        text_dim,
-        embed_dim,
-        num_heads,
-        dropout=0.1,
-        drop_path=0.0,
-        init_values=1e-4,
-    ):
-        """
-        Inputs:
-            embed_dim - Dimensionality of input and attention feature vectors
-            hidden_dim - Dimensionality of hidden layer in feed-forward network
-                         (usually 2-4x larger than embed_dim)
-            num_heads - Number of heads to use in the Multi-Head Attention block
-            dropout - Amount of dropout to apply in the feed-forward network
-        """
+class GroundingDINOFusionLayer(nn.Module):
+    def __init__(self, config, init_values=1e-4):
         super().__init__()
+        drop_path = config.fusion_droppath
 
         # pre layer norm
-        self.layer_norm_vision = nn.LayerNorm(vision_dim)
-        self.layer_norm_text = nn.LayerNorm(text_dim)
-        self.attn = BiMultiHeadAttention(
-            vision_dim=vision_dim, text_dim=text_dim, embed_dim=embed_dim, num_heads=num_heads, dropout=dropout
+        self.layer_norm_vision = nn.LayerNorm(config.d_model)
+        self.layer_norm_text = nn.LayerNorm(config.d_model)
+        self.attn = GroundingDINOBiMultiHeadAttention(
+            vision_dim=config.d_model, 
+            text_dim=config.d_model, 
+            embed_dim=config.encoder_ffn_dim // 2, 
+            num_heads=config.num_heads // 2, 
+            dropout=config.fusion_dropout
         )
 
         # add layer scale for training stability
         self.drop_path = GroundingDINODropPath(drop_path) if drop_path > 0.0 else nn.Identity()
-        self.gamma_v = nn.Parameter(init_values * torch.ones((vision_dim)), requires_grad=True)
-        self.gamma_l = nn.Parameter(init_values * torch.ones((text_dim)), requires_grad=True)
+        self.gamma_v = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
+        self.gamma_l = nn.Parameter(init_values * torch.ones((config.d_model)), requires_grad=True)
 
     def forward(self, vision_features, text_features, attention_mask_vision=None, attention_mask_text=None):
         vision_features = self.layer_norm_vision(vision_features)
@@ -1153,8 +1139,8 @@ class GroundingDINOBiAttention(nn.Module):
         text_features = text_features + self.drop_path(self.gamma_l * delta_l)
         return vision_features, text_features
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrEncoderLayer with DeformableDetr->GroundingDINO
-class GroundingDINOEncoderLayer(nn.Module):
+#NOTE just renamed the class
+class GroundingDINODeformableLayer(nn.Module):
     def __init__(self, config: GroundingDINOConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -1237,6 +1223,98 @@ class GroundingDINOEncoderLayer(nn.Module):
             outputs += (attn_weights,)
 
         return outputs
+
+def get_sine_pos_embed(
+    pos_tensor: torch.Tensor,
+    num_pos_feats: int = 128,
+    temperature: int = 10000,
+    exchange_xy: bool = True,
+    ) -> Tensor:
+    """generate sine position embedding from a position tensor
+    Args:
+        pos_tensor (torch.Tensor): shape: [..., n].
+        num_pos_feats (int): projected shape for each float in the tensor.
+        temperature (int): temperature in the sine/cosine function.
+        exchange_xy (bool, optional): exchange pos x and pos y. \
+            For example, input tensor is [x,y], the results will be [pos(y), pos(x)]. Defaults to True.
+    Returns:
+        pos_embed (torch.Tensor): shape: [..., n*num_pos_feats].
+    """
+    scale = 2 * math.pi
+    dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=pos_tensor.device)
+    dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_pos_feats)
+
+    def sine_func(x: torch.Tensor):
+        sin_x = x * scale / dim_t
+        sin_x = torch.stack((sin_x[..., 0::2].sin(), sin_x[..., 1::2].cos()), dim=3).flatten(2)
+        return sin_x
+
+    pos_res = [sine_func(x) for x in pos_tensor.split([1] * pos_tensor.shape[-1], dim=-1)]
+    if exchange_xy:
+        pos_res[0], pos_res[1] = pos_res[1], pos_res[0]
+    pos_res = torch.cat(pos_res, dim=-1)
+    return pos_res
+
+
+class GroundingDINOEncoderLayer(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init_()
+        self.text_enhancer_layer = GroundingDINOTextEnhancerLayer(config)
+        self.fusion_layer = GroundingDINOFusionLayer(config)
+        self.deformable_layer = GroundingDINODeformableLayer(config)
+
+    def forward(
+            self,
+            vision_features: Tensor,
+            vision_position_embedding: Tensor,
+            spatial_shapes: Tensor,
+            level_start_index: Tensor,
+            key_padding_mask: Tensor,
+            reference_points: Tensor,
+            text_features: Optional[Tensor] = None,
+            text_attention_mask: Optional[Tensor] = None,
+            text_position_embedding: Optional[Tensor] = None,
+            text_self_attention_masks: Optional[Tensor] = None,
+            text_position_ids: Optional[Tensor] = None
+        ):
+        bs, n_text, text_dim = text_features.shape
+        if text_position_embedding is None and text_position_ids is None:
+            pos_text = (
+                torch.arange(n_text, device=text_features.device)
+                .float()
+                .unsqueeze(0)
+                .unsqueeze(-1)
+                .repeat(bs, 1, 1)
+            )
+            pos_text = get_sine_pos_embed(text_position_embedding, num_pos_feats=256, exchange_xy=False)
+        if text_position_ids is not None:
+            text_position_embedding = get_sine_pos_embed(
+                text_position_ids[..., None], num_pos_feats=256, exchange_xy=False
+            )
+
+        vision_features, text_features = self.fusion_layer(
+            vision_features=vision_features,
+            text_features=text_features,
+            attention_mask_vision=key_padding_mask,
+            attention_mask_text=text_attention_mask,
+        )
+
+        text_features = self.text_enhancer_layer(
+            hidden_states=text_features.transpose(0, 1),
+            attention_masks=~text_self_attention_masks,  # note we use ~ for mask here
+            position_embeddings=(pos_text.transpose(0, 1) if pos_text is not None else None),
+        ).transpose(0, 1)
+
+        vision_features = self.deformable_layer(
+            hidden_states=vision_features,
+            attention_mask=key_padding_mask,
+            position_embeddings=vision_position_embedding,
+            reference_points=reference_points,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+        )
+
+        return vision_features, text_features
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrDecoderLayer with DeformableDetr->GroundingDINO
@@ -1788,7 +1866,6 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
     """,
     GROUNDING_DINO_START_DOCSTRING,
 )
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrModel with DeformableDetr->GroundingDINO,DEFORMABLE_DETR->GROUNDING_DINO,Deformable DETR->Grounding DINO
 class GroundingDINOModel(GroundingDINOPreTrainedModel):
     def __init__(self, config: GroundingDINOConfig):
         super().__init__(config)
@@ -1797,6 +1874,8 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         backbone = GroundingDINOConvEncoder(config)
         position_embeddings = build_position_encoding(config)
         self.backbone = GroundingDINOConvModel(backbone, position_embeddings)
+        # Create text backbone
+        self.text_backbone = GroundingDINOTextModel(config.text_backbone_config)
 
         # Create input projection layers
         if config.num_feature_levels > 1:
@@ -2161,7 +2240,6 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         self.bbox_embed = GroundingDINOMLPPredictionHead(
             input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
         )
-        self.text_backbone = GroundingDINOTextModel(config.text_backbone_config)
 
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)

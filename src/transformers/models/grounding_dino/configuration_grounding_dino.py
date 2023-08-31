@@ -199,6 +199,9 @@ class GroundingDINOConfig(PretrainedConfig):
         #other parameters
         max_text_len = 256,
         sub_sentence_present = True,
+        text_enhancer_dropout = 0.0,
+        fusion_droppath = 0.1,
+        fusion_dropout = 0.0,
         **kwargs,
     ):
         if backbone_config is not None and use_timm_backbone:
@@ -261,6 +264,11 @@ class GroundingDINOConfig(PretrainedConfig):
         self.text_backbone_config = AutoConfig.from_pretrained(text_backbone_config)
         self.max_text_len = max_text_len
         self.sub_sentence_present = sub_sentence_present
+        # Text Enhancer
+        self.text_enhancer_dropout = text_enhancer_dropout
+        # Fusion
+        self.fusion_droppath = fusion_droppath
+        self.fusion_dropout = fusion_dropout
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     @property
