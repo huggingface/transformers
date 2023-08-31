@@ -152,7 +152,6 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
 
         self.vocab_file = vocab_file
 
-
         self._prefix_token = prefix_token
         self._middle_token = middle_token
         self._suffix_token = suffix_token
@@ -162,7 +161,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
     @property
     def can_save_slow_tokenizer(self) -> bool:
         return os.path.isfile(self.vocab_file) if self.vocab_file else False
-    
+
     def update_post_processor(self):
         """
         Updates the underlying post processor with the current `bos_token` and `eos_token`.
