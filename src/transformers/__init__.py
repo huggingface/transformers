@@ -165,6 +165,10 @@ _import_structure = {
         "AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "AutoformerConfig",
     ],
+    "models.patchtsmixer": [
+        "PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "PatchTSMixerConfig",
+    ],
     "models.bark": [
         "BarkCoarseConfig",
         "BarkConfig",
@@ -1141,6 +1145,8 @@ else:
             "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
             "MODEL_MAPPING",
             "MODEL_WITH_LM_HEAD_MAPPING",
+            "MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING",
             "AutoBackbone",
             "AutoModel",
             "AutoModelForAudioClassification",
@@ -1185,6 +1191,17 @@ else:
             "AutoformerForPrediction",
             "AutoformerModel",
             "AutoformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.patchtsmixer"].extend(
+        [
+            "PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PatchTSMixerPreTrainedModel",
+            "PatchTSMixerModel",
+            "PatchTSMixerForPretraining",
+            "PatchTSMixerForForecasting",
+            "PatchTSMixerForClassification"
+            "PatchTSMixerForRegression"
         ]
     )
     _import_structure["models.bark"].extend(
@@ -4267,6 +4284,10 @@ if TYPE_CHECKING:
         AUTOFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         AutoformerConfig,
     )
+    from .models.patchtsmixer import (
+        PATCHTSMIXER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PatchTSMixerConfig,
+    )
     from .models.bark import (
         BarkCoarseConfig,
         BarkConfig,
@@ -5151,6 +5172,8 @@ if TYPE_CHECKING:
             MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
+            MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING,
+            MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING,
             AutoBackbone,
             AutoModel,
             AutoModelForAudioClassification,
@@ -5193,6 +5216,15 @@ if TYPE_CHECKING:
             AutoformerForPrediction,
             AutoformerModel,
             AutoformerPreTrainedModel,
+        )
+        from .models.patchtsmixer import (
+            PATCHTSMIXER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PatchTSMixerPreTrainedModel,
+            PatchTSMixerModel,
+            PatchTSMixerForPretraining,
+            PatchTSMixerForForecasting,
+            PatchTSMixerForClassification,
+            PatchTSMixerForRegression
         )
         from .models.bark import (
             BARK_PRETRAINED_MODEL_ARCHIVE_LIST,
