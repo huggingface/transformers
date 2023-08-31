@@ -494,8 +494,8 @@ class IdeficsRMSNorm(nn.Module):
         return self.weight * hidden_states
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with RotaryEmbedding->Idefics
-class LlamaIdefics(torch.nn.Module):
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with LlamaRotary->Idefics
+class IdeficsEmbedding(torch.nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
 
