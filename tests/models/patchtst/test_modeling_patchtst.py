@@ -313,8 +313,8 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         expected_shape = torch.Size([64, model.config.input_size, num_patch, model.config.patch_length])
         self.assertEqual(output.shape, expected_shape)
 
-        expected_slice = torch.tensor([[[-0.0170]], [[0.0163]], [[0.0090]], [[0.0139]], [[0.0067]],
-                                       [[0.0246]], [[0.0090]]],
+        expected_slice = torch.tensor([[[0.0160]], [[0.0148]], [[0.0090]], [[0.0166]], [[0.0099]],
+                                       [[0.0053]], [[0.0090]]],
                                       device=torch_device)
         self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
 
@@ -336,8 +336,8 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
     #                                   )
     #     self.assertTrue(torch.allclose(output, expected_slice, atol=TOLERANCE))
 
-    def test_prediction_head(self):
-        model = PatchTSTForPrediction.from_pretrained('diepi/test_patchtst_prediction_etth1').to(torch_device)
+    def test_forecasting_head(self):
+        model = PatchTSTForForecasting.from_pretrained('diepi/test_patchtst_forecasting_etth1').to(torch_device)
         batch = prepare_batch(file="test-batch.pt")
 
         torch.manual_seed(0)
@@ -345,11 +345,11 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
             output = model(
                 past_values=batch["past_values"].to(torch_device),
                 future_values=batch["future_values"].to(torch_device)
-            ).prediction_output
+            ).forecast_outputs
         expected_shape = torch.Size([64, model.config.prediction_length, model.config.input_size])
         self.assertEqual(output.shape, expected_shape)
 
-        expected_slice = torch.tensor([[-0.8200, 0.3741, -0.7543, 0.3971, -0.6659, -0.0124, -0.8308]],
+        expected_slice = torch.tensor([[-0.9027,  0.3814, -0.8322,  0.4250, -0.7183, -0.0635, -0.8747]],
                                       device=torch_device,
                                       )
         self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))
