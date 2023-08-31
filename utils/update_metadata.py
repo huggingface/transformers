@@ -206,6 +206,8 @@ def get_frameworks_table() -> pd.DataFrame:
 
     data["processor"] = [processors[t] for t in all_models]
 
+    print(data)
+
     return pd.DataFrame(data)
 
 
@@ -257,7 +259,9 @@ def update_metadata(token: str, commit_sha: str):
         commit_sha (`str`): The commit SHA on Transformers corresponding to this update.
     """
     frameworks_table = get_frameworks_table()
+    print(frameworks_table)
     frameworks_dataset = Dataset.from_pandas(frameworks_table)
+    print(frameworks_dataset)
 
     resolved_tags_file = hf_hub_download(
         "huggingface/transformers-metadata", "pipeline_tags.json", repo_type="dataset", token=token
@@ -281,7 +285,11 @@ def update_metadata(token: str, commit_sha: str):
     tags_dataset = Dataset.from_pandas(tags_table)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
+        print(frameworks_dataset)
+
         frameworks_dataset.to_json(os.path.join(tmp_dir, "frameworks.json"))
+
+
         tags_dataset.to_json(os.path.join(tmp_dir, "pipeline_tags.json"))
 
         if commit_sha is not None:
