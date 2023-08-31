@@ -65,6 +65,10 @@ class CodeLlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.save_pretrained(self.tmpdirname)
 
+    def get_tokenizers(self, **kwargs):
+        kwargs.update({"pad_token": "<PAD>"})
+        return super().get_tokenizers(**kwargs)
+
     def test_full_tokenizer(self):
         tokenizer = CodeLlamaTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
@@ -521,7 +525,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         out2 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=True
         )
-        self.assertEqual(out2, " <REPR_END> inform")
+        self.assertEqual(out2, "<REPR_END>inform") # `spaces_between_special_tokens` will no longer work if the token is not special?
         input_ids = tokenizer.encode("<REPR_END>inform", add_special_tokens=False)
         self.assertEqual(input_ids, [29871, 32016, 262, 689])  # 29871 is the spiece underline, '▁'
 

@@ -959,7 +959,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         if not spaces_between_special_tokens:
             logger.warning_once(
                 "spaces_between_special_tokens is deprecated and will be removed in transformers v5. It was adding spaces between `added_tokens`, not special tokens, "
-                "and does not exist in our fast implementation. Future tokenizers will handle the decoding process on their own"
+                "and does not exist in our fast implementation. Future tokenizers will handle the decoding process on a per-model rule."
             )
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
@@ -972,7 +972,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         for token in filtered_tokens:
             if skip_special_tokens and token in self.all_special_ids:
                 continue
-            # set(self.added_tokens_encoder) - set(self.all_special_tokens) gives the added tokens from pervious versions. Kept for legacy.
+            # set(self.added_tokens_encoder) - set(self.all_special_tokens) gives the added tokens from pervious versions. Kept for legacy. -> Currently does not exactly work see REFORM llama and LlamaCode issue
+            # we should probably just fix this to use all tokens in all_special_tokens?
             if token in set(self.added_tokens_encoder) - set(self.all_special_tokens):
                 if current_sub_text:
                     sub_texts.append(self.convert_tokens_to_string(current_sub_text))

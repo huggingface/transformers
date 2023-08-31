@@ -2151,7 +2151,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens! Only time we need to check
         # We should deprecate this since you need a `convert_slow_tokenizer` method anyway, better to add the tokens then! (consistency)
-        if slow_to_fast or slow_tokenizer is not None:
+        if slow_to_fast:
             tokens = []
             special_tokens = tokenizer.all_special_tokens
             is_last_special = None
