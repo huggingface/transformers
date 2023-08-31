@@ -2572,7 +2572,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise ImportError(
                     "Loading GPTQ quantized model requires optimum : `pip install optimum` and auto-gptq library 'pip install auto-gptq'"
                 )
-            elif version.parse(importlib.metadata.version("auto_gptq")) >= version.parse("0.4.2"):
+            elif version.parse(importlib.metadata.version("auto_gptq")) < version.parse("0.4.2"):
                 raise ImportError(
                     "You need a version of auto_gptq > 0.4.2 to use GPTQ: `pip install --upgrade auto-gptq`"
                 )
