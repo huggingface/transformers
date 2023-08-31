@@ -44,7 +44,7 @@ else:
     _import_structure["tokenization_llama_fast"] = ["LlamaTokenizerFast"]
 
 try:
-    if not is_flax_available():
+    if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
@@ -57,7 +57,7 @@ else:
     ]
 
 try:
-    if not is_torch_available():
+    if not is_flax_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
