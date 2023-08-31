@@ -1352,14 +1352,6 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                     Used to set the maximum value of the initial timestamp. This is used to prevent the model from
                     predicting timestamps that are too far in the future.
 
-
-    <Tip>
-
-    Make sure you set the sampling_rate` argument to this function below for the whisper model
-
-    </Tip>
-
-
     Examples:
     ``` py
     >>> import torch
