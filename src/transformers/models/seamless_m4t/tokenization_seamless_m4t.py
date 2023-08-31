@@ -306,7 +306,6 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
 
     @property
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.vocab_size
     def vocab_size(self):
         return len(self.sp_model) + len(self.additional_special_tokens) + self.fairseq_offset
 
@@ -331,12 +330,11 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         return BatchEncoding(output, tensor_type=kwargs.get("return_tensors"))
 
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang
     @property
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang
     def src_lang(self) -> str:
         return self._src_lang
 
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang
     @src_lang.setter
     def src_lang(self, new_src_lang: str) -> None:
         if "__" not in new_src_lang:
@@ -506,7 +504,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         return (out_vocab_file,)
 
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.prepare_seq2seq_batch
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.prepare_seq2seq_batch with eng_Latn->eng, fra_Latn->fra
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
@@ -527,7 +525,6 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     def _switch_to_target_mode(self):
         return self.set_tgt_lang_special_tokens(self.tgt_lang)
 
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.set_src_lang_special_tokens
     def set_src_lang_special_tokens(self, src_lang) -> None:
         """Reset the special tokens to the source lang setting.
         Prefix=[src_lang_code], suffix = [eos]
@@ -538,7 +535,6 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         self.suffix_tokens = [self.eos_token_id]
 
     # https://github.com/facebookresearch/fairseq2/blob/c53f18e6be6b8b46b722f2249b8397b7eccd7ad3/src/fairseq2/models/nllb/tokenizer.py#L112-L116
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.__getstate__
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
         """Reset the special tokens to the target lang setting.
         No prefix and suffix=[eos, tgt_lang_code].

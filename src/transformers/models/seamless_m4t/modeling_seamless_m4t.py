@@ -669,7 +669,7 @@ class SeamlessM4TConformerSelfAttention(nn.Module):
 class SeamlessM4TConformerEncoderLayer(nn.Module):
     """Conformer block based on https://arxiv.org/abs/2005.08100."""
 
-    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerEncoderLayer.__init__ with Wav2Vec2->, attention_dropout->speech_encoder_dropout
+    # Copied from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer.Wav2Vec2ConformerEncoderLayer.__init__ with Wav2Vec2->SeamlessM4T, attention_dropout->speech_encoder_dropout
     def __init__(self, config):
         super().__init__()
         embed_dim = config.hidden_size
@@ -1185,7 +1185,7 @@ class SeamlessM4TAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeDenseActDense with NllbMoe->SeamlessM4T,DenseActDense->FeedForwardNetwork
+# Copied from transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeDenseActDense with NllbMoe->SeamlessM4T,DenseActDense->FeedForwardNetwork, d_model->hidden_size
 class SeamlessM4TFeedForwardNetwork(nn.Module):
     def __init__(self, config: SeamlessM4TConfig, ffn_dim: int):
         super().__init__()

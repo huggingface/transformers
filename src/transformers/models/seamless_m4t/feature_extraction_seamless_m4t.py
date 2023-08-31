@@ -98,12 +98,11 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
 
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
 
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang
     @property
+    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang
     def src_lang(self) -> str:
         return self._src_lang
 
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang
     @src_lang.setter
     def src_lang(self, new_src_lang: str) -> None:
         if "__" not in new_src_lang:
