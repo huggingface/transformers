@@ -160,7 +160,7 @@ class GroundingDINOConfig(PretrainedConfig):
         num_queries=300,
         max_position_embeddings=1024,
         encoder_layers=6,
-        encoder_ffn_dim=1024,
+        encoder_ffn_dim=2048,
         encoder_attention_heads=8,
         decoder_layers=6,
         decoder_ffn_dim=1024,
