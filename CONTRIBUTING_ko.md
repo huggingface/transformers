@@ -249,7 +249,7 @@ Pull Request에서 실행되는 검사에 대한 자세한 정보는 [Pull Reque
 
 라이브러리 동작과 여러 예제를 테스트할 수 있는 광범위한 테스트 스위트가 포함되어 있습니다. 라이브러리 테스트는 [tests](https://github.com/huggingface/transformers/tree/main/tests) 폴더에, 예제 테스트는 [examples](https://github.com/huggingface/transformers/tree/main/examples) 폴더에 있습니다.
 
-속도가 빠른 `pytest`와 `pytest-xdist`를 선호합니다. 저장소의 루트 디렉토리에서 테스트를 실행할 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요.
+속도가 빠른 `pytest`와 `pytest-xdist`를 선호합니다. 저장소의 루트 디렉터리에서 테스트를 실행할 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요.
 
 ```bash
 python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
