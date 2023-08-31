@@ -82,6 +82,7 @@ from .trainer_pt_utils import (
     LabelSmoother,
     LengthGroupedSampler,
     SequentialDistributedSampler,
+    check_dataloader_randomsampler,
     distributed_broadcast_scalars,
     distributed_concat,
     find_batch_size,
@@ -214,14 +215,6 @@ if is_accelerate_available():
 
 if TYPE_CHECKING:
     import optuna
-
-
-def get_dataloader_sampler(dataloader):
-    if hasattr(dataloader, "sampler") and isinstance(dataloader.sampler, RandomSampler):
-        return dataloader.sampler, True
-    if hasattr(dataloader, "batch_sampler"):
-        return get_dataloader_sampler(dataloader.batch_sampler)
-    return dataloader.sampler, False
 
 
 logger = logging.get_logger(__name__)
@@ -1791,7 +1784,7 @@ class Trainer:
         # Skip the first epochs_trained epochs to get the random state of the dataloader at the right point.
         if not args.ignore_data_skip:
             for epoch in range(epochs_trained):
-                sampler, is_random_sampler = get_dataloader_sampler(train_dataloader)
+                sampler, is_random_sampler = check_dataloader_randomsampler(train_dataloader)
 
                 if is_torch_less_than_1_11 or not is_random_sampler:
                     # We just need to begin an iteration to create the randomization of the sampler.
