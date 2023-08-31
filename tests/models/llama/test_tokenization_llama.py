@@ -552,6 +552,34 @@ class LlamaIntegrationTest(unittest.TestCase):
         decoded_tokens = tokenizer.decode(input_ids)
         self.assertEqual(decoded_tokens, " <s> Hello<s> how")
 
+    def test_some_edge_cases(self):
+        tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", legacy=False)
+
+        sp_tokens = tokenizer.sp_model.encode("<s>>", out_type=str)
+        self.assertEqual(sp_tokens, ["<", "s", ">>"])
+        tokens = tokenizer.tokenize("<s>>")
+        self.assertNotEqual(sp_tokens, tokens)
+        self.assertEqual(tokens, ["<s>", ">"])
+
+        tokens = tokenizer.tokenize("")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, tokenizer.sp_model.encode("", out_type=str))
+
+        tokens = tokenizer.tokenize(" ")
+        self.assertEqual(tokens, ["▁▁"])
+        # a dummy prefix space is not added by the sp_model as it was de-activated
+        self.assertEqual(tokens, tokenizer.sp_model.encode("  ", out_type=str))
+
+        tokens = tokenizer.tokenize("▁")
+        self.assertEqual(tokens, ["▁▁"])
+        # a dummy prefix space is not added by the sp_model as it was de-activated
+        self.assertEqual(tokens, tokenizer.sp_model.encode("▁▁", out_type=str))
+
+        tokens = tokenizer.tokenize(" ▁")
+        self.assertEqual(tokens, ["▁▁▁"])
+        # a dummy prefix space is not added by the sp_model as it was de-activated
+        self.assertEqual(tokens, tokenizer.sp_model.encode("▁▁▁", out_type=str))
+
 
 @require_sentencepiece
 @require_tokenizers
@@ -576,6 +604,18 @@ class CommonSpmIntegrationTests(unittest.TestCase):
         self.assertEqual(input_ids, [7] + sp_encode)
         tokens = self.tokenizer.tokenize(". Hello")
         self.assertEqual(tokens, ["▁", ".", "▁He", "ll", "o"])
+
+        tokens = self.tokenizer.tokenize("")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, self.tokenizer.sp_model.encode("", out_type=str))
+
+        tokens = self.tokenizer.tokenize(" ")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, self.tokenizer.sp_model.encode(" ", out_type=str))
+
+        tokens = self.tokenizer.tokenize("▁")
+        self.assertEqual(tokens, [])
+        self.assertEqual(tokens, self.tokenizer.sp_model.encode("▁", out_type=str))
 
     def test_remove_extra_whitespaces(self):
         # make sure the extra spaces are eaten. Since the sample vocab does not have

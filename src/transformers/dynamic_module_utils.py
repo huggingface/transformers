@@ -603,7 +603,7 @@ def resolve_trust_remote_code(trust_remote_code, model_name, has_local_code, has
                     elif answer.lower() in ["no", "n", "0", ""]:
                         trust_remote_code = False
                 signal.alarm(0)
-            except AttributeError:
+            except Exception:
                 # OS which does not support signal.SIGALRM
                 raise ValueError(
                     "Loading this model requires you to execute execute some code in that repo on your local machine. "
