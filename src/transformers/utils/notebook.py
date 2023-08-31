@@ -141,20 +141,14 @@ class NotebookProgressBar:
             self.update_bar(value)
         elif value <= self.last_value and not force_update:
             return
-        elif (
-            force_update
-            or self.first_calls > 0
-            or value >= min(self.last_value + self.wait_for, self.total)
-        ):
+        elif force_update or self.first_calls > 0 or value >= min(self.last_value + self.wait_for, self.total):
             if self.first_calls > 0:
                 self.first_calls -= 1
             current_time = time.time()
             self.elapsed_time = current_time - self.start_time
             # We could have value = self.start_value if the update is called twixe with the same start value.
             if value > self.start_value:
-                self.average_time_per_item = self.elapsed_time / (
-                    value - self.start_value
-                )
+                self.average_time_per_item = self.elapsed_time / (value - self.start_value)
             else:
                 self.average_time_per_item = None
             if value >= self.total:
@@ -163,44 +157,32 @@ class NotebookProgressBar:
                 if not self.leave:
                     self.close()
             elif self.average_time_per_item is not None:
-                self.predicted_remaining = self.average_time_per_item * (
-                    self.total - value
-                )
+                self.predicted_remaining = self.average_time_per_item * (self.total - value)
             self.update_bar(value)
             self.last_value = value
             self.last_time = current_time
             if self.average_time_per_item is None:
                 self.wait_for = 1
             else:
-                self.wait_for = max(
-                    int(self.update_every / self.average_time_per_item), 1
-                )
+                self.wait_for = max(int(self.update_every / self.average_time_per_item), 1)
 
     def update_bar(self, value, comment=None):
         spaced_value = " " * (len(str(self.total)) - len(str(value))) + str(value)
         if self.elapsed_time is None:
             self.label = f"[{spaced_value}/{self.total} : < :"
         elif self.predicted_remaining is None:
-            self.label = (
-                f"[{spaced_value}/{self.total} {format_time(self.elapsed_time)}"
-            )
+            self.label = f"[{spaced_value}/{self.total} {format_time(self.elapsed_time)}"
         else:
             self.label = (
                 f"[{spaced_value}/{self.total} {format_time(self.elapsed_time)} <"
                 f" {format_time(self.predicted_remaining)}"
             )
             self.label += f", {1/self.average_time_per_item:.2f} it/s"
-        self.label += (
-            "]"
-            if self.comment is None or len(self.comment) == 0
-            else f", {self.comment}]"
-        )
+        self.label += "]" if self.comment is None or len(self.comment) == 0 else f", {self.comment}]"
         self.display()
 
     def display(self):
-        self.html_code = html_progress_bar(
-            self.value, self.total, self.prefix, self.label, self.width
-        )
+        self.html_code = html_progress_bar(self.value, self.total, self.prefix, self.label, self.width)
         if self.parent is not None:
             # If this is a child bar, the parent will take care of the display.
             self.parent.display()
@@ -232,9 +214,7 @@ class NotebookTrainingTracker(NotebookProgressBar):
         self.child_bar = None
 
     def display(self):
-        self.html_code = html_progress_bar(
-            self.value, self.total, self.prefix, self.label, self.width
-        )
+        self.html_code = html_progress_bar(self.value, self.total, self.prefix, self.label, self.width)
         if self.inner_table is not None:
             self.html_code += text_to_html_table(self.inner_table)
         if self.child_bar is not None:
@@ -287,9 +267,7 @@ class NotebookTrainingTracker(NotebookProgressBar):
             prefix (`str`, *optional*): A prefix to write on the left of the progress bar.
             width (`int`, *optional*, defaults to 300): The width (in pixels) of the progress bar.
         """
-        self.child_bar = NotebookProgressBar(
-            total, prefix=prefix, parent=self, width=width
-        )
+        self.child_bar = NotebookProgressBar(total, prefix=prefix, parent=self, width=width)
         return self.child_bar
 
     def remove_child(self):
@@ -312,20 +290,16 @@ class NotebookProgressCallback(TrainerCallback):
         self._force_next_update = False
 
     def on_train_begin(self, args, state, control, **kwargs):
-        self.first_column = (
-            "Epoch" if args.evaluation_strategy == IntervalStrategy.EPOCH else "Step"
-        )
+        self.first_column = "Epoch" if args.evaluation_strategy == IntervalStrategy.EPOCH else "Step"
         self.training_loss = 0
         self.last_log = 0
         column_names = [self.first_column] + ["Training Loss"]
+        if args.evaluation_strategy != IntervalStrategy.NO:
+            column_names.append("Validation Loss")
         self.training_tracker = NotebookTrainingTracker(state.max_steps, column_names)
 
     def on_step_end(self, args, state, control, **kwargs):
-        epoch = (
-            int(state.epoch)
-            if int(state.epoch) == state.epoch
-            else f"{state.epoch:.2f}"
-        )
+        epoch = int(state.epoch) if int(state.epoch) == state.epoch else f"{state.epoch:.2f}"
         self.training_tracker.update(
             state.global_step + 1,
             comment=f"Epoch {epoch}/{state.num_train_epochs}",
@@ -338,9 +312,7 @@ class NotebookProgressCallback(TrainerCallback):
             return
         if self.prediction_bar is None:
             if self.training_tracker is not None:
-                self.prediction_bar = self.training_tracker.add_child(
-                    len(eval_dataloader)
-                )
+                self.prediction_bar = self.training_tracker.add_child(len(eval_dataloader))
             else:
                 self.prediction_bar = NotebookProgressBar(len(eval_dataloader))
             self.prediction_bar.update(1)
@@ -362,7 +334,7 @@ class NotebookProgressCallback(TrainerCallback):
 
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
         if self.training_tracker is not None:
-            values = {"Training Loss": "No log"}
+            values = {"Training Loss": "No log", "Validation Loss": "No log"}
             for log in reversed(state.log_history):
                 if "loss" in log:
                     values["Training Loss"] = log["loss"]
@@ -383,9 +355,12 @@ class NotebookProgressCallback(TrainerCallback):
             _ = metrics.pop(f"{metric_key_prefix}_steps_per_second", None)
             _ = metrics.pop(f"{metric_key_prefix}_jit_compilation_time", None)
             for k, v in metrics.items():
-                splits = k.split("_")
-                name = " ".join([part.capitalize() for part in splits[1:]])
-                values[name] = v
+                    splits = k.split("_")
+                    name = " ".join([part.capitalize() for part in splits[1:]])
+                    if name == "Loss":
+                        # Single dataset
+                        name = "Validation Loss"
+                    values[name] = v
             self.training_tracker.write_line(values)
             self.training_tracker.remove_child()
             self.prediction_bar = None
@@ -394,8 +369,6 @@ class NotebookProgressCallback(TrainerCallback):
 
     def on_train_end(self, args, state, control, **kwargs):
         self.training_tracker.update(
-            state.global_step,
-            comment=f"Epoch {int(state.epoch)}/{state.num_train_epochs}",
-            force_update=True,
+            state.global_step, comment=f"Epoch {int(state.epoch)}/{state.num_train_epochs}", force_update=True
         )
         self.training_tracker = None
