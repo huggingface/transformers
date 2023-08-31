@@ -35,10 +35,9 @@ from torch.nn import CrossEntropyLoss
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
-from .deepspeed import deepspeed_config, is_deepspeed_zero3_enabled
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, GenerationMixin
-from .lib_integrations import PeftAdapterMixin
+from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -51,6 +50,7 @@ from .pytorch_utils import (  # noqa: F401
 from .utils import (
     ADAPTER_SAFE_WEIGHTS_NAME,
     ADAPTER_WEIGHTS_NAME,
+    CONFIG_NAME,
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
     SAFE_WEIGHTS_INDEX_NAME,
@@ -65,6 +65,7 @@ from .utils import (
     cached_file,
     copy_func,
     download_url,
+    extract_commit_hash,
     has_file,
     is_accelerate_available,
     is_auto_gptq_available,
@@ -95,6 +96,7 @@ if is_accelerate_available():
         check_tied_parameters_on_same_device,
         find_tied_parameters,
         get_balanced_memory,
+        get_max_memory,
         load_offloaded_weights,
         offload_weight,
         save_offload_index,
@@ -303,7 +305,7 @@ def shard_checkpoint(
 
     <Tip warning={true}>
 
-    If one of the model's weight is bigger that `max_sahrd_size`, it will end up in its own sub-checkpoint which will
+    If one of the model's weight is bigger than `max_shard_size`, it will end up in its own sub-checkpoint which will
     have a size greater than `max_shard_size`.
 
     </Tip>
@@ -661,7 +663,7 @@ def _load_state_dict_into_meta_model(
     #   they won't get loaded.
 
     if is_quantized:
-        from .utils.bitsandbytes import set_module_quantized_tensor_to_device
+        from .integrations import set_module_quantized_tensor_to_device
 
     error_msgs = []
 
@@ -1215,8 +1217,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Returns:
             `bool`: Whether this model can generate sequences with `.generate()`.
         """
-        # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation
-        if "GenerationMixin" in str(cls.prepare_inputs_for_generation):
+        # Detects whether `prepare_inputs_for_generation` has been overwritten, which is a requirement for generation.
+        # Alternativelly, the model can also have a custom `generate` function.
+        if "GenerationMixin" in str(cls.prepare_inputs_for_generation) and "GenerationMixin" in str(cls.generate):
             return False
         return True
 
@@ -1502,9 +1505,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             new_num_tokens = ((new_num_tokens // pad_to_multiple_of) + 1) * pad_to_multiple_of
         else:
             logger.warning(
-                "You are resizing the embedding layer without providing a `pad_to_multiple_of` parameter. This means that the new embeding"
+                "You are resizing the embedding layer without providing a `pad_to_multiple_of` parameter. This means that the new embedding"
                 f" dimension will be {new_num_tokens}. This might induce some performance reduction as *Tensor Cores* will not be available."
-                " For more details  about this, or help on choosing the correct value for resizing, refer to this guide:"
+                " For more details about this, or help on choosing the correct value for resizing, refer to this guide:"
                 " https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc"
             )
 
@@ -2368,27 +2371,44 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " ignored."
             )
 
-        if is_peft_available() and _adapter_model_path is None:
-            maybe_adapter_model_path = find_adapter_config_file(
-                pretrained_model_name_or_path,
-                revision=revision,
-                subfolder=subfolder,
-                token=token,
-                commit_hash=commit_hash,
-            )
-        elif is_peft_available() and _adapter_model_path is not None:
-            maybe_adapter_model_path = _adapter_model_path
-        else:
-            maybe_adapter_model_path = None
-
-        has_adapter_config = maybe_adapter_model_path is not None
-
-        if has_adapter_config:
-            if _adapter_model_path is not None:
-                adapter_model_id = _adapter_model_path
+        if commit_hash is None:
+            if not isinstance(config, PretrainedConfig):
+                # We make a call to the config file first (which may be absent) to get the commit hash as soon as possible
+                resolved_config_file = cached_file(
+                    pretrained_model_name_or_path,
+                    CONFIG_NAME,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    resume_download=resume_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    token=token,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
+                    _raise_exceptions_for_connection_errors=False,
+                )
+                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
             else:
-                with open(maybe_adapter_model_path, "r", encoding="utf-8") as f:
-                    adapter_model_id = pretrained_model_name_or_path
+                commit_hash = getattr(config, "_commit_hash", None)
+
+        if is_peft_available():
+            if _adapter_model_path is None:
+                _adapter_model_path = find_adapter_config_file(
+                    pretrained_model_name_or_path,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    resume_download=resume_download,
+                    proxies=proxies,
+                    local_files_only=local_files_only,
+                    token=token,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _commit_hash=commit_hash,
+                )
+            if _adapter_model_path is not None and os.path.isfile(_adapter_model_path):
+                with open(_adapter_model_path, "r", encoding="utf-8") as f:
+                    _adapter_model_path = pretrained_model_name_or_path
                     pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
 
         # change device_map into a map if we passed an int, a str or a torch.device
@@ -2621,9 +2641,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " `bitsandbytes` version to support int8 serialization. Please install the latest version of `bitsandbytes` with "
                 " `pip install --upgrade bitsandbytes`."
             )
-
-        if commit_hash is None:
-            commit_hash = getattr(config, "_commit_hash", None)
 
         # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
         # index of the files.
@@ -2944,7 +2961,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             keep_in_fp32_modules = []
 
         if load_in_8bit or load_in_4bit:
-            from .utils.bitsandbytes import get_keys_to_not_convert, replace_with_bnb_linear
+            from .integrations import get_keys_to_not_convert, replace_with_bnb_linear
 
             llm_int8_skip_modules = quantization_config.llm_int8_skip_modules
             load_in_8bit_fp32_cpu_offload = quantization_config.llm_int8_enable_fp32_cpu_offload
@@ -3077,7 +3094,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     max_memory=max_memory,
                     **device_map_kwargs,
                 )
+            else:
+                max_memory = get_max_memory(max_memory)
+            if getattr(model, "quantization_method", None) == QuantizationMethod.BITS_AND_BYTES:
+                # need more space for buffers that are created during quantization
+                max_memory = {key: val * 0.90 for key, val in max_memory.items()}
             device_map_kwargs["max_memory"] = max_memory
+
             # Make sure tied weights are tied before creating the device map.
             model.tie_weights()
             device_map = infer_auto_device_map(model, dtype=target_dtype, **device_map_kwargs)
@@ -3221,9 +3244,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if quantization_method_from_config == QuantizationMethod.GPTQ:
             model = quantizer.post_init_model(model)
 
-        if has_adapter_config:
+        if _adapter_model_path is not None:
             model.load_adapter(
-                adapter_model_id,
+                _adapter_model_path,
                 adapter_name=adapter_name,
                 revision=revision,
                 token=token,
@@ -3262,7 +3285,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     ):
         is_safetensors = False
         if is_quantized:
-            from .utils.bitsandbytes import set_module_quantized_tensor_to_device
+            from .integrations import set_module_quantized_tensor_to_device
 
         if device_map is not None and "disk" in device_map.values():
             archive_file = (
@@ -3559,11 +3582,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             if param.device == torch.device("meta"):
                                 if not (is_quantized):
                                     set_module_tensor_to_device(
-                                        model, key, "cpu", torch.empty(*param.size(), dtype=dtype)
+                                        model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
                                     )
                                 else:
                                     set_module_quantized_tensor_to_device(
-                                        model, key, "cpu", torch.empty(*param.size(), dtype=dtype)
+                                        model_to_load, key, "cpu", torch.empty(*param.size(), dtype=dtype)
                                     )
                 else:
                     error_msgs += _load_state_dict_into_model(model_to_load, state_dict, start_prefix)

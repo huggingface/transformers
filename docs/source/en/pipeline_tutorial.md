@@ -204,7 +204,7 @@ page.
 
 Using a [`pipeline`] for vision tasks is practically identical.
 
-Specify your task and pass your image to the classifier. The image can be a link or a local path to the image. For example, what species of cat is shown below?
+Specify your task and pass your image to the classifier. The image can be a link, a local path or a base64-encoded image. For example, what species of cat is shown below?
 
 ![pipeline-cat-chonk](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg)
 

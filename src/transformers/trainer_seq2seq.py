@@ -20,8 +20,8 @@ import torch
 from torch import nn
 from torch.utils.data import Dataset
 
-from .deepspeed import is_deepspeed_zero3_enabled
 from .generation.configuration_utils import GenerationConfig
+from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .trainer import Trainer
 from .utils import logging
 

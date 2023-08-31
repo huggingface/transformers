@@ -54,6 +54,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("clap", "ClapModel"),
         ("clip", "CLIPModel"),
         ("clipseg", "CLIPSegModel"),
+        ("code_llama", "LlamaModel"),
         ("codegen", "CodeGenModel"),
         ("conditional_detr", "ConditionalDetrModel"),
         ("convbert", "ConvBertModel"),
@@ -203,6 +204,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vit_hybrid", "ViTHybridModel"),
         ("vit_mae", "ViTMAEModel"),
         ("vit_msn", "ViTMSNModel"),
+        ("vitdet", "VitDetModel"),
         ("vivit", "VivitModel"),
         ("wav2vec2", "Wav2Vec2Model"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerModel"),
@@ -385,6 +387,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("blenderbot-small", "BlenderbotSmallForCausalLM"),
         ("bloom", "BloomForCausalLM"),
         ("camembert", "CamembertForCausalLM"),
+        ("code_llama", "LlamaForCausalLM"),
         ("codegen", "CodeGenForCausalLM"),
         ("cpmant", "CpmAntForCausalLM"),
         ("ctrl", "CTRLLMHeadModel"),
@@ -691,6 +694,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("bloom", "BloomForSequenceClassification"),
         ("camembert", "CamembertForSequenceClassification"),
         ("canine", "CanineForSequenceClassification"),
+        ("code_llama", "LlamaForSequenceClassification"),
         ("convbert", "ConvBertForSequenceClassification"),
         ("ctrl", "CTRLForSequenceClassification"),
         ("data2vec-text", "Data2VecTextForSequenceClassification"),
@@ -835,6 +839,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
+        ("blip-2", "Blip2ForConditionalGeneration"),
         ("vilt", "ViltForQuestionAnswering"),
     ]
 )
@@ -1052,12 +1057,14 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("convnext", "ConvNextBackbone"),
         ("convnextv2", "ConvNextV2Backbone"),
         ("dinat", "DinatBackbone"),
+        ("dinov2", "Dinov2Backbone"),
         ("focalnet", "FocalNetBackbone"),
         ("maskformer-swin", "MaskFormerSwinBackbone"),
         ("nat", "NatBackbone"),
         ("resnet", "ResNetBackbone"),
         ("swin", "SwinBackbone"),
         ("timm_backbone", "TimmBackbone"),
+        ("vitdet", "VitDetBackbone"),
     ]
 )
 

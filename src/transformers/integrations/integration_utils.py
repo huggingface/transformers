@@ -30,8 +30,8 @@ from typing import TYPE_CHECKING, Dict, Optional
 
 import numpy as np
 
-from . import __version__ as version
-from .utils import flatten_dict, is_datasets_available, is_pandas_available, is_torch_available, logging
+from .. import __version__ as version
+from ..utils import flatten_dict, is_datasets_available, is_pandas_available, is_torch_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -68,10 +68,10 @@ if TYPE_CHECKING and _has_neptune:
         except importlib.metadata.PackageNotFoundError:
             _has_neptune = False
 
-from .trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
-from .training_args import ParallelMode  # noqa: E402
-from .utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
+from ..trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
+from ..trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
+from ..training_args import ParallelMode  # noqa: E402
+from ..utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
 
 
 # Integration functions:
@@ -255,7 +255,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
             ray.tune.report(objective=local_trainer.objective, **metrics, done=True)
 
     if not trainer._memory_tracker.skip_memory_metrics:
-        from .trainer_utils import TrainerMemoryTracker
+        from ..trainer_utils import TrainerMemoryTracker
 
         logger.warning(
             "Memory tracking for your Trainer is currently "
@@ -463,7 +463,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
 
 
 def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
-    from .integrations import is_wandb_available
+    from ..integrations import is_wandb_available
 
     if not is_wandb_available():
         raise ImportError("This function needs wandb installed: `pip install wandb`")
@@ -763,7 +763,7 @@ class WandbCallback(TrainerCallback):
         if self._wandb is None:
             return
         if self._log_model in ("end", "checkpoint") and self._initialized and state.is_world_process_zero:
-            from .trainer import Trainer
+            from ..trainer import Trainer
 
             fake_trainer = Trainer(args=args, model=model, tokenizer=tokenizer)
             with tempfile.TemporaryDirectory() as temp_dir:

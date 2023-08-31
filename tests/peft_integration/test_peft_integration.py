@@ -159,6 +159,26 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # dummy generation
                 _ = model.generate(input_ids=torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7]]).to(torch_device))
 
+    def test_peft_add_adapter_from_pretrained(self):
+        """
+        Simple test that tests if `add_adapter` works as expected
+        """
+        from peft import LoraConfig
+
+        for model_id in self.transformers_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+
+                peft_config = LoraConfig(init_lora_weights=False)
+
+                model.add_adapter(peft_config)
+
+                self.assertTrue(self._check_lora_correctly_converted(model))
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
+                    model_from_pretrained = transformers_class.from_pretrained(tmpdirname).to(torch_device)
+                    self.assertTrue(self._check_lora_correctly_converted(model_from_pretrained))
+
     def test_peft_add_multi_adapter(self):
         """
         Simple test that tests the basic usage of PEFT model through `from_pretrained`. This test tests if
