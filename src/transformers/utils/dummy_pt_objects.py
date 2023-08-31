@@ -7905,7 +7905,6 @@ class ViTMSNPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-
 VITS_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -7914,7 +7913,8 @@ class VitsModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-        
+
+
 class VitsPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7924,12 +7924,12 @@ class VitsPreTrainedModel(metaclass=DummyObject):
 
 VITDET_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
+
 class VitDetBackbone(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-
 
 
 class VitDetModel(metaclass=DummyObject):
