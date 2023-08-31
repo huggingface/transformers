@@ -62,7 +62,6 @@ VOCODER_SUPPORTED_LANGUAGES = ["__arb__", "__ben__", "__cat__", "__ces__", "__cm
 # fmt: on
 
 
-
 # TODO: change repo/id -> repo id
 # TODO: add language code to docstrings
 # TODO: add t2u_vocab_size and t2u_language_code and t2u_tokenizer_offset
@@ -231,18 +230,13 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         self._tgt_lang = f"__{tgt_lang}__"
         self.set_src_lang_special_tokens(self._src_lang)
         self.set_tgt_lang_special_tokens(self._tgt_lang)
-        
-        
-        self.t2u_language_code=UNIT_SUPPORTED_LANGUAGES
-        self.t2u_lang_code_to_id = {
-            code: i for i, code in enumerate(self.t2u_language_code)
-        }
+
+        self.t2u_language_code = UNIT_SUPPORTED_LANGUAGES
+        self.t2u_lang_code_to_id = {code: i for i, code in enumerate(self.t2u_language_code)}
         self.t2u_id_to_lang_code = {v: k for k, v in self.t2u_lang_code_to_id.items()}
-        
-        self.vocoder_language_code=VOCODER_SUPPORTED_LANGUAGES
-        self.vocoder_lang_code_to_id = {
-            code: i for i, code in enumerate(self.vocoder_language_code)
-        }
+
+        self.vocoder_language_code = VOCODER_SUPPORTED_LANGUAGES
+        self.vocoder_lang_code_to_id = {code: i for i, code in enumerate(self.vocoder_language_code)}
         self.vocoder_id_to_lang_code = {v: k for k, v in self.vocoder_lang_code_to_id.items()}
 
     @classmethod
@@ -326,12 +320,14 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         output = super().__call__(text=text, padding=padding, pad_to_multiple_of=pad_to_multiple_of, **kwargs)
 
         output["decoder_input_ids"] = [[self.lang_code_to_id[self.tgt_lang]]]  # TODO: check batch behavior
-        
+
         if self._tgt_lang in self.t2u_lang_code_to_id:
-            output["speech_tgt_lang_id"] = [[self.t2u_lang_code_to_id[self._tgt_lang]]] # TODO: check batch behavior
-            
+            output["speech_tgt_lang_id"] = [[self.t2u_lang_code_to_id[self._tgt_lang]]]  # TODO: check batch behavior
+
         if self._tgt_lang in self.vocoder_lang_code_to_id:
-            output["vocoder_tgt_lang_id"] = [[self.vocoder_lang_code_to_id[self._tgt_lang]]] # TODO: check batch behavior
+            output["vocoder_tgt_lang_id"] = [
+                [self.vocoder_lang_code_to_id[self._tgt_lang]]
+            ]  # TODO: check batch behavior
 
         return BatchEncoding(output, tensor_type=kwargs.get("return_tensors"))
 

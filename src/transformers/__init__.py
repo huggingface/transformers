@@ -4495,8 +4495,8 @@ if TYPE_CHECKING:
     from .models.seamless_m4t import (
         SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SeamlessM4TConfig,
-        SeamlessM4TTokenizer,
         SeamlessM4TFeatureExtractor,
+        SeamlessM4TTokenizer,
     )
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig

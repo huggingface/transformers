@@ -41,10 +41,13 @@ class SeamlessM4TConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 256102):
             Vocabulary size of the SeamlessM4T model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`~SeamlessM4TModel`], [`~SeamlessM4TForSpeechToSpeech`], [`~SeamlessM4TForSpeechToText`], [`~SeamlessM4TForTextToSpeech`] or [`~SeamlessM4TForTextToText`].
+            the `inputs_ids` passed when calling [`~SeamlessM4TModel`], [`~SeamlessM4TForSpeechToSpeech`],
+            [`~SeamlessM4TForSpeechToText`], [`~SeamlessM4TForTextToSpeech`] or [`~SeamlessM4TForTextToText`].
         unit_vocab_size (`int`, *optional*, defaults to 10082):
-            Unit vocabulary size of the SeamlessM4T model. Defines the number of different unit tokens that can be represented by
-            the `inputs_ids` passed when calling the Text-To-Units sub-model of [`~SeamlessM4TModel`], [`~SeamlessM4TForSpeechToSpeech`], [`~SeamlessM4TForSpeechToText`], [`~SeamlessM4TForTextToSpeech`] or [`~SeamlessM4TForTextToText`].
+            Unit vocabulary size of the SeamlessM4T model. Defines the number of different unit tokens that can be
+            represented by the `inputs_ids` passed when calling the Text-To-Units sub-model of [`~SeamlessM4TModel`],
+            [`~SeamlessM4TForSpeechToSpeech`], [`~SeamlessM4TForSpeechToText`], [`~SeamlessM4TForTextToSpeech`] or
+            [`~SeamlessM4TForTextToText`].
         hidden_size (`int`, *optional*, defaults to 1024):
             Dimensionality of the "intermediate" layers in the architecture.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -55,8 +58,8 @@ class SeamlessM4TConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
         max_position_embeddings (`int`, *optional*, defaults to 1024):
-            The maximum sequence length that this model text encoder and decoder might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model text encoder and decoder might ever be used with. Typically set
+            this to something large just in case (e.g., 512 or 1024 or 2048).
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
         encoder_layers (`int`, *optional*, defaults to 24):
@@ -70,9 +73,9 @@ class SeamlessM4TConfig(PretrainedConfig):
         decoder_ffn_dim (`int`, *optional*, defaults to 8192):
             Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer text decoder.
         decoder_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer text decoder.        
-            
-            
+            Number of attention heads for each attention layer in the Transformer text decoder.
+
+
 
         speech_encoder_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer speech encoder.
@@ -143,8 +146,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         use_cache=True,
         max_position_embeddings=1024,
         is_encoder_decoder=True,
-        
-        
         # left to add
         # text|unit encoder|decoder
         encoder_layers=24,
@@ -214,16 +215,15 @@ class SeamlessM4TConfig(PretrainedConfig):
         resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
         leaky_relu_slope=0.1,
         # specific to Code Hifi-Gan
-        unit_hifi_gan_vocab_size = 10000,
-        unit_embed_dim = 1280,
-        lang_embed_dim = 256,
-        spkr_embed_dim = 256,
-        vocoder_num_langs = 36,
-        vocoder_num_spkrs = 200,
-        use_dur_predictor = True,
-        var_pred_kernel_size = 3,
-        var_pred_dropout = 0.5,
-        
+        unit_hifi_gan_vocab_size=10000,
+        unit_embed_dim=1280,
+        lang_embed_dim=256,
+        spkr_embed_dim=256,
+        vocoder_num_langs=36,
+        vocoder_num_spkrs=200,
+        use_dur_predictor=True,
+        var_pred_kernel_size=3,
+        var_pred_dropout=0.5,
         **kwargs,
     ):
         # overall_config
@@ -285,7 +285,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.t2u_decoder_start_token_id = t2u_decoder_start_token_id
         self.t2u_max_new_tokens = t2u_max_new_tokens
         self.hidden_act = hidden_act
-        self.t2u_num_langs=t2u_num_langs
+        self.t2u_num_langs = t2u_num_langs
         # self.type_vocab_size = type_vocab_size
         self.t2u_encoder_layers = t2u_encoder_layers
         self.t2u_encoder_ffn_dim = t2u_encoder_ffn_dim
@@ -293,11 +293,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.t2u_decoder_layers = t2u_decoder_layers
         self.t2u_decoder_ffn_dim = t2u_decoder_ffn_dim
         self.t2u_decoder_attention_heads = t2u_decoder_attention_heads
-        
-        
-        
 
-        
         # hifi-gan vocoder config
         # original parameters specific to Hifi-Gan
         self.model_in_dim = model_in_dim
