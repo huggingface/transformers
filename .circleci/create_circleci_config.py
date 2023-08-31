@@ -223,18 +223,28 @@ class CircleCIJob:
             # failure.
             test_command = f"({test_command}) || true"
         else:
-            test_command += " | tee tests_output.txt"
+            test_command += " | tee tests_output.txt || true"
         steps.append({"run": {"name": "Run tests", "command": test_command}})
+
+        check_test_command = f'if [ -s reports/tests_{self.name}/failures_short.txt ]; '
+        check_test_command += 'then echo "Some test failed!"; echo ""; '
+        check_test_command += f'cat reports/tests_{self.name}/failures_short.txt; '
+        check_test_command += 'echo ""; echo ""; '
+
+        py_command = f'import os; fp = open("reports/tests_{self.name}/summary_short.txt"); failed = os.linesep.join([x for x in fp.read().split(os.linesep) if x.startswith("FAILED ")]); fp.close(); fp = open("summary_short.txt", "w"); fp.write(failed); fp.close()'
+        check_test_command += f"$(python3 -c '{py_command}'); "
+
+        check_test_command += f'cat summary_short.txt; exit -1; '
+        check_test_command += f'elif [ -s reports/tests_{self.name}/stats.txt ]; then echo "All tests pass!"; '
 
         # return code `124` means the previous (pytest run) step is timeout
         if self.name == "pr_documentation_tests":
-            checkout_doctest_command = 'if [ -s reports/tests_pr_documentation_tests/failures_short.txt ]; '
-            checkout_doctest_command += 'then echo "some test failed"; '
-            checkout_doctest_command += 'cat reports/tests_pr_documentation_tests/failures_short.txt; '
-            checkout_doctest_command += 'cat reports/tests_pr_documentation_tests/summary_short.txt; exit -1; '
-            checkout_doctest_command += 'elif [ -s reports/tests_pr_documentation_tests/stats.txt ]; then echo "All tests pass!"; '
-            checkout_doctest_command += 'elif [ -f 124.txt ]; then echo "doctest timeout!"; else echo "other fatal error)"; exit -1; fi;'
-            steps.append({"run": {"name": "Check doctest results", "command": checkout_doctest_command}})
+            check_test_command += 'elif [ -f 124.txt ]; then echo "doctest timeout!"; '
+
+        check_test_command += 'else echo "other fatal error"; exit -1; fi;'
+        check_test_command += 'echo ""; '
+
+        steps.append({"run": {"name": "Check test results", "command": check_test_command}})
 
         steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/reports"}})
