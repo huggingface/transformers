@@ -112,3 +112,13 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] LlamaForSequenceClassification
     - forward
+
+## FlaxLlamaModel
+
+[[autodoc]] FlaxLlamaModel
+    - __call__
+
+## FlaxLlamaForCausalLM
+
+[[autodoc]] FlaxLlamaForCausalLM
+    - __call__
