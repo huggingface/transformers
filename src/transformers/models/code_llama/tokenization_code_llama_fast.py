@@ -304,7 +304,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         self.set_infilling_processor(True)
         return tokens
 
-    # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.update_post_processor
+    # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
@@ -353,7 +353,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         return self.bos_token_id + token_ids_0 + token_ids_1 + self.eos_token_id
 
     # Copied from transformers.models.code_llama.tokenization_code_llama.CodeLlamaTokenizer._build_conversation_input_ids
-    def _build_conversation_input_ids(self, conversation: "Conversation"):
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         r"""Builds the input ids for a conversation.
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
         the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
