@@ -94,6 +94,7 @@ _import_structure = {
     "data.metrics": [],
     "data.processors": [],
     "debug_utils": [],
+    "deepspeed": [],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
     "dynamic_module_utils": [],
@@ -115,8 +116,6 @@ _import_structure = {
         "is_tensorboard_available",
         "is_wandb_available",
     ],
-    "lib_integrations": [],
-    "lib_integrations.peft": [],
     "modelcard": ["ModelCard"],
     "modeling_tf_pytorch_utils": [
         "convert_tf_weight_name_to_pt_weight_name",
@@ -254,6 +253,7 @@ _import_structure = {
         "CLIPSegTextConfig",
         "CLIPSegVisionConfig",
     ],
+    "models.code_llama": [],
     "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
     "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
@@ -591,6 +591,7 @@ _import_structure = {
         "VitsConfig",
         "VitsTokenizer",
     ],
+    "models.vitdet": ["VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitDetConfig"],
     "models.vivit": [
         "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VivitConfig",
@@ -750,7 +751,6 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
-    "utils.bitsandbytes": [],
     "utils.quantization_config": ["BitsAndBytesConfig", "GPTQConfig"],
 }
 
@@ -771,6 +771,7 @@ else:
     _import_structure["models.bert_generation"].append("BertGenerationTokenizer")
     _import_structure["models.big_bird"].append("BigBirdTokenizer")
     _import_structure["models.camembert"].append("CamembertTokenizer")
+    _import_structure["models.code_llama"].append("CodeLlamaTokenizer")
     _import_structure["models.cpm"].append("CpmTokenizer")
     _import_structure["models.deberta_v2"].append("DebertaV2Tokenizer")
     _import_structure["models.ernie_m"].append("ErnieMTokenizer")
@@ -819,6 +820,7 @@ else:
     _import_structure["models.bloom"].append("BloomTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
     _import_structure["models.clip"].append("CLIPTokenizerFast")
+    _import_structure["models.code_llama"].append("CodeLlamaTokenizerFast")
     _import_structure["models.codegen"].append("CodeGenTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.cpm"].append("CpmTokenizerFast")
@@ -1007,20 +1009,28 @@ else:
         "TextDataset",
         "TextDatasetForNextSentencePrediction",
     ]
-    _import_structure["deepspeed"] = []
     _import_structure["generation"].extend(
         [
+            "AlternatingCodebooksLogitsProcessor",
             "BeamScorer",
             "BeamSearchScorer",
+            "ClassifierFreeGuidanceLogitsProcessor",
             "ConstrainedBeamSearchScorer",
             "Constraint",
             "ConstraintListState",
             "DisjunctiveConstraint",
+            "EncoderNoRepeatNGramLogitsProcessor",
+            "EncoderRepetitionPenaltyLogitsProcessor",
+            "EpsilonLogitsWarper",
+            "EtaLogitsWarper",
+            "ExponentialDecayLengthPenalty",
             "ForcedBOSTokenLogitsProcessor",
             "ForcedEOSTokenLogitsProcessor",
+            "ForceTokensLogitsProcessor",
             "GenerationMixin",
             "HammingDiversityLogitsProcessor",
             "InfNanRemoveLogitsProcessor",
+            "LogitNormalization",
             "LogitsProcessor",
             "LogitsProcessorList",
             "LogitsWarper",
@@ -1036,10 +1046,14 @@ else:
             "SequenceBiasLogitsProcessor",
             "StoppingCriteria",
             "StoppingCriteriaList",
+            "SuppressTokensAtBeginLogitsProcessor",
+            "SuppressTokensLogitsProcessor",
             "TemperatureLogitsWarper",
             "TopKLogitsWarper",
             "TopPLogitsWarper",
             "TypicalLogitsWarper",
+            "UnbatchedClassifierFreeGuidanceLogitsProcessor",
+            "WhisperTimeStampLogitsProcessor",
             "top_k_top_p_filtering",
         ]
     )
@@ -1615,6 +1629,7 @@ else:
     _import_structure["models.dinov2"].extend(
         [
             "DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Dinov2Backbone",
             "Dinov2ForImageClassification",
             "Dinov2Model",
             "Dinov2PreTrainedModel",
@@ -2924,6 +2939,14 @@ else:
             "VitsPreTrainedModel",
         ]
     )
+    _import_structure["models.vitdet"].extend(
+        [
+            "VITDET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VitDetBackbone",
+            "VitDetModel",
+            "VitDetPreTrainedModel",
+        ]
+    )
     _import_structure["models.vivit"].extend(
         [
             "VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3127,6 +3150,7 @@ else:
         [
             "TFForcedBOSTokenLogitsProcessor",
             "TFForcedEOSTokenLogitsProcessor",
+            "TFForceTokensLogitsProcessor",
             "TFGenerationMixin",
             "TFLogitsProcessor",
             "TFLogitsProcessorList",
@@ -3135,6 +3159,8 @@ else:
             "TFNoBadWordsLogitsProcessor",
             "TFNoRepeatNGramLogitsProcessor",
             "TFRepetitionPenaltyLogitsProcessor",
+            "TFSuppressTokensAtBeginLogitsProcessor",
+            "TFSuppressTokensLogitsProcessor",
             "TFTemperatureLogitsWarper",
             "TFTopKLogitsWarper",
             "TFTopPLogitsWarper",
@@ -3848,14 +3874,18 @@ else:
         [
             "FlaxForcedBOSTokenLogitsProcessor",
             "FlaxForcedEOSTokenLogitsProcessor",
+            "FlaxForceTokensLogitsProcessor",
             "FlaxGenerationMixin",
             "FlaxLogitsProcessor",
             "FlaxLogitsProcessorList",
             "FlaxLogitsWarper",
             "FlaxMinLengthLogitsProcessor",
             "FlaxTemperatureLogitsWarper",
+            "FlaxSuppressTokensAtBeginLogitsProcessor",
+            "FlaxSuppressTokensLogitsProcessor",
             "FlaxTopKLogitsWarper",
             "FlaxTopPLogitsWarper",
+            "FlaxWhisperTimeStampLogitsProcessor",
         ]
     )
     _import_structure["generation_flax_utils"] = []
@@ -3977,6 +4007,7 @@ else:
             "FlaxCLIPPreTrainedModel",
             "FlaxCLIPTextModel",
             "FlaxCLIPTextPreTrainedModel",
+            "FlaxCLIPTextModelWithProjection",
             "FlaxCLIPVisionModel",
             "FlaxCLIPVisionPreTrainedModel",
         ]
@@ -4628,6 +4659,7 @@ if TYPE_CHECKING:
         VitsConfig,
         VitsTokenizer,
     )
+    from .models.vitdet import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP, VitDetConfig
     from .models.vivit import VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, VivitConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4802,6 +4834,7 @@ if TYPE_CHECKING:
         from .models.bert_generation import BertGenerationTokenizer
         from .models.big_bird import BigBirdTokenizer
         from .models.camembert import CamembertTokenizer
+        from .models.code_llama import CodeLlamaTokenizer
         from .models.cpm import CpmTokenizer
         from .models.deberta_v2 import DebertaV2Tokenizer
         from .models.ernie_m import ErnieMTokenizer
@@ -4844,6 +4877,7 @@ if TYPE_CHECKING:
         from .models.bloom import BloomTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.clip import CLIPTokenizerFast
+        from .models.code_llama import CodeLlamaTokenizerFast
         from .models.codegen import CodeGenTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.cpm import CpmTokenizerFast
@@ -4999,17 +5033,26 @@ if TYPE_CHECKING:
             TextDatasetForNextSentencePrediction,
         )
         from .generation import (
+            AlternatingCodebooksLogitsProcessor,
             BeamScorer,
             BeamSearchScorer,
+            ClassifierFreeGuidanceLogitsProcessor,
             ConstrainedBeamSearchScorer,
             Constraint,
             ConstraintListState,
             DisjunctiveConstraint,
+            EncoderNoRepeatNGramLogitsProcessor,
+            EncoderRepetitionPenaltyLogitsProcessor,
+            EpsilonLogitsWarper,
+            EtaLogitsWarper,
+            ExponentialDecayLengthPenalty,
             ForcedBOSTokenLogitsProcessor,
             ForcedEOSTokenLogitsProcessor,
+            ForceTokensLogitsProcessor,
             GenerationMixin,
             HammingDiversityLogitsProcessor,
             InfNanRemoveLogitsProcessor,
+            LogitNormalization,
             LogitsProcessor,
             LogitsProcessorList,
             LogitsWarper,
@@ -5025,10 +5068,14 @@ if TYPE_CHECKING:
             SequenceBiasLogitsProcessor,
             StoppingCriteria,
             StoppingCriteriaList,
+            SuppressTokensAtBeginLogitsProcessor,
+            SuppressTokensLogitsProcessor,
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
             TypicalLogitsWarper,
+            UnbatchedClassifierFreeGuidanceLogitsProcessor,
+            WhisperTimeStampLogitsProcessor,
             top_k_top_p_filtering,
         )
         from .modeling_utils import PreTrainedModel
@@ -5511,6 +5558,7 @@ if TYPE_CHECKING:
         )
         from .models.dinov2 import (
             DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Dinov2Backbone,
             Dinov2ForImageClassification,
             Dinov2Model,
             Dinov2PreTrainedModel,
@@ -6563,6 +6611,12 @@ if TYPE_CHECKING:
             VitsModel,
             VitsPreTrainedModel,
         )
+        from .models.vitdet import (
+            VITDET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VitDetBackbone,
+            VitDetModel,
+            VitDetPreTrainedModel,
+        )
         from .models.vivit import (
             VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             VivitForVideoClassification,
@@ -6733,6 +6787,7 @@ if TYPE_CHECKING:
         from .generation import (
             TFForcedBOSTokenLogitsProcessor,
             TFForcedEOSTokenLogitsProcessor,
+            TFForceTokensLogitsProcessor,
             TFGenerationMixin,
             TFLogitsProcessor,
             TFLogitsProcessorList,
@@ -6741,6 +6796,8 @@ if TYPE_CHECKING:
             TFNoBadWordsLogitsProcessor,
             TFNoRepeatNGramLogitsProcessor,
             TFRepetitionPenaltyLogitsProcessor,
+            TFSuppressTokensAtBeginLogitsProcessor,
+            TFSuppressTokensLogitsProcessor,
             TFTemperatureLogitsWarper,
             TFTopKLogitsWarper,
             TFTopPLogitsWarper,
@@ -7306,14 +7363,18 @@ if TYPE_CHECKING:
         from .generation import (
             FlaxForcedBOSTokenLogitsProcessor,
             FlaxForcedEOSTokenLogitsProcessor,
+            FlaxForceTokensLogitsProcessor,
             FlaxGenerationMixin,
             FlaxLogitsProcessor,
             FlaxLogitsProcessorList,
             FlaxLogitsWarper,
             FlaxMinLengthLogitsProcessor,
+            FlaxSuppressTokensAtBeginLogitsProcessor,
+            FlaxSuppressTokensLogitsProcessor,
             FlaxTemperatureLogitsWarper,
             FlaxTopKLogitsWarper,
             FlaxTopPLogitsWarper,
+            FlaxWhisperTimeStampLogitsProcessor,
         )
         from .modeling_flax_utils import FlaxPreTrainedModel
 
@@ -7410,6 +7471,7 @@ if TYPE_CHECKING:
             FlaxCLIPModel,
             FlaxCLIPPreTrainedModel,
             FlaxCLIPTextModel,
+            FlaxCLIPTextModelWithProjection,
             FlaxCLIPTextPreTrainedModel,
             FlaxCLIPVisionModel,
             FlaxCLIPVisionPreTrainedModel,
