@@ -1374,6 +1374,7 @@ class VitsModel(VitsPreTrainedModel):
         self.speaking_rate = config.speaking_rate
         self.noise_scale = config.noise_scale
         self.noise_scale_duration = config.noise_scale_duration
+        self.sampling_rate = config.sampling_rate
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1497,13 +1498,13 @@ class VitsModel(VitsPreTrainedModel):
         sequence_lengths = predicted_lengths * np.prod(self.config.upsample_rates)
 
         if not return_dict:
-            outputs = (waveform, sequence_lengths, spectrogram) + text_encoder_output[3:]
+            outputs = (waveform, sequence_lengths, self.sampling_rate, spectrogram) + text_encoder_output[3:]
             return outputs
 
         return VitsModelOutput(
             waveform=waveform,
             sequence_lengths=sequence_lengths,
-            sampling_rate=self.config.sampling_rate,
+            sampling_rate=self.sampling_rate,
             spectrogram=spectrogram,
             hidden_states=text_encoder_output.hidden_states,
             attentions=text_encoder_output.attentions,
