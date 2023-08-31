@@ -66,7 +66,7 @@ limitations under the License.
 transformers-cli env
 ```
 
-저장소의 루트 디렉토리에서도 같은 명령을 실행할 수 있습니다:
+저장소의 루트 디렉터리에서도 같은 명령을 실행할 수 있습니다:
 
 ```bash
 python src/transformers/commands/transformers_cli.py env
