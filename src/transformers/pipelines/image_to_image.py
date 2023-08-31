@@ -38,15 +38,13 @@ class ImageToImagePipeline(Pipeline):
     >>> from transformers import pipeline
 
     >>> upscaler = pipeline("image-to-image", model="caidas/swin2SR-classical-sr-x2-64")
-    >>> parrots = Image.open(
-    ...     requests.get("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png", stream=True).raw
-    ... )
-    >>> upscaled_parrots = upscaler(parrots)
-    >>> parrots.size
-    (768, 512)
+    >>> img = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+    >>> upscaled_img = upscaler(img)
+    >>> img.size
+    (640, 480)
 
-    >>> upscaled_parrots.size
-    (1552, 1040)
+    >>> upscaled_img.size
+    (1296, 976)
     ```
 
     This image to image pipeline can currently be loaded from [`pipeline`] using the following task identifier:
