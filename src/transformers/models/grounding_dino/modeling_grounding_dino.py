@@ -854,6 +854,304 @@ class GroundingDINOMultiheadAttention(nn.Module):
 
         return attn_output, attn_weights_reshaped
 
+# Repeting some code to avoid convert nn.MultiheadAttention later
+class GroundingDINOEncoderTextLayer(nn.Module):
+    def __init__(
+            self, 
+            embed_dim,
+            num_heads,
+            ffn_dim: int,
+            dropout: float = 0.0,
+            bias: bool = True,
+            activation: str = 'relu'
+            ):
+        super().__init__()
+        self.self_attn = nn.MultiheadAttention(embed_dim, num_heads, dropout=dropout)
+        # Implementation of Feedforward model
+        self.fc1 = nn.Linear(embed_dim, ffn_dim)
+        self.dropout = nn.Dropout(dropout)
+        self.fc2 = nn.Linear(ffn_dim, embed_dim)
+
+        self.layer_norm_before = nn.LayerNorm(embed_dim)
+        self.layer_norm_after = nn.LayerNorm(embed_dim)
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+
+        self.activation = ACT2FN[activation]
+        self.num_heads = num_heads
+
+    def with_pos_embed(self, hidden_state: Tensor, position_embeddings: Optional[Tensor]):
+        return hidden_state if position_embeddings is None else hidden_state + position_embeddings
+
+    def forward(
+        self,
+        hidden_states: Tensor,
+        attention_masks: Optional[Tensor] = None,
+        position_embeddings: Optional[Tensor] = None,
+    ):    # repeat attn mask
+        if attention_masks.dim() == 3 and attention_masks.shape[0] == hidden_states.shape[1]:
+            # bs, num_q, num_k
+            attention_masks = attention_masks.repeat(self.num_heads, 1, 1)
+
+        q = k = self.with_pos_embed(hidden_states, position_embeddings)
+        attention_output = self.self_attn(q, k, value=hidden_states, attn_mask=attention_masks)[0]
+
+        hidden_states = hidden_states + self.dropout1(attention_output)
+        hidden_states = self.layer_norm_before(hidden_states)
+        hidden_states = self.activation(self.fc1(hidden_states))
+        attention_output = self.fc2(self.dropout(hidden_states))
+        hidden_states = hidden_states + self.dropout2(attention_output)
+        hidden_states = self.layer_norm_after(hidden_states)
+        return hidden_states
+
+class BiMultiHeadAttention(nn.Module):
+    def __init__(
+            self,
+            vision_dim: int,
+            text_dim: int,
+            embed_dim: int,
+            num_heads: int,
+            dropout:float = 0.1
+        ):
+        super().__init__()
+
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+        self.vision_dim = vision_dim
+        self.text_dim = text_dim
+
+        assert (
+            self.head_dim * self.num_heads == self.embed_dim
+        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+        self.scale = self.head_dim ** (-0.5)
+        self.dropout = dropout
+
+        self.vision_proj = nn.Linear(self.vision_dim, self.embed_dim)
+        self.text_proj = nn.Linear(self.text_dim, self.embed_dim)
+        self.values_vision_proj = nn.Linear(self.vision_dim, self.embed_dim)
+        self.values_text_proj = nn.Linear(self.text_dim, self.embed_dim)
+
+        self.out_vision_proj = nn.Linear(self.embed_dim, self.vision_dim)
+        self.out_text_proj = nn.Linear(self.embed_dim, self.text_dim)
+
+        self.stable_softmax_2d = True
+        self.clamp_min_for_underflow = True
+        self.clamp_max_for_overflow = True
+
+        self._reset_parameters()
+
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+
+    def _reset_parameters(self):
+        nn.init.xavier_uniform_(self.vision_proj.weight)
+        self.vision_proj.bias.data.fill_(0)
+        nn.init.xavier_uniform_(self.text_proj.weight)
+        self.text_proj.bias.data.fill_(0)
+        nn.init.xavier_uniform_(self.values_vision_proj.weight)
+        self.values_vision_proj.bias.data.fill_(0)
+        nn.init.xavier_uniform_(self.values_text_proj.weight)
+        self.values_text_proj.bias.data.fill_(0)
+        nn.init.xavier_uniform_(self.out_vision_proj.weight)
+        self.out_vision_proj.bias.data.fill_(0)
+        nn.init.xavier_uniform_(self.out_text_proj.weight)
+        self.out_text_proj.bias.data.fill_(0)
+
+    def forward(
+            self, 
+            vision_features: Tensor, 
+            text_features: Tensor, 
+            vision_attention_mask: Optional[Tensor] = None, 
+            text_attention_mask: Optional[Tensor] = None
+        ):
+        """_summary_
+
+        Args:
+            vision_features Tensor: bs, n_img, dim
+            text_features Tensor: bs, n_text, dim
+            vision_attention_mask (Tensor, optional): _description_. bs, n_img
+            text_attention_mask (Tensor, optional): _description_. bs, n_text
+
+        Returns:
+            _type_: _description_
+        """
+        # if os.environ.get('IPDB_SHILONG_DEBUG', None) == 'INFO':
+        #     import ipdb; ipdb.set_trace()
+        bsz, tgt_len, _ = vision_features.size()
+
+        vision_query_states = self.vision_proj(vision_features) * self.scale
+        vision_query_states = self._shape(vision_query_states, tgt_len, bsz)
+
+        text_key_states = self.text_proj(text_features)
+        text_key_states = self._shape(text_key_states, -1, bsz)
+
+        vision_value_states = self.values_vision_proj(vision_features)
+        vision_value_states = self._shape(vision_value_states, -1, bsz)
+
+        text_value_states = self.values_text_proj(text_features)
+        text_value_states = self._shape(text_value_states, -1, bsz)
+
+        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
+
+        vision_query_states = vision_query_states.view(*proj_shape)
+        text_key_states = text_key_states.view(*proj_shape)
+        vision_value_states = vision_value_states.view(*proj_shape)
+        text_value_states = text_value_states.view(*proj_shape)
+
+        src_len = text_key_states.size(1)
+        attn_weights = torch.bmm(vision_query_states, text_key_states.transpose(1, 2))  # bs*nhead, nimg, ntxt
+
+        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+            raise ValueError(
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+            )
+
+        attn_weights = attn_weights - attn_weights.max()
+
+        attn_weights = torch.clamp(
+                attn_weights, min=-50000
+            )  # Do not increase -50000, data type half has quite limited range
+        attn_weights = torch.clamp(
+                attn_weights, max=50000
+            )  # Do not increase 50000, data type half has quite limited range
+
+        attn_weights_T = attn_weights.transpose(1, 2)
+        text_attn_weights = attn_weights_T - torch.max(attn_weights_T, dim=-1, keepdim=True)[0]
+        
+        text_attn_weights = torch.clamp(
+                text_attn_weights, min=-50000
+            )  # Do not increase -50000, data type half has quite limited range
+        text_attn_weights = torch.clamp(
+                text_attn_weights, max=50000
+            )  # Do not increase 50000, data type half has quite limited range
+
+        # mask vison for language
+        if vision_attention_mask is not None:
+            vision_attention_mask = (
+                vision_attention_mask[:, None, None, :].repeat(1, self.num_heads, 1, 1).flatten(0, 1)
+            )
+            text_attn_weights.masked_fill_(vision_attention_mask, float("-inf"))
+
+        text_attn_weights = text_attn_weights.softmax(dim=-1)
+
+        # mask language for vision
+        if text_attention_mask is not None:
+            text_attention_mask = (
+                text_attention_mask[:, None, None, :].repeat(1, self.num_heads, 1, 1).flatten(0, 1)
+            )
+            attn_weights.masked_fill_(text_attention_mask, float("-inf"))
+        vision_attn_weights = attn_weights.softmax(dim=-1)
+
+        vision_attn_probs = F.dropout(vision_attn_weights, p=self.dropout, training=self.training)
+        text_attn_probs = F.dropout(text_attn_weights, p=self.dropout, training=self.training)
+
+        vision_attn_output = torch.bmm(vision_attn_probs, text_value_states)
+        text_attn_output = torch.bmm(text_attn_probs, vision_value_states)
+
+        if vision_attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
+            raise ValueError(
+                f"`vision_attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {vision_attn_output.size()}"
+            )
+
+        if text_attn_output.size() != (bsz * self.num_heads, src_len, self.head_dim):
+            raise ValueError(
+                f"`text_attn_output` should be of size {(bsz, self.num_heads, src_len, self.head_dim)}, but is {text_attn_output.size()}"
+            )
+
+        vision_attn_output = vision_attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
+        vision_attn_output = vision_attn_output.transpose(1, 2)
+        vision_attn_output = vision_attn_output.reshape(bsz, tgt_len, self.embed_dim)
+
+        text_attn_output = text_attn_output.view(bsz, self.num_heads, src_len, self.head_dim)
+        text_attn_output = text_attn_output.transpose(1, 2)
+        text_attn_output = text_attn_output.reshape(bsz, src_len, self.embed_dim)
+
+        vision_attn_output = self.out_vision_proj(vision_attn_output)
+        text_attn_output = self.out_text_proj(text_attn_output)
+
+        return vision_attn_output, text_attn_output
+
+# Copied from transformers.models.beit.modeling_beit.drop_path
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+    """
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
+    """
+    if drop_prob == 0.0 or not training:
+        return input
+    keep_prob = 1 - drop_prob
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    random_tensor.floor_()  # binarize
+    output = input.div(keep_prob) * random_tensor
+    return output
+
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->GroundingDINO
+class GroundingDINODropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob: Optional[float] = None) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return "p={}".format(self.drop_prob)
+    
+class GroundingDINOBiAttention(nn.Module):
+    def __init__(
+        self,
+        vision_dim,
+        text_dim,
+        embed_dim,
+        num_heads,
+        dropout=0.1,
+        drop_path=0.0,
+        init_values=1e-4,
+    ):
+        """
+        Inputs:
+            embed_dim - Dimensionality of input and attention feature vectors
+            hidden_dim - Dimensionality of hidden layer in feed-forward network
+                         (usually 2-4x larger than embed_dim)
+            num_heads - Number of heads to use in the Multi-Head Attention block
+            dropout - Amount of dropout to apply in the feed-forward network
+        """
+        super().__init__()
+
+        # pre layer norm
+        self.layer_norm_vision = nn.LayerNorm(vision_dim)
+        self.layer_norm_text = nn.LayerNorm(text_dim)
+        self.attn = BiMultiHeadAttention(
+            vision_dim=vision_dim, text_dim=text_dim, embed_dim=embed_dim, num_heads=num_heads, dropout=dropout
+        )
+
+        # add layer scale for training stability
+        self.drop_path = GroundingDINODropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.gamma_v = nn.Parameter(init_values * torch.ones((vision_dim)), requires_grad=True)
+        self.gamma_l = nn.Parameter(init_values * torch.ones((text_dim)), requires_grad=True)
+
+    def forward(self, vision_features, text_features, attention_mask_vision=None, attention_mask_text=None):
+        vision_features = self.layer_norm_vision(vision_features)
+        text_features = self.layer_norm_text(text_features)
+        delta_v, delta_l = self.attn(
+            vision_features, 
+            text_features, 
+            attention_mask_vision=attention_mask_vision, 
+            attention_mask_text=attention_mask_text
+        )
+        # vision_features, text_features = vision_features + delta_v, text_features + delta_l
+        vision_features = vision_features + self.drop_path(self.gamma_v * delta_v)
+        text_features = text_features + self.drop_path(self.gamma_l * delta_l)
+        return vision_features, text_features
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrEncoderLayer with DeformableDetr->GroundingDINO
 class GroundingDINOEncoderLayer(nn.Module):
@@ -1499,8 +1797,6 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
         backbone = GroundingDINOConvEncoder(config)
         position_embeddings = build_position_encoding(config)
         self.backbone = GroundingDINOConvModel(backbone, position_embeddings)
-        # Create Text Extractor
-        self.text_backbone = GroundingDINOTextModel(config.text_backbone_config)
 
         # Create input projection layers
         if config.num_feature_levels > 1:
@@ -1850,7 +2146,6 @@ class GroundingDINOModel(GroundingDINOPreTrainedModel):
     """,
     GROUNDING_DINO_START_DOCSTRING,
 )
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrForObjectDetection with DeformableDetr->GroundingDINO,DEFORMABLE_DETR->GROUNDING_DINO,Deformable DETR->Grounding DINO
 class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     _tied_weights_keys = [r"bbox_embed\.[1-9]\d*", r"class_embed\.[1-9]\d*"]
@@ -1866,6 +2161,7 @@ class GroundingDINOForObjectDetection(GroundingDINOPreTrainedModel):
         self.bbox_embed = GroundingDINOMLPPredictionHead(
             input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
         )
+        self.text_backbone = GroundingDINOTextModel(config.text_backbone_config)
 
         prior_prob = 0.01
         bias_value = -math.log((1 - prior_prob) / prior_prob)
@@ -2588,6 +2884,8 @@ class GroundingDINOTextEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings
 
+# Classes for Text Backbone (It's just a BERT model)
+
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->GroundingDINOText
 class GroundingDINOTextSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
@@ -3013,7 +3311,6 @@ class GroundingDINOTextPooler(nn.Module):
         pooled_output = self.activation(pooled_output)
         return pooled_output
 
-# Copied from transformers.models.bert.modeling_bert.BertModel with Bert->GroundingDINOText
 class GroundingDINOTextModel(PreTrainedModel):
     """
 
@@ -3029,11 +3326,15 @@ class GroundingDINOTextModel(PreTrainedModel):
 
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
+        self.config = config
 
         self.embeddings = GroundingDINOTextEmbeddings(config)
         self.encoder = GroundingDINOTextEncoder(config)
 
         self.pooler = GroundingDINOTextPooler(config) if add_pooling_layer else None
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
