@@ -255,7 +255,7 @@ Pull Request에서 실행되는 검사에 대한 자세한 정보는 [Pull Reque
 python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
 ```
 
-마찬가지로 `examples` 디렉토리에서도 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요. 예를 들어, 다음 명령은 PyTorch `examples` 디렉토리의 텍스트 분류 하위 폴더를 테스트합니다:
+마찬가지로 `examples` 디렉터리에서도 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요. 예를 들어, 다음 명령은 PyTorch `examples` 디렉터리의 텍스트 분류 하위 폴더를 테스트합니다:
 
 ```bash
 pip install -r examples/xxx/requirements.txt  # only needed the first time
