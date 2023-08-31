@@ -58,8 +58,6 @@ class VitsModelOutput(ModelOutput):
             The final audio waveform predicted by the model.
         sequence_lengths  (`torch.FloatTensor` of shape `(batch_size,)`):
             The length in samples of each element in the `waveform` batch.
-        sampling_rate (`int`):
-            The sampling rate in hertz (Hz) of the audio waveform predicted by the model.
         spectrogram (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_bins)`):
             The log-mel spectrogram predicted at the output of the flow model. This spectrogram is passed to the Hi-Fi
             GAN decoder model to obtain the final audio waveform.
@@ -78,7 +76,6 @@ class VitsModelOutput(ModelOutput):
 
     waveform: torch.FloatTensor = None
     sequence_lengths: torch.FloatTensor = None
-    sampling_rate: Optional[int] = None
     spectrogram: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -1498,13 +1495,12 @@ class VitsModel(VitsPreTrainedModel):
         sequence_lengths = predicted_lengths * np.prod(self.config.upsample_rates)
 
         if not return_dict:
-            outputs = (waveform, sequence_lengths, self.sampling_rate, spectrogram) + text_encoder_output[3:]
+            outputs = (waveform, sequence_lengths, spectrogram) + text_encoder_output[3:]
             return outputs
 
         return VitsModelOutput(
             waveform=waveform,
             sequence_lengths=sequence_lengths,
-            sampling_rate=self.sampling_rate,
             spectrogram=spectrogram,
             hidden_states=text_encoder_output.hidden_states,
             attentions=text_encoder_output.attentions,
