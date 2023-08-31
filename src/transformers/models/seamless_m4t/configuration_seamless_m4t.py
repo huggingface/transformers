@@ -59,9 +59,21 @@ class SeamlessM4TConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
+        encoder_layers (`int`, *optional*, defaults to 24):
+            Number of hidden layers in the Transformer text encoder.
+        encoder_ffn_dim (`int`, *optional*, defaults to 8192):
+            Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer text encoder.
+        encoder_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer text encoder.
+        decoder_layers (`int`, *optional*, defaults to 24):
+            Number of hidden layers in the Transformer text decoder.
+        decoder_ffn_dim (`int`, *optional*, defaults to 8192):
+            Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer text decoder.
+        decoder_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer text decoder.        
             
             
-            
+
         speech_encoder_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer speech encoder.
         speech_encoder_attention_heads (`int`, *optional*, defaults to 12):
@@ -152,8 +164,8 @@ class SeamlessM4TConfig(PretrainedConfig):
         scale_embedding=True,
         max_new_tokens=256,
         # speech_encoder
-        speech_encoder_layers=24,  # works for speech encoder
-        speech_encoder_attention_heads=16,  # works for speech encoder
+        speech_encoder_layers=24,
+        speech_encoder_attention_heads=16,
         speech_encoder_intermediate_size=4096,
         speech_encoder_hidden_act="swish",
         speech_encoder_dropout=0.0,
@@ -173,7 +185,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         output_hidden_size=None,
         position_embeddings_type="relative",
         rotary_embedding_base=10000,
-        max_source_positions=4096,  # works
+        max_source_positions=4096,
         conv_depthwise_kernel_size=31,
         # t2u config
         t2u_bos_token_id=0,
@@ -181,19 +193,17 @@ class SeamlessM4TConfig(PretrainedConfig):
         t2u_eos_token_id=2,
         t2u_decoder_start_token_id=2,
         t2u_max_new_tokens=1024,
-        #t2u_unk_token_id=3,
-        t2u_encoder_layers=6,  # works
-        t2u_encoder_ffn_dim=8192,  # works
-        t2u_encoder_attention_heads=16,  # works
-        t2u_decoder_layers=6,  # works
-        t2u_decoder_ffn_dim=8192,  # works
-        t2u_decoder_attention_heads=16,  # works
+        t2u_encoder_layers=6,
+        t2u_encoder_ffn_dim=8192,
+        t2u_encoder_attention_heads=16,
+        t2u_decoder_layers=6,
+        t2u_decoder_ffn_dim=8192,
+        t2u_decoder_attention_heads=16,
         t2u_num_langs=38,
         hidden_act="gelu",
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=3,
-        # unk_token_id=1, TODO
         # hifi-gan vocoder config
         model_in_dim=1792,
         sampling_rate=16000,

@@ -3013,6 +3013,17 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
 
         return waveforms
 
+    @staticmethod
+    def _reorder_cache(past_key_values, beam_idx):
+        reordered_past = ()
+        for layer_past in past_key_values:
+            # cached cross_attention states don't have to be reordered -> they are always the same
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
+        return reordered_past
+
+
 @add_start_docstrings(
     "The speech-to-speech SeamlessM4T Model transformer which can be used for S2ST.",
     SEAMLESS_M4T_START_DOCSTRING,
@@ -3184,6 +3195,17 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
                                                waveforms=waveforms)
 
         return waveforms
+    
+    @staticmethod
+    def _reorder_cache(past_key_values, beam_idx):
+        reordered_past = ()
+        for layer_past in past_key_values:
+            # cached cross_attention states don't have to be reordered -> they are always the same
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
+        return reordered_past
+
 
 
 
@@ -3472,7 +3494,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         )
         # input modality = speech so new attention mask
         if self.current_modality == "speech" and attention_mask is not None:
-            _compute_new_attention_mask(
+            attention_mask = _compute_new_attention_mask(
                 text_generation_output.encoder_hidden_states[-1],
                 attention_mask,
                 self.config.adaptor_kernel_size,
@@ -3480,29 +3502,14 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             )
 
         # TODO: clarify that
-        self.forward(
-            input_ids=input_ids,
-            input_features=input_features,
-            attention_mask=attention_mask,
-            decoder_input_ids=text_generation_output.sequences,
-            head_mask=kwargs_text.get("head_mask"),
-            decoder_head_mask=kwargs_text.get("decoder_head_mask"),
-            cross_attn_head_mask=kwargs_text.get("cross_attn_head_mask"),
-            output_attentions=kwargs_text.get("output_attentions"),
-            output_hidden_states=kwargs_text.get("output_hidden_states"),
-            return_dict=kwargs_text.get("return_dict"),
-        )
-        # input_ids=text_generation_output.sequences,
-        # encoder_hidden_states=text_generation_output.encoder_hidden_states[-1],
-        # encoder_attention_mask=encoder_attention_mask,
-        # head_mask=decoder_head_mask,
-        # cross_attn_head_mask=cross_attn_head_mask,
-        # past_key_values=past_key_values,
-        # inputs_embeds=decoder_inputs_embeds,
-        # use_cache=use_cache,
-        # output_attentions=output_attentions,
-        # output_hidden_states=output_hidden_states,
-        # return_dict=return_dict,
+        t2u_input_embeds = self.text_decoder(
+        input_ids = text_generation_output.sequences,
+        encoder_hidden_states = text_generation_output.encoder_hidden_states[-1],
+        encoder_attention_mask = attention_mask,
+        head_mask=kwargs_text.get("decoder_head_mask"),
+        cross_attn_head_mask=kwargs_text.get("cross_attn_head_mask"),
+        ).last_hidden_state
+        
 
         # take care of num_return_sequences
         # take most probable hidden states per batch of return_sequences
@@ -3590,6 +3597,16 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,
         }
+
+    @staticmethod
+    def _reorder_cache(past_key_values, beam_idx):
+        reordered_past = ()
+        for layer_past in past_key_values:
+            # cached cross_attention states don't have to be reordered -> they are always the same
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
+        return reordered_past
 
 
 ############ VOCODER related code ################
