@@ -21,10 +21,12 @@ from functools import partialmethod
 
 from ..dependency_versions_check import dep_version_check
 from ..utils import is_accelerate_available, is_torch_available, logging
-from ..optimization import get_scheduler
+
 
 if is_torch_available():
     import torch
+
+    from ..optimization import get_scheduler
 
 logger = logging.get_logger(__name__)
 
