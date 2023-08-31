@@ -116,7 +116,6 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             self._src_lang = f"__{new_src_lang}__"
         else:
             self._src_lang = new_src_lang
-        self.set_src_lang_special_tokens(self._src_lang)
 
     @property
     def tgt_lang(self) -> str:
@@ -128,7 +127,6 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             self._tgt_lang = f"__{new_tgt_lang}__"
         else:
             self._tgt_lang = new_tgt_lang
-        self.set_tgt_lang_special_tokens(self._tgt_lang)
         
         
     def _extract_fbank_features(

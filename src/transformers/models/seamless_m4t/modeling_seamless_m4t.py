@@ -3250,14 +3250,17 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
             "attention_mask", kwargs_text.get("attention_mask", None)
         )
 
+        encoder_hidden_states = text_generation_output.encoder_hidden_states[-1]  
+        
         # compute last hidden state
         t2u_input_embeds = self.text_decoder(
         input_ids = sequences,
-        encoder_hidden_states = text_generation_output.encoder_hidden_states[-1],
+        encoder_hidden_states = encoder_hidden_states,
         encoder_attention_mask = attention_mask,
         head_mask=kwargs_text.get("decoder_head_mask"),
         cross_attn_head_mask=kwargs_text.get("cross_attn_head_mask"),
         ).last_hidden_state
+        
         
 
         # take care of num_return_sequences
@@ -3439,22 +3442,30 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
             "attention_mask", kwargs_text.get("attention_mask", None)
         )
         
-        # input modality = speech so new attention mask
-        attention_mask = _compute_new_attention_mask(
-                text_generation_output.encoder_hidden_states[-1],
-                attention_mask,
-                self.config.adaptor_kernel_size,
-                self.config.adaptor_stride,
-            )
+        # get last_hidden_state from encoder
+        encoder_hidden_states = self.speech_encoder(
+            input_features=input_features,
+            attention_mask=attention_mask)[0]
+        
+            # input modality = speech so new attention mask for the decoder
+        if attention_mask is not None:
+            attention_mask = _compute_new_attention_mask(
+            encoder_hidden_states,
+            attention_mask,
+            self.config.adaptor_kernel_size,
+            self.config.adaptor_stride,
+        )
 
+        
         # compute last hidden state
         t2u_input_embeds = self.text_decoder(
         input_ids = sequences,
-        encoder_hidden_states = text_generation_output.encoder_hidden_states[-1],
+        encoder_hidden_states = encoder_hidden_states,
         encoder_attention_mask = attention_mask,
         head_mask=kwargs_text.get("decoder_head_mask"),
         cross_attn_head_mask=kwargs_text.get("cross_attn_head_mask"),
         ).last_hidden_state
+        
         
 
         # take care of num_return_sequences
@@ -3805,19 +3816,29 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         attention_mask = kwargs_speech.get(
             "attention_mask", kwargs_text.get("attention_mask", None)
         )
-        # input modality = speech so new attention mask
-        if self.current_modality == "speech" and attention_mask is not None:
-            attention_mask = _compute_new_attention_mask(
-                text_generation_output.encoder_hidden_states[-1],
+       
+            
+        if self.current_modality == "speech":
+            # get last_hidden_state from encoder
+            encoder_hidden_states = self.speech_encoder(
+                input_features=input_features,
+                attention_mask=attention_mask)[0]
+            
+             # input modality = speech so new attention mask for the decoder
+            if attention_mask is not None:
+                attention_mask = _compute_new_attention_mask(
+                encoder_hidden_states,
                 attention_mask,
                 self.config.adaptor_kernel_size,
                 self.config.adaptor_stride,
             )
-
+        else:
+            encoder_hidden_states = text_generation_output.encoder_hidden_states[-1]  
+        
         # compute last hidden state
         t2u_input_embeds = self.text_decoder(
         input_ids = sequences,
-        encoder_hidden_states = text_generation_output.encoder_hidden_states[-1],
+        encoder_hidden_states = encoder_hidden_states,
         encoder_attention_mask = attention_mask,
         head_mask=kwargs_text.get("decoder_head_mask"),
         cross_attn_head_mask=kwargs_text.get("cross_attn_head_mask"),

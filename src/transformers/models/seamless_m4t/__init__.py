@@ -19,6 +19,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 _import_structure = {
     "configuration_seamless_m4t": ["SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP", "SeamlessM4TConfig"],
     "tokenization_seamless_m4t": ["SeamlessM4TTokenizer"],
+    "feature_extractor_seamless_m4T": ["SeamlessM4TFeatureExtractor"]
 }
 
 try:
@@ -49,6 +50,7 @@ else:
 if TYPE_CHECKING:
     from .configuration_seamless_m4t import SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP, SeamlessM4TConfig
     from .tokenization_seamless_m4t import SeamlessM4TTokenizer
+    from .feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
 
     try:
         if not is_tokenizers_available():

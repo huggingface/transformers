@@ -26,6 +26,36 @@ Tips:
 
 This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
+## SeamlessM4TModel
+
+[[autodoc]] SeamlessM4TModel
+    - generate
+
+
+## SeamlessM4TForTextToSpeech
+
+[[autodoc]] SeamlessM4TForTextToSpeech
+    - generate
+
+
+## SeamlessM4TForSpeechToSpeech
+
+[[autodoc]] SeamlessM4TForSpeechToSpeech
+    - generate
+
+
+## SeamlessM4TForTextToText
+
+[[autodoc]] transformers.SeamlessM4TForTextToText
+    - forward
+    - generate
+
+## SeamlessM4TForSpeechToText
+
+[[autodoc]] transformers.SeamlessM4TForSpeechToText
+    - forward
+    - generate
+
 ## SeamlessM4TConfig
 
 [[autodoc]] SeamlessM4TConfig
@@ -45,30 +75,11 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingfac
 [[autodoc]] SeamlessM4TTokenizerFast
 
 
-## SeamlessM4TModel
+## SeamlessM4TFeatureExtractor
 
-[[autodoc]] SeamlessM4TModel
-    - forward
+[[autodoc]] SeamlessM4TTokenizer
+    - build_inputs_with_special_tokens
+    - get_special_tokens_mask
+    - create_token_type_ids_from_sequences
+    - save_vocabulary
 
-
-## SeamlessM4TForTextToSpeech
-
-[[autodoc]] SeamlessM4TForTextToSpeech
-    - forward
-
-
-## SeamlessM4TForSpeechToSpeech
-
-[[autodoc]] SeamlessM4TForSpeechToSpeech
-    - forward
-
-
-## SeamlessM4TForTextToText
-
-[[autodoc]] transformers.SeamlessM4TForTextToText
-    - forward
-
-## SeamlessM4TForSpeechToText
-
-[[autodoc]] transformers.SeamlessM4TForSpeechToText
-    - forward
