@@ -23,7 +23,7 @@ from typing import Tuple, Union
 import tensorflow as tf
 
 from ...modeling_tf_outputs import TFBaseModelOutputWithPooling
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list, unpack_inputs
+from ...modeling_tf_utils import TFModelInputType, TFPreTrainedModel, get_initializer, shape_list, unpack_inputs
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -540,15 +540,15 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
     @replace_return_docstrings(output_type=TFDPRContextEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: tf.Tensor | None = None,
         token_type_ids: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFDPRContextEncoderOutput, Tuple[tf.Tensor, ...]]:
+    ) -> TFDPRContextEncoderOutput | Tuple[tf.Tensor, ...]:
         r"""
         Return:
 
@@ -621,15 +621,15 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
     @replace_return_docstrings(output_type=TFDPRQuestionEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: tf.Tensor | None = None,
         token_type_ids: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFDPRQuestionEncoderOutput, Tuple[tf.Tensor, ...]]:
+    ) -> TFDPRQuestionEncoderOutput | Tuple[tf.Tensor, ...]:
         r"""
         Return:
 
@@ -701,14 +701,14 @@ class TFDPRReader(TFDPRPretrainedReader):
     @replace_return_docstrings(output_type=TFDPRReaderOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids=None,
+        input_ids: TFModelInputType | None = None,
         attention_mask: tf.Tensor | None = None,
         inputs_embeds: tf.Tensor | None = None,
-        output_attentions: bool = None,
-        output_hidden_states: bool = None,
-        return_dict=None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
+    ) -> TFDPRReaderOutput | Tuple[tf.Tensor, ...]:
         r"""
         Return:
 
