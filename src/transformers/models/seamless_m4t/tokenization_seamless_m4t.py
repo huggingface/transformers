@@ -72,7 +72,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
     [SentencePiece](https://github.com/google/sentencepiece).
 
-    The tokenization method is `<tokens> <eos> <language code>` for source language documents, and `<language code>
+    The tokenization method is `<language code> <tokens> <eos>` for source language documents, and `<eos> <language code>
     <tokens> <eos>` for target language documents.
 
     Examples:
@@ -80,7 +80,7 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     ```python
     >>> from transformers import SeamlessM4TTokenizer
 
-    >>> tokenizer = SeamlessM4TTokenizer.from_pretrained("repo/id", src_lang="eng_Latn", tgt_lang="fra_Latn")
+    >>> tokenizer = SeamlessM4TTokenizer.from_pretrained("repo/id", src_lang="eng", tgt_lang="fra")
     >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
     >>> expected_translation_french = "Le chef de l'ONU affirme qu'il n'y a pas de solution militaire en Syrie."
     >>> inputs = tokenizer(example_english_phrase, text_target=expected_translation_french, return_tensors="pt")
@@ -534,9 +534,9 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     # https://github.com/facebookresearch/fairseq2/blob/c53f18e6be6b8b46b722f2249b8397b7eccd7ad3/src/fairseq2/models/nllb/tokenizer.py#L112-L116
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
         """Reset the special tokens to the target lang setting.
-        No prefix and suffix=[eos, tgt_lang_code].
+        Prefix=[eos, tgt_lang_code] and suffix=[eos].
         """
         self.cur_lang_code = self.lang_code_to_id[lang]
 
-        self.prefix_tokens = []
-        self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
+        self.prefix_tokens = [self.eos_token_id, self.cur_lang_code]
+        self.suffix_tokens = [self.eos_token_id]

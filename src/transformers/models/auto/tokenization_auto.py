@@ -306,7 +306,7 @@ else:
                 "seamless_m4t",
                 (
                     "SeamlessM4TTokenizer" if is_sentencepiece_available() else None,
-                    None,  # "NllbTokenizerFast" if is_tokenizers_available() else None,
+                    "SeamlessM4TTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("speech_to_text", ("Speech2TextTokenizer" if is_sentencepiece_available() else None, None)),
