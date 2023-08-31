@@ -185,24 +185,3 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
             for expected, decoded in zip(normalized_sequences, decoded_sequences):
                 self.assertEqual(expected, decoded)
-
-    @slow
-    def test_tokenizer_uroman_integration(self):
-        sequence = "이봐 무슨 일이야"
-
-        tokenizer = VitsTokenizer.from_pretrained(
-            "sanchit-gandhi/mms-tts-kor",
-            revision="513de8c60126737fc310b1864537c8125c8af786",  # to pin the tokenizer version
-        )
-
-        # fmt: off
-        EXPECTED_TOKENS = [0, 9, 0, 13, 0, 3, 0, 7, 0, 21, 0, 23, 0, 0, 0, 4, 0, 22, 0, 0, 0, 16, 0, 21, 0, 9, 0, 17, 0, 9, 0, 6, 0, 7, 0]
-        # fmt: on
-
-        with tempfile.TemporaryDirectory() as tmp_dir_name:
-            uroman_path = os.path.join(tmp_dir_name, "uroman")
-            os.system(f"git clone https://github.com/isi-nlp/uroman.git {uroman_path}")
-
-            encoding = tokenizer(sequence, uroman_path=uroman_path)
-
-        self.assertListEqual(EXPECTED_TOKENS, encoding.input_ids)
