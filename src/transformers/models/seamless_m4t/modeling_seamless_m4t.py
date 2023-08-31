@@ -2426,6 +2426,303 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
             )
         return reordered_past
+    
+
+
+############ VOCODER related code ################
+
+
+HIFIGAN_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`SpeechT5HifiGanConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+# Copied from transformers.models.speecht5.modeling_speecht5.HifiGanResidualBlock
+class HifiGanResidualBlock(nn.Module):
+    def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5), leaky_relu_slope=0.1):
+        super().__init__()
+        self.leaky_relu_slope = leaky_relu_slope
+
+        self.convs1 = nn.ModuleList(
+            [
+                nn.Conv1d(
+                    channels,
+                    channels,
+                    kernel_size,
+                    stride=1,
+                    dilation=dilation[i],
+                    padding=self.get_padding(kernel_size, dilation[i]),
+                )
+                for i in range(len(dilation))
+            ]
+        )
+        self.convs2 = nn.ModuleList(
+            [
+                nn.Conv1d(
+                    channels,
+                    channels,
+                    kernel_size,
+                    stride=1,
+                    dilation=1,
+                    padding=self.get_padding(kernel_size, 1),
+                )
+                for _ in range(len(dilation))
+            ]
+        )
+
+    def get_padding(self, kernel_size, dilation=1):
+        return (kernel_size * dilation - dilation) // 2
+
+    def apply_weight_norm(self):
+        for layer in self.convs1:
+            nn.utils.weight_norm(layer)
+        for layer in self.convs2:
+            nn.utils.weight_norm(layer)
+
+    def remove_weight_norm(self):
+        for layer in self.convs1:
+            nn.utils.remove_weight_norm(layer)
+        for layer in self.convs2:
+            nn.utils.remove_weight_norm(layer)
+
+    def forward(self, hidden_states):
+        for conv1, conv2 in zip(self.convs1, self.convs2):
+            residual = hidden_states
+            hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
+            hidden_states = conv1(hidden_states)
+            hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
+            hidden_states = conv2(hidden_states)
+            hidden_states = hidden_states + residual
+        return hidden_states
+
+
+class SeamlessM4TVariancePredictor(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        encoder_embed_dim = config.unit_embed_dim
+        var_pred_hidden_dim = config.unit_embed_dim
+        var_pred_kernel_size = config.var_pred_kernel_size
+        var_pred_dropout = config.var_pred_dropout
+
+        self.conv1 = nn.Sequential(
+            nn.Conv1d(
+                encoder_embed_dim,
+                var_pred_hidden_dim,
+                kernel_size=var_pred_kernel_size,
+                padding=(var_pred_kernel_size - 1) // 2,
+            ),
+            nn.ReLU(),
+        )
+        self.ln1 = nn.LayerNorm(var_pred_hidden_dim)
+        self.dropout_module = nn.Dropout(p=var_pred_dropout)
+        self.conv2 = nn.Sequential(
+            nn.Conv1d(
+                var_pred_hidden_dim,
+                var_pred_hidden_dim,
+                kernel_size=var_pred_kernel_size,
+                padding=1,
+            ),
+            nn.ReLU(),
+        )
+        self.ln2 = nn.LayerNorm(var_pred_hidden_dim)
+        self.proj = nn.Linear(var_pred_hidden_dim, 1)
+
+    def forward(self, hidden_states: Tensor) -> Tensor:
+        # Input: B x T x C; Output: B x T
+        hidden_states = self.conv1(hidden_states.transpose(1, 2)).transpose(1, 2)
+        hidden_states = self.dropout_module(self.ln1(hidden_states))
+        hidden_states = self.conv2(hidden_states.transpose(1, 2)).transpose(1, 2)
+        hidden_states = self.dropout_module(self.ln2(hidden_states))
+        return self.proj(hidden_states).squeeze(dim=2)
+
+
+class SeamlessM4THifiGan(PreTrainedModel):
+    config_class = SeamlessM4TConfig
+    main_input_name = "input_embeds"
+
+    # Almost the same as SpeechT5HifiGan.__init__ with SpeechT5->SeamlessM4TCode
+    def __init__(self, config: SeamlessM4TConfig):
+        super().__init__(config)
+        self.num_kernels = len(config.resblock_kernel_sizes)
+        self.num_upsamples = len(config.upsample_rates)
+        self.conv_pre = nn.Conv1d(
+            config.model_in_dim,
+            config.upsample_initial_channel,
+            kernel_size=7,
+            stride=1,
+            padding=3,
+        )
+
+        self.upsampler = nn.ModuleList()
+        for i, (upsample_rate, kernel_size) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes)):
+            self.upsampler.append(
+                nn.ConvTranspose1d(
+                    config.upsample_initial_channel // (2**i),
+                    config.upsample_initial_channel // (2 ** (i + 1)),
+                    kernel_size=kernel_size,
+                    stride=upsample_rate,
+                    padding=(kernel_size - upsample_rate) // 2,
+                )
+            )
+
+        self.resblocks = nn.ModuleList()
+        for i in range(len(self.upsampler)):
+            channels = config.upsample_initial_channel // (2 ** (i + 1))
+            for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes):
+                self.resblocks.append(HifiGanResidualBlock(channels, kernel_size, dilation, config.leaky_relu_slope))
+
+        self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
+
+
+    # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan._init_weights
+    def _init_weights(self, module):
+        """Initialize the weights."""
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+
+    # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan.apply_weight_norm
+    def apply_weight_norm(self):
+        nn.utils.weight_norm(self.conv_pre)
+        for layer in self.upsampler:
+            nn.utils.weight_norm(layer)
+        for layer in self.resblocks:
+            layer.apply_weight_norm()
+        nn.utils.weight_norm(self.conv_post)
+
+    # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan.remove_weight_norm
+    def remove_weight_norm(self):
+        nn.utils.remove_weight_norm(self.conv_pre)
+        for layer in self.upsampler:
+            nn.utils.remove_weight_norm(layer)
+        for layer in self.resblocks:
+            layer.remove_weight_norm()
+        nn.utils.remove_weight_norm(self.conv_post)
+
+    def forward(self, input_embeds: torch.FloatTensor) -> torch.FloatTensor:
+        r"""
+        Converts a log-mel spectrogram into a speech waveform. Passing a batch of log-mel spectrograms returns a batch
+        of speech waveforms. Passing a single, un-batched log-mel spectrogram returns a single, un-batched speech
+        waveform.
+
+        Args:
+            spectrogram (`torch.FloatTensor`):
+                Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
+                config.model_in_dim)`, or un-batched and of shape `(sequence_length, config.model_in_dim)`.
+
+        Returns:
+            `torch.FloatTensor`: Tensor containing the speech waveform. If the input spectrogram is batched, will be of
+            shape `(batch_size, num_frames,)`. If un-batched, will be of shape `(num_frames,)`.
+        """
+
+        hidden_states = self.conv_pre(input_embeds)
+        for i in range(self.num_upsamples):
+            hidden_states = nn.functional.leaky_relu(hidden_states, self.config.leaky_relu_slope)
+            hidden_states = self.upsampler[i](hidden_states)
+
+            res_state = self.resblocks[i * self.num_kernels](hidden_states)
+            for j in range(1, self.num_kernels):
+                res_state += self.resblocks[i * self.num_kernels + j](hidden_states)
+            hidden_states = res_state / self.num_kernels
+
+        hidden_states = nn.functional.leaky_relu(hidden_states)
+        hidden_states = self.conv_post(hidden_states)
+        hidden_states = torch.tanh(hidden_states)
+
+        # remove seq-len dim since this collapses to 1
+        waveform = hidden_states.squeeze(1)
+
+        return waveform
+
+
+
+@add_start_docstrings(
+    """HiFi-GAN vocoder.""",
+    HIFIGAN_START_DOCSTRING,
+)
+class SeamlessM4TCodeHifiGan(SeamlessM4THifiGan):
+    """Builds modules of a vocoder model (Code Hifigan) as described in
+    :cite:t`https://github.com/facebookresearch/speech-resynthesis`.
+
+    To tweak the architecture, you can derive from this class and override the corresponding methods.
+    """
+
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.unit_embeds_layer = nn.Embedding(config.unit_hifi_gan_vocab_size, config.unit_embed_dim)
+        self.spkr_embeds_layer = nn.Embedding(config.vocoder_num_spkrs, config.spkr_embed_dim)
+        self.lang_embeds_layer = nn.Embedding(config.vocoder_num_langs, config.lang_embed_dim)
+
+        if config.use_dur_predictor:
+            self.dur_predictor = SeamlessM4TVariancePredictor(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @staticmethod
+    def _upsample(signal: Tensor, max_frames: int) -> Tensor:
+        if signal.dim() == 3:
+            bsz, channels, cond_length = signal.size()
+        elif signal.dim() == 2:
+            signal = signal.unsqueeze(2)
+            bsz, channels, cond_length = signal.size()
+        else:
+            signal = signal.view(-1, 1, 1)
+            bsz, channels, cond_length = signal.size()
+
+        signal = signal.unsqueeze(3).repeat(1, 1, 1, max_frames // cond_length)
+
+        # pad zeros as needed (if signal's shape does not divide completely with max_frames)
+        reminder = (max_frames - signal.shape[2] * signal.shape[3]) // signal.shape[3]
+        if reminder > 0:
+            raise NotImplementedError("Padding condition signal - misalignment between condition features.")
+
+        signal = signal.view(bsz, channels, max_frames)
+        return signal
+
+    def forward(
+        self, input_ids: Tensor, speaker_id: Tensor, lang_id: Tensor, use_dur_prediction: bool
+    ) -> Tensor:  # type: ignore
+        hidden_states = self.unit_embeds_layer(input_ids).transpose(1, 2)
+
+        if self.dur_predictor and use_dur_prediction:
+            if hidden_states.size(0) != 1:
+                raise ValueError(
+                    f"Input `batch_size={hidden_states.size(0)} and `use_dur_prediction=True`, but the variance predictor only supports single sample prediction. Use it sample per sample."
+                )
+
+            log_dur_pred = self.dur_predictor(hidden_states.transpose(1, 2))
+            dur_out = torch.clamp(torch.round((torch.exp(log_dur_pred) - 1)).long(), min=1)
+            # B x C x T
+            hidden_states = torch.repeat_interleave(hidden_states, dur_out.view(-1), dim=2)
+
+        spkr = self.spkr_embeds_layer(speaker_id).transpose(1, 2)
+        spkr = self._upsample(spkr, hidden_states.shape[-1])
+        hidden_states = torch.cat([hidden_states, spkr], dim=1)
+
+        lang = self.lang_embeds_layer(lang_id).transpose(1, 2)
+        lang = self._upsample(lang, hidden_states.shape[-1])
+        hidden_states = torch.cat([lang, hidden_states], dim=1)
+
+        return super().forward(hidden_states)
+
+
+
 
 
 @add_start_docstrings(
@@ -3604,302 +3901,6 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         return reordered_past
 
 
-############ VOCODER related code ################
-
-
-HIFIGAN_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`SpeechT5HifiGanConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-# Copied from transformers.models.speecht5.modeling_speecht5.HifiGanResidualBlock
-class HifiGanResidualBlock(nn.Module):
-    def __init__(self, channels, kernel_size=3, dilation=(1, 3, 5), leaky_relu_slope=0.1):
-        super().__init__()
-        self.leaky_relu_slope = leaky_relu_slope
-
-        self.convs1 = nn.ModuleList(
-            [
-                nn.Conv1d(
-                    channels,
-                    channels,
-                    kernel_size,
-                    stride=1,
-                    dilation=dilation[i],
-                    padding=self.get_padding(kernel_size, dilation[i]),
-                )
-                for i in range(len(dilation))
-            ]
-        )
-        self.convs2 = nn.ModuleList(
-            [
-                nn.Conv1d(
-                    channels,
-                    channels,
-                    kernel_size,
-                    stride=1,
-                    dilation=1,
-                    padding=self.get_padding(kernel_size, 1),
-                )
-                for _ in range(len(dilation))
-            ]
-        )
-
-    def get_padding(self, kernel_size, dilation=1):
-        return (kernel_size * dilation - dilation) // 2
-
-    def apply_weight_norm(self):
-        for layer in self.convs1:
-            nn.utils.weight_norm(layer)
-        for layer in self.convs2:
-            nn.utils.weight_norm(layer)
-
-    def remove_weight_norm(self):
-        for layer in self.convs1:
-            nn.utils.remove_weight_norm(layer)
-        for layer in self.convs2:
-            nn.utils.remove_weight_norm(layer)
-
-    def forward(self, hidden_states):
-        for conv1, conv2 in zip(self.convs1, self.convs2):
-            residual = hidden_states
-            hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
-            hidden_states = conv1(hidden_states)
-            hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
-            hidden_states = conv2(hidden_states)
-            hidden_states = hidden_states + residual
-        return hidden_states
-
-
-class SeamlessM4TVariancePredictor(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        encoder_embed_dim = config.unit_embed_dim
-        var_pred_hidden_dim = config.unit_embed_dim
-        var_pred_kernel_size = config.var_pred_kernel_size
-        var_pred_dropout = config.var_pred_dropout
-
-        self.conv1 = nn.Sequential(
-            nn.Conv1d(
-                encoder_embed_dim,
-                var_pred_hidden_dim,
-                kernel_size=var_pred_kernel_size,
-                padding=(var_pred_kernel_size - 1) // 2,
-            ),
-            nn.ReLU(),
-        )
-        self.ln1 = nn.LayerNorm(var_pred_hidden_dim)
-        self.dropout_module = nn.Dropout(p=var_pred_dropout)
-        self.conv2 = nn.Sequential(
-            nn.Conv1d(
-                var_pred_hidden_dim,
-                var_pred_hidden_dim,
-                kernel_size=var_pred_kernel_size,
-                padding=1,
-            ),
-            nn.ReLU(),
-        )
-        self.ln2 = nn.LayerNorm(var_pred_hidden_dim)
-        self.proj = nn.Linear(var_pred_hidden_dim, 1)
-
-    def forward(self, hidden_states: Tensor) -> Tensor:
-        # Input: B x T x C; Output: B x T
-        hidden_states = self.conv1(hidden_states.transpose(1, 2)).transpose(1, 2)
-        hidden_states = self.dropout_module(self.ln1(hidden_states))
-        hidden_states = self.conv2(hidden_states.transpose(1, 2)).transpose(1, 2)
-        hidden_states = self.dropout_module(self.ln2(hidden_states))
-        return self.proj(hidden_states).squeeze(dim=2)
-
-
-class SeamlessM4THifiGan(PreTrainedModel):
-    config_class = SeamlessM4TConfig
-    main_input_name = "input_embeds"
-
-    # Almost the same as SpeechT5HifiGan.__init__ with SpeechT5->SeamlessM4TCode
-    def __init__(self, config: SeamlessM4TConfig):
-        super().__init__(config)
-        self.num_kernels = len(config.resblock_kernel_sizes)
-        self.num_upsamples = len(config.upsample_rates)
-        self.conv_pre = nn.Conv1d(
-            config.model_in_dim,
-            config.upsample_initial_channel,
-            kernel_size=7,
-            stride=1,
-            padding=3,
-        )
-
-        self.upsampler = nn.ModuleList()
-        for i, (upsample_rate, kernel_size) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes)):
-            self.upsampler.append(
-                nn.ConvTranspose1d(
-                    config.upsample_initial_channel // (2**i),
-                    config.upsample_initial_channel // (2 ** (i + 1)),
-                    kernel_size=kernel_size,
-                    stride=upsample_rate,
-                    padding=(kernel_size - upsample_rate) // 2,
-                )
-            )
-
-        self.resblocks = nn.ModuleList()
-        for i in range(len(self.upsampler)):
-            channels = config.upsample_initial_channel // (2 ** (i + 1))
-            for kernel_size, dilation in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes):
-                self.resblocks.append(HifiGanResidualBlock(channels, kernel_size, dilation, config.leaky_relu_slope))
-
-        self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
-
-
-    # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan._init_weights
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-
-    # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan.apply_weight_norm
-    def apply_weight_norm(self):
-        nn.utils.weight_norm(self.conv_pre)
-        for layer in self.upsampler:
-            nn.utils.weight_norm(layer)
-        for layer in self.resblocks:
-            layer.apply_weight_norm()
-        nn.utils.weight_norm(self.conv_post)
-
-    # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan.remove_weight_norm
-    def remove_weight_norm(self):
-        nn.utils.remove_weight_norm(self.conv_pre)
-        for layer in self.upsampler:
-            nn.utils.remove_weight_norm(layer)
-        for layer in self.resblocks:
-            layer.remove_weight_norm()
-        nn.utils.remove_weight_norm(self.conv_post)
-
-    def forward(self, input_embeds: torch.FloatTensor) -> torch.FloatTensor:
-        r"""
-        Converts a log-mel spectrogram into a speech waveform. Passing a batch of log-mel spectrograms returns a batch
-        of speech waveforms. Passing a single, un-batched log-mel spectrogram returns a single, un-batched speech
-        waveform.
-
-        Args:
-            spectrogram (`torch.FloatTensor`):
-                Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
-                config.model_in_dim)`, or un-batched and of shape `(sequence_length, config.model_in_dim)`.
-
-        Returns:
-            `torch.FloatTensor`: Tensor containing the speech waveform. If the input spectrogram is batched, will be of
-            shape `(batch_size, num_frames,)`. If un-batched, will be of shape `(num_frames,)`.
-        """
-
-        hidden_states = self.conv_pre(input_embeds)
-        for i in range(self.num_upsamples):
-            hidden_states = nn.functional.leaky_relu(hidden_states, self.config.leaky_relu_slope)
-            hidden_states = self.upsampler[i](hidden_states)
-
-            res_state = self.resblocks[i * self.num_kernels](hidden_states)
-            for j in range(1, self.num_kernels):
-                res_state += self.resblocks[i * self.num_kernels + j](hidden_states)
-            hidden_states = res_state / self.num_kernels
-
-        hidden_states = nn.functional.leaky_relu(hidden_states)
-        hidden_states = self.conv_post(hidden_states)
-        hidden_states = torch.tanh(hidden_states)
-
-        # remove seq-len dim since this collapses to 1
-        waveform = hidden_states.squeeze(1)
-
-        return waveform
-
-
-# TODO: lang_speaker_id in the processor
-
-
-@add_start_docstrings(
-    """HiFi-GAN vocoder.""",
-    HIFIGAN_START_DOCSTRING,
-)
-class SeamlessM4TCodeHifiGan(SeamlessM4THifiGan):
-    """Builds modules of a vocoder model (Code Hifigan) as described in
-    :cite:t`https://github.com/facebookresearch/speech-resynthesis`.
-
-    To tweak the architecture, you can derive from this class and override the corresponding methods.
-    """
-
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.unit_embeds_layer = nn.Embedding(config.unit_hifi_gan_vocab_size, config.unit_embed_dim)
-        self.spkr_embeds_layer = nn.Embedding(config.vocoder_num_spkrs, config.spkr_embed_dim)
-        self.lang_embeds_layer = nn.Embedding(config.vocoder_num_langs, config.lang_embed_dim)
-
-        if config.use_dur_predictor:
-            self.dur_predictor = SeamlessM4TVariancePredictor(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @staticmethod
-    def _upsample(signal: Tensor, max_frames: int) -> Tensor:
-        if signal.dim() == 3:
-            bsz, channels, cond_length = signal.size()
-        elif signal.dim() == 2:
-            signal = signal.unsqueeze(2)
-            bsz, channels, cond_length = signal.size()
-        else:
-            signal = signal.view(-1, 1, 1)
-            bsz, channels, cond_length = signal.size()
-
-        signal = signal.unsqueeze(3).repeat(1, 1, 1, max_frames // cond_length)
-
-        # pad zeros as needed (if signal's shape does not divide completely with max_frames)
-        reminder = (max_frames - signal.shape[2] * signal.shape[3]) // signal.shape[3]
-        if reminder > 0:
-            raise NotImplementedError("Padding condition signal - misalignment between condition features.")
-
-        signal = signal.view(bsz, channels, max_frames)
-        return signal
-
-    def forward(
-        self, input_ids: Tensor, speaker_id: Tensor, lang_id: Tensor, use_dur_prediction: bool
-    ) -> Tensor:  # type: ignore
-        hidden_states = self.unit_embeds_layer(input_ids).transpose(1, 2)
-
-        if self.dur_predictor and use_dur_prediction:
-            if hidden_states.size(0) != 1:
-                raise ValueError(
-                    f"Input `batch_size={hidden_states.size(0)} and `use_dur_prediction=True`, but the variance predictor only supports single sample prediction. Use it sample per sample."
-                )
-
-            log_dur_pred = self.dur_predictor(hidden_states.transpose(1, 2))
-            dur_out = torch.clamp(torch.round((torch.exp(log_dur_pred) - 1)).long(), min=1)
-            # B x C x T
-            hidden_states = torch.repeat_interleave(hidden_states, dur_out.view(-1), dim=2)
-
-        spkr = self.spkr_embeds_layer(speaker_id).transpose(1, 2)
-        spkr = self._upsample(spkr, hidden_states.shape[-1])
-        hidden_states = torch.cat([hidden_states, spkr], dim=1)
-
-        lang = self.lang_embeds_layer(lang_id).transpose(1, 2)
-        lang = self._upsample(lang, hidden_states.shape[-1])
-        hidden_states = torch.cat([lang, hidden_states], dim=1)
-
-        return super().forward(hidden_states)
-
-
-# TODO: model with vocoder head
 
 
 ############ WHOLE MODEL related code ################
