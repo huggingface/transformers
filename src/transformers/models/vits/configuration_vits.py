@@ -133,6 +133,8 @@ class VitsConfig(PretrainedConfig):
             How random the speech prediction is. Larger values create more variation in the predicted speech.
         noise_scale_duration (`float`, *optional*, defaults to 0.8):
             How random the duration prediction is. Larger values create more variation in the predicted durations.
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate at which the output audio waveform is digitalized expressed in hertz (Hz).
 
     Example:
 
@@ -195,6 +197,7 @@ class VitsConfig(PretrainedConfig):
         speaking_rate=1.0,
         noise_scale=0.667,
         noise_scale_duration=0.8,
+        sampling_rate=16_000,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -240,6 +243,7 @@ class VitsConfig(PretrainedConfig):
         self.speaking_rate = speaking_rate
         self.noise_scale = noise_scale
         self.noise_scale_duration = noise_scale_duration
+        self.sampling_rate = sampling_rate
 
         if len(upsample_kernel_sizes) != len(upsample_rates):
             raise ValueError(

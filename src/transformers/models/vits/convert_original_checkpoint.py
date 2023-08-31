@@ -270,6 +270,7 @@ def convert_checkpoint(
     vocab_path=None,
     language=None,
     num_speakers=None,
+    sampling_rate=None,
     repo_id=None,
 ):
     """
@@ -283,6 +284,9 @@ def convert_checkpoint(
     if num_speakers:
         config.num_speakers = num_speakers
         config.speaker_embedding_size = 256
+
+    if sampling_rate:
+        config.sampling_rate = sampling_rate
 
     if checkpoint_path is None:
         logger.info(f"***Converting model: facebook/mms-tts {language}***")
@@ -327,13 +331,15 @@ def convert_checkpoint(
         # Save vocab as temporary json file
         symbols = [line.replace("\n", "") for line in open(vocab_path, encoding="utf-8").readlines()]
         symbol_to_id = {s: i for i, s in enumerate(symbols)}
+        # MMS-TTS does not use a <pad> token, so we set to the token used to space characters
+        _pad = symbols[0]
         phonemize = False
 
     with tempfile.NamedTemporaryFile() as tf:
         with open(tf.name, "w", encoding="utf-8") as f:
             f.write(json.dumps(symbol_to_id, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
-        tokenizer = VitsTokenizer(tf.name, language=language, phonemize=phonemize, is_uroman=is_uroman)
+        tokenizer = VitsTokenizer(tf.name, language=language, phonemize=phonemize, is_uroman=is_uroman, pad_token=_pad)
 
     config.vocab_size = len(symbols)
     model = VitsModel(config)
@@ -361,6 +367,7 @@ if __name__ == "__main__":
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     parser.add_argument("--language", default=None, type=str, help="Tokenizer language (three-letter code)")
     parser.add_argument("--num_speakers", default=None, type=int, help="Number of speakers")
+    parser.add_argument("--sampling_rate", default=None, type=int, help="Sampling rate on which the model was trained.")
     parser.add_argument(
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
     )
@@ -376,5 +383,6 @@ if __name__ == "__main__":
         args.vocab_path,
         args.language,
         args.num_speakers,
+        args.sampling_rate,
         args.push_to_hub,
     )
