@@ -76,7 +76,7 @@ GPU memory occupied: 0 MB.
 
 That looks good: the GPU memory is not occupied as we would expect before we load any models. If that's not the case on 
 your machine make sure to stop all processes that are using GPU memory. However, not all free GPU memory can be used by 
-the user. When a model is loaded to the GPU also the kernels are loaded which can take up 1-2GB of memory. To see how 
+the user. When a model is loaded to the GPU the kernels are also loaded, which can take up 1-2GB of memory. To see how 
 much it is we load a tiny tensor into the GPU which triggers the kernels to be loaded as well.
 
 ```py
@@ -105,7 +105,7 @@ how much space just the weights use.
 GPU memory occupied: 2631 MB.
 ```
 
-We can see that the model weights alone take up 1.3 GB of the GPU memory. The exact number depends on the specific 
+We can see that the model weights alone take up 1.3 GB of GPU memory. The exact number depends on the specific 
 GPU you are using. Note that on newer GPUs a model can sometimes take up more space since the weights are loaded in an 
 optimized fashion that speeds up the usage of the model. Now we can also quickly check if we get the same result 
 as with `nvidia-smi` CLI:
