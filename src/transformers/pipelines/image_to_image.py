@@ -39,12 +39,13 @@ class ImageToImagePipeline(Pipeline):
 
     >>> upscaler = pipeline("image-to-image", model="caidas/swin2SR-classical-sr-x2-64")
     >>> img = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+    >>> img = img.resize((64, 64))
     >>> upscaled_img = upscaler(img)
     >>> img.size
-    (640, 480)
+    (64, 64)
 
     >>> upscaled_img.size
-    (1296, 976)
+    (144, 144)
     ```
 
     This image to image pipeline can currently be loaded from [`pipeline`] using the following task identifier:
