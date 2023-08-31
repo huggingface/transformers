@@ -548,7 +548,7 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFDPRContextEncoderOutput, Tuple[tf.Tensor, ...]]:
+    ) -> TFDPRContextEncoderOutput | Tuple[tf.Tensor, ...]:
         r"""
         Return:
 
@@ -629,7 +629,7 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFDPRQuestionEncoderOutput, Tuple[tf.Tensor, ...]]:
+    ) -> TFDPRQuestionEncoderOutput | Tuple[tf.Tensor, ...]:
         r"""
         Return:
 
@@ -708,7 +708,7 @@ class TFDPRReader(TFDPRPretrainedReader):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         training: bool = False,
-    ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
+    ) -> TFDPRReaderOutput | Tuple[tf.Tensor, ...]:
         r"""
         Return:
 
