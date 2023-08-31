@@ -205,6 +205,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "TFGroupViTTextModel",
     "TFGroupViTVisionModel",
     "FlaxCLIPTextModel",
+    "FlaxCLIPTextModelWithProjection",
     "FlaxCLIPVisionModel",
     "FlaxWav2Vec2ForCTC",
     "DetrForSegmentation",
@@ -955,6 +956,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "ConvNextBackbone",
     "ConvNextV2Backbone",
     "DinatBackbone",
+    "Dinov2Backbone",
     "FocalNetBackbone",
     "MaskFormerSwinBackbone",
     "MaskFormerSwinConfig",
@@ -964,6 +966,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "SwinBackbone",
     "TimmBackbone",
     "TimmBackboneConfig",
+    "VitDetBackbone",
 ]
 
 

@@ -34,7 +34,7 @@ jobs:
           nvidia-smi
 
       - name: Install transformers in edit mode
-        run: python3 -m pip install -e .
+        run: python3 -m pip install -e .[flax]
 
       - name: GPU visibility
         run: |

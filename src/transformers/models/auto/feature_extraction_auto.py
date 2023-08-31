@@ -379,7 +379,7 @@ class AutoFeatureExtractor:
         )
 
     @staticmethod
-    def register(config_class, feature_extractor_class):
+    def register(config_class, feature_extractor_class, exist_ok=False):
         """
         Register a new feature extractor for this class.
 
@@ -388,4 +388,4 @@ class AutoFeatureExtractor:
                 The configuration corresponding to the model to register.
             feature_extractor_class ([`FeatureExtractorMixin`]): The feature extractor to register.
         """
-        FEATURE_EXTRACTOR_MAPPING.register(config_class, feature_extractor_class)
+        FEATURE_EXTRACTOR_MAPPING.register(config_class, feature_extractor_class, exist_ok=exist_ok)
