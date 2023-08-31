@@ -2581,7 +2581,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if torch_dtype is None:
                 torch_dtype = torch.float16
             else:
-                logger.info("`We suggest you to set torch_dtype=torch.float16` for better efficiency with GPTQ.")
+                logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with GPTQ.")
 
             quantizer = GPTQQuantizer.from_dict(quantization_config.to_dict())
 
