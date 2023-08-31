@@ -159,7 +159,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         self.fill_token = fill_token
         self.suffix_first = suffix_first
         self.sp_model = self.get_spm_processor()
-        
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,

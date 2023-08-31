@@ -111,7 +111,7 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
 
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
-        
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
