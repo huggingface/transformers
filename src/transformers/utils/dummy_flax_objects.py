@@ -814,7 +814,7 @@ class FlaxLlamaModel(metaclass=DummyObject):
         requires_backends(self, ["flax"])
 
 
-class FlaxLlamaPretrainedModel(metaclass=DummyObject):
+class FlaxLlamaPreTrainedModel(metaclass=DummyObject):
     _backends = ["flax"]
 
     def __init__(self, *args, **kwargs):
