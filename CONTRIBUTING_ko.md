@@ -18,7 +18,7 @@ limitations under the License.
 
 누구나 🤗 Transformers에 기여할 수 있으며, 우리는 모든 사람의 기여를 소중히 생각합니다. 코드 기여는 커뮤니티를 돕는 유일한 방법이 아닙니다. 질문에 답하거나 다른 사람을 도와 문서를 개선하는 것도 매우 가치가 있습니다.
 
-🤗 Transformers를 널리 알리는 것도 큰 도움이 됩니다! 블로그 게시글에 멋진 프로젝트들이 가능하게 한 🤗 Transformers 라이브러리에 대해 언급하거나, 도움이 되었을 때마다 Twitter에 알리거나, 저장소에 ⭐️ 를 표시하여 감사 인사를 전해주세요.
+🤗 Transformers를 널리 알리는 것도 큰 도움이 됩니다! 멋진 프로젝트들을 가능하게 한 🤗 Transformers 라이브러리에 대해 블로그 게시글에 언급하거나, 도움이 되었을 때마다 Twitter에 알리거나, 저장소에 ⭐️ 를 표시하여 감사 인사를 전해주세요.
 
 어떤 방식으로 기여하든 [행동 규칙](https://github.com/huggingface/transformers/blob/main/CODE_OF_CONDUCT.md)을 숙지하고 존중해주세요.
 
@@ -77,7 +77,7 @@ python src/transformers/commands/transformers_cli.py env
 
 🤗 Transformers에서 사용하고 싶은 새로운 기능이 있다면, 다음 내용을 포함하여 이슈를 제출해 주세요:
 
-1. 이 기능이 필요한 *이유*는 무엇인가요? 라이브러리에 대한 문제나 불만과 관련이 있나요? 프로젝트에 필요한 기능인가요? 커뉴미니테 도움이 될 만한 기능인가요?
+1. 이 기능이 필요한 *이유*는 무엇인가요? 라이브러리에 대한 문제나 불만과 관련이 있나요? 프로젝트에 필요한 기능인가요? 커뮤니티에 도움이 될 만한 기능인가요?
 
    어떤 내용이든 여러분의 이야기를 듣고 싶습니다!
 
@@ -141,7 +141,7 @@ python src/transformers/commands/transformers_cli.py env
 
    만약 이미 가상 환경에 🤗 Transformers가 설치되어 있다면, `-e` 플래그를 사용하여 설치하기 전에 `pip uninstall transformers`로 제거해주세요.
    
-   여러분의 운영체제에 따라서, 그리고 🤗 Transformers의 선택적 의존성의 수가 증가하면서, 이 명령이 실패할 수도 있습니다. 그럴 경우 사용하려는 딥 러닝 프레임워크(PyTorch, TensorFlow, 그리고/또는 Flax)를 설치한 다음 다음 명령을 실행해주세요:
+   여러분의 운영체제에 따라서, 그리고 🤗 Transformers의 선택적 의존성의 수가 증가하면서, 이 명령이 실패할 수도 있습니다. 그럴 경우 사용하려는 딥 러닝 프레임워크(PyTorch, TensorFlow, 그리고/또는 Flax)를 설치한 후 아래 명령을 실행해주세요:
 
    ```bash
    pip install -e ".[quality]"
