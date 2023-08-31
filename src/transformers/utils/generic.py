@@ -74,7 +74,7 @@ def strtobool(val):
 def infer_framework_from_repr(x):
     """
     Tries to guess the framework of an object `x` from its repr (brittle but will help in `is_tensor` to try the
-    frameworks in a smart order).
+    frameworks in a smart order, without the need to import the frameworks).
     """
     representation = repr(x)
     if representation.startswith("tensor"):
@@ -109,7 +109,7 @@ def _get_frameworks_and_tests(x):
 
 def is_tensor(x):
     """
-    Tests if `x` is a `torch.Tensor`, `tf.Tensor`, `jaxlib.xla_extension.DeviceArray` or `np.ndarray`.
+    Tests if `x` is a `torch.Tensor`, `tf.Tensor`, `jaxlib.xla_extension.DeviceArray` or `np.ndarray` in the order defined by `infer_framework_from_repr` 
     """
     # This gives us a smart order to test the frameworks with the corresponding tests.
     framework_tests = _get_frameworks_and_tests(x)
