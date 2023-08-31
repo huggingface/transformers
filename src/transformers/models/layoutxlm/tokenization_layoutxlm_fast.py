@@ -257,7 +257,6 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
 
         # additional properties
         self.cls_token_box = cls_token_box
@@ -265,6 +264,10 @@ class LayoutXLMTokenizerFast(PreTrainedTokenizerFast):
         self.pad_token_box = pad_token_box
         self.pad_token_label = pad_token_label
         self.only_label_first_subword = only_label_first_subword
+
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
     @add_end_docstrings(LAYOUTXLM_ENCODE_KWARGS_DOCSTRING)
     def __call__(
