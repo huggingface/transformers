@@ -90,7 +90,7 @@ class ImageToImagePipeline(Pipeline):
                 Images in a batch must all be in the same format: all as http links, all as local paths, or all as PIL
                 images.
             timeout (`float`, *optional*, defaults to None):
-                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is used and
                 the call may block forever.
 
         Return:
