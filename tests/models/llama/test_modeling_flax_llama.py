@@ -254,7 +254,6 @@ class FlaxLlamaModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitte
         generated_ids = model.generate(**inputs, max_length=15).sequences
         generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 
-        # TODO: add expected outputs
         # fmt: off
         EXPECTED_GENERATION = [
             "Aloha, World! 201",

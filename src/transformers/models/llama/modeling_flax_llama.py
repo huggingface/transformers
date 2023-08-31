@@ -380,7 +380,6 @@ class FlaxLlamaDecoderLayer(nn.Module):
         return (hidden_states,) + outputs[1:]
 
 
-# Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel with GPTNeo->Llama
 class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -391,6 +390,7 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
     base_model_prefix = "model"
     module_class: nn.Module = None
 
+    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel.__init__ with GPTNeo->Llama
     def __init__(
         self,
         config: LlamaConfig,
@@ -403,6 +403,7 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
+    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel.init_weights with GPTNeo->Llama
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         input_ids = jnp.zeros(input_shape, dtype="i4")
@@ -423,6 +424,7 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         else:
             return random_params
 
+    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel.init_cache with GPTNeo->Llama
     def init_cache(self, batch_size, max_length):
         r"""
         Args:
@@ -443,6 +445,7 @@ class FlaxLlamaPreTrainedModel(FlaxPreTrainedModel):
         return unfreeze(init_variables["cache"])
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
+    # Copied from transformers.models.gpt_neo.modeling_flax_gpt_neo.FlaxGPTNeoPreTrainedModel.__call__ with GPTNeo->Llama
     def __call__(
         self,
         input_ids,
