@@ -1330,7 +1330,7 @@ class ForceTokensLogitsProcessor(LogitsProcessor):
 
 class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     r"""
-    [LogitsProcessor]Whisper specific Processor. This processor is specifically designed for the Whisper Automatic
+    [`LogitsProcessor`] Whisper specific Processor. This processor is specifically designed for the Whisper Automatic
     Speech Recognition model. It facilitates the manipulation of log probabilities for a predefined list of tokens
     during text generation. By using this processor, you can effectively "force" certain tokens to be selected at
     specific positions in the generated sequence. When tokens are passed to this processor, their log probabilities are
