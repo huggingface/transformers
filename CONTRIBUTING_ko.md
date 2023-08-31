@@ -193,7 +193,7 @@ python src/transformers/commands/transformers_cli.py env
    pip install ".[docs]"
    ```
 
-   저장소의 루트 디렉토리에서 다음 명령을 실행하세요:
+   저장소의 루트 디렉터리에서 다음 명령을 실행하세요:
 
    ```bash
    doc-builder build transformers docs/source/en --build_dir ~/tmp/test-build
