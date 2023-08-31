@@ -165,6 +165,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         self._eot_token = eot_token
         self.fill_token = fill_token
 
+    # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.update_post_processor
     def update_post_processor(self):
         """
         Updates the underlying post processor with the current `bos_token` and `eos_token`.
@@ -303,6 +304,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         self.set_infilling_processor(True)
         return tokens
 
+    # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.update_post_processor
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
@@ -322,8 +324,36 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
 
         return (out_vocab_file,)
 
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. The special tokens depend on calling set_lang.
+
+        An NLLB sequence has the following format, where `X` represents the sequence:
+
+        - `input_ids` (for encoder) `X [eos, src_lang_code]`
+        - `decoder_input_ids`: (for decoder) `X [eos, tgt_lang_code]`
+
+        BOS is never used. Pairs of sequences are not the expected use case, but they will be handled without a
+        separator.
+
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (`List[int]`, *optional*):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+        """
+        if token_ids_1 is None:
+            return self.bos_token_id + token_ids_0 + self.eos_token_id
+        return self.bos_token_id + token_ids_0 + token_ids_1 + self.eos_token_id
+
     # Copied from transformers.models.code_llama.tokenization_code_llama.CodeLlamaTokenizer._build_conversation_input_ids
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
+    def _build_conversation_input_ids(self, conversation: "Conversation"):
         r"""Builds the input ids for a conversation.
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
         the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
