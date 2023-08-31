@@ -161,14 +161,6 @@ BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
 """
 
 
-def set_split_position(position):
-    def apply_fn(module):
-        if hasattr(module, "split_position"):
-            module.split_position = position
-
-    return apply_fn
-
-
 class Beit3MLP(nn.Module):
     def __init__(
         self,
@@ -247,7 +239,7 @@ class Beit3MultiwayFeedForwardNetwork(nn.Module):
         self.second = copy.deepcopy(module)
         self.second.reset_parameters()
 
-    def forward(self, hidden_states,split_position=-1):
+    def forward(self, hidden_states, split_position=-1):
         if split_position == -1:
             return self.first(hidden_states)
         if split_position == 0:
@@ -267,7 +259,7 @@ class Beit3Linear(nn.Module):
         self.linear_1 = nn.Linear(config.embed_dim, config.embed_dim, bias=True)
         self.linear_2 = nn.Linear(config.embed_dim, config.embed_dim, bias=True)
 
-    def forward(self, hidden_states,split_position=-1):
+    def forward(self, hidden_states, split_position=-1):
         if split_position == -1:
             return self.linear_1(hidden_states)
         if split_position == 0:
@@ -313,7 +305,7 @@ class Beit3Embedder(nn.Module):
         self.second = modules[1]
         self.split_position = -1
 
-    def forward(self, hidden_states, positions,multiway_split_position=None):
+    def forward(self, hidden_states, positions, multiway_split_position=None):
         if multiway_split_position is not None:
             self.split_position = multiway_split_position
         if self.split_position == -1:
@@ -555,13 +547,12 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
         multiway_split_position=None,
         incremental_state=None,
     ):
-
         if attn_mask is not None:
             attn_mask = attn_mask.masked_fill(attn_mask.to(torch.bool), -1e8)
 
         residual = hidden_states
         split_position = multiway_split_position if multiway_split_position is not None else -1
-        hidden_states = self.self_attn_layer_norm(hidden_states,split_position=split_position)
+        hidden_states = self.self_attn_layer_norm(hidden_states, split_position=split_position)
         hidden_states, _ = self.self_attn(
             query=hidden_states,
             key=hidden_states,
@@ -576,12 +567,12 @@ class Beit3EncoderLayer(Beit3PreTrainedModel):
         hidden_states = self.residual_connection(hidden_states, residual)
 
         residual = hidden_states
-        hidden_states = self.final_layer_norm(hidden_states,split_position=split_position)
-        hidden_states = self.ffn(hidden_states,split_position=split_position)
+        hidden_states = self.final_layer_norm(hidden_states, split_position=split_position)
+        hidden_states = self.ffn(hidden_states, split_position=split_position)
 
         hidden_states = self.residual_connection(hidden_states, residual)
         if not self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states,split_position=split_position)
+            hidden_states = self.final_layer_norm(hidden_states, split_position=split_position)
         return hidden_states
 
 
@@ -623,9 +614,13 @@ class Beit3Encoder(nn.Module):
         x = embed = token_embedding
         if self.embed_positions is not None:
             if src_tokens is not None:
-                x = embed + self.embed_positions(src_tokens, positions=positions,multiway_split_position=multiway_split_position)
+                x = embed + self.embed_positions(
+                    src_tokens, positions=positions, multiway_split_position=multiway_split_position
+                )
             else:
-                x = embed + self.embed_positions(x, positions=positions,multiway_split_position=multiway_split_position)
+                x = embed + self.embed_positions(
+                    x, positions=positions, multiway_split_position=multiway_split_position
+                )
         x = self.dropout_module(x)
         return x, embed
 
@@ -651,7 +646,7 @@ class Beit3Encoder(nn.Module):
                     device=token_embeddings.device,
                 ).bool()
 
-        x, encoder_embedding = self.forward_embedding(src_tokens, token_embeddings, positions,multiway_split_position)
+        x, encoder_embedding = self.forward_embedding(src_tokens, token_embeddings, positions, multiway_split_position)
         x = x * (1 - encoder_padding_mask.unsqueeze(-1).type_as(x))
 
         hidden_states = []
