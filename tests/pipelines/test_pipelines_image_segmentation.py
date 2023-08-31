@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import hashlib
+import tempfile
 import unittest
 from typing import Dict
 
@@ -32,7 +33,7 @@ from transformers import (
     ImageSegmentationPipeline,
     MaskFormerForInstanceSegmentation,
     is_vision_available,
-    pipeline,
+    pipeline, Pipeline,
 )
 from transformers.testing_utils import (
     is_pipeline_test,
@@ -714,3 +715,17 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
                 },
             ],
         )
+
+    def test_save_load(self):
+        model_id = "hf-internal-testing/tiny-detr-mobilenetsv3-panoptic"
+
+        model = AutoModelForImageSegmentation.from_pretrained(model_id)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
+        image_segmenter = pipeline(
+            task='image-segmentation',
+            model=model,
+            image_processor=image_processor,
+        )
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            image_segmenter.save_pretrained(tmpdirname)
+            loaded_image_segmenter = pipeline(task = 'image-segmentation',model=tmpdirname)
