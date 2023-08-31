@@ -494,7 +494,7 @@ class IdeficsRMSNorm(nn.Module):
         return self.weight * hidden_states
 
 
-# this was adapted from LlamaRotaryEmbedding
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with RotaryEmbedding->Idefics
 class IdeficsEmbedding(torch.nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -533,7 +533,7 @@ def rotate_half(x):
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
-
+# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
     cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
