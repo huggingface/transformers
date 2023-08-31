@@ -47,6 +47,7 @@ encode the text and prepare the images respectively.
 The following example shows how to run temporal video grounding using [`TVPProcessor`] and [`TVPModel`].
 ```python
 import av
+import cv2
 import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
@@ -114,7 +115,7 @@ def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps
     return frames
 
 
-file = hf_hub_download(repo_id="Intel/tvp_demo", filename="3MSZA.mp4", repo_type="dataset")
+file = hf_hub_download(repo_id="Intel/tvp_demo", filename="0A8ZT.mp4", repo_type="dataset")
 
 model = AutoModel.from_pretrained("Intel/tvp-base")
 
@@ -136,7 +137,21 @@ data = processor(
 
 output = model(**data)
 
-print(output)
+print(f"The model's output is {output}")
+
+def get_video_duration(filename):
+    cap = cv2.VideoCapture(filename)
+    if cap.isOpened():
+        rate = cap.get(5)
+        frame_num =cap.get(7)
+        duration = frame_num/rate
+        return duration
+    return -1
+
+duration = get_video_duration(file)
+timestamp = output['logits'].tolist()
+start, end = round(timestamp[0][0]*duration, 1), round(timestamp[0][1]*duration, 1)
+print(f"The time slot of the video corresponding to the text is from {start}s to {end}s")
 ```
 
 
