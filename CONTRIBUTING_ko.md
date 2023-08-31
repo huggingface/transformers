@@ -66,7 +66,7 @@ limitations under the License.
 transformers-cli env
 ```
 
-저장소의 루트 디렉토리에서도 같은 명령을 실행할 수 있습니다:
+저장소의 루트 디렉터리에서도 같은 명령을 실행할 수 있습니다:
 
 ```bash
 python src/transformers/commands/transformers_cli.py env
@@ -81,7 +81,7 @@ python src/transformers/commands/transformers_cli.py env
 
    어떤 내용이든 여러분의 이야기를 듣고 싶습니다!
 
-2. 가능한 한 자세하게 요청하는 기능에 대해 설명해 주세요. 더 많은 정보를 제공할수록 더 나은 도움을 드릴 수 있습니다.
+2. 요청하는 기능을 최대한 자세히 설명해 주세요. 더 많은 정보를 제공할수록 더 나은 도움을 드릴 수 있습니다.
 3. 해당 기능의 사용법을 보여주는 *코드 스니펫*을 제공해 주세요.
 4. 기능과 관련된 논문이 있는 경우 링크를 포함해 주세요.
 
@@ -193,7 +193,7 @@ python src/transformers/commands/transformers_cli.py env
    pip install ".[docs]"
    ```
 
-   저장소의 루트 디렉토리에서 다음 명령을 실행하세요:
+   저장소의 루트 디렉터리에서 다음 명령을 실행하세요:
 
    ```bash
    doc-builder build transformers docs/source/en --build_dir ~/tmp/test-build
@@ -227,7 +227,7 @@ python src/transformers/commands/transformers_cli.py env
 
 6. 이제 GitHub에서 포크한 저장소로 이동하고 **Pull request(풀 리퀘스트)**를 클릭하여 Pull Request를 열 수 있습니다. 아래의 [체크리스트](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md/#pull-request-checklist)에서 모든 항목에 체크 표시를 하세요. 준비가 완료되면 프로젝트 관리자에게 변경 사항을 보내 검토를 요청할 수 있습니다.
 
-7. 관리자가 변경 사항을 요청해도 괜찮습니다. 숙련된 기여자들도 동일한 상황을 겪습니다! 모두가 변경 사항을 Pull Request에서 볼 수 있도록, 로컬 브랜치에서 작업하고 변경 사항을 포크한 저장소로 푸시하세요. 그러면 변경 사항이 자동으로 Pull Request에 나타납니다.
+7. 관리자가 변경 사항을 요청해도 괜찮습니다. 핵심 기여자들도 동일한 상황을 겪습니다! 모두가 변경 사항을 Pull Request에서 볼 수 있도록, 로컬 브랜치에서 작업하고 변경 사항을 포크한 저장소로 푸시하세요. 그러면 변경 사항이 자동으로 Pull Request에 나타납니다.
 
 ### Pull Request 체크리스트 [[pull-request-checklist]]
 
@@ -238,9 +238,10 @@ python src/transformers/commands/transformers_cli.py env
 ☐ 새로운 기능을 추가하는 경우, 해당 기능에 대한 테스트도 추가하세요.<br>
    - 새 모델을 추가하는 경우, `ModelTester.all_model_classes = (MyModel, MyModelWithLMHead,...)`을 사용하여 일반적인 테스트를 활성화하세요.
    - 새 `@slow` 테스트를 추가하는 경우, 다음 명령으로 테스트를 통과하는지 확인하세요: `RUN_SLOW=1 python -m pytest tests/models/my_new_model/test_my_new_model.py`.
-   - 새 토크나이저를 추가하는 경우, 테스트를 작성하고 다음 명령으로 테스트를 통과하는지 확인하세요: `RUN_SLOW=1 python -m pytest tests/models/{your_model_name}/test_tokenization_{your_model_name}.py`. CircleCI에서는 느린 테스트를 실행하지 않지만, GitHub Actions에서는 매일 밤 실행됩니다!<br>
+   - 새 토크나이저를 추가하는 경우, 테스트를 작성하고 다음 명령으로 테스트를 통과하는지 확인하세요: `RUN_SLOW=1 python -m pytest tests/models/{your_model_name}/test_tokenization_{your_model_name}.py`. 
+   - CircleCI에서는 느린 테스트를 실행하지 않지만, GitHub Actions에서는 매일 밤 실행됩니다!<br>
 
-☐ 모든 공개 메서드는 유용한 기술문서를 가져야 합니다 (예를 들어 [`modeling_bert.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py) 참조).<br>
+☐ 모든 공개 메소드는 유용한 기술문서를 가져야 합니다 (예를 들어 [`modeling_bert.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py) 참조).<br>
 ☐ 저장소가 빠르게 성장하고 있으므로 저장소에 상당한 부담을 주는 이미지, 동영상 및 기타 텍스트가 아닌 파일은 추가하지 마세요. 대신 [`hf-internal-testing`](https://huggingface.co/hf-internal-testing)과 같은 Hub 저장소를 사용하여 이러한 파일을 호스팅하고 URL로 참조하세요. 문서와 관련된 이미지는 다음 저장소에 배치하는 것을 권장합니다: [huggingface/documentation-images](https://huggingface.co/datasets/huggingface/documentation-images). 이 데이터셋 저장소에서 PR을 열어서 Hugging Face 멤버에게 병합을 요청할 수 있습니다.
 
 Pull Request에서 실행되는 검사에 대한 자세한 정보는 [Pull Request에 대한 검사](https://huggingface.co/docs/transformers/pr_checks) 가이드를 확인하세요.
@@ -249,13 +250,13 @@ Pull Request에서 실행되는 검사에 대한 자세한 정보는 [Pull Reque
 
 라이브러리 동작과 여러 예제를 테스트할 수 있는 광범위한 테스트 스위트가 포함되어 있습니다. 라이브러리 테스트는 [tests](https://github.com/huggingface/transformers/tree/main/tests) 폴더에, 예제 테스트는 [examples](https://github.com/huggingface/transformers/tree/main/examples) 폴더에 있습니다.
 
-속도가 빠른 `pytest`와 `pytest-xdist`를 선호합니다. 저장소의 루트 디렉토리에서 테스트를 실행할 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요.
+속도가 빠른 `pytest`와 `pytest-xdist`를 선호합니다. 저장소의 루트 디렉터리에서 테스트를 실행할 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요.
 
 ```bash
 python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
 ```
 
-마찬가지로 `examples` 디렉토리에서도 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요. 예를 들어, 다음 명령은 PyTorch `examples` 디렉토리의 텍스트 분류 하위 폴더를 테스트합니다:
+마찬가지로 `examples` 디렉터리에서도 *하위 폴더 경로 또는 테스트 파일 경로*를 지정하세요. 예를 들어, 다음 명령은 PyTorch `examples` 디렉터리의 텍스트 분류 하위 폴더를 테스트합니다:
 
 ```bash
 pip install -r examples/xxx/requirements.txt  # only needed the first time
