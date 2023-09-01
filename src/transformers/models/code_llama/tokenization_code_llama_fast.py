@@ -372,7 +372,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         >>> from transformers import Conversation
 
         >>> Conversation(
-        ...     "Complete the following function definition: `def remove_non_ascii(s: str) -> str:`"
+        ...     ""<<SYS>>\n Complete the functions without any documentation<</SYS>> `def remove_non_ascii(s: str) -> str:`"
         ... )  # doctest: +IGNORE_RESULT
         ```
         Args:
