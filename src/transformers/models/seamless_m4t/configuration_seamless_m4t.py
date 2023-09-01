@@ -260,9 +260,9 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.speech_encoder_dropout = speech_encoder_dropout
         self.speech_encoder_attention_heads = speech_encoder_attention_heads
 
-        self.conv_dim = conv_dim
-        self.conv_stride = conv_stride
-        self.conv_kernel = conv_kernel
+        self.conv_dim = list(conv_dim)
+        self.conv_stride = list(conv_stride)
+        self.conv_kernel = list(conv_kernel)
         self.conv_bias = conv_bias
         self.num_conv_pos_embeddings = num_conv_pos_embeddings
         self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
