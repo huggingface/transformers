@@ -2439,6 +2439,10 @@ class Trainer:
 
         if self.is_deepspeed_enabled:
             # deepspeed loads optimizer/lr_scheduler together with the model in deepspeed_init
+            if not isinstance(self.lr_scheduler, DeepSpeedSchedulerWrapper):
+                with warnings.catch_warnings(record=True) as caught_warnings:
+                    self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, SCHEDULER_NAME)))
+                reissue_pt_warnings(caught_warnings)
             return
 
         checkpoint_file_exists = (
