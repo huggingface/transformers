@@ -1697,17 +1697,8 @@ class TDNNLayer(nn.Module):
         self.kernel = nn.Linear(self.in_conv_dim * self.kernel_size, self.out_conv_dim)
         self.activation = nn.ReLU()
 
-    def forward(self, hidden_states):
-        # hidden_states = hidden_states.unsqueeze(1)
-        # hidden_states = nn.functional.unfold(
-        #     hidden_states,
-        #     (self.kernel_size, self.in_conv_dim),
-        #     stride=(1, self.in_conv_dim),
-        #     dilation=(self.dilation, 1),
-        # )
-        # hidden_states = hidden_states.transpose(1, 2)
-        # hidden_states = self.kernel(hidden_states)
-
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # for backward compatibility, we keep nn.Linear but call F.conv1d for speed up
         hidden_states = hidden_states.transpose(1, 2)
         weight = self.kernel.weight.view(self.out_conv_dim, self.kernel_size, self.in_conv_dim).transpose(1, 2)
         hidden_states = nn.functional.conv1d(hidden_states, weight, self.kernel.bias, dilation=self.dilation)
