@@ -749,8 +749,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return (text, kwargs)
 
     @property
-    # Copied from models.gpt2.tokenization_gpt2.GPT2Tokenizer.default_chat_template
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.default_chat_template
     def default_chat_template(self):
+        """
+        A simple chat template that ignores role information and just concatenates messages with EOS tokens.
+        """
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"
 
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):

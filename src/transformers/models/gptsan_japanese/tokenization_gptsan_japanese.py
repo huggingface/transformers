@@ -256,6 +256,10 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
 
     @property
     def default_chat_template(self):
+        """
+        A simple chat template that adds standard BOS, SEP and EOS tokens between messages while discarding role
+        information.
+        """
         return (
             "{% for message in messages %}"
             "{% if not loop.first %}{{ bos_token}}{% endif %}"

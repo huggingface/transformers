@@ -353,4 +353,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
 
     @property
     def default_chat_template(self):
+        """
+        A simple chat template that ignores role information and just concatenates messages with EOS tokens.
+        """
         return "{% for message in messages %}" "{{ message.content }}{{ eos_token }}" "{% endfor %}"

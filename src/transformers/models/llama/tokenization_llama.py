@@ -375,6 +375,13 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
     @property
     def default_chat_template(self):
+        """
+        LLaMA uses [INST] and [/INST] to indicate user messages, and <<SYS>> and <</SYS>> to indicate system messages.
+        Assistant messages do not have special tokens, because LLaMA chat models are generally trained with strict
+        user/assistant/user/assistant message ordering, and so assistant messages can be identified from the ordering
+        rather than needing special tokens. This template should definitely be changed if you wish to fine-tune a model
+        with more flexible role ordering!
+        """
         template = "{% for message in messages %}"
         if self.use_default_system_prompt:
             prompt = DEFAULT_SYSTEM_PROMPT.replace("\n", "\\n").replace("'", "\\'")

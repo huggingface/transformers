@@ -412,7 +412,9 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
 
     @property
     def default_chat_template(self):
-        # BlenderBot actually tokenizes messages together with a "  " separator between them, so we try to imitate that
+        """
+        A very simple chat template that just adds whitespace between messages.
+        """
         return (
             "{% for message in messages %}"
             "{% if message.role == 'user' %}{{ ' ' }}{% endif %}"

@@ -177,6 +177,9 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
 
     @property
     def default_chat_template(self):
+        """
+        A simple chat template that just adds BOS/EOS tokens around messages while discarding role information.
+        """
         return (
             "{% for message in messages %}" "{{ bos_token + eos_token + message.content + eos_token }}" "{% endfor %}"
         )

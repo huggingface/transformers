@@ -317,6 +317,10 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
 
     @property
     def default_chat_template(self):
+        """
+        This chat template formats messages like an instant messenger chat log, with "User:" and "Bot:" strings
+        preceding messages. BOS tokens are added between all messages.
+        """
         return (
             "{{ eos_token }}{{ bos_token }}"
             "{% for message in messages %}"
