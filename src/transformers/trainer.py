@@ -1171,7 +1171,7 @@ class Trainer:
                     return tokens
                 train_tokens += tokens
             return train_tokens
-        except (KeyError):
+        except KeyError:
             logger.warning("Cannot get num_tokens from dataloader")
             return 0
 
@@ -1592,6 +1592,7 @@ class Trainer:
         total_train_batch_size = self._train_batch_size * args.gradient_accumulation_steps * args.world_size
 
         len_dataloader = None
+        num_train_tokens = 0
         if has_length(train_dataloader):
             len_dataloader = len(train_dataloader)
             num_update_steps_per_epoch = len_dataloader // args.gradient_accumulation_steps
