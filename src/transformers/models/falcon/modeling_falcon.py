@@ -559,7 +559,7 @@ class FalconFlashAttention(nn.Module):
         bsz, kv_seq_length, _ = key_layer.shape
 
         torch_dtype = query_layer.dtype
-        
+
         past_key_value = (key_layer, value_layer) if use_cache else None
 
         # (attention_mask * 1.0).masked_fill(attention_mask, float("-1e9")).to(torch_dtype)
@@ -567,9 +567,7 @@ class FalconFlashAttention(nn.Module):
             query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim).transpose(1, 2).to(torch_dtype)
         )
         key_layer = key_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim).transpose(1, 2).to(torch_dtype)
-        value_layer = (
-            value_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim).transpose(1, 2).to(torch_dtype)
-        )
+        value_layer = value_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim).transpose(1, 2).to(torch_dtype)
 
         if alibi is not None:
             raise ValueError("`alibi` is not supported when `use_flash_attn` is True")
@@ -585,7 +583,7 @@ class FalconFlashAttention(nn.Module):
 
         # contains at least one padding token
         if padding_mask.sum().item() != bsz * kv_seq_length:
-            query_layer, indices, current_query_length, query_max_seqlen = unpad_input(query_layer, query_padding_mask)    
+            query_layer, indices, current_query_length, query_max_seqlen = unpad_input(query_layer, query_padding_mask)
             key_layer, _, current_key_length, key_max_seqlen = unpad_input(key_layer, padding_mask)
             value_layer, _, _, _ = unpad_input(value_layer, padding_mask)
 
@@ -608,7 +606,7 @@ class FalconFlashAttention(nn.Module):
 
         attn_weights = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
         attn_output = self.dense(attn_weights)
-        
+
         if not output_attentions:
             attn_weights = None
 
@@ -636,7 +634,9 @@ class FalconDecoderLayer(nn.Module):
         super().__init__()
         hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.self_attention = FalconAttention(config) if getattr(config, "_use_flash_attn_2", False) else FalconFlashAttention(config)
+        self.self_attention = (
+            FalconAttention(config) if getattr(config, "_use_flash_attn_2", False) else FalconFlashAttention(config)
+        )
         self.mlp = FalconMLP(config)
         self.hidden_dropout = config.hidden_dropout
         self.config = config
