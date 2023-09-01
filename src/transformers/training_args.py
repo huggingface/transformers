@@ -636,9 +636,9 @@ class TrainingArguments:
         tgs_metrics (`bool`, *optional*, defaults to `False`):
             Whether or not to compute the `tgs` for training speed metrics.
 
-            "If set to `True`, the speed metrics will include `tgs`(tokens per second per device)."
-            " It will iterate over the dataloader ahead of training, which might slow down the whole process,"
-            " especally for large datasets."
+            If set to `True`, the speed metrics will include `tgs`(tokens per second per device).
+
+            It will iterate over the dataloader ahead of training, which might slow down the whole process, especally for large datasets.
     """
 
     framework = "pt"
