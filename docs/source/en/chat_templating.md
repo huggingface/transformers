@@ -22,7 +22,7 @@ An increasingly common use case for LLMs is **chat**. In a chat context, rather 
 of text (as is the case with a standard language model), the model instead continues a conversation that consists
 of one or more **messages**, each of which includes a **role** as well as message text.
 
-All LLMs, including models fine-tuned for chat, operate on linear sequences of tokens, and do not intrinsically
+All language models, including models fine-tuned for chat, operate on linear sequences of tokens and do not intrinsically
 have special handling for roles. This means that role information is usually injected by adding control tokens
 between messages, to indicate both the message boundary and the relevant roles.
 
@@ -184,15 +184,18 @@ once you set the correct chat template, your model will automatically become com
 
 When setting the template for a model that's already been trained for chat, you should ensure that the template
 exactly matches the message formatting that the model saw during training, or else you will probably experience
-performance degradation. If you're training a model from scratch, or fine-tuning a base language model for chat,
-you can do whatever you like! LLMs are smart enough to learn to handle lots of different formats. Our default
-template for models that don't have a class-specific template follows the 
-[ChatML format](https://github.com/openai/openai-python/blob/main/chatml.md), and this is a good, flexible
-choice for many use-cases. It looks like this:
+performance degradation. This is true even if you're training the model further - you will probably get the best 
+performance if you keep the chat tokens constant. This is very analogous to tokenization - you generally get the
+best performance for inference or fine-tuning when you precisely match the tokenization used during training.
+
+If you're training a model from scratch, or fine-tuning a base language model for chat, on the other hand,
+you have a lot of freedom to choose an appropriate template! LLMs are smart enough to learn to handle lots of different
+input formats. Our default template for models that don't have a class-specific template follows the 
+[ChatML format](https://github.com/openai/openai-python/blob/main/chatml.md), and this is a good, flexible choice for many use-cases. It looks like this:
 
 ```
 {% for message in messages %}
-{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}
+    {{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}
 {% endfor %}
 ```
 
@@ -201,7 +204,7 @@ allows for flexibility in the roles you train with. The output looks like this:
 
 ```
 <|im_start|>system
-You are a helpful chatbot who will do its best not to say anything so stupid that people tweet about it.<|im_end|>
+You are a helpful chatbot that will do its best not to say anything so stupid that people tweet about it.<|im_end|>
 <|im_start|>user
 How are you?<|im_end|>
 <|im_start|>assistant
@@ -218,8 +221,7 @@ If you have any chat models, you should check their `tokenizer.chat_template` at
 to a default value based on the model class - if this doesn't match the format you used to train the model, then you
 should set it to a template that does, and test it using [`~PreTrainedTokenizer.apply_chat_template`]. 
 This applies even if you're not the model owner - if you're using a model with an incorrect chat template, please open 
-a [pull request](https://huggingface.co/docs/hub/repositories-pull-requests-discussions) to the model repository so that
-this attribute can be set properly!
+a [pull request](https://huggingface.co/docs/hub/repositories-pull-requests-discussions) to the model repository so that this attribute can be set properly!
 
 By ensuring that models have this attribute, we can make sure that the whole community gets to use the full power of
 open-source models. Formatting mismatches have been haunting the field and silently harming performance for too long - 
