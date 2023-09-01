@@ -2436,8 +2436,10 @@ class Trainer:
         checkpoint_file_exists = (
             glob.glob(os.path.join(checkpoint, OPTIMIZER_NAME) + "_*")
             if is_sagemaker_mp_enabled()
-            else (os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME))
-                  or os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME_BIN)))
+            else (
+                os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME))
+                or os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME_BIN))
+            )
         )
         if checkpoint_file_exists and os.path.isfile(os.path.join(checkpoint, SCHEDULER_NAME)):
             # Load in optimizer and scheduler states
