@@ -199,7 +199,7 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
     # Weight initialization
     config_class = PatchTSMixerConfig
     base_model_prefix = "model"
-    main_input_name = "x"
+    main_input_name = "context_values"
 
     # def _init_weights(self, module):
     #     """Initialize weights"""
@@ -239,12 +239,12 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, context_values: torch.Tensor) -> torch.Tensor:
         """
-        x: x: [bs  x n_vars x num_patches x patch_len]
+        context_values: [bs  x n_vars x num_patches x patch_len]
         return: [bs x n_vars x num_patches x num_features]
         """
-        return self.encoder(x)
+        return self.encoder(context_values)
 
 
 @add_start_docstrings(
@@ -308,20 +308,20 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         else:
             self.revin = None
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, context_values: torch.Tensor):
         """
-        x: tensor [bs x seq_len x in_channels]
+        context_values: tensor [bs x seq_len x in_channels]
         """
         revin_mean = None
         revin_stdev = None
         mask = None
         
         if self.revin is not None:
-            x = self.revin(x, mode = "norm") # x: tensor [bs x seq_len x in_channels]
+            context_values = self.revin(context_values, mode = "norm") # x: tensor [bs x seq_len x in_channels]
             revin_mean = self.revin.mean
             revin_stdev = self.revin.stdev
         
-        patched_x = self.patching(x)  # [bs x in_channels x num_patch x patch_len]
+        patched_x = self.patching(context_values)  # [bs x in_channels x num_patch x patch_len]
         
         enc_input = patched_x
 
@@ -358,13 +358,13 @@ class PatchTSMixerPretrainHead(nn.Module):
             th_mode=config.th_mode
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, context_values: torch.Tensor) -> torch.Tensor:
         """
-        x: [bs x n_vars x num_patches x num_features]
+        context_values: [bs x n_vars x num_patches x num_features]
 
         return: [bs x n_vars x num_patches x patch_len]
         """
-        return self.head(x)
+        return self.head(context_values)
 
 
 class PatchTSMixerForPreTrainingOutput(ModelOutput):
@@ -407,13 +407,13 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
 
     def forward(
             self, 
-            x: torch.Tensor,
+            context_values: torch.Tensor,
             return_loss: bool = True
         ) -> PatchTSMixerForPreTrainingOutput:
         """
-        x: tensor [bs x seq_len x in_channels]
+        context_values: tensor [bs x seq_len x in_channels]
         """
-        model_output = self.model(x) # x.last_hidden_state: [bs x nvars x num_patch x num_features]
+        model_output = self.model(context_values) # x.last_hidden_state: [bs x nvars x num_patch x num_features]
         x_hat = self.head(
             model_output.last_hidden_state
         )  # tensor [bs x nvars x num_patch x patch_len]
@@ -498,17 +498,17 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
 
     def forward(
         self,
-        x: torch.Tensor,
-        y: torch.Tensor = None,
+        context_values: torch.Tensor,
+        target_values: torch.Tensor = None,
         return_loss: bool = True
     ) -> PatchTSMixerForForecastOutput:
         """
-        x: tensor [bs x seq_len x in_channels]
+        context_values: tensor [bs x seq_len x in_channels]
         """
 
         model_output = self.model(
-            x
-        )  # x: [bs x nvars x num_patch x num_features]
+            context_values
+        )  # model_output: [bs x nvars x num_patch x num_features]
 
 
         y_hat = self.head(
@@ -520,8 +520,8 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             y_hat = self.revin(y_hat, mode = "denorm")
 
 
-        if y is not None:
-            loss_val = self.loss(y_hat, y)
+        if target_values is not None:
+            loss_val = self.loss(y_hat, target_values)
         else:
             loss_val = None
 
@@ -546,12 +546,12 @@ class PatchTSMixerClassificationHead(nn.Module):
             mode=config.mode,
         )
 
-    def forward(self, x, y=None) -> torch.Tensor:
+    def forward(self, context_values, target_values=None) -> torch.Tensor:
         """
         x: [bs x nvars x num_patch x num_features]
         output: [bs x n_classes]
         """
-        return self.head(x, y=y)
+        return self.head(context_values, y=target_values)
 
 
 class PatchTSMixerForClassificationOutput(ModelOutput):
@@ -593,18 +593,18 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
 
     def forward(
             self, 
-            x: torch.Tensor, 
-            y: torch.Tensor = None,
+            context_values: torch.Tensor, 
+            target_values: torch.Tensor = None,
             return_loss: bool = True
     ) -> PatchTSMixerForClassificationOutput:
 
         """
-        x: tensor [bs x seq_len x in_channels]
-        y: tensor [bs x n_classes]
+        context_values: tensor [bs x seq_len x in_channels]
+        target_values: tensor [bs x n_classes]
         """
 
         model_output = self.model(
-            x
+            context_values
         )  # x: [bs x nvars x num_patch x num_features]
 
         if self.inject_revin is not None:
@@ -614,8 +614,8 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
 
         y_hat = self.head(model_output.last_hidden_state)  # tensor [bs x n_labels]
 
-        if y is not None:
-            loss_val = self.loss(y_hat, y)
+        if target_values is not None:
+            loss_val = self.loss(y_hat, target_values)
         else:
             loss_val = None
 
@@ -641,12 +641,12 @@ class PatchTSMixerRegressionHead(nn.Module):
             mode=config.mode,
         )
 
-    def forward(self, x: torch.Tensor, y: torch.Tensor=None ) -> torch.Tensor:
+    def forward(self, context_values: torch.Tensor, target_values: torch.Tensor=None ) -> torch.Tensor:
         """
-        x: [bs x in_channels x num_patches x num_features]
+        context_values: [bs x in_channels x num_patches x num_features]
         return: [bs x n_targets]
         """
-        return self.head(x, y = y)
+        return self.head(context_values, y = target_values)
 
 
 class PatchTSMixerForRegressionOutput(ModelOutput):
@@ -686,17 +686,17 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
 
     def forward(
         self,
-        x: torch.Tensor,
-        y: torch.Tensor = None,
+        context_values: torch.Tensor,
+        target_values: torch.Tensor = None,
     ) -> PatchTSMixerForRegressionOutput:
         """
-        x: tensor [bs x seq_len x in_channels]
-        y: tensor [bs x n_targets]
+        context_values: tensor [bs x seq_len x in_channels]
+        target_values: tensor [bs x n_targets]
         """
 
         model_output = self.model(
-            x
-        )  # x: [bs x nvars x num_patch x num_features]
+            context_values
+        )  # model_output: [bs x nvars x num_patch x num_features]
 
 
         if self.inject_revin is not None:
@@ -705,8 +705,8 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             
         y_hat = self.head(model_output.last_hidden_state)  # tensor [bs x n_targets]
 
-        if y is not None:
-            loss_val = self.loss(y_hat, y)
+        if target_values is not None:
+            loss_val = self.loss(y_hat, target_values)
         else:
             loss_val = None
 
