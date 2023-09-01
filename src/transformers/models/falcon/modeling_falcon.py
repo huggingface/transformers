@@ -600,7 +600,7 @@ class FalconDecoderLayer(nn.Module):
         super().__init__()
         hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.self_attention = FalconAttention(config) if config._use_flash_attn_2 else FalconFlashAttention(config)
+        self.self_attention = FalconAttention(config) if getattr(config, "_use_flash_attn_2", False) else FalconFlashAttention(config)
         self.mlp = FalconMLP(config)
         self.hidden_dropout = config.hidden_dropout
         self.config = config
