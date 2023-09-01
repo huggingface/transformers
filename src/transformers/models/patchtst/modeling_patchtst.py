@@ -175,7 +175,6 @@ def random_masking(
     """random_masking: Mask the input considering the control variables.
 
     Args:
-        seed_number (int, optional): Value to set for the seed number
         xb (Tensor): Input to mask [ bs x nvars x num_patches x patch_length]
         mask_ratio (float): Mask ratio.
         unmasked_channel_indices (list, optional):
@@ -184,6 +183,7 @@ def random_masking(
             When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
             across channels. Defaults to True.
         mask_value (int, optional): Value to use for masking. Defaults to 0.
+        seed_number (int, optional): Value to set for the random seed.
 
     Returns:
         Tensor: xb_mask, masked input, same shape as input Tensor: Mask tensor of shape [bs x c x n]
@@ -351,6 +351,7 @@ class PatchMasking(nn.Module):
             When true, masking will be same across all channels of a timeseries. Otherwise, masking positions will vary
             across channels. Defaults to True.
         mask_value (int, optional): Value to use for masking. Defaults to 0.
+        seed_number (int, optional): Random seed, when None seed is not set. Defaults to None.
     """
 
     def __init__(
@@ -576,11 +577,17 @@ class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
         if config.use_cls_token:
             self.cls_token = nn.Parameter(torch.zeros(1, 1, 1, config.d_model))
             self.w_pos = positional_encoding(
-                config.positional_encoding, config.learn_pe, config.num_patches + 1, config.d_model
+                config.positional_encoding,
+                config.learn_pe,
+                config.num_patches + 1,
+                config.d_model,
             )
         else:
             self.w_pos = positional_encoding(
-                config.positional_encoding, config.learn_pe, config.num_patches, config.d_model
+                config.positional_encoding,
+                config.learn_pe,
+                config.num_patches,
+                config.d_model,
             )
 
         # Positional dropout
@@ -596,7 +603,8 @@ class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
         self, past_values: torch.Tensor, output_hidden_states: Optional[bool] = None
     ) -> BaseModelOutputWithNoAttention:
         """
-        x: tensor [bs x nvars x num_patches x patch_length] return:
+        past_values: tensor [bs x nvars x num_patches x patch_length] output_hidden_states (bool, optional): Boolean
+        indicating if hidden states should be outtput return:
             tensor [bs x nvars x num_patches x d_model]
                 or [bs x nvars x (num_patches+1) x d_model] if use cls_token
         """
@@ -807,7 +815,7 @@ PATCHTST_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare PatchTST Model outputting raw hidden-states without any specific head on top.",
+    "The bare PatchTST Model outputting raw hidden-states without any specific head.",
     PATCHTST_START_DOCSTRING,
 )
 class PatchTSTModelOutputWithNoAttention(ModelOutput):
@@ -902,7 +910,11 @@ class PatchTSTModel(PatchTSTPreTrainedModel):
         else:
             self.revin = nn.Identity()
 
-        self.patching = Patchify(config.context_length, patch_length=config.patch_length, stride=config.stride)
+        self.patching = Patchify(
+            config.context_length,
+            patch_length=config.patch_length,
+            stride=config.stride,
+        )
         self.mask_input = config.mask_input
 
         if self.mask_input:
@@ -1038,7 +1050,11 @@ class PatchTSTForMaskPretraining(PatchTSTPreTrainedModel):
         loss_val = self.loss(x_hat, model_output.patched_input)
         masked_loss = (loss_val.mean(dim=-1) * model_output.mask).sum() / (model_output.mask.sum() + 1e-10)
 
-        return PatchTSTOutput(loss=masked_loss, prediction_output=x_hat, hidden_states=model_output.hidden_states)
+        return PatchTSTOutput(
+            loss=masked_loss,
+            prediction_output=x_hat,
+            hidden_states=model_output.hidden_states,
+        )
 
 
 class PatchTSTForClassification(PatchTSTPreTrainedModel):
@@ -1065,7 +1081,9 @@ class PatchTSTForClassification(PatchTSTPreTrainedModel):
         if labels is not None:
             loss_val = self.loss(y_hat, labels)
         return PatchTSTForClassificationOutput(
-            loss=loss_val, prediction_logits=y_hat, hidden_states=model_output.hidden_states
+            loss=loss_val,
+            prediction_logits=y_hat,
+            hidden_states=model_output.hidden_states,
         )
 
 
@@ -1192,7 +1210,11 @@ class PatchTSTForPrediction(PatchTSTPreTrainedModel):
         loss_val = None
         if future_values is not None:
             loss_val = self.loss(y_hat, future_values)
-        return PatchTSTOutput(loss=loss_val, prediction_output=y_hat, hidden_states=model_output.hidden_states)
+        return PatchTSTOutput(
+            loss=loss_val,
+            prediction_output=y_hat,
+            hidden_states=model_output.hidden_states,
+        )
 
 
 class PatchTSTForForecastingOutput(ModelOutput):
@@ -1320,7 +1342,9 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
         if future_values is not None:
             loss_val = self.loss(y_hat, future_values)
         return PatchTSTForForecastingOutput(
-            loss=loss_val, forecast_outputs=y_hat, hidden_states=model_output.hidden_states
+            loss=loss_val,
+            forecast_outputs=y_hat,
+            hidden_states=model_output.hidden_states,
         )
 
 
@@ -1374,7 +1398,10 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         self.post_init()
 
     def forward(
-        self, past_values: torch.Tensor, labels: Optional[torch.Tensor], output_hidden_states: Optional[bool] = None
+        self,
+        past_values: torch.Tensor,
+        labels: Optional[torch.Tensor],
+        output_hidden_states: Optional[bool] = None,
     ):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1385,4 +1412,8 @@ class PatchTSTForRegression(PatchTSTPreTrainedModel):
         loss_val = None
         if labels is not None:
             loss_val = self.loss(y_hat, labels)
-        return PatchTSTOutput(loss=loss_val, prediction_output=y_hat, hidden_states=model_output.hidden_states)
+        return PatchTSTOutput(
+            loss=loss_val,
+            prediction_output=y_hat,
+            hidden_states=model_output.hidden_states,
+        )

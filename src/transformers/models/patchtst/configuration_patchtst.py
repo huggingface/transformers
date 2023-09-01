@@ -45,9 +45,6 @@ class PatchTSTConfig(PretrainedConfig):
         input_size (`int`, *optional*, defaults to 1):
             The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
             multivariate targets.
-        scaling (`string` or `bool`, *optional* defaults to `"mean"`):
-            Whether to scale the input targets via "mean" scaler, "std" scaler or no scaler if `None`. If `True`, the
-            scaler is set to "mean".
         num_time_features (`int`, *optional*, defaults to 0):
             The number of time features in the input time series.
         num_dynamic_real_features (`int`, *optional*, defaults to 0):
@@ -155,11 +152,11 @@ class PatchTSTConfig(PretrainedConfig):
         mask_input: Optional[bool] = None,
         mask_type: str = "random",
         mask_ratio=0.5,
-        mask_patches: list = [2, 3],
-        mask_patch_ratios: list = [1, 1],
+        mask_patches: List[int] = [2, 3],
+        mask_patch_ratios: List[int] = [1, 1],
         channel_consistent_masking: bool = False,
         d_size: str = "4D",
-        unmasked_channel_indices: list = None,
+        unmasked_channel_indices: Optional[List[int]] = None,
         mask_value=0,
         pooling: str = "mean",
         num_classes: int = 1,
@@ -173,7 +170,7 @@ class PatchTSTConfig(PretrainedConfig):
         is_encoder_decoder: bool = False,
         encoder_layerdrop: float = 0.1,
         prediction_length: int = 24,
-        prediction_range: List = [0, 1],
+        prediction_range: List[int] = [0, 1],
         target_dimension: int = 1,
         # PatchTST arguments
         attention_type: str = "prob",
