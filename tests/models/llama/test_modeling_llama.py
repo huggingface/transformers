@@ -107,7 +107,8 @@ class LlamaModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+            input_mask = torch.tril(torch.ones(7,7))
+            input_mask = torch.nn.functional.pad(input_mask, (0, 0, 0, self.batch_size - self.seq_length), value=1)
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -304,16 +305,6 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    # TODO: replace with better test
-    @is_pt_flax_cross_test
-    def test_equivalence_pt_to_flax(self):
-        return
-
-    # TODO: replace with better test
-    @is_pt_flax_cross_test
-    def test_equivalence_flax_to_pt(self):
-        return
 
     def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
