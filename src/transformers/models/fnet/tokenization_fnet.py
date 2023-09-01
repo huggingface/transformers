@@ -220,11 +220,13 @@ class FNetTokenizer(PreTrainedTokenizer):
                 if not prev_is_special:
                     out_string += " "
                 out_string += self.sp_model.decode(current_sub_tokens) + token
+                prev_is_special = True
                 current_sub_tokens = []
             else:
                 current_sub_tokens.append(token)
+                prev_is_special = False
         out_string += self.sp_model.decode(current_sub_tokens)
-        return out_string
+        return out_string.strip()
 
     def _decode(
         self,
@@ -234,9 +236,14 @@ class FNetTokenizer(PreTrainedTokenizer):
         spaces_between_special_tokens: bool = False,
         **kwargs,
     ) -> str:
-        return super()._decode(
+        text = super()._decode(
             token_ids, skip_special_tokens, clean_up_tokenization_spaces, spaces_between_special_tokens, **kwargs
         )
+        # Mimic the behavior of the Rust tokenizer:
+        # No space after <unk>
+        if not spaces_between_special_tokens:
+            text = text.replace("<unk> ", "<unk>")
+        return text
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
