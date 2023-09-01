@@ -82,10 +82,10 @@ from .trainer_pt_utils import (
     LabelSmoother,
     LengthGroupedSampler,
     SequentialDistributedSampler,
-    check_dataloader_randomsampler,
     distributed_broadcast_scalars,
     distributed_concat,
     find_batch_size,
+    get_dataloader_sampler,
     get_model_param_count,
     get_module_class_from_name,
     get_parameter_names,
@@ -1784,8 +1784,8 @@ class Trainer:
         # Skip the first epochs_trained epochs to get the random state of the dataloader at the right point.
         if not args.ignore_data_skip:
             for epoch in range(epochs_trained):
-                sampler, is_random_sampler = check_dataloader_randomsampler(train_dataloader)
-
+                sampler = get_dataloader_sampler(train_dataloader)
+                is_random_sampler = isinstance(sampler, RandomSampler)
                 if is_torch_less_than_1_11 or not is_random_sampler:
                     # We just need to begin an iteration to create the randomization of the sampler.
                     for _ in train_dataloader:
