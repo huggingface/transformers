@@ -214,6 +214,7 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, use_best_model:
         best_trial = study.best_trial
         return BestRun(str(best_trial.number), best_trial.value, best_trial.params)
     else:
+        print("We have process index not 0")
         for i in range(n_trials):
             trainer.objective = None
             args_main_rank = list(pickle.dumps(trainer.args))
@@ -369,7 +370,11 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, use_best_model: bo
         num_samples=n_trials,
         **kwargs,
     )
-    best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3], scope=trainer.args.ray_scope)
+    
+    # Override ray_scope if use_best_model.
+    ray_scope = "all" if use_best_model else trainer.args.ray_scope
+
+    best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3], scope=ray_scope)
     best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config, analysis)
     if _tb_writer is not None:
         trainer.add_callback(_tb_writer)
