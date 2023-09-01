@@ -48,3 +48,27 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] PatchTSTForPrediction
     - forward
+
+
+## PatchTSTForForecasting
+
+[[autodoc]] PatchTSTForForecasting
+    - forward
+
+
+## PatchTSTForClassification
+
+[[autodoc]] PatchTSTForClassification
+    - forward
+
+
+## PatchTSTForMaskPretraining
+
+[[autodoc]] PatchTSTForMaskPretraining
+    - forward
+
+
+## PatchTSTForRegression
+
+[[autodoc]] PatchTSTForRegression
+    - forward

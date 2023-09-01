@@ -372,7 +372,6 @@ _import_structure = {
     ],
     "models.imagegpt": ["IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ImageGPTConfig"],
     "models.informer": ["INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "InformerConfig"],
-    "models.patchtst": ["PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP", "PatchTSTConfig"],
     "models.instructblip": [
         "INSTRUCTBLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "InstructBlipConfig",
@@ -467,6 +466,7 @@ _import_structure = {
         "OwlViTTextConfig",
         "OwlViTVisionConfig",
     ],
+    "models.patchtst": ["PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP", "PatchTSTConfig"],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
@@ -1133,6 +1133,8 @@ else:
             "MODEL_FOR_TEXT_ENCODING_MAPPING",
             "MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING",
             "MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING",
+            "MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING",
             "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
             "MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING",
             "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING",
@@ -1142,8 +1144,6 @@ else:
             "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
             "MODEL_MAPPING",
             "MODEL_WITH_LM_HEAD_MAPPING",
-            "MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING",
-            "MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING",
             "AutoBackbone",
             "AutoModel",
             "AutoModelForAudioClassification",
@@ -1992,18 +1992,6 @@ else:
             "InformerPreTrainedModel",
         ]
     )
-    _import_structure["models.patchtst"].extend(
-        [
-            "PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "PatchTSTModel",
-            "PatchTSTPreTrainedModel",
-            "PatchTSTForPrediction",
-            "PatchTSTForForecasting",
-            "PatchTSTForPretraining",
-            "PatchTSTForClassification",
-            "PatchTSTForRegression",
-        ]
-    )
     _import_structure["models.instructblip"].extend(
         [
             "INSTRUCTBLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2418,6 +2406,18 @@ else:
             "OwlViTPreTrainedModel",
             "OwlViTTextModel",
             "OwlViTVisionModel",
+        ]
+    )
+    _import_structure["models.patchtst"].extend(
+        [
+            "PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PatchTSTForClassification",
+            "PatchTSTForForecasting",
+            "PatchTSTForMaskPretraining",
+            "PatchTSTForPrediction",
+            "PatchTSTForRegression",
+            "PatchTSTModel",
+            "PatchTSTPreTrainedModel",
         ]
     )
     _import_structure["models.pegasus"].extend(
@@ -4477,7 +4477,6 @@ if TYPE_CHECKING:
     )
     from .models.imagegpt import IMAGEGPT_PRETRAINED_CONFIG_ARCHIVE_MAP, ImageGPTConfig
     from .models.informer import INFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, InformerConfig
-    from .models.patchtst import PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP, PatchTSTConfig
     from .models.instructblip import (
         INSTRUCTBLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         InstructBlipConfig,
@@ -4562,6 +4561,7 @@ if TYPE_CHECKING:
         OwlViTTextConfig,
         OwlViTVisionConfig,
     )
+    from .models.patchtst import PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP, PatchTSTConfig
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
@@ -5158,6 +5158,8 @@ if TYPE_CHECKING:
             MODEL_FOR_TEXT_ENCODING_MAPPING,
             MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING,
             MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING,
+            MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING,
+            MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING,
             MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
@@ -5167,8 +5169,6 @@ if TYPE_CHECKING:
             MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
-            MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING,
-            MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING,
             AutoBackbone,
             AutoModel,
             AutoModelForAudioClassification,
@@ -5865,16 +5865,6 @@ if TYPE_CHECKING:
             InformerModel,
             InformerPreTrainedModel,
         )
-        from .models.patchtst import (
-            PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST,
-            PatchTSTModel,
-            PatchTSTForPrediction,
-            PatchTSTForForecasting,
-            PatchTSTForPretraining,
-            PatchTSTPreTrainedModel,
-            PatchTSTForClassification,
-            PatchTSTForRegression,
-        )
         from .models.instructblip import (
             INSTRUCTBLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             InstructBlipForConditionalGeneration,
@@ -6210,6 +6200,16 @@ if TYPE_CHECKING:
             OwlViTPreTrainedModel,
             OwlViTTextModel,
             OwlViTVisionModel,
+        )
+        from .models.patchtst import (
+            PATCHTST_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PatchTSTForClassification,
+            PatchTSTForForecasting,
+            PatchTSTForMaskPretraining,
+            PatchTSTForPrediction,
+            PatchTSTForRegression,
+            PatchTSTModel,
+            PatchTSTPreTrainedModel,
         )
         from .models.pegasus import (
             PegasusForCausalLM,

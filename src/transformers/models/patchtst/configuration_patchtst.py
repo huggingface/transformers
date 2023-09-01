@@ -14,7 +14,7 @@
 # limitations under the License.
 """PatchTST model configuration"""
 
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
@@ -161,7 +161,7 @@ class PatchTSTConfig(PretrainedConfig):
         d_size: str = "4D",
         unmasked_channel_indices: list = None,
         mask_value=0,
-        pooling: str = 'mean',
+        pooling: str = "mean",
         num_classes: int = 1,
         head_dropout: float = 0.0,
         # proj_dropout: float = 0.0,
@@ -175,17 +175,15 @@ class PatchTSTConfig(PretrainedConfig):
         prediction_length: int = 24,
         prediction_range: List = [0, 1],
         target_dimension: int = 1,
-
         # PatchTST arguments
         attention_type: str = "prob",
         sampling_factor: int = 5,
         distil: bool = True,
         **kwargs,
     ):
-
         # time series specific configuration
         self.context_length = context_length
-        self.input_size = input_size # n_vars
+        self.input_size = input_size  # n_vars
         self.num_time_features = num_time_features
         self.num_dynamic_real_features = num_dynamic_real_features
         self.num_static_real_features = num_static_real_features
@@ -256,4 +254,3 @@ class PatchTSTConfig(PretrainedConfig):
 
     def _num_patches(self):
         return (max(self.context_length, self.patch_length) - self.patch_length) // self.stride + 1
-
