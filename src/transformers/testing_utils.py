@@ -2135,8 +2135,8 @@ def _device_agnostic_dispatch(device: str, dispatch_table: Dict[str, Callable], 
 # Mappings from device names to callable functions to support device agnostic
 # testing.
 ACCELERATOR_MANUAL_SEED = {"cuda": torch.cuda.manual_seed, "cpu": None, "default": torch.manual_seed}
-ACCELERATOR_EMPTY_CACHE = {"cuda": torch.cuda.empty_cache, "cpu": None}
-ACCELERATOR_DEVICE_COUNT = {"cuda": torch.cuda.device_count, "cpu": lambda: 0}
+ACCELERATOR_EMPTY_CACHE = {"cuda": torch.cuda.empty_cache, "cpu": None, "default": None}
+ACCELERATOR_DEVICE_COUNT = {"cuda": torch.cuda.device_count, "cpu": lambda: 0, "default": lambda: 1}
 
 
 def accelerator_manual_seed(device: str, seed: int):
