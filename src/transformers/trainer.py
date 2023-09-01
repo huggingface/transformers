@@ -202,7 +202,7 @@ if is_peft_available():
 if is_accelerate_available():
     from accelerate import Accelerator, skip_first_batches
     from accelerate import __version__ as accelerate_version
-    from accelerate.utils import DistributedDataParallelKwargs, GradientAccumulationPlugin
+    from accelerate.utils import DeepSpeedSchedulerWrapper, DistributedDataParallelKwargs, GradientAccumulationPlugin
 
     if version.parse(accelerate_version) > version.parse("0.20.3"):
         from accelerate.utils import (
@@ -2366,7 +2366,14 @@ class Trainer:
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
 
         # Save SCHEDULER & SCALER
-        if self.args.should_save and not self.is_deepspeed_enabled and not is_torch_tpu_available():
+        is_deepspeed_custom_scheduler = self.is_deepspeed_enabled and not isinstance(
+            self.lr_scheduler, DeepSpeedSchedulerWrapper
+        )
+        if (
+            self.args.should_save
+            and (not self.is_deepspeed_enabled or is_deepspeed_custom_scheduler)
+            and not is_torch_tpu_available()
+        ):
             with warnings.catch_warnings(record=True) as caught_warnings:
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
             reissue_pt_warnings(caught_warnings)
