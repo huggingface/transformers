@@ -14,10 +14,7 @@
 # limitations under the License.
 """ Testing suite for the PyTorch LLaMA model. """
 
-import tempfile
 import unittest
-
-import numpy as np
 
 from parameterized import parameterized
 from pytest import mark
@@ -37,14 +34,10 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-if is_flax_available():
-    import jax.numpy as jnp
 
-    from transformers.modeling_flax_pytorch_utils import (
-        convert_pytorch_state_dict_to_flax,
-        load_flax_weights_in_pytorch_model,
-    )
-    from .test_modeling_flax_llama import FlaxLlamaModelTest
+if is_flax_available():
+
+    pass
 
 if is_torch_available():
     import torch
