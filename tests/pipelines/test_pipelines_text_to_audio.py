@@ -173,6 +173,32 @@ class TextToAudioPipelineTests(unittest.TestCase):
             outputs,
         )
 
+    @slow
+    @require_torch
+    def test_vits_model_pt(self):
+        speech_generator = pipeline(task="text-to-audio", model="facebook/mms-tts-eng", framework="pt")
+
+        outputs = speech_generator("This is a test")
+
+        # vits sampling_rate is not straightforward to get
+        self.assertEqual(outputs["sampling_rate"], 16000)
+
+        audio = outputs["audio"]
+
+        self.assertEqual(ANY(np.ndarray), audio)
+
+        # test two examples side-by-side
+        outputs = speech_generator(["This is a test", "This is a second test"])
+
+        audio = [output["audio"] for output in outputs]
+
+        self.assertEqual([ANY(np.ndarray), ANY(np.ndarray)], audio)
+
+        # test batching
+        outputs = speech_generator(["This is a test", "This is a second test"], batch_size=2)
+
+        self.assertEqual(ANY(np.ndarray), outputs[0]["audio"])
+
     def get_test_pipeline(self, model, tokenizer, processor):
         speech_generator = TextToAudioPipeline(model=model, tokenizer=tokenizer)
         return speech_generator, ["This is a test", "Another test"]
