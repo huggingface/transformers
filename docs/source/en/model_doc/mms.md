@@ -179,7 +179,9 @@ pip install --upgrade transformers accelerate
 ```
 
 Since the flow-based model in VITS is non-deterministic, it is good practice to set a seed to ensure reproducibility of 
-the outputs. For languages with a Roman alphabet, such as English or French, the tokenizer can be used directly to 
+the outputs. 
+
+- For languages with a Roman alphabet, such as English or French, the tokenizer can be used directly to 
 pre-process the text inputs. The following code example runs a forward pass using the MMS-TTS English checkpoint:
 
 ```python
