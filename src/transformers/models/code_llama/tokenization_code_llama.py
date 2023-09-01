@@ -267,8 +267,8 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
 
         if None in (self.prefix_id, self.middle_id, self.suffix_id):
             raise ValueError(
-                "Then input either includes a `prefix` and a `suffix` used for the infilling task,"
-                f"  or can be split on the {self.fill_token} token, creating a suffix an prefix,"
+                "The input either includes a `prefix` and a `suffix` used for the infilling task,"
+                f"  or can be split on the {self.fill_token} token, creating a suffix and prefix,"
                 " but the model does not support `infilling`."
             )
         suffix_tokens = self._tokenize(suffix)  # make sure CodeLlama sp model does not mess up
