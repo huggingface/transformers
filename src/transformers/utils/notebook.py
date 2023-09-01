@@ -353,12 +353,12 @@ class NotebookProgressCallback(TrainerCallback):
             _ = metrics.pop(f"{metric_key_prefix}_steps_per_second", None)
             _ = metrics.pop(f"{metric_key_prefix}_jit_compilation_time", None)
             for k, v in metrics.items():
-                    splits = k.split("_")
-                    name = " ".join([part.capitalize() for part in splits[1:]])
-                    if name == "Loss":
-                        # Single dataset
-                        name = "Validation Loss"
-                    values[name] = v
+                splits = k.split("_")
+                name = " ".join([part.capitalize() for part in splits[1:]])
+                if name == "Loss":
+                    # Single dataset
+                    name = "Validation Loss"
+                values[name] = v
             self.training_tracker.write_line(values)
             self.training_tracker.remove_child()
             self.prediction_bar = None
