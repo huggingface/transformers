@@ -2570,7 +2570,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 raise RuntimeError("GPU is required to quantize or run quantize model.")
             elif not (is_optimum_available() and is_auto_gptq_available()):
                 raise ImportError(
-                    "Loading GPTQ quantized model requires optimum : `pip install optimum` and auto-gptq library 'pip install auto-gptq'"
+                    "Loading a GPTQ quantized model requires optimum (`pip install optimum`) and auto-gptq library (`pip install auto-gptq`)"
                 )
             elif version.parse(importlib.metadata.version("auto_gptq")) < version.parse("0.4.2"):
                 raise ImportError(
