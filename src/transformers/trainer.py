@@ -2123,7 +2123,7 @@ class Trainer:
 
     def _load_best_model(self):
         logger.info(
-            f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric_value})."
+            f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric})."
         )
         best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
         best_safe_model_path = os.path.join(self.state.best_model_checkpoint, SAFE_WEIGHTS_NAME)
@@ -2387,12 +2387,12 @@ class Trainer:
 
             operator = np.greater if self.args.greater_is_better else np.less
             if (
-                self.state.best_metric_value is None
+                self.state.best_metric is None
                 or self.state.best_model_checkpoint is None
-                or operator(metric_value, self.state.best_metric_value)
+                or operator(metric_value, self.state.best_metric)
             ):
-                self.state.best_metrics = metrics.copy()
-                self.state.best_metric_value = metric_value
+                self.state.best_metrics_dict = metrics.copy()
+                self.state.best_metric = metric_value
                 self.state.best_model_checkpoint = output_dir
 
         # Save the Trainer state

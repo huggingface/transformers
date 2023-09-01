@@ -44,7 +44,7 @@ class HyperParamSearchBackendBase:
     def is_available():
         raise NotImplementedError
 
-    def run(self, trainer, n_trials: int, direction: str, use_best_model: bool, **kwargs):
+    def run(self, trainer, n_trials: int, direction: str, use_best_model: bool = False, **kwargs):
         raise NotImplementedError
 
     def default_hp_space(self, trial):

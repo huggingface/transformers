@@ -200,7 +200,7 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, use_best_model:
             # If we want to load the best model, override the object with best
             # metric objective.
             if use_best_model:
-                trainer.objective = trainer.compute_objective(trainer.state.best_metrics.copy())
+                trainer.objective = trainer.compute_objective(trainer.state.best_metrics_dict.copy())
             # If there hasn't been any evaluation during the training loop.
             if getattr(trainer, "objective", None) is None:
                 metrics = trainer.evaluate()
@@ -228,7 +228,7 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, use_best_model:
             # If we want to load the best model, override the object with best
             # metric objective.
             if use_best_model:
-                trainer.objective = trainer.compute_objective(trainer.state.best_metrics)
+                trainer.objective = trainer.compute_objective(trainer.state.best_metrics_dict)
             # If there hasn't been any evaluation during the training loop.
             if getattr(trainer, "objective", None) is None:
                 metrics = trainer.evaluate()
@@ -258,7 +258,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, use_best_model: bo
         # If we want to load the best model, override the object with best
         # metric objective.
         if use_best_model:
-            local_trainer.objective = local_trainer.compute_objective(local_trainer.state.best_metrics)
+            local_trainer.objective = local_trainer.compute_objective(local_trainer.state.best_metrics_dict)
         # If there hasn't been any evaluation during the training loop.
         if getattr(local_trainer, "objective", None) is None:
             metrics = local_trainer.evaluate()
@@ -380,7 +380,6 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, use_best_model:
     import sigopt
 
     if trainer.args.process_index == 0:
-        print("In master of sigopt")
         if importlib.metadata.version("sigopt") >= "8.0.0":
             sigopt.set_project("huggingface")
 
@@ -408,7 +407,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, use_best_model:
                         trainer.train(resume_from_checkpoint=None, trial=run.run)
                     # Override the objective with best metric objective.
                     if use_best_model:
-                        trainer.objective = trainer.compute_objective(trainer.state.best_metrics)
+                        trainer.objective = trainer.compute_objective(trainer.state.best_metrics_dict)
                     # If there hasn't been any evaluation during the training loop.
                     if getattr(trainer, "objective", None) is None:
                         metrics = trainer.evaluate()
@@ -448,7 +447,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, use_best_model:
                     trainer.train(resume_from_checkpoint=None, trial=suggestion)
 
                 if use_best_model:
-                    trainer.objective = trainer.compute_objective(trainer.state.best_metrics.copy())
+                    trainer.objective = trainer.compute_objective(trainer.state.best_metrics_dict.copy())
                 # If there hasn't been any evaluation during the training loop.
                 if getattr(trainer, "objective", None) is None:
                     metrics = trainer.evaluate()
@@ -522,7 +521,7 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, use_best_model: 
         # Override the objective with best metric objective. Use_best_model assumes
         # we perform evaluation during the training loop.
         if use_best_model:
-            trainer.objective = trainer.compute_objective(trainer.state.best_metrics)
+            trainer.objective = trainer.compute_objective(trainer.state.best_metrics_dict)
         # If there hasn't been any evaluation during the training loop.
         if getattr(trainer, "objective", None) is None:
             metrics = trainer.evaluate()
@@ -799,7 +798,7 @@ class WandbCallback(TrainerCallback):
                     }
                     if not args.load_best_model_at_end
                     else {
-                        f"eval/{args.metric_for_best_model}": state.best_metric_value,
+                        f"eval/{args.metric_for_best_model}": state.best_metric,
                         "train/total_floss": state.total_flos,
                     }
                 )
@@ -1389,8 +1388,8 @@ class NeptuneCallback(TrainerCallback):
 
             operator = np.greater if args.greater_is_better else np.less
 
-            self._should_upload_checkpoint = state.best_metric_value is None or operator(
-                metric_value, state.best_metric_value
+            self._should_upload_checkpoint = state.best_metric is None or operator(
+                metric_value, state.best_metric
             )
 
     @classmethod
