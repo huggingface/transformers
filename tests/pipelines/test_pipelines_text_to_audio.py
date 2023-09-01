@@ -180,7 +180,6 @@ class TextToAudioPipelineTests(unittest.TestCase):
 
         outputs = speech_generator("This is a test")
 
-        # vits sampling_rate is not straightforward to get
         self.assertEqual(outputs["sampling_rate"], 16000)
 
         audio = outputs["audio"]
