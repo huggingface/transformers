@@ -1,4 +1,4 @@
-      docs/source/en/autoclass_tutorial.md
+docs/source/en/autoclass_tutorial.md
 docs/source/en/model_doc/byt5.md
 docs/source/en/model_doc/donut.md
 docs/source/en/model_doc/encoder-decoder.md
