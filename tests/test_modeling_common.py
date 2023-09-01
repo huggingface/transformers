@@ -2745,6 +2745,9 @@ class ModelTesterMixin:
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
+            if not model_class._supports_flash_attn_2:
+                return
+
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
