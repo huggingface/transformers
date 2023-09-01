@@ -68,7 +68,7 @@ class OptunaBackend(HyperParamSearchBackendBase):
     def is_available():
         return is_optuna_available()
 
-    def run(self, trainer, n_trials: int, direction: str, use_best_model: bool, **kwargs):
+    def run(self, trainer, n_trials: int, direction: str, use_best_model: bool = False, **kwargs):
         return run_hp_search_optuna(trainer, n_trials, direction, use_best_model, **kwargs)
 
     def default_hp_space(self, trial):
@@ -83,7 +83,7 @@ class RayTuneBackend(HyperParamSearchBackendBase):
     def is_available():
         return is_ray_available()
 
-    def run(self, trainer, n_trials: int, direction: str, use_best_model: bool, **kwargs):
+    def run(self, trainer, n_trials: int, direction: str, use_best_model: bool = False, **kwargs):
         return run_hp_search_ray(trainer, n_trials, direction, use_best_model, **kwargs)
 
     def default_hp_space(self, trial):
@@ -97,7 +97,7 @@ class SigOptBackend(HyperParamSearchBackendBase):
     def is_available():
         return is_sigopt_available()
 
-    def run(self, trainer, n_trials: int, direction: str, use_best_model: bool, **kwargs):
+    def run(self, trainer, n_trials: int, direction: str, use_best_model: bool = False, **kwargs):
         return run_hp_search_sigopt(trainer, n_trials, direction, use_best_model, **kwargs)
 
     def default_hp_space(self, trial):
