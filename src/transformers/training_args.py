@@ -633,6 +633,12 @@ class TrainingArguments:
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
 
             This flag is experimental and subject to change in future releases.
+        tgs_metrics (`bool`, *optional*, defaults to `False`):
+            Whether or not to compute the `tgs` for training speed metrics.
+
+            "If set to `True`, the speed metrics will include `tgs`(tokens per second per device)."
+            " It will iterate over the dataloader ahead of training, which might slow down the whole process,"
+            " especally for large datasets."
     """
 
     framework = "pt"
@@ -1230,6 +1236,11 @@ class TrainingArguments:
             "and then the batches are split and broadcast to each process. Will default to `True` for `DataLoader` whose"
             "underlying dataset is an `IterableDataset`, `False` otherwise."
         },
+    )
+
+    tgs_metrics: Optional[bool] = field(
+        default=False,
+        metadata={"help": ("If set to `True`, the speed metrics will include `tgs`(tokens per second per device).")},
     )
 
     def __post_init__(self):
