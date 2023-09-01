@@ -556,11 +556,11 @@ class FalconFlashAttention(nn.Module):
             value_layer = torch.cat((past_value, value_layer), dim=1)
 
         _, kv_length, _ = key_layer.shape
+
         torch_dtype = query_layer.dtype
-        if use_cache:
-            present = (key_layer, value_layer)
-        else:
-            present = None
+        
+        past_key_value = (key_layer, value_layer) if use_cache else None
+
         (attention_mask * 1.0).masked_fill(attention_mask, float("-1e9")).to(torch_dtype)
         query_layer = (
             query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim).transpose(1, 2).to(torch_dtype)
@@ -576,13 +576,13 @@ class FalconFlashAttention(nn.Module):
         # below output will have shape (batch_size, seqlen, nheads, headdim)
         attn_weights = flash_attn_func(query_layer, key_layer, value_layer, causal=True)
         attn_weights = attn_weights.reshape(batch_size, query_length, self.num_heads * self.head_dim)
-        
+
         attn_output = self.dense(attn_weights)
         
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, present
+        return attn_output, attn_weights, past_key_value
 
 
 class FalconMLP(nn.Module):
