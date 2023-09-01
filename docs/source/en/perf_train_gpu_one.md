@@ -237,10 +237,11 @@ For example if you have [NVIDIA/apex](https://github.com/NVIDIA/apex) installed,
 fastest training experience among all supported AdamW optimizers.
 
 [`Trainer`] integrates a variety of optimizers that can be used out of box: `adamw_hf`, `adamw_torch`, `adamw_torch_fused`, 
-`adamw_apex_fused`, `adamw_anyprecision` or `adafactor`. More optimizers can be plugged in via a third-party implementation.
+`adamw_apex_fused`, `adamw_anyprecision`, `adafactor`, or `adamw_bnb_8bit`. More optimizers can be plugged in via a third-party implementation.
 
-Let's take a closer look at two alternatives to AdamW optimizer - Adafactor (available in Trainer), and 8bit BNB quantized 
-optimizer (third-party implementation).
+Let's take a closer look at two alternatives to AdamW optimizer:
+1. `adafactor` which is available in [`Trainer`]
+2. `adamw_bnb_8bit` is also available in Trainer, but a third-party integration is provided below for demonstration.
 
 For comparison, for a 3B-parameter model, like “t5-3b”: 
 * A standard AdamW optimizer will need 24GB of GPU memory because it uses 8 bytes for each parameter (8*3 => 24GB)
@@ -269,7 +270,13 @@ Instead of aggregating optimizer states like Adafactor, 8-bit Adam keeps the ful
 means that it stores the state with lower precision and dequantizes it only for the optimization. This is similar to the 
 idea behind mixed precision training.
 
-To use the 8-bit optimizer, you need to install it separately and then pass it as a custom optimizer to the [`Trainer`]. 
+To use `adamw_bnb_8bit`, you simply need to set `optim="adamw_bnb_8bit"` in [`TrainingArguments`]:
+
+```py
+training_args = TrainingArguments(per_device_train_batch_size=4, optim="adamw_bnb_8bit", **default_args)
+```
+
+However, we can also use a third-party implementation of the 8-bit optimizer for demonstration purposes to see how that can be integrated.
 
 First, follow the installation guide in the GitHub [repo](https://github.com/TimDettmers/bitsandbytes) to install the `bitsandbytes` library 
 that implements the 8-bit Adam optimizer.
@@ -310,13 +317,6 @@ adam_bnb_optim = bnb.optim.Adam8bit(
     lr=training_args.learning_rate,
 )
 ```
-
-<Tip>
-
-To use the 8-bit optimizer with an existing pretrained model, you need to make a change to the embedding layer.
-Read [this issue](https://github.com/huggingface/transformers/issues/14819) for more information.
-
-</Tip>
 
 Finally, pass the custom optimizer as an argument to the `Trainer`:
 
