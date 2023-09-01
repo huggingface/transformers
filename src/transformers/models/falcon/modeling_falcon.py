@@ -556,27 +556,33 @@ class FalconFlashAttention(nn.Module):
             value_layer = torch.cat((past_value, value_layer), dim=1)
 
         _, kv_length, _ = key_layer.shape
+        torch_dtype = query_layer.dtype
         if use_cache:
             present = (key_layer, value_layer)
         else:
             present = None
-        (attention_mask * 1.0).masked_fill(attention_mask, float("-1e9")).to(query_layer.dtype)
-        query_layer_ = (
-            query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim).transpose(1, 2).to(torch.bfloat16)
+        (attention_mask * 1.0).masked_fill(attention_mask, float("-1e9")).to(torch_dtype)
+        query_layer = (
+            query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim).transpose(1, 2).to(torch_dtype)
         )
-        key_layer_ = key_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim).transpose(1, 2).to(torch.bfloat16)
-        value_layer_ = (
-            value_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim).transpose(1, 2).to(torch.bfloat16)
+        key_layer = key_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim).transpose(1, 2).to(torch_dtype)
+        value_layer = (
+            value_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim).transpose(1, 2).to(torch_dtype)
         )
 
         if alibi is not None:
             raise ValueError("`alibi` is not supported when `use_flash_attn` is True")
 
         # below output will have shape (batch_size, seqlen, nheads, headdim)
-        attn_output = flash_attn_func(query_layer_, key_layer_, value_layer_, causal=True)
-        attn_output = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
-        output_tensor = self.dense(attn_output)
-        return output_tensor, present
+        attn_weights = flash_attn_func(query_layer, key_layer, value_layer, causal=True)
+        attn_weights = attn_weights.reshape(batch_size, query_length, self.num_heads * self.head_dim)
+        
+        attn_output = self.dense(attn_weights)
+        
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights, present
 
 
 class FalconMLP(nn.Module):
