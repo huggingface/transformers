@@ -1261,6 +1261,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
         config._flash_attn_2_enabled = True
+        return config
 
     def enable_input_require_grads(self):
         """
