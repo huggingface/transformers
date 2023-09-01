@@ -1034,7 +1034,10 @@ class MBartDecoder(MBartPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
+            print("Input_ids:", input_ids)
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+            print("Shape of inputs_embeds:", inputs_embeds.shape)
+            print("First values of inputs_embeds:", inputs_embeds[0,:3,:3])
 
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
