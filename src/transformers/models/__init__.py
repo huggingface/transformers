@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from . import (
+    mixformer_sequential,
     albert,
     align,
     altclip,
