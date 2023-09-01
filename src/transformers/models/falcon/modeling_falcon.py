@@ -548,7 +548,7 @@ class FalconFlashAttention(nn.Module):
         past_kv_length = 0 if layer_past is None else layer_past[0].shape[1]
         query_layer, key_layer = self.maybe_rotary(query_layer, key_layer, past_kv_length)
 
-        if layer_past is not None:
+        if layer_past is not None and use_cache:
             past_key, past_value = layer_past
             # concatenate along seq_length dimension:
             #  - key: [batch_size * self.num_heads, kv_length, head_dim]
@@ -562,7 +562,7 @@ class FalconFlashAttention(nn.Module):
         
         past_key_value = (key_layer, value_layer) if use_cache else None
 
-        (attention_mask * 1.0).masked_fill(attention_mask, float("-1e9")).to(torch_dtype)
+        # (attention_mask * 1.0).masked_fill(attention_mask, float("-1e9")).to(torch_dtype)
         query_layer = (
             query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim).transpose(1, 2).to(torch_dtype)
         )
@@ -574,11 +574,18 @@ class FalconFlashAttention(nn.Module):
         if alibi is not None:
             raise ValueError("`alibi` is not supported when `use_flash_attn` is True")
 
-        padding_mask = _convert_to_padding_mask(attention_mask, mask_value=float("-inf"))
+        padding_mask = _convert_to_padding_mask(attention_mask * 1.0, mask_value=0)
+
+        _, q_len, _, _ = query_layer.shape
+
+        if use_cache:
+            query_padding_mask = padding_mask[:, -q_len:]
+        else:
+            query_padding_mask = padding_mask
 
         # contains at least one padding token
         if padding_mask.sum().item() != bsz * kv_seq_length:
-            query_layer, indices, current_query_length, query_max_seqlen = unpad_input(query_layer, padding_mask)
+            query_layer, indices, current_query_length, query_max_seqlen = unpad_input(query_layer, query_padding_mask)    
             key_layer, _, current_key_length, key_max_seqlen = unpad_input(key_layer, padding_mask)
             value_layer, _, _, _ = unpad_input(value_layer, padding_mask)
 
@@ -595,11 +602,11 @@ class FalconFlashAttention(nn.Module):
                 causal=True,
             )
 
-            attn_output = pad_input(attn_output_unpad, indices, bsz, kv_seq_length)
+            attn_output = pad_input(attn_output_unpad, indices, bsz, q_len)
         else:
-            attn_output = flash_attn_func(query_layer, key_layer, value_layer, dropout_rate, causal=True)
+            attn_output = flash_attn_func(query_layer, key_layer, value_layer, 0.0, causal=True)
 
-        attn_weights = attn_weights.reshape(batch_size, query_length, self.num_heads * self.head_dim)
+        attn_weights = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
         attn_output = self.dense(attn_weights)
         
         if not output_attentions:
