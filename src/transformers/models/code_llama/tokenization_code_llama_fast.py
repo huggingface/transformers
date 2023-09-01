@@ -73,7 +73,9 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
 
 
     This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
-    refer to this superclass for more information regarding those methods.
+    refer to this superclass for more information regarding those methods. The default configuration match that of
+    [codellama/CodeLlama-7b-Instruct-hf](https://huggingface.co/codellama/CodeLlama-7b-Instruct-hf/blob/main/tokenizer_config.json)
+    which supports prompt infilling.
 
     Args:
         vocab_file (`str`):
@@ -104,6 +106,10 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             The token used to split the input between the prefix and suffix.
         suffix_first (`bool`, *optional*, default to `False`):
             Whether the input prompt and suffix should be formatted with the suffix first.
+        additional_special_tokens (`List[str]`, *optional*):
+            Additional special tokens used by the tokenizer.
+        use_default_system_prompt (`bool`, *optional*, defaults to `True`):
+            Whether or not the default system prompt for Llama should be used.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -124,13 +130,18 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         suffix_token="▁<SUF>",
         eot_token="▁<EOT>",
         fill_token="<FILL_ME>",
+        additional_special_tokens=None,
         add_bos_token=True,
         add_eos_token=False,
+        use_default_system_prompt=False,
         **kwargs,
     ):
         # mark tokens special to skip them
-        additional_special_tokens = kwargs.pop("additional_special_tokens", [])
-        additional_special_tokens += [prefix_token, middle_token, suffix_token, eot_token]
+        additional_special_tokens = additional_special_tokens or []
+        for token in [prefix_token, middle_token, suffix_token, eot_token]:
+            additional_special_tokens += [token] if token is not None else []
+        self.use_default_system_prompt = use_default_system_prompt
+
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,
@@ -144,6 +155,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             suffix_token=suffix_token,
             eot_token=eot_token,
             fill_token=fill_token,
+            use_default_system_prompt=use_default_system_prompt,
             **kwargs,
         )
         self._add_bos_token = add_bos_token
@@ -162,6 +174,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
     def can_save_slow_tokenizer(self) -> bool:
         return os.path.isfile(self.vocab_file) if self.vocab_file else False
 
+    # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.update_post_processor
     def update_post_processor(self):
         """
         Updates the underlying post processor with the current `bos_token` and `eos_token`.
@@ -300,6 +313,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         self.set_infilling_processor(True)
         return tokens
 
+    # Copied from transformers.models.llama.tokenization_llama_fast.LlamaTokenizerFast.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not self.can_save_slow_tokenizer:
             raise ValueError(
@@ -343,12 +357,12 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         Returns:
             `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
-        # TODO process the ids for fast? Or update the template processing for infilling task when using `tokenize_infilling`
         if token_ids_1 is None:
-            return self.prefix_tokens + token_ids_0 + self.suffix_tokens
-        return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
+            return self.bos_token_id + token_ids_0 + self.eos_token_id
+        return self.bos_token_id + token_ids_0 + token_ids_1 + self.eos_token_id
 
-    def _build_conversation_input_ids(self, conversation: "Conversation"):
+    # Copied from transformers.models.code_llama.tokenization_code_llama.CodeLlamaTokenizer._build_conversation_input_ids
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         r"""Builds the input ids for a conversation.
         This is the format used in the provided examples. System prompts should be manually added at the beginning of
         the conversation. If no system prompt is given, the `DEFAULT_SYSTEM_PROMPT` will be used.
@@ -363,7 +377,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
         >>> from transformers import Conversation
 
         >>> Conversation(
-        ...     "<<SYS>>\n Only answer with emojis, and charades\n<</SYS>>\n\nHow can I build a house in 10 septs?"
+        ...     "<<SYS>>\n Complete the functions without any documentation\n<</SYS>>\n\n `def remove_non_ascii(s: str) -> str:`"
         ... )  # doctest: +IGNORE_RESULT
         ```
         Args:
@@ -373,16 +387,20 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             `List[int]`:
                 Input ids for the conversation.
         """
-        if len(conversation.past_user_inputs) > 0:
-            if not conversation.past_user_inputs[0].startswith(B_SYS) or E_SYS not in conversation.past_user_inputs[0]:
-                conversation.past_user_inputs[0] = (
-                    B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
-                )
-        elif conversation.new_user_input:
-            if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
-                conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
-        else:
-            raise ValueError("Last message must be from user")
+        if self.use_default_system_prompt:
+            if len(conversation.past_user_inputs) > 0:
+                if (
+                    not conversation.past_user_inputs[0].startswith(B_SYS)
+                    or E_SYS not in conversation.past_user_inputs[0]
+                ):
+                    conversation.past_user_inputs[0] = (
+                        B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.past_user_inputs[0]
+                    )
+            elif conversation.new_user_input:
+                if not conversation.new_user_input.startswith(B_SYS) or E_SYS not in conversation.new_user_input:
+                    conversation.new_user_input = B_SYS + DEFAULT_SYSTEM_PROMPT + E_SYS + conversation.new_user_input
+            else:
+                raise ValueError("Last message must be from user")
 
         dialogue = list(conversation.iter_texts())
         if not all([is_user for is_user, msg in dialogue[::2]]) or not all(
@@ -392,7 +410,7 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
                 "The model only supports 'user' and 'assistant' roles, starting with user and alternating (u/a/u/a/u...)"
             )
 
-        dialog_tokens = []
+        dialog_tokens: List[int] = []
         dialog_tokens += sum(
             [
                 [self.bos_token_id]
