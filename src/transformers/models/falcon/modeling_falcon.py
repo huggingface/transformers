@@ -578,14 +578,14 @@ class FalconFlashAttention(nn.Module):
 
         # contains at least one padding token
         if padding_mask.sum().item() != bsz * kv_seq_length:
-            query_states, indices, current_query_length, query_max_seqlen = unpad_input(query_states, padding_mask)
-            key_states, _, current_key_length, key_max_seqlen = unpad_input(key_states, padding_mask)
-            value_states, _, _, _ = unpad_input(value_states, padding_mask)
+            query_layer, indices, current_query_length, query_max_seqlen = unpad_input(query_layer, padding_mask)
+            key_layer, _, current_key_length, key_max_seqlen = unpad_input(key_layer, padding_mask)
+            value_layer, _, _, _ = unpad_input(value_layer, padding_mask)
 
             attn_output_unpad = flash_attn_varlen_func(
-                query_states,
-                key_states,
-                value_states,
+                query_layer,
+                key_layer,
+                value_layer,
                 cu_seqlens_q=current_query_length,
                 cu_seqlens_k=current_key_length,
                 max_seqlen_q=query_max_seqlen,
@@ -597,7 +597,7 @@ class FalconFlashAttention(nn.Module):
 
             attn_output = pad_input(attn_output_unpad, indices, bsz, kv_seq_length)
         else:
-            attn_output = flash_attn_func(query_states, key_states, value_states, dropout_rate, causal=True)
+            attn_output = flash_attn_func(query_layer, key_layer, value_layer, dropout_rate, causal=True)
 
         attn_weights = attn_weights.reshape(batch_size, query_length, self.num_heads * self.head_dim)
         attn_output = self.dense(attn_weights)
