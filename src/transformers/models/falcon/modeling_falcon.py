@@ -556,7 +556,7 @@ class FalconFlashAttention(nn.Module):
             key_layer = torch.cat((past_key, key_layer), dim=1)
             value_layer = torch.cat((past_value, value_layer), dim=1)
 
-        bsz, kv_seq_length, _ = key_layer.shape
+        _, kv_seq_length, _ = key_layer.shape
 
         torch_dtype = query_layer.dtype
 
@@ -574,15 +574,15 @@ class FalconFlashAttention(nn.Module):
 
         padding_mask = _convert_to_padding_mask(attention_mask * 1.0, mask_value=0)
 
-        _, q_len, _, _ = query_layer.shape
-
-        if use_cache:
-            query_padding_mask = padding_mask[:, -q_len:]
-        else:
-            query_padding_mask = padding_mask
-
         # contains at least one padding token
-        if padding_mask.sum().item() != bsz * kv_seq_length:
+        if padding_mask.sum().item() != batch_size * kv_seq_length:
+            _, q_len, _, _ = query_layer.shape
+
+            if use_cache:
+                query_padding_mask = padding_mask[:, -q_len:]
+            else:
+                query_padding_mask = padding_mask
+
             query_layer, indices, current_query_length, query_max_seqlen = unpad_input(query_layer, query_padding_mask)
             key_layer, _, current_key_length, key_max_seqlen = unpad_input(key_layer, padding_mask)
             value_layer, _, _, _ = unpad_input(value_layer, padding_mask)
@@ -600,10 +600,15 @@ class FalconFlashAttention(nn.Module):
                 causal=True,
             )
 
-            attn_output = pad_input(attn_output_unpad, indices, bsz, q_len)
+            attn_output = pad_input(attn_output_unpad, indices, batch_size, q_len)
         else:
             attn_output = flash_attn_func(query_layer, key_layer, value_layer, 0.0, causal=True)
 
+        # print(batch_size, query_length, self.num_heads * self.head_dim)
+        # print(attn_output.shape)
+        # import pdb
+
+        # pdb.set_trace()
         attn_weights = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
         attn_output = self.dense(attn_weights)
 
