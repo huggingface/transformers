@@ -1334,10 +1334,7 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     Speech Recognition model. It facilitates the manipulation of log probabilities for a predefined list of tokens
     during text generation. By using this processor, you can effectively "force" certain tokens to be selected at
     specific positions in the generated sequence. When tokens are passed to this processor, their log probabilities are
-    set to `inf` (infinity), ensuring that they are chosen at their corresponding indices. This is particularly useful
-    in scenarios where you want to have deterministic control over parts of the generated output.
-
-
+    set to `inf` (infinity), ensuring that they are chosen at their corresponding indices.
 
     See [the paper](https://arxiv.org/abs/2212.04356) for more information.
 
@@ -1353,30 +1350,16 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
                     predicting timestamps that are too far in the future.
 
     Examples:
-    ``` py
+    ``` python
     >>> import torch
     >>> from transformers import AutoProcessor, WhisperForConditionalGeneration,GenerationConfig
     >>> from datasets import load_dataset
 
     >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
     >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-
-
-    >>> #Downloading an example audio file to process
     >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-    >>> file_index =4
-
-
-    >>> inputs = processor(ds[file_index]["audio"]["array"], return_tensors="pt")
+    >>> inputs = processor(ds[4]["audio"]["array"], return_tensors="pt")
     >>> input_features = inputs.input_features
-
-
-    >>> #Default
-    >>> generated_ids = model.generate(inputs=input_features,return_timestamps=True)
-    >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-    >>> print(transcription)
-    Linnell's pictures are a sort of up-guards and atom paintings, and Mason's exquisite idles are as national as a jingo poem. Mr. Birkett Foster's landscapes smile at one much in the same way that Mr. Carker used to flash his teeth. And Mr. John Collier gives his sitter a cheerful slap in the back, before he says, like
-
 
     >>> #Change EOS:
     >>> #This allows the user to select a specific token to terminate the sequence on, in this case it's the word poem(21247)
@@ -1386,11 +1369,9 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     >>> print(transcription)
     Linnell's pictures are a sort of up-guards and atom paintings, and Mason's exquisite idles are as national as a jingo poem
 
-
     >>> #Change Max_initial_timestamp
     >>> #Changing the max initial timestamp only impacts the start of predictions for the first set of tokens
     >>> #when this value is changed you're selecting the window of predictions for the first tokens.
-    >>> #Please note that there is not change from the previous code, since this paramter is highly based on input data.
     >>> model.generation_config.max_initial_timestamp_index= 800
     >>> generated_ids = model.generate(inputs=input_features,return_timestamps=True)
     >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
@@ -1400,7 +1381,6 @@ class WhisperTimeStampLogitsProcessor(LogitsProcessor):
     >>> #Change No_timestamps_token_id
     >>> #This ID represents tokens that shouldn't have timestamps in the transcription output.
     >>> #Such tokens might be unwanted artifacts, special characters, or noise.
-    >>> #In this example, any token with ID '4' will be treated as a 'no timestamp' token.
     >>> model.generation_config.no_timestamps_token_id =4
     >>> generated_ids = model.generate(inputs=input_features,return_timestamps=True)
     >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
