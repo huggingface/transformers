@@ -42,7 +42,8 @@ from .configuration_falcon import FalconConfig
 
 
 if is_flash_attn_available():
-    from flash_attn import flash_attn_func
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn.bert_padding import pad_input, unpad_input  # noqa
 
 logger = logging.get_logger(__name__)
 
@@ -555,7 +556,7 @@ class FalconFlashAttention(nn.Module):
             key_layer = torch.cat((past_key, key_layer), dim=1)
             value_layer = torch.cat((past_value, value_layer), dim=1)
 
-        _, kv_length, _ = key_layer.shape
+        bsz, kv_seq_length, _ = key_layer.shape
 
         torch_dtype = query_layer.dtype
         
@@ -573,10 +574,32 @@ class FalconFlashAttention(nn.Module):
         if alibi is not None:
             raise ValueError("`alibi` is not supported when `use_flash_attn` is True")
 
-        # below output will have shape (batch_size, seqlen, nheads, headdim)
-        attn_weights = flash_attn_func(query_layer, key_layer, value_layer, causal=True)
-        attn_weights = attn_weights.reshape(batch_size, query_length, self.num_heads * self.head_dim)
+        padding_mask = _convert_to_padding_mask(attention_mask, mask_value=float("-inf"))
 
+        # contains at least one padding token
+        if padding_mask.sum().item() != bsz * kv_seq_length:
+            query_states, indices, current_query_length, query_max_seqlen = unpad_input(query_states, padding_mask)
+            key_states, _, current_key_length, key_max_seqlen = unpad_input(key_states, padding_mask)
+            value_states, _, _, _ = unpad_input(value_states, padding_mask)
+
+            attn_output_unpad = flash_attn_varlen_func(
+                query_states,
+                key_states,
+                value_states,
+                cu_seqlens_q=current_query_length,
+                cu_seqlens_k=current_key_length,
+                max_seqlen_q=query_max_seqlen,
+                max_seqlen_k=key_max_seqlen,
+                dropout_p=0.0,
+                softmax_scale=None,
+                causal=True,
+            )
+
+            attn_output = pad_input(attn_output_unpad, indices, bsz, kv_seq_length)
+        else:
+            attn_output = flash_attn_func(query_states, key_states, value_states, dropout_rate, causal=True)
+
+        attn_weights = attn_weights.reshape(batch_size, query_length, self.num_heads * self.head_dim)
         attn_output = self.dense(attn_weights)
         
         if not output_attentions:
