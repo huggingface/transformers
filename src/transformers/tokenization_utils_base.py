@@ -2083,12 +2083,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     tokenizer_file_handle = json.load(tokenizer_file_handle)
                     added_tokens = tokenizer_file_handle.pop("added_tokens")
                 for serialized_tokens in added_tokens:
-                    idx = int(serialized_tokens.pop("id"))
-                    special = serialized_tokens.pop("special")
-                    token = AddedToken(**serialized_tokens)
-                    added_tokens_decoder[idx] = token
-                    if special and str(token) not in additional_special_tokens:
-                        additional_special_tokens.append(str(token))
+                    idx = int(serialized_tokens["id"])
+                    serialized_tokens.pop("special")
+                    added_tokens_decoder[idx] = AddedToken(**serialized_tokens)
+                    # for legacy purpose, we ignore whether or not these tokens are special.
+                    # TODO @ArthurZ special tokens can sometimes not be in `_tokenizer.get_added_vocab()`
 
         # slow -> slow, non-legacy: deserialize the `added_tokens_decoder`. Special tokens stored in `additional_special_tokens`
         if "added_tokens_decoder" in init_kwargs:

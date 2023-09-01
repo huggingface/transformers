@@ -847,7 +847,7 @@ class TokenizerTesterMixin:
                 tokenized_sequence = "".join(tokenizer.tokenize(sequence_with_special_tokens))
 
                 for special_token in tokenizer.all_special_tokens:
-                    self.assertTrue(special_token in tokenized_sequence)
+                    self.assertTrue(special_token in tokenized_sequence or special_token.lower() in tokenized_sequence)
 
         tokenizers = self.get_tokenizers(do_lower_case=True)
         for tokenizer in tokenizers:
@@ -2956,6 +2956,7 @@ class TokenizerTesterMixin:
 
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                # sometimes the tokenizer saved online is not the same
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
