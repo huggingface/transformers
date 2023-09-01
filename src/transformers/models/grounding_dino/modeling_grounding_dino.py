@@ -862,7 +862,7 @@ class GroundingDINOTextEnhancerLayer(nn.Module):
         super().__init__()
         self.self_attn = nn.MultiheadAttention(
             embed_dim=config.d_model, 
-            num_heads=config.num_heads // 2, 
+            num_heads=config.encoder_attention_heads // 2, 
             dropout=config.text_enhancer_dropout
             )
         # Implementation of Feedforward model
@@ -875,8 +875,8 @@ class GroundingDINOTextEnhancerLayer(nn.Module):
         self.dropout1 = nn.Dropout(config.text_enhancer_dropout)
         self.dropout2 = nn.Dropout(config.text_enhancer_dropout)
 
-        self.activation = ACT2FN[config.activation_fuction]
-        self.num_heads = config.num_heads // 2
+        self.activation = ACT2FN[config.activation_function]
+        self.num_heads = config.encoder_attention_heads // 2
 
     def with_pos_embed(self, hidden_state: Tensor, position_embeddings: Optional[Tensor]):
         return hidden_state if position_embeddings is None else hidden_state + position_embeddings
@@ -1116,7 +1116,7 @@ class GroundingDINOFusionLayer(nn.Module):
             vision_dim=config.d_model, 
             text_dim=config.d_model, 
             embed_dim=config.encoder_ffn_dim // 2, 
-            num_heads=config.num_heads // 2, 
+            num_heads=config.encoder_attention_heads // 2, 
             dropout=config.fusion_dropout
         )
 
@@ -1258,25 +1258,25 @@ def get_sine_pos_embed(
 
 class GroundingDINOEncoderLayer(nn.Module):
     def __init__(self, config) -> None:
-        super().__init_()
+        super().__init__()
         self.text_enhancer_layer = GroundingDINOTextEnhancerLayer(config)
         self.fusion_layer = GroundingDINOFusionLayer(config)
         self.deformable_layer = GroundingDINODeformableLayer(config)
 
     def forward(
-            self,
-            vision_features: Tensor,
-            vision_position_embedding: Tensor,
-            spatial_shapes: Tensor,
-            level_start_index: Tensor,
-            key_padding_mask: Tensor,
-            reference_points: Tensor,
-            text_features: Optional[Tensor] = None,
-            text_attention_mask: Optional[Tensor] = None,
-            text_position_embedding: Optional[Tensor] = None,
-            text_self_attention_masks: Optional[Tensor] = None,
-            text_position_ids: Optional[Tensor] = None
-        ):
+        self,
+        vision_features: Tensor,
+        vision_position_embedding: Tensor,
+        spatial_shapes: Tensor,
+        level_start_index: Tensor,
+        key_padding_mask: Tensor,
+        reference_points: Tensor,
+        text_features: Optional[Tensor] = None,
+        text_attention_mask: Optional[Tensor] = None,
+        text_position_embedding: Optional[Tensor] = None,
+        text_self_attention_masks: Optional[Tensor] = None,
+        text_position_ids: Optional[Tensor] = None
+    ):
         bs, n_text, text_dim = text_features.shape
         if text_position_embedding is None and text_position_ids is None:
             pos_text = (
