@@ -228,7 +228,7 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, use_best_model:
             # If we want to load the best model, override the object with best
             # metric objective.
             if use_best_model:
-                trainer.objective = trainer.compute_objective(trainer.state.best_metrics_dict)
+                trainer.objective = trainer.compute_objective(trainer.state.best_metrics_dict.copy())
             # If there hasn't been any evaluation during the training loop.
             if getattr(trainer, "objective", None) is None:
                 metrics = trainer.evaluate()
@@ -258,7 +258,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, use_best_model: bo
         # If we want to load the best model, override the object with best
         # metric objective.
         if use_best_model:
-            local_trainer.objective = local_trainer.compute_objective(local_trainer.state.best_metrics_dict)
+            local_trainer.objective = local_trainer.compute_objective(local_trainer.state.best_metrics_dict.copy())
         # If there hasn't been any evaluation during the training loop.
         if getattr(local_trainer, "objective", None) is None:
             metrics = local_trainer.evaluate()
@@ -392,7 +392,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, use_best_model:
                 budget=n_trials,
             )
 
-            logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
+            logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")j
 
             for run in experiment.loop():
                 with run:
@@ -407,7 +407,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, use_best_model:
                         trainer.train(resume_from_checkpoint=None, trial=run.run)
                     # Override the objective with best metric objective.
                     if use_best_model:
-                        trainer.objective = trainer.compute_objective(trainer.state.best_metrics_dict)
+                        trainer.objective = trainer.compute_objective(trainer.state.best_metrics_dict.copy())
                     # If there hasn't been any evaluation during the training loop.
                     if getattr(trainer, "objective", None) is None:
                         metrics = trainer.evaluate()
@@ -521,7 +521,7 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, use_best_model: 
         # Override the objective with best metric objective. Use_best_model assumes
         # we perform evaluation during the training loop.
         if use_best_model:
-            trainer.objective = trainer.compute_objective(trainer.state.best_metrics_dict)
+            trainer.objective = trainer.compute_objective(trainer.state.best_metrics_dict.copy())
         # If there hasn't been any evaluation during the training loop.
         if getattr(trainer, "objective", None) is None:
             metrics = trainer.evaluate()
