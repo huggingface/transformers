@@ -30,7 +30,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import reset_and_attach_new_hooks
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -88,38 +87,6 @@ def _convert_to_padding_mask(attention_mask: torch.Tensor, mask_value: float = 0
         padding_mask[i, :] = torch.all(mask_slice == mask_value, dim=0)
 
     return padding_mask
-
-
-def recursively_replace_module(model, old_class, target_class):
-    """
-    Recursively replace all old_class instances of the model with a target class. The target class should have the same
-    sub-module names than the old class.
-
-    Args:
-        model (`torch.nn.Module`):
-            The model or the child module used for recursion
-        old_class (`class`):
-            The target old class to replace
-        target_class (`class`):
-            The new class that is going to be used in the replaced module.
-    """
-    for name, module in model.named_children():
-        if isinstance(module, old_class):
-            torch_device = module.q_proj.weight.device
-            with torch.device(torch_device):
-                new_module = target_class(module.config)
-
-            for inner_module_name, inner_module in module.named_modules():
-                setattr(new_module, inner_module_name, inner_module)
-
-            if hasattr(module, "_hf_hook"):
-                reset_and_attach_new_hooks(module, new_module)
-
-            model._modules[name] = new_module
-            module = None
-
-        if module is not None and len(list(module.children())) > 0:
-            recursively_replace_module(module, old_class, target_class)
 
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
@@ -566,7 +533,11 @@ class LlamaDecoderLayer(nn.Module):
     def __init__(self, config: LlamaConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = LlamaAttention(config=config)
+        self.self_attn = (
+            LlamaAttention(config=config)
+            if not getattr(config, "_flash_attn_2_enabled", False)
+            else LlamaFlashAttention(config=config)
+        )
         self.mlp = LlamaMLP(config)
         self.input_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -669,16 +640,6 @@ class LlamaPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, LlamaModel):
             module.gradient_checkpointing = value
-
-    def _enable_flash_attn_2(self):
-        for _, module in self.named_children():
-            if len(list(module.children())) > 0:
-                recursively_replace_module(module, LlamaAttention, LlamaFlashAttention)
-
-    def _disable_flash_attn_2(self):
-        for _, module in self.named_children():
-            if len(list(module.children())) > 0:
-                recursively_replace_module(module, LlamaFlashAttention, LlamaAttention)
 
 
 LLAMA_INPUTS_DOCSTRING = r"""

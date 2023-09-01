@@ -286,34 +286,3 @@ def id_tensor_storage(tensor: torch.Tensor) -> Tuple[torch.device, int, int]:
     non-overlapping lifetimes may have the same id.
     """
     return tensor.device, storage_ptr(tensor), storage_size(tensor)
-
-
-def reset_and_attach_new_hooks(old_module, new_module) -> None:
-    """
-    Attach new hooks in new_module that are similar to the hook of old_module
-
-    Args:
-        old_module (`torch.nn.Module`):
-            The old module that contains the old hook
-        new_module (`torch.nn.Module`):
-            The new module that does not contain any hook
-        hook (`~accelerate.hooks.AlignDeviceHook`):
-            The
-    """
-    import accelerate
-    from accelerate.hooks import add_hook_to_module, remove_hook_from_module
-
-    hook = old_module._hf_hook
-
-    hook_cls = getattr(accelerate.hooks, hook.__class__.__name__)
-    hook_attr = hook.__dict__
-    filtered_old_hook_attr = {}
-    old_hook_init_signature = inspect.signature(hook_cls.__init__)
-    for k in hook_attr.keys():
-        if k in old_hook_init_signature.parameters:
-            filtered_old_hook_attr[k] = hook_attr[k]
-
-    new_hook = hook_cls(**filtered_old_hook_attr)
-
-    remove_hook_from_module(old_module)
-    add_hook_to_module(new_module, new_hook)

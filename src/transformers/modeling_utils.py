@@ -1224,18 +1224,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             return False
         return True
 
-    def enable_input_require_grads(self):
-        """
-        Enables the gradients for the input embeddings. This is useful for fine-tuning adapter weights while keeping
-        the model weights fixed.
-        """
-
-        def make_inputs_require_grads(module, input, output):
-            output.requires_grad_(True)
-
-        self._require_grads_hook = self.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
-
-    def enable_flash_attn_2(self) -> None:
+    @classmethod
+    def _check_and_enable_flash_attn_2(cls, config) -> PretrainedConfig:
         """
         Enable the Flash Attention 2.0 implementation for this model for more memory efficient inference and training.
         If you don't know about Flash Attention, check out the official repository of flash attention:
@@ -1245,7 +1235,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         specific section of the documentation to learn more about it:
         https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#decoder-models
         """
-        if not self._supports_flash_attn_2:
+        if not cls._supports_flash_attn_2:
             raise ValueError(
                 "The current architecture does not support Flash Attention 2.0. Please open an issue on GitHub to "
                 "request support for this architecture."
@@ -1263,36 +1253,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     "You need flash_attn package version to be greater than 2.0. Make sure to have that version installed."
                 )
 
-        _is_bettertransformer = getattr(self, "use_bettertransformer", False)
+        _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
 
         if _is_bettertransformer:
             raise ValueError(
                 "Flash Attention 2 and BetterTransformer API are not compatible. Please use one API or the other."
             )
 
-        self._enable_flash_attn_2()
-        self._flash_attn_2_enabled = True
+        config._flash_attn_2_enabled = True
 
-    def disable_flash_attn_2(self) -> None:
+    def enable_input_require_grads(self):
         """
-        Disables the Flash Attention 2.0 implementation for this model for more memory efficient inference and
-        training.
+        Enables the gradients for the input embeddings. This is useful for fine-tuning adapter weights while keeping
+        the model weights fixed.
         """
-        if not self._supports_flash_attn_2:
-            raise ValueError(
-                "The current architecture does not support Flash Attention 2.0. Please open an issue on GitHub to "
-                "request support for this architecture."
-            )
 
-        _flash_attn_2_enabled = self._flash_attn_2_enabled
+        def make_inputs_require_grads(module, input, output):
+            output.requires_grad_(True)
 
-        if not _flash_attn_2_enabled:
-            raise ValueError(
-                "Flash Attention 2.0 is not enabled. Please enable it with `model.enable_flash_attn_2()`."
-            )
-
-        self._disable_flash_attn_2()
-        self._flash_attn_2_enabled = False
+        self._require_grads_hook = self.get_input_embeddings().register_forward_hook(make_inputs_require_grads)
 
     def disable_input_require_grads(self):
         """
@@ -2403,6 +2382,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         variant = kwargs.pop("variant", None)
         _adapter_model_path = kwargs.pop("_adapter_model_path", None)
         adapter_name = kwargs.pop("adapter_name", "default")
+        use_flash_attn_2 = kwargs.pop("use_flash_attn_2", False)
 
         if is_fsdp_enabled():
             low_cpu_mem_usage = True
@@ -2995,6 +2975,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             init_contexts = [deepspeed.zero.Init(config_dict_or_path=deepspeed_config())] + init_contexts
         elif load_in_8bit or load_in_4bit or low_cpu_mem_usage:
             init_contexts.append(init_empty_weights())
+
+        if use_flash_attn_2:
+            config = cls._check_and_enable_flash_attn_2(config)
 
         with ContextManagers(init_contexts):
             model = cls(config, *model_args, **model_kwargs)
