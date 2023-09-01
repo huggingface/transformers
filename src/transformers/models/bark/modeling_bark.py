@@ -1231,13 +1231,6 @@ class BarkFineModel(BarkPreTrainedModel):
             attentions=all_self_attentions,
         )
 
-    def can_generate(self) -> bool:
-        """
-        Returns True. Despite being an autoencoder, BarkFineModel shares some characteristics with generative models
-        due to the way audio are generated.
-        """
-        return True
-
     def generate(
         self,
         coarse_output: torch.Tensor,
@@ -1594,10 +1587,3 @@ class BarkModel(BarkPreTrainedModel):
             self.codec_model_hook.offload()
 
         return audio
-
-    def can_generate(self) -> bool:
-        """
-        Returns True. Despite not having a `self.generate` method, this model can `generate` and thus needs a
-        BarkGenerationConfig.
-        """
-        return True

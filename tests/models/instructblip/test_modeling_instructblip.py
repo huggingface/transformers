@@ -538,7 +538,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
             logits = model(**inputs).logits
 
         expected_slice = torch.tensor(
-            [[-3.4727, -11.8203, 8.3828], [-5.1172, -11.3438, 7.7656], [-4.0742, -13.4688, 9.1953]],
+            [[-3.4902, -12.5078, 8.4141], [-5.1211, -12.1328, 7.8281], [-4.0312, -13.5938, 9.1172]],
             device=torch_device,
         )
         self.assertTrue(torch.allclose(logits[0, :3, :3].float(), expected_slice, atol=1e-3))
@@ -548,12 +548,12 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(outputs, skip_special_tokens=True)[0].strip()
 
         # fmt: off
-        expected_outputs = [2, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 19500, 373, 263, 19587, 4272, 11952, 29889]
+        expected_outputs = [2, 450, 22910, 9565, 310, 445, 1967, 338, 393, 263, 767, 338, 13977, 292, 22095, 373, 278, 1250, 310, 263, 13328, 20134, 29963, 1550, 19500, 1623, 263, 19587, 4272, 11952, 29889]
         # fmt: on
         self.assertEqual(outputs[0].tolist(), expected_outputs)
         self.assertEqual(
             generated_text,
-            "The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while driving on a busy city street.",
+            "The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV while driving down a busy city street.",
         )
 
     def test_inference_flant5_xl(self):

@@ -71,32 +71,36 @@ class FalconRotaryEmbedding(nn.Module):
     n_heads_per_partition, seq_len, head_dim]` (e.g. MinGPTAttention format).
     """
 
-    def __init__(self, head_dim: int, base=10000):
+    def __init__(self, head_dim: int, base=10000, max_position_embeddings=2048):
         super().__init__()
-        inv_freq = 1.0 / (base ** (torch.arange(0, head_dim, 2).float() / head_dim))
+        self.base = base
+        self.max_position_embeddings = max_position_embeddings
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, head_dim, 2).float() / head_dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.head_dim = head_dim
         self.seq_len_cached = -1
         self.cos_cached: torch.Tensor | None = None
         self.sin_cached: torch.Tensor | None = None
 
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
+        self.seq_len_cached = seq_len
+        t = torch.arange(seq_len, device=device, dtype=self.inv_freq.dtype)
+        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1).to(device)
+
+        if dtype in [torch.float16, torch.bfloat16]:
+            emb = emb.float()
+
+        self.cos_cached = emb.cos()[None, :, :]
+        self.sin_cached = emb.sin()[None, :, :]
+
+        self.cos_cached = self.cos_cached.type(dtype)
+        self.sin_cached = self.sin_cached.type(dtype)
+
     def cos_sin(self, seq_len: int, past_key_values_length: int, device="cpu", dtype=torch.bfloat16) -> torch.Tensor:
         total_length = seq_len + past_key_values_length
         if total_length > self.seq_len_cached:
-            self.seq_len_cached = total_length
-            t = torch.arange(total_length, device=device, dtype=self.inv_freq.dtype)
-            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-            emb = torch.cat((freqs, freqs), dim=-1).to(device)
-
-            if dtype in [torch.float16, torch.bfloat16]:
-                emb = emb.float()
-
-            self.cos_cached = emb.cos()[None, :, :]
-            self.sin_cached = emb.sin()[None, :, :]
-
-            self.cos_cached = self.cos_cached.type(dtype)
-            self.sin_cached = self.sin_cached.type(dtype)
-
+            self._set_cos_sin_cache(total_length, device, dtype)
         return (
             self.cos_cached[:, past_key_values_length : seq_len + past_key_values_length],
             self.sin_cached[:, past_key_values_length : seq_len + past_key_values_length],
@@ -106,6 +110,66 @@ class FalconRotaryEmbedding(nn.Module):
         batch, seq_len, head_dim = query.shape
         cos, sin = self.cos_sin(seq_len, past_key_values_length, query.device, query.dtype)
         return (query * cos) + (rotate_half(query) * sin), (key * cos) + (rotate_half(key) * sin)
+
+
+class FalconLinearScalingRotaryEmbedding(FalconRotaryEmbedding):
+    """FalconRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+
+    def __init__(self, head_dim: int, base=10000, max_position_embeddings=2048, scaling_factor=1.0):
+        self.scaling_factor = scaling_factor
+        super().__init__(head_dim, base, max_position_embeddings)
+
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
+        self.seq_len_cached = seq_len
+        t = torch.arange(seq_len, device=device, dtype=self.inv_freq.dtype)
+        # This line is the only difference from FalconRotaryEmbedding._set_cos_sin_cache
+        t = t / self.scaling_factor
+
+        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1).to(device)
+
+        if dtype in [torch.float16, torch.bfloat16]:
+            emb = emb.float()
+
+        self.cos_cached = emb.cos()[None, :, :]
+        self.sin_cached = emb.sin()[None, :, :]
+
+        self.cos_cached = self.cos_cached.type(dtype)
+        self.sin_cached = self.sin_cached.type(dtype)
+
+
+class FalconDynamicNTKScalingRotaryEmbedding(FalconRotaryEmbedding):
+    """
+    FalconRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla
+    """
+
+    def __init__(self, head_dim: int, base=10000, max_position_embeddings=2048, scaling_factor=1.0):
+        self.scaling_factor = scaling_factor
+        super().__init__(head_dim, base, max_position_embeddings)
+
+    def _set_cos_sin_cache(self, seq_len, device, dtype):
+        self.seq_len_cached = seq_len
+
+        # This if block is the only difference from FalconRotaryEmbedding._set_cos_sin_cache
+        if seq_len > self.max_position_embeddings:
+            base = self.base * (
+                (self.scaling_factor * seq_len / self.max_position_embeddings) - (self.scaling_factor - 1)
+            ) ** (self.head_dim / (self.head_dim - 2))
+            inv_freq = 1.0 / (base ** (torch.arange(0, self.head_dim, 2).float().to(device) / self.head_dim))
+            self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+        t = torch.arange(seq_len, device=device, dtype=self.inv_freq.dtype)
+        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1).to(device)
+
+        if dtype in [torch.float16, torch.bfloat16]:
+            emb = emb.float()
+
+        self.cos_cached = emb.cos()[None, :, :]
+        self.sin_cached = emb.sin()[None, :, :]
+
+        self.cos_cached = self.cos_cached.type(dtype)
+        self.sin_cached = self.sin_cached.type(dtype)
 
 
 def _make_causal_mask(
@@ -191,6 +255,7 @@ class FalconAttention(nn.Module):
     def __init__(self, config: FalconConfig):
         super().__init__()
 
+        self.config = config
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
@@ -203,7 +268,7 @@ class FalconAttention(nn.Module):
                 f" {self.num_heads})."
             )
 
-        self.maybe_rotary = FalconRotaryEmbedding(config.head_dim) if config.rotary else lambda q, k, t: (q, k)
+        self.maybe_rotary = self._init_rope() if config.rotary else lambda q, k, t: (q, k)
 
         # Layer-wise attention scaling
         self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
@@ -220,6 +285,34 @@ class FalconAttention(nn.Module):
         self.dense = FalconLinear(self.hidden_size, self.hidden_size, bias=config.bias)
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.num_kv_heads = config.num_kv_heads if (self.new_decoder_architecture or not self.multi_query) else 1
+
+    def _init_rope(self):
+        if self.config.rope_scaling is None:
+            rotary_emb = FalconRotaryEmbedding(
+                self.head_dim,
+                base=self.config.rope_theta,
+                max_position_embeddings=self.config.max_position_embeddings,
+            )
+        else:
+            scaling_type = self.config.rope_scaling["type"]
+            scaling_factor = self.config.rope_scaling["factor"]
+            if scaling_type == "linear":
+                rotary_emb = FalconLinearScalingRotaryEmbedding(
+                    self.head_dim,
+                    base=self.config.rope_theta,
+                    max_position_embeddings=self.config.max_position_embeddings,
+                    scaling_factor=scaling_factor,
+                )
+            elif scaling_type == "dynamic":
+                rotary_emb = FalconDynamicNTKScalingRotaryEmbedding(
+                    self.head_dim,
+                    base=self.config.rope_theta,
+                    max_position_embeddings=self.config.max_position_embeddings,
+                    scaling_factor=scaling_factor,
+                )
+            else:
+                raise ValueError(f"Unknown RoPE scaling type {scaling_type}")
+        return rotary_emb
 
     def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
