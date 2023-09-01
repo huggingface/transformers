@@ -64,8 +64,11 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
     Construct a CodeLlama tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as
     there is no padding token in the original model.
 
+    The default configuration match that of
+    [codellama/CodeLlama-7b-Instruct-hf](https://huggingface.co/codellama/CodeLlama-7b-Instruct-hf/blob/main/tokenizer_config.json)
+    which supports prompt infilling.
+
     Args:
-    The default configuration match that of the model []() which supports prompt infilling.
         vocab_file (`str`):
             Path to the vocabulary file.
         eos_token (`str`, *optional*, defaults to `"</s>"`):
