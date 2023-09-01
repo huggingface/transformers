@@ -104,6 +104,10 @@ class CodeLlamaTokenizerFast(PreTrainedTokenizerFast):
             The token used to split the input between the prefix and suffix.
         suffix_first (`bool`, *optional*, default to `False`):
             Whether the input prompt and suffix should be formatted with the suffix first.
+        additional_special_tokens (`List[str]`, *optional*):
+            Additional special tokens used by the tokenizer.
+        use_default_system_prompt (`bool`, *optional*, defaults to `True`):
+            Whether or not the default system prompt for Llama should be used.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

@@ -110,7 +110,8 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
 
             - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
               BPE-dropout.
-
+        use_default_system_prompt (`bool`, *optional*, defaults to `False`):
+            Whether or not the default system prompt for Llama should be used.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -241,7 +242,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         """Returns vocab size"""
         return self.sp_model.get_piece_size()
 
-    # Copied from Llama
+    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.get_vocab
     def get_vocab(self):
         """Returns vocab as a dict"""
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
@@ -310,7 +311,6 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         # since we manually add the prefix space, we have to remove it when decoding
-        # unless we were doing infilling!
         if tokens[0].startswith(SPIECE_UNDERLINE):
             tokens[0] = tokens[0][1:]
 
@@ -453,7 +453,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         >>> from transformers import Conversation
 
         >>> Conversation(
-        ...     "Complete the following function definition: `def remove_non_ascii(s: str) -> str:`"
+        ...     ""<<SYS>>\n Complete the functions without any documentation<</SYS>> `def remove_non_ascii(s: str) -> str:`"
         ... )  # doctest: +IGNORE_RESULT
         ```
         Args:
