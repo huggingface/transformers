@@ -1365,9 +1365,13 @@ class TrainingArguments:
                         )
                     elif not is_torch_xpu_available():
                         # xpu
-                        raise ValueError(
-                            "Your setup doesn't support bf16/xpu. You need torch>=1.12, using Intel XPU/GPU with IPEX installed"
-                        )
+                        import torch
+                        parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
+                        is_torch_greater_or_equal_than_1_12 = parsed_torch_version_base >= version.parse("1.12")
+                        if not is_torch_greater_or_equal_than_1_12:
+                            raise ValueError(
+                                "Your setup doesn't support bf16/xpu. You need torch>=1.12, using Intel XPU/GPU with IPEX installed"
+                            )
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")

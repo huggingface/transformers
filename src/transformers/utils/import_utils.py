@@ -29,7 +29,6 @@ from itertools import chain
 from types import ModuleType
 from typing import Any, Tuple, Union
 
-import torch
 from packaging import version
 
 from . import logging
@@ -534,7 +533,8 @@ def is_torch_xpu_available(check_device=False):
     "Checks if `intel_extension_for_pytorch` is installed and potentially if a XPU is in the environment"
     if not is_ipex_available():
         return False
-
+    
+    import torch
     import intel_extension_for_pytorch  # noqa: F401
 
     if check_device:
