@@ -35,7 +35,7 @@ from torch import nn
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
 
-from .deepspeed import is_deepspeed_zero3_enabled
+from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .tokenization_utils_base import BatchEncoding
 from .utils import is_sagemaker_mp_enabled, is_torch_tpu_available, is_training_run_on_sagemaker, logging
 
@@ -1087,6 +1087,14 @@ def get_module_class_from_name(module, name):
             module_class = get_module_class_from_name(child_module, name)
             if module_class is not None:
                 return module_class
+
+
+def remove_dummy_checkpoint(is_main_process, output_dir, filenames):
+    if is_main_process:
+        for filename in filenames:
+            file = os.path.join(output_dir, filename)
+            if os.path.isfile(file):
+                os.remove(file)
 
 
 if is_sagemaker_mp_enabled():

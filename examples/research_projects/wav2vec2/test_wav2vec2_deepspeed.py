@@ -32,7 +32,7 @@ from copy import deepcopy  # noqa
 
 from parameterized import parameterized  # noqa
 from transformers import TrainingArguments, is_torch_available  # noqa
-from transformers.deepspeed import is_deepspeed_available  # noqa
+from transformers.integrations.deepspeed import is_deepspeed_available  # noqa
 from transformers.file_utils import WEIGHTS_NAME  # noqa
 from transformers.testing_utils import (  # noqa
     CaptureLogger,
