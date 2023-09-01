@@ -218,6 +218,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("vit_hybrid", "ViTHybridConfig"),
         ("vit_mae", "ViTMAEConfig"),
         ("vit_msn", "ViTMSNConfig"),
+        ("vitdet", "VitDetConfig"),
         ("vivit", "VivitConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
@@ -408,6 +409,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("vit_hybrid", "VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit_mae", "VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vit_msn", "VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("vitdet", "VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vivit", "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2", "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2-conformer", "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -640,6 +642,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("vit_hybrid", "ViT Hybrid"),
         ("vit_mae", "ViTMAE"),
         ("vit_msn", "ViTMSN"),
+        ("vitdet", "VitDet"),
         ("vivit", "ViViT"),
         ("wav2vec2", "Wav2Vec2"),
         ("wav2vec2-conformer", "Wav2Vec2-Conformer"),
@@ -1043,7 +1046,7 @@ class AutoConfig:
         )
 
     @staticmethod
-    def register(model_type, config):
+    def register(model_type, config, exist_ok=False):
         """
         Register a new configuration for this class.
 
@@ -1057,4 +1060,4 @@ class AutoConfig:
                 f"you passed (config has {config.model_type} and you passed {model_type}. Fix one of those so they "
                 "match!"
             )
-        CONFIG_MAPPING.register(model_type, config)
+        CONFIG_MAPPING.register(model_type, config, exist_ok=exist_ok)

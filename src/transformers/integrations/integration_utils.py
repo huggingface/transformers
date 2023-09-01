@@ -255,7 +255,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
             ray.tune.report(objective=local_trainer.objective, **metrics, done=True)
 
     if not trainer._memory_tracker.skip_memory_metrics:
-        from .trainer_utils import TrainerMemoryTracker
+        from ..trainer_utils import TrainerMemoryTracker
 
         logger.warning(
             "Memory tracking for your Trainer is currently "
@@ -463,7 +463,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
 
 
 def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
-    from .integrations import is_wandb_available
+    from ..integrations import is_wandb_available
 
     if not is_wandb_available():
         raise ImportError("This function needs wandb installed: `pip install wandb`")
@@ -763,7 +763,7 @@ class WandbCallback(TrainerCallback):
         if self._wandb is None:
             return
         if self._log_model in ("end", "checkpoint") and self._initialized and state.is_world_process_zero:
-            from .trainer import Trainer
+            from ..trainer import Trainer
 
             fake_trainer = Trainer(args=args, model=model, tokenizer=tokenizer)
             with tempfile.TemporaryDirectory() as temp_dir:

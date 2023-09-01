@@ -586,6 +586,7 @@ _import_structure = {
     "models.vit_hybrid": ["VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTHybridConfig"],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
+    "models.vitdet": ["VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitDetConfig"],
     "models.vivit": [
         "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VivitConfig",
@@ -1623,6 +1624,7 @@ else:
     _import_structure["models.dinov2"].extend(
         [
             "DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Dinov2Backbone",
             "Dinov2ForImageClassification",
             "Dinov2Model",
             "Dinov2PreTrainedModel",
@@ -2923,6 +2925,14 @@ else:
             "ViTMSNForImageClassification",
             "ViTMSNModel",
             "ViTMSNPreTrainedModel",
+        ]
+    )
+    _import_structure["models.vitdet"].extend(
+        [
+            "VITDET_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VitDetBackbone",
+            "VitDetModel",
+            "VitDetPreTrainedModel",
         ]
     )
     _import_structure["models.vivit"].extend(
@@ -4632,6 +4642,7 @@ if TYPE_CHECKING:
     from .models.vit_hybrid import VIT_HYBRID_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTHybridConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
+    from .models.vitdet import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP, VitDetConfig
     from .models.vivit import VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, VivitConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -5530,6 +5541,7 @@ if TYPE_CHECKING:
         )
         from .models.dinov2 import (
             DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Dinov2Backbone,
             Dinov2ForImageClassification,
             Dinov2Model,
             Dinov2PreTrainedModel,
@@ -6576,6 +6588,12 @@ if TYPE_CHECKING:
             ViTMSNForImageClassification,
             ViTMSNModel,
             ViTMSNPreTrainedModel,
+        )
+        from .models.vitdet import (
+            VITDET_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VitDetBackbone,
+            VitDetModel,
+            VitDetPreTrainedModel,
         )
         from .models.vivit import (
             VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,

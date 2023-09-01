@@ -14,14 +14,12 @@ docs/source/en/custom_models.md
 docs/source/en/custom_tools.md
 docs/source/en/debugging.md
 docs/source/en/fast_tokenizers.md
-docs/source/en/generation_strategies.md
 docs/source/en/glossary.md
 docs/source/en/hpo_train.md
 docs/source/en/index.md
 docs/source/en/installation.md
 docs/source/en/internal/audio_utils.md
 docs/source/en/internal/file_utils.md
-docs/source/en/internal/generation_utils.md
 docs/source/en/internal/image_processing_utils.md
 docs/source/en/internal/modeling_utils.md
 docs/source/en/internal/pipelines_utils.md
@@ -45,7 +43,6 @@ docs/source/en/main_classes/output.md
 docs/source/en/main_classes/pipelines.md
 docs/source/en/main_classes/processors.md
 docs/source/en/main_classes/quantization.md
-docs/source/en/main_classes/text_generation.md
 docs/source/en/main_classes/tokenizer.md
 docs/source/en/main_classes/trainer.md
 docs/source/en/model_doc/albert.md
@@ -367,16 +364,6 @@ src/transformers/dynamic_module_utils.py
 src/transformers/feature_extraction_sequence_utils.py
 src/transformers/feature_extraction_utils.py
 src/transformers/file_utils.py
-src/transformers/generation/beam_constraints.py
-src/transformers/generation/beam_search.py
-src/transformers/generation/flax_logits_process.py
-src/transformers/generation/flax_utils.py
-src/transformers/generation/stopping_criteria.py
-src/transformers/generation/streamers.py
-src/transformers/generation/tf_logits_process.py
-src/transformers/generation_flax_utils.py
-src/transformers/generation_tf_utils.py
-src/transformers/generation_utils.py
 src/transformers/hf_argparser.py
 src/transformers/hyperparameter_search.py
 src/transformers/image_processing_utils.py
@@ -413,7 +400,6 @@ src/transformers/models/auto/modeling_tf_auto.py
 src/transformers/models/autoformer/configuration_autoformer.py
 src/transformers/models/autoformer/modeling_autoformer.py
 src/transformers/models/bark/convert_suno_to_hf.py
-src/transformers/models/bark/generation_configuration_bark.py
 src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/bart/modeling_flax_bart.py
 src/transformers/models/bart/modeling_tf_bart.py
@@ -925,9 +911,7 @@ src/transformers/pipelines/object_detection.py
 src/transformers/pipelines/pt_utils.py
 src/transformers/pipelines/question_answering.py
 src/transformers/pipelines/table_question_answering.py
-src/transformers/pipelines/text2text_generation.py
 src/transformers/pipelines/text_classification.py
-src/transformers/pipelines/text_generation.py
 src/transformers/pipelines/token_classification.py
 src/transformers/pipelines/video_classification.py
 src/transformers/pipelines/visual_question_answering.py

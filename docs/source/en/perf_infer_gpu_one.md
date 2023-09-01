@@ -74,7 +74,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m").to("cuda")
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", torch_dtype=torch.float16).to("cuda")
 # convert the model to BetterTransformer
 model.to_bettertransformer()
 
@@ -98,6 +98,8 @@ try using the PyTorch nightly version, which may have a broader coverage for Fla
 ```bash
 pip3 install -U --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu118
 ```
+
+Or make sure your model is correctly casted in float16 or bfloat16
 
 
 Have a look at [this detailed blogpost](https://pytorch.org/blog/out-of-the-box-acceleration/) to read more about what is possible to do with `BetterTransformer` + SDPA API.

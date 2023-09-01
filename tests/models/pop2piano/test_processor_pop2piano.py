@@ -55,8 +55,6 @@ if requirements_available:
         Pop2PianoTokenizer,
     )
 
-## TODO : changing checkpoints from `susnato/pop2piano_dev` to `sweetcocoa/pop2piano` after the PR is approved
-
 
 @require_scipy
 @require_torch
@@ -67,8 +65,8 @@ class Pop2PianoProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
-        feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("susnato/pop2piano_dev")
-        tokenizer = Pop2PianoTokenizer.from_pretrained("susnato/pop2piano_dev")
+        feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
+        tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
         processor = Pop2PianoProcessor(feature_extractor, tokenizer)
 
         processor.save_pretrained(self.tmpdirname)
@@ -121,7 +119,7 @@ class Pop2PianoProcessorTest(unittest.TestCase):
         feature_extractor_outputs = self.get_feature_extractor()(
             audio=input_speech, sampling_rate=sampling_rate, return_tensors="pt"
         )
-        model = Pop2PianoForConditionalGeneration.from_pretrained("susnato/pop2piano_dev")
+        model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
         token_ids = model.generate(input_features=feature_extractor_outputs["input_features"], composer="composer1")
         dummy_notes = [
             [

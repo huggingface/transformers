@@ -872,6 +872,9 @@ class Pipeline(_ScikitCompat):
         if self.feature_extractor is not None:
             self.feature_extractor.save_pretrained(save_directory)
 
+        if self.image_processor is not None:
+            self.image_processor.save_pretrained(save_directory)
+
         if self.modelcard is not None:
             self.modelcard.save_pretrained(save_directory)
 

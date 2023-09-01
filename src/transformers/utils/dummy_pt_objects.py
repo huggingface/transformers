@@ -2689,6 +2689,13 @@ class DinatPreTrainedModel(metaclass=DummyObject):
 DINOV2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class Dinov2Backbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class Dinov2ForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -7892,6 +7899,30 @@ class ViTMSNModel(metaclass=DummyObject):
 
 
 class ViTMSNPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+VITDET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class VitDetBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VitDetModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VitDetPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

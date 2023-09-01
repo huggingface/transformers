@@ -90,7 +90,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     vocab_files_names = VOCAB_FILES_NAMES
     slow_tokenizer_class: PreTrainedTokenizer = None
-    can_save_slow_tokenizer: bool = True
 
     def __init__(self, *args, **kwargs):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
@@ -157,6 +156,14 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     @property
     def is_fast(self) -> bool:
+        return True
+
+    @property
+    def can_save_slow_tokenizer(self) -> bool:
+        """
+        `bool`: Whether or not the slow tokenizer can be saved. Usually for sentencepiece based slow tokenizer, this
+        can only be `True` if the original `"sentencepiece.model"` was not deleted.
+        """
         return True
 
     @property

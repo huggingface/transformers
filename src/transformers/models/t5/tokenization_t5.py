@@ -168,7 +168,7 @@ class T5Tokenizer(PreTrainedTokenizer):
             logger.warning_once(
                 f"You are using the default legacy behaviour of the {self.__class__}. If you see this, DO NOT PANIC! This is"
                 " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
-                " If you want to use the new behaviour, set `legacy=True`. This should only be set if you understand what it"
+                " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"
                 " means, and thouroughly read the reason why this was added as explained in"
                 " https://github.com/huggingface/transformers/pull/24565"
             )
@@ -351,18 +351,18 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
+    # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
+    def tokenize(self, text: "TextInput", add_special_tokens=False, **kwargs) -> List[str]:
         """
         Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
         first token is special.
         """
-        if self.legacy:
+        if self.legacy or len(text) == 0:
             return super().tokenize(text, **kwargs)
 
-        if len(text) > 0:
-            tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
+        tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
 
-        if tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
+        if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
             tokens = tokens[1:]
         return tokens
 
