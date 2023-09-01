@@ -64,6 +64,7 @@ from transformers.testing_utils import (
     is_pt_flax_cross_test,
     is_pt_tf_cross_test,
     require_accelerate,
+    require_flash_attn,
     require_safetensors,
     require_torch,
     require_torch_gpu,
@@ -2734,6 +2735,29 @@ class ModelTesterMixin:
             assert (
                 num_params < 1000000
             ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
+
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    def test_flash_attn_2_conversion(self):
+        import torch
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, use_flash_attn_2=True).to(
+                    torch_device
+                )
+
+                for _, module in model.named_modules():
+                    if "FlashAttention" in module.__class__.__name__:
+                        return
+
+                self.assertTrue(False, "FlashAttention2 modules not found in model")
 
 
 global_rng = random.Random()
