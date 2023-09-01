@@ -1371,7 +1371,6 @@ class VitsModel(VitsPreTrainedModel):
         self.speaking_rate = config.speaking_rate
         self.noise_scale = config.noise_scale
         self.noise_scale_duration = config.noise_scale_duration
-        self.sampling_rate = config.sampling_rate
 
         # Initialize weights and apply final processing
         self.post_init()
