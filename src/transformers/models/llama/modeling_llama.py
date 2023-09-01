@@ -491,7 +491,6 @@ class LlamaFlashAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         kv_seq_len = key_states.shape[-2]
-
         if past_key_value is not None:
             kv_seq_len += past_key_value[0].shape[-2]
 
@@ -519,9 +518,14 @@ class LlamaFlashAttention(nn.Module):
 
         # contains at least one padding token
         if padding_mask.sum().item() != bsz * kv_seq_len:
-            query_states, indices, current_query_length, query_max_seqlen = unpad_input(query_states, padding_mask)
             key_states, _, current_key_length, key_max_seqlen = unpad_input(key_states, padding_mask)
             value_states, _, _, _ = unpad_input(value_states, padding_mask)
+
+            # This assumes padding_side = "left" during generation with use_cache=True.
+            if use_cache:
+                padding_mask = padding_mask[:, -q_len:]
+
+            query_states, indices, current_query_length, query_max_seqlen = unpad_input(query_states, padding_mask)
 
             attn_output_unpad = flash_attn_varlen_func(
                 query_states,
@@ -536,7 +540,7 @@ class LlamaFlashAttention(nn.Module):
                 causal=True,
             )
 
-            attn_output = pad_input(attn_output_unpad, indices, bsz, kv_seq_len)
+            attn_output = pad_input(attn_output_unpad, indices, bsz, q_len)
         else:
             attn_output = flash_attn_func(query_states, key_states, value_states, dropout_rate, causal=True)
 
