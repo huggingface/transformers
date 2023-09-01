@@ -370,7 +370,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, use_best_model: bo
         num_samples=n_trials,
         **kwargs,
     )
-    
+
     # Override ray_scope if use_best_model.
     ray_scope = "all" if use_best_model else trainer.args.ray_scope
 
@@ -1393,9 +1393,7 @@ class NeptuneCallback(TrainerCallback):
 
             operator = np.greater if args.greater_is_better else np.less
 
-            self._should_upload_checkpoint = state.best_metric is None or operator(
-                metric_value, state.best_metric
-            )
+            self._should_upload_checkpoint = state.best_metric is None or operator(metric_value, state.best_metric)
 
     @classmethod
     def get_run(cls, trainer):

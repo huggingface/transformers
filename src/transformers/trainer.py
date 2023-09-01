@@ -2122,9 +2122,7 @@ class Trainer:
                 self._issue_warnings_after_load(load_result)
 
     def _load_best_model(self):
-        logger.info(
-            f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric})."
-        )
+        logger.info(f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric}).")
         best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
         best_safe_model_path = os.path.join(self.state.best_model_checkpoint, SAFE_WEIGHTS_NAME)
         best_adapter_model_path = os.path.join(self.state.best_model_checkpoint, ADAPTER_WEIGHTS_NAME)
