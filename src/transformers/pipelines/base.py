@@ -277,7 +277,7 @@ def infer_framework_load_model(
 
         if isinstance(model, str):
             error = ""
-            for class_name, trace in all_traceback.values():
+            for class_name, trace in all_traceback.items():
                 error += f"while loading with {class_name}, an error is thrown:\n{trace}\n"
             raise ValueError(f"Could not load model {model} with any of the following classes: {class_tuple}. See the original errors:\n\n{error}\n")
 
