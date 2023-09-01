@@ -453,7 +453,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         >>> from transformers import Conversation
 
         >>> Conversation(
-        ...     ""<<SYS>>\n Complete the functions without any documentation\n<</SYS>>\n\n `def remove_non_ascii(s: str) -> str:`"
+        ...     "<<SYS>>\n Complete the functions without any documentation\n<</SYS>>\n\n `def remove_non_ascii(s: str) -> str:`"
         ... )  # doctest: +IGNORE_RESULT
         ```
         Args:
