@@ -392,7 +392,7 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, use_best_model:
                 budget=n_trials,
             )
 
-            logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")j
+            logger.info(f"created experiment: https://app.sigopt.com/experiment/{experiment.id}")
 
             for run in experiment.loop():
                 with run:
