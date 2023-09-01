@@ -147,7 +147,6 @@ class PatchTSMixerConfig(PretrainedConfig):
         mode: str = "common_channel",
         gated_attn: bool = True,
         norm_mlp="LayerNorm",
-        swin_hier: int = 0,
         # masking related
         mask_type: str = "random",
         mask_ratio=0.5,
@@ -158,18 +157,13 @@ class PatchTSMixerConfig(PretrainedConfig):
         mask_mode: str = "mask_before_encoder",
         channel_consistent_masking: bool = True,
         revin: bool = True,
-        # Head related
         head_dropout: float = 0.2,
-        # forecast/prediction related
         forecast_len: int = 16,
-        prediction_len: int = 16,
-        out_channels: int = None,
-        # Classification/regression related
+        forecast_channel_indices: list = None,
         n_classes: int = 3,
         n_targets: int = 3,
         output_range: list = None,
         head_agg: str = None,
-        # other args
         is_encoder_decoder=False,
         **kwargs
     ):
@@ -183,10 +177,9 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.num_layers = num_layers
         self.dropout = dropout
         self.mode = mode
-
+        self.gated_attn = gated_attn
+        
         self.norm_mlp = norm_mlp
-
-        self.swin_hier = swin_hier
 
         self.revin = revin
         
@@ -210,8 +203,7 @@ class PatchTSMixerConfig(PretrainedConfig):
 
         # forecast/prediction related
         self.forecast_len = forecast_len
-        self.prediction_len = prediction_len
-        self.out_channels = out_channels
+        self.forecast_channel_indices = forecast_channel_indices
 
         # classification/regression related
         self.n_classes = n_classes
@@ -220,29 +212,8 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.head_agg = head_agg
 
         # other params
-        self.use_pe = False
-        self.pe = "zeros"
-        self.learn_pe = False
-        self.gated_attn = gated_attn
-        self.ffn = "mlp"
         self.self_attn = False
         self.self_attn_heads = 1
-        self.mixer_type = "base"
         self.d_size = "4D"
-        self.beats = False
-        self.shift_segment_len = 8
-        self.shift_attention = False
-        self.time_hierarchy = False
-        self.teacher_forcing = False
-        self.head_attn = False
-        self.th_mode = "reconcile"
-        self.forecast_channel_mixing = False
-        self.cm_gated_attn = False
-        self.cm_teacher_forcing = False
-        self.channel_context_length = 0
-        self.patchwise_forecast = False
-        self.forecast_channel_indices = None
-        self.cv_channel_indices = None
-        self.finetune_channel_indices = None
-
+        
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)

@@ -33,8 +33,9 @@ from ...modeling_outputs import (BaseModelOutput, ModelOutput,
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, logging
 from .configuration_patchtsmixer import PatchTSMixerConfig
-from .layers import (InjectRevinStatistics4D, LinearHead, MLPMixer, Patch,
-                     PatchMasking, PredictionHead, PretrainHead, RevIN)
+
+from .layers import (InjectRevinStatistics4D, LinearHead, PatchTSMixer, Patch,
+                     PatchMasking, ForecastHead, PretrainHead, RevIN)
 
 logger = logging.get_logger(__name__)
 
@@ -211,7 +212,7 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
         
-        self.encoder = MLPMixer(
+        self.encoder = PatchTSMixer(
             num_patches=config.num_patches,
             patch_size=config.patch_len,
             in_channels=config.in_channels,
@@ -220,19 +221,10 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
             num_layers=config.num_layers,
             dropout=config.dropout,
             mode=config.mode,
-            use_pe=config.use_pe,
-            pe=config.pe,
-            learn_pe=config.learn_pe,
             gated_attn=config.gated_attn,
-            beats=config.beats,
-            ffn=config.ffn,
             self_attn=config.self_attn,
             self_attn_heads=config.self_attn_heads,
-            mixer_type=config.mixer_type,
             norm_mlp=config.norm_mlp,
-            swin_hier=config.swin_hier,
-            shift_segment_len=config.shift_segment_len,
-            shift_attention=config.shift_attention,
         )
         
 
@@ -297,7 +289,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
                 mask_patch_ratios=config.mask_patch_ratios,
                 channel_consistent_masking=config.channel_consistent_masking,
                 d_size=config.d_size,
-                cv_channel_indices=config.cv_channel_indices,
+                cv_channel_indices=None,
                 mask_value=config.mask_value,
             )
         else:
@@ -353,9 +345,6 @@ class PatchTSMixerPretrainHead(nn.Module):
             patch_size=config.patch_len,
             head_dropout=config.head_dropout,
             mode=config.mode,  
-            time_hierarchy=config.time_hierarchy,
-            teacher_forcing=config.teacher_forcing,
-            th_mode=config.th_mode
         )
 
     def forward(self, context_values: torch.Tensor) -> torch.Tensor:
@@ -434,7 +423,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
 class PatchTSMixerForecastHead(nn.Module):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__()
-        self.head = PredictionHead(
+        self.head = ForecastHead(
             num_patches=config.num_patches,
             in_channels=config.in_channels,
             patch_size=config.patch_len,
@@ -442,22 +431,12 @@ class PatchTSMixerForecastHead(nn.Module):
             forecast_len=config.forecast_len,
             head_dropout=config.head_dropout,
             mode=config.mode,
-            time_hierarchy=config.time_hierarchy,
-            th_mode=config.th_mode,
-            expansion_factor=config.expansion_factor,
-            teacher_forcing=config.teacher_forcing,
-            head_attn=config.head_attn,
-            head_agg=config.head_agg,
-            forecast_channel_mixing=config.forecast_channel_mixing,
-            cm_gated_attn=config.cm_gated_attn,
-            cm_teacher_forcing=config.cm_teacher_forcing,
-            channel_context_length=config.channel_context_length,
+            forecast_channel_indices=config.forecast_channel_indices,
         )
 
     def forward(self, x: torch.Tensor, y: torch.Tensor=None) -> torch.Tensor:
         """
         x: [bs x in_channels x num_patches x num_features]
-        
         return: [bs x forecast_len x in_channels]
         """
         return self.head(x, y = y)
@@ -492,7 +471,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         self.head = PatchTSMixerForecastHead(config)
         self.loss = torch.nn.MSELoss(reduction="mean")
         if config.revin is True:
-            self.revin = RevIN()
+            self.revin = RevIN(denorm_channels = config.forecast_channel_indices)
         else:
             self.revin = None
 

@@ -19,15 +19,15 @@ from .norm import NormLayer
 from .mixutils import get_class_params_via_inspect
 
 
-try:
-    from tsfm.models.layers.shift_attention import TSShiftBlock
-    from tsfm.models.layers.forecast_channel_mixer import ForecastChannelMixer
-    from tsfm.models.layers.hierarchy_tuner import HierarchyPredictionTuner
-    from tsfm.models.layers.hierarchy_tuner import HierarchyPretrainTuner
-    from tsfm.models.layers.heads import ForecastExogHead
-    from tsfm.models.layers.basics import check_forecast_masks
-except:
-    print("skipping tsfm imports")
+# try:
+#     from tsfm.models.layers.shift_attention import TSShiftBlock
+#     from tsfm.models.layers.forecast_channel_mixer import ForecastChannelMixer
+#     from tsfm.models.layers.hierarchy_tuner import HierarchyPredictionTuner
+#     from tsfm.models.layers.hierarchy_tuner import HierarchyPretrainTuner
+#     from tsfm.models.layers.heads import ForecastExogHead
+#     from tsfm.models.layers.basics import check_forecast_masks
+# except:
+#     print("skipping tsfm imports")
 # from tsfm.utils import get_class_params
 
 logger = logging.getLogger(__name__)
@@ -54,48 +54,48 @@ class MLP(nn.Module):
         return x
 
 
-class SGU(nn.Module):
-    """SGU (Not preferred to use.)"""
+# class SGU(nn.Module):
+#     """SGU (Not preferred to use.)"""
 
-    def __init__(self, d_ffn):
-        super().__init__()
-        self.norm = nn.LayerNorm(d_ffn)
-        self.proj = nn.Linear(d_ffn, d_ffn)
-        nn.init.constant_(self.proj.bias, 1.0)
+#     def __init__(self, d_ffn):
+#         super().__init__()
+#         self.norm = nn.LayerNorm(d_ffn)
+#         self.proj = nn.Linear(d_ffn, d_ffn)
+#         nn.init.constant_(self.proj.bias, 1.0)
 
-    def forward(self, x):
-        # print(x.shape)
-        u, v = x.chunk(2, dim=-1)
-        # print(u.shape)
-        # print(v.shape)
+#     def forward(self, x):
+#         # print(x.shape)
+#         u, v = x.chunk(2, dim=-1)
+#         # print(u.shape)
+#         # print(v.shape)
 
-        v = self.norm(v)
-        v = self.proj(v)
-        out = u * v
-        return out
+#         v = self.norm(v)
+#         v = self.proj(v)
+#         out = u * v
+#         return out
 
 
-class gMLP(nn.Module):
-    """gMLP (Not preferred to use.)"""
+# class gMLP(nn.Module):
+#     """gMLP (Not preferred to use.)"""
 
-    def __init__(self, in_features, out_features, expansion_factor, dropout):
-        super().__init__()
-        num_hidden = in_features * expansion_factor
-        self.norm = nn.LayerNorm(in_features)
-        self.fc1 = nn.Linear(in_features, num_hidden * 2)
-        self.dropout1 = nn.Dropout(dropout)
-        self.fc2 = nn.Linear(num_hidden, out_features)
-        self.dropout2 = nn.Dropout(dropout)
-        self.sgu = SGU(d_ffn=num_hidden)
+#     def __init__(self, in_features, out_features, expansion_factor, dropout):
+#         super().__init__()
+#         num_hidden = in_features * expansion_factor
+#         self.norm = nn.LayerNorm(in_features)
+#         self.fc1 = nn.Linear(in_features, num_hidden * 2)
+#         self.dropout1 = nn.Dropout(dropout)
+#         self.fc2 = nn.Linear(num_hidden, out_features)
+#         self.dropout2 = nn.Dropout(dropout)
+#         self.sgu = SGU(d_ffn=num_hidden)
 
-    def forward(self, x):
-        # residual = x
-        # x = self.norm(x)
-        x = self.dropout1(F.gelu(self.fc1(x)))
-        x = self.sgu(x)
-        x = self.dropout2(self.fc2(x))
-        # x = x + residual
-        return x
+#     def forward(self, x):
+#         # residual = x
+#         # x = self.norm(x)
+#         x = self.dropout1(F.gelu(self.fc1(x)))
+#         x = self.sgu(x)
+#         x = self.dropout2(self.fc2(x))
+#         # x = x + residual
+#         return x
 
 
 # class ChannelTokenMixer(nn.Module):
@@ -172,14 +172,15 @@ class ChannelFeatureMixer(nn.Module):
         dropout: float = 0.2,
         mode: str = "common_channel",
         gated_attn: bool = False,
-        ffn: str = "mlp",  # mlp, gmlp
+        ffn: str = "mlp",
         norm_mlp="LayerNorm",
     ):
         super().__init__()
         self.mode = mode
         self.norm = NormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
         if ffn == "gmlp":
-            self.mlp = gMLP(in_channels, in_channels, expansion_factor, dropout)
+            raise Exception("Use ffn = mlp. gmlp is not preferred")
+            # self.mlp = gMLP(in_channels, in_channels, expansion_factor, dropout)
         else:
             self.mlp = MLP(in_channels, in_channels, expansion_factor, dropout)
 
@@ -235,7 +236,7 @@ class PatchMixer(nn.Module):
         dropout=0.2,
         mode="common_channel",
         gated_attn=False,
-        ffn="mlp",  # mlp, gmlp
+        ffn="mlp",
         self_attn=False,
         self_attn_heads=1,
         norm_mlp="LayerNorm",
@@ -249,7 +250,8 @@ class PatchMixer(nn.Module):
 
         self.self_attn = self_attn
         if ffn == "gmlp":
-            self.mlp = gMLP(num_patches, num_patches, expansion_factor, dropout)
+            raise Exception("Use ffn = mlp. gmlp is not preferred")
+            # self.mlp = gMLP(num_patches, num_patches, expansion_factor, dropout)
         else:
             self.mlp = MLP(num_patches, num_patches, expansion_factor, dropout)
 
@@ -357,7 +359,8 @@ class FeatureMixer(nn.Module):
         self.norm = NormLayer(norm_mlp=norm_mlp, mode=mode, num_features=num_features)
 
         if ffn == "gmlp":
-            self.mlp = gMLP(num_features, num_features, expansion_factor, dropout)
+            raise Exception("Use ffn = mlp. gmlp is not preferred")
+            # self.mlp = gMLP(num_features, num_features, expansion_factor, dropout)
         else:
             self.mlp = MLP(num_features, num_features, expansion_factor, dropout)
 
@@ -726,13 +729,6 @@ class MixerLayer(nn.Module):
 
         self.mode = mode
         if mode == "mix_channel":
-            # allow mixing channels (current performance is not satisfactory)
-            # TODO: improve
-
-            # self.channel_token_mixer = ChannelTokenMixer(
-            # num_patches, num_features, in_channels, expansion_factor, dropout, mode, gated_attn, ffn,
-            # )
-
             self.channel_feature_mixer = ChannelFeatureMixer(
                 num_features=num_features,
                 in_channels=in_channels,
@@ -745,7 +741,6 @@ class MixerLayer(nn.Module):
 
     def forward(self, x):
         # x.shape == (batch_size, num_patches, num_features)
-
         if self.mode == "mix_channel":
             # x = self.channel_token_mixer(x)
             x = self.channel_feature_mixer(x)
@@ -817,16 +812,16 @@ class MLPMixer(nn.Module):
         expansion_factor: int = 2,
         num_layers: int = 8,
         dropout: float = 0.5,
-        mode: str = "common_channel",  # common_channel, flatten
+        mode: str = "common_channel",
         use_pe: bool = False,
         pe: str = "zeros",
         learn_pe: bool = True,
         gated_attn: bool = False,
         beats: bool = False,
-        ffn: str = "mlp",  # mlp, gmlp
+        ffn: str = "mlp",  
         self_attn: bool = False,
         self_attn_heads: int = 1,
-        mixer_type: str = "base",  # base, gated
+        mixer_type: str = "base",
         norm_mlp="LayerNorm",
         swin_hier: int = 0,
         shift_segment_len: int = 8,
@@ -856,7 +851,12 @@ class MLPMixer(nn.Module):
             raise Exception(
                 "beats: True is not allowed due to poor performance. Set it to False"
             )
-
+        if use_pe is True:
+            raise Exception("set use_pe to False")
+        
+        if ffn != "mlp":
+            raise Exception("Set ffn to mlp")
+            
         self.mode = mode
         self.swin_hier = swin_hier
 

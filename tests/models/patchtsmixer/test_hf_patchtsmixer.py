@@ -32,16 +32,12 @@ class TestHFPatchTSMixer(unittest.TestCase):
             mode="common_channel",  # common_channel, flatten, mix_channel
             gated_attn=True,
             norm_mlp="LayerNorm",
-            swin_hier=1,
-            head_patch_filter_length=0,
-            use_finetune_decoder=True,
             mask_type="random",
             mask_ratio=0.5,
             mask_patches=[2, 3],
             mask_patch_ratios=[1, 1],
             mask_value=0,
             masked_loss = True,
-            mask_mode="mask_before_encoder",
             channel_consistent_masking=True,
             head_dropout=0.2,
             forecast_len=64,
@@ -99,6 +95,12 @@ class TestHFPatchTSMixer(unittest.TestCase):
             batch_size,
             cls.params["forecast_len"],
             cls.params["in_channels"],
+        )
+
+        cls.correct_sel_forecast_output = torch.rand(
+            batch_size,
+            cls.params["forecast_len"],
+            2
         )
 
         cls.correct_classification_output = torch.rand(
@@ -161,10 +163,19 @@ class TestHFPatchTSMixer(unittest.TestCase):
     def forecast_full_module(self, params):
         config = PatchTSMixerConfig(**params)
         mdl = PatchTSMixerForForecasting(config)
-        output = mdl(self.__class__.data, target_values=self.__class__.correct_forecast_output)
+
+        target_val = self.__class__.correct_forecast_output
+
+        if config.forecast_channel_indices is not None:
+            target_val = self.__class__.correct_sel_forecast_output
+
+
+        output = mdl(self.__class__.data, target_values=target_val)
+
         self.assertEqual(
-            output.prediction_logits.shape, self.__class__.correct_forecast_output.shape
-        )
+                output.prediction_logits.shape, target_val.shape
+            )
+
         self.assertEqual(
             output.backbone_embeddings.shape, self.__class__.enc_output.shape
         )
@@ -187,6 +198,15 @@ class TestHFPatchTSMixer(unittest.TestCase):
         params.update(mode = "mix_channel",
                         swin_hier = 2,
                         decoder_mode = "mix_channel", 
+                        )
+        self.forecast_full_module(params)
+    
+    def test_forecast_full_3(self):
+        params = self.__class__.params.copy()
+        params.update(mode = "mix_channel",
+                        swin_hier = 2,
+                        decoder_mode = "mix_channel", 
+                        forecast_channel_indices = [0,2],
                         )
         self.forecast_full_module(params)
 
