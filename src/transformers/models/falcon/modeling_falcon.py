@@ -31,9 +31,18 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_flash_attn_available,
+    logging,
+)
 from .configuration_falcon import FalconConfig
 
+
+if is_flash_attn_available():
+    from flash_attn import flash_attn_func
 
 logger = logging.get_logger(__name__)
 
@@ -137,6 +146,28 @@ def _expand_mask(mask: torch.Tensor, past_key_values_length: int) -> torch.BoolT
 
     expanded_mask = ~(mask[:, None, None, :].to(torch.bool))
     return expanded_mask.expand(batch_size, 1, seq_length, total_length)
+
+
+# Copied from transformers.models.llama.modeling_llama._convert_to_padding_mask
+def _convert_to_padding_mask(attention_mask: torch.Tensor, mask_value: float = 0.0):
+    """
+    Convert causal attention mask to key-padding mask
+    """
+    if len(attention_mask.size()) != 4:
+        raise ValueError(
+            "Expecting attention_mask to have 4 dimensions, got tensor of shape: " f"{attention_mask.size()}"
+        )
+
+    batch_size = attention_mask.size(0)
+    key_length = attention_mask.size(-1)
+
+    padding_mask = torch.ones((batch_size, key_length), device=attention_mask.device)
+
+    for i in range(batch_size):
+        mask_slice = attention_mask[i, :, -1, :]
+        padding_mask[i, :] = torch.all(mask_slice == mask_value, dim=0)
+
+    return padding_mask
 
 
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
@@ -395,6 +426,159 @@ class FalconAttention(nn.Module):
                 return output_tensor, present
 
 
+class FalconFlashAttention(nn.Module):
+    # Copied from transformers.models.falcon.modeling_falcon.FalconAttention.__init__
+    def __init__(self, config: FalconConfig):
+        super().__init__()
+
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.hidden_size // self.num_heads
+        self.split_size = self.hidden_size
+        self.hidden_dropout = config.hidden_dropout
+
+        if self.head_dim * self.num_heads != self.hidden_size:
+            raise ValueError(
+                f"`hidden_size` must be divisible by num_heads (got `hidden_size`: {self.hidden_size} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+
+        self.maybe_rotary = FalconRotaryEmbedding(config.head_dim) if config.rotary else lambda q, k, t: (q, k)
+
+        # Layer-wise attention scaling
+        self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
+        self.beta = self.inv_norm_factor
+        if config.new_decoder_architecture:
+            qkv_out_dim = (config.num_kv_heads * 2 + config.num_attention_heads) * self.head_dim
+        elif config.multi_query:
+            qkv_out_dim = self.hidden_size + 2 * self.head_dim
+        else:
+            qkv_out_dim = 3 * self.hidden_size
+        self.query_key_value = FalconLinear(self.hidden_size, qkv_out_dim, bias=config.bias)
+        self.new_decoder_architecture = config.new_decoder_architecture
+        self.multi_query = config.multi_query
+        self.dense = FalconLinear(self.hidden_size, self.hidden_size, bias=config.bias)
+        self.attention_dropout = nn.Dropout(config.attention_dropout)
+        self.num_kv_heads = config.num_kv_heads if (self.new_decoder_architecture or not self.multi_query) else 1
+
+    # Copied from transformers.models.falcon.modeling_falcon.FalconAttention._split_heads
+    def _split_heads(self, fused_qkv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Split the last dimension into (num_heads, head_dim), results share same memory storage as `fused_qkv`
+
+        Args:
+            fused_qkv (`torch.tensor`, *required*): [batch_size, seq_length, num_heads * 3 * head_dim]
+
+        Returns:
+            query: [batch_size, seq_length, num_heads, head_dim] key: [batch_size, seq_length, num_heads, head_dim]
+            value: [batch_size, seq_length, num_heads, head_dim]
+        """
+        if self.new_decoder_architecture:
+            batch, seq_len, _ = fused_qkv.shape
+            qkv = fused_qkv.view(batch, seq_len, -1, self.num_heads // self.num_kv_heads + 2, self.head_dim)
+            query = qkv[:, :, :, :-2]
+            key = qkv[:, :, :, [-2]]
+            value = qkv[:, :, :, [-1]]
+            key = torch.broadcast_to(key, query.shape)
+            value = torch.broadcast_to(value, query.shape)
+
+            query, key, value = [x.flatten(2, 3) for x in (query, key, value)]
+            return query, key, value
+        elif not self.multi_query:
+            batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
+            fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads, 3, self.head_dim)
+            return fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :]
+        else:
+            batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
+            fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads + 2, self.head_dim)
+            return fused_qkv[..., :-2, :], fused_qkv[..., [-2], :], fused_qkv[..., [-1], :]
+
+    # Copied from transformers.models.bloom.modeling_bloom.BloomAttention._merge_heads
+    def _merge_heads(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Merge heads together over the last dimension
+
+        Args:
+            x (`torch.tensor`, *required*): [batch_size * num_heads, seq_length, head_dim]
+
+        Returns:
+            torch.tensor: [batch_size, seq_length, num_heads * head_dim]
+        """
+        # What we want to achieve is:
+        # batch_size * num_heads, seq_length, head_dim -> batch_size, seq_length, num_heads * head_dim
+        batch_size_and_num_heads, seq_length, _ = x.shape
+        batch_size = batch_size_and_num_heads // self.num_heads
+
+        # First view to decompose the batch size
+        # batch_size * num_heads, seq_length, head_dim -> batch_size, num_heads, seq_length, head_dim
+        x = x.view(batch_size, self.num_heads, seq_length, self.head_dim)
+
+        # batch_size, num_heads, seq_length, head_dim -> batch_size, seq_length, num_heads, head_dim
+        x = x.permute(0, 2, 1, 3)
+
+        # batch_size, seq_length, num_heads, head_dim -> batch_size, seq_length, num_heads * head_dim
+        return x.reshape(batch_size, seq_length, self.num_heads * self.head_dim)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        alibi: Optional[torch.Tensor],
+        attention_mask: torch.Tensor,
+        layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        use_cache: bool = False,
+        output_attentions: bool = False,
+    ):
+        fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
+        num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv_heads
+        # 3 x [batch_size, seq_length, num_heads, head_dim]
+        (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
+
+        batch_size, query_length, _, _ = query_layer.shape
+
+        query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, query_length, self.head_dim)
+        key_layer = key_layer.transpose(1, 2).reshape(
+            batch_size * num_kv_heads,
+            query_length,
+            self.head_dim,
+        )
+        value_layer = value_layer.transpose(1, 2).reshape(batch_size * num_kv_heads, query_length, self.head_dim)
+
+        past_kv_length = 0 if layer_past is None else layer_past[0].shape[1]
+        query_layer, key_layer = self.maybe_rotary(query_layer, key_layer, past_kv_length)
+
+        if layer_past is not None:
+            past_key, past_value = layer_past
+            # concatenate along seq_length dimension:
+            #  - key: [batch_size * self.num_heads, kv_length, head_dim]
+            #  - value: [batch_size * self.num_heads, kv_length, head_dim]
+            key_layer = torch.cat((past_key, key_layer), dim=1)
+            value_layer = torch.cat((past_value, value_layer), dim=1)
+
+        _, kv_length, _ = key_layer.shape
+        if use_cache:
+            present = (key_layer, value_layer)
+        else:
+            present = None
+        (attention_mask * 1.0).masked_fill(attention_mask, float("-1e9")).to(query_layer.dtype)
+        query_layer_ = (
+            query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim).transpose(1, 2).to(torch.bfloat16)
+        )
+        key_layer_ = key_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim).transpose(1, 2).to(torch.bfloat16)
+        value_layer_ = (
+            value_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim).transpose(1, 2).to(torch.bfloat16)
+        )
+
+        if alibi is not None:
+            raise ValueError("`alibi` is not supported when `use_flash_attn` is True")
+
+        # below output will have shape (batch_size, seqlen, nheads, headdim)
+        attn_output = flash_attn_func(query_layer_, key_layer_, value_layer_, causal=True)
+        attn_output = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
+        output_tensor = self.dense(attn_output)
+        return output_tensor, present
+
+
 class FalconMLP(nn.Module):
     def __init__(self, config: FalconConfig):
         super().__init__()
@@ -416,7 +600,7 @@ class FalconDecoderLayer(nn.Module):
         super().__init__()
         hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.self_attention = FalconAttention(config)
+        self.self_attention = FalconAttention(config) if config._use_flash_attn_2 else FalconFlashAttention(config)
         self.mlp = FalconMLP(config)
         self.hidden_dropout = config.hidden_dropout
         self.config = config
@@ -569,6 +753,7 @@ class FalconPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["FalconDecoderLayer"]
+    _supports_flash_attn_2 = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
