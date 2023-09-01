@@ -244,6 +244,12 @@ class GPTQTestDeviceMapExllama(GPTQTest):
 @require_torch_gpu
 @require_accelerate
 class GPTQTestActOrderExllama(unittest.TestCase):
+    """
+    Test GPTQ model with exllama kernel and desc_act=True (also known as act-order).
+    More information on those arguments here:
+    https://huggingface.co/docs/transformers/main_classes/quantization#transformers.GPTQConfig
+    """
+
     EXPECTED_OUTPUTS = set()
     EXPECTED_OUTPUTS.add("Hello my name is Katie and I am a 20 year")
     model_name = "TheBloke/Llama-2-7B-GPTQ"
@@ -267,6 +273,12 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name, use_fast=True)
 
     def check_inference_correctness(self, model):
+        """
+        Test the generation quality of the quantized model and see that we are matching the expected output.
+        Given that we are operating on small numbers + the testing model is relatively small, we might not get
+        the same output across GPUs. So we'll generate few tokens (5-10) and check their output.
+        """
+
         # Check that inference pass works on the model
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
 
@@ -277,13 +289,16 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_generate_quality(self):
+        """
+        Simple test to check the quality of the model by comapring the the generated tokens with the expected tokens
+        """
         self.check_inference_correctness(self.quantized_model)
 
     # this test will fail until the next release of optimum
     @pytest.mark.skip
-    def test_exllama_max_input_length(self):
+    def test_max_input_length(self):
         """
-        Test if the max_input_length works with exllama + act_order
+        Test if the max_input_length works. It modifies the maximum input length that of the model that runs with exllama backend.
         """
 
         prompt = "I am in Paris and" * 1000
