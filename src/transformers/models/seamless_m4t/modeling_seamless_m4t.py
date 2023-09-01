@@ -3662,7 +3662,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
             use_cache = False
             if decoder_input_ids is None and decoder_inputs_embeds is None:
-                decoder_input_ids = shift_tokens_right(labels, self.config.t2u_pad_token_id)
+                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id)
 
         # TODO: keep it or not ?
         logger.warning(
