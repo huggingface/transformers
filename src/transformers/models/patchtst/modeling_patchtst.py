@@ -222,10 +222,12 @@ def compute_num_patches(sequence_length, patch_length, stride):
 class Patchify(nn.Module):
     """
     A class to patchify the time series sequence into different patches
+
     Args:
-        sequence_length (int, required): input sequence length
-        patch_length (int, required): patch length
-        stride (int, required): stride between patches
+        sequence_length (int, required): input sequence length.
+        patch_length (int, required): patch length.
+        stride (int, required): stride between patches.
+
     Returns:
         z: output tensor data [bs x num_input_channels x num_patches x patch_length]
     """
@@ -256,6 +258,7 @@ class Patchify(nn.Module):
         """
         Args:
             past_values (torch.Tensor, required): Input of shape [bs x sequence_length x num_input_channels]
+
         Returns:
             x: output tensor data [bs x num_input_channels x num_patches x patch_length]
         """
@@ -274,9 +277,10 @@ class PatchEmbeddings(nn.Module):
     """
     A class to patchify the time series sequence into different patches
     Args:
-        sequence_length (int, required): input sequence length
-        patch_length (int, required): patch length
-        stride (int, required): stride between patches
+        sequence_length (int, required): input sequence length.
+        patch_length (int, required): patch length.
+        stride (int, required): stride between patches.
+
     Returns:
         embeddings: output tensor data [bs x num_input_channels x num_patches x embed_dim]
     """
@@ -592,7 +596,10 @@ class ChannelAttentionPatchTSTEncoder(PatchTSTPreTrainedModel):
     def forward(self, past_values: torch.Tensor,
                 output_hidden_states: Optional[bool] = None) -> BaseModelOutputWithNoAttention:
         """
-        x: tensor [bs x nvars x num_patches x patch_length]
+        Args:
+            past_values: tensor [bs x nvars x num_patches x patch_length].
+            output_hidden_states (bool, optional): Indicates if hidden states should be output.
+
         return:
             tensor [bs x nvars x num_patches x d_model]
                 or [bs x nvars x (num_patches+1) x d_model] if use cls_token
@@ -890,7 +897,6 @@ class RevIN(nn.Module):
         return x
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerModel with TimeSeriesTransformer->PatchTST,TIME_SERIES_TRANSFORMER->PATCHTST,time-series-transformer->patchtst,TimeSeries->PatchTST
 class PatchTSTModel(PatchTSTPreTrainedModel):
     def __init__(self, config: PatchTSTConfig):
         super().__init__(config)
