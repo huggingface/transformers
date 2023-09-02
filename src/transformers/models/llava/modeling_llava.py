@@ -576,7 +576,7 @@ class LlamaModel(LlamaPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList([LlamaDecoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = LlamaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
+        self.mm_projector = nn.Linear(config.mm_hidden_size, config.hidden_size)
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
@@ -762,9 +762,12 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
         self.model = LlamaModel(config)
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
+        
         # Initialize weights and apply final processing
         self.post_init()
+    
+    def get_model(self):
+        return self.model
         
     def prepare_inputs_labels_for_multimodal(
         self, input_ids, attention_mask, past_key_values, labels, images
@@ -786,13 +789,13 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
         new_input_embeds = []
         new_labels = [] if labels is not None else None
         cur_image_idx = 0
-        mm_projector = nn.Linear(self.config.mm_hidden_size, self.config.hidden_size)
+        
         for batch_idx, cur_input_ids in enumerate(input_ids):
             if (cur_input_ids == IMAGE_TOKEN_INDEX).sum() == 0:
                 # multimodal LLM, but the current sample is not multimodal
                 cur_input_embeds = self.get_model().embed_tokens(cur_input_ids)
-                dummy_feature = torch.zeros(1, self.config.mm_hidden_size, device="cpu", dtype=torch.float32)
-                cur_input_embeds = cur_input_embeds + (0. * mm_projector(dummy_feature)).sum()
+                dummy_feature = torch.zeros(1, self.config.mm_hidden_size, device="cuda", dtype=torch.float16)
+                cur_input_embeds = cur_input_embeds + (0. * self.model.mm_projector(dummy_feature)).sum()
                 new_input_embeds.append(cur_input_embeds)
                 
                 if labels is not None:
@@ -883,8 +886,7 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
 
         return None, attention_mask, past_key_values, new_input_embeds, new_labels
 
-    def get_model(self):
-        return self.model
+
 
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -995,4 +997,5 @@ class LlavaLlamaForCausalLM(LlamaPreTrainedModel):
             }
         )
         return model_inputs
+
 
