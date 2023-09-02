@@ -14,11 +14,11 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The Bros model was proposed in [BROS: A Pre-trained Language Model Focusing on Text and Layout for Better Key Information Extraction from Documents](https://arxiv.org/abs/2108.04539) by Teakgyu Hong, Donghyun Kim, Mingi Ji, Wonseok Hwang, Daehyun Nam, Sungrae Park.
+The BROS model was proposed in [BROS: A Pre-trained Language Model Focusing on Text and Layout for Better Key Information Extraction from Documents](https://arxiv.org/abs/2108.04539) by Teakgyu Hong, Donghyun Kim, Mingi Ji, Wonseok Hwang, Daehyun Nam, Sungrae Park.
 
-Bros stands for *BERT Relying On Spatiality*. It is an encoder-only Transformer model that takes a sequence of tokens and their bounding boxes as inputs and outputs a sequence of hidden states. Bros encode relative spatial information instead of using absolute spatial information.
+BROS stands for *BERT Relying On Spatiality*. It is an encoder-only Transformer model that takes a sequence of tokens and their bounding boxes as inputs and outputs a sequence of hidden states. BROS encode relative spatial information instead of using absolute spatial information.
 
-It is pre-trained with two objectivess: a token-masked LM (TMLM) used in BERT, and a novel area-masked LM (AMLM)
+It is pre-trained with two objectives: a token-masked LM (TMLM) used in BERT, and a novel area-masked LM (AMLM)
 In TMLM, tokens are randomly masked, and the model predicts the masked tokens using spatial information and other unmasked tokens.
 AMLM is a 2D version of TMLM. It randomly masks text tokens and predicts with the same information as TMLM, but it masks text blocks (areas).
 
@@ -29,7 +29,7 @@ AMLM is a 2D version of TMLM. It randomly masks text tokens and predicts with th
 
 `BrosSpadeELForTokenClassification` perform the intra-entity linking task. It predicts relation from one token (of one entity) to another token (of another entity) if these two entities share some relation.
 
-Bros achieves comparable or better result on Key Information Extraction (KIE) benchmarks such as FUNSD, SROIE, CORD and SciTSR, without relying on explicit visual features.
+BROS achieves comparable or better result on Key Information Extraction (KIE) benchmarks such as FUNSD, SROIE, CORD and SciTSR, without relying on explicit visual features.
 
 
 The abstract from the paper is the following:
