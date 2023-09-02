@@ -156,6 +156,7 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     image = dataset["test"][0]["image"].convert("RGB")
 
     tokenizer = original_model.decoder.tokenizer
+    tokenizer.model_max_length = original_model.config.max_length
     image_processor = DonutImageProcessor(
         do_align_long_axis=original_model.config.align_long_axis, size=original_model.config.input_size[::-1]
     )
