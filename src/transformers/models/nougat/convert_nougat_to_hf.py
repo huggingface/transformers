@@ -12,16 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Nougat checkpoints using the original `nougat` library. URL: https://github.com/facebookresearch/nougat/tree/main"""
+"""Convert Nougat checkpoints using the original `nougat` library. URL:
+https://github.com/facebookresearch/nougat/tree/main"""
 
 import argparse
-from pathlib import Path
 
 import torch
 from datasets import load_dataset
-
-from nougat.utils.checkpoint import get_checkpoint
 from nougat import NougatModel
+from nougat.utils.checkpoint import get_checkpoint
 
 from transformers import (
     DonutImageProcessor,
@@ -161,7 +160,7 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         do_align_long_axis=original_model.config.align_long_axis, size=original_model.config.input_size[::-1]
     )
     processor = DonutProcessor(image_processor=image_processor, tokenizer=tokenizer)
-    
+
     # verify hidden states, logits
     pixel_values = processor(image, return_tensors="pt").pixel_values
     original_patch_embed = original_model.encoder.model.patch_embed(pixel_values)
@@ -183,12 +182,20 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     # verify decoder hidden states
     print("Verifying decoder hidden states...")
     prompt = "hello world"
-    decoder_input_ids = original_model.decoder.tokenizer(prompt, add_special_tokens=False, return_tensors="pt").input_ids
+    decoder_input_ids = original_model.decoder.tokenizer(
+        prompt, add_special_tokens=False, return_tensors="pt"
+    ).input_ids
     decoder_attention_mask = torch.ones_like(decoder_input_ids)
-    original_logits = original_model(image_tensors=pixel_values, decoder_input_ids=decoder_input_ids, attention_mask=decoder_attention_mask).logits
-    logits = model(pixel_values, decoder_input_ids=decoder_input_ids[:, :-1], decoder_attention_mask=decoder_attention_mask[:, :-1]).logits
-    print(original_logits[0,:3,:3])
-    print(logits[0,:3,:3])
+    original_logits = original_model(
+        image_tensors=pixel_values, decoder_input_ids=decoder_input_ids, attention_mask=decoder_attention_mask
+    ).logits
+    logits = model(
+        pixel_values,
+        decoder_input_ids=decoder_input_ids[:, :-1],
+        decoder_attention_mask=decoder_attention_mask[:, :-1],
+    ).logits
+    print(original_logits[0, :3, :3])
+    print(logits[0, :3, :3])
     assert torch.allclose(original_logits, logits, atol=1e-3)
     print("Looks ok!")
 
