@@ -28,6 +28,7 @@ PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 
 class PatchTSTConfig(PretrainedConfig):
+    model_type = "patchtst"
     r"""
     This is the configuration class to store the configuration of an [`PatchTSTModel`]. It is used to instantiate an
     PatchTST model according to the specified arguments, defining the model architecture.
@@ -89,13 +90,7 @@ class PatchTSTConfig(PretrainedConfig):
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal weight initialization distribution.
         use_cache (`bool`, *optional*, defaults to `True`):
-            Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
-        attention_type (`str`, *optional*, defaults to "prob"):
-            Attention used in encoder. This can be set to "prob" (PatchTST's ProbAttention) or "full" (vanilla
-            transformer's canonical self-attention).
-        sampling_factor (`int`, *optional*, defaults to 5):
-            ProbSparse sampling factor (only makes affect when `attention_type`="prob"). It is used to control the
-            reduced query matrix (Q_reduce) input length.
+            Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.        
         distil (`bool`, *optional*, defaults to `True`):
             Whether to use distilling in encoder.
 
@@ -113,7 +108,6 @@ class PatchTSTConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "patchtst"
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
@@ -122,10 +116,18 @@ class PatchTSTConfig(PretrainedConfig):
 
     def __init__(
         self,
+        # time series specific configuration
         num_input_channels: int = 1,
         context_length: int = 32,
+        num_dynamic_real_features: int = 0,
+        num_static_real_features: int = 0,
+        num_static_categorical_features: int = 0,
+        num_time_features: int = 0,
+        is_encoder_decoder: bool = False,
+        # PatchTST arguments
         patch_length: int = 8,
         stride: int = 8,
+        # Transformer architecture configuration
         encoder_layers: int = 3,
         d_model: int = 128,
         encoder_attention_heads: int = 16,
@@ -149,33 +151,23 @@ class PatchTSTConfig(PretrainedConfig):
         individual: bool = False,
         seed_number: int = None,
         revin: Optional[bool] = True,
+        qkv_bias: bool = True,
+        # mask pretraining
         mask_input: Optional[bool] = None,
         mask_type: str = "random",
         mask_ratio=0.5,
         mask_patches: List[int] = [2, 3],
         mask_patch_ratios: List[int] = [1, 1],
         channel_consistent_masking: bool = False,
-        d_size: str = "4D",
         unmasked_channel_indices: Optional[List[int]] = None,
         mask_value=0,
-        pooling: str = 'mean',
+        # head
+        pooling: str = "mean",
         num_classes: int = 1,
         head_dropout: float = 0.0,
-        # proj_dropout: float = 0.0,
-        qkv_bias: bool = True,
-        num_dynamic_real_features: int = 0,
-        num_static_real_features: int = 0,
-        num_static_categorical_features: int = 0,
-        num_time_features: int = 0,
-        is_encoder_decoder: bool = False,
-        encoder_layerdrop: float = 0.1,
         prediction_length: int = 24,
         prediction_range: List = [0, 1],
         num_output_channels: int = 1,
-        # PatchTST arguments
-        attention_type: str = "prob",
-        sampling_factor: int = 5,
-        distil: bool = True,
         **kwargs,
     ):
 
@@ -194,7 +186,6 @@ class PatchTSTConfig(PretrainedConfig):
         self.encoder_layers = encoder_layers
         self.dropout = dropout
         self.attention_dropout = attention_dropout
-        self.encoder_layerdrop = encoder_layerdrop
         self.shared_embedding = shared_embedding
         self.channel_attention = channel_attention
         self.norm = norm
@@ -216,11 +207,8 @@ class PatchTSTConfig(PretrainedConfig):
         self.patch_length = patch_length
         self.stride = stride
         self.num_patches = self._num_patches()
-        self.attention_type = attention_type
-        self.sampling_factor = sampling_factor
-        self.distil = distil
 
-        # Masking
+        # Mask pretraining
         self.seed_number = seed_number
         self.mask_input = mask_input
         self.mask_type = mask_type
@@ -228,7 +216,6 @@ class PatchTSTConfig(PretrainedConfig):
         self.mask_patches = mask_patches
         self.mask_patch_ratios = mask_patch_ratios
         self.channel_consistent_masking = channel_consistent_masking
-        self.d_size = d_size
         self.unmasked_channel_indices = unmasked_channel_indices
         self.mask_value = mask_value
 
@@ -239,7 +226,6 @@ class PatchTSTConfig(PretrainedConfig):
 
         # Classification
         self.num_classes = num_classes
-        # self.proj_dropout = proj_dropout
 
         # Forcasting and prediction
         self.prediction_length = prediction_length

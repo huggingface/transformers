@@ -61,7 +61,6 @@ class PatchTSTModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         lags_sequence=[1, 2, 3, 4, 5],
-        sampling_factor=10,
         distil=False,
         seed_number=42,
         num_classes=2,
@@ -85,13 +84,9 @@ class PatchTSTModelTester:
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
-        self.encoder_seq_length = min(
-            sampling_factor * np.ceil(np.log1p(context_length)).astype("int").item(), context_length
-        )
         self.seed_number = seed_number
         self.num_classes = num_classes
         self.num_output_channels = num_output_channels
-        self.sampling_factor = sampling_factor
         self.distil = distil
         self.num_patches = (max(self.context_length, self.patch_length) - self.patch_length) // self.stride + 1
 
