@@ -44,3 +44,7 @@ Tips:
 
 [[autodoc]] NougatImageProcessor
     - preprocess
+
+## NougatTokenizerFast
+
+[[autodoc]] NougatTokenizerFast

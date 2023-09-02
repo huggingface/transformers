@@ -13,10 +13,18 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_vision_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_vision_available
 
 
 _import_structure = {}
+
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_nougat_fast"] = ["NougatTokenizerFast"]
 
 try:
     if not is_vision_available():
@@ -28,6 +36,14 @@ else:
 
 
 if TYPE_CHECKING:
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_nougat_fast import NougatTokenizerFast
+
     try:
         if not is_vision_available():
             raise OptionalDependencyNotAvailable()
