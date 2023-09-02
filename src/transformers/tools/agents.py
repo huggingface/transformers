@@ -36,6 +36,7 @@ logger = logging.get_logger(__name__)
 
 if is_openai_available():
     import openai
+    from litellm import completion
 
 if is_torch_available():
     from ..generation import StoppingCriteria, StoppingCriteriaList
@@ -440,7 +441,7 @@ class OpenAiAgent(Agent):
             return self._completion_generate([prompt], stop)[0]
 
     def _chat_generate(self, prompt, stop):
-        result = openai.ChatCompletion.create(
+        result = completion(
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
