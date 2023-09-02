@@ -49,7 +49,7 @@ class BrosModelTester:
         is_training=True,
         use_input_mask=True,
         use_token_type_ids=True,
-        use_box_first_token_mask=True,
+        use_bbox_first_token_mask=True,
         use_labels=True,
         vocab_size=99,
         hidden_size=64,
@@ -73,7 +73,7 @@ class BrosModelTester:
         self.seq_length = seq_length
         self.is_training = is_training
         self.use_input_mask = use_input_mask
-        self.use_box_first_token_mask = use_box_first_token_mask
+        self.use_bbox_first_token_mask = use_bbox_first_token_mask
         self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
         self.vocab_size = vocab_size
@@ -113,9 +113,9 @@ class BrosModelTester:
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
-        box_first_token_mask = None
-        if self.use_box_first_token_mask:
-            box_first_token_mask = torch.ones([self.batch_size, self.seq_length], dtype=torch.bool).to(torch_device)
+        bbox_first_token_mask = None
+        if self.use_bbox_first_token_mask:
+            bbox_first_token_mask = torch.ones([self.batch_size, self.seq_length], dtype=torch.bool).to(torch_device)
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -135,7 +135,7 @@ class BrosModelTester:
             bbox,
             token_type_ids,
             input_mask,
-            box_first_token_mask,
+            bbox_first_token_mask,
             token_labels,
             initial_token_labels,
             subsequent_token_labels,
@@ -164,7 +164,7 @@ class BrosModelTester:
         bbox,
         token_type_ids,
         input_mask,
-        box_first_token_mask,
+        bbox_first_token_mask,
         token_labels,
         initial_token_labels,
         subsequent_token_labels,
@@ -184,7 +184,7 @@ class BrosModelTester:
         bbox,
         token_type_ids,
         input_mask,
-        box_first_token_mask,
+        bbox_first_token_mask,
         token_labels,
         initial_token_labels,
         subsequent_token_labels,
@@ -205,7 +205,7 @@ class BrosModelTester:
         bbox,
         token_type_ids,
         input_mask,
-        box_first_token_mask,
+        bbox_first_token_mask,
         token_labels,
         initial_token_labels,
         subsequent_token_labels,
@@ -218,7 +218,7 @@ class BrosModelTester:
             input_ids,
             bbox=bbox,
             attention_mask=input_mask,
-            box_first_token_mask=box_first_token_mask,
+            bbox_first_token_mask=bbox_first_token_mask,
             token_type_ids=token_type_ids,
             initial_token_labels=token_labels,
             subsequent_token_labels=token_labels,
@@ -235,7 +235,7 @@ class BrosModelTester:
         bbox,
         token_type_ids,
         input_mask,
-        box_first_token_mask,
+        bbox_first_token_mask,
         token_labels,
         initial_token_labels,
         subsequent_token_labels,
@@ -248,7 +248,7 @@ class BrosModelTester:
             input_ids,
             bbox=bbox,
             attention_mask=input_mask,
-            box_first_token_mask=box_first_token_mask,
+            bbox_first_token_mask=bbox_first_token_mask,
             token_type_ids=token_type_ids,
             labels=token_labels,
         )
@@ -262,7 +262,7 @@ class BrosModelTester:
             bbox,
             token_type_ids,
             input_mask,
-            box_first_token_mask,
+            bbox_first_token_mask,
             token_labels,
             initial_token_labels,
             subsequent_token_labels,
@@ -308,7 +308,7 @@ class BrosModelTest(ModelTesterMixin, unittest.TestCase):
                     dtype=torch.long,
                     device=torch_device,
                 )
-                inputs_dict["box_first_token_mask"] = torch.ones(
+                inputs_dict["bbox_first_token_mask"] = torch.ones(
                     [self.model_tester.batch_size, self.model_tester.seq_length],
                     dtype=torch.bool,
                     device=torch_device,
@@ -324,7 +324,7 @@ class BrosModelTest(ModelTesterMixin, unittest.TestCase):
                     dtype=torch.long,
                     device=torch_device,
                 )
-                inputs_dict["box_first_token_mask"] = torch.ones(
+                inputs_dict["bbox_first_token_mask"] = torch.ones(
                     [self.model_tester.batch_size, self.model_tester.seq_length],
                     dtype=torch.bool,
                     device=torch_device,

@@ -74,10 +74,9 @@ BROS_INPUTS_DOCSTRING = r"""
 
             [What are input IDs?](../glossary#input-ids)
 
-        bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 8)'):
-            Bounding box coordinates for each token in the input sequence. Each bounding box is a list of eight values
-            (x1, y1, x2, y1, x2, y2, x1, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right
-            corner of the bounding box.
+        bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
+            Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values
+            (x1, y1, x2, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right corner of the bounding box.
 
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -87,7 +86,7 @@ BROS_INPUTS_DOCSTRING = r"""
 
             [What are attention masks?](../glossary#attention-mask)
 
-        box_first_token_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+        bbox_first_token_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
             Mask to indicate the first token of each bounding box. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -656,11 +655,11 @@ class BrosEncoder(nn.Module):
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer_module),
                     hidden_states,
+                    bbox_pos_emb,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    bbox_pos_emb=bbox_pos_emb,
                 )
             else:
                 layer_outputs = layer_module(
@@ -731,27 +730,25 @@ class BrosRelationExtractor(nn.Module):
         self.classifier_dropout_prob = config.classifier_dropout_prob
 
         self.drop = nn.Dropout(self.classifier_dropout_prob)
-        self.q_net = nn.Linear(self.backbone_hidden_size, self.n_relations * self.head_hidden_size)
+        self.query = nn.Linear(self.backbone_hidden_size, self.n_relations * self.head_hidden_size)
 
-        self.k_net = nn.Linear(self.backbone_hidden_size, self.n_relations * self.head_hidden_size)
+        self.key = nn.Linear(self.backbone_hidden_size, self.n_relations * self.head_hidden_size)
 
         self.dummy_node = nn.Parameter(torch.zeros(1, self.backbone_hidden_size))
 
-    def forward(
-        self,
-        h_q: torch.Tensor,
-        h_k: torch.Tensor,
-    ):
-        h_q = self.q_net(self.drop(h_q))
+    def forward(self, query_layer: torch.Tensor, key_layer: torch.Tensor):
+        query_layer = self.query(self.drop(query_layer))
 
-        dummy_vec = self.dummy_node.unsqueeze(0).repeat(1, h_k.size(1), 1)
-        h_k = torch.cat([h_k, dummy_vec], axis=0)
-        h_k = self.k_net(self.drop(h_k))
+        dummy_vec = self.dummy_node.unsqueeze(0).repeat(1, key_layer.size(1), 1)
+        key_layer = torch.cat([key_layer, dummy_vec], axis=0)
+        key_layer = self.key(self.drop(key_layer))
 
-        head_q = h_q.view(h_q.size(0), h_q.size(1), self.n_relations, self.head_hidden_size)
-        head_k = h_k.view(h_k.size(0), h_k.size(1), self.n_relations, self.head_hidden_size)
+        query_layer = query_layer.view(
+            query_layer.size(0), query_layer.size(1), self.n_relations, self.head_hidden_size
+        )
+        key_layer = key_layer.view(key_layer.size(0), key_layer.size(1), self.n_relations, self.head_hidden_size)
 
-        relation_score = torch.einsum("ibnd,jbnd->nbij", (head_q, head_k))
+        relation_score = torch.einsum("ibnd,jbnd->nbij", (query_layer, key_layer))
 
         return relation_score
 
@@ -985,7 +982,7 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         bbox: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        box_first_token_mask: Optional[torch.Tensor] = None,
+        bbox_first_token_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -1039,10 +1036,10 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            if box_first_token_mask is not None:
-                box_first_token_mask = box_first_token_mask.view(-1)
+            if bbox_first_token_mask is not None:
+                bbox_first_token_mask = bbox_first_token_mask.view(-1)
                 loss = loss_fct(
-                    logits.view(-1, self.num_labels)[box_first_token_mask], labels.view(-1)[box_first_token_mask]
+                    logits.view(-1, self.num_labels)[bbox_first_token_mask], labels.view(-1)[bbox_first_token_mask]
                 )
             else:
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
@@ -1101,7 +1098,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         bbox: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        box_first_token_mask: Optional[torch.Tensor] = None,
+        bbox_first_token_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -1157,9 +1154,13 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         batch_size, max_seq_length = inv_attention_mask.shape
         device = inv_attention_mask.device
         invalid_token_mask = torch.cat([inv_attention_mask, torch.zeros([batch_size, 1]).to(device)], axis=1).bool()
-        subsequent_token_logits.masked_fill_(invalid_token_mask[:, None, :], -10000.0)
+        subsequent_token_logits = subsequent_token_logits.masked_fill(
+            invalid_token_mask[:, None, :], torch.finfo(subsequent_token_logits.dtype).min
+        )
         self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device).bool()
-        subsequent_token_logits.masked_fill_(self_token_mask[None, :, :], -10000.0)
+        subsequent_token_logits = subsequent_token_logits.masked_fill(
+            self_token_mask[None, :, :], torch.finfo(subsequent_token_logits.dtype).min
+        )
         subsequent_token_mask = attention_mask.view(-1).bool()
 
         loss = None
@@ -1168,11 +1169,11 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
 
             # get initial token loss
             initial_token_labels = initial_token_labels.view(-1)
-            if box_first_token_mask is not None:
-                box_first_token_mask = box_first_token_mask.view(-1)
+            if bbox_first_token_mask is not None:
+                bbox_first_token_mask = bbox_first_token_mask.view(-1)
                 initial_token_loss = loss_fct(
-                    initial_token_logits.view(-1, self.num_labels)[box_first_token_mask],
-                    initial_token_labels[box_first_token_mask],
+                    initial_token_logits.view(-1, self.num_labels)[bbox_first_token_mask],
+                    initial_token_labels[bbox_first_token_mask],
                 )
             else:
                 initial_token_loss = loss_fct(initial_token_logits.view(-1, self.num_labels), initial_token_labels)
@@ -1229,7 +1230,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         bbox: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        box_first_token_mask: Optional[torch.Tensor] = None,
+        bbox_first_token_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -1287,16 +1288,16 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
 
             self_token_mask = torch.eye(max_seq_length, max_seq_length + 1).to(device).bool()
 
-            mask = box_first_token_mask.view(-1)
-            box_first_token_mask = torch.cat(
+            mask = bbox_first_token_mask.view(-1)
+            bbox_first_token_mask = torch.cat(
                 [
-                    ~box_first_token_mask,
+                    ~bbox_first_token_mask,
                     torch.zeros([batch_size, 1], dtype=torch.bool).to(device),
                 ],
                 axis=1,
             )
-            logits = logits.masked_fill_(box_first_token_mask[:, None, :], -10000.0)
-            logits = logits.masked_fill_(self_token_mask[None, :, :], -10000.0)
+            logits = logits.masked_fill(bbox_first_token_mask[:, None, :], torch.finfo(logits.dtype).min)
+            logits = logits.masked_fill(self_token_mask[None, :, :], torch.finfo(logits.dtype).min)
 
             loss = loss_fct(logits.view(-1, max_seq_length + 1)[mask], labels.view(-1)[mask])
 
