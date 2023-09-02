@@ -413,6 +413,7 @@ Flax), PyTorch, and/or TensorFlow.
 |              NAT              |       ✅        |         ❌         |      ❌      |
 |             Nezha             |       ✅        |         ❌         |      ❌      |
 |           NLLB-MOE            |       ✅        |         ❌         |      ❌      |
+|            Nougat             |       ✅        |         ✅         |      ✅      |
 |         Nyströmformer         |       ✅        |         ❌         |      ❌      |
 |           OneFormer           |       ✅        |         ❌         |      ❌      |
 |          OpenAI GPT           |       ✅        |         ✅         |      ❌      |
