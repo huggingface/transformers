@@ -24,7 +24,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_oneformer"] = ["NougatImageProcessor"]
+    _import_structure["image_processing_nougat"] = ["NougatImageProcessor"]
 
 
 if TYPE_CHECKING:

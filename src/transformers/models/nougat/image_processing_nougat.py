@@ -140,13 +140,13 @@ class NougatImageProcessor(BaseImageProcessor):
         min_val = data.min()
         if max_val == min_val:
             return image
-        
+
         data = (data - min_val) / (max_val - min_val) * 255
         gray = 255 * (data < 200).astype(np.uint8)
 
         coords = np.nonzero(gray)  # Find all non-zero points (text)
         a, b, w, h = cv2.boundingRect(coords)  # Find minimum spanning bounding box
-        
+
         return image.crop((a, b, w + a, h + b))
 
     def align_long_axis(
@@ -324,6 +324,7 @@ class NougatImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
+        do_crop_margin: bool = None,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -434,7 +435,8 @@ class NougatImageProcessor(BaseImageProcessor):
 
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
-        
+
+        # First crop the margins.
         if do_crop_margin:
             images = [self.crop_margin(image) for image in images]
 
