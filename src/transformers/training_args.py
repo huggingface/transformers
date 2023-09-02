@@ -1546,10 +1546,10 @@ class TrainingArguments:
                 warnings.warn("`--fsdp_config` is useful only when `--fsdp` is specified.")
             with io.open(self.fsdp_config, "r", encoding="utf-8") as f:
                 self.fsdp_config = json.load(f)
-                for k, v in self.fsdp_config.items():
+                for k in list(self.fsdp_config.keys()):
                     if k.startswith("fsdp_"):
-                        self.fsdp_config[k.replace("fsdp_", "")] = v
-                        del self.fsdp_config[k]
+                        v = self.fsdp_config.pop(k)
+                        self.fsdp_config[k[5:]] = v
 
         if self.fsdp_min_num_params > 0:
             warnings.warn("using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ", FutureWarning)
