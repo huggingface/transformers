@@ -32,9 +32,9 @@ from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
 from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, WordPieceTrainer
 
-from .convert_slow_tokenizer import convert_slow_tokenizer
-from .tokenization_utils import PreTrainedTokenizer
-from .tokenization_utils_base import (
+from transformers.convert_slow_tokenizer import convert_slow_tokenizer
+from transformers.tokenization_utils import PreTrainedTokenizer
+from transformers.tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
     AddedToken,
     BatchEncoding,
@@ -46,7 +46,7 @@ from .tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
-from .utils import PaddingStrategy, add_end_docstrings, logging
+from transformers.utils import PaddingStrategy, add_end_docstrings, logging
 
 
 logger = logging.get_logger(__name__)

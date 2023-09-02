@@ -29,6 +29,7 @@ from transformers import (
     DonutSwinModel,
     MBartConfig,
     MBartForCausalLM,
+    NougatTokenizerFast,
     VisionEncoderDecoderModel,
 )
 
@@ -155,7 +156,12 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     dataset = load_dataset("hf-internal-testing/example-documents")
     image = dataset["test"][0]["image"].convert("RGB")
 
-    tokenizer = original_model.decoder.tokenizer
+    tokenizer_file = checkpoint_path / "tokenizer.json"
+    tokenizer = NougatTokenizerFast(tokenizer_file=str(tokenizer_file))
+    tokenizer.pad_token = "<pad>"
+    tokenizer.bos_token = "<s>"
+    tokenizer.eos_token = "</s>"
+    tokenizer.unk_token = "<unk>"
     tokenizer.model_max_length = original_model.config.max_length
     image_processor = DonutImageProcessor(
         do_align_long_axis=original_model.config.align_long_axis, size=original_model.config.input_size[::-1]
