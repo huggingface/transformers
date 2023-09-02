@@ -23,12 +23,12 @@ from nougat import NougatModel
 from nougat.utils.checkpoint import get_checkpoint
 
 from transformers import (
-    DonutImageProcessor,
     DonutProcessor,
     DonutSwinConfig,
     DonutSwinModel,
     MBartConfig,
     MBartForCausalLM,
+    NougatImageProcessor,
     NougatTokenizerFast,
     VisionEncoderDecoderModel,
 )
@@ -163,13 +163,22 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     tokenizer.eos_token = "</s>"
     tokenizer.unk_token = "<unk>"
     tokenizer.model_max_length = original_model.config.max_length
-    image_processor = DonutImageProcessor(
-        do_align_long_axis=original_model.config.align_long_axis, size=original_model.config.input_size[::-1]
+
+    size = {"height": original_model.config.input_size[0], "width": original_model.config.input_size[1]}
+    image_processor = NougatImageProcessor(
+        do_align_long_axis=original_model.config.align_long_axis,
+        size=size,
+        do_normalize=False,
     )
+    # TODO create NougatProcessor?
     processor = DonutProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
-    # verify hidden states, logits
+    # verify pixel_values
     pixel_values = processor(image, return_tensors="pt").pixel_values
+    original_pixel_values = original_model.encoder.prepare_input(image).unsqueeze(0)
+    assert torch.allclose(original_pixel_values, pixel_values, atol=1e-3)
+
+    # verify patch embeddings
     original_patch_embed = original_model.encoder.model.patch_embed(pixel_values)
     patch_embeddings, _ = model.encoder.embeddings(pixel_values)
     assert torch.allclose(original_patch_embed, patch_embeddings, atol=1e-3)

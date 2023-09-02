@@ -60,10 +60,8 @@ class NougatImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
             `do_resize` in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
-            Size of the image after resizing. The shortest edge of the image is resized to size["shortest_edge"], with
-            the longest edge resized to keep the input aspect ratio. Can be overridden by `size` in the `preprocess`
-            method.
+        size (`Dict[str, int]` *optional*, defaults to `{"height": 896, "width": 672}`):
+            Size of the image after resizing. Can be overridden by `size` in the `preprocess` method.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_thumbnail (`bool`, *optional*, defaults to `True`):
@@ -72,7 +70,7 @@ class NougatImageProcessor(BaseImageProcessor):
             Whether to align the long axis of the image with the long axis of `size` by rotating by 90 degrees.
         do_pad (`bool`, *optional*, defaults to `True`):
             Whether to pad the image. If `random_padding` is set to `True` in `preprocess`, each image is padded with a
-            random amont of padding on each size, up to the largest image size in the batch. Otherwise, all images are
+            random amount of padding on each size, up to the largest image size in the batch. Otherwise, all images are
             padded to the largest image size in the batch.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
@@ -102,14 +100,14 @@ class NougatImageProcessor(BaseImageProcessor):
         do_pad: bool = True,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = True,
+        do_normalize: bool = False,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
 
-        size = size if size is not None else {"height": 2560, "width": 1920}
+        size = size if size is not None else {"height": 896, "width": 672}
         if isinstance(size, (tuple, list)):
             # The previous feature extractor size parameter was in (width, height) format
             size = size[::-1]
@@ -144,7 +142,7 @@ class NougatImageProcessor(BaseImageProcessor):
         data = (data - min_val) / (max_val - min_val) * 255
         gray = 255 * (data < 200).astype(np.uint8)
 
-        coords = np.nonzero(gray)  # Find all non-zero points (text)
+        coords = cv2.findNonZero(gray)  # Find all non-zero points (text)
         a, b, w, h = cv2.boundingRect(coords)  # Find minimum spanning bounding box
 
         return image.crop((a, b, w + a, h + b))
