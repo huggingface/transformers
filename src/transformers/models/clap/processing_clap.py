@@ -44,16 +44,15 @@ class ClapProcessor(ProcessorMixin):
         text=None,
         audios=None,
         return_tensors=None,
-        tokenizer_kwargs=None,
-        feature_extractor_kwargs=None,
         **kwargs,
     ):
         """
-        Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`,
-        `tokenizer_kwargs` and `kwargs` arguments to RobertaTokenizerFast's [`~RobertaTokenizerFast.__call__`] if
-        `text` is not `None` to encode the text. To prepare the audio(s), this method forwards the `audios`,
-        `feature_extractor_kwargs` and `kwargs` arguments to ClapFeatureExtractor's [`~ClapFeatureExtractor.__call__`]
-        if `audios` is not `None`. Please refer to the doctsring of the above two methods for more information.
+        Main method to prepare one or several text sequences(s) and audio(s) for the model. If `text` is not `None`,
+        this method forwards the `text` and tokenizer specific `kwargs` arguments to RobertaTokenizerFast's
+        [`~RobertaTokenizerFast.__call__`] to encode the text. If `audios` is not `None`, this method forwards the
+        `audios`, and feature extractor specific `kwargs` arguments to ClapFeatureExtractor's
+        [`~ClapFeatureExtractor.__call__`] to prepare the audio(s). Please refer to the docstring of the above two
+        methods for more information.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
@@ -70,11 +69,13 @@ class ClapProcessor(ProcessorMixin):
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
-            tokenizer_kwargs (`dict`, *optional*):
-                Keyword arguments to be passed only to RobertaTokenizerFast's [`~RobertaTokenizerFast.__call__`].
-            feature_extractor_kwargs (`dict`, *optional*):
-                Keyword arguments to be passed only to ClapFeatureExtractor's [`~ClapFeatureExtractor.__call__`].
-
+            kwargs (`dict`, *optional*):
+                Keyword arguments to be passed to RobertaTokenizerFast and ClapFeatureExtractor.
+                - Keyword arguments with `tokenizer_` prefix are passed only to RobertaTokenizerFast
+                - Keyword arguments with `feature_extractor_` prefix are passed only to ClapFeatureExtractor
+                - Keyword arguments without either of the prefix are passed to both RobertaTokenizerFast as well as
+                  ClapFeatureExtractor.
+                In case of a conflict, keyword arguments with prefix are given preference.
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
 
@@ -87,19 +88,27 @@ class ClapProcessor(ProcessorMixin):
         if text is None and audios is None:
             raise ValueError("You have to specify either text or audios. Both cannot be none.")
 
-        if tokenizer_kwargs is None:
-            tokenizer_kwargs = {}
+        tokenizer_kwargs = {k[len("tokenizer_") :]: v for k, v in kwargs.items() if k.startswith("tokenizer_")}
 
-        if feature_extractor_kwargs is None:
-            feature_extractor_kwargs = {}
+        feature_extractor_kwargs = {
+            k[len("feature_extractor_") :]: v for k, v in kwargs.items() if k.startswith("feature_extractor_")
+        }
+
+        # remove tokenizer kwargs and feature_extractor kwargs from kwargs
+        for key in tokenizer_kwargs.keys():
+            del kwargs["tokenizer_" + key]
+        for key in feature_extractor_kwargs.keys():
+            del kwargs["feature_extractor_" + key]
+
+        # collect all tokenizer kwargs and feature_extractor kwargs
+        tokenizer_kwargs = {**kwargs, **tokenizer_kwargs}
+        feature_extractor_kwargs = {**kwargs, **feature_extractor_kwargs}
 
         if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **tokenizer_kwargs, **kwargs)
+            encoding = self.tokenizer(text, return_tensors=return_tensors, **tokenizer_kwargs)
 
         if audios is not None:
-            audio_features = self.feature_extractor(
-                audios, return_tensors=return_tensors, **feature_extractor_kwargs, **kwargs
-            )
+            audio_features = self.feature_extractor(audios, return_tensors=return_tensors, **feature_extractor_kwargs)
 
         if text is not None and audios is not None:
             encoding["input_features"] = audio_features.input_features
