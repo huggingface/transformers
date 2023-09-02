@@ -24,7 +24,6 @@ from ...utils import (
 
 _import_structure = {
     "configuration_llama": ["LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP", "LlamaConfig"],
-    "processing_llva": ["LlavaProcessor"]
 }
 
 try:
@@ -54,12 +53,11 @@ else:
         "LlamaModel",
         "LlamaPreTrainedModel",
         "LlamaForSequenceClassification",
-        "LlavaLlamaForCausalLM",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_llava import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlavaConfig
+    from .configuration_llama import LLAMA_PRETRAINED_CONFIG_ARCHIVE_MAP, LlamaConfig
 
     try:
         if not is_sentencepiece_available():
@@ -83,11 +81,10 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel, LlavaLlamaForCausalLM
+        from .modeling_llama import LlamaForCausalLM, LlamaForSequenceClassification, LlamaModel, LlamaPreTrainedModel
 
 
 else:
     import sys
 
     sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
-
