@@ -94,9 +94,9 @@ class FastViTConfig(PretrainedConfig):
         self,
         image_size=256,
         num_channels=3,
-        patch_size=7,
+        patch_size=4,
         depths=[2, 2, 4, 2],
-        embed_dims=[48, 96, 192, 384],
+        hidden_sizes=[48, 96, 192, 384],
         pos_embeds = None,
         token_mixers = ("repmixer", "repmixer", "repmixer", "repmixer"),
         mlp_ratio = 3.0,
@@ -111,7 +111,7 @@ class FastViTConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.depths = depths
-        self.embed_dims = embed_dims
+        self.hidden_sizes = hidden_sizes
         self.mlp_ratio = mlp_ratio
         self.pos_embeds = pos_embeds
         self.token_mixers = token_mixers
