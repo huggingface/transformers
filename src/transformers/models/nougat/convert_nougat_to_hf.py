@@ -180,7 +180,6 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     assert torch.allclose(original_embeddings.weight, embeddings.weight, atol=1e-3)
 
     # verify decoder hidden states
-    print("Verifying decoder hidden states...")
     prompt = "hello world"
     decoder_input_ids = original_model.decoder.tokenizer(
         prompt, add_special_tokens=False, return_tensors="pt"
@@ -194,9 +193,26 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         decoder_input_ids=decoder_input_ids[:, :-1],
         decoder_attention_mask=decoder_attention_mask[:, :-1],
     ).logits
-    print(original_logits[0, :3, :3])
-    print(logits[0, :3, :3])
     assert torch.allclose(original_logits, logits, atol=1e-3)
+
+    # TODO verify generation
+    # generated_ids = model.generate(pixel_values
+    #                                 min_length=1,
+    #                                 max_length=original_model.config.max_length,
+    #                                 pad_token_id=tokenizer.pad_token_id,
+    #                                 eos_token_id=tokenizer.eos_token_id,
+    #                                 use_cache=True,
+    #                                 bad_words_ids=[
+    #                                     [tokenizer.unk_token_id],
+    #                                 ],
+    #                                 return_dict_in_generate=True,
+    #                                 output_scores=True,
+    #                                 output_attentions=False,
+    #                                 do_sample=False,
+    #                                 stopping_criteria=StoppingCriteriaList([StoppingCriteriaScores()]),
+    # )
+    # print(tokenizer.batch_decode(generated_ids, skip_special_tokens=True))
+
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:

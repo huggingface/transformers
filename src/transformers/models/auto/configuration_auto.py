@@ -580,6 +580,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("nezha", "Nezha"),
         ("nllb", "NLLB"),
         ("nllb-moe", "NLLB-MOE"),
+        ("nougat", "Nougat"),
         ("nystromformer", "Nyströmformer"),
         ("oneformer", "OneFormer"),
         ("open-llama", "OpenLlama"),
