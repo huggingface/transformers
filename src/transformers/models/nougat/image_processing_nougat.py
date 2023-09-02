@@ -17,6 +17,7 @@
 from typing import Dict, List, Optional, Union
 
 import numpy as np
+from PIL import Image
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
@@ -54,6 +55,8 @@ class NougatImageProcessor(BaseImageProcessor):
     Constructs a Nougat image processor.
 
     Args:
+        do_crop_margin (`bool`, *optional*, defaults to `True`):
+            Whether to crop the image margins.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
             `do_resize` in the `preprocess` method.
@@ -90,6 +93,7 @@ class NougatImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
+        do_crop_margin: bool = True,
         do_resize: bool = True,
         size: Dict[str, int] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
@@ -111,6 +115,7 @@ class NougatImageProcessor(BaseImageProcessor):
             size = size[::-1]
         size = get_size_dict(size)
 
+        self.do_crop_margin = do_crop_margin
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
@@ -122,6 +127,27 @@ class NougatImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+
+    def crop_margin(self, image: Image.Image) -> Image.Image:
+        import cv2
+
+        if not isinstance(image, Image.Image):
+            image = Image.fromarray(image)
+
+        data = np.array(image.convert("L"))
+        data = data.astype(np.uint8)
+        max_val = data.max()
+        min_val = data.min()
+        if max_val == min_val:
+            return image
+        
+        data = (data - min_val) / (max_val - min_val) * 255
+        gray = 255 * (data < 200).astype(np.uint8)
+
+        coords = np.nonzero(gray)  # Find all non-zero points (text)
+        a, b, w, h = cv2.boundingRect(coords)  # Find minimum spanning bounding box
+        
+        return image.crop((a, b, w + a, h + b))
 
     def align_long_axis(
         self,
@@ -322,6 +348,8 @@ class NougatImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            do_crop_margin (`bool`, *optional*, defaults to `self.do_crop_margin`):
+                Whether to crop the image margins.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -370,6 +398,7 @@ class NougatImageProcessor(BaseImageProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
+        do_crop_margin = do_crop_margin if do_crop_margin is not None else self.do_crop_margin
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         if isinstance(size, (tuple, list)):
@@ -405,6 +434,9 @@ class NougatImageProcessor(BaseImageProcessor):
 
         if do_normalize and (image_mean is None or image_std is None):
             raise ValueError("Image mean and std must be specified if do_normalize is True.")
+        
+        if do_crop_margin:
+            images = [self.crop_margin(image) for image in images]
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
