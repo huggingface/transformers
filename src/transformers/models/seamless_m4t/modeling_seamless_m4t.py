@@ -163,25 +163,21 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     return incremental_indices.long() + padding_idx
 
 
-# Copied from transformers.models.mbart.modeling_mbart.shift_tokens_right
-def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
+# Copied from transformers.models.bart.modeling_bart.shift_tokens_right
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
-    Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that MBart does not
-    have a single `decoder_start_token_id` in contrast to other Bart-like models.
+    Shift input ids one token to the right.
     """
-    prev_output_tokens = input_ids.clone()
+    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+    shifted_input_ids[:, 0] = decoder_start_token_id
 
     if pad_token_id is None:
         raise ValueError("self.model.config.pad_token_id has to be defined.")
     # replace possible -100 values in labels by `pad_token_id`
-    prev_output_tokens.masked_fill_(prev_output_tokens == -100, pad_token_id)
+    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
-    index_of_eos = (prev_output_tokens.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
-    decoder_start_tokens = prev_output_tokens.gather(1, index_of_eos).squeeze()
-    prev_output_tokens[:, 1:] = prev_output_tokens[:, :-1].clone()
-    prev_output_tokens[:, 0] = decoder_start_tokens
-
-    return prev_output_tokens
+    return shifted_input_ids
 
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
@@ -490,7 +486,7 @@ class SeamlessM4TConformerConvolutionModule(nn.Module):
         # Ensure that we do not leak padded positions in depthwise convolution.
         # Put 0 where necessary
         if attention_mask is not None:
-            hidden_states[~attention_mask.bool()] = 0.0
+            hidden_states = hidden_states.masked_fill(~attention_mask.bool().unsqueeze(-1), 0.0)
 
         # exchange the temporal dimension and the feature dimension
         hidden_states = hidden_states.transpose(1, 2)
@@ -773,7 +769,7 @@ class SeamlessM4TConformerEncoder(nn.Module):
         conv_attention_mask = attention_mask
         if attention_mask is not None:
             # make sure padded tokens output 0
-            hidden_states[~attention_mask.bool()] = 0.0
+            hidden_states = hidden_states.masked_fill(~attention_mask.bool().unsqueeze(-1), 0.0)
             # extend attention_mask
             attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
             attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
@@ -1460,7 +1456,7 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
                 nn.init.uniform_(module.bias, a=-k, b=k)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (SeamlessM4TDecoder, SeamlessM4TEncoder)):
+        if isinstance(module, (SeamlessM4TDecoder, SeamlessM4TEncoder, SeamlessM4TSpeechEncoder)):
             module.gradient_checkpointing = value
 
     def compute_last_hidden_states_per_sample(
@@ -1589,9 +1585,8 @@ class SeamlessM4TSpeechEncoder(SeamlessM4TPreTrainedModel):
 
         if self.adapter is not None:
             hidden_states = self.adapter(hidden_states, attention_mask=attention_mask)
-            hidden_states[0] = self.inner_layer_norm(hidden_states[0])
-        else:
-            hidden_states = self.inner_layer_norm(hidden_states)
+                        
+        hidden_states = self.inner_layer_norm(hidden_states)
 
         if not return_dict:
             return (hidden_states,) + encoder_outputs[1:]
@@ -2097,13 +2092,13 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
+                next_decoder_cache += (layer_outputs[1],)
 
             if output_attentions:
-                all_self_attns += (layer_outputs[1],)
+                all_self_attns += (layer_outputs[2],)
 
                 if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
+                    all_cross_attentions += (layer_outputs[3],)
 
         hidden_states = self.layer_norm(hidden_states)
 
@@ -2248,7 +2243,6 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
     """
 
     _keys_to_ignore_on_load_missing = [
-        "final_logits_bias",
         "vocoder",
         "speech_encoder",
         "text_encoder",
@@ -2269,7 +2263,6 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
         super().__init__(config)
 
         self.model = SeamlessM4TTextToUnitModel(config, embed_tokens_decoder)
-        self.register_buffer("final_logits_bias", torch.zeros((1, config.unit_vocab_size)))
 
         self.lm_head = nn.Linear(config.hidden_size, config.unit_vocab_size, bias=False)
 
@@ -2281,20 +2274,6 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
 
     def get_decoder(self):
         return self.model.decoder
-
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        self._resize_final_logits_bias(new_num_tokens)
-        return new_embeddings
-
-    def _resize_final_logits_bias(self, new_num_tokens: int) -> None:
-        old_num_tokens = self.final_logits_bias.shape[-1]
-        if new_num_tokens <= old_num_tokens:
-            new_bias = self.final_logits_bias[:, :new_num_tokens]
-        else:
-            extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
-            new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
-        self.register_buffer("final_logits_bias", new_bias)
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -2346,7 +2325,7 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
             use_cache = False
             if decoder_input_ids is None and decoder_inputs_embeds is None:
-                decoder_input_ids = shift_tokens_right(labels, self.config.t2u_pad_token_id)
+                decoder_input_ids = shift_tokens_right(labels, self.config.t2u_pad_token_id, self.config.t2u_decoder_start_token_id)
 
         outputs = self.model(
             input_ids,
@@ -2365,7 +2344,7 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        lm_logits = self.lm_head(outputs[0]) + self.final_logits_bias
+        lm_logits = self.lm_head(outputs[0])
 
         masked_lm_loss = None
         if labels is not None:
@@ -2417,7 +2396,7 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
         }
 
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
-        return shift_tokens_right(labels, self.config.t2u_pad_token_id)
+        return shift_tokens_right(labels, self.config.t2u_pad_token_id, self.config.t2u_decoder_start_token_id)
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
@@ -2428,6 +2407,14 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
             )
         return reordered_past
+    
+
+    def _tie_weights(self) -> None:
+        if getattr(self.config, "tie_word_embeddings", True):
+            output_embeddings = self.get_output_embeddings()
+            if output_embeddings is not None:
+                self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
+
 
 
 ############ VOCODER related code ################
@@ -2587,14 +2574,17 @@ class SeamlessM4THifiGan(PreTrainedModel):
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
 
-    # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan._init_weights
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
+        if isinstance(module, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+                
     # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan.apply_weight_norm
     def apply_weight_norm(self):
         nn.utils.weight_norm(self.conv_pre)
@@ -2730,7 +2720,7 @@ class SeamlessM4TCodeHifiGan(SeamlessM4THifiGan):
 )
 class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
     # base_model_prefix = ""
-    _keys_to_ignore_on_load_missing = ["final_logits_bias", "speech_encoder", "t2u_model", "vocoder"]
+    _keys_to_ignore_on_load_missing = ["speech_encoder", "t2u_model", "vocoder"]
     main_input_name = "input_ids"
 
     _tied_weights_keys = [
@@ -2741,12 +2731,12 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
 
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__(config)
+        
+        self.shared = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
 
-        self.text_encoder = SeamlessM4TEncoder(config)
-        self.text_decoder = SeamlessM4TDecoder(config)
+        self.text_encoder = SeamlessM4TEncoder(config, self.shared)
+        self.text_decoder = SeamlessM4TDecoder(config, self.shared)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        self.register_buffer("final_logits_bias", torch.zeros((1, config.vocab_size)))
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2756,20 +2746,6 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
 
     def get_decoder(self):
         return self.text_decoder
-
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        self._resize_final_logits_bias(new_num_tokens)
-        return new_embeddings
-
-    def _resize_final_logits_bias(self, new_num_tokens: int) -> None:
-        old_num_tokens = self.final_logits_bias.shape[-1]
-        if new_num_tokens <= old_num_tokens:
-            new_bias = self.final_logits_bias[:, :new_num_tokens]
-        else:
-            extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
-            new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
-        self.register_buffer("final_logits_bias", new_bias)
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -2781,7 +2757,9 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
         return self.text_decoder.embed_tokens
 
     def set_input_embeddings(self, value):
+        self.text_encoder.embed_tokens = value
         self.text_decoder.embed_tokens = value
+        self.shared = value
 
     # @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     # @add_code_sample_docstrings(
@@ -2823,7 +2801,7 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
             use_cache = False
             if decoder_input_ids is None and decoder_inputs_embeds is None:
-                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id)
+                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id,self.config.decoder_start_token_id)
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2868,7 +2846,7 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
             return_dict=return_dict,
         )
 
-        lm_logits = self.lm_head(decoder_outputs.last_hidden_state) + self.final_logits_bias
+        lm_logits = self.lm_head(decoder_outputs[0])
 
         masked_lm_loss = None
         if labels is not None:
@@ -2936,7 +2914,7 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
     SEAMLESS_M4T_START_DOCSTRING,
 )
 class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["final_logits_bias", "text_decoder", "t2u_model", "vocoder"]
+    _keys_to_ignore_on_load_missing = ["text_decoder", "t2u_model", "vocoder"]
     main_input_name = "input_features"
 
     _tied_weights_keys = [
@@ -2951,8 +2929,6 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
         self.text_decoder = SeamlessM4TDecoder(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        self.register_buffer("final_logits_bias", torch.zeros((1, config.vocab_size)))
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -2961,20 +2937,6 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
 
     def get_decoder(self):
         return self.text_decoder
-
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        self._resize_final_logits_bias(new_num_tokens)
-        return new_embeddings
-
-    def _resize_final_logits_bias(self, new_num_tokens: int) -> None:
-        old_num_tokens = self.final_logits_bias.shape[-1]
-        if new_num_tokens <= old_num_tokens:
-            new_bias = self.final_logits_bias[:, :new_num_tokens]
-        else:
-            extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
-            new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
-        self.register_buffer("final_logits_bias", new_bias)
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -3028,7 +2990,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
             use_cache = False
             if decoder_input_ids is None and decoder_inputs_embeds is None:
-                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id)
+                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id,self.config.decoder_start_token_id)
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -3077,7 +3039,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
             return_dict=return_dict,
         )
 
-        lm_logits = self.lm_head(decoder_outputs.last_hidden_state) + self.final_logits_bias
+        lm_logits = self.lm_head(decoder_outputs[0])
 
         masked_lm_loss = None
         if labels is not None:
@@ -3145,7 +3107,7 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
     SEAMLESS_M4T_START_DOCSTRING,
 )
 class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
-    _keys_to_ignore_on_load_missing = ["final_logits_bias", "speech_encoder"]
+    _keys_to_ignore_on_load_missing = ["speech_encoder"]
     main_input_name = "input_ids"
 
     def __init__(self, config: SeamlessM4TConfig):
@@ -3339,7 +3301,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
     SEAMLESS_M4T_START_DOCSTRING,
 )
 class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
-    _keys_to_ignore_on_load_missing = ["final_logits_bias", "text_decoder"]
+    _keys_to_ignore_on_load_missing = ["text_encoder"]
     main_input_name = "input_features"
 
     def __init__(self, config):
@@ -3545,7 +3507,6 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
     SEAMLESS_M4T_START_DOCSTRING,
 )
 class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["final_logits_bias"]
     _tied_weights_keys = [
         "lm_head.weight",
         "text_encoder.embed_tokens.weight",
@@ -3554,23 +3515,27 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
     def __init__(self, config, current_modality="text"):
         super().__init__(config)
+        
+        self.shared = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
 
-        self.text_encoder = SeamlessM4TEncoder(config)
+        self.text_encoder = SeamlessM4TEncoder(config, self.shared)
         self.speech_encoder = SeamlessM4TSpeechEncoder(config)
-        self.text_decoder = SeamlessM4TDecoder(config)
+        self.text_decoder = SeamlessM4TDecoder(config, self.shared)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
+                
+        # Initialize weights and apply final processing
+        self.post_init()
+        
         self.current_modality = current_modality
         if current_modality == "speech":
             self.main_input_name = current_modality
 
-        self.register_buffer("final_logits_bias", torch.zeros((1, config.vocab_size)))
 
+        # these models already call post_init in their initialization
         self.t2u_model = SeamlessM4TTextToUnitForConditionalGeneration(config)
         self.vocoder = SeamlessM4TCodeHifiGan(config)
 
-        # Initialize weights and apply final processing
-        self.post_init()
+
 
     def set_modality(self, modality="text"):
         if modality == "text":
@@ -3588,20 +3553,6 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         else:
             return self.speech_encoder
 
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        self._resize_final_logits_bias(new_num_tokens)
-        return new_embeddings
-
-    def _resize_final_logits_bias(self, new_num_tokens: int) -> None:
-        old_num_tokens = self.final_logits_bias.shape[-1]
-        if new_num_tokens <= old_num_tokens:
-            new_bias = self.final_logits_bias[:, :new_num_tokens]
-        else:
-            extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
-            new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
-        self.register_buffer("final_logits_bias", new_bias)
-
     def get_output_embeddings(self):
         return self.lm_head
 
@@ -3612,7 +3563,9 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         return self.text_decoder.embed_tokens
 
     def set_input_embeddings(self, value):
+        self.text_encoder.embed_tokens = value
         self.text_decoder.embed_tokens = value
+        self.shared = value
 
     # @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     # @add_code_sample_docstrings(
@@ -3662,7 +3615,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                 logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
             use_cache = False
             if decoder_input_ids is None and decoder_inputs_embeds is None:
-                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id)
+                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id,self.config.decoder_start_token_id)
 
         # TODO: keep it or not ?
         logger.warning(
@@ -3695,7 +3648,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                 return_dict=return_dict,
             )
 
-        elif input_ids is not None:
+        elif input_ids is not None or inputs_embeds is not None:
             self.set_modality("text")
             encoder_outputs = self.text_encoder(
                 input_ids=input_ids,
@@ -3737,7 +3690,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             return_dict=return_dict,
         )
 
-        lm_logits = self.lm_head(decoder_outputs.last_hidden_state) + self.final_logits_bias
+        lm_logits = self.lm_head(decoder_outputs[0])
 
         masked_lm_loss = None
         if labels is not None:

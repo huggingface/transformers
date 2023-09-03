@@ -770,8 +770,8 @@ class NllbConverter(SpmConverter):
                 ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
             ],
         )
-        
-        
+
+
 class SeamlessM4TConverter(SpmConverter):
     def vocab(self, proto):
         vocab = [

@@ -2583,12 +2583,16 @@ else:
     _import_structure["models.seamless_m4t"].extend(
         [
             "SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "SeamlessM4TCodeHifiGan",
             "SeamlessM4TForSpeechToSpeech",
             "SeamlessM4TForSpeechToText",
             "SeamlessM4TForTextToSpeech",
             "SeamlessM4TForTextToText",
+            "SeamlessM4THifiGan",
             "SeamlessM4TModel",
             "SeamlessM4TPreTrainedModel",
+            "SeamlessM4TTextToUnitForConditionalGeneration",
+            "SeamlessM4TTextToUnitModel",
         ]
     )
     _import_structure["models.segformer"].extend(
@@ -6245,12 +6249,16 @@ if TYPE_CHECKING:
         # PyTorch model imports
         from .models.seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SeamlessM4TCodeHifiGan,
             SeamlessM4TForSpeechToSpeech,
             SeamlessM4TForSpeechToText,
             SeamlessM4TForTextToSpeech,
             SeamlessM4TForTextToText,
+            SeamlessM4THifiGan,
             SeamlessM4TModel,
             SeamlessM4TPreTrainedModel,
+            SeamlessM4TTextToUnitForConditionalGeneration,
+            SeamlessM4TTextToUnitModel,
         )
         from .models.segformer import (
             SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

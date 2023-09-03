@@ -6607,6 +6607,13 @@ class SamPreTrainedModel(metaclass=DummyObject):
 SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class SeamlessM4TCodeHifiGan(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class SeamlessM4TForSpeechToSpeech(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -6635,6 +6642,13 @@ class SeamlessM4TForTextToText(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class SeamlessM4THifiGan(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class SeamlessM4TModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -6643,6 +6657,20 @@ class SeamlessM4TModel(metaclass=DummyObject):
 
 
 class SeamlessM4TPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SeamlessM4TTextToUnitForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SeamlessM4TTextToUnitModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

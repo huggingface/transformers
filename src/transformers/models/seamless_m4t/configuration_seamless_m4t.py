@@ -316,6 +316,10 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.use_dur_predictor = use_dur_predictor
         self.var_pred_kernel_size = var_pred_kernel_size
         self.var_pred_dropout = var_pred_dropout
+        
+        # for proper config init
+        self.num_attention_heads = decoder_attention_heads
+        self.num_hidden_layers = decoder_layers
 
         super().__init__(
             pad_token_id=pad_token_id,

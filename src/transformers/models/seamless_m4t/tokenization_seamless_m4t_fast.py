@@ -19,16 +19,19 @@ from typing import List, Optional, Tuple, Union
 
 from tokenizers import processors
 
-
 from ...tokenization_utils import (
     BatchEncoding,
     PreTokenizedInput,
-    PreTrainedTokenizer,
     TextInput,
 )
-from ...utils import PaddingStrategy, logging
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from .tokenization_seamless_m4t import SeamlessM4TTokenizer, LARGE_SEAMLESS_M4T_LANGUAGE_CODES, UNIT_SUPPORTED_LANGUAGES, VOCODER_SUPPORTED_LANGUAGES
+from ...utils import PaddingStrategy, logging
+from .tokenization_seamless_m4t import (
+    LARGE_SEAMLESS_M4T_LANGUAGE_CODES,
+    UNIT_SUPPORTED_LANGUAGES,
+    VOCODER_SUPPORTED_LANGUAGES,
+    SeamlessM4TTokenizer,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -57,8 +60,8 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
     This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
 
-    The tokenization method is `<language code> <tokens> <eos>` for source language documents, and `<eos> <language code>
-    <tokens> <eos>` for target language documents.
+    The tokenization method is `<language code> <tokens> <eos>` for source language documents, and `<eos> <language
+    code> <tokens> <eos>` for target language documents.
 
     Examples:
 
@@ -183,7 +186,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         self.cur_lang_code = self.convert_tokens_to_ids(self._src_lang)
         self._tgt_lang = f"__{tgt_lang}__"
         self.set_tgt_lang_special_tokens(self._tgt_lang)
-        
+
         self.t2u_language_code = UNIT_SUPPORTED_LANGUAGES
         self.t2u_lang_code_to_id = {code: i for i, code in enumerate(self.t2u_language_code)}
         self.t2u_id_to_lang_code = {v: k for k, v in self.t2u_lang_code_to_id.items()}
@@ -191,7 +194,6 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         self.vocoder_language_code = VOCODER_SUPPORTED_LANGUAGES
         self.vocoder_lang_code_to_id = {code: i for i, code in enumerate(self.vocoder_language_code)}
         self.vocoder_id_to_lang_code = {v: k for k, v in self.vocoder_lang_code_to_id.items()}
-
 
     @property
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang

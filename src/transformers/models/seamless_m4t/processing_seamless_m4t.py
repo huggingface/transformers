@@ -21,10 +21,12 @@ from ...processing_utils import ProcessorMixin
 
 class SeamlessM4TProcessor(ProcessorMixin):
     r"""
-    Constructs a SeamlessM4T processor which wraps a SeamlessM4T feature extractor and a SeamlessM4T tokenizer into a single processor.
+    Constructs a SeamlessM4T processor which wraps a SeamlessM4T feature extractor and a SeamlessM4T tokenizer into a
+    single processor.
 
-    [`SeamlessM4TProcessor`] offers all the functionalities of [`SeamlessM4TFeatureExtractor`] and [`SeamlessM4TTokenizerFast`]. See the
-    [`~SeamlessM4TProcessor.__call__`] and [`~SeamlessM4TProcessor.decode`] for more information.
+    [`SeamlessM4TProcessor`] offers all the functionalities of [`SeamlessM4TFeatureExtractor`] and
+    [`SeamlessM4TTokenizerFast`]. See the [`~SeamlessM4TProcessor.__call__`] and [`~SeamlessM4TProcessor.decode`] for
+    more information.
 
     Args:
         feature_extractor ([`SeamlessM4TFeatureExtractor`]):
@@ -38,14 +40,13 @@ class SeamlessM4TProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
-    def __call__(self, text=None, audios=None, return_tensors=None, 
-                 src_lang=None, tgt_lang=None, **kwargs):
+    def __call__(self, text=None, audios=None, return_tensors=None, src_lang=None, tgt_lang=None, **kwargs):
         """
         Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
-        and `kwargs` arguments to SeamlessM4TTokenizerFast's [`~SeamlessM4TTokenizerFast.__call__`] if `text` is not `None` to
-        encode the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
-        SeamlessM4TFeatureExtractor's [`~SeamlessM4TFeatureExtractor.__call__`] if `audios` is not `None`. Please refer to the
-        doctsring of the above two methods for more information.
+        and `kwargs` arguments to SeamlessM4TTokenizerFast's [`~SeamlessM4TTokenizerFast.__call__`] if `text` is not
+        `None` to encode the text. To prepare the audio(s), this method forwards the `audios` and `kwrags` arguments to
+        SeamlessM4TFeatureExtractor's [`~SeamlessM4TFeatureExtractor.__call__`] if `audios` is not `None`. Please refer
+        to the doctsring of the above two methods for more information.
 
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
@@ -65,7 +66,7 @@ class SeamlessM4TProcessor(ProcessorMixin):
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
             src_lang (`str`, *optional*): The language code of the input texts/audios.
             tgt_lang (`str`, *optional*): The code of the target language.
-                
+
 
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
@@ -84,16 +85,18 @@ class SeamlessM4TProcessor(ProcessorMixin):
         if text is None and audios is None:
             raise ValueError("You have to specify either text or audios. Both cannot be none.")
         elif text is not None and audios is not None:
-            raise ValueError("Text and audios are mututally exclusive when passed to `SeamlessM4T`. Specify one or another.")
+            raise ValueError(
+                "Text and audios are mututally exclusive when passed to `SeamlessM4T`. Specify one or another."
+            )
         elif text is not None:
             if tgt_lang is not None:
                 self.tokenizer.tgt_lang = tgt_lang
             if src_lang is not None:
                 self.tokenizer.src_lang = src_lang
             encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
-            
+
             return encoding
-        
+
         else:
             if tgt_lang is not None:
                 self.feature_extractor.tgt_lang = tgt_lang
@@ -104,18 +107,17 @@ class SeamlessM4TProcessor(ProcessorMixin):
             )
             return encoding
 
-
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to SeamlessM4TTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
+        This method forwards all its arguments to SeamlessM4TTokenizerFast's [`~PreTrainedTokenizer.batch_decode`].
+        Please refer to the docstring of this method for more information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to SeamlessM4TTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer
-        to the docstring of this method for more information.
+        This method forwards all its arguments to SeamlessM4TTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please
+        refer to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 

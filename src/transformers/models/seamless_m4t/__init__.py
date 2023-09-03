@@ -44,6 +44,10 @@ else:
         "SeamlessM4TForSpeechToText",
         "SeamlessM4TModel",
         "SeamlessM4TPreTrainedModel",
+        "SeamlessM4TCodeHifiGan",
+        "SeamlessM4THifiGan",
+        "SeamlessM4TTextToUnitForConditionalGeneration",
+        "SeamlessM4TTextToUnitModel",
     ]
 
 
@@ -68,12 +72,16 @@ if TYPE_CHECKING:
     else:
         from .modeling_seamless_m4t import (
             SEAMLESS_M4T_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SeamlessM4TCodeHifiGan,
             SeamlessM4TForSpeechToSpeech,
             SeamlessM4TForSpeechToText,
             SeamlessM4TForTextToSpeech,
             SeamlessM4TForTextToText,
+            SeamlessM4THifiGan,
             SeamlessM4TModel,
             SeamlessM4TPreTrainedModel,
+            SeamlessM4TTextToUnitForConditionalGeneration,
+            SeamlessM4TTextToUnitModel,
         )
 
 

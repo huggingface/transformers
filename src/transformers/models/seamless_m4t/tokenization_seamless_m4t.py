@@ -65,6 +65,7 @@ VOCODER_SUPPORTED_LANGUAGES = ["__arb__", "__ben__", "__cat__", "__ces__", "__cm
 # TODO: change repo/id -> repo id
 # TODO: add language code to docstrings
 
+
 class SeamlessM4TTokenizer(PreTrainedTokenizer):
     """
     Construct an SeamlessM4T tokenizer.
@@ -72,8 +73,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
     Adapted from [`RobertaTokenizer`] and [`XLNetTokenizer`]. Based on
     [SentencePiece](https://github.com/google/sentencepiece).
 
-    The tokenization method is `<language code> <tokens> <eos>` for source language documents, and `<eos> <language code>
-    <tokens> <eos>` for target language documents.
+    The tokenization method is `<language code> <tokens> <eos>` for source language documents, and `<eos> <language
+    code> <tokens> <eos>` for target language documents.
 
     Examples:
 
