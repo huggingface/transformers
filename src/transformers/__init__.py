@@ -3359,12 +3359,12 @@ else:
         [
             "TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TFDebertaV2ForMaskedLM",
+            "TFDebertaV2ForMultipleChoice",
             "TFDebertaV2ForQuestionAnswering",
             "TFDebertaV2ForSequenceClassification",
             "TFDebertaV2ForTokenClassification",
             "TFDebertaV2Model",
             "TFDebertaV2PreTrainedModel",
-            "TFDebertaV2ForMultipleChoice",
         ]
     )
     _import_structure["models.deit"].extend(
@@ -6968,12 +6968,12 @@ if TYPE_CHECKING:
         from .models.deberta_v2 import (
             TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDebertaV2ForMaskedLM,
+            TFDebertaV2ForMultipleChoice,
             TFDebertaV2ForQuestionAnswering,
             TFDebertaV2ForSequenceClassification,
             TFDebertaV2ForTokenClassification,
             TFDebertaV2Model,
             TFDebertaV2PreTrainedModel,
-            TFDebertaV2ForMultipleChoice,
         )
         from .models.deit import (
             TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
