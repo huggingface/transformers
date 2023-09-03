@@ -185,7 +185,7 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     # verify patch embeddings
     original_patch_embed = original_model.encoder.model.patch_embed(pixel_values)
     patch_embeddings, _ = model.encoder.embeddings(pixel_values)
-    assert torch.allclose(original_patch_embed, patch_embeddings, atol=1e-3)
+    assert torch.allclose(original_patch_embed, patch_embeddings)
 
     # verify encoder hidden states
     original_last_hidden_state = original_model.encoder(pixel_values)
