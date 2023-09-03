@@ -180,10 +180,7 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     pixel_values = processor(image, return_tensors="pt").pixel_values
     original_pixel_values = original_model.encoder.prepare_input(image).unsqueeze(0)
 
-    print("Mean of pixel values:", pixel_values.mean())
-    print("Mean of original pixel values:", original_pixel_values.mean())
-
-    assert torch.allclose(original_pixel_values, pixel_values, atol=1e-3)
+    assert torch.allclose(original_pixel_values, pixel_values)
 
     # verify patch embeddings
     original_patch_embed = original_model.encoder.model.patch_embed(pixel_values)

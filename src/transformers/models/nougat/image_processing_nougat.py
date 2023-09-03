@@ -129,6 +129,17 @@ class NougatImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
     def crop_margin(self, image: Image.Image) -> Image.Image:
+        """
+        Crops the margin of the image.
+
+        Args:
+            image (`Image.Image`):
+                The image to be cropped.
+
+        Returns:
+            `Image.Image`: The cropped image.
+        """
+
         if not isinstance(image, Image.Image):
             image = Image.fromarray(image)
 
@@ -315,19 +326,6 @@ class NougatImageProcessor(BaseImageProcessor):
         )
         return resized_image
 
-    def normalize_cv2(self, image, mean, denominator):
-        if mean.shape and len(mean) != 4 and mean.shape != image.shape:
-            mean = np.array(mean.tolist() + [0] * (4 - len(mean)), dtype=np.float64)
-        if not denominator.shape:
-            denominator = np.array([denominator.tolist()] * 4, dtype=np.float64)
-        elif len(denominator) != 4 and denominator.shape != image.shape:
-            denominator = np.array(denominator.tolist() + [1] * (4 - len(denominator)), dtype=np.float64)
-
-        image = np.ascontiguousarray(image.astype("float32"))
-        cv2.subtract(image, mean.astype(np.float64), image)
-        cv2.multiply(image, denominator.astype(np.float64), image)
-        return image
-
     def normalize(
         self,
         image: np.array,
@@ -339,7 +337,22 @@ class NougatImageProcessor(BaseImageProcessor):
     ) -> np.array:
         """
         Normalize the image with the provided mean and standard deviation. Replicates
-        `Albumentations.pytorch.transforms.Normalize`.
+        `Albumentations.augmentations.Normalize`.
+
+        Normalization is applied by the formula: `img = (img - mean * max_pixel_value) / (std * max_pixel_value)`.
+
+        Args:
+            image (`np.ndarray`):
+                The image to normalize.
+            mean (`float` or `Iterable[float]`):
+                The mean to use for normalization.
+            std (`float` or `Iterable[float]`):
+                The standard deviation to use for normalization.
+            data_format (`ChannelDimension`, *optional*):
+                The channel dimension format of the output image. If unset, will use the inferred format from the
+                input.
+            input_data_format (`ChannelDimension`, *optional*):
+                The channel dimension format of the input image. If unset, will use the inferred format from the input.
         """
         if not isinstance(image, np.ndarray):
             raise ValueError("image must be a numpy array")
@@ -368,10 +381,9 @@ class NougatImageProcessor(BaseImageProcessor):
         denominator = np.reciprocal(std, dtype=np.float32)
 
         if input_data_format == ChannelDimension.LAST:
-            image = self.normalize_cv2(image, mean, denominator)
+            image = (image - mean) * denominator
         else:
-            pass
-            # return normalize_numpy(image, mean, denominator)
+            image = ((image.T - mean) * denominator).T
 
         image = (
             to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
@@ -497,9 +509,6 @@ class NougatImageProcessor(BaseImageProcessor):
         if do_crop_margin:
             images = [self.crop_margin(image) for image in images]
 
-        print(np.array(images[0]).shape)
-        print(np.array(images[0]).mean())
-
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
@@ -522,14 +531,8 @@ class NougatImageProcessor(BaseImageProcessor):
                 for image in images
             ]
 
-        print("Shape of image after resizing:", images[0].shape)
-        print("Mean of image after resizing:", images[0].mean())
-
         if do_thumbnail:
             images = [self.thumbnail(image=image, size=size, input_data_format=input_data_format) for image in images]
-
-        print("Shape of image after thumbnail:", images[0].shape)
-        print("Mean of image after thumbnail:", images[0].mean())
 
         if do_pad:
             images = [
@@ -539,15 +542,11 @@ class NougatImageProcessor(BaseImageProcessor):
                 for image in images
             ]
 
-        print("Shape of image after padding:", images[0].shape)
-        print("Mean of image after padding:", images[0].mean())
-
         if do_normalize:
-            # TODO support input_data_format
-            images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
-
-        print("Shape of image after normalizing:", images[0].shape)
-        print("Mean of image after normalizing:", images[0].mean())
+            images = [
+                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                for image in images
+            ]
 
         # TODO remove do_rescale?
         # if do_rescale:
