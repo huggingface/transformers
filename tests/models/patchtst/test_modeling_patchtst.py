@@ -285,17 +285,20 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         super().test_retain_grad_hidden_states_attentions()
 
 
-def prepare_batch(repo_id="diepi/test-etth1", file='train-batch.pt'):
+# Note: Publishing of this dataset is under internal review. The dataset is not yet downloadable.
+def prepare_batch(repo_id="ibm/etth1", file="train-batch.pt"):
     file = hf_hub_download(repo_id=repo_id, filename=file, repo_type="dataset")
     batch = torch.load(file, map_location=torch_device)
     return batch
 
 
+# Note: Publishing of pretrained weights is under internal review. Pretrained model is not yet downloadable.
 @require_torch
 @slow
 class PatchTSTModelIntegrationTests(unittest.TestCase):
+    # Publishing of pretrained weights are under internal review. Pretrained model is not yet downloadable.
     def test_pretrain_head(self):
-        model = PatchTSTForMaskPretraining.from_pretrained('diepi/test_patchtst_pretrained_etth1').to(torch_device)
+        model = PatchTSTForMaskPretraining.from_pretrained("ibm/patchtst_pretrained_etth1").to(torch_device)
         batch = prepare_batch()
 
         torch.manual_seed(0)
@@ -313,26 +316,10 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
                                       device=torch_device)
         self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
 
-    # def test_classification_head(self):
-    #     # mock data, test
-    #     model = PatchTSTForClassification.from_pretrained('diepi/test_patchtst_classification_mock').to(torch_device)
-    #     batch = prepare_batch(repo_id="diepi/mock-data", file="test-mock-patchtst.pt")
-    #
-    #     torch.manual_seed(0)
-    #     with torch.no_grad():
-    #         output = model(
-    #             past_values=batch["past_values"].to(torch_device)
-    #         ).prediction_logits
-    #     expected_shape = torch.Size([1, model.config.num_classes])
-    #     self.assertEqual(output.shape, expected_shape)
-    #
-    #     expected_slice = torch.tensor([[-0.2774, -0.1081, 0.6771]],
-    #                                   device=torch_device,
-    #                                   )
-    #     self.assertTrue(torch.allclose(output, expected_slice, atol=TOLERANCE))
-
+    # Publishing of pretrained weights are under internal review. Pretrained model is not yet downloadable.
     def test_prediction_head(self):
-        model = PatchTSTForPrediction.from_pretrained('diepi/test_patchtst_prediction_etth1').to(torch_device)
+        model = PatchTSTForPrediction.from_pretrained("ibm/patchtst_prediction_etth1").to(torch_device)
+
         batch = prepare_batch(file="test-batch.pt")
 
         torch.manual_seed(0)
@@ -348,29 +335,3 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
                                       device=torch_device,
                                       )
         self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))
-
-    # def test_seq_to_seq_generation(self):
-    #     model = PatchTSTForPrediction.from_pretrained("diepi/test_patchtst_prediction_etth1").to(torch_device)
-    #     batch = prepare_batch("val-batch.pt")
-    #
-    #     torch.manual_seed(0)
-    #     with torch.no_grad():
-    #         outputs = model.generate(
-    #             past_values=batch["past_values"].to(torch_device),
-    #             future_values=batch["future_values"].to(torch_device)
-    #         ).prediction_output
-    #     expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
-    #     # self.assertEqual(outputs.sequences.shape, expected_shape)
-    #     #
-    #     # expected_slice = torch.tensor([3400.8005, 4289.2637, 7101.9209], device=torch_device)
-    #     # mean_prediction = outputs.sequences.mean(dim=1)
-    #     # self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=1e-1))
-    #
-    #     # expected_shape = torch.Size([64, model.config.prediction_length, model.config.num_input_channels])
-    #     self.assertEqual(outputs.shape, expected_shape)
-    #
-    #     expected_slice = torch.tensor([[-0.8200, 0.3741, -0.7543, 0.3971, -0.6659, -0.0124, -0.8308]],
-    #                                   device=torch_device,
-    #                                   )
-    #     self.assertTrue(torch.allclose(outputs[0, :1, :7], expected_slice, atol=TOLERANCE))
-
