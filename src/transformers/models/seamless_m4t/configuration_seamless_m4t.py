@@ -221,7 +221,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         spkr_embed_dim=256,
         vocoder_num_langs=36,
         vocoder_num_spkrs=200,
-        use_dur_predictor=True,
         variance_predictor_kernel_size=3,
         var_pred_dropout=0.5,
         **kwargs,

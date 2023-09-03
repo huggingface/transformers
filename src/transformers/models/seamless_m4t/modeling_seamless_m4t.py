@@ -2653,8 +2653,7 @@ class SeamlessM4TCodeHifiGan(SeamlessM4THifiGan):
         self.speaker_embedding = nn.Embedding(config.vocoder_num_spkrs, config.spkr_embed_dim)
         self.language_embedding = nn.Embedding(config.vocoder_num_langs, config.lang_embed_dim)
 
-        if config.use_dur_predictor:
-            self.dur_predictor = SeamlessM4TVariancePredictor(config)
+        self.dur_predictor = SeamlessM4TVariancePredictor(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2681,20 +2680,19 @@ class SeamlessM4TCodeHifiGan(SeamlessM4THifiGan):
         return signal
 
     def forward(
-        self, input_ids: Tensor, speaker_id: Tensor, lang_id: Tensor, use_dur_prediction: bool
+        self, input_ids: Tensor, speaker_id: Tensor, lang_id: Tensor
     ) -> Tensor:  # type: ignore
         hidden_states = self.unit_embedding(input_ids).transpose(1, 2)
 
-        if self.dur_predictor and use_dur_prediction:
-            if hidden_states.size(0) != 1:
-                raise ValueError(
-                    f"Input `batch_size={hidden_states.size(0)} and `use_dur_prediction=True`, but the variance predictor only supports single sample prediction. Use it sample per sample."
-                )
+        if hidden_states.size(0) != 1:
+            raise ValueError(
+                f"Input `batch_size={hidden_states.size(0)}, but the variance predictor only supports single sample prediction. Use it sample per sample."
+            )
 
-            log_dur_pred = self.dur_predictor(hidden_states.transpose(1, 2))
-            dur_out = torch.clamp(torch.round((torch.exp(log_dur_pred) - 1)).long(), min=1)
-            # B x C x T
-            hidden_states = torch.repeat_interleave(hidden_states, dur_out.view(-1), dim=2)
+        log_dur_pred = self.dur_predictor(hidden_states.transpose(1, 2))
+        dur_out = torch.clamp(torch.round((torch.exp(log_dur_pred) - 1)).long(), min=1)
+        # B x C x T
+        hidden_states = torch.repeat_interleave(hidden_states, dur_out.view(-1), dim=2)
 
         spkr = self.speaker_embedding(speaker_id).transpose(1, 2)
         spkr = self._upsample(spkr, hidden_states.shape[-1])
@@ -3271,7 +3269,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
 
         vocoder_speaker_id = torch.tensor([[0]]).to(self.device)  # TODO: batch and parameter
         waveforms = self.vocoder(
-            input_ids=unit_ids, speaker_id=vocoder_speaker_id, lang_id=vocoder_tgt_lang_id, use_dur_prediction=True
+            input_ids=unit_ids, speaker_id=vocoder_speaker_id, lang_id=vocoder_tgt_lang_id
         )
 
         if return_intermediate_token_ids:
@@ -3477,7 +3475,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
 
         vocoder_speaker_id = torch.tensor([[0]]).to(self.device)  # TODO: batch and parameter
         waveforms = self.vocoder(
-            input_ids=unit_ids, speaker_id=vocoder_speaker_id, lang_id=vocoder_tgt_lang_id, use_dur_prediction=True
+            input_ids=unit_ids, speaker_id=vocoder_speaker_id, lang_id=vocoder_tgt_lang_id
         )
 
         if return_intermediate_token_ids:
@@ -3844,7 +3842,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
         vocoder_speaker_id = torch.tensor([[0]]).to(self.device)  # TODO: batch and parameter
         waveforms = self.vocoder(
-            input_ids=unit_ids, speaker_id=vocoder_speaker_id, lang_id=vocoder_tgt_lang_id, use_dur_prediction=True
+            input_ids=unit_ids, speaker_id=vocoder_speaker_id, lang_id=vocoder_tgt_lang_id
         )
 
         if return_intermediate_token_ids:
