@@ -18,11 +18,10 @@ https://github.com/facebookresearch/nougat/tree/main"""
 import argparse
 
 import torch
+from huggingface_hub import hf_hub_download
 from nougat import NougatModel
 from nougat.dataset.rasterize import rasterize_paper
 from nougat.utils.checkpoint import get_checkpoint
-
-from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import (
@@ -172,6 +171,7 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     image_processor = NougatImageProcessor(
         do_align_long_axis=original_model.config.align_long_axis,
         size=size,
+        do_rescale=False,
     )
     # TODO create NougatProcessor?
     processor = DonutProcessor(image_processor=image_processor, tokenizer=tokenizer)

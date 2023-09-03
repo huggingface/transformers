@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for Nougat."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 import cv2
 import numpy as np
@@ -33,6 +33,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    get_channel_dimension_axis,
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
@@ -73,7 +74,7 @@ class NougatImageProcessor(BaseImageProcessor):
             Whether to pad the image. If `random_padding` is set to `True` in `preprocess`, each image is padded with a
             random amount of padding on each size, up to the largest image size in the batch. Otherwise, all images are
             padded to the largest image size in the batch.
-        do_rescale (`bool`, *optional*, defaults to `True`):
+        do_rescale (`bool`, *optional*, defaults to `False`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
             the `preprocess` method.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
@@ -99,7 +100,7 @@ class NougatImageProcessor(BaseImageProcessor):
         do_thumbnail: bool = True,
         do_align_long_axis: bool = False,
         do_pad: bool = True,
-        do_rescale: bool = True,
+        do_rescale: bool = False,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
@@ -314,32 +315,69 @@ class NougatImageProcessor(BaseImageProcessor):
         )
         return resized_image
 
-    def normalize_cv2(self, img, mean, denominator):
-        if mean.shape and len(mean) != 4 and mean.shape != img.shape:
+    def normalize_cv2(self, image, mean, denominator):
+        if mean.shape and len(mean) != 4 and mean.shape != image.shape:
             mean = np.array(mean.tolist() + [0] * (4 - len(mean)), dtype=np.float64)
         if not denominator.shape:
             denominator = np.array([denominator.tolist()] * 4, dtype=np.float64)
-        elif len(denominator) != 4 and denominator.shape != img.shape:
+        elif len(denominator) != 4 and denominator.shape != image.shape:
             denominator = np.array(denominator.tolist() + [1] * (4 - len(denominator)), dtype=np.float64)
 
-        img = np.ascontiguousarray(img.astype("float32"))
-        cv2.subtract(img, mean.astype(np.float64), img)
-        cv2.multiply(img, denominator.astype(np.float64), img)
-        return img
+        image = np.ascontiguousarray(image.astype("float32"))
+        cv2.subtract(image, mean.astype(np.float64), image)
+        cv2.multiply(image, denominator.astype(np.float64), image)
+        return image
 
-    def normalize(self, image, mean, std, max_pixel_value=255.0):
+    def normalize(
+        self,
+        image: np.array,
+        mean: Union[float, Iterable[float]],
+        std: Union[float, Iterable[float]],
+        max_pixel_value: int = 255.0,
+        data_format: Optional[ChannelDimension] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.array:
+        """
+        Normalize the image with the provided mean and standard deviation. Replicates
+        `Albumentations.pytorch.transforms.Normalize`.
+        """
+        if not isinstance(image, np.ndarray):
+            raise ValueError("image must be a numpy array")
+
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image)
+        channel_axis = get_channel_dimension_axis(image, input_data_format=input_data_format)
+        num_channels = image.shape[channel_axis]
+
+        if isinstance(mean, Iterable):
+            if len(mean) != num_channels:
+                raise ValueError(f"mean must have {num_channels} elements if it is an iterable, got {len(mean)}")
+        else:
+            mean = [mean] * num_channels
         mean = np.array(mean, dtype=np.float32)
         mean *= max_pixel_value
 
+        if isinstance(std, Iterable):
+            if len(std) != num_channels:
+                raise ValueError(f"std must have {num_channels} elements if it is an iterable, got {len(std)}")
+        else:
+            std = [std] * num_channels
         std = np.array(std, dtype=np.float32)
         std *= max_pixel_value
 
         denominator = np.reciprocal(std, dtype=np.float32)
 
-        if image.ndim == 3 and image.shape[-1] == 3:
-            return self.normalize_cv2(image, mean, denominator)
-        # return normalize_numpy(img, mean, denominator)
-    
+        if input_data_format == ChannelDimension.LAST:
+            image = self.normalize_cv2(image, mean, denominator)
+        else:
+            pass
+            # return normalize_numpy(image, mean, denominator)
+
+        image = (
+            to_channel_dimension_format(image, data_format, input_data_format) if data_format is not None else image
+        )
+        return image
+
     def preprocess(
         self,
         images: ImageInput,
@@ -505,14 +543,13 @@ class NougatImageProcessor(BaseImageProcessor):
         print("Mean of image after padding:", images[0].mean())
 
         if do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std)
-                for image in images
-            ]
-        
+            # TODO support input_data_format
+            images = [self.normalize(image=image, mean=image_mean, std=image_std) for image in images]
+
         print("Shape of image after normalizing:", images[0].shape)
         print("Mean of image after normalizing:", images[0].mean())
 
+        # TODO remove do_rescale?
         # if do_rescale:
         #     images = [
         #         self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
