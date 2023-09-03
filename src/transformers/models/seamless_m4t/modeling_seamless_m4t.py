@@ -2672,8 +2672,8 @@ class SeamlessM4TCodeHifiGan(SeamlessM4THifiGan):
         signal = signal.unsqueeze(3).repeat(1, 1, 1, max_frames // cond_length)
 
         # pad zeros as needed (if signal's shape does not divide completely with max_frames)
-        reminder = (max_frames - signal.shape[2] * signal.shape[3]) // signal.shape[3]
-        if reminder > 0:
+        remainder = (max_frames - signal.shape[2] * signal.shape[3]) // signal.shape[3]
+        if remainder > 0:
             raise NotImplementedError("Padding condition signal - misalignment between condition features.")
 
         signal = signal.view(bsz, channels, max_frames)
