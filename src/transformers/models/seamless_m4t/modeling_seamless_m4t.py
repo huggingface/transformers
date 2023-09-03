@@ -2500,33 +2500,32 @@ class SeamlessM4TVariancePredictor(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        encoder_embed_dim = config.unit_embed_dim
-        var_pred_hidden_dim = config.unit_embed_dim
+        embed_dim = config.unit_embed_dim
         var_pred_kernel_size = config.var_pred_kernel_size
         var_pred_dropout = config.var_pred_dropout
 
         self.conv1 = nn.Sequential(
             nn.Conv1d(
-                encoder_embed_dim,
-                var_pred_hidden_dim,
+                embed_dim,
+                embed_dim,
                 kernel_size=var_pred_kernel_size,
                 padding=(var_pred_kernel_size - 1) // 2,
             ),
             nn.ReLU(),
         )
-        self.ln1 = nn.LayerNorm(var_pred_hidden_dim)
+        self.ln1 = nn.LayerNorm(embed_dim)
         self.dropout_module = nn.Dropout(p=var_pred_dropout)
         self.conv2 = nn.Sequential(
             nn.Conv1d(
-                var_pred_hidden_dim,
-                var_pred_hidden_dim,
+                embed_dim,
+                embed_dim,
                 kernel_size=var_pred_kernel_size,
                 padding=1,
             ),
             nn.ReLU(),
         )
-        self.ln2 = nn.LayerNorm(var_pred_hidden_dim)
-        self.proj = nn.Linear(var_pred_hidden_dim, 1)
+        self.ln2 = nn.LayerNorm(embed_dim)
+        self.proj = nn.Linear(embed_dim, 1)
 
     def forward(self, hidden_states: Tensor) -> Tensor:
         # Input: B x T x C; Output: B x T
