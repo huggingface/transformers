@@ -2504,34 +2504,31 @@ class SeamlessM4TVariancePredictor(nn.Module):
         kernel_size = config.variance_predictor_kernel_size
         var_pred_dropout = config.var_pred_dropout
 
-        self.conv1 = nn.Sequential(
-            nn.Conv1d(
+        self.conv1 = nn.Conv1d(
                 embed_dim,
                 embed_dim,
                 kernel_size=kernel_size,
                 padding=(kernel_size - 1) // 2,
-            ),
-            nn.ReLU(),
-        )
+            )
+        self.activation_fuction = nn.ReLU()
         self.ln1 = nn.LayerNorm(embed_dim)
         self.dropout_module = nn.Dropout(p=var_pred_dropout)
-        self.conv2 = nn.Sequential(
-            nn.Conv1d(
+        self.conv2 = nn.Conv1d(
                 embed_dim,
                 embed_dim,
                 kernel_size=kernel_size,
                 padding=1,
-            ),
-            nn.ReLU(),
-        )
+            )
         self.ln2 = nn.LayerNorm(embed_dim)
         self.proj = nn.Linear(embed_dim, 1)
 
     def forward(self, hidden_states: Tensor) -> Tensor:
         # Input: B x T x C; Output: B x T
-        hidden_states = self.conv1(hidden_states.transpose(1, 2)).transpose(1, 2)
+        hidden_states = self.conv1(hidden_states.transpose(1, 2))
+        hidden_states = self.activation_fuction(hidden_states).transpose(1, 2)
         hidden_states = self.dropout_module(self.ln1(hidden_states))
-        hidden_states = self.conv2(hidden_states.transpose(1, 2)).transpose(1, 2)
+        hidden_states = self.conv2(hidden_states.transpose(1, 2))
+        hidden_states = self.activation_fuction(hidden_states).transpose(1, 2)
         hidden_states = self.dropout_module(self.ln2(hidden_states))
         return self.proj(hidden_states).squeeze(dim=2)
 
