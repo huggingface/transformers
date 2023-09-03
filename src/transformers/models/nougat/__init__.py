@@ -16,7 +16,9 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_vision_available
 
 
-_import_structure = {}
+_import_structure = {
+    "processing_nougat": ["NougatProcessor"],
+}
 
 try:
     if not is_tokenizers_available():
@@ -36,6 +38,8 @@ else:
 
 
 if TYPE_CHECKING:
+    from .processing_nougat import NougatProcessor
+
     try:
         if not is_tokenizers_available():
             raise OptionalDependencyNotAvailable()

@@ -25,17 +25,17 @@ The abstract from the paper is the following:
 
 *Scientific knowledge is predominantly stored in books and scientific journals, often in the form of PDFs. However, the PDF format leads to a loss of semantic information, particularly for mathematical expressions. We propose Nougat (Neural Optical Understanding for Academic Documents), a Visual Transformer model that performs an Optical Character Recognition (OCR) task for processing scientific documents into a markup language, and demonstrate the effectiveness of our model on a new dataset of scientific documents. The proposed approach offers a promising solution to enhance the accessibility of scientific knowledge in the digital age, by bridging the gap between human-readable documents and machine-readable text. We release the models and code to accelerate future work on scientific text recognition.*
 
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/donut_architecture.jpg"
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/nougat_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> Donut high-level overview. Taken from the <a href="https://arxiv.org/abs/2111.15664">original paper</a>. </small>
+<small> Nougat high-level overview. Taken from the <a href="https://arxiv.org/abs/2308.13418">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found
 [here](https://github.com/facebookresearch/nougat).
 
 Tips:
 
-- The quickest way to get started with Donut is by checking the [tutorial
+- The quickest way to get started with Nougat is by checking the [tutorial
   notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/Donut), which show how to use the model
   at inference time as well as fine-tuning on custom data.
 - Nougat is always used within the [VisionEncoderDecoder](vision-encoder-decoder) framework.
@@ -48,3 +48,7 @@ Tips:
 ## NougatTokenizerFast
 
 [[autodoc]] NougatTokenizerFast
+
+## NougatProcessor
+
+[[autodoc]] NougatProcessor
