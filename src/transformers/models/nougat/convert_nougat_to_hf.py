@@ -18,9 +18,12 @@ https://github.com/facebookresearch/nougat/tree/main"""
 import argparse
 
 import torch
-from datasets import load_dataset
 from nougat import NougatModel
+from nougat.dataset.rasterize import rasterize_paper
 from nougat.utils.checkpoint import get_checkpoint
+
+from huggingface_hub import hf_hub_download
+from PIL import Image
 
 from transformers import (
     DonutProcessor,
@@ -152,9 +155,10 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     new_state_dict = convert_state_dict(state_dict, model)
     model.load_state_dict(new_state_dict)
 
-    # verify results on scanned document
-    dataset = load_dataset("hf-internal-testing/example-documents")
-    image = dataset["test"][0]["image"].convert("RGB")
+    # verify results on PDF
+    filepath = hf_hub_download(repo_id="ysharma/nougat", filename="input/nougat.pdf", repo_type="space")
+    images = rasterize_paper(pdf=filepath, return_pil=True)
+    image = Image.open(images[0])
 
     tokenizer_file = checkpoint_path / "tokenizer.json"
     tokenizer = NougatTokenizerFast(tokenizer_file=str(tokenizer_file))
@@ -168,7 +172,6 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     image_processor = NougatImageProcessor(
         do_align_long_axis=original_model.config.align_long_axis,
         size=size,
-        do_normalize=False,
     )
     # TODO create NougatProcessor?
     processor = DonutProcessor(image_processor=image_processor, tokenizer=tokenizer)
@@ -176,6 +179,10 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
     # verify pixel_values
     pixel_values = processor(image, return_tensors="pt").pixel_values
     original_pixel_values = original_model.encoder.prepare_input(image).unsqueeze(0)
+
+    print("Mean of pixel values:", pixel_values.mean())
+    print("Mean of original pixel values:", original_pixel_values.mean())
+
     assert torch.allclose(original_pixel_values, pixel_values, atol=1e-3)
 
     # verify patch embeddings
