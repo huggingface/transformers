@@ -57,7 +57,10 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 vocoder_convert_list = [
-    ("ups", "upsampler"),
+    ("ups", "hifi_gan.upsampler"),
+    ("conv_pre", "hifi_gan.conv_pre"),
+    ("resblocks", "hifi_gan.resblocks"),
+    ("conv_post", "hifi_gan.conv_post"),
     ("lang", "language_embedding"),
     ("spkr", "speaker_embedding"),
     ("dict.", "unit_embedding."),

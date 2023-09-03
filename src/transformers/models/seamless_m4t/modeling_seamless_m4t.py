@@ -2533,9 +2533,7 @@ class SeamlessM4TVariancePredictor(nn.Module):
         return self.proj(hidden_states).squeeze(dim=2)
 
 
-class SeamlessM4THifiGan(PreTrainedModel):
-    config_class = SeamlessM4TConfig
-    main_input_name = "input_embeds"
+class SeamlessM4THifiGan(nn.Module):
 
     # Almost the same as SpeechT5HifiGan.__init__
     def __init__(self, config: SeamlessM4TConfig):
@@ -2569,35 +2567,6 @@ class SeamlessM4THifiGan(PreTrainedModel):
                 self.resblocks.append(HifiGanResidualBlock(channels, kernel_size, dilation, config.leaky_relu_slope))
 
         self.conv_post = nn.Conv1d(channels, 1, kernel_size=7, stride=1, padding=3)
-
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-                
-    # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan.apply_weight_norm
-    def apply_weight_norm(self):
-        nn.utils.weight_norm(self.conv_pre)
-        for layer in self.upsampler:
-            nn.utils.weight_norm(layer)
-        for layer in self.resblocks:
-            layer.apply_weight_norm()
-        nn.utils.weight_norm(self.conv_post)
-
-    # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan.remove_weight_norm
-    def remove_weight_norm(self):
-        nn.utils.remove_weight_norm(self.conv_pre)
-        for layer in self.upsampler:
-            nn.utils.remove_weight_norm(layer)
-        for layer in self.resblocks:
-            layer.remove_weight_norm()
-        nn.utils.remove_weight_norm(self.conv_post)
 
     def forward(self, input_embeds: torch.FloatTensor) -> torch.FloatTensor:
         r"""
@@ -2639,22 +2608,27 @@ class SeamlessM4THifiGan(PreTrainedModel):
     """HiFi-GAN vocoder.""",
     HIFIGAN_START_DOCSTRING,
 )
-class SeamlessM4TCodeHifiGan(SeamlessM4THifiGan):
+class SeamlessM4TCodeHifiGan(PreTrainedModel):
     """Builds modules of a vocoder model (Code Hifigan) as described in
     :cite:t`https://github.com/facebookresearch/speech-resynthesis`.
 
     To tweak the architecture, you can derive from this class and override the corresponding methods.
     """
+    
+    config_class = SeamlessM4TConfig
+    main_input_name = "input_embeds"
 
     def __init__(self, config):
         super().__init__(config)
+
+        self.dur_predictor = SeamlessM4TVariancePredictor(config)
 
         self.unit_embedding = nn.Embedding(config.unit_hifi_gan_vocab_size, config.unit_embed_dim)
         self.speaker_embedding = nn.Embedding(config.vocoder_num_spkrs, config.spkr_embed_dim)
         self.language_embedding = nn.Embedding(config.vocoder_num_langs, config.lang_embed_dim)
 
-        self.dur_predictor = SeamlessM4TVariancePredictor(config)
-
+        self.hifi_gan = SeamlessM4THifiGan(config)
+        
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -2701,8 +2675,39 @@ class SeamlessM4TCodeHifiGan(SeamlessM4THifiGan):
         lang = self.language_embedding(lang_id).transpose(1, 2)
         lang = self._upsample(lang, hidden_states.shape[-1])
         hidden_states = torch.cat([lang, hidden_states], dim=1)
+        
+        hidden_states = self.hifi_gan(hidden_states)
 
-        return super().forward(hidden_states)
+        return hidden_states
+
+    def _init_weights(self, module):
+        """Initialize the weights."""
+        if isinstance(module, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+                
+    # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan.apply_weight_norm
+    def apply_weight_norm(self):
+        nn.utils.weight_norm(self.conv_pre)
+        for layer in self.hifi_gan.upsampler:
+            nn.utils.weight_norm(layer)
+        for layer in self.hifi_gan.resblocks:
+            layer.apply_weight_norm()
+        nn.utils.weight_norm(self.conv_post)
+
+    # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan.remove_weight_norm
+    def remove_weight_norm(self):
+        nn.utils.remove_weight_norm(self.conv_pre)
+        for layer in self.hifi_gan.upsampler:
+            nn.utils.remove_weight_norm(layer)
+        for layer in self.hifi_gan.resblocks:
+            layer.remove_weight_norm()
+        nn.utils.remove_weight_norm(self.conv_post)
 
 
 ############ WHOLE MODEL related code ################
