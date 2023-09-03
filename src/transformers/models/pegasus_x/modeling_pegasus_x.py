@@ -1300,6 +1300,8 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         # embed positions
         positions = self.embed_positions(inputs_embeds, past_key_values_length)
 
+        positions = positions.to(inputs_embeds.device)
+        
         hidden_states = inputs_embeds + positions
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
