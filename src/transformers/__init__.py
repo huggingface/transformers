@@ -3364,6 +3364,7 @@ else:
             "TFDebertaV2ForTokenClassification",
             "TFDebertaV2Model",
             "TFDebertaV2PreTrainedModel",
+            "TFDebertaV2ForMultipleChoice",
         ]
     )
     _import_structure["models.deit"].extend(
@@ -6972,6 +6973,7 @@ if TYPE_CHECKING:
             TFDebertaV2ForTokenClassification,
             TFDebertaV2Model,
             TFDebertaV2PreTrainedModel,
+            TFDebertaV2ForMultipleChoice,
         )
         from .models.deit import (
             TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -100,6 +100,7 @@ if TYPE_CHECKING:
             TFDebertaV2ForTokenClassification,
             TFDebertaV2Model,
             TFDebertaV2PreTrainedModel,
+            TFDebertaV2ForMultipleChoice,
         )
 
     try:
