@@ -14,7 +14,6 @@
 # limitations under the License.
 """ TF 2.0 DeBERTa-v2 model."""
 
-
 from __future__ import annotations
 
 from typing import Dict, Optional, Tuple, Union
@@ -46,9 +45,7 @@ from ...tf_utils import check_embeddings_within_bounds, shape_list, stable_softm
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_deberta_v2 import DebertaV2Config
 
-
 logger = logging.get_logger(__name__)
-
 
 _CONFIG_FOR_DOC = "DebertaV2Config"
 _CHECKPOINT_FOR_DOC = "kamalkraj/deberta-v2-xlarge"
@@ -169,14 +166,14 @@ class TFDebertaV2Attention(tf.keras.layers.Layer):
         self.config = config
 
     def call(
-        self,
-        input_tensor: tf.Tensor,
-        attention_mask: tf.Tensor,
-        query_states: tf.Tensor = None,
-        relative_pos: tf.Tensor = None,
-        rel_embeddings: tf.Tensor = None,
-        output_attentions: bool = False,
-        training: bool = False,
+            self,
+            input_tensor: tf.Tensor,
+            attention_mask: tf.Tensor,
+            query_states: tf.Tensor = None,
+            relative_pos: tf.Tensor = None,
+            rel_embeddings: tf.Tensor = None,
+            output_attentions: bool = False,
+            training: bool = False,
     ) -> Tuple[tf.Tensor]:
         self_outputs = self.self(
             hidden_states=input_tensor,
@@ -248,14 +245,14 @@ class TFDebertaV2Layer(tf.keras.layers.Layer):
         self.bert_output = TFDebertaV2Output(config, name="output")
 
     def call(
-        self,
-        hidden_states: tf.Tensor,
-        attention_mask: tf.Tensor,
-        query_states: tf.Tensor = None,
-        relative_pos: tf.Tensor = None,
-        rel_embeddings: tf.Tensor = None,
-        output_attentions: bool = False,
-        training: bool = False,
+            self,
+            hidden_states: tf.Tensor,
+            attention_mask: tf.Tensor,
+            query_states: tf.Tensor = None,
+            relative_pos: tf.Tensor = None,
+            rel_embeddings: tf.Tensor = None,
+            output_attentions: bool = False,
+            training: bool = False,
     ) -> Tuple[tf.Tensor]:
         attention_outputs = self.attention(
             input_tensor=hidden_states,
@@ -301,7 +298,7 @@ class TFDebertaV2ConvLayer(tf.keras.layers.Layer):
         return super().build(input_shape)
 
     def call(
-        self, hidden_states: tf.Tensor, residual_states: tf.Tensor, input_mask: tf.Tensor, training: bool = False
+            self, hidden_states: tf.Tensor, residual_states: tf.Tensor, input_mask: tf.Tensor, training: bool = False
     ) -> tf.Tensor:
         out = tf.nn.conv2d(
             tf.expand_dims(hidden_states, 1),
@@ -393,15 +390,15 @@ class TFDebertaV2Encoder(tf.keras.layers.Layer):
         return relative_pos
 
     def call(
-        self,
-        hidden_states: tf.Tensor,
-        attention_mask: tf.Tensor,
-        query_states: tf.Tensor = None,
-        relative_pos: tf.Tensor = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-        training: bool = False,
+            self,
+            hidden_states: tf.Tensor,
+            attention_mask: tf.Tensor,
+            query_states: tf.Tensor = None,
+            relative_pos: tf.Tensor = None,
+            output_attentions: bool = False,
+            output_hidden_states: bool = False,
+            return_dict: bool = True,
+            training: bool = False,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         if len(shape_list(attention_mask)) <= 2:
             input_mask = attention_mask
@@ -458,10 +455,10 @@ def make_log_bucket_position(relative_pos, bucket_size, max_position):
     mid = bucket_size // 2
     abs_pos = tf.where((relative_pos < mid) & (relative_pos > -mid), mid - 1, tf.math.abs(relative_pos))
     log_pos = (
-        tf.math.ceil(
-            tf.cast(tf.math.log(abs_pos / mid), tf.float32) / tf.math.log((max_position - 1) / mid) * (mid - 1)
-        )
-        + mid
+            tf.math.ceil(
+                tf.cast(tf.math.log(abs_pos / mid), tf.float32) / tf.math.log((max_position - 1) / mid) * (mid - 1)
+            )
+            + mid
     )
     bucket_pos = tf.cast(
         tf.where(abs_pos <= mid, tf.cast(relative_pos, tf.float32), log_pos * tf.cast(sign, tf.float32)), tf.int32
@@ -626,14 +623,14 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
         return tensor
 
     def call(
-        self,
-        hidden_states: tf.Tensor,
-        attention_mask: tf.Tensor,
-        query_states: tf.Tensor = None,
-        relative_pos: tf.Tensor = None,
-        rel_embeddings: tf.Tensor = None,
-        output_attentions: bool = False,
-        training: bool = False,
+            self,
+            hidden_states: tf.Tensor,
+            attention_mask: tf.Tensor,
+            query_states: tf.Tensor = None,
+            relative_pos: tf.Tensor = None,
+            rel_embeddings: tf.Tensor = None,
+            output_attentions: bool = False,
+            training: bool = False,
     ) -> Tuple[tf.Tensor]:
         """
         Call the module
@@ -734,7 +731,7 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
 
         att_span = self.pos_ebd_size
         rel_embeddings = tf.expand_dims(
-            rel_embeddings[self.pos_ebd_size - att_span : self.pos_ebd_size + att_span, :], 0
+            rel_embeddings[self.pos_ebd_size - att_span: self.pos_ebd_size + att_span, :], 0
         )
         if self.share_att_key:
             pos_query_layer = tf.tile(
@@ -858,13 +855,13 @@ class TFDebertaV2Embeddings(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def call(
-        self,
-        input_ids: tf.Tensor = None,
-        position_ids: tf.Tensor = None,
-        token_type_ids: tf.Tensor = None,
-        inputs_embeds: tf.Tensor = None,
-        mask: tf.Tensor = None,
-        training: bool = False,
+            self,
+            input_ids: tf.Tensor = None,
+            position_ids: tf.Tensor = None,
+            token_type_ids: tf.Tensor = None,
+            inputs_embeds: tf.Tensor = None,
+            mask: tf.Tensor = None,
+            training: bool = False,
     ) -> tf.Tensor:
         """
         Applies embedding based on inputs tensor.
@@ -1024,16 +1021,16 @@ class TFDebertaV2MainLayer(tf.keras.layers.Layer):
 
     @unpack_inputs
     def call(
-        self,
-        input_ids: TFModelInputType | None = None,
-        attention_mask: np.ndarray | tf.Tensor | None = None,
-        token_type_ids: np.ndarray | tf.Tensor | None = None,
-        position_ids: np.ndarray | tf.Tensor | None = None,
-        inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: bool = False,
+            self,
+            input_ids: TFModelInputType | None = None,
+            attention_mask: np.ndarray | tf.Tensor | None = None,
+            token_type_ids: np.ndarray | tf.Tensor | None = None,
+            position_ids: np.ndarray | tf.Tensor | None = None,
+            inputs_embeds: np.ndarray | tf.Tensor | None = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            training: bool = False,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1196,16 +1193,16 @@ class TFDebertaV2Model(TFDebertaV2PreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
-        self,
-        input_ids: TFModelInputType | None = None,
-        attention_mask: np.ndarray | tf.Tensor | None = None,
-        token_type_ids: np.ndarray | tf.Tensor | None = None,
-        position_ids: np.ndarray | tf.Tensor | None = None,
-        inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
+            self,
+            input_ids: TFModelInputType | None = None,
+            attention_mask: np.ndarray | tf.Tensor | None = None,
+            token_type_ids: np.ndarray | tf.Tensor | None = None,
+            position_ids: np.ndarray | tf.Tensor | None = None,
+            inputs_embeds: np.ndarray | tf.Tensor | None = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            training: Optional[bool] = False,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         outputs = self.deberta(
             input_ids=input_ids,
@@ -1248,17 +1245,17 @@ class TFDebertaV2ForMaskedLM(TFDebertaV2PreTrainedModel, TFMaskedLanguageModelin
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
-        self,
-        input_ids: TFModelInputType | None = None,
-        attention_mask: np.ndarray | tf.Tensor | None = None,
-        token_type_ids: np.ndarray | tf.Tensor | None = None,
-        position_ids: np.ndarray | tf.Tensor | None = None,
-        inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
+            self,
+            input_ids: TFModelInputType | None = None,
+            attention_mask: np.ndarray | tf.Tensor | None = None,
+            token_type_ids: np.ndarray | tf.Tensor | None = None,
+            position_ids: np.ndarray | tf.Tensor | None = None,
+            inputs_embeds: np.ndarray | tf.Tensor | None = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            labels: np.ndarray | tf.Tensor | None = None,
+            training: Optional[bool] = False,
     ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1327,17 +1324,17 @@ class TFDebertaV2ForSequenceClassification(TFDebertaV2PreTrainedModel, TFSequenc
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
-        self,
-        input_ids: TFModelInputType | None = None,
-        attention_mask: np.ndarray | tf.Tensor | None = None,
-        token_type_ids: np.ndarray | tf.Tensor | None = None,
-        position_ids: np.ndarray | tf.Tensor | None = None,
-        inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
+            self,
+            input_ids: TFModelInputType | None = None,
+            attention_mask: np.ndarray | tf.Tensor | None = None,
+            token_type_ids: np.ndarray | tf.Tensor | None = None,
+            position_ids: np.ndarray | tf.Tensor | None = None,
+            inputs_embeds: np.ndarray | tf.Tensor | None = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            labels: np.ndarray | tf.Tensor | None = None,
+            training: Optional[bool] = False,
     ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
@@ -1403,17 +1400,17 @@ class TFDebertaV2ForTokenClassification(TFDebertaV2PreTrainedModel, TFTokenClass
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
-        self,
-        input_ids: TFModelInputType | None = None,
-        attention_mask: np.ndarray | tf.Tensor | None = None,
-        token_type_ids: np.ndarray | tf.Tensor | None = None,
-        position_ids: np.ndarray | tf.Tensor | None = None,
-        inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
+            self,
+            input_ids: TFModelInputType | None = None,
+            attention_mask: np.ndarray | tf.Tensor | None = None,
+            token_type_ids: np.ndarray | tf.Tensor | None = None,
+            position_ids: np.ndarray | tf.Tensor | None = None,
+            inputs_embeds: np.ndarray | tf.Tensor | None = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            labels: np.ndarray | tf.Tensor | None = None,
+            training: Optional[bool] = False,
     ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1474,18 +1471,18 @@ class TFDebertaV2ForQuestionAnswering(TFDebertaV2PreTrainedModel, TFQuestionAnsw
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
-        self,
-        input_ids: TFModelInputType | None = None,
-        attention_mask: np.ndarray | tf.Tensor | None = None,
-        token_type_ids: np.ndarray | tf.Tensor | None = None,
-        position_ids: np.ndarray | tf.Tensor | None = None,
-        inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        start_positions: np.ndarray | tf.Tensor | None = None,
-        end_positions: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
+            self,
+            input_ids: TFModelInputType | None = None,
+            attention_mask: np.ndarray | tf.Tensor | None = None,
+            token_type_ids: np.ndarray | tf.Tensor | None = None,
+            position_ids: np.ndarray | tf.Tensor | None = None,
+            inputs_embeds: np.ndarray | tf.Tensor | None = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            start_positions: np.ndarray | tf.Tensor | None = None,
+            end_positions: np.ndarray | tf.Tensor | None = None,
+            training: Optional[bool] = False,
     ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
         r"""
         start_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
@@ -1542,14 +1539,15 @@ class TFDebertaV2ForQuestionAnswering(TFDebertaV2PreTrainedModel, TFQuestionAnsw
 )
 class TFDebertaV2ForMultipleChoice(TFDebertaV2PreTrainedModel, TFMultipleChoiceLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    _keys_to_ignore_on_load_unexpected = [r"mlm___cls", r"nsp___cls", r"cls.predictions", r"cls.seq_relationship"]
-    _keys_to_ignore_on_load_missing = [r"dropout"]
+    # _keys_to_ignore_on_load_unexpected = [r"mlm___cls", r"nsp___cls", r"cls.predictions", r"cls.seq_relationship"]
+    # _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config: DebertaV2Config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.deberta = TFDebertaV2MainLayer(config, name="deberta")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+        self.pooler = TFDebertaV2ContextPooler(config, name="pooler")
         self.classifier = tf.keras.layers.Dense(
             units=1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
@@ -1562,18 +1560,17 @@ class TFDebertaV2ForMultipleChoice(TFDebertaV2PreTrainedModel, TFMultipleChoiceL
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
-        self,
-        input_ids: TFModelInputType | None = None,
-        attention_mask: np.ndarray | tf.Tensor | None = None,
-        token_type_ids: np.ndarray | tf.Tensor | None = None,
-        position_ids: np.ndarray | tf.Tensor | None = None,
-        head_mask: np.ndarray | tf.Tensor | None = None,
-        inputs_embeds: np.ndarray | tf.Tensor | None = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: np.ndarray | tf.Tensor | None = None,
-        training: Optional[bool] = False,
+            self,
+            input_ids: TFModelInputType | None = None,
+            attention_mask: np.ndarray | tf.Tensor | None = None,
+            token_type_ids: np.ndarray | tf.Tensor | None = None,
+            position_ids: np.ndarray | tf.Tensor | None = None,
+            inputs_embeds: np.ndarray | tf.Tensor | None = None,
+            output_attentions: Optional[bool] = None,
+            output_hidden_states: Optional[bool] = None,
+            return_dict: Optional[bool] = None,
+            labels: np.ndarray | tf.Tensor | None = None,
+            training: Optional[bool] = False,
     ) -> Union[TFMultipleChoiceModelOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
@@ -1607,16 +1604,16 @@ class TFDebertaV2ForMultipleChoice(TFDebertaV2PreTrainedModel, TFMultipleChoiceL
             attention_mask=flat_attention_mask,
             token_type_ids=flat_token_type_ids,
             position_ids=flat_position_ids,
-            head_mask=head_mask,
             inputs_embeds=flat_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
         )
-        pooled_output = outputs[1]
-        pooled_output = self.dropout(inputs=pooled_output, training=training)
-        logits = self.classifier(inputs=pooled_output)
+        sequence_output = outputs[0]
+        pooled_output = self.pooler(sequence_output, training=training)
+        pooled_output = self.dropout(pooled_output, training=training)
+        logits = self.classifier(pooled_output)
         reshaped_logits = tf.reshape(tensor=logits, shape=(-1, num_choices))
         loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=reshaped_logits)
 
