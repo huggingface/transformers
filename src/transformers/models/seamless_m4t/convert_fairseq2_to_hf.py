@@ -58,9 +58,9 @@ logger = logging.get_logger(__name__)
 
 vocoder_convert_list = [
     ("ups", "upsampler"),
-    ("lang", "lang_embeds_layer"),
-    ("spkr", "spkr_embeds_layer"),
-    ("dict.", "unit_embeds_layer."),
+    ("lang", "language_embedding"),
+    ("spkr", "speaker_embedding"),
+    ("dict.", "unit_embedding."),
 ]
 
 # order is important

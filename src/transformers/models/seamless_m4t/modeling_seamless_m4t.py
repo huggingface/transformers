@@ -2541,7 +2541,7 @@ class SeamlessM4THifiGan(PreTrainedModel):
     config_class = SeamlessM4TConfig
     main_input_name = "input_embeds"
 
-    # Almost the same as SpeechT5HifiGan.__init__ with SpeechT5->SeamlessM4TCode
+    # Almost the same as SpeechT5HifiGan.__init__
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__(config)
         self.num_kernels = len(config.resblock_kernel_sizes)
@@ -2653,9 +2653,9 @@ class SeamlessM4TCodeHifiGan(SeamlessM4THifiGan):
     def __init__(self, config):
         super().__init__(config)
 
-        self.unit_embeds_layer = nn.Embedding(config.unit_hifi_gan_vocab_size, config.unit_embed_dim)
-        self.spkr_embeds_layer = nn.Embedding(config.vocoder_num_spkrs, config.spkr_embed_dim)
-        self.lang_embeds_layer = nn.Embedding(config.vocoder_num_langs, config.lang_embed_dim)
+        self.unit_embedding = nn.Embedding(config.unit_hifi_gan_vocab_size, config.unit_embed_dim)
+        self.speaker_embedding = nn.Embedding(config.vocoder_num_spkrs, config.spkr_embed_dim)
+        self.language_embedding = nn.Embedding(config.vocoder_num_langs, config.lang_embed_dim)
 
         if config.use_dur_predictor:
             self.dur_predictor = SeamlessM4TVariancePredictor(config)
@@ -2687,7 +2687,7 @@ class SeamlessM4TCodeHifiGan(SeamlessM4THifiGan):
     def forward(
         self, input_ids: Tensor, speaker_id: Tensor, lang_id: Tensor, use_dur_prediction: bool
     ) -> Tensor:  # type: ignore
-        hidden_states = self.unit_embeds_layer(input_ids).transpose(1, 2)
+        hidden_states = self.unit_embedding(input_ids).transpose(1, 2)
 
         if self.dur_predictor and use_dur_prediction:
             if hidden_states.size(0) != 1:
@@ -2700,11 +2700,11 @@ class SeamlessM4TCodeHifiGan(SeamlessM4THifiGan):
             # B x C x T
             hidden_states = torch.repeat_interleave(hidden_states, dur_out.view(-1), dim=2)
 
-        spkr = self.spkr_embeds_layer(speaker_id).transpose(1, 2)
+        spkr = self.speaker_embedding(speaker_id).transpose(1, 2)
         spkr = self._upsample(spkr, hidden_states.shape[-1])
         hidden_states = torch.cat([hidden_states, spkr], dim=1)
 
-        lang = self.lang_embeds_layer(lang_id).transpose(1, 2)
+        lang = self.language_embedding(lang_id).transpose(1, 2)
         lang = self._upsample(lang, hidden_states.shape[-1])
         hidden_states = torch.cat([lang, hidden_states], dim=1)
 
