@@ -222,7 +222,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         vocoder_num_langs=36,
         vocoder_num_spkrs=200,
         use_dur_predictor=True,
-        var_pred_kernel_size=3,
+        variance_predictor_kernel_size=3,
         var_pred_dropout=0.5,
         **kwargs,
     ):
@@ -314,7 +314,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.vocoder_num_langs = vocoder_num_langs
         self.vocoder_num_spkrs = vocoder_num_spkrs
         self.use_dur_predictor = use_dur_predictor
-        self.var_pred_kernel_size = var_pred_kernel_size
+        self.variance_predictor_kernel_size = variance_predictor_kernel_size
         self.var_pred_dropout = var_pred_dropout
         
         # for proper config init

@@ -2501,15 +2501,15 @@ class SeamlessM4TVariancePredictor(nn.Module):
         super().__init__()
 
         embed_dim = config.unit_embed_dim
-        var_pred_kernel_size = config.var_pred_kernel_size
+        kernel_size = config.variance_predictor_kernel_size
         var_pred_dropout = config.var_pred_dropout
 
         self.conv1 = nn.Sequential(
             nn.Conv1d(
                 embed_dim,
                 embed_dim,
-                kernel_size=var_pred_kernel_size,
-                padding=(var_pred_kernel_size - 1) // 2,
+                kernel_size=kernel_size,
+                padding=(kernel_size - 1) // 2,
             ),
             nn.ReLU(),
         )
@@ -2519,7 +2519,7 @@ class SeamlessM4TVariancePredictor(nn.Module):
             nn.Conv1d(
                 embed_dim,
                 embed_dim,
-                kernel_size=var_pred_kernel_size,
+                kernel_size=kernel_size,
                 padding=1,
             ),
             nn.ReLU(),
