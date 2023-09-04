@@ -25,12 +25,12 @@ from nougat.utils.checkpoint import get_checkpoint
 from PIL import Image
 
 from transformers import (
-    NougatProcessor,
     DonutSwinConfig,
     DonutSwinModel,
     MBartConfig,
     MBartForCausalLM,
     NougatImageProcessor,
+    NougatProcessor,
     NougatTokenizerFast,
     VisionEncoderDecoderModel,
 )

@@ -21,8 +21,13 @@ from multiprocessing import Pool
 from typing import List, Union
 
 import numpy as np
-from Levenshtein import ratio
 from nltk.corpus import words
+
+from ...utils import is_levensthein_available
+
+
+if is_levensthein_available():
+    from Levenshtein import ratio
 
 from transformers.tokenization_utils_base import INIT_TOKENIZER_DOCSTRING
 from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
@@ -255,6 +260,11 @@ def remove_slice_from_lines(lines, clean_text, sli) -> str:
     Returns:
         str: The removed slice of text as a single string.
     """
+    try:
+        from Levenshtein import ratio
+    except Exception:
+        raise ImportError("Postprocessing requires the `python-Levenshtein` package.")
+
     base = clean_text[sli[0]]
     section = list(sli)
     check_start_flag = False

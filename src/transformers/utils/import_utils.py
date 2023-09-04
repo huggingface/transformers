@@ -94,6 +94,7 @@ _jieba_available = _is_package_available("jieba")
 _jinja_available = _is_package_available("jinja2")
 _kenlm_available = _is_package_available("kenlm")
 _keras_nlp_available = _is_package_available("keras_nlp")
+_levensthein_available = _is_package_available("python-Levenshtein")
 _librosa_available = _is_package_available("librosa")
 _natten_available = _is_package_available("natten")
 _onnx_available = _is_package_available("onnx")
@@ -618,6 +619,10 @@ def is_auto_gptq_available():
     return _auto_gptq_available
 
 
+def is_levensthein_available():
+    return _levensthein_available
+
+
 def is_optimum_neuron_available():
     return _optimum_available and _is_package_available("optimum.neuron")
 
@@ -948,6 +953,11 @@ installation section: https://github.com/rspeer/python-ftfy/tree/master#installi
 that match your environment. Please note that you may need to restart your runtime after installation.
 """
 
+LEVENSHTEIN_IMPORT_ERROR = """
+{0} requires the python-Levenshtein library but it was not found in your environment. You can install it with pip: `pip
+install python-Levenshtein`. Please note that you may need to restart your runtime after installation.
+"""
+
 # docstyle-ignore
 PYTORCH_QUANTIZATION_IMPORT_ERROR = """
 {0} requires the pytorch-quantization library but it was not found in your environment. You can install it with pip:
@@ -1107,6 +1117,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
         ("pretty_midi", (is_pretty_midi_available, PRETTY_MIDI_IMPORT_ERROR)),
+        ("levensthein", (is_levensthein_available, LEVENSHTEIN_IMPORT_ERROR)),
         ("librosa", (is_librosa_available, LIBROSA_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
