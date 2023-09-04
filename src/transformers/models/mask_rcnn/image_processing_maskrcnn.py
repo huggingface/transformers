@@ -730,58 +730,6 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
             raise ValueError(f"Format {format} is not supported.")
         return target
 
-    def resize(
-        self,
-        image: np.ndarray,
-        size: Dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: Optional[ChannelDimension] = None,
-    ) -> np.ndarray:
-        """
-        Resize the image to the given size. Size can be `min_size` (scalar) or `(height, width)` tuple. If size is an
-        int, smaller edge of the image will be matched to this number.
-        """
-        if "shortest_edge" in size and "longest_edge" in size:
-            size = get_resize_output_image_size(image, size["shortest_edge"], size["longest_edge"])
-        elif "height" in size and "width" in size:
-            size = (size["height"], size["width"])
-        else:
-            raise ValueError(
-                "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
-                f" {size.keys()}."
-            )
-        image = resize(image, size=size, resample=resample, data_format=data_format)
-        return image
-
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.rescale
-    def rescale(
-        self,
-        image: np.ndarray,
-        rescale_factor: float,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.ndarray:
-        """
-        Rescale the image by the given factor. image = image * rescale_factor.
-
-        Args:
-            image (`np.ndarray`):
-                Image to rescale.
-            rescale_factor (`float`):
-                The value to use for rescaling.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the output image. If unset, the channel dimension format of the input
-                image is used. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-            input_data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format for the input image. If unset, is inferred from the input image. Can be
-                one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-        """
-        return rescale(image, rescale_factor, data_format=data_format, input_data_format=input_data_format)
-
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.resize_annotation
     def resize_annotation(
         self,
@@ -796,6 +744,30 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         """
         return resize_annotation(annotation, orig_size=orig_size, target_size=size, resample=resample)
 
+    def resize(
+        self,
+        image: np.ndarray,
+        size: Dict[str, int],
+        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        data_format: Optional[ChannelDimension] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.ndarray:
+        """
+        Resize the image to the given size. Size can be `min_size` (scalar) or `(height, width)` tuple. If size is an
+        int, smaller edge of the image will be matched to this number.
+        """
+        if "shortest_edge" in size and "longest_edge" in size:
+            size = get_resize_output_image_size(image, size["shortest_edge"], size["longest_edge"])
+        elif "height" in size and "width" in size:
+            size = (size["height"], size["width"])
+        else:
+            raise ValueError(
+                "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
+                f" {size.keys()}."
+            )
+        image = resize(image, size=size, resample=resample, data_format=data_format, input_data_format=input_data_format,)
+        return image
+    
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_image
     def _pad_image(
         self,
@@ -872,6 +844,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         format: Optional[Union[str, AnnotionFormat]] = None,
         return_tensors: Optional[Union[TensorType, str]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> BatchFeature:
         """
         Preprocess an image or a batch of images so that it can be used by the model.
@@ -981,6 +954,10 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays
         images = [to_numpy_array(image) for image in images]
 
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
         # prepare (COCO annotations as a list of Dict -> target as a single Dict per image)
         if annotations is not None:
             prepared_annotations = []
@@ -1001,7 +978,7 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
                 resized_images, resized_annotations = [], []
                 for image, target in zip(images, annotations):
                     orig_size = get_image_size(image)
-                    resized_image = self.resize(image, size=size, resample=resample)
+                    resized_image = self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
                     resized_annotation = self.resize_annotation(target, orig_size, get_image_size(resized_image))
                     resized_images.append(resized_image)
                     resized_annotations.append(resized_annotation)
@@ -1009,13 +986,13 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
                 annotations = resized_annotations
                 del resized_images, resized_annotations
             else:
-                images = [self.resize(image, size=size, resample=resample) for image in images]
+                images = [self.resize(image, size=size, resample=resample, input_data_format=input_data_format) for image in images]
 
         if do_rescale:
-            images = [self.rescale(image, rescale_factor) for image in images]
+            images = [self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format) for image in images]
 
         if do_normalize:
-            images = [self.normalize(image, image_mean, image_std) for image in images]
+            images = [self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format) for image in images]
 
         if do_pad:
             # Pads images up to the largest image in the batch
