@@ -1297,9 +1297,9 @@ class InfNanRemoveLogitsProcessor(LogitsProcessor):
 
 class ExponentialDecayLengthPenalty(LogitsProcessor):
     r"""
-    [`LogitsProcessor`] that exponentially increases the score of the `eos_token_id` after `start_index` has been reached.
-    This allows generating shorter sequences without having a hard cutoff, allowing the `eos_token` to be predicted in a
-    meaningful position.
+    [`LogitsProcessor`] that exponentially increases the score of the `eos_token_id` after `start_index` has been
+    reached. This allows generating shorter sequences without having a hard cutoff, allowing the `eos_token` to be
+    predicted in a meaningful position.
 
     Args:
         exponential_decay_length_penalty (`tuple(int, float)`):
