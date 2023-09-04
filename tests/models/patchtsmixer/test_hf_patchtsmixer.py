@@ -79,6 +79,12 @@ class TestHFPatchTSMixer(unittest.TestCase):
             cls.params["num_features"],
         )
 
+        cls.flat_enc_output = torch.rand(
+            batch_size,
+            cls.num_patches,
+            cls.params["num_features"],
+        )
+
         cls.correct_pred_output = torch.rand(
             batch_size, cls.params["forecast_len"], cls.params["in_channels"]
         )
@@ -117,7 +123,7 @@ class TestHFPatchTSMixer(unittest.TestCase):
         config = PatchTSMixerConfig(**self.__class__.params)
         enc = PatchTSMixerEncoder(config)
         output = enc(self.__class__.enc_data)
-        self.assertEqual(output.shape, self.__class__.enc_output.shape)
+        self.assertEqual(output.last_hidden_state.shape, self.__class__.enc_output.shape)
 
     def test_patchmodel(self):
         config = PatchTSMixerConfig(**self.__class__.params)
@@ -146,7 +152,7 @@ class TestHFPatchTSMixer(unittest.TestCase):
             output.prediction_logits.shape, self.__class__.correct_pretrain_output.shape
         )
         self.assertEqual(
-            output.backbone_embeddings.shape, self.__class__.enc_output.shape
+            output.last_hidden_state.shape, self.__class__.enc_output.shape
         )
         self.assertEqual(output.loss.item()<100,True)
 
@@ -160,7 +166,8 @@ class TestHFPatchTSMixer(unittest.TestCase):
         
         self.assertEqual(output.shape, self.__class__.correct_forecast_output.shape)
 
-    def forecast_full_module(self, params):
+    def forecast_full_module(self, params = None, output_hidden_states = False):
+        
         config = PatchTSMixerConfig(**params)
         mdl = PatchTSMixerForForecasting(config)
 
@@ -169,43 +176,48 @@ class TestHFPatchTSMixer(unittest.TestCase):
         if config.forecast_channel_indices is not None:
             target_val = self.__class__.correct_sel_forecast_output
 
-
-        output = mdl(self.__class__.data, target_values=target_val)
+        if config.mode == "flatten":
+            enc_output = self.__class__.flat_enc_output
+        else:
+            enc_output = self.__class__.enc_output
+        output = mdl(self.__class__.data, target_values=target_val, output_hidden_states = output_hidden_states)
 
         self.assertEqual(
                 output.prediction_logits.shape, target_val.shape
             )
 
         self.assertEqual(
-            output.backbone_embeddings.shape, self.__class__.enc_output.shape
+            output.last_hidden_state.shape, enc_output.shape
         )
+
+        if output_hidden_states is True:
+            self.assertEqual(len(output.hidden_states),params["num_layers"])
+            
+        else:
+            self.assertEqual(output.hidden_states, None)
+            
+        
         self.assertEqual(output.loss.item()<100,True)
         # print("loss shape", output.loss, output.loss.shape)
 
     def test_forecast_full(self):
-        self.forecast_full_module(self.__class__.params)
+        self.forecast_full_module(self.__class__.params, output_hidden_states = True)
     
     def test_forecast_full_2(self):
         params = self.__class__.params.copy()
         params.update(mode = "mix_channel",
-                        swin_hier = 2,
-                        decoder_mode = "mix_channel", 
                         )
-        self.forecast_full_module(params)
+        self.forecast_full_module(params,  output_hidden_states = True)
 
     def test_forecast_full_3(self):
         params = self.__class__.params.copy()
-        params.update(mode = "mix_channel",
-                        swin_hier = 2,
-                        decoder_mode = "mix_channel", 
+        params.update(mode = "flatten",
                         )
-        self.forecast_full_module(params)
+        self.forecast_full_module(params, output_hidden_states = True)
     
-    def test_forecast_full_3(self):
+    def test_forecast_full_4(self):
         params = self.__class__.params.copy()
         params.update(mode = "mix_channel",
-                        swin_hier = 2,
-                        decoder_mode = "mix_channel", 
                         forecast_channel_indices = [0,2],
                         )
         self.forecast_full_module(params)
@@ -219,7 +231,7 @@ class TestHFPatchTSMixer(unittest.TestCase):
     #         output.prediction_logits.shape, self.__class__.correct_forecast_output.shape
     #     )
     #     self.assertEqual(
-    #         output.backbone_embeddings.shape, self.__class__.enc_output.shape
+    #         output.last_hidden_state.shape, self.__class__.enc_output.shape
     #     )
     #     self.assertEqual(output.loss.item()<100,True)
     #     # print("loss shape", output.loss, output.loss.shape)
@@ -245,7 +257,7 @@ class TestHFPatchTSMixer(unittest.TestCase):
             self.__class__.correct_classification_output.shape,
         )
         self.assertEqual(
-            output.backbone_embeddings.shape, self.__class__.enc_output.shape
+            output.last_hidden_state.shape, self.__class__.enc_output.shape
         )
         self.assertEqual(output.loss.item()<100,True)
         # print("loss shape", output.loss, output.loss.shape)
@@ -267,7 +279,7 @@ class TestHFPatchTSMixer(unittest.TestCase):
             self.__class__.correct_regression_output.shape,
         )
         self.assertEqual(
-            output.backbone_embeddings.shape, self.__class__.enc_output.shape
+            output.last_hidden_state.shape, self.__class__.enc_output.shape
         )
         self.assertEqual(output.loss.item()<100,True)
 

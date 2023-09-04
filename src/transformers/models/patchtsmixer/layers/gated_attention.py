@@ -18,3 +18,4 @@ class GatedAttention(nn.Module):
         attn_weight = self.attn_softmax(self.attn_layer(x))
         x = x * attn_weight
         return x
+

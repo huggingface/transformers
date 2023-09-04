@@ -373,8 +373,8 @@ class PatchTSMixerLayer(nn.Module):
         return x
 
 
-class PatchTSMixerEncoder(nn.Module):
-    """PatchTSMixerEncoder
+class PatchTSMixerBackbone(nn.Module):
+    """PatchTSMixerBackbone
 
     Args:
         num_patches (int): Number of patches to segment
@@ -435,8 +435,8 @@ class PatchTSMixerEncoder(nn.Module):
         else:
             raise Exception("mixer_type %s is not yet implemented"%(mixer_type))
         
-        self.mixers = nn.Sequential(
-                *[
+        self.mixers = nn.ModuleList(
+                [
                     mixer_class(
                         num_patches=num_patches,
                         num_features=num_features,
@@ -457,21 +457,27 @@ class PatchTSMixerEncoder(nn.Module):
 
         
 
-    def forward(self, x):
+    def forward(self, x, output_hidden_states: Optional[bool] = False):
         # flatten: [bs x num_patch x num_features]   common_channel/mix_channel: [bs x n_vars x num_patch x num_features]
 
-        batch_size = x.shape[0]
-        logger.debug(x.shape)
-
-        patches = x
-
-        embedding = self.mixers(patches)
+        all_hidden_states = []
 
         logger.debug(x.shape)
+
+        embedding = x
+
+        for mod in self.mixers:
+            embedding = mod(embedding)
+            if output_hidden_states is True:
+                all_hidden_states.append(embedding)
+        
         # embedding.shape == (batch_size, num_patches, num_features) if flatten
         # embedding.shape == (batch_size, n_vars, num_patches, num_features) if common_channel
 
-        return embedding
+        if output_hidden_states is True:
+            return embedding, all_hidden_states
+        else:
+            return embedding, None
 
 
 class PatchTSMixer(nn.Module):
@@ -532,7 +538,7 @@ class PatchTSMixer(nn.Module):
         self.num_features = num_features
         self.num_layers = num_layers
         
-        self.mlp_mixer_encoder = PatchTSMixerEncoder(
+        self.mlp_mixer_encoder = PatchTSMixerBackbone(
             num_patches=num_patches,
             patch_size=patch_size,
             in_channels=in_channels,
@@ -549,7 +555,7 @@ class PatchTSMixer(nn.Module):
             norm_mlp=norm_mlp,
         )
 
-    def forward(self, x):
+    def forward(self, x, output_hidden_states: Optional[bool] = False):
         # x: [bs  x n_vars x num_patch x patch_len]
 
         batch_size = x.shape[0]
@@ -572,13 +578,13 @@ class PatchTSMixer(nn.Module):
         logger.debug(x.shape)
 
     
-        embedding = self.mlp_mixer_encoder(patches)
+        embedding, all_hidden_states = self.mlp_mixer_encoder(patches, output_hidden_states = output_hidden_states)
 
         logger.debug(x.shape)
         # embedding.shape == (batch_size, num_patches, num_features) if flatten
         # embedding.shape == (batch_size, n_vars, num_patches, num_features) if common_channel
 
-        return embedding
+        return embedding, all_hidden_states
 
 
 class ForecastHead(nn.Module):
@@ -664,6 +670,7 @@ class ForecastHead(nn.Module):
             forecast = forecast.reshape(
                 -1, self.forecast_len, self.nvars
             )  # y: [bs x forecast_len x n_vars]
+            
             
         if self.forecast_channel_indices is not None:
             forecast = forecast[..., self.forecast_channel_indices]

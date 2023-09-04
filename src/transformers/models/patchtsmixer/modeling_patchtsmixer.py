@@ -17,19 +17,17 @@
 """ PyTorch PatchTSMixer model."""
 
 import logging
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
-from transformers.configuration_utils import PretrainedConfig
+
 
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import ModelOutput
 
-from ...modeling_outputs import (BaseModelOutput, ModelOutput,
-                                 SampleTSPredictionOutput,
-                                 Seq2SeqTSPredictionOutput)
+from ...modeling_outputs import ModelOutput 
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, logging
 from .configuration_patchtsmixer import PatchTSMixerConfig
@@ -202,10 +200,19 @@ class PatchTSMixerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     main_input_name = "context_values"
 
-    # def _init_weights(self, module):
-    #     """Initialize weights"""
-    #     if self.config.use_cls_token:
-    #         torch.nn.init.normal_(self.config.cls_token, std=.02)
+
+
+class PatchTSMixerEncoderOutput(ModelOutput):
+    """
+    Base class for PatchTSMixerEncoderOutput, with potential hidden states.
+    Args:
+        last_hidden_state (`torch.FloatTensor`  of shape `(batch_size, num_channels, height, width)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        patched_input (`torch.FloatTensor` of shape `(batch_size, num_channels, num_patches, patch_len)`): 
+            Patched input data
+    """
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None,
 
 
 class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
@@ -231,18 +238,22 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def forward(self, context_values: torch.Tensor) -> torch.Tensor:
+    def forward(self, context_values: torch.Tensor, output_hidden_states: Optional[bool] = False) -> PatchTSMixerEncoderOutput:
         """
         context_values: [bs  x n_vars x num_patches x patch_len]
         return: [bs x n_vars x num_patches x num_features]
         """
-        return self.encoder(context_values)
+        last_hidden_state, hidden_states  = self.encoder(context_values, output_hidden_states = output_hidden_states)
+        return PatchTSMixerEncoderOutput(last_hidden_state=last_hidden_state,
+                                            hidden_states=hidden_states)
+
 
 
 @add_start_docstrings(
-    "The PatchTSMixer Model with a distribution head on top for time-series forecasting.",
+    "The PatchTSMixer Model for time-series forecasting.",
     PATCHTSMIXER_START_DOCSTRING,
 )
+
 class PatchTSMixerModelOutput(ModelOutput):
     """
     Base class for model's outputs, with potential hidden states.
@@ -261,6 +272,7 @@ class PatchTSMixerModelOutput(ModelOutput):
             per channel.
     """
     last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None,
     patched_input: torch.FloatTensor = None
     mask: Optional[torch.FloatTensor] = None
     revin_mean: Optional[torch.FloatTensor] = None,
@@ -300,7 +312,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         else:
             self.revin = None
 
-    def forward(self, context_values: torch.Tensor):
+    def forward(self, context_values: torch.Tensor, output_hidden_states: Optional[bool] = False):
         """
         context_values: tensor [bs x seq_len x in_channels]
         """
@@ -323,11 +335,12 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
             # enc_input: [bs x in_channels x num_patch x patch_len] 
             # mask: [bs x in_channels x num_patch]
         
-        encoder_output = self.encoder(enc_input)
+        encoder_output = self.encoder(enc_input, output_hidden_states = output_hidden_states)
 
 
         return PatchTSMixerModelOutput(
-            last_hidden_state=encoder_output, 
+            last_hidden_state=encoder_output.last_hidden_state, 
+            hidden_states = encoder_output.hidden_states,
             patched_input=patched_x,
             mask=mask,
             revin_mean=revin_mean,
@@ -366,14 +379,14 @@ class PatchTSMixerForPreTrainingOutput(ModelOutput):
         prediction_logits (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, patch_len)`):
             Prediction output from the pretrain head.
 
-        backbone_embeddings (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, num_features)`):
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, in_channels, num_patches, num_features)`):
             Backbone embeddings before passing through the head.
     """
 
     prediction_logits: torch.FloatTensor = None
-    backbone_embeddings: torch.FloatTensor = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     loss: Optional[torch.FloatTensor] = None
-    # attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
@@ -397,25 +410,30 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
     def forward(
             self, 
             context_values: torch.Tensor,
+            output_hidden_states: Optional[bool] = False,
             return_loss: bool = True
         ) -> PatchTSMixerForPreTrainingOutput:
         """
         context_values: tensor [bs x seq_len x in_channels]
         """
-        model_output = self.model(context_values) # x.last_hidden_state: [bs x nvars x num_patch x num_features]
+        model_output = self.model(context_values, output_hidden_states = output_hidden_states) # x.last_hidden_state: [bs x nvars x num_patch x num_features]
         x_hat = self.head(
             model_output.last_hidden_state
         )  # tensor [bs x nvars x num_patch x patch_len]
 
-        loss_val = self.loss(x_hat, model_output.patched_input)
+        if return_loss is True:
+            loss_val = self.loss(x_hat, model_output.patched_input)
+        else:
+            loss_val = None
 
         # calculate masked_loss
-        if self.masked_loss is True:
+        if self.masked_loss is True and loss_val is not None:
             loss_val = (loss_val.mean(dim=-1) * model_output.mask).sum() / (model_output.mask.sum() + 1e-10)
         
         return PatchTSMixerForPreTrainingOutput(
             prediction_logits=x_hat,  # tensor [bs x nvars x num_patch x patch_len]
-            backbone_embeddings=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
+            last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
+            hidden_states = model_output.hidden_states,
             loss=loss_val,
         )
 
@@ -457,9 +475,9 @@ class PatchTSMixerForForecastOutput(ModelOutput):
     """
 
     prediction_logits: torch.FloatTensor = None
-    backbone_embeddings: torch.FloatTensor = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None,
     loss: Optional[torch.FloatTensor] = None
-    # attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
@@ -479,6 +497,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         self,
         context_values: torch.Tensor,
         target_values: torch.Tensor = None,
+        output_hidden_states: Optional[bool] = False,
         return_loss: bool = True
     ) -> PatchTSMixerForForecastOutput:
         """
@@ -486,7 +505,8 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         """
 
         model_output = self.model(
-            context_values
+            context_values,
+            output_hidden_states = output_hidden_states,
         )  # model_output: [bs x nvars x num_patch x num_features]
 
 
@@ -499,14 +519,15 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             y_hat = self.revin(y_hat, mode = "denorm")
 
 
-        if target_values is not None:
+        if target_values is not None and return_loss is True:
             loss_val = self.loss(y_hat, target_values)
         else:
             loss_val = None
 
         return PatchTSMixerForForecastOutput(
             prediction_logits=y_hat,  # tensor [bs x forecast_len x in_channels]
-            backbone_embeddings=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
+            last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
+            hidden_states = model_output.hidden_states,
             loss=loss_val,
         )
 
@@ -548,9 +569,9 @@ class PatchTSMixerForClassificationOutput(ModelOutput):
     """
 
     prediction_logits: torch.FloatTensor = None
-    backbone_embeddings: torch.FloatTensor = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None,
     loss: Optional[torch.FloatTensor] = None
-    # attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
@@ -574,6 +595,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
             self, 
             context_values: torch.Tensor, 
             target_values: torch.Tensor = None,
+            output_hidden_states: Optional[bool] = False,
             return_loss: bool = True
     ) -> PatchTSMixerForClassificationOutput:
 
@@ -583,7 +605,8 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         """
 
         model_output = self.model(
-            context_values
+            context_values,
+            output_hidden_states = output_hidden_states,
         )  # x: [bs x nvars x num_patch x num_features]
 
         if self.inject_revin is not None:
@@ -593,14 +616,15 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
 
         y_hat = self.head(model_output.last_hidden_state)  # tensor [bs x n_labels]
 
-        if target_values is not None:
+        if target_values is not None and return_loss is True:
             loss_val = self.loss(y_hat, target_values)
         else:
             loss_val = None
 
         return PatchTSMixerForClassificationOutput(
             prediction_logits=y_hat,  # tensor [bs x n_labels]
-            backbone_embeddings=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
+            last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
+            hidden_states = model_output.hidden_states,
             loss=loss_val,
         )
 
@@ -643,9 +667,9 @@ class PatchTSMixerForRegressionOutput(ModelOutput):
     """
 
     prediction_logits: torch.FloatTensor = None
-    backbone_embeddings: torch.FloatTensor = None
+    last_hidden_state: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     loss: Optional[torch.FloatTensor] = None
-    # attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
@@ -667,6 +691,8 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         self,
         context_values: torch.Tensor,
         target_values: torch.Tensor = None,
+        output_hidden_states: Optional[bool] = False,
+        return_loss: bool = True,
     ) -> PatchTSMixerForRegressionOutput:
         """
         context_values: tensor [bs x seq_len x in_channels]
@@ -674,7 +700,8 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         """
 
         model_output = self.model(
-            context_values
+            context_values,
+            output_hidden_states = output_hidden_states,
         )  # model_output: [bs x nvars x num_patch x num_features]
 
 
@@ -684,14 +711,15 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             
         y_hat = self.head(model_output.last_hidden_state)  # tensor [bs x n_targets]
 
-        if target_values is not None:
+        if target_values is not None and return_loss is True:
             loss_val = self.loss(y_hat, target_values)
         else:
             loss_val = None
 
         return PatchTSMixerForRegressionOutput(
             prediction_logits=y_hat,  # tensor [bs x n_targets]
-            backbone_embeddings=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
+            last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
+            hidden_states = model_output.hidden_states,
             loss=loss_val,
         )
 
