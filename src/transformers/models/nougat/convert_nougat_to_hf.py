@@ -25,7 +25,7 @@ from nougat.utils.checkpoint import get_checkpoint
 from PIL import Image
 
 from transformers import (
-    DonutProcessor,
+    NougatProcessor,
     DonutSwinConfig,
     DonutSwinModel,
     MBartConfig,
@@ -173,8 +173,7 @@ def convert_nougat_checkpoint(model_name, pytorch_dump_folder_path=None, push_to
         size=size,
         do_rescale=False,
     )
-    # TODO create NougatProcessor?
-    processor = DonutProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    processor = NougatProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
     # verify pixel_values
     pixel_values = processor(image, return_tensors="pt").pixel_values
