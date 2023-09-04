@@ -144,11 +144,7 @@ def convert_tinyvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         image_mean=IMAGENET_DEFAULT_MEAN,
         image_std=IMAGENET_DEFAULT_STD,
     )
-    print(image_processor.resample)
     pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
-
-    print(pixel_values.mean())
-    print(original_pixel_values.mean())
 
     assert torch.allclose(pixel_values, original_pixel_values)
 
@@ -156,7 +152,6 @@ def convert_tinyvit_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         logits = model(pixel_values).logits
 
     print("First values of logits:", logits[0, :3])
-    print("Shape of logits:", logits.shape)
     predicted_class_idx = logits.argmax(-1).item()
     print("Predicted class:", model.config.id2label[predicted_class_idx])
 
