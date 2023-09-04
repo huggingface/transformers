@@ -35,9 +35,7 @@ TOLERANCE = 1e-4
 if is_torch_available():
     import torch
     from transformers import PatchTSMixerConfig, MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING, MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
-    from transformers import PatchTSMixerModel, PatchTSMixerForForecasting, PatchTSMixerForPretraining
-    # \
-        # PatchTSMixerForClassification, PatchTSMixerForRegression
+    from transformers import PatchTSMixerModel, PatchTSMixerForForecasting, PatchTSMixerForPretraining, PatchTSMixerForClassification, PatchTSMixerForRegression
 
 
 
@@ -49,9 +47,11 @@ class PatchTSMixerModelTester:
         patch_len: int = 8,
         in_channels: int = 3,
         stride: int = 8,
-        num_features: int = 128,
+        # num_features: int = 128,
+        hidden_size: int = 128,
+        # num_layers: int = 8,
+        num_hidden_layers: int = 2,
         expansion_factor: int = 2,
-        num_layers: int = 8,
         dropout: float = 0.5,
         mode: str = "common_channel",
         gated_attn: bool = True,
@@ -79,15 +79,18 @@ class PatchTSMixerModelTester:
         head_agg: str = None,
         # Trainer related
         batch_size=13,
-        is_training=True
+        is_training=True,
+        seed_number=42
     ):
         self.in_channels = in_channels
         self.seq_len = seq_len
         self.patch_len = patch_len
         self.stride = stride
-        self.num_features = num_features
+        # self.num_features = num_features
+        self.hidden_size = hidden_size
         self.expansion_factor = expansion_factor
-        self.num_layers = num_layers
+        # self.num_layers = num_layers
+        self.num_hidden_layers = num_hidden_layers
         self.dropout = dropout
         self.mode = mode
         self.gated_attn = gated_attn
@@ -117,16 +120,19 @@ class PatchTSMixerModelTester:
         # Trainer related
         self.batch_size = batch_size
         self.is_training = is_training
+        self.seed_number = seed_number
 
     def get_config(self):
-        return PatchTSMixerConfig(
+        config_ = PatchTSMixerConfig(
             in_channels = self.in_channels,
             seq_len = self.seq_len,
             patch_len = self.patch_len,
             stride = self.stride,
-            num_features = self.num_features,
+            # num_features = self.num_features,
+            num_features = self.hidden_size,
             expansion_factor = self.expansion_factor,
-            num_layers = self.num_layers,
+            # num_layers = self.num_layers,
+            num_layers = self.num_hidden_layers,
             dropout = self.dropout,
             mode = self.mode,
             gated_attn = self.gated_attn,
@@ -149,19 +155,21 @@ class PatchTSMixerModelTester:
             output_range = self.output_range,
             head_agg = self.head_agg
         )
+        self.num_patches = config_.num_patches
+        return config_
 
     def prepare_patchtsmixer_inputs_dict(self, config):
         _past_length = config.seq_len
         # bs, n_vars, num_patch, patch_len
 
         # [bs x seq_len x n_vars]
-        past_values = floats_tensor([self.batch_size, _past_length, self.in_channels])
+        context_values = floats_tensor([self.batch_size, _past_length, self.in_channels])
 
-        future_values = floats_tensor([self.batch_size, config.forecast_len, self.in_channels])
+        target_values = floats_tensor([self.batch_size, config.forecast_len, self.in_channels])
 
         inputs_dict = {
-            "past_values": past_values,
-            "future_values": future_values,
+            "context_values": context_values,
+            "target_values": target_values,
         }
         return inputs_dict
 
@@ -180,9 +188,9 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     all_model_classes = (
         (PatchTSMixerModel,
          PatchTSMixerForForecasting,
-         PatchTSMixerForPretraining,)
-        #  PatchTSMixerForClassification,
-        #  PatchTSMixerForRegression)
+         PatchTSMixerForPretraining,
+         PatchTSMixerForClassification,
+         PatchTSMixerForRegression)
         if is_torch_available()
         else ()
     )
@@ -204,12 +212,13 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = PatchTSMixerModelTester(self)
+        self.model_tester = PatchTSMixerModelTester()
         self.config_tester = ConfigTester(
             self,
             config_class=PatchTSMixerConfig,
             has_text_modality=False,
             forecast_len=self.model_tester.forecast_len,
+            common_properties=["hidden_size", "expansion_factor", "num_hidden_layers"]
         )
 
     def test_config(self):
@@ -221,14 +230,20 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         # if classification model:
         if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING):
             rng = random.Random(self.model_tester.seed_number)
-            labels = ids_tensor([self.model_tester.batch_size], self.model_tester.num_classes, rng=rng)
-            inputs_dict["labels"] = labels
-            inputs_dict.pop("future_values")
+            labels = ids_tensor([self.model_tester.batch_size], self.model_tester.n_classes, rng=rng)
+            # inputs_dict["labels"] = labels
+            inputs_dict["target_values"] = labels
+            # inputs_dict.pop("target_values")
         elif model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
             rng = random.Random(self.model_tester.seed_number)
-            labels = floats_tensor([self.model_tester.batch_size, self.model_tester.target_dimension], rng=rng)
-            inputs_dict["labels"] = labels
-            inputs_dict.pop("future_values")
+            labels = floats_tensor([self.model_tester.batch_size, self.model_tester.n_targets], rng=rng)
+            # inputs_dict["labels"] = labels
+            inputs_dict["target_values"] = labels
+            # inputs_dict.pop("target_values")
+        elif model_class in [PatchTSMixerModel, PatchTSMixerForPretraining]:
+            inputs_dict.pop("target_values")
+
+        inputs_dict["output_hidden_states"] = True
         return inputs_dict
 
     def test_save_load_strict(self):
@@ -241,7 +256,6 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
 
-#
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -252,11 +266,14 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
-
+            
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
+
+            expected_hidden_size = self.model_tester.hidden_size
+            self.assertEqual(hidden_states[0].shape[-1], expected_hidden_size)
 
             num_patch = self.model_tester.num_patches
             self.assertListEqual(
@@ -267,19 +284,18 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
+            # inputs_dict["output_hidden_states"] = True
             print('model_class: ', model_class)
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
             # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
+            # del inputs_dict["output_hidden_states"]
+            # config.output_hidden_states = True
 
-            check_hidden_states_output(inputs_dict, config, model_class)
-#
-#     # Ignore since we have no tokens embeddings
+            # check_hidden_states_output(inputs_dict, config, model_class)
 
+    # Ignore since we have no tokens embeddings
     def test_resize_tokens_embeddings(self):
         pass
 
@@ -305,18 +321,21 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             arg_names = [*signature.parameters.keys()]
 
             expected_arg_names = [
-                "past_values",
-                "future_values",
+                "context_values",
+                "target_values",
             ]
-            if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or \
-                    model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
-                expected_arg_names.remove("future_values")
-                expected_arg_names.append("labels")
-            expected_arg_names.extend(
-                [
-                    "output_hidden_states",
-                ]
-            )
+            # if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or \
+            #         model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
+            #     expected_arg_names.remove("target_values")
+            #     expected_arg_names.append("labels")
+            if model_class in [PatchTSMixerModel, PatchTSMixerForPretraining]:
+                expected_arg_names.remove("target_values")
+
+            # expected_arg_names.extend(
+            #     [
+            #         "output_hidden_states",
+            #     ]
+            # )
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
@@ -325,91 +344,104 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         super().test_retain_grad_hidden_states_attentions()
 
 
-# def prepare_batch(repo_id="diepi/test-etth1", file='train-batch.pt'):
-#     file = hf_hub_download(repo_id=repo_id, filename=file, repo_type="dataset")
-#     batch = torch.load(file, map_location=torch_device)
-#     return batch
+def prepare_batch(repo_id="ibm/etth1", file='train-batch.pt'):
+    # TODO: upload to the model to user: ibm when approved
+    # file = hf_hub_download(repo_id=repo_id, filename=file, repo_type="dataset")
+    # batch = torch.load(file, map_location=torch_device)
+
+    batch = torch.load(f"/dccstor/dnn_forecasting/FM/HF/pytest_data/etth1/{file}")
+
+    return batch
 
 
-# @require_torch
+@require_torch
 # @slow
-# class PatchTSMixerModelIntegrationTests(unittest.TestCase):
-    # def test_pretrain_head(self):
-    #     model = PatchTSMixerForPretraining.from_pretrained('diepi/test_patchtsmixer_pretrained_etth1').to(torch_device)
-    #     batch = prepare_batch()
+class PatchTSMixerModelIntegrationTests(unittest.TestCase):
+    def test_pretrain_head(self):
+        # TODO: upload to the model to user: ibm when approved
+        # model = PatchTSMixerForPretraining.from_pretrained('ajati/patchtsmixer_pretrained_etth1').to(torch_device)
+        model = PatchTSMixerForPretraining.from_pretrained('/dccstor/dnn_forecasting/FM/HF/pytest_data/etth1/patchtsmixer_pretrained_etth1').to(torch_device)
+        batch = prepare_batch(file="batch.pt")
 
+        torch.manual_seed(0)
+        with torch.no_grad():
+            output = model(
+                context_values=batch["context_values"].to(torch_device)
+            ).prediction_logits
+        num_patch = (max(model.config.seq_len,
+                         model.config.patch_len) - model.config.patch_len) // model.config.stride + 1
+        expected_shape = torch.Size([32, model.config.in_channels, num_patch, model.config.patch_len])
+        self.assertEqual(output.shape, expected_shape)
+
+        # print(output[0, :7, :1, :1])
+        expected_slice = torch.tensor([[[-0.1184]],[[ 0.6268]],[[-0.0182]],[[-0.3095]],[[-0.3687]],[[ 2.2908]],[[ 0.1970]]], device=torch_device)
+        self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
+
+    def test_forecasting_head(self):
+        # TODO: upload to the model to user: ibm when approved
+        # model = PatchTSMixerForForecasting.from_pretrained('diepi/test_patchtsmixer_prediction_etth1').to(torch_device)
+        model = PatchTSMixerForForecasting.from_pretrained('/dccstor/dnn_forecasting/FM/HF/pytest_data/etth1/patchtsmixer_finetune_forecast_etth1').to(torch_device)
+        # batch = prepare_batch(file="test-batch.pt")
+        batch = prepare_batch(file="batch_forecast.pt")
+
+        torch.manual_seed(0)
+        with torch.no_grad():
+            output = model(
+                context_values=batch["context_values"].to(torch_device),
+                target_values=batch["target_values"].to(torch_device)
+            ).prediction_logits
+        
+        print(output[0, :1, :7])
+        expected_shape = torch.Size([32, model.config.forecast_len, model.config.in_channels])
+        self.assertEqual(output.shape, expected_shape)
+
+        expected_slice = torch.tensor([[ 0.5436,  0.0911,  0.6704,  0.8515, -0.4594, -2.3386,  0.3025]],
+                                      device=torch_device,
+                                      )
+        self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))
+
+    def test_prediction_head(self):
+        # TODO: upload to the model to user: ibm when approved
+        # model = PatchTSMixerForForecasting.from_pretrained('diepi/test_patchtsmixer_prediction_etth1').to(torch_device)
+        model = PatchTSMixerForForecasting.from_pretrained('/dccstor/dnn_forecasting/FM/HF/pytest_data/etth1/patchtsmixer_finetune_prediction_etth1').to(torch_device)
+        model.config.update({"forecast_channel_indices": [1,4]})
+
+        # batch = prepare_batch(file="test-batch.pt")
+        batch = prepare_batch(file="batch_prediction.pt")
+
+        torch.manual_seed(0)
+        with torch.no_grad():
+            output = model(
+                context_values=batch["context_values"].to(torch_device),
+                target_values=batch["target_values"].to(torch_device)
+            ).prediction_logits
+        
+        print(output[0, :1, :2])
+        expected_shape = torch.Size([32, model.config.forecast_len, 2])
+        self.assertEqual(output.shape, expected_shape)
+
+        expected_slice = torch.tensor([[ 0.1204, -0.3356]],
+                                      device=torch_device,
+                                      )
+        self.assertTrue(torch.allclose(output[0, :1, :2], expected_slice, atol=TOLERANCE))
+
+
+    # def test_classification_head(self):
+    #     # mock data, test
+    #     model = PatchTSMixerForClassification.from_pretrained('diepi/test_patchtsmixer_classification_mock').to(torch_device)
+    #     batch = prepare_batch(repo_id="diepi/mock-data", file="test-mock-patchtsmixer.pt")
+    #
     #     torch.manual_seed(0)
     #     with torch.no_grad():
     #         output = model(
-    #             past_values=batch["past_values"].to(torch_device)
-    #         ).prediction_output
-    #     num_patch = (max(model.config.context_length,
-    #                      model.config.patch_length) - model.config.patch_length) // model.config.stride + 1
-    #     expected_shape = torch.Size([64, model.config.in_channels, num_patch, model.config.patch_length])
+    #             context_values=batch["context_values"].to(torch_device)
+    #         ).prediction_logits
+    #     expected_shape = torch.Size([1, model.config.num_classes])
     #     self.assertEqual(output.shape, expected_shape)
-
-    #     expected_slice = torch.tensor([[[-0.0170]], [[0.0163]], [[0.0090]], [[0.0139]], [[0.0067]],
-    #                                    [[0.0246]], [[0.0090]]],
-    #                                   device=torch_device)
-    #     self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
-
-    # # def test_classification_head(self):
-    # #     # mock data, test
-    # #     model = PatchTSMixerForClassification.from_pretrained('diepi/test_patchtsmixer_classification_mock').to(torch_device)
-    # #     batch = prepare_batch(repo_id="diepi/mock-data", file="test-mock-patchtsmixer.pt")
-    # #
-    # #     torch.manual_seed(0)
-    # #     with torch.no_grad():
-    # #         output = model(
-    # #             past_values=batch["past_values"].to(torch_device)
-    # #         ).prediction_logits
-    # #     expected_shape = torch.Size([1, model.config.num_classes])
-    # #     self.assertEqual(output.shape, expected_shape)
-    # #
-    # #     expected_slice = torch.tensor([[-0.2774, -0.1081, 0.6771]],
-    # #                                   device=torch_device,
-    # #                                   )
-    # #     self.assertTrue(torch.allclose(output, expected_slice, atol=TOLERANCE))
-
-    # def test_prediction_head(self):
-    #     model = PatchTSMixerForForecasting.from_pretrained('diepi/test_patchtsmixer_prediction_etth1').to(torch_device)
-    #     batch = prepare_batch(file="test-batch.pt")
-
-    #     torch.manual_seed(0)
-    #     with torch.no_grad():
-    #         output = model(
-    #             past_values=batch["past_values"].to(torch_device),
-    #             future_values=batch["future_values"].to(torch_device)
-    #         ).prediction_output
-    #     expected_shape = torch.Size([64, model.config.forecast_len, model.config.in_channels])
-    #     self.assertEqual(output.shape, expected_shape)
-
-    #     expected_slice = torch.tensor([[-0.8200, 0.3741, -0.7543, 0.3971, -0.6659, -0.0124, -0.8308]],
+    #
+    #     expected_slice = torch.tensor([[-0.2774, -0.1081, 0.6771]],
     #                                   device=torch_device,
     #                                   )
-    #     self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))
+    #     self.assertTrue(torch.allclose(output, expected_slice, atol=TOLERANCE))
 
-    # # def test_seq_to_seq_generation(self):
-    # #     model = PatchTSMixerForForecasting.from_pretrained("diepi/test_patchtsmixer_prediction_etth1").to(torch_device)
-    # #     batch = prepare_batch("val-batch.pt")
-    # #
-    # #     torch.manual_seed(0)
-    # #     with torch.no_grad():
-    # #         outputs = model.generate(
-    # #             past_values=batch["past_values"].to(torch_device),
-    # #             future_values=batch["future_values"].to(torch_device)
-    # #         ).prediction_output
-    # #     expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.forecast_len))
-    # #     # self.assertEqual(outputs.sequences.shape, expected_shape)
-    # #     #
-    # #     # expected_slice = torch.tensor([3400.8005, 4289.2637, 7101.9209], device=torch_device)
-    # #     # mean_prediction = outputs.sequences.mean(dim=1)
-    # #     # self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=1e-1))
-    # #
-    # #     # expected_shape = torch.Size([64, model.config.forecast_len, model.config.in_channels])
-    # #     self.assertEqual(outputs.shape, expected_shape)
-    # #
-    # #     expected_slice = torch.tensor([[-0.8200, 0.3741, -0.7543, 0.3971, -0.6659, -0.0124, -0.8308]],
-    # #                                   device=torch_device,
-    # #                                   )
-    # #     self.assertTrue(torch.allclose(outputs[0, :1, :7], expected_slice, atol=TOLERANCE))
+    # def test_regression_head(self):

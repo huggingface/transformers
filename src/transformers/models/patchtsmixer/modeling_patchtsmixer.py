@@ -22,7 +22,8 @@ from typing import Optional, Tuple
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
-
+import random
+import numpy as np
 
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import ModelOutput
@@ -194,15 +195,40 @@ PATCHTSMIXER_INPUTS_DOCSTRING = r"""
 """
 
 
+def set_seed(x=42):
+    random.seed(x)
+    np.random.seed(x)
+    torch.manual_seed(x)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(x)
+
+
 class PatchTSMixerPreTrainedModel(PreTrainedModel):
     # Weight initialization
     config_class = PatchTSMixerConfig
     base_model_prefix = "model"
     main_input_name = "context_values"
+    supports_gradient_checkpointing = True
+
+    def _init_weights(self, module):
+        """Initialize weights"""
+        # print("Module = ", module)
+        if isinstance(module, (nn.LayerNorm, nn.BatchNorm1d)):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (PatchTSMixerEncoder)):
+            module.gradient_checkpointing = value
 
 
 
-class PatchTSMixerEncoderOutput(ModelOutput):
+
+class PatchTSMixerEncoderOutputWithNoAttention(ModelOutput):
     """
     Base class for PatchTSMixerEncoderOutput, with potential hidden states.
     Args:
@@ -238,13 +264,13 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def forward(self, context_values: torch.Tensor, output_hidden_states: Optional[bool] = False) -> PatchTSMixerEncoderOutput:
+    def forward(self, context_values: torch.Tensor, output_hidden_states: Optional[bool] = False) -> PatchTSMixerEncoderOutputWithNoAttention:
         """
         context_values: [bs  x n_vars x num_patches x patch_len]
         return: [bs x n_vars x num_patches x num_features]
         """
         last_hidden_state, hidden_states  = self.encoder(context_values, output_hidden_states = output_hidden_states)
-        return PatchTSMixerEncoderOutput(last_hidden_state=last_hidden_state,
+        return PatchTSMixerEncoderOutputWithNoAttention(last_hidden_state=last_hidden_state,
                                             hidden_states=hidden_states)
 
 
@@ -254,7 +280,7 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
     PATCHTSMIXER_START_DOCSTRING,
 )
 
-class PatchTSMixerModelOutput(ModelOutput):
+class PatchTSMixerModelOutputWithNoAttention(ModelOutput):
     """
     Base class for model's outputs, with potential hidden states.
     Args:
@@ -282,6 +308,8 @@ class PatchTSMixerModelOutput(ModelOutput):
 class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
+
+        set_seed(config.seed_number)
 
         if hasattr(config, "mask_input"):
             mask_input = config.mask_input
@@ -312,7 +340,14 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         else:
             self.revin = None
 
-    def forward(self, context_values: torch.Tensor, output_hidden_states: Optional[bool] = False):
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+            self, 
+            context_values: torch.Tensor, 
+            output_hidden_states: Optional[bool] = False
+        ) -> PatchTSMixerModelOutputWithNoAttention:
         """
         context_values: tensor [bs x seq_len x in_channels]
         """
@@ -338,7 +373,7 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
         encoder_output = self.encoder(enc_input, output_hidden_states = output_hidden_states)
 
 
-        return PatchTSMixerModelOutput(
+        return PatchTSMixerModelOutputWithNoAttention(
             last_hidden_state=encoder_output.last_hidden_state, 
             hidden_states = encoder_output.hidden_states,
             patched_input=patched_x,
@@ -369,7 +404,7 @@ class PatchTSMixerPretrainHead(nn.Module):
         return self.head(context_values)
 
 
-class PatchTSMixerForPreTrainingOutput(ModelOutput):
+class PatchTSMixerForPreTrainingOutputWithNoAttention(ModelOutput):
     """
     Output type of [`PatchTSMixerForPreTrainingOutput`].
 
@@ -406,13 +441,16 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
             self.revin = RevIN()
         else:
             self.revin = None
+        
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward(
             self, 
             context_values: torch.Tensor,
             output_hidden_states: Optional[bool] = False,
             return_loss: bool = True
-        ) -> PatchTSMixerForPreTrainingOutput:
+        ) -> PatchTSMixerForPreTrainingOutputWithNoAttention:
         """
         context_values: tensor [bs x seq_len x in_channels]
         """
@@ -430,7 +468,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
         if self.masked_loss is True and loss_val is not None:
             loss_val = (loss_val.mean(dim=-1) * model_output.mask).sum() / (model_output.mask.sum() + 1e-10)
         
-        return PatchTSMixerForPreTrainingOutput(
+        return PatchTSMixerForPreTrainingOutputWithNoAttention(
             prediction_logits=x_hat,  # tensor [bs x nvars x num_patch x patch_len]
             last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
             hidden_states = model_output.hidden_states,
@@ -460,7 +498,7 @@ class PatchTSMixerForecastHead(nn.Module):
         return self.head(x, y = y)
 
 
-class PatchTSMixerForForecastOutput(ModelOutput):
+class PatchTSMixerForForecastOutputWithNoAttention(ModelOutput):
     """
     Output type of [`PatchTSMixerForForecastOutput`].
 
@@ -492,6 +530,9 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             self.revin = RevIN(denorm_channels = config.forecast_channel_indices)
         else:
             self.revin = None
+        
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward(
         self,
@@ -499,7 +540,7 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
         target_values: torch.Tensor = None,
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True
-    ) -> PatchTSMixerForForecastOutput:
+    ) -> PatchTSMixerForForecastOutputWithNoAttention:
         """
         context_values: tensor [bs x seq_len x in_channels]
         """
@@ -520,11 +561,14 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
 
 
         if target_values is not None and return_loss is True:
-            loss_val = self.loss(y_hat, target_values)
+            if self.config.forecast_channel_indices is not None:
+                loss_val = self.loss(y_hat, target_values[..., self.config.forecast_channel_indices])
+            else:    
+                loss_val = self.loss(y_hat, target_values)
         else:
             loss_val = None
 
-        return PatchTSMixerForForecastOutput(
+        return PatchTSMixerForForecastOutputWithNoAttention(
             prediction_logits=y_hat,  # tensor [bs x forecast_len x in_channels]
             last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
             hidden_states = model_output.hidden_states,
@@ -554,7 +598,7 @@ class PatchTSMixerClassificationHead(nn.Module):
         return self.head(context_values, y=target_values)
 
 
-class PatchTSMixerForClassificationOutput(ModelOutput):
+class PatchTSMixerForClassificationOutputWithNoAttention(ModelOutput):
     """
     Output type of [`PatchTSMixerForClassificationOutput`].
 
@@ -589,6 +633,9 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
                         
         else:
             self.inject_revin = None
+        
+        # Initialize weights and apply final processing
+        self.post_init()
 
 
     def forward(
@@ -597,7 +644,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
             target_values: torch.Tensor = None,
             output_hidden_states: Optional[bool] = False,
             return_loss: bool = True
-    ) -> PatchTSMixerForClassificationOutput:
+    ) -> PatchTSMixerForClassificationOutputWithNoAttention:
 
         """
         context_values: tensor [bs x seq_len x in_channels]
@@ -621,7 +668,7 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         else:
             loss_val = None
 
-        return PatchTSMixerForClassificationOutput(
+        return PatchTSMixerForClassificationOutputWithNoAttention(
             prediction_logits=y_hat,  # tensor [bs x n_labels]
             last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
             hidden_states = model_output.hidden_states,
@@ -652,9 +699,9 @@ class PatchTSMixerRegressionHead(nn.Module):
         return self.head(context_values, y = target_values)
 
 
-class PatchTSMixerForRegressionOutput(ModelOutput):
+class PatchTSMixerForRegressionOutputWithNoAttention(ModelOutput):
     """
-    Output type of [`PatchTSMixerForRegressionOutput`].
+    Output type of [`PatchTSMixerForRegressionOutputWithNoAttention`].
 
     Args:
         loss (*optional*, returned when `y` is provided, `torch.FloatTensor` of shape `()`):
@@ -686,6 +733,9 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
                                 num_patches = config.num_patches)
         else:
             self.inject_revin = None
+        
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def forward(
         self,
@@ -693,7 +743,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         target_values: torch.Tensor = None,
         output_hidden_states: Optional[bool] = False,
         return_loss: bool = True,
-    ) -> PatchTSMixerForRegressionOutput:
+    ) -> PatchTSMixerForRegressionOutputWithNoAttention:
         """
         context_values: tensor [bs x seq_len x in_channels]
         target_values: tensor [bs x n_targets]
@@ -716,7 +766,7 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         else:
             loss_val = None
 
-        return PatchTSMixerForRegressionOutput(
+        return PatchTSMixerForRegressionOutputWithNoAttention(
             prediction_logits=y_hat,  # tensor [bs x n_targets]
             last_hidden_state=model_output.last_hidden_state,  # x: [bs x nvars x num_patch x num_features]
             hidden_states = model_output.hidden_states,

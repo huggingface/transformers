@@ -803,12 +803,12 @@ class PretrainHead(nn.Module):
         self.num_patches = num_patches
 
         if self.mode in ["common_channel", "mix_channel"]:
-            self.base_forecast_block = nn.Sequential(
+            self.base_pt_block = nn.Sequential(
                 nn.Dropout(head_dropout),
                 nn.Linear(num_features, patch_size),
             )
         else:
-            self.base_forecast_block = nn.Sequential(
+            self.base_pt_block = nn.Sequential(
                 nn.Dropout(head_dropout),
                 nn.Linear(num_features, patch_size * in_channels),
             )
@@ -825,14 +825,14 @@ class PretrainHead(nn.Module):
         """
 
         if self.mode == "flatten":
-            x = self.base_forecast_block(x)  # x: [bs x num_patch x n_vars*patch_size]
+            x = self.base_pt_block(x)  # x: [bs x num_patch x n_vars*patch_size]
             x = torch.reshape(
                 x, (x.shape[0], x.shape[1], self.patch_size, self.in_channels)
             )  # [bs x num_patch x patch_size x n_vars]
             x = x.permute(0, 3, 1, 2)  # [bs x nvars x num_patch  x patch_len]
             return x
         elif self.mode in ["common_channel", "mix_channel"]:
-            forecast = self.base_forecast_block(
+            forecast = self.base_pt_block(
                 x
             )  # [bs x n_vars x num_patch x patch_size]
             return forecast

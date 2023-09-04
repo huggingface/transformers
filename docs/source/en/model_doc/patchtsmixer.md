@@ -43,8 +43,3 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 [[autodoc]] PatchTSMixerModel
     - forward
 
-
-## PatchTSMixerForPrediction
-
-[[autodoc]] PatchTSMixerForPrediction
-    - forward
