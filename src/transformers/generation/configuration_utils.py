@@ -737,7 +737,9 @@ class GenerationConfig(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
 
-        return cls.from_dict(config_dict, **kwargs)
+        config = cls.from_dict(config_dict, **kwargs)
+        config._original_object_hash = hash(config)
+        return config
 
     @classmethod
     def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
@@ -775,7 +777,6 @@ class GenerationConfig(PushToHubMixin):
 
         # Keep the original hash to detect whether the generation config has been mutated. This property is used to
         # disable legacy behavior (if the generation config is mutated, the legacy behavior is disabled).
-        config._original_object_hash = hash(config)
 
         logger.info(f"Generate config {config}")
         if return_unused_kwargs:
@@ -898,6 +899,7 @@ class GenerationConfig(PushToHubMixin):
                     if attr in decoder_config and getattr(config, attr) == getattr(default_generation_config, attr):
                         setattr(config, attr, decoder_config[attr])
 
+        config._original_object_hash = hash(config)
         return config
 
     def update(self, **kwargs):
