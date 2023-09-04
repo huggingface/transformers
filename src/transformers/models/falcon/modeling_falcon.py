@@ -423,8 +423,8 @@ class FalconAttention(nn.Module):
             if hasattr(F, "scaled_dot_product_attention") and not output_attentions:
                 # TODO: deprecate this once we add FA2 support in Falcon
                 logger.warning_once(
-                    "The current implementation of Falcon calls `torch.scaled_dot_product_attention` directly, this will be depracted in the"
-                    " future in favor of `BetterTransformer` API. Please install the latest optimum library `pip install -U optimum` and call "
+                    "The current implementation of Falcon calls `torch.scaled_dot_product_attention` directly, this will be deprecated in the"
+                    " future in favor of the `BetterTransformer` API. Please install the latest optimum library with `pip install -U optimum` and call "
                     "`model.to_bettertransformer()` to benefit from `torch.scaled_dot_product_attention`."
                 )
 
