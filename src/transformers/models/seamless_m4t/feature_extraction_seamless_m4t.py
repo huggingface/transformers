@@ -67,8 +67,6 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate=16000,
         num_mel_bins=80,
         padding_value=0.0,
-        normalize_means=True,
-        normalize_vars=True,
         stride=2,  # TODO: add to docstrings
         lang_start_idx=256001,  # TODO: add to docstrings
         src_lang="eng",
@@ -77,8 +75,6 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         **kwargs,
     ):
         self.num_mel_bins = num_mel_bins
-        self.normalize_means = normalize_means
-        self.normalize_vars = normalize_vars
         self.return_attention_mask = True
         self.stride = stride
         self.lang_start_idx = lang_start_idx
@@ -120,6 +116,29 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
             self._tgt_lang = f"__{new_tgt_lang}__"
         else:
             self._tgt_lang = new_tgt_lang
+            
+    @staticmethod
+    # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
+    def zero_mean_unit_var_norm(
+        input_values: List[np.ndarray], attention_mask: List[np.ndarray], padding_value: float = 0.0
+    ) -> List[np.ndarray]:
+        """
+        Every array in the list is normalized to have zero mean and unit variance
+        """
+        if attention_mask is not None:
+            attention_mask = np.array(attention_mask, np.int32)
+            normed_input_values = []
+
+            for vector, length in zip(input_values, attention_mask.sum(-1)):
+                normed_slice = (vector - vector[:length].mean()) / np.sqrt(vector[:length].var() + 1e-7)
+                if length < normed_slice.shape[0]:
+                    normed_slice[length:] = padding_value
+
+                normed_input_values.append(normed_slice)
+        else:
+            normed_input_values = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in input_values]
+
+        return normed_input_values
 
     def _extract_fbank_features(
         self,
@@ -144,6 +163,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
+        do_normalize: Optional[bool] = True,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -201,6 +221,9 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
                 `sampling_rate` at the forward call to prevent silent errors.
             padding_value (`float`, defaults to 0.0):
                 The value that is used to fill the padding values / vectors.
+            do_normalize (`bool`, *optional*, defaults to `True`):
+                Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
+                improve the performance of the model.
         """
 
         if sampling_rate is not None:
@@ -238,6 +261,9 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         # extract fbank features
         features = [self._extract_fbank_features(waveform) for waveform in raw_speech]
 
+        # TODO: verify usage
+        if do_normalize:
+            features = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in features]
         if self.normalize_means:
             features = [feature - feature.mean(axis=0) for feature in features]
         if self.normalize_vars:

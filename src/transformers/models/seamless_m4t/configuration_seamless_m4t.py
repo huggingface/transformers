@@ -312,7 +312,6 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.spkr_embed_dim = spkr_embed_dim
         self.vocoder_num_langs = vocoder_num_langs
         self.vocoder_num_spkrs = vocoder_num_spkrs
-        self.use_dur_predictor = use_dur_predictor
         self.variance_predictor_kernel_size = variance_predictor_kernel_size
         self.var_pred_dropout = var_pred_dropout
         

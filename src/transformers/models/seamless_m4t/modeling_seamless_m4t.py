@@ -2537,7 +2537,7 @@ class SeamlessM4THifiGan(nn.Module):
 
     # Almost the same as SpeechT5HifiGan.__init__
     def __init__(self, config: SeamlessM4TConfig):
-        super().__init__(config)
+        super().__init__()
         self.num_kernels = len(config.resblock_kernel_sizes)
         self.num_upsamples = len(config.upsample_rates)
         self.conv_pre = nn.Conv1d(
@@ -2693,21 +2693,21 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
                 
     # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan.apply_weight_norm
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.conv_pre)
+        nn.utils.weight_norm(self.hifi_gan.conv_pre)
         for layer in self.hifi_gan.upsampler:
             nn.utils.weight_norm(layer)
         for layer in self.hifi_gan.resblocks:
             layer.apply_weight_norm()
-        nn.utils.weight_norm(self.conv_post)
+        nn.utils.weight_norm(self.hifi_gan.conv_post)
 
     # Copied from transformers.models.speecht5.modeling_speecht5.SpeechT5HifiGan.remove_weight_norm
     def remove_weight_norm(self):
-        nn.utils.remove_weight_norm(self.conv_pre)
+        nn.utils.remove_weight_norm(self.hifi_gan.conv_pre)
         for layer in self.hifi_gan.upsampler:
             nn.utils.remove_weight_norm(layer)
         for layer in self.hifi_gan.resblocks:
             layer.remove_weight_norm()
-        nn.utils.remove_weight_norm(self.conv_post)
+        nn.utils.remove_weight_norm(self.hifi_gan.conv_post)
 
 
 ############ WHOLE MODEL related code ################
@@ -3150,7 +3150,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
         """
 
         logger.warning(
-            "This is the same forward method as `SeamlessM4TForTextToText`. It doesn't use `self.t2u_model`. If you want to generate speech, use the `generate` method."
+            "This is the same forward method as `SeamlessM4TForTextToText`. It doesn't use the text-to-unit model `SeamlessM4TTextToUnitForConditionalGeneration`. If you want to generate speech, use the `.generate` method."
         )
 
         return super().forward(
@@ -3770,9 +3770,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
         if self.current_modality == "speech":
             # get last_hidden_state from encoder
-            encoder_hidden_states = self.speech_encoder(input_features=input_features, attention_mask=attention_mask)[
-                0
-            ]
+            encoder_hidden_states = self.speech_encoder(input_features=input_features, attention_mask=attention_mask).last_hidden_state
 
             # input modality = speech so new attention mask for the decoder
             if attention_mask is not None:

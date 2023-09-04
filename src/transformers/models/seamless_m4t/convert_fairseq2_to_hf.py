@@ -34,6 +34,14 @@ from transformers.utils import logging
 
 api = HfApi()
 
+# fmt: off
+UNIT_SUPPORTED_LANGUAGES = ["__arb__", "__ben__", "__cat__", "__ces__", "__cmn__", "__cym__", "__dan__", "__deu__", "__eng__", "__est__", "__fin__", "__fra__", "__hin__", "__ind__", "__ita__", "__jpn__", "__kan__", "__kor__", "__mlt__", "__nld__", "__pes__", "__pol__", "__por__", "__ron__", "__rus__", "__slk__", "__spa__", "__swe__", "__swh__", "__tam__", "__tel__", "__tgl__", "__tha__", "__tur__", "__ukr__", "__urd__", "__uzn__", "__vie__", ]
+# fmt: on
+
+# fmt: off
+VOCODER_SUPPORTED_LANGUAGES = ["__arb__", "__ben__", "__cat__", "__ces__", "__cmn__", "__cym__", "__dan__", "__deu__", "__eng__", "__est__", "__fin__", "__fra__", "__hin__", "__ind__", "__ita__", "__jpn__", "__kor__", "__mlt__", "__nld__", "__pes__", "__pol__", "__por__", "__ron__", "__rus__", "__slk__", "__spa__", "__swe__", "__swh__", "__tel__", "__tgl__", "__tha__", "__tur__", "__ukr__", "__urd__", "__uzn__", "__vie__",]
+# fmt: on
+
 
 def assert_param_count(model_1, model_2):
     count_1 = sum(p[1].numel() for p in model_1.named_parameters() if "final_proj" not in p[0])
@@ -64,6 +72,8 @@ vocoder_convert_list = [
     ("lang", "language_embedding"),
     ("spkr", "speaker_embedding"),
     ("dict.", "unit_embedding."),
+    ("dur_predictor.conv1.0", "dur_predictor.conv1"),
+    ("dur_predictor.conv2.0", "dur_predictor.conv2"),
 ]
 
 # order is important
@@ -243,7 +253,7 @@ def load_model(pytorch_dump_folder_path, model_type):
     - text_encoder (#4) and text_encoder_frontend (#5)
     - text_decoder (#6) [and text_decoder_frontend (#5) = equals to text_encoder_frontend]
     - final_proj (#7)
-    - vocoder (#8) TODO
+    - vocoder (#8)
     """
     device = _grab_best_device()
     if model_type == "medium":
@@ -272,6 +282,12 @@ def load_model(pytorch_dump_folder_path, model_type):
         raise ValueError(
             f"Error in tokenizer saving/loading - __fra__ lang id is not coherent: {sanity_check_lang_id} vs {tokenizer.lang_code_to_id['__fra__']}"
         )
+        
+    ####### get language to ids dict
+    text_decoder_lang_code_to_id = {lang: tokenizer.lang_code_to_id[f"__{lang}__"] for lang in langs}
+    t2u_lang_code_to_id = {code: i for i, code in enumerate(UNIT_SUPPORTED_LANGUAGES)}
+    vocoder_lang_code_to_id = {code: i for i, code in enumerate(VOCODER_SUPPORTED_LANGUAGES)}
+    
 
     ######### FE
 
@@ -296,6 +312,10 @@ def load_model(pytorch_dump_folder_path, model_type):
     # init model
     hf_config = _load_hf_config(model_type)
     hf_model = SeamlessM4TModel(hf_config)
+    
+    hf_model.generation_config.__setattr__("text_decoder_lang_to_code_id",text_decoder_lang_code_to_id)
+    hf_model.generation_config.__setattr__("t2u_lang_code_to_id",t2u_lang_code_to_id)
+    hf_model.generation_config.__setattr__("vocoder_lang_code_to_id",vocoder_lang_code_to_id)
 
     # -1. take care of vocoder
     # similarly to speech T5 must apply and remove weight norm
