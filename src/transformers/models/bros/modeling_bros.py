@@ -1074,8 +1074,11 @@ class BrosForTokenClassification(BrosPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Bros Model with a token classification head on top (initial token layers and sequence token layer on top of the
-    hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks.
+    Bros Model with a token classification head on top (initial_token_layers and subsequent_token_layer on top of the
+    hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. The initial_token_classifier is used to
+    predict the first token of each entity, and the subsequent_token_classifier is used to predict the subsequent
+    tokens within an entity. Compared to BrosForTokenClassification, this model is more robust to serialization errors
+    since it predicts next token from one token.
     """,
     BROS_START_DOCSTRING,
 )
@@ -1217,8 +1220,8 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Bros Model with a token classification head on top (a relation extractor layer on top of the hidden-states output)
-    e.g. for Entity-Linking.
+    Bros Model with a token classification head on top (a entity_linker layer on top of the hidden-states output) e.g.
+    for Entity-Linking. The entity_linker is used to predict intra-entity links (one entity to another entity).
     """,
     BROS_START_DOCSTRING,
 )
