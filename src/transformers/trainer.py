@@ -3184,8 +3184,8 @@ class Trainer:
 
             if labels is not None:
                 labels = self.accelerator.gather_for_metrics((labels))
-                labels_host = [labels] if all_labels is None else labels_host+[labels]
-                #labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
+                labels_host = [labels] if labels_host is None else labels_host+[labels]
+                # labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
 
             self.control = self.callback_handler.on_prediction_step(args, self.state, self.control)
 
@@ -3236,7 +3236,7 @@ class Trainer:
             )
         if labels_host is not None:
             labels = nested_numpify(labels_host)
-            all_labels = [labels] if all_labels is None else all_labels+[labels]
+            all_labels = labels if all_labels is None else all_labels+labels
             # all_labels = labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
 
         # Number of samples
