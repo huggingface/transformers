@@ -62,7 +62,7 @@ uploaded to the Hub, we recommend making a backup before attempting the conversi
 
 ## FalconForCausalLM
 
-[[autodoc]] FalconForMaskedLM
+[[autodoc]] FalconForCausalLM
     - forward
 
 ## FalconForSequenceClassification
