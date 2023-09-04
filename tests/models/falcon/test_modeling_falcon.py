@@ -528,9 +528,8 @@ class FalconOverrideTest(unittest.TestCase):
                 config2 = FalconConfig.from_pretrained(supported_checkpoint)
 
             self.assertIn(
-                "The Falcon model was initialized without trust_remote_code=True, and will therefore leverage the "
-                "transformers library implementation. The repository revision is set to a version that doesn't "
-                "leverage remote code.",
+                "The Falcon model was initialized without `trust_remote_code=True`, and will therefore leverage the "
+                "transformers library implementation.",
                 cm.out,
             )
 
@@ -545,9 +544,8 @@ class FalconOverrideTest(unittest.TestCase):
                 config2 = AutoConfig.from_pretrained(supported_checkpoint)
 
             self.assertIn(
-                "The Falcon model was initialized without trust_remote_code=True, and will therefore leverage the "
-                "transformers library implementation. The repository revision is set to a version that doesn't "
-                "leverage remote code.",
+                "The Falcon model was initialized without `trust_remote_code=True`, and will therefore leverage the "
+                "transformers library implementation.",
                 cm.out,
             )
 
@@ -593,9 +591,8 @@ class FalconOverrideTest(unittest.TestCase):
                 config3 = FalconModel.from_pretrained(supported_checkpoint, trust_remote_code=True).config
 
             self.assertIn(
-                "The Falcon model was initialized without trust_remote_code=True, and will therefore leverage the "
-                "transformers library implementation. The repository revision is set to a version that doesn't "
-                "leverage remote code.",
+                "The Falcon model was initialized without `trust_remote_code=True`, and will therefore leverage the "
+                "transformers library implementation.",
                 cm.out,
             )
 
@@ -611,9 +608,8 @@ class FalconOverrideTest(unittest.TestCase):
                 config2 = AutoModel.from_pretrained(supported_checkpoint).config
 
             self.assertIn(
-                "The Falcon model was initialized without trust_remote_code=True, and will therefore leverage the "
-                "transformers library implementation. The repository revision is set to a version that doesn't "
-                "leverage remote code.",
+                "The Falcon model was initialized without `trust_remote_code=True`, and will therefore leverage the "
+                "transformers library implementation.",
                 cm.out,
             )
 
