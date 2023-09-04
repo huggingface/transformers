@@ -729,7 +729,11 @@ class GenerationConfig(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
 
-        return cls.from_dict(config_dict, **kwargs)
+        generation_config = cls.from_dict(config_dict, **kwargs)
+        # If the generation_config contains the `_from_config` attribute, we ignore it. This attribute's purpose is to
+        # flag that the GenerationConfig instance was created from a model config file, which is not the case here.
+        generation_config._from_model_config = False
+        return generation_config
 
     @classmethod
     def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
