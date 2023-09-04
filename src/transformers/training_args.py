@@ -18,7 +18,7 @@ import json
 import math
 import os
 import warnings
-from dataclasses import FrozenInstanceError, asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
@@ -154,6 +154,7 @@ class OptimizerNames(ExplicitEnum):
     PAGED_LION_8BIT = "paged_lion_8bit"
 
 
+# TODO: `TrainingArguments` users rely on it being fully mutable. In the future see if we can narrow this to a few keys: https://github.com/huggingface/transformers/pull/25903
 @dataclass
 class TrainingArguments:
     """
@@ -1706,16 +1707,6 @@ class TrainingArguments:
                 f"{self.hub_model_id}).",
                 FutureWarning,
             )
-
-        # Finally set the `TrainingArguments` to be immutable
-        self._frozen = True
-
-    def __setattr__(self, name, value):
-        # Once fully through the `__post_init__`, `TrainingArguments` are immutable
-        if not name.startswith("_") and getattr(self, "_frozen", False):
-            raise FrozenInstanceError(f"cannot assign to field {name}")
-        else:
-            super().__setattr__(name, value)
 
     def __str__(self):
         self_as_dict = asdict(self)
