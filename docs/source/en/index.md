@@ -315,6 +315,7 @@ Flax), PyTorch, and/or TensorFlow.
 |             CLIP              |       ✅        |         ✅         |      ✅      |
 |            CLIPSeg            |       ✅        |         ❌         |      ❌      |
 |            CodeGen            |       ✅        |         ❌         |      ❌      |
+|           CodeLlama           |       ✅        |         ❌         |      ❌      |
 |       Conditional DETR        |       ✅        |         ❌         |      ❌      |
 |           ConvBERT            |       ✅        |         ✅         |      ❌      |
 |           ConvNeXT            |       ✅        |         ✅         |      ❌      |
@@ -366,6 +367,7 @@ Flax), PyTorch, and/or TensorFlow.
 |           GroupViT            |       ✅        |         ✅         |      ❌      |
 |            Hubert             |       ✅        |         ✅         |      ❌      |
 |            I-BERT             |       ✅        |         ❌         |      ❌      |
+|            IDEFICS            |       ✅        |         ❌         |      ❌      |
 |           ImageGPT            |       ✅        |         ❌         |      ❌      |
 |           Informer            |       ✅        |         ❌         |      ❌      |
 |         InstructBLIP          |       ✅        |         ❌         |      ❌      |
@@ -419,6 +421,7 @@ Flax), PyTorch, and/or TensorFlow.
 |          Pix2Struct           |       ✅        |         ❌         |      ❌      |
 |            PLBart             |       ✅        |         ❌         |      ❌      |
 |          PoolFormer           |       ✅        |         ❌         |      ❌      |
+|           Pop2Piano           |       ✅        |         ❌         |      ❌      |
 |          ProphetNet           |       ✅        |         ❌         |      ❌      |
 |              PVT              |       ✅        |         ❌         |      ❌      |
 |            QDQBert            |       ✅        |         ❌         |      ❌      |
@@ -472,8 +475,10 @@ Flax), PyTorch, and/or TensorFlow.
 |          VisualBERT           |       ✅        |         ❌         |      ❌      |
 |              ViT              |       ✅        |         ✅         |      ✅      |
 |          ViT Hybrid           |       ✅        |         ❌         |      ❌      |
+|            VitDet             |       ✅        |         ❌         |      ❌      |
 |            ViTMAE             |       ✅        |         ✅         |      ❌      |
 |            ViTMSN             |       ✅        |         ❌         |      ❌      |
+|             VITS              |       ✅        |         ❌         |      ❌      |
 |             ViViT             |       ✅        |         ❌         |      ❌      |
 |           Wav2Vec2            |       ✅        |         ✅         |      ✅      |
 |      Wav2Vec2-Conformer       |       ✅        |         ❌         |      ❌      |
