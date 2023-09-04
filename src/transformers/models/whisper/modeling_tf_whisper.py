@@ -487,14 +487,14 @@ class TFWhisperPreTrainedModel(TFPreTrainedModel):
             self.main_input_name: tf.random.uniform(
                 [1, self.config.num_mel_bins, self.config.max_source_positions * 2 - 1], dtype=tf.float32
             ),
-            # "decoder_input_ids": tf.constant([[1, 3]], dtype=tf.int32),
+            "decoder_input_ids": tf.constant([[1, 3]], dtype=tf.int32),
         }
 
     @property
     def input_signature(self):
         return {
             "input_features": tf.TensorSpec((None, self.config.num_mel_bins, None), tf.float32, name="input_features"),
-            # "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+            "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
             "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
         }
 
@@ -1626,7 +1626,26 @@ class TFWhisperForAudioClassification(TFWhisperPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.encoder.set_input_embeddings(value)
+    
+    @property
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        """
+        Dummy inputs to build the network.
 
+        Returns:
+            `Dict[str, tf.Tensor]`: The dummy inputs.
+        """
+        return {
+            self.main_input_name: tf.random.uniform(
+                [1, self.config.num_mel_bins, self.config.max_source_positions * 2 - 1], dtype=tf.float32
+            ),
+        }
+
+    @property
+    def input_signature(self):
+        return {
+            "input_features": tf.TensorSpec((None, self.config.num_mel_bins, None), tf.float32, name="input_features"),
+        }
 
     @unpack_inputs
     def call(

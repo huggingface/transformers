@@ -1,0 +1,628 @@
+============================= test session starts ==============================
+platform linux -- Python 3.8.10, pytest-7.2.1, pluggy-1.0.0
+rootdir: /home/adit299/transformers, configfile: setup.cfg
+plugins: hypothesis-6.64.0, timeout-2.1.0, xdist-3.1.0
+collected 40 items
+
+tests/models/whisper/test_modeling_tf_whisper.py .F...sFF..F............ [ 57%]
+....FsFFF.Fs.ss.s                                                        [100%]
+
+=================================== FAILURES ===================================
+_______________ TFWhisperEncoderModelTest.test_compile_tf_model ________________
+
+self = <tests.models.whisper.test_modeling_tf_whisper.TFWhisperEncoderModelTest testMethod=test_compile_tf_model>
+
+    def test_compile_tf_model(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        max_input = getattr(self.model_tester, "max_position_embeddings", 512)
+        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
+        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
+    
+        for model_class in self.all_model_classes:
+            if model_class.__name__ in ["TFSpeech2TextModel", "TFSpeech2TextForConditionalGeneration"]:
+                inputs = {
+                    "decoder_input_ids": tf.keras.Input(
+                        batch_shape=(2, max_input),
+                        name="decoder_input_ids",
+                        dtype="int32",
+                    ),
+                    "input_features": tf.keras.Input(
+                        batch_shape=(
+                            2,
+                            max_input,
+                            self.model_tester.input_feat_per_channel * self.model_tester.input_channels,
+                        ),
+                        name="input_features",
+                        dtype="float32",
+                    ),
+                }
+            elif model_class.__name__ in ["TFWhisperModel", "TFWhisperForConditionalGeneration"]:
+                inputs = {
+                    "decoder_input_ids": tf.keras.Input(
+                        batch_shape=(2, max_input),
+                        name="decoder_input_ids",
+                        dtype="int32",
+                    ),
+                    "input_features": tf.keras.Input(
+                        batch_shape=(
+                            2,
+                            self.model_tester.num_mel_bins,
+                            self.model_tester.seq_length,
+                        ),
+                        name="input_features",
+                        dtype="float32",
+                    ),
+                }
+            elif self.is_encoder_decoder:
+                inputs = {
+                    "decoder_input_ids": tf.keras.Input(
+                        batch_shape=(2, max_input),
+                        name="decoder_input_ids",
+                        dtype="int32",
+                    ),
+                    "input_ids": tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32"),
+                }
+            # `pixel_values` implies that the input is an image
+            elif model_class.main_input_name == "pixel_values":
+                inputs = tf.keras.Input(
+                    batch_shape=(
+                        3,
+                        self.model_tester.num_channels,
+                        self.model_tester.image_size,
+                        self.model_tester.image_size,
+                    ),
+                    name="pixel_values",
+                    dtype="float32",
+                )
+            elif model_class.__name__ in ["TFCLIPModel", "TFGroupViTModel", "TFBlipModel"]:
+                inputs = {
+                    "input_ids": tf.keras.Input(batch_shape=(3, max_input), name="input_ids", dtype="int32"),
+                    "pixel_values": tf.keras.Input(
+                        batch_shape=(
+                            3,
+                            self.model_tester.vision_model_tester.num_channels,
+                            self.model_tester.vision_model_tester.image_size,
+                            self.model_tester.vision_model_tester.image_size,
+                        ),
+                        name="pixel_values",
+                        dtype="float32",
+                    ),
+                }
+            elif model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
+                inputs = tf.keras.Input(batch_shape=(4, 2, max_input), name="input_ids", dtype="int32")
+            else:
+                inputs = tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32")
+    
+            # Prepare our model
+            model = model_class(config)
+            model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
+            # Let's load it from the disk to be sure we can use pretrained weights
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=False)
+>               model = model_class.from_pretrained(tmpdirname)
+
+tests/test_modeling_tf_common.py:827: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/transformers/modeling_tf_utils.py:2810: in from_pretrained
+    model(model.dummy_inputs)  # build the network with dummy inputs
+.env/lib/python3.8/site-packages/keras/utils/traceback_utils.py:70: in error_handler
+    raise e.with_traceback(filtered_tb) from None
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <transformers.models.whisper.modeling_tf_whisper.TFWhisperForAudioClassification object at 0x7f8ab3b5a160>
+args = ({'decoder_input_ids': <tf.Tensor: shape=(1, 2), dtype=int32, numpy=array([[2, 3]], dtype=int32)>, 'input_features': <...],
+        [0.18482292, 0.9640751 , 0.32960486, ..., 0.53566337,
+         0.2877066 , 0.8109739 ]]], dtype=float32)>},)
+kwargs = {}
+fn_args_and_kwargs = {'input_features': {'decoder_input_ids': <tf.Tensor: shape=(1, 2), dtype=int32, numpy=array([[2, 3]], dtype=int32)>, '...2292, 0.9640751 , 0.32960486, ..., 0.53566337,
+         0.2877066 , 0.8109739 ]]], dtype=float32)>}, 'kwargs_call': {}}
+config = WhisperConfig {
+  "_name_or_path": "/tmp/tmpa3qgulea",
+  "activation_dropout": 0.0,
+  "activation_function": "gelu",
+ ..."transformers_version": "4.30.0.dev0",
+  "use_cache": true,
+  "use_weighted_layer_sum": false,
+  "vocab_size": 51865
+}
+
+unpacked_inputs = {'decoder_input_ids': <tf.Tensor: shape=(1, 2), dtype=int32, numpy=array([[2, 3]], dtype=int32)>, 'encoder_outputs': N...        [0.18482292, 0.9640751 , 0.32960486, ..., 0.53566337,
+         0.2877066 , 0.8109739 ]]], dtype=float32)>, ...}
+
+    @functools.wraps(func)
+    def run_call_with_unpacked_inputs(self, *args, **kwargs):
+        # isolates the actual `**kwargs` for the decorated function
+        kwargs_call = {key: val for key, val in kwargs.items() if key not in dict(original_signature.parameters)}
+        fn_args_and_kwargs = {key: val for key, val in kwargs.items() if key not in kwargs_call}
+        fn_args_and_kwargs.update({"kwargs_call": kwargs_call})
+    
+        # move any arg into kwargs, if they exist
+        fn_args_and_kwargs.update(dict(zip(func.__code__.co_varnames[1:], args)))
+    
+        # Encoder Decoder models delegate the application of the configuration options to their inner models.
+        if "EncoderDecoder" in self.__class__.__name__:
+            config = None
+        else:
+            config = self.config
+    
+        unpacked_inputs = input_processing(func, config, **fn_args_and_kwargs)
+>       return func(self, **unpacked_inputs)
+E       TypeError: Exception encountered when calling layer 'tf_whisper_for_audio_classification_4' (type TFWhisperForAudioClassification).
+E       
+E       call() got an unexpected keyword argument 'decoder_input_ids'
+E       
+E       Call arguments received by layer 'tf_whisper_for_audio_classification_4' (type TFWhisperForAudioClassification):
+E         • input_features={'input_features': 'tf.Tensor(shape=(2, 80, 59), dtype=float32)', 'decoder_input_ids': 'tf.Tensor(shape=(1, 2), dtype=int32)'}
+E         • head_mask=None
+E         • encoder_outputs=None
+E         • labels=None
+E         • output_attentions=None
+E         • output_hidden_states=None
+E         • return_dict=None
+
+src/transformers/modeling_tf_utils.py:434: TypeError
+________________ TFWhisperEncoderModelTest.test_encoder_outputs ________________
+
+self = <tests.models.whisper.test_modeling_tf_whisper.TFWhisperEncoderModelTest testMethod=test_encoder_outputs>
+
+    def test_encoder_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+    
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            outputs = model(**inputs)[0]
+            input_ids = inputs["input_features"]
+            del inputs["input_features"]
+    
+            encoder = model.encoder
+            inputs["encoder_outputs"] = encoder(input_ids)
+>           outputs_embeds = model(**inputs)[0]
+
+tests/models/whisper/test_modeling_tf_whisper.py:980: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.env/lib/python3.8/site-packages/keras/utils/traceback_utils.py:70: in error_handler
+    raise e.with_traceback(filtered_tb) from None
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <keras.utils.layer_utils.CallFunctionSpec object at 0x7f8ab36e31c0>
+args = ()
+kwargs = {'encoder_outputs': TFBaseModelOutput(last_hidden_state=<tf.Tensor: shape=(13, 30, 16), dtype=float32, numpy=
+array([[...k': <tf.Tensor: shape=(2, 4), dtype=float32, numpy=
+array([[1., 1., 1., 1.],
+       [1., 1., 1., 1.]], dtype=float32)>}
+
+    def split_out_first_arg(self, args, kwargs):
+        """Splits (args, kwargs) into (inputs, args, kwargs)."""
+        # Grab the argument corresponding to the first argument in the
+        # layer's `call` method spec. This will either be the first positional
+        # argument, or it will be provided as a keyword argument.
+        if args:
+            inputs = args[0]
+            args = args[1:]
+        elif self._arg_names[0] in kwargs:
+            kwargs = copy.copy(kwargs)
+            inputs = kwargs.pop(self._arg_names[0])
+        else:
+>           raise ValueError(
+                "The first argument to `Layer.call` must always be passed."
+            )
+E           ValueError: The first argument to `Layer.call` must always be passed.
+
+.env/lib/python3.8/site-packages/keras/utils/layer_utils.py:809: ValueError
+_______________ TFWhisperEncoderModelTest.test_forward_signature _______________
+
+self = <tests.models.whisper.test_modeling_tf_whisper.TFWhisperEncoderModelTest testMethod=test_forward_signature>
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+    
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+>           signature = inspect.signature(model.forward)
+E           AttributeError: 'TFWhisperForAudioClassification' object has no attribute 'forward'
+
+tests/models/whisper/test_modeling_tf_whisper.py:955: AttributeError
+_____________ TFWhisperEncoderModelTest.test_hidden_states_output ______________
+
+self = <tests.models.whisper.test_modeling_tf_whisper.TFWhisperEncoderModelTest testMethod=test_hidden_states_output>
+
+    def test_hidden_states_output(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    
+        def check_hidden_states_output(config, inputs_dict, model_class):
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+    
+            if model.config.is_encoder_decoder:
+                encoder_hidden_states = outputs.encoder_hidden_states
+                decoder_hidden_states = outputs.decoder_hidden_states
+    
+                self.assertEqual(config.output_attentions, False)
+                self.assertEqual(len(encoder_hidden_states), expected_num_layers)
+                self.assertListEqual(
+                    list(encoder_hidden_states[0].shape[-2:]),
+                    [self.model_tester.seq_length, self.model_tester.hidden_size],
+                )
+                self.assertEqual(len(decoder_hidden_states), expected_num_layers)
+                self.assertListEqual(
+                    list(decoder_hidden_states[0].shape[-2:]),
+                    [self.model_tester.seq_length, self.model_tester.hidden_size],
+                )
+            else:
+                hidden_states = outputs.hidden_states
+                self.assertEqual(config.output_attentions, False)
+                self.assertEqual(len(hidden_states), expected_num_layers)
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [self.model_tester.seq_length, self.model_tester.hidden_size],
+                )
+    
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+>           check_hidden_states_output(config, inputs_dict, model_class)
+
+tests/test_modeling_tf_common.py:1028: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_modeling_tf_common.py:1021: in check_hidden_states_output
+    self.assertListEqual(
+E   AssertionError: Lists differ: [30, 16] != [60, 16]
+E   
+E   First differing element 0:
+E   30
+E   60
+E   
+E   - [30, 16]
+E   ?  ^
+E   
+E   + [60, 16]
+E   ?  ^
+________________ TFWhisperEncoderModelTest.test_onnx_compliancy ________________
+
+self = <tests.models.whisper.test_modeling_tf_whisper.TFWhisperEncoderModelTest testMethod=test_onnx_compliancy>
+
+    def test_onnx_compliancy(self):
+>       if not self.test_onnx:
+E       AttributeError: 'TFWhisperEncoderModelTest' object has no attribute 'test_onnx'
+
+tests/test_modeling_tf_common.py:343: AttributeError
+____________ TFWhisperEncoderModelTest.test_prepare_serving_output _____________
+
+self = <tests.models.whisper.test_modeling_tf_whisper.TFWhisperEncoderModelTest testMethod=test_prepare_serving_output>
+
+    def test_prepare_serving_output(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = self.has_attentions
+    
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            outputs = model(inputs)
+>           serving_outputs = model.serving_output(outputs)
+
+tests/test_modeling_tf_common.py:300: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <transformers.models.whisper.modeling_tf_whisper.TFWhisperForAudioClassification object at 0x7f8ab3909dc0>
+output = TFSequenceClassifierOutput(loss=None, logits=<tf.Tensor: shape=(13, 2), dtype=float32, numpy=
+array([[1.8147802, 1.989...
+         [0.05317271, 0.03583057, 0.03193213, ..., 0.02386571,
+          0.02572016, 0.02103928]]]], dtype=float32)>))
+
+    def serving_output(self, output):
+        """
+        Prepare the output of the saved model. Each model must implement this function.
+    
+        Args:
+            output ([`TFBaseModelOutput`]):
+                The output returned by the model.
+        """
+>       raise NotImplementedError
+E       NotImplementedError
+
+src/transformers/modeling_tf_utils.py:1236: NotImplementedError
+____________ TFWhisperEncoderModelTest.test_pt_tf_model_equivalence ____________
+
+self = <tests.models.whisper.test_modeling_tf_whisper.TFWhisperEncoderModelTest testMethod=test_pt_tf_model_equivalence>
+allow_missing_keys = False
+
+    @is_pt_tf_cross_test
+    def test_pt_tf_model_equivalence(self, allow_missing_keys=False):
+        import transformers
+    
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    
+            # Output all for aggressive testing
+            config.output_hidden_states = True
+            config.output_attentions = self.has_attentions
+    
+            # Make sure no sequence has all zeros as attention mask, otherwise some tests fail due to the inconsistency
+            # of the usage `1e-4`, `1e-9`, `1e-30`, `-inf`.
+            # TODO: Use a uniform value for all models, make sure all tests pass without this processing, and remove it.
+            self._make_attention_mask_non_null(inputs_dict)
+    
+            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
+            pt_model_class = getattr(transformers, pt_model_class_name)
+    
+            tf_model = model_class(config)
+            pt_model = pt_model_class(config)
+    
+            tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            tf_inputs_dict_with_labels = self._prepare_for_class(
+                inputs_dict,
+                model_class,
+                # Not all models accept "labels" in the forward pass (yet :) )
+                return_labels=True if "labels" in inspect.signature(model_class.call).parameters.keys() else False,
+            )
+    
+            # For some models (e.g. base models), there is no label returned.
+            # Set the input dict to `None` to avoid check outputs twice for the same input dicts.
+            if not set(tf_inputs_dict_with_labels.keys()).symmetric_difference(tf_inputs_dict.keys()):
+                tf_inputs_dict_with_labels = None
+    
+            # Check we can load pt model in tf and vice-versa with model => model functions
+>           tf_model = transformers.load_pytorch_model_in_tf2_model(
+                tf_model, pt_model, tf_inputs=tf_inputs_dict, allow_missing_keys=allow_missing_keys
+            )
+
+tests/test_modeling_tf_common.py:706: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/transformers/modeling_tf_pytorch_utils.py:204: in load_pytorch_model_in_tf2_model
+    return load_pytorch_weights_in_tf2_model(
+src/transformers/modeling_tf_pytorch_utils.py:230: in load_pytorch_weights_in_tf2_model
+    return load_pytorch_state_dict_in_tf2_model(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tf_model = <transformers.models.whisper.modeling_tf_whisper.TFWhisperForAudioClassification object at 0x7f8ab36988b0>
+pt_state_dict = {'classifier.bias': array([0., 0.], dtype=float32), 'classifier.weight': array([[-0.00916307,  0.00247839,  0.01647531...       [ 0.04591416, -0.00516921,  0.03591024],
+        [-0.01335885, -0.01553431, -0.0269356 ]]], dtype=float32), ...}
+tf_inputs = {'head_mask': <tf.Tensor: shape=(2, 4), dtype=float32, numpy=
+array([[1., 1., 1., 1.],
+       [1., 1., 1., 1.]], dtype...53],
+        [0.87383145, 0.34678572, 0.2766716 , ..., 0.37082306,
+         0.825713  , 0.6365404 ]]], dtype=float32)>}
+allow_missing_keys = False, output_loading_info = False, _prefix = ''
+tf_to_pt_weight_rename = None, ignore_mismatched_sizes = False
+
+    def load_pytorch_state_dict_in_tf2_model(
+        tf_model,
+        pt_state_dict,
+        tf_inputs=None,
+        allow_missing_keys=False,
+        output_loading_info=False,
+        _prefix=None,
+        tf_to_pt_weight_rename=None,
+        ignore_mismatched_sizes=False,
+    ):
+        """Load a pytorch state_dict in a TF 2.0 model."""
+        import tensorflow as tf
+        from packaging.version import parse
+    
+        if parse(tf.__version__) >= parse("2.11.0"):
+            from keras import backend as K
+        else:
+            from tensorflow.python.keras import backend as K
+    
+        if tf_inputs is None:
+            tf_inputs = tf_model.dummy_inputs
+    
+        if _prefix is None:
+            _prefix = ""
+        if tf_inputs is not None:
+            with tf.name_scope(_prefix):
+                tf_model(tf_inputs, training=False)  # Make sure model is built
+        # Adapt state dict - TODO remove this and update the AWS weights files instead
+        # Convert old format to new format if needed from a PyTorch state_dict
+        old_keys = []
+        new_keys = []
+        for key in pt_state_dict.keys():
+            new_key = None
+            if "gamma" in key:
+                new_key = key.replace("gamma", "weight")
+            if "beta" in key:
+                new_key = key.replace("beta", "bias")
+            if "running_var" in key:
+                new_key = key.replace("running_var", "moving_variance")
+            if "running_mean" in key:
+                new_key = key.replace("running_mean", "moving_mean")
+            if new_key:
+                old_keys.append(key)
+                new_keys.append(new_key)
+        for old_key, new_key in zip(old_keys, new_keys):
+            pt_state_dict[new_key] = pt_state_dict.pop(old_key)
+    
+        # Matt: All TF models store the actual model stem in a MainLayer class, including the base model.
+        # In PT, the derived models (with heads) use the base model class as the stem instead, and the base model
+        # just contains the stem itself, and there is no MainLayer class. This means that TF base classes have one
+        # extra layer in their weight names, corresponding to the MainLayer class. This code block compensates for that.
+        start_prefix_to_remove = ""
+        if not any(s.startswith(tf_model.base_model_prefix) for s in pt_state_dict.keys()):
+            start_prefix_to_remove = tf_model.base_model_prefix + "."
+    
+        symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
+        tf_loaded_numel = 0
+        weight_value_tuples = []
+        all_pytorch_weights = set(pt_state_dict.keys())
+        missing_keys = []
+        mismatched_keys = []
+        for symbolic_weight in symbolic_weights:
+            sw_name = symbolic_weight.name
+            name, transpose = convert_tf_weight_name_to_pt_weight_name(
+                sw_name,
+                start_prefix_to_remove=start_prefix_to_remove,
+                tf_weight_shape=symbolic_weight.shape,
+                name_scope=_prefix,
+            )
+            if tf_to_pt_weight_rename is not None:
+                name = tf_to_pt_weight_rename(name)
+    
+            # Find associated numpy array in pytorch model state dict
+            if name not in pt_state_dict:
+                if allow_missing_keys:
+                    missing_keys.append(name)
+                    continue
+                elif tf_model._keys_to_ignore_on_load_missing is not None:
+                    # authorized missing keys don't have to be loaded
+                    if any(re.search(pat, name) is not None for pat in tf_model._keys_to_ignore_on_load_missing):
+                        continue
+>               raise AttributeError(f"{name} not found in PyTorch model")
+E               AttributeError: tf_whisper_encoder_17.conv1.weight not found in PyTorch model
+
+src/transformers/modeling_tf_pytorch_utils.py:322: AttributeError
+____________ TFWhisperEncoderModelTest.test_resize_token_embeddings ____________
+
+self = <tests.models.whisper.test_modeling_tf_whisper.TFWhisperEncoderModelTest testMethod=test_resize_token_embeddings>
+
+    def test_resize_token_embeddings(self):
+        # TODO (joao): after the embeddings refactor is complete, rework this test so as to rely exclusively on
+        # tf.keras.layers.Embedding
+    
+        if not self.test_resize_embeddings:
+            return
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    
+        def _get_word_embedding_weight(model, embedding_layer):
+            if isinstance(embedding_layer, tf.keras.layers.Embedding):
+                # builds the embeddings layer
+                model(model.dummy_inputs)
+                return embedding_layer.embeddings
+            else:
+                return model._get_word_embedding_weight(embedding_layer)
+    
+        for model_class in self.all_model_classes:
+            for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
+                # build the embeddings
+                model = model_class(config=copy.deepcopy(config))  # `resize_token_embeddings` mutates `config`
+>               old_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
+
+tests/test_modeling_tf_common.py:1211: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <transformers.models.whisper.modeling_tf_whisper.TFWhisperForAudioClassification object at 0x7f8ab3b77d30>
+
+    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+        """
+        Returns the model's input embeddings layer.
+    
+        Returns:
+            `tf.Variable`: The embeddings layer mapping vocabulary to hidden states.
+        """
+        main_layer = getattr(self, self.base_model_prefix, self)
+    
+        if main_layer is not self:
+            return main_layer.get_input_embeddings()
+        else:
+>           raise NotImplementedError
+E           NotImplementedError
+
+src/transformers/modeling_tf_utils.py:1262: NotImplementedError
+___________________ TFWhisperEncoderModelTest.test_save_load ___________________
+
+self = <tests.models.whisper.test_modeling_tf_whisper.TFWhisperEncoderModelTest testMethod=test_save_load>
+
+    def test_save_load(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+    
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+    
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=False)
+    
+                # the config file (and the generation config file, if it can generate) should be saved
+                self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
+                self.assertEqual(
+                    model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
+                )
+    
+>               model = model_class.from_pretrained(tmpdirname)
+
+tests/test_modeling_tf_common.py:247: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/transformers/modeling_tf_utils.py:2810: in from_pretrained
+    model(model.dummy_inputs)  # build the network with dummy inputs
+.env/lib/python3.8/site-packages/keras/utils/traceback_utils.py:70: in error_handler
+    raise e.with_traceback(filtered_tb) from None
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <transformers.models.whisper.modeling_tf_whisper.TFWhisperForAudioClassification object at 0x7f8ab352caf0>
+args = ({'decoder_input_ids': <tf.Tensor: shape=(1, 2), dtype=int32, numpy=array([[2, 3]], dtype=int32)>, 'input_features': <...],
+        [0.00129569, 0.1321398 , 0.4477892 , ..., 0.09110773,
+         0.8213068 , 0.2709607 ]]], dtype=float32)>},)
+kwargs = {}
+fn_args_and_kwargs = {'input_features': {'decoder_input_ids': <tf.Tensor: shape=(1, 2), dtype=int32, numpy=array([[2, 3]], dtype=int32)>, '...9569, 0.1321398 , 0.4477892 , ..., 0.09110773,
+         0.8213068 , 0.2709607 ]]], dtype=float32)>}, 'kwargs_call': {}}
+config = WhisperConfig {
+  "_name_or_path": "/tmp/tmpozgmlb9x",
+  "activation_dropout": 0.0,
+  "activation_function": "gelu",
+ ..."transformers_version": "4.30.0.dev0",
+  "use_cache": true,
+  "use_weighted_layer_sum": false,
+  "vocab_size": 51865
+}
+
+unpacked_inputs = {'decoder_input_ids': <tf.Tensor: shape=(1, 2), dtype=int32, numpy=array([[2, 3]], dtype=int32)>, 'encoder_outputs': N...        [0.00129569, 0.1321398 , 0.4477892 , ..., 0.09110773,
+         0.8213068 , 0.2709607 ]]], dtype=float32)>, ...}
+
+    @functools.wraps(func)
+    def run_call_with_unpacked_inputs(self, *args, **kwargs):
+        # isolates the actual `**kwargs` for the decorated function
+        kwargs_call = {key: val for key, val in kwargs.items() if key not in dict(original_signature.parameters)}
+        fn_args_and_kwargs = {key: val for key, val in kwargs.items() if key not in kwargs_call}
+        fn_args_and_kwargs.update({"kwargs_call": kwargs_call})
+    
+        # move any arg into kwargs, if they exist
+        fn_args_and_kwargs.update(dict(zip(func.__code__.co_varnames[1:], args)))
+    
+        # Encoder Decoder models delegate the application of the configuration options to their inner models.
+        if "EncoderDecoder" in self.__class__.__name__:
+            config = None
+        else:
+            config = self.config
+    
+        unpacked_inputs = input_processing(func, config, **fn_args_and_kwargs)
+>       return func(self, **unpacked_inputs)
+E       TypeError: Exception encountered when calling layer 'tf_whisper_for_audio_classification_20' (type TFWhisperForAudioClassification).
+E       
+E       call() got an unexpected keyword argument 'decoder_input_ids'
+E       
+E       Call arguments received by layer 'tf_whisper_for_audio_classification_20' (type TFWhisperForAudioClassification):
+E         • input_features={'input_features': 'tf.Tensor(shape=(2, 80, 59), dtype=float32)', 'decoder_input_ids': 'tf.Tensor(shape=(1, 2), dtype=int32)'}
+E         • head_mask=None
+E         • encoder_outputs=None
+E         • labels=None
+E         • output_attentions=None
+E         • output_hidden_states=None
+E         • return_dict=None
+
+src/transformers/modeling_tf_utils.py:434: TypeError
+=============================== warnings summary ===============================
+.env/lib/python3.8/site-packages/tensorflow/python/framework/dtypes.py:246
+  /home/adit299/transformers/.env/lib/python3.8/site-packages/tensorflow/python/framework/dtypes.py:246: DeprecationWarning: `np.bool8` is a deprecated alias for `np.bool_`.  (Deprecated NumPy 1.24)
+    np.bool8: (False, True),
+
+src/transformers/models/open_llama/modeling_open_llama.py:42
+  /home/adit299/transformers/src/transformers/models/open_llama/modeling_open_llama.py:42: DeprecationWarning: The 'warn' method is deprecated, use 'warning' instead
+    logger.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/models/whisper/test_modeling_tf_whisper.py::TFWhisperEncoderModelTest::test_compile_tf_model
+FAILED tests/models/whisper/test_modeling_tf_whisper.py::TFWhisperEncoderModelTest::test_encoder_outputs
+FAILED tests/models/whisper/test_modeling_tf_whisper.py::TFWhisperEncoderModelTest::test_forward_signature
+FAILED tests/models/whisper/test_modeling_tf_whisper.py::TFWhisperEncoderModelTest::test_hidden_states_output
+FAILED tests/models/whisper/test_modeling_tf_whisper.py::TFWhisperEncoderModelTest::test_onnx_compliancy
+FAILED tests/models/whisper/test_modeling_tf_whisper.py::TFWhisperEncoderModelTest::test_prepare_serving_output
+FAILED tests/models/whisper/test_modeling_tf_whisper.py::TFWhisperEncoderModelTest::test_pt_tf_model_equivalence
+FAILED tests/models/whisper/test_modeling_tf_whisper.py::TFWhisperEncoderModelTest::test_resize_token_embeddings
+FAILED tests/models/whisper/test_modeling_tf_whisper.py::TFWhisperEncoderModelTest::test_save_load
+============= 9 failed, 25 passed, 6 skipped, 2 warnings in 39.74s =============
