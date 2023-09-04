@@ -57,6 +57,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("git", "GitProcessor"),
         ("groupvit", "CLIPProcessor"),
         ("hubert", "Wav2Vec2Processor"),
+        ("idefics", "IdeficsProcessor"),
         ("instructblip", "InstructBlipProcessor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
@@ -66,6 +67,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("oneformer", "OneFormerProcessor"),
         ("owlvit", "OwlViTProcessor"),
         ("pix2struct", "Pix2StructProcessor"),
+        ("pop2piano", "Pop2PianoProcessor"),
         ("sam", "SamProcessor"),
         ("sew", "Wav2Vec2Processor"),
         ("sew-d", "Wav2Vec2Processor"),
@@ -317,7 +319,7 @@ class AutoProcessor:
         )
 
     @staticmethod
-    def register(config_class, processor_class):
+    def register(config_class, processor_class, exist_ok=False):
         """
         Register a new processor for this class.
 
@@ -326,4 +328,4 @@ class AutoProcessor:
                 The configuration corresponding to the model to register.
             processor_class ([`FeatureExtractorMixin`]): The processor to register.
         """
-        PROCESSOR_MAPPING.register(config_class, processor_class)
+        PROCESSOR_MAPPING.register(config_class, processor_class, exist_ok=exist_ok)

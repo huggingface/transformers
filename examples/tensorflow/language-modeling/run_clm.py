@@ -259,6 +259,7 @@ def main():
             assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, json or txt file."
 
     if training_args.output_dir is not None:
+        training_args.output_dir = Path(training_args.output_dir)
         os.makedirs(training_args.output_dir, exist_ok=True)
     # endregion
 
@@ -266,8 +267,8 @@ def main():
     # Detecting last checkpoint.
     checkpoint = None
     if len(os.listdir(training_args.output_dir)) > 0 and not training_args.overwrite_output_dir:
-        config_path = Path(training_args.output_dir) / CONFIG_NAME
-        weights_path = Path(training_args.output_dir) / TF2_WEIGHTS_NAME
+        config_path = training_args.output_dir / CONFIG_NAME
+        weights_path = training_args.output_dir / TF2_WEIGHTS_NAME
         if config_path.is_file() and weights_path.is_file():
             checkpoint = training_args.output_dir
             logger.info(

@@ -16,6 +16,7 @@ import collections
 import contextlib
 import doctest
 import functools
+import importlib
 import inspect
 import logging
 import multiprocessing
@@ -39,7 +40,6 @@ import requests
 
 from transformers import logging as transformers_logging
 
-from .deepspeed import is_deepspeed_available
 from .integrations import (
     is_clearml_available,
     is_fairscale_available,
@@ -48,6 +48,7 @@ from .integrations import (
     is_sigopt_available,
     is_wandb_available,
 )
+from .integrations.deepspeed import is_deepspeed_available
 from .utils import (
     is_accelerate_available,
     is_apex_available,
@@ -57,6 +58,7 @@ from .utils import (
     is_cython_available,
     is_decord_available,
     is_detectron2_available,
+    is_essentia_available,
     is_faiss_available,
     is_flax_available,
     is_ftfy_available,
@@ -69,7 +71,9 @@ from .utils import (
     is_onnx_available,
     is_optimum_available,
     is_pandas_available,
+    is_peft_available,
     is_phonemizer_available,
+    is_pretty_midi_available,
     is_pyctcdecode_available,
     is_pytesseract_available,
     is_pytest_available,
@@ -369,6 +373,16 @@ def require_torch(test_case):
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
 
 
+def require_peft(test_case):
+    """
+    Decorator marking a test that requires PEFT.
+
+    These tests are skipped when PEFT isn't installed.
+
+    """
+    return unittest.skipUnless(is_peft_available(), "test requires PEFT")(test_case)
+
+
 def require_torchvision(test_case):
     """
     Decorator marking a test that requires Torchvision.
@@ -629,6 +643,17 @@ if is_torch_available():
         torch_device = "npu"
     else:
         torch_device = "cpu"
+
+    if "TRANSFORMERS_TEST_BACKEND" in os.environ:
+        backend = os.environ["TRANSFORMERS_TEST_BACKEND"]
+        try:
+            _ = importlib.import_module(backend)
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                f"Failed to import `TRANSFORMERS_TEST_BACKEND` '{backend}'! This should be the name of an installed module. The original error (look up to see its"
+                f" traceback):\n{e}"
+            ) from e
+
 else:
     torch_device = None
 
@@ -812,6 +837,20 @@ def require_librosa(test_case):
     Decorator marking a test that requires librosa
     """
     return unittest.skipUnless(is_librosa_available(), "test requires librosa")(test_case)
+
+
+def require_essentia(test_case):
+    """
+    Decorator marking a test that requires essentia
+    """
+    return unittest.skipUnless(is_essentia_available(), "test requires essentia")(test_case)
+
+
+def require_pretty_midi(test_case):
+    """
+    Decorator marking a test that requires pretty_midi
+    """
+    return unittest.skipUnless(is_pretty_midi_available(), "test requires pretty_midi")(test_case)
 
 
 def cmd_exists(cmd):
