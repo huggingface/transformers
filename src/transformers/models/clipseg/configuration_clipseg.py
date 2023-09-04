@@ -14,7 +14,6 @@
 # limitations under the License.
 """ CLIPSeg model configuration"""
 
-import copy
 import os
 from typing import Union
 
@@ -97,8 +96,8 @@ class CLIPSegTextConfig(PretrainedConfig):
         initializer_range=0.02,
         initializer_factor=1.0,
         pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
+        bos_token_id=49406,
+        eos_token_id=49407,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -117,6 +116,8 @@ class CLIPSegTextConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from CLIPSegConfig
@@ -218,6 +219,8 @@ class CLIPSegVisionConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from CLIPSegConfig
@@ -298,7 +301,6 @@ class CLIPSegConfig(PretrainedConfig):
     ```"""
 
     model_type = "clipseg"
-    is_composition = True
 
     def __init__(
         self,
@@ -420,16 +422,3 @@ class CLIPSegConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["text_config"] = self.text_config.to_dict()
-        output["vision_config"] = self.vision_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output

@@ -15,6 +15,9 @@
 """ Classes to support TF Encoder-Decoder architectures"""
 
 
+from __future__ import annotations
+
+import inspect
 import re
 import warnings
 from typing import Optional, Tuple, Union
@@ -33,7 +36,6 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import shape_list
 from ...utils import (
-    DUMMY_INPUTS,
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -266,18 +268,12 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
                 f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
             )
 
-    @property
-    def dummy_inputs(self):
-        """
-        Dummy inputs to build the network.
-
-        Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        # Add `decoder_input_ids` because `self.decoder` requires it.
-        input_ids = tf.constant(DUMMY_INPUTS, dtype=tf.int32)
-        dummy = {"input_ids": input_ids, "decoder_input_ids": input_ids}
-        return dummy
+        decoder_signature = set(inspect.signature(self.decoder.call).parameters.keys())
+        if "encoder_hidden_states" not in decoder_signature:
+            raise ValueError(
+                "The selected decoder is not prepared for the encoder hidden states to be passed. Please see the "
+                "following discussion on GitHub: https://github.com/huggingface/transformers/issues/23350"
+            )
 
     def get_encoder(self):
         return self.encoder
@@ -475,15 +471,15 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        encoder_outputs: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        past_key_values: Optional[Tuple[Tuple[tf.Tensor]]] = None,
-        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        decoder_inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        input_ids: TFModelInputType | None = None,
+        attention_mask: np.ndarray | tf.Tensor | None = None,
+        decoder_input_ids: np.ndarray | tf.Tensor | None = None,
+        decoder_attention_mask: np.ndarray | tf.Tensor | None = None,
+        encoder_outputs: np.ndarray | tf.Tensor | None = None,
+        past_key_values: Tuple[Tuple[tf.Tensor]] | None = None,
+        inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        decoder_inputs_embeds: np.ndarray | tf.Tensor | None = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -630,33 +626,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-        )
-
-    def serving_output(self, output):
-        pkv = tf.tuple(output.past_key_values)[1] if self.config.decoder.use_cache else None
-        dec_hs = (
-            tf.convert_to_tensor(output.decoder_hidden_states) if self.config.decoder.output_hidden_states else None
-        )
-        dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.decoder.output_attentions else None
-        enc_hs = (
-            tf.convert_to_tensor(output.encoder_hidden_states) if self.config.encoder.output_hidden_states else None
-        )
-        enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.encoder.output_attentions else None
-        cross_attns = (
-            tf.convert_to_tensor(output.cross_attentions)
-            if self.config.decoder.output_attentions and output.cross_attentions is not None
-            else None
-        )
-
-        return TFSeq2SeqLMOutput(
-            logits=output.logits,
-            past_key_values=pkv,
-            decoder_hidden_states=dec_hs,
-            decoder_attentions=dec_attns,
-            encoder_last_hidden_state=output.encoder_last_hidden_state,
-            encoder_hidden_states=enc_hs,
-            encoder_attentions=enc_attns,
-            cross_attentions=cross_attns,
         )
 
     def prepare_inputs_for_generation(

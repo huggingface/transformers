@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import random
 import unittest
 
@@ -57,7 +59,7 @@ class TFTransfoXLModelTester:
         self.d_head = 8
         self.d_inner = 128
         self.div_val = 2
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 2
         self.scope = None
         self.seed = 1
         self.eos_token_id = 0

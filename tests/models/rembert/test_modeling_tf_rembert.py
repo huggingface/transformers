@@ -14,6 +14,8 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 import unittest
 
 from transformers import RemBertConfig, is_tf_available
@@ -52,7 +54,7 @@ class TFRemBertModelTester:
         hidden_size=32,
         input_embedding_size=18,
         output_embedding_size=43,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -77,7 +79,7 @@ class TFRemBertModelTester:
         self.hidden_size = 32
         self.input_embedding_size = input_embedding_size
         self.output_embedding_size = output_embedding_size
-        self.num_hidden_layers = 5
+        self.num_hidden_layers = 2
         self.num_attention_heads = 4
         self.intermediate_size = 37
         self.hidden_act = "gelu"

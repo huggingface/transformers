@@ -1,14 +1,17 @@
-import copy
 import enum
 import warnings
 
-from .. import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING
-from ..utils import add_end_docstrings, is_tf_available
+from ..utils import add_end_docstrings, is_tf_available, is_torch_available
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
+if is_torch_available():
+    from ..models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+
 if is_tf_available():
     import tensorflow as tf
+
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 
 
 class ReturnType(enum.Enum):
@@ -63,7 +66,7 @@ class TextGenerationPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.check_model_type(
-            TF_MODEL_FOR_CAUSAL_LM_MAPPING if self.framework == "tf" else MODEL_FOR_CAUSAL_LM_MAPPING
+            TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES if self.framework == "tf" else MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
         )
         if "prefix" not in self._preprocess_params:
             # This is very specific. The logic is quite complex and needs to be done
@@ -242,7 +245,6 @@ class TextGenerationPipeline(Pipeline):
 
         # If there is a prefix, we may need to adjust the generation length. Do so without permanently modifying
         # generate_kwargs, as some of the parameterization may come from the initialization of the pipeline.
-        generate_kwargs = copy.deepcopy(generate_kwargs)
         prefix_length = generate_kwargs.pop("prefix_length", 0)
         if prefix_length > 0:
             has_max_new_tokens = "max_new_tokens" in generate_kwargs or (

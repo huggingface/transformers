@@ -14,6 +14,8 @@
 # limitations under the License.
 """ Testing suite for the TensorFlow LayoutLMv3 model. """
 
+from __future__ import annotations
+
 import copy
 import inspect
 import unittest
@@ -49,7 +51,7 @@ if is_tf_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import LayoutLMv3FeatureExtractor
+    from transformers import LayoutLMv3ImageProcessor
 
 
 class TFLayoutLMv3ModelTester:
@@ -67,7 +69,7 @@ class TFLayoutLMv3ModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=36,
-        num_hidden_layers=3,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -276,13 +278,7 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, PipelineTesterMixin, unittest.Te
         else ()
     )
     pipeline_model_mapping = (
-        {
-            "feature-extraction": TFLayoutLMv3Model,
-            "question-answering": TFLayoutLMv3ForQuestionAnswering,
-            "text-classification": TFLayoutLMv3ForSequenceClassification,
-            "token-classification": TFLayoutLMv3ForTokenClassification,
-            "zero-shot": TFLayoutLMv3ForSequenceClassification,
-        }
+        {"document-question-answering": TFLayoutLMv3ForQuestionAnswering, "feature-extraction": TFLayoutLMv3Model}
         if is_tf_available()
         else {}
     )
@@ -486,16 +482,16 @@ def prepare_img():
 @require_tf
 class TFLayoutLMv3ModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return LayoutLMv3FeatureExtractor(apply_ocr=False) if is_vision_available() else None
+    def default_image_processor(self):
+        return LayoutLMv3ImageProcessor(apply_ocr=False) if is_vision_available() else None
 
     @slow
     def test_inference_no_head(self):
         model = TFLayoutLMv3Model.from_pretrained("microsoft/layoutlmv3-base")
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        pixel_values = feature_extractor(images=image, return_tensors="tf").pixel_values
+        pixel_values = image_processor(images=image, return_tensors="tf").pixel_values
 
         input_ids = tf.constant([[1, 2]])
         bbox = tf.expand_dims(tf.constant([[1, 2, 3, 4], [5, 6, 7, 8]]), axis=0)

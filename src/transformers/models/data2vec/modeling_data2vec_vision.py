@@ -470,7 +470,7 @@ class Data2VecVisionRelativePositionBias(nn.Module):
         relative_position_index[0:, 0] = self.num_relative_distance - 2
         relative_position_index[0, 0] = self.num_relative_distance - 1
 
-        self.register_buffer("relative_position_index", relative_position_index)
+        self.register_buffer("relative_position_index", relative_position_index, persistent=False)
 
     def forward(self) -> torch.Tensor:
         relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)].view(
@@ -1120,8 +1120,10 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
         # compute weighted loss
         loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
         main_loss = loss_fct(upsampled_logits, labels)
-        auxiliary_loss = loss_fct(upsampled_auxiliary_logits, labels)
-        loss = main_loss + self.config.auxiliary_loss_weight * auxiliary_loss
+        loss = main_loss
+        if auxiliary_logits is not None:
+            auxiliary_loss = loss_fct(upsampled_auxiliary_logits, labels)
+            loss += self.config.auxiliary_loss_weight * auxiliary_loss
 
         return loss
 

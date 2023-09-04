@@ -130,7 +130,7 @@ You will need basic `git` proficiency to contribute to
 manual. Type `git --help` in a shell and enjoy! If you prefer books, [Pro
 Git](https://git-scm.com/book/en/v2) is a very good reference.
 
-You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/main/setup.py#L426))** or above to contribute to 🤗 Transformers. Follow the steps below to start contributing:
+You'll need **[Python 3.8]((https://github.com/huggingface/transformers/blob/main/setup.py#L426))** or above to contribute to 🤗 Transformers. Follow the steps below to start contributing:
 
 1. Fork the [repository](https://github.com/huggingface/transformers) by
    clicking on the **[Fork](https://github.com/huggingface/transformers/fork)** button on the repository's page. This creates a copy of the code
@@ -275,7 +275,7 @@ You'll need **[Python 3.7]((https://github.com/huggingface/transformers/blob/mai
 request description to make sure they are linked (and people viewing the issue know you
 are working on it).<br>
 ☐ To indicate a work in progress please prefix the title with `[WIP]`. These are
-useful to avoid duplicated work, and to differentiate it from PRs ready to be merged.
+useful to avoid duplicated work, and to differentiate it from PRs ready to be merged.<br>
 ☐ Make sure existing tests pass.<br>
 ☐ If adding a new feature, also add tests for it.<br>
    - If you are adding a new model, make sure you use
@@ -284,7 +284,7 @@ useful to avoid duplicated work, and to differentiate it from PRs ready to be me
      `RUN_SLOW=1 python -m pytest tests/models/my_new_model/test_my_new_model.py`.
    - If you are adding a new tokenizer, write tests and make sure
      `RUN_SLOW=1 python -m pytest tests/models/{your_model_name}/test_tokenization_{your_model_name}.py` passes.
-   CircleCI does not run the slow tests, but GitHub Actions does every night!<br>
+   - CircleCI does not run the slow tests, but GitHub Actions does every night!<br>
 
 ☐ All public methods must have informative docstrings (see
 [`modeling_bert.py`](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py)

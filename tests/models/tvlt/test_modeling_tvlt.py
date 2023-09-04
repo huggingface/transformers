@@ -42,9 +42,6 @@ if is_torch_available():
 
     from transformers import TvltForAudioVisualClassification, TvltForPreTraining, TvltModel
     from transformers.models.tvlt.modeling_tvlt import TVLT_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_10
-else:
-    is_torch_greater_or_equal_than_1_10 = False
 
 
 if is_datasets_available():
@@ -70,8 +67,8 @@ class TvltModelTester:
         num_image_channels=3,
         num_audio_channels=1,
         num_frames=2,
-        hidden_size=128,
-        num_hidden_layers=12,
+        hidden_size=32,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=128,
         hidden_act="gelu",
@@ -82,7 +79,7 @@ class TvltModelTester:
         qkv_bias=True,
         use_mean_pooling=True,
         decoder_num_attention_heads=4,
-        decoder_hidden_size=64,
+        decoder_hidden_size=32,
         decoder_num_hidden_layers=2,
         decoder_intermediate_size=128,
         image_mask_ratio=0.75,
@@ -322,7 +319,6 @@ class TvltModelTester:
 
 
 @require_torch
-@unittest.skipIf(not is_torch_greater_or_equal_than_1_10, "TVLT is only available in torch v1.10+")
 class TvltModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TvltModel, TvltForPreTraining, TvltForAudioVisualClassification) if is_torch_available() else ()
@@ -568,7 +564,7 @@ def prepare_audio(num_samples=1):
 @require_vision
 class TvltModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_processors(self):
         # logits were tested with a different mean and std, so we use the same here
         return (
             TvltImageProcessor() if is_vision_available() else None,
@@ -578,7 +574,7 @@ class TvltModelIntegrationTest(unittest.TestCase):
     def test_inference_for_base_model(self):
         model = TvltModel.from_pretrained("ZinengTang/tvlt-base").to(torch_device)
 
-        image_processor, audio_feature_extractor = self.default_feature_extractor
+        image_processor, audio_feature_extractor = self.default_processors
         video = prepare_video()
         audio = prepare_audio()
         video_inputs = image_processor(video, return_tensors="pt").to(torch_device)
@@ -600,7 +596,7 @@ class TvltModelIntegrationTest(unittest.TestCase):
     def test_inference_for_pretraining(self):
         model = TvltForPreTraining.from_pretrained("ZinengTang/tvlt-base").to(torch_device)
 
-        image_processor, audio_feature_extractor = self.default_feature_extractor
+        image_processor, audio_feature_extractor = self.default_processors
         video = prepare_video()
         video_mixed = prepare_video()
         audio = prepare_audio()

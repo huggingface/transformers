@@ -290,6 +290,28 @@ class FlaxGenerationTesterMixin:
 
             self.assertListEqual(generation_outputs.tolist(), jit_generation_outputs.tolist())
 
+    def test_greedy_generate_dict_outputs(self):
+        config, input_ids, _, max_length = self._get_input_ids_and_config()
+
+        for model_class in self.all_generative_model_classes:
+            model = model_class(config)
+
+            jit_generate = jit(
+                model.generate, static_argnames=["output_hidden_states", "output_scores", "return_dict_in_generate"]
+            )
+            jit_generation_outputs_with_scores = jit_generate(
+                input_ids, output_scores=True, output_hidden_states=True, return_dict_in_generate=True
+            )
+            jit_generation_outputs_wo_scores = jit_generate(
+                input_ids, output_scores=False, output_hidden_states=True, return_dict_in_generate=True
+            )
+
+            self.assertIsNotNone(jit_generation_outputs_with_scores.scores)
+            self.assertListEqual(
+                jit_generation_outputs_with_scores.sequences.tolist(),
+                jit_generation_outputs_wo_scores.sequences.tolist(),
+            )
+
 
 @require_flax
 class FlaxGenerationIntegrationTests(unittest.TestCase):

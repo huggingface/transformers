@@ -443,7 +443,7 @@ AUDIO_SPECTROGRAM_TRANSFORMER_INPUTS_DOCSTRING = r"""
     AUDIO_SPECTROGRAM_TRANSFORMER_START_DOCSTRING,
 )
 class ASTModel(ASTPreTrainedModel):
-    def __init__(self, config: ASTConfig):
+    def __init__(self, config: ASTConfig) -> None:
         super().__init__(config)
         self.config = config
 
@@ -481,7 +481,7 @@ class ASTModel(ASTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ):
+    ) -> Union[Tuple, BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

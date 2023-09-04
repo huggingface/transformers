@@ -24,6 +24,7 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    infer_channel_dimension_format,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -60,9 +61,9 @@ class ImageGPTImageProcessor(BaseImageProcessor):
     (color clusters).
 
     Args:
-        clusters (`np.ndarray`, *optional*):
-            The color clusters to use, as a `np.ndarray` of shape `(n_clusters, 3)` when color quantizing. Can be
-            overriden by `clusters` in `preprocess`.
+        clusters (`np.ndarray` or `List[List[int]]`, *optional*):
+            The color clusters to use, of shape `(n_clusters, 3)` when color quantizing. Can be overriden by `clusters`
+            in `preprocess`.
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's dimensions to `(size["height"], size["width"])`. Can be overridden by
             `do_resize` in `preprocess`.
@@ -81,8 +82,8 @@ class ImageGPTImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        # clusters is a first argument to maintain backwards compatibility with the old ImageGPTFeatureExtractor
-        clusters: Optional[np.ndarray] = None,
+        # clusters is a first argument to maintain backwards compatibility with the old ImageGPTImageProcessor
+        clusters: Optional[Union[List[List[int]], np.ndarray]] = None,
         do_resize: bool = True,
         size: Dict[str, int] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
@@ -93,45 +94,67 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 256, "width": 256}
         size = get_size_dict(size)
-        self.clusters = clusters
+        self.clusters = np.array(clusters) if clusters is not None else None
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
         self.do_normalize = do_normalize
         self.do_color_quantize = do_color_quantize
 
+    # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> np.ndarray:
         """
-        Resize an image to (size["height"], size["width"]).
+        Resize an image to `(size["height"], size["width"])`.
 
         Args:
             image (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
-                Size of the output image.
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-                Resampling filter to use when resizing the image.
-            data_format (`str` or `ChannelDimension`, *optional*):
-                The channel dimension format of the image. If not provided, it will be the same as the input image.
+                `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
+            data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the output image. If unset, the channel dimension format of the input
+                image is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+
+        Returns:
+            `np.ndarray`: The resized image.
         """
         size = get_size_dict(size)
         if "height" not in size or "width" not in size:
-            raise ValueError(f"Size dictionary must contain both height and width keys. Got {size.keys()}")
+            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
+        output_size = (size["height"], size["width"])
         return resize(
-            image, size=(size["height"], size["width"]), resample=resample, data_format=data_format, **kwargs
+            image,
+            size=output_size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
         )
 
     def normalize(
         self,
         image: np.ndarray,
         data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """
         Normalizes an images' pixel values to between [-1, 1].
@@ -141,8 +164,10 @@ class ImageGPTImageProcessor(BaseImageProcessor):
                 Image to normalize.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format of the input image. If not provided, it will be inferred.
         """
-        image = rescale(image=image, scale=1 / 127.5, data_format=data_format)
+        image = rescale(image=image, scale=1 / 127.5, data_format=data_format, input_data_format=input_data_format)
         image = image - 1
         return image
 
@@ -154,9 +179,10 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         resample: PILImageResampling = None,
         do_normalize: bool = None,
         do_color_quantize: Optional[bool] = None,
-        clusters: Optional[Union[int, List[int]]] = None,
+        clusters: Optional[Union[List[List[int]], np.ndarray]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> PIL.Image.Image:
         """
@@ -176,7 +202,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
                 Whether to normalize the image
             do_color_quantize (`bool`, *optional*, defaults to `self.do_color_quantize`):
                 Whether to color quantize the image.
-            clusters (`np.ndarray`, *optional*, defaults to `self.clusters`):
+            clusters (`np.ndarray` or `List[List[int]]`, *optional*, defaults to `self.clusters`):
                 Clusters used to quantize the image of shape `(n_clusters, 3)`. Only has an effect if
                 `do_color_quantize` is set to `True`.
             return_tensors (`str` or `TensorType`, *optional*):
@@ -191,6 +217,12 @@ class ImageGPTImageProcessor(BaseImageProcessor):
                     - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                     - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 Only has an effect if `do_color_quantize` is set to `False`.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -199,6 +231,7 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         do_color_quantize = do_color_quantize if do_color_quantize is not None else self.do_color_quantize
         clusters = clusters if clusters is not None else self.clusters
+        clusters = np.array(clusters)
 
         images = make_list_of_images(images)
 
@@ -217,17 +250,23 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(images[0])
+
         if do_resize:
-            images = [self.resize(image=image, size=size, resample=resample) for image in images]
+            images = [
+                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_normalize:
-            images = [self.normalize(image=image) for image in images]
+            images = [self.normalize(image=image, input_data_format=input_data_format) for image in images]
 
         if do_color_quantize:
-            images = [to_channel_dimension_format(image, ChannelDimension.LAST) for image in images]
+            images = [to_channel_dimension_format(image, ChannelDimension.LAST, input_data_format) for image in images]
             # color quantize from (batch_size, height, width, 3) to (batch_size, height, width)
             images = np.array(images)
-            clusters = np.array(clusters)
             images = color_quantize(images, clusters).reshape(images.shape[:-1])
 
             # flatten to (batch_size, height*width)
@@ -237,7 +276,10 @@ class ImageGPTImageProcessor(BaseImageProcessor):
             # We need to convert back to a list of images to keep consistent behaviour across processors.
             images = list(images)
         else:
-            images = [to_channel_dimension_format(image, data_format) for image in images]
+            images = [
+                to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+                for image in images
+            ]
 
         data = {"input_ids": images}
         return BatchFeature(data=data, tensor_type=return_tensors)

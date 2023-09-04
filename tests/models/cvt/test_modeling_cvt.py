@@ -38,7 +38,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoFeatureExtractor
+    from transformers import AutoImageProcessor
 
 
 class CvtConfigTester(ConfigTester):
@@ -55,8 +55,8 @@ class CvtModelTester:
         batch_size=13,
         image_size=64,
         num_channels=3,
-        embed_dim=[16, 48, 96],
-        num_heads=[1, 3, 6],
+        embed_dim=[16, 32, 48],
+        num_heads=[1, 2, 3],
         depth=[1, 2, 10],
         patch_sizes=[7, 3, 3],
         patch_stride=[4, 2, 2],
@@ -264,16 +264,16 @@ def prepare_img():
 @require_vision
 class CvtModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained(CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
+    def default_image_processor(self):
+        return AutoImageProcessor.from_pretrained(CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
 
     @slow
     def test_inference_image_classification_head(self):
         model = CvtForImageClassification.from_pretrained(CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0]).to(torch_device)
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():

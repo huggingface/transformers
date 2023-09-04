@@ -14,10 +14,13 @@
 # limitations under the License.
 """ TF 2.0 Data2Vec Vision model."""
 
+
+from __future__ import annotations
+
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -94,8 +97,8 @@ class TFData2VecVisionModelOutputWithPooling(TFBaseModelOutputWithPooling):
 
     last_hidden_state: tf.Tensor = None
     pooler_output: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    hidden_states: Tuple[tf.Tensor] | None = None
+    attentions: Tuple[tf.Tensor] | None = None
 
 
 class TFData2VecVisionDropPath(tf.keras.layers.Layer):
@@ -163,7 +166,7 @@ class TFData2VecVisionEmbeddings(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    def call(self, pixel_values: tf.Tensor, bool_masked_pos: Optional[tf.Tensor] = None) -> tf.Tensor:
+    def call(self, pixel_values: tf.Tensor, bool_masked_pos: tf.Tensor | None = None) -> tf.Tensor:
         embeddings = self.patch_embeddings(pixel_values)
         batch_size, seq_len, projection_dim = shape_list(embeddings)
 
@@ -461,7 +464,7 @@ class TFData2VecVisionLayer(tf.keras.layers.Layer):
         )
         self.init_values = config.layer_scale_init_value
 
-    def build(self, input_shape: tf.TensorShape):
+    def build(self, input_shape: tf.TensorShape = None):
         if self.init_values > 0:
             self.lambda_1 = self.add_weight(
                 shape=(self.config.hidden_size),
@@ -609,7 +612,7 @@ class TFData2VecVisionEncoder(tf.keras.layers.Layer):
     def call(
         self,
         hidden_states: tf.Tensor,
-        head_mask: Optional[tf.Tensor] = None,
+        head_mask: tf.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -685,9 +688,9 @@ class TFData2VecVisionMainLayer(tf.keras.layers.Layer):
     @unpack_inputs
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
-        bool_masked_pos: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
+        bool_masked_pos: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -770,36 +773,6 @@ class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "data2vec_vision"
     main_input_name = "pixel_values"
     _keys_to_ignore_on_load_unexpected = [r"relative_position_index"]
-
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        """
-        Dummy inputs to build the network. Returns:
-            `Dict[str, tf.Tensor]`: The dummy inputs.
-        """
-        VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size),
-            dtype=tf.float32,
-        )
-        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
-
-    @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-        return self.serving_output(output)
 
 
 DATA2VEC_VISION_START_DOCSTRING = r"""
@@ -899,9 +872,9 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
     )
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
-        bool_masked_pos: Optional[tf.Tensor] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        pixel_values: TFModelInputType | None = None,
+        bool_masked_pos: tf.Tensor | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -922,17 +895,6 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
         )
 
         return outputs
-
-    def serving_output(self, output: TFData2VecVisionModelOutputWithPooling) -> TFData2VecVisionModelOutputWithPooling:
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFData2VecVisionModelOutputWithPooling(
-            last_hidden_state=output.last_hidden_state,
-            pooler_output=output.pooler_output,
-            hidden_states=hidden_states,
-            attentions=attentions,
-        )
 
 
 @add_start_docstrings(
@@ -966,12 +928,12 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
     )
     def call(
         self,
-        pixel_values: Optional[TFModelInputType] = None,
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        pixel_values: TFModelInputType | None = None,
+        head_mask: np.ndarray | tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: np.ndarray | tf.Tensor | None = None,
         training: Optional[bool] = False,
     ) -> Union[TFSequenceClassifierOutput, tuple]:
         r"""
@@ -1005,12 +967,6 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
 
 
 class TFData2VecVisionConvModule(tf.keras.layers.Layer):
@@ -1378,9 +1334,9 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
     @replace_return_docstrings(output_type=TFSemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        pixel_values: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        labels: Optional[tf.Tensor] = None,
+        pixel_values: tf.Tensor | None = None,
+        head_mask: tf.Tensor | None = None,
+        labels: tf.Tensor | None = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1427,11 +1383,11 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
         # only keep certain features, and reshape
         # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
         features = [feature for idx, feature in enumerate(encoder_hidden_states) if idx + 1 in self.config.out_indices]
-        batch_size = shape_list(pixel_values)[0]
         patch_resolution = self.config.image_size // self.config.patch_size
 
         def reshape_features(x):
-            x = tf.reshape(x, (batch_size, patch_resolution, patch_resolution, -1))
+            # We do it this way so TF can always infer the non-batch dims at compile time
+            x = tf.reshape(x, (-1, patch_resolution, patch_resolution, self.config.hidden_size))
             return x
 
         features = [reshape_features(x[:, 1:, :]) for x in features]
@@ -1472,9 +1428,3 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
-
-    def serving_output(self, output: TFSemanticSegmenterOutput) -> TFSemanticSegmenterOutput:
-        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFSemanticSegmenterOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)

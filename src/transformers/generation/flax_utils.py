@@ -300,7 +300,7 @@ class FlaxGenerationMixin:
                 Custom logits processors that complement the default logits processors built from arguments and
                 generation config. If a logit processor is passed that is already created with the arguments or a
                 generation config an error is thrown. This feature is intended for advanced users.
-            kwargs:
+            kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
@@ -323,7 +323,7 @@ class FlaxGenerationMixin:
                         "You have modified the pretrained model configuration to control generation. This is a"
                         " deprecated strategy to control generation and will be removed soon, in a future version."
                         " Please use a generation configuration file (see"
-                        " https://huggingface.co/docs/transformers/main_classes/text_generation)"
+                        " https://huggingface.co/docs/transformers/main_classes/text_generation )"
                     )
                     self.generation_config = new_generation_config
             generation_config = self.generation_config
@@ -381,11 +381,11 @@ class FlaxGenerationMixin:
         # Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        if has_default_max_length and generation_config.max_new_tokens is None:
+        if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
+            # 20 is the default max_length of the generation config
             warnings.warn(
-                f"Using `max_length`'s default ({generation_config.max_length}) to control the generation length. "
-                "This behaviour is deprecated and will be removed from the config in v5 of Transformers -- we"
-                " recommend using `max_new_tokens` to control the maximum length of the generation.",
+                f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
+                "to control the generation length.  recommend setting `max_new_tokens` to control the maximum length of the generation.",
                 UserWarning,
             )
         elif generation_config.max_new_tokens is not None:
@@ -592,29 +592,7 @@ class FlaxGenerationMixin:
         # per batch-item holding current token in loop.
         sequences = jnp.full((batch_size, max_length), pad_token_id, dtype=jnp.int32)
         sequences = lax.dynamic_update_slice(sequences, input_ids, (0, 0))
-        if output_scores:
-            if hasattr(self.config, "vocab_size") and self.config.vocab_size is not None:
-                vocab_size = self.config.vocab_size
-            elif (
-                hasattr(self.config, "decoder")
-                and hasattr(self.config.decoder, "vocab_size")
-                and self.config.decoder.vocab_size is not None
-            ):
-                vocab_size = self.config.decoder.vocab_size
-            elif (
-                hasattr(self.config, "encoder")
-                and hasattr(self.config.encoder, "vocab_size")
-                and self.config.encoder.vocab_size is not None
-            ):
-                vocab_size = self.config.encoder.vocab_size
-            else:
-                raise TypeError(
-                    f"The current model class ({self.__class__.__name__}) has not a recognized "
-                    f"`vocab_size` , as it doesn't support output_scores."
-                )
-            scores = jnp.ones((batch_size, max_length, vocab_size)) * np.array(-1.0e7)
-        else:
-            scores = None
+        scores = None
 
         # per batch-item state bit indicating if sentence has finished.
         is_sent_finished = jnp.zeros((batch_size,), dtype=jnp.bool_)
@@ -651,7 +629,16 @@ class FlaxGenerationMixin:
             next_tokens_scores = logits_processor(state.sequences, logits, state.cur_len)
 
             next_token = jnp.argmax(next_tokens_scores, axis=-1)
-            tokens_scores = state.scores.at[:, state.cur_len, :].set(next_tokens_scores) if output_scores else None
+
+            if output_scores:
+                if state.scores is not None:
+                    tokens_scores = state.scores.at[:, state.cur_len, :].set(next_tokens_scores)
+                else:
+                    scores = jnp.ones((batch_size, max_length, next_tokens_scores.shape[-1])) * np.array(-1.0e7)
+                    tokens_scores = scores.at[:, state.cur_len, :].set(next_tokens_scores)
+            else:
+                tokens_scores = None
+
             next_token = next_token * ~state.is_sent_finished + pad_token_id * state.is_sent_finished
             next_is_sent_finished = state.is_sent_finished | (next_token == eos_token_id)
             next_token = next_token[:, None]
@@ -668,7 +655,8 @@ class FlaxGenerationMixin:
             )
 
         # The very first prompt often has sequence length > 1, so run outside of `lax.while_loop` to comply with TPU
-        if input_ids.shape[1] > 1:
+        # Besides, when output_scores is true, to return scores vocab_size of the model is got from first run.
+        if input_ids.shape[1] > 1 or output_scores:
             state = greedy_search_body_fn(state)
 
         if not trace:

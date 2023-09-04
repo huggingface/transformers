@@ -86,12 +86,6 @@ class LongformerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
         attention_window (`int` or `List[int]`, *optional*, defaults to 512):
             Size of an attention window around each token. If an `int`, use the same size for all layers. To specify a
             different window size for each layer, use a `List[int]` where `len(attention_window) == num_hidden_layers`.
@@ -131,7 +125,6 @@ class LongformerConfig(PretrainedConfig):
         type_vocab_size: int = 2,
         initializer_range: float = 0.02,
         layer_norm_eps: float = 1e-12,
-        position_embedding_type: str = "absolute",
         onnx_export: bool = False,
         **kwargs,
     ):
@@ -154,7 +147,6 @@ class LongformerConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
         self.onnx_export = onnx_export
 
 

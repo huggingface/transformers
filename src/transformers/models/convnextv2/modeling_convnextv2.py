@@ -37,7 +37,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.backbone_utils import BackboneMixin, get_aligned_output_features_output_indices
+from ...utils.backbone_utils import BackboneMixin
 from .configuration_convnextv2 import ConvNextV2Config
 
 
@@ -61,7 +61,7 @@ CONVNEXTV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input, drop_prob: float = 0.0, training: bool = False):
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -504,15 +504,11 @@ class ConvNextV2ForImageClassification(ConvNextV2PreTrainedModel):
 class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
+        super()._init_backbone(config)
 
-        self.stage_names = config.stage_names
         self.embeddings = ConvNextV2Embeddings(config)
         self.encoder = ConvNextV2Encoder(config)
-
         self.num_features = [config.hidden_sizes[0]] + config.hidden_sizes
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            config.out_features, config.out_indices, self.stage_names
-        )
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}

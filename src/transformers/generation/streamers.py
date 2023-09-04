@@ -81,7 +81,7 @@ class TextStreamer(BaseStreamer):
 
     def put(self, value):
         """
-        Recives tokens, decodes them, and prints them to stdout as soon as they form entire words.
+        Receives tokens, decodes them, and prints them to stdout as soon as they form entire words.
         """
         if len(value.shape) > 1 and value.shape[0] > 1:
             raise ValueError("TextStreamer only supports batch size 1")

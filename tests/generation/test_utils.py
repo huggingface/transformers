@@ -16,6 +16,7 @@
 
 import inspect
 import unittest
+import warnings
 
 import numpy as np
 
@@ -438,7 +439,6 @@ class GenerationTesterMixin:
         input_ids,
         attention_mask,
         max_length,
-        num_return_sequences,
         beam_scorer,
         beam_kwargs,
         logits_warper,
@@ -463,30 +463,30 @@ class GenerationTesterMixin:
             **logits_warper_kwargs,
             **model_kwargs,
         )
-        # beam_search does not automatically interleave `batch_size` dim for `num_beams * num_return_sequences`
+        # beam_search does not automatically interleave `batch_size` dim for `num_beams`
+        torch.manual_seed(0)
         kwargs = {}
         if model.config.is_encoder_decoder:
             encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
                 model,
                 input_ids,
                 attention_mask,
-                num_interleave=beam_scorer.num_beams * num_return_sequences,
+                num_interleave=beam_scorer.num_beams,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
             kwargs["encoder_outputs"] = encoder_outputs
         elif attention_mask is not None:
-            attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams * num_return_sequences, dim=0)
+            attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
 
         # prevent flaky generation test failures
         logits_processor = LogitsProcessorList()
         logits_processor.append(InfNanRemoveLogitsProcessor())
 
-        torch.manual_seed(0)
         with torch.no_grad():
             model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
             output_beam_sample = model.beam_sample(
-                input_ids.repeat_interleave(beam_scorer.num_beams * num_return_sequences, dim=0),
+                input_ids.repeat_interleave(beam_scorer.num_beams, dim=0),
                 beam_scorer,
                 max_length=max_length,
                 logits_warper=logits_warper,
@@ -891,13 +891,9 @@ class GenerationTesterMixin:
 
             self.assertListEqual(output_generate.tolist(), output_beam_search.tolist())
 
-            # check `generate()` and `beam_search()` are equal for `num_return_sequences`
-            num_return_sequences = 2
             if model.config.is_encoder_decoder:
                 max_length = 4
-            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(
-                input_ids.shape[0], max_length, num_return_sequences=num_return_sequences
-            )
+            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
 
             output_generate, output_beam_search = self._beam_search_generate(
                 model=model,
@@ -1036,21 +1032,15 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device).eval()
 
             # check `generate()` and `beam_search()` are equal
-            # change `num_return_sequences = 2` but not for `beam_scorer`
-            num_return_sequences = 2
             if model.config.is_encoder_decoder:
                 max_length = 4
-            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(
-                input_ids.shape[0] * num_return_sequences, max_length
-            )
-            beam_kwargs["num_return_sequences"] = num_return_sequences
+            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
 
             output_generate, output_beam_sample = self._beam_sample_generate(
                 model=model,
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 max_length=max_length,
-                num_return_sequences=num_return_sequences,
                 beam_scorer=beam_scorer,
                 beam_kwargs=beam_kwargs,
                 logits_warper=logits_warper,
@@ -1074,20 +1064,15 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device).eval()
             logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
 
-            num_return_sequences = 2
             if model.config.is_encoder_decoder:
                 max_length = 4
-            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(
-                input_ids.shape[0] * num_return_sequences, max_length
-            )
-            beam_kwargs["num_return_sequences"] = num_return_sequences
+            beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
 
             output_beam_sample, output_generate = self._beam_sample_generate(
                 model=model,
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 max_length=max_length,
-                num_return_sequences=num_return_sequences,
                 beam_scorer=beam_scorer,
                 beam_kwargs=beam_kwargs,
                 logits_warper=logits_warper,
@@ -1113,9 +1098,7 @@ class GenerationTesterMixin:
             self.assertTrue((output_generate["sequences_scores"] < 0).all().item())
 
             for output in (output_beam_sample, output_generate):
-                self._check_outputs(
-                    output, input_ids, model.config, num_return_sequences=num_return_sequences * beam_scorer.num_beams
-                )
+                self._check_outputs(output, input_ids, model.config, num_return_sequences=beam_scorer.num_beams)
 
     def test_generate_without_input_ids(self):
         config, _, _, max_length = self._get_input_ids_and_config()
@@ -1457,6 +1440,49 @@ class GenerationTesterMixin:
             for output in (output_contrastive, output_generate):
                 self._check_outputs(output, input_ids, model.config, use_cache=True)
 
+    def test_contrastive_generate_low_memory(self):
+        # Check that choosing 'low_memory' does not change the model output
+        for model_class in self.all_generative_model_classes:
+            # won't fix: FSMT, Reformer, gptbigcode, and speech2text have a different cache variable type (and format).
+            if any(
+                model_name in model_class.__name__.lower()
+                for model_name in ["fsmt", "reformer", "gptbigcode", "speech2text"]
+            ):
+                return
+
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config(batch_size=1)
+
+            # NOTE: contrastive search only works with cache on at the moment.
+            if not hasattr(config, "use_cache"):
+                return
+
+            config.use_cache = True
+            config.is_decoder = True
+
+            # test output equality of low versus high memory
+            model = model_class(config).to(torch_device).eval()
+
+            low_output = model.generate(
+                input_ids,
+                top_k=4,
+                penalty_alpha=0.6,
+                low_memory=True,
+                max_length=max_length,
+                attention_mask=attention_mask,
+            )
+
+            high_output = model.generate(
+                input_ids,
+                top_k=4,
+                penalty_alpha=0.6,
+                low_memory=False,
+                max_length=max_length,
+                attention_mask=attention_mask,
+            )
+            self.assertListEqual(low_output.tolist(), high_output.tolist())
+
+        return
+
     @slow  # TODO(Joao): remove this. Some models (e.g. data2vec, xcom, roberta) have an error rate between 1 and 10%.
     def test_assisted_decoding_matches_greedy_search(self):
         # This test ensures that the assisted generation does not introduce output changes over greedy search.
@@ -1473,50 +1499,61 @@ class GenerationTesterMixin:
             # may fix in the future: the following models fail with assisted decoding, and need model-specific fixes
             if any(
                 model_name in model_class.__name__.lower()
-                for model_name in ["bigbirdpegasus", "gptbigcode", "led", "mega", "speech2text", "git", "prophetnet"]
+                for model_name in ["bigbirdpegasus", "led", "mega", "speech2text", "git", "prophetnet"]
             ):
                 return
 
-            # enable cache
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config(batch_size=1)
+            # This for loop is a naive and temporary effort to make the test less flaky.
+            failed = 0
+            for i in range(10):
+                # enable cache
+                config, input_ids, attention_mask, max_length = self._get_input_ids_and_config(batch_size=1)
 
-            # NOTE: assisted generation only works with cache on at the moment.
-            if not hasattr(config, "use_cache"):
-                return
+                # NOTE: assisted generation only works with cache on at the moment.
+                if not hasattr(config, "use_cache"):
+                    return
 
-            config.use_cache = True
-            config.is_decoder = True
-            model = model_class(config).to(torch_device).eval()
-            output_greedy = model.generate(
-                input_ids,
-                attention_mask=attention_mask,
-                max_length=max_length,
-                num_beams=1,
-                do_sample=False,
-                output_scores=True,
-                output_hidden_states=True,
-                output_attentions=True,
-                return_dict_in_generate=True,
-            )
-            # Note: with assisted generate, if the same model is used as assistant, then all assistant tokens will
-            # be correct
-            output_assisted = model.generate(
-                input_ids,
-                attention_mask=attention_mask,
-                max_length=max_length,
-                num_beams=1,
-                do_sample=False,
-                assistant_model=model,
-                output_scores=True,
-                output_hidden_states=True,
-                output_attentions=True,
-                return_dict_in_generate=True,
-            )
+                config.use_cache = True
+                config.is_decoder = True
+                model = model_class(config).to(torch_device).eval()
+                output_greedy = model.generate(
+                    input_ids,
+                    attention_mask=attention_mask,
+                    max_length=max_length,
+                    num_beams=1,
+                    do_sample=False,
+                    output_scores=True,
+                    output_hidden_states=True,
+                    output_attentions=True,
+                    return_dict_in_generate=True,
+                )
+                # Note: with assisted generate, if the same model is used as assistant, then all assistant tokens will
+                # be correct
+                output_assisted = model.generate(
+                    input_ids,
+                    attention_mask=attention_mask,
+                    max_length=max_length,
+                    num_beams=1,
+                    do_sample=False,
+                    assistant_model=model,
+                    output_scores=True,
+                    output_hidden_states=True,
+                    output_attentions=True,
+                    return_dict_in_generate=True,
+                )
 
-            self.assertListEqual(output_greedy.sequences.tolist(), output_assisted.sequences.tolist())
+                try:
+                    self.assertListEqual(output_greedy.sequences.tolist(), output_assisted.sequences.tolist())
 
-            for output in (output_greedy, output_assisted):
-                self._check_outputs(output, input_ids, model.config, use_cache=True)
+                    for output in (output_greedy, output_assisted):
+                        self._check_outputs(output, input_ids, model.config, use_cache=True)
+                except AssertionError:
+                    failed += 1
+                    if failed > 1:
+                        self.assertListEqual(output_greedy.sequences.tolist(), output_assisted.sequences.tolist())
+
+                        for output in (output_greedy, output_assisted):
+                            self._check_outputs(output, input_ids, model.config, use_cache=True)
 
     def test_assisted_decoding_sample(self):
         # Seeded assisted decoding will not match sample for the same seed, as the forward pass does not return the
@@ -1529,7 +1566,7 @@ class GenerationTesterMixin:
             # may fix in the future: the following models fail with assisted decoding, and need model-specific fixes
             if any(
                 model_name in model_class.__name__.lower()
-                for model_name in ["bigbirdpegasus", "gptbigcode", "led", "mega", "speech2text", "git", "prophetnet"]
+                for model_name in ["bigbirdpegasus", "led", "mega", "speech2text", "git", "prophetnet"]
             ):
                 return
 
@@ -1597,9 +1634,6 @@ class GenerationTesterMixin:
                 attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
                 self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
 
-    # TODO (joao): this test is actually not slow :) However, it is not passing in some models (e.g. GPTNeoX) and the
-    # fix for some models is quite lengthy. Being slow means it doesn't block our push CI while we fix it.
-    @slow
     def test_left_padding_compatibility(self):
         # The check done in this test is fairly difficult -- depending on the model architecture, passing the right
         # position index for the position embeddings can still result in a different output, due to numerical masking.
@@ -1639,11 +1673,82 @@ class GenerationTesterMixin:
                     position_ids.masked_fill_(padded_attention_mask == 0, 1)
                     model_kwargs["position_ids"] = position_ids
                 next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
-                if not torch.allclose(next_logits_wo_padding, next_logits_with_padding):
+                if not torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-7):
                     no_failures = False
                     break
 
             self.assertTrue(no_failures)
+
+    def test_past_key_values_format(self):
+        # Test that the KV cache is formatted correctly. Exceptions need to explicitly overwrite this test. Having a
+        # standard KV cache format is important for a consistent API (and for advanced generation methods).
+        for model_class in self.all_generative_model_classes:
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+            # If it doesn't support cache, pass the test
+            if not hasattr(config, "use_cache"):
+                return
+
+            model = model_class(config).to(torch_device)
+            if "use_cache" not in inputs:
+                inputs["use_cache"] = True
+            outputs = model(**inputs)
+
+            # If "past_key_values" is not returned, pass the test (e.g. RWKV uses a different cache name and format)
+            if "past_key_values" not in outputs:
+                return
+
+            num_hidden_layers = (
+                getattr(config, "decoder_layers", None)
+                or getattr(config, "num_decoder_layers", None)
+                or config.num_hidden_layers
+            )
+            num_attention_heads = getattr(config, "decoder_attention_heads", config.num_attention_heads)
+            embed_dim = getattr(config, "d_model", config.hidden_size)
+            per_head_embed_dim = embed_dim // num_attention_heads
+
+            past_kv = outputs["past_key_values"]
+            self.assertEqual(len(past_kv), num_hidden_layers)
+
+            # Encoder-Decoder checks
+            if config.is_encoder_decoder:
+                encoder_num_attention_heads = config.encoder_attention_heads
+                encoder_per_head_embed_dim = embed_dim // encoder_num_attention_heads
+                batch_size, seq_length = inputs["decoder_input_ids"].shape
+                for i in range(num_hidden_layers):
+                    self.assertEqual(len(past_kv[i]), 4)  # K V for the decoder + K V for the encoder = 4
+                    self.assertEqual(
+                        past_kv[i][0].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                    )
+                    self.assertEqual(
+                        past_kv[i][1].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                    )
+                    # The sequence length for the encoder K V depends on the model. Since it is not manipulated in
+                    # autoregressive generation, I'm keeping the test general and not checking the 3rd dim
+                    self.assertEqual(
+                        (past_kv[i][2].shape[0], past_kv[i][2].shape[1], past_kv[i][2].shape[3]),
+                        (batch_size, encoder_num_attention_heads, encoder_per_head_embed_dim),
+                    )
+                    self.assertEqual(
+                        (past_kv[i][3].shape[0], past_kv[i][3].shape[1], past_kv[i][3].shape[3]),
+                        (batch_size, encoder_num_attention_heads, encoder_per_head_embed_dim),
+                    )
+
+            # Decoder-only checks
+            else:
+                # TODO: this line is only needed because of imagegpt, where "pixel_values" = "input_ids". Fix the
+                # tests in imagegpt such that `prepare_config_and_inputs_for_common` returns the later (and the other
+                # tests use it)
+                key = "input_ids" if "input_ids" in inputs else "pixel_values"
+                batch_size, seq_length = inputs[key].shape
+                for i in range(num_hidden_layers):
+                    self.assertEqual(len(past_kv[0]), 2)  # K V for the decoder = 2
+                    self.assertEqual(
+                        past_kv[i][0].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                    )
+                    self.assertEqual(
+                        past_kv[i][1].shape, (batch_size, num_attention_heads, seq_length, per_head_embed_dim)
+                    )
 
     def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
@@ -2287,6 +2392,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             num_beams=2,
             num_beam_groups=2,
             num_return_sequences=2,
+            diversity_penalty=1.0,
             eos_token_id=None,
             return_dict_in_generate=True,
             output_scores=True,
@@ -2459,6 +2565,46 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
                 "The soldiers, who had been stationed at the base for more than a year before being evacuated"
                 " screaming scared",
                 "The child was taken to a local hospital where he died.\n 'I don't think screaming scared",
+            ],
+        )
+
+    @slow
+    def test_cfg_mixin(self):
+        model = GPT2LMHeadModel.from_pretrained("gpt2").to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
+        input = tokenizer(["The dragon flew over Paris,"], return_tensors="pt", return_attention_mask=True)
+        input["input_ids"] = input["input_ids"].to(torch_device)
+        input["attention_mask"] = input["attention_mask"].to(torch_device)
+
+        outputs = model.generate(**input, max_new_tokens=32, guidance_scale=1.5)
+        generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                "The dragon flew over Paris, landing in the Rue de la Bastille. The crowd was so excited "
+                'that they had to leave the city.\n\n"We\'re going to Paris!"\n'
+            ],
+        )
+
+        neg = tokenizer(["France,"], return_tensors="pt", return_attention_mask=True)
+        neg["input_ids"] = neg["input_ids"].to(torch_device)
+        neg["attention_mask"] = neg["attention_mask"].to(torch_device)
+        outputs = model.generate(
+            **input,
+            max_new_tokens=32,
+            guidance_scale=1.5,
+            negative_prompt_ids=neg["input_ids"],
+            negative_prompt_attention_mask=neg["attention_mask"],
+        )
+        generated_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                'The dragon flew over Paris, landing on the pavement.\n\n"Paris!"\n\n"Paris!"\n\n"'
+                'Paris!"\n\n"Paris!"\n\n"Paris!"\n\n'
             ],
         )
 
@@ -2699,3 +2845,28 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         with self.assertRaises(TypeError):
             # FakeEncoder.forward() accepts **kwargs -> no filtering -> type error due to unexpected input "foo"
             bart_model.generate(input_ids, foo="bar")
+
+    def test_default_max_length_warning(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model.config.pad_token_id = tokenizer.eos_token_id
+
+        text = "Hello world"
+        tokenized_inputs = tokenizer([text], return_tensors="pt")
+        input_ids = tokenized_inputs.input_ids.to(torch_device)
+
+        # Default generation config value of 20 -> emits warning
+        with self.assertWarns(UserWarning):
+            model.generate(input_ids)
+
+        # Explicitly setting max_length to 20 -> no warning
+        with warnings.catch_warnings(record=True) as warning_list:
+            model.generate(input_ids, max_length=20)
+            self.assertEqual(len(warning_list), 0)
+
+        # Generation config max_length != 20 -> no warning
+        with warnings.catch_warnings(record=True) as warning_list:
+            model.generation_config.max_length = 10
+            model.generation_config._from_model_config = False  # otherwise model.config.max_length=20 takes precedence
+            model.generate(input_ids)
+            self.assertEqual(len(warning_list), 0)

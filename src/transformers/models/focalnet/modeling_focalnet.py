@@ -36,7 +36,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.backbone_utils import BackboneMixin, get_aligned_output_features_output_indices
+from ...utils.backbone_utils import BackboneMixin
 from .configuration_focalnet import FocalNetConfig
 
 
@@ -286,7 +286,7 @@ class FocalNetPatchEmbeddings(nn.Module):
 
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
@@ -981,16 +981,12 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
     FOCALNET_START_DOCSTRING,
 )
 class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
-    def __init__(self, config):
+    def __init__(self, config: FocalNetConfig):
         super().__init__(config)
-
-        self.stage_names = config.stage_names
-        self.focalnet = FocalNetModel(config)
+        super()._init_backbone(config)
 
         self.num_features = [config.embed_dim] + config.hidden_sizes
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            config.out_features, config.out_indices, self.stage_names
-        )
+        self.focalnet = FocalNetModel(config)
 
         # initialize weights and apply final processing
         self.post_init()

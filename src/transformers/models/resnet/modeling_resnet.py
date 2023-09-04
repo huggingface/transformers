@@ -36,7 +36,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.backbone_utils import BackboneMixin, get_aligned_output_features_output_indices
+from ...utils.backbone_utils import BackboneMixin
 from .configuration_resnet import ResNetConfig
 
 
@@ -432,15 +432,11 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
 class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
     def __init__(self, config):
         super().__init__(config)
+        super()._init_backbone(config)
 
-        self.stage_names = config.stage_names
+        self.num_features = [config.embedding_size] + config.hidden_sizes
         self.embedder = ResNetEmbeddings(config)
         self.encoder = ResNetEncoder(config)
-
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            config.out_features, config.out_indices, self.stage_names
-        )
-        self.num_features = [config.embedding_size] + config.hidden_sizes
 
         # initialize weights and apply final processing
         self.post_init()

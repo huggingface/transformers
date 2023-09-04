@@ -18,10 +18,12 @@ import unittest
 import datasets
 import numpy as np
 import pytest
+from requests import ReadTimeout
 
+from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
 from transformers import is_torch_available, is_vision_available
 from transformers.image_utils import ChannelDimension, get_channel_dimension_axis, make_list_of_images
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import is_flaky, require_torch, require_vision
 
 
 if is_torch_available():
@@ -478,6 +480,17 @@ class ImageFeatureExtractionTester(unittest.TestCase):
 
 @require_vision
 class LoadImageTester(unittest.TestCase):
+    def test_load_img_url(self):
+        img = load_image(INVOICE_URL)
+        img_arr = np.array(img)
+
+        self.assertEqual(img_arr.shape, (1061, 750, 3))
+
+    @is_flaky()
+    def test_load_img_url_timeout(self):
+        with self.assertRaises(ReadTimeout):
+            load_image(INVOICE_URL, timeout=0.001)
+
     def test_load_img_local(self):
         img = load_image("./tests/fixtures/tests_samples/COCO/000000039769.png")
         img_arr = np.array(img)
@@ -565,6 +578,10 @@ class UtilFunctionTester(unittest.TestCase):
         # Test we fail if neither first not last dimension is of size 3 or 1
         with pytest.raises(ValueError):
             infer_channel_dimension_format(np.random.randint(0, 256, (10, 1, 50)))
+
+        # But if we explicitly set one of the number of channels to 50 it works
+        inferred_dim = infer_channel_dimension_format(np.random.randint(0, 256, (10, 1, 50)), num_channels=50)
+        self.assertEqual(inferred_dim, ChannelDimension.LAST)
 
         # Test we correctly identify the channel dimension
         image = np.random.randint(0, 256, (3, 4, 5))

@@ -24,7 +24,7 @@ ARG FRAMEWORK
 ARG VERSION
 
 # Control `setuptools` version to avoid some issues
-RUN [ "$VERSION" != "1.9" -a "$VERSION" != "1.10" ] && python3 -m pip install -U setuptools || python3 -m pip install -U "setuptools<=59.5"
+RUN [ "$VERSION" != "1.10" ] && python3 -m pip install -U setuptools || python3 -m pip install -U "setuptools<=59.5"
 
 # Remove all frameworks
 RUN python3 -m pip uninstall -y torch torchvision torchaudio tensorflow jax flax

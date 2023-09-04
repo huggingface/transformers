@@ -14,7 +14,6 @@
 # limitations under the License.
 """ CLIP model configuration"""
 
-import copy
 import os
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
@@ -105,9 +104,11 @@ class CLIPTextConfig(PretrainedConfig):
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
+        # This differs from `CLIPTokenizer`'s default and from openai/clip
+        # See https://github.com/huggingface/transformers/pull/24773#issuecomment-1632287538
         pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
+        bos_token_id=49406,
+        eos_token_id=49407,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -127,6 +128,8 @@ class CLIPTextConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from CLIPConfig
@@ -230,6 +233,8 @@ class CLIPVisionConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
+        cls._set_token_in_kwargs(kwargs)
+
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from CLIPConfig
@@ -292,7 +297,6 @@ class CLIPConfig(PretrainedConfig):
     ```"""
 
     model_type = "clip"
-    is_composition = True
 
     def __init__(
         self, text_config=None, vision_config=None, projection_dim=512, logit_scale_init_value=2.6592, **kwargs
@@ -394,19 +398,6 @@ class CLIPConfig(PretrainedConfig):
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
 
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`].
-
-        Returns:
-            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-        output["text_config"] = self.text_config.to_dict()
-        output["vision_config"] = self.vision_config.to_dict()
-        output["model_type"] = self.__class__.model_type
-        return output
-
 
 class CLIPOnnxConfig(OnnxConfig):
     @property
@@ -445,7 +436,7 @@ class CLIPOnnxConfig(OnnxConfig):
             processor.tokenizer, batch_size=batch_size, seq_length=seq_length, framework=framework
         )
         image_input_dict = super().generate_dummy_inputs(
-            processor.feature_extractor, batch_size=batch_size, framework=framework
+            processor.image_processor, batch_size=batch_size, framework=framework
         )
         return {**text_input_dict, **image_input_dict}
 

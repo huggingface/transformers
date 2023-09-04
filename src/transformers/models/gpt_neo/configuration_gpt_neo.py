@@ -47,41 +47,46 @@ class GPTNeoConfig(PretrainedConfig):
             Vocabulary size of the GPT Neo model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GPTNeoModel`]. Vocabulary size of the model. Defines the different
             tokens that can be represented by the *inputs_ids* passed to the forward method of [`GPTNeoModel`].
-        attention_types (`List`, *optional*, defaults to `[[["global", "local"], 12]]`):
-            The type of attention for each layer in a `List` of the following format `[[["attention_type"],
-            num_layerss]]` e.g. for a 24 layer model `[[["global"], 24]]` or `[[["global", "local"], 12]]` Choose the
-            value of `attention_type` from `["global", "local"]`
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimensionality of the encoder layers and the pooler layer.
         num_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
+        attention_types (`List`, *optional*, defaults to `[[["global", "local"], 12]]`):
+            The type of attention for each layer in a `List` of the following format `[[["attention_type"],
+            num_layerss]]` e.g. for a 24 layer model `[[["global"], 24]]` or `[[["global", "local"], 12]]` Choose the
+            value of `attention_type` from `["global", "local"]`
         num_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (`int`, *optional*, defaults to 8192):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        window_size (`int`, *optional*, defaults to 256):
+            The size of the sliding window for local attention.
         activation_function (`str` or `function`, *optional*, defaults to `"gelu_new"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
+        resid_dropout (`float`, *optional*, defaults to 0.0):
+            Residual dropout used in the attention pattern.
         embed_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         classifier_dropout (`float`, *optional*, defaults to 0.1):
-            Argument used when doing token classification, used in the model [`GPTNeoForTokenClassification`].
-
-            The dropout ratio for the hidden layer.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`GPTNeoModel`].
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            Argument used when doing token classification, used in the model [`GPTNeoForTokenClassification`]. The
+            dropout ratio for the hidden layer.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        bos_token_id (`int`, *optional*, defaults to 50256):
+            The id of the beginning of sentence token in the vocabulary.
+        eos_token_id (`int`, *optional*, defaults to 50256):
+            The id of the end of sentence token in the vocabulary.
 
     Example:
 

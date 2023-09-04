@@ -50,7 +50,7 @@ class ViTHybridModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -163,6 +163,7 @@ class ViTHybridModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+    model_split_percents = [0.5, 0.9]
 
     def setUp(self):
         self.model_tester = ViTHybridModelTester(self)
@@ -243,7 +244,7 @@ def prepare_img():
 @require_vision
 class ViTModelIntegrationTest(unittest.TestCase):
     @cached_property
-    def default_feature_extractor(self):
+    def default_image_processor(self):
         return (
             ViTHybridImageProcessor.from_pretrained(VIT_HYBRID_PRETRAINED_MODEL_ARCHIVE_LIST[0])
             if is_vision_available()
@@ -256,9 +257,9 @@ class ViTModelIntegrationTest(unittest.TestCase):
             torch_device
         )
 
-        feature_extractor = self.default_feature_extractor
+        image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -275,12 +276,12 @@ class ViTModelIntegrationTest(unittest.TestCase):
     @slow
     @require_accelerate
     def test_accelerate_inference(self):
-        feature_extractor = ViTHybridImageProcessor.from_pretrained("google/vit-hybrid-base-bit-384")
+        image_processor = ViTHybridImageProcessor.from_pretrained("google/vit-hybrid-base-bit-384")
         model = ViTHybridForImageClassification.from_pretrained("google/vit-hybrid-base-bit-384", device_map="auto")
 
         image = prepare_img()
 
-        inputs = feature_extractor(images=image, return_tensors="pt")
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
         outputs = model(**inputs)
         logits = outputs.logits
         # model predicts one of the 1000 ImageNet classes

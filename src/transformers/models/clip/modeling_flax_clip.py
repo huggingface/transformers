@@ -487,6 +487,9 @@ class FlaxCLIPTextTransformer(nn.Module):
         self.encoder = FlaxCLIPEncoder(self.config, dtype=self.dtype)
         self.final_layer_norm = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
 
+        # For `pooled_output` computation
+        self.eos_token_id = self.config.eos_token_id
+
     def __call__(
         self,
         input_ids,
@@ -517,9 +520,18 @@ class FlaxCLIPTextTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
-        # text_embeds.shape = [batch_size, sequence_length, transformer.width]
-        # take features from the EOS embedding (eos_token_id is the highest number in each sequence)
-        pooled_output = last_hidden_state[jnp.arange(last_hidden_state.shape[0]), input_ids.argmax(axis=-1)]
+        if self.eos_token_id == 2:
+            # The `eos_token_id` was incorrect before PR #24773: Let's keep what have been done here.
+            # A CLIP model with such `eos_token_id` in the config can't work correctly with extra new tokens added
+            # ------------------------------------------------------------
+            # text_embeds.shape = [batch_size, sequence_length, transformer.width]
+            # take features from the EOS embedding (eos_token_id is the highest number in each sequence)
+            pooled_output = last_hidden_state[jnp.arange(last_hidden_state.shape[0]), input_ids.argmax(axis=-1)]
+        else:
+            # (no need to cast from bool to int after comparing to `eos_token_id`)
+            pooled_output = last_hidden_state[
+                jnp.arange(last_hidden_state.shape[0]), (input_ids == self.eos_token_id).argmax(axis=-1)
+            ]
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]

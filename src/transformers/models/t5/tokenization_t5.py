@@ -19,11 +19,16 @@ import os
 import re
 import warnings
 from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
+from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import PreTrainedTokenizer
+
+
+if TYPE_CHECKING:
+    from ...tokenization_utils_base import TextInput
 from ...utils import logging
 
 
@@ -50,6 +55,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "t5-3b": 512,
     "t5-11b": 512,
 }
+
+SPIECE_UNDERLINE = "▁"
 
 
 class T5Tokenizer(PreTrainedTokenizer):
@@ -100,6 +107,28 @@ class T5Tokenizer(PreTrainedTokenizer):
 
             - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
               BPE-dropout.
+        legacy (`bool`, *optional*):
+            Whether or not the `legacy` behaviour of the tokenizer should be used. Legacy is before the merge of #24622
+            and #25224 which includes fixes to properly handle tokens that appear after special tokens. A simple
+            example:
+
+            - `legacy=True`:
+            ```python
+            >>> from transformers import T5Tokenizer
+
+            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=True)
+            >>> tokenizer.encode("Hello <extra_id_0>.")
+            [8774, 32099, 3, 5, 1]
+            ```
+            - `legacy=False`:
+            ```python
+            >>> from transformers import T5Tokenizer
+
+            >>> tokenizer = T5Tokenizer.from_pretrained("t5-base", legacy=False)
+            >>> tokenizer.encode("Hello <extra_id_0>.")  # the extra space `[3]` is no longer here
+            [8774, 32099, 5, 1]
+            ```
+            Checkout the [pull request](https://github.com/huggingface/transformers/pull/24565) for more details.
 
     Attributes:
         sp_model (`SentencePieceProcessor`):
@@ -120,6 +149,7 @@ class T5Tokenizer(PreTrainedTokenizer):
         extra_ids=100,
         additional_special_tokens=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        legacy=None,
         **kwargs,
     ) -> None:
         # Add extra_ids to the special token list
@@ -134,7 +164,17 @@ class T5Tokenizer(PreTrainedTokenizer):
                     " provided to T5Tokenizer. In this case the additional_special_tokens must include the extra_ids"
                     " tokens"
                 )
+        if legacy is None:
+            logger.warning_once(
+                f"You are using the default legacy behaviour of the {self.__class__}. If you see this, DO NOT PANIC! This is"
+                " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
+                " If you want to use the new behaviour, set `legacy=True`. This should only be set if you understand what it"
+                " means, and thouroughly read the reason why this was added as explained in"
+                " https://github.com/huggingface/transformers/pull/24565"
+            )
+            legacy = True
 
+        self.legacy = legacy
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
         super().__init__(
@@ -144,14 +184,28 @@ class T5Tokenizer(PreTrainedTokenizer):
             extra_ids=extra_ids,
             additional_special_tokens=additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
+            legacy=legacy,
             **kwargs,
         )
 
         self.vocab_file = vocab_file
         self._extra_ids = extra_ids
 
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
+        self.sp_model = self.get_spm_processor()
+
+    def get_spm_processor(self):
+        tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        with open(self.vocab_file, "rb") as f:
+            sp_model = f.read()
+            model_pb2 = import_protobuf()
+            model = model_pb2.ModelProto.FromString(sp_model)
+            if not self.legacy:
+                normalizer_spec = model_pb2.NormalizerSpec()
+                normalizer_spec.add_dummy_prefix = False
+                model.normalizer_spec.MergeFrom(normalizer_spec)
+            sp_model = model.SerializeToString()
+            tokenizer.LoadFromSerializedProto(sp_model)
+        return tokenizer
 
     @staticmethod
     def _eventually_correct_t5_max_length(pretrained_model_name_or_path, max_model_length, init_max_model_length):
@@ -294,9 +348,38 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(self.vocab_file)
 
-    def _tokenize(self, text: str) -> List[str]:
-        """Take as input a string and return a list of strings (tokens) for words/sub-words"""
-        return self.sp_model.encode(text, out_type=str)
+    def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
+        """
+        Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
+        first token is special.
+        """
+        if self.legacy:
+            return super().tokenize(text, **kwargs)
+
+        if len(text) > 0:
+            tokens = super().tokenize(SPIECE_UNDERLINE + text.replace(SPIECE_UNDERLINE, " "), **kwargs)
+
+        if tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
+            tokens = tokens[1:]
+        return tokens
+
+    def _tokenize(self, text, **kwargs):
+        """
+        Returns a tokenized string.
+
+        We de-activated the `add_dummy_prefix` option, thus the sentencepiece internals will always strip any
+        SPIECE_UNDERLINE. For example: `self.sp_model.encode(f"{SPIECE_UNDERLINE}Hey", out_type = str)` will give
+        `['H', 'e', 'y']` instead of `['▁He', 'y']`. Thus we always encode `f"{unk_token}text"` and strip the
+        `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
+        `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
+        """
+        if self.legacy:
+            return self.sp_model.encode(text, out_type=str)
+
+        unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
+        text = self.unk_token + text
+        tokens = self.sp_model.encode(text, out_type=str)
+        return tokens[unk_token_length:]
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
@@ -317,6 +400,8 @@ class T5Tokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         current_sub_tokens = []
+        # since we manually add the prefix space, we have to remove it
+        tokens[0] = tokens[0].lstrip(SPIECE_UNDERLINE)
         out_string = ""
         prev_is_special = False
         for token in tokens:

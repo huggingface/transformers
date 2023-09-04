@@ -882,7 +882,7 @@ FUNNEL_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`BertTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -966,6 +966,7 @@ class FunnelBaseModel(FunnelPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -1041,6 +1042,7 @@ class FunnelModel(FunnelPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
             input_shape = input_ids.size()
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
@@ -1190,7 +1192,7 @@ class FunnelForPreTraining(FunnelPreTrainedModel):
 
 @add_start_docstrings("""Funnel Transformer Model with a `language modeling` head on top.""", FUNNEL_START_DOCSTRING)
 class FunnelForMaskedLM(FunnelPreTrainedModel):
-    _keys_to_ignore_on_load_missing = ["lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: FunnelConfig) -> None:
         super().__init__(config)

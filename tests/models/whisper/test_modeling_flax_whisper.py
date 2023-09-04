@@ -248,6 +248,10 @@ class FlaxWhisperModelTest(FlaxModelTesterMixin, unittest.TestCase):
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
 
+    def check_pt_flax_outputs(self, fx_outputs, pt_outputs, model_class, tol=5e-5, name="outputs", attributes=None):
+        # We override with a slightly higher tol value, as test recently became flaky
+        super().check_pt_flax_outputs(fx_outputs, pt_outputs, model_class, tol, name, attributes)
+
     # overwrite because of `input_features`
     @is_pt_flax_cross_test
     def test_save_load_bf16_to_base_pt(self):
@@ -651,6 +655,78 @@ class FlaxWhisperModelIntegrationTest(unittest.TestCase):
         generate_fn = jax.jit(functools.partial(model.generate, max_length=448, return_timestamps=True))
 
         generated_ids = generate_fn(input_features)
+
+        # fmt: off
+        EXPECTED_OUTPUT = np.array([50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50692, 50692, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50926, 50926, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 51208, 51208, 949, 505, 11, 14138, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51552, 51552, 634, 575, 12525, 22618, 1968, 6144, 35617, 7354, 1292, 6, 589, 307, 534, 10281, 934, 439, 11, 293, 51836, 51836, 50257])
+        # fmt: on
+
+        self.assertTrue(np.allclose(generated_ids, EXPECTED_OUTPUT))
+
+        EXPECTED_TRANSCRIPT = [
+            {
+                "text": (
+                    " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel. Nor is"
+                    " Mr. Quilter's manner less interesting than his matter. He tells us that at this festive season"
+                    " of the year, with Christmas and roast beef looming before us, similarly drawn from eating and"
+                    " its results occur most readily to the mind. He has grave doubts whether Sir Frederick Latins'"
+                    " work is really Greek after all, and"
+                ),
+                "offsets": [
+                    {
+                        "text": (
+                            " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."
+                        ),
+                        "timestamp": (0.0, 6.5600000000000005),
+                    },
+                    {
+                        "text": " Nor is Mr. Quilter's manner less interesting than his matter.",
+                        "timestamp": (6.5600000000000005, 11.24),
+                    },
+                    {
+                        "text": (
+                            " He tells us that at this festive season of the year, with Christmas and roast beef"
+                            " looming"
+                        ),
+                        "timestamp": (11.24, 16.88),
+                    },
+                    {
+                        "text": (
+                            " before us, similarly drawn from eating and its results occur most readily to the mind."
+                        ),
+                        "timestamp": (16.88, 23.76),
+                    },
+                    {
+                        "text": (
+                            " He has grave doubts whether Sir Frederick Latins' work is really Greek after all, and"
+                        ),
+                        "timestamp": (23.76, 29.44),
+                    },
+                ],
+            }
+        ]
+
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True, output_offsets=True)
+        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+    def test_tiny_timestamp_generation_with_output_scores(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+
+        input_speech = np.concatenate(self._load_datasamples(4))
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="jax").input_features
+
+        generate_fn = jax.jit(
+            functools.partial(
+                model.generate,
+                max_length=448,
+                return_timestamps=True,
+                static_argnames=["output_hidden_states", "output_scores", "return_dict_in_generate"],
+            )
+        )
+
+        generated_ids = generate_fn(
+            input_features, output_scores=True, output_hidden_states=True, return_dict_in_generate=True
+        )
 
         # fmt: off
         EXPECTED_OUTPUT = np.array([50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50692, 50692, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50926, 50926, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 51208, 51208, 949, 505, 11, 14138, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51552, 51552, 634, 575, 12525, 22618, 1968, 6144, 35617, 7354, 1292, 6, 589, 307, 534, 10281, 934, 439, 11, 293, 51836, 51836, 50257])

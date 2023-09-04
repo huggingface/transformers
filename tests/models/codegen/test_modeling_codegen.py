@@ -47,7 +47,7 @@ class CodeGenModelTester:
         vocab_size=256,
         hidden_size=32,
         rotary_dim=4,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -521,7 +521,7 @@ class CodeGenModelLanguageGenerationTest(unittest.TestCase):
 
         self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
         self.assertTrue(
-            all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
+            all(output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs)))
         )  # token_type_ids should change output
 
     @is_flaky(max_attempts=3, description="measure of timing is somehow flaky.")

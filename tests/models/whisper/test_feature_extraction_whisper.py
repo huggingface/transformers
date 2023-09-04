@@ -173,6 +173,14 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+        # Test 2-D numpy arrays are batched.
+        speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
+        np_speech_inputs = np.asarray(speech_inputs)
+        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_features
+        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
         # Test truncation required
         speech_inputs = [floats_list((1, x))[0] for x in range(200, (feature_extractor.n_samples + 500), 200)]
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
@@ -218,8 +226,9 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         # fmt: on
 
         input_speech = self._load_datasamples(1)
-        feaure_extractor = WhisperFeatureExtractor()
-        input_features = feaure_extractor(input_speech, return_tensors="pt").input_features
+        feature_extractor = WhisperFeatureExtractor()
+        input_features = feature_extractor(input_speech, return_tensors="pt").input_features
+        self.assertEqual(input_features.shape, (1, 80, 3000))
         self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
 
     def test_zero_mean_unit_variance_normalization_trunc_np_longest(self):
