@@ -75,6 +75,8 @@ class LagLlamaConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        rope_theta (`float`, *optional*, defaults to 10000.0):
+            The base period of the RoPE embeddings.
         rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
             strategies: linear and dynamic. Their scaling factor must be an float greater than 1. The expected format
@@ -119,6 +121,7 @@ class LagLlamaConfig(PretrainedConfig):
         rms_norm_eps=1e-6,
         use_cache=True,
         pretraining_tp=1,
+        rope_theta=10000.0,
         rope_scaling=None,
         **kwargs,
     ):
@@ -141,6 +144,7 @@ class LagLlamaConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
+        self.rope_theta = rope_theta
         self.pretraining_tp = pretraining_tp
         self.rope_scaling = rope_scaling
         self._rope_scaling_validation()
