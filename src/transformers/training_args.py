@@ -1240,7 +1240,7 @@ class TrainingArguments:
 
     tgs_metrics: Optional[bool] = field(
         default=False,
-        metadata={"help": ("If set to `True`, the speed metrics will include `tgs`(tokens per second per device).")},
+        metadata={"help": "If set to `True`, the speed metrics will include `tgs`(tokens per second per device)."},
     )
 
     def __post_init__(self):
