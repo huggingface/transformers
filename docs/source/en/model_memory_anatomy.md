@@ -184,7 +184,7 @@ GPU memory occupied: 14949 MB.
 We see that already a relatively small batch size almost fills up our GPU's entire memory. However, a larger batch size 
 can often result in faster model convergence or better end performance. So ideally we want to tune the batch size to our
 model's needs and not to the GPU limitations. What's interesting is that we use much more memory than the size of the model. 
-To understand a bit better why this is the case let's have look at a model's operations and memory needs.
+To understand a bit better why this is the case let's have a look at a model's operations and memory needs.
 
 ## Anatomy of Model's Operations
 
