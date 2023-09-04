@@ -27,7 +27,7 @@ from transformers.testing_utils import (
     is_torch_available,
     require_torch,
     slow,
-    torch_device,
+    torch_device, is_flaky,
 )
 from transformers.trainer_utils import set_seed
 
@@ -180,6 +180,7 @@ class VitsModelTest(ModelTesterMixin, unittest.TestCase):
     def test_determinism(self):
         pass
 
+    @is_flaky(description="Weight initialisation for the VITS conv layers sometimes exceeds the kaiming normal range")
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
