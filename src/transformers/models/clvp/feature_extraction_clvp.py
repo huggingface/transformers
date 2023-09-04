@@ -131,13 +131,11 @@ class CLVPFeatureExtractor(SequenceFeatureExtractor):
         **kwargs,
     ) -> BatchFeature:
         """
-        CLVP Feature Extractor is used to extrtact various voice specific properties such as the pitch and tone of the
+        CLVP Feature Extractor is used to extract various voice specific properties such as the pitch and tone of the
         voice, speaking speed, and even speaking defects like a lisp or stuttering from a sample voice or `raw_speech`.
 
         First the voice is padded or truncated in a way such that it becomes a six seconds long waveform and then the
         log-mel spectrogram is extracted from it.
-
-        Please note that if nothing is passed in `max_length` it will automatically set to 6 * `self.sampling_rate`.
 
         Args:
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
@@ -150,7 +148,7 @@ class CLVPFeatureExtractor(SequenceFeatureExtractor):
                 pipeline.
             truncation (`bool`, *optional*, default to `True`):
                 Activates truncation to cut input sequences longer than *max_length* to *max_length*.
-            pad_to_multiple_of (`int`, *optional*, defaults to None):
+            pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
@@ -159,14 +157,6 @@ class CLVPFeatureExtractor(SequenceFeatureExtractor):
                 Whether to return the attention mask. If left to the default, it will return the attention mask.
 
                 [What are attention masks?](../glossary#attention-mask)
-
-                <Tip>
-
-                For Whisper models, `attention_mask` should always be passed for batched inference, to avoid subtle
-                bugs.
-
-                </Tip>
-
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -175,6 +165,9 @@ class CLVPFeatureExtractor(SequenceFeatureExtractor):
                 - `'np'`: Return Numpy `np.ndarray` objects.
             padding_value (`float`, defaults to 0.0):
                 The value that is used to fill the padding values / vectors.
+            max_length (`int`, *optional*):
+                The maximum input length of the inputs. Note that if nothing is passed it will automatically be set to
+                6 * `self.sampling_rate`.
         """
 
         if sampling_rate is not None:
@@ -233,15 +226,9 @@ class CLVPFeatureExtractor(SequenceFeatureExtractor):
         else:
             padded_inputs["input_features"] = input_features
 
-        if return_attention_mask:
-            # rescale from sample (48000) to feature (3000)
-            padded_inputs["attention_mask"] = padded_inputs["attention_mask"]
+        return padded_inputs.convert_to_tensors(return_tensors)
 
-        if return_tensors is not None:
-            padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
-
-        return padded_inputs
-
+    # Copied from transformers.models.whisper.feature_extraction_whisper.to_dict
     def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.

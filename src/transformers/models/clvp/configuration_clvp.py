@@ -270,7 +270,7 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-    Please note that CLVP uses GPT2 as it's Auto Regressive Model.
+    The architecture is similar to GPT2.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 8194):
@@ -492,112 +492,7 @@ class CLVPConfig(PretrainedConfig):
         logit_scale_init_value=2.6592,
         **kwargs,
     ):
-        # If `_config_dict` exist, we use them for the backward compatibility.
-        # We pop out these 3 attributes before calling `super().__init__` to avoid them being saved (which causes a lot
-        # of confusion!).
-        text_config_dict = kwargs.pop("text_config_dict", None)
-        speech_config_dict = kwargs.pop("speech_config_dict", None)
-        autoregressive_config_dict = kwargs.pop("autoregressive_config_dict", None)
-
         super().__init__(**kwargs)
-
-        # Instead of simply assigning `[text|speech|autoregressive]_config_dict` to `[text|speech|autoregressive]_config`,
-        # we use the values in `[text|speech|autoregressive]_config_dict` to update the values in
-        # `[text|speech|autoregressive]_config`.
-        if text_config_dict is not None:
-            if text_config is None:
-                text_config = {}
-
-            # This is the complete result when using `text_config_dict`.
-            _text_config_dict = CLVPTextConfig(**text_config_dict).to_dict()
-
-            # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
-            for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
-                    # If specified in `text_config_dict`
-                    if key in text_config_dict:
-                        message = (
-                            f"`{key}` is found in both `text_config_dict` and `text_config` but with different values. "
-                            f'The value `text_config_dict["{key}"]` will be used instead.'
-                        )
-                    # If inferred from default argument values (just to be super careful)
-                    else:
-                        message = (
-                            f"`text_config_dict` is provided which will be used to initialize `CLVPTextConfig`. The "
-                            f'value `text_config["{key}"]` will be overriden.'
-                        )
-                    logger.warning(message)
-
-            # Update all values in `text_config` with the ones in `_text_config_dict`.
-            text_config.update(_text_config_dict)
-
-        if speech_config_dict is not None:
-            if speech_config is None:
-                speech_config = {}
-
-            # This is the complete result when using `speech_config_dict`.
-            _speech_config_dict = CLVPSpeechConfig(**speech_config_dict).to_dict()
-            # convert keys to string instead of integer
-            if "id2label" in _speech_config_dict:
-                _speech_config_dict["id2label"] = {
-                    str(key): value for key, value in _speech_config_dict["id2label"].items()
-                }
-
-            # Give a warning if the values exist in both `_speech_config_dict` and `speech_config` but being different.
-            for key, value in _speech_config_dict.items():
-                if key in speech_config and value != speech_config[key] and key not in ["transformers_version"]:
-                    # If specified in `speech_config_dict`
-                    if key in speech_config_dict:
-                        message = (
-                            f"`{key}` is found in both `speech_config_dict` and `speech_config` but with different "
-                            f'values. The value `speech_config_dict["{key}"]` will be used instead.'
-                        )
-                    # If inferred from default argument values (just to be super careful)
-                    else:
-                        message = (
-                            f"`speech_config_dict` is provided which will be used to initialize `CLVPSpeechConfig`. "
-                            f'The value `speech_config["{key}"]` will be overriden.'
-                        )
-                    logger.warning(message)
-
-            # Update all values in `speech_config` with the ones in `_speech_config_dict`.
-            speech_config.update(_speech_config_dict)
-
-        if autoregressive_config_dict is not None:
-            if autoregressive_config is None:
-                autoregressive_config = {}
-
-            # This is the complete result when using `autoregressive_config_dict`.
-            _autoregressive_config_dict = CLVPAutoRegressiveConfig(**autoregressive_config_dict).to_dict()
-            # convert keys to string instead of integer
-            if "id2label" in _autoregressive_config_dict:
-                _autoregressive_config_dict["id2label"] = {
-                    str(key): value for key, value in _autoregressive_config_dict["id2label"].items()
-                }
-
-            # Give a warning if the values exist in both `_autoregressive_config_dict` and `autoregressive_config` but being different.
-            for key, value in _autoregressive_config_dict.items():
-                if (
-                    key in autoregressive_config
-                    and value != autoregressive_config[key]
-                    and key not in ["transformers_version"]
-                ):
-                    # If specified in `autoregressive_config_dict`
-                    if key in autoregressive_config_dict:
-                        message = (
-                            f"`{key}` is found in both `autoregressive_config_dict` and `autoregressive_config` but with different "
-                            f'values. The value `autoregressive_config_dict["{key}"]` will be used instead.'
-                        )
-                    # If inferred from default argument values (just to be super careful)
-                    else:
-                        message = (
-                            f"`autoregressive_config_dict` is provided which will be used to initialize `CLVPAutoRegressiveConfig`. "
-                            f'The value `autoregressive_config["{key}"]` will be overriden.'
-                        )
-                    logger.warning(message)
-
-            # Update all values in `speech_config` with the ones in `_speech_config_dict`.
-            autoregressive_config.update(_autoregressive_config_dict)
 
         if text_config is None:
             text_config = {}
@@ -622,7 +517,7 @@ class CLVPConfig(PretrainedConfig):
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_speech_autoregressive_configs(
+    def from_sub_model_configs(
         cls,
         text_config: CLVPTextConfig,
         speech_config: CLVPSpeechConfig,
@@ -632,6 +527,14 @@ class CLVPConfig(PretrainedConfig):
         r"""
         Instantiate a [`CLVPConfig`] (or a derived class) from clvp text model configuration, clvp speech model
         configuration and clvp autoregressive model configuration.
+
+        Args:
+            text_config (`CLVPTextConfig`):
+                Text model configuration of type [`CLVPTextConfig`].
+            speech_config (`CLVPSpeechConfig`):
+                Speech model configuration of type [`CLVPSpeechConfig`].
+            autoregressive_config (`CLVPAutoRegressiveConfig`):
+                Autoregressive model configuration of type [`CLVPAutoRegressiveConfig`].
 
         Returns:
             [`CLVPConfig`]: An instance of a configuration object

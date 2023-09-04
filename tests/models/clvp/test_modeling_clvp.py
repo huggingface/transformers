@@ -210,7 +210,7 @@ class CLVPModelTester:
             relative_attention_max_distance=16,
         )
 
-        return CLVPConfig.from_text_speech_autoregressive_configs(
+        return CLVPConfig.from_sub_model_configs(
             self.transformer_projection_model_tester.get_config(),  # text config
             self.transformer_projection_model_tester.get_config(),  # text config used as speech config as they have same attributes
             autoregressive_config,  # autoregressive config
@@ -529,58 +529,28 @@ class CLVPModelIntegrationTest(unittest.TestCase):
     def test_speech_and_text_projection_models(self):
         # check for text embeds
         text_embeds = self.model.text_model(input_ids=self.text_tokens, return_dict=True).text_embeds.cpu()
+
+        # fmt: off
         EXPECTED_TEXT_EMBEDS = torch.tensor(
-            [
-                1.4798,
-                -2.0005,
-                2.3902,
-                -0.5042,
-                1.6401,
-                -2.4135,
-                -1.4800,
-                3.0118,
-                -2.4422,
-                1.3267,
-                2.2339,
-                1.4761,
-                -4.8983,
-                -1.3592,
-                6.0251,
-                6.7364,
-                2.2576,
-                3.7229,
-                -10.0436,
-                4.6676,
+            [ 1.4798, -2.0005, 2.3902, -0.5042, 1.6401, -2.4135, -1.4800, 3.0118, -2.4422, 1.3267,
+              2.2339, 1.4761, -4.8983, -1.3592, 6.0251, 6.7364, 2.2576, 3.7229, -10.0436, 4.6676,
             ]
         )
+        # fmt: on
+
         self.assertTrue(torch.allclose(text_embeds[0, :20], EXPECTED_TEXT_EMBEDS, atol=1e-4))
 
         # check for speech embeds
         speech_embeds = self.model.speech_model(input_ids=self.text_tokens, return_dict=True).speech_embeds.cpu()
+
+        # fmt: off
         EXPECTED_SPEECH_EMBEDS = torch.tensor(
-            [
-                3.1202,
-                -3.1183,
-                -1.4264,
-                -6.1339,
-                1.8885,
-                -0.1983,
-                0.9461,
-                -1.7414,
-                0.3320,
-                -3.8400,
-                -1.5715,
-                1.5096,
-                -1.7576,
-                0.2387,
-                4.9758,
-                5.8450,
-                -6.2534,
-                2.8586,
-                -5.5816,
-                4.7821,
+            [ 3.1202, -3.1183, -1.4264, -6.1339, 1.8885, -0.1983, 0.9461, -1.7414, 0.3320, -3.8400,
+              -1.5715, 1.5096, -1.7576, 0.2387, 4.9758, 5.8450, -6.2534, 2.8586, -5.5816, 4.7821,
             ]
         )
+        # fmt: on
+
         self.assertTrue(torch.allclose(speech_embeds[0, :20], EXPECTED_SPEECH_EMBEDS, atol=1e-4))
 
     def test_full_model_integration(self):
