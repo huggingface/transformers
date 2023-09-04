@@ -52,6 +52,12 @@ INIT_TOKENIZER_DOCSTRING += """
 """
 
 
+PRETRAINED_VOCAB_FILES_MAP = {
+    "tokenizer_file": {
+        "nielsr/nougat": "https://huggingface.co/nielsr/nougat/tokenizer/blob/main/tokenizer.json",
+    },
+}
+
 VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE}
 
 
@@ -319,16 +325,16 @@ def remove_slice_from_lines(lines, clean_text, sli) -> str:
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
 class NougatTokenizerFast(PreTrainedTokenizerFast):
     """
-    Fast tokenizer for Nougat (wrapping HuggingFace tokenizers library).
+    Fast tokenizer for Nougat (backed by HuggingFace tokenizers library).
 
     Inherits from [`~tokenization_utils_base.PreTrainedTokenizerFast`] with additional Nougat-specific postprocessing.
-
-    Handles all the shared methods for tokenization and special tokens, as well as methods for
-    downloading/caching/loading pretrained tokenizers, as well as adding tokens to the vocabulary.
-
-    This class also contains the added tokens in a unified way on top of all tokenizers so we don't have to handle the
-    specific vocabulary augmentation methods of the various underlying dictionary structures (BPE, sentencepiece...).
+    Users should refer to this superclass for more information regarding those methods.
     """
+
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    model_input_names = ["input_ids", "attention_mask"]
+    slow_tokenizer_class = None
 
     def remove_hallucinated_references(self, text: str) -> str:
         """
