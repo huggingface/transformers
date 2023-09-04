@@ -181,7 +181,7 @@ class VitsModelTest(ModelTesterMixin, unittest.TestCase):
     def test_determinism(self):
         pass
 
-    @is_flaky(description="Weight initialisation for the VITS conv layers sometimes exceeds the kaiming normal range")
+    @is_flaky(max_attempts=3, description="Weight initialisation for the VITS conv layers sometimes exceeds the kaiming normal range")
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
