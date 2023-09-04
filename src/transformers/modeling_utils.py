@@ -1229,7 +1229,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @classmethod
     def _check_and_enable_flash_attn_2(
-        cls, config, torch_dtype: Optional[torch.dtype] = None, device_map: Optional[Union[str, dict[str, int]]] = None
+        cls, config, torch_dtype: Optional[torch.dtype] = None, device_map: Optional[Union[str, Dict[str, int]]] = None
     ) -> PretrainedConfig:
         """
         Enable the Flash Attention 2.0 implementation for this model for more memory efficient inference and training.
