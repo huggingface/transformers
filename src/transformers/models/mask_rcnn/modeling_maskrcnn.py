@@ -689,6 +689,26 @@ def crop_and_resize(masks, bboxes, out_shape, inds, device="cpu", binarize=True)
     Source:
     https://github.com/open-mmlab/mmdetection/blob/56e42e72cdf516bebb676e586f408b98f854d84c/mmdet/core/mask/structures.py#L333.
 
+    This function is mainly used in mask targets computation. It first aligns mask to bboxes by assigned_inds, then
+    crop mask by the assigned bbox and resize to the size of (mask_height, mask_width).
+
+    Args:
+        masks (`torch.Tensor` of shape `(num_instances, height, width)`):
+            Masks to crop and resize.
+        bboxes (`torch.Tensor` of shape `(num_instances, 4)`):
+            Bounding boxes in format [top_left_x, top_left_y, bottom_right_x, bottom_right_y].
+        out_shape (`Tuple[int]`):
+            Target size of the resized masks, as a tuple (height, width).
+        inds (`np.ndarray`):
+            Indexes to assign masks to each bbox, shape (N,) and values should be between [0, num_masks - 1].
+        device (`str`, *optional*, defaults to `"cpu"`):
+            Device of the bounding boxes.
+        binarize (`bool`, *optional*, defaults to `True`):
+            Whether to round fractional values to 0 or 1 after the resize operation. If `False` and unsupported an
+            error will be raised.
+
+    Return:
+        `torch.Tensor`: the cropped and resized masks.
     """
     if len(masks) == 0:
         empty_masks = np.empty((0, *out_shape), dtype=np.uint8)
