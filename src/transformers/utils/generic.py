@@ -83,7 +83,7 @@ def infer_framework_from_repr(x):
         return "tf"
     elif representation.startswith("<class 'jax"):
         return "jax"
-    elif representation.startswith("<class 'numpy"):
+    elif representation.startswith("<class 'numpy."):
         return "np"
 
 
