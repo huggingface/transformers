@@ -420,15 +420,30 @@ class FalconAttention(nn.Module):
         value_layer_ = value_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim)
 
         if alibi is None:
-            attention_scores = query_layer_ @ key_layer_.transpose(-1, -2)
-            attention_scores /= math.sqrt(self.head_dim)
+            if hasattr(F, "scaled_dot_product_attention"):
+                attention_scores = query_layer_ @ key_layer_.transpose(-1, -2)
+                attention_scores /= math.sqrt(self.head_dim)
 
-            attention_scores = F.softmax(attention_scores + attention_mask_float, dim=-1, dtype=hidden_states.dtype)
-            attn_output = attention_scores @ value_layer_
+                attention_scores = F.softmax(
+                    attention_scores + attention_mask_float, dim=-1, dtype=hidden_states.dtype
+                )
+                attn_output = attention_scores @ value_layer_
 
-            attn_output = attn_output.view(batch_size, self.num_heads, query_length, self.head_dim)
-            attn_output = attn_output.permute(0, 2, 1, 3)
-            attn_output = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
+                attn_output = attn_output.view(batch_size, self.num_heads, query_length, self.head_dim)
+                attn_output = attn_output.permute(0, 2, 1, 3)
+                attn_output = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
+            else:
+                # TODO: deprecate this once we add FA2 support in Falcon
+                logger.warning_once(
+                    "The current implementation of Falcon calls `torch.scaled_dot_product_attention` directly, this will be depracted in the"
+                    " future in favor of `BetterTransformer` API. Please install the latest optimum library `pip install -U optimum` and call "
+                    "`model.to_bettertransformer()` to benefit from `torch.scaled_dot_product_attention`."
+                )
+
+                attn_output = F.scaled_dot_product_attention(
+                    query_layer_, key_layer_, value_layer_, attention_mask_float, 0.0, is_causal=False
+                )
+                attention_scores = None
 
             output_tensor = self.dense(attn_output)
 
