@@ -16,11 +16,6 @@ parser.add_argument(
     required=True,
     help="Directory containing a custom code checkpoint to convert to a modern Falcon checkpoint.",
 )
-parser.add_argument(
-    "--new_decoder_architecture",
-    action="store_true",
-    help="Whether the checkpoint uses the new decoder architecture. If your checkpoint was fine-tuned from Falcon-40B, you are using the new architecture. If it was fine-tuned from Falcon-7B or Falcon-RW you are using the old architecture.",
-)
 args = parser.parse_args()
 
 if not args.checkpoint_dir.is_dir():
@@ -43,13 +38,16 @@ text = text.replace("RefinedWebModel", "falcon")
 text = text.replace("RefinedWeb", "falcon")
 json_config = json.loads(text)
 del json_config["auto_map"]
-json_config["new_decoder_architecture"] = args.new_decoder_architecture
+
 if "n_head" in json_config:
     json_config["num_attention_heads"] = json_config.pop("n_head")
 if "n_layer" in json_config:
     json_config["num_hidden_layers"] = json_config.pop("n_layer")
 if "n_head_kv" in json_config:
     json_config["num_kv_heads"] = json_config.pop("n_head_kv")
+    json_config["new_decoder_architecture"] = True
+else:
+    json_config["new_decoder_architecture"] = False
 bos_token_id = json_config.get("bos_token_id", 1)
 eos_token_id = json_config.get("eos_token_id", 2)
 config.unlink()
