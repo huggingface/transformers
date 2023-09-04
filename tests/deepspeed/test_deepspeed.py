@@ -662,6 +662,11 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         if stage == ZERO3:
             ds_config_dict["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = True
 
+        # ToDo: Currently, hf_optim + hf_scheduler resumes with the correct states and
+        # also has same losses for few steps but then slowly diverges. Need to figure it out.
+        if optim == HF_OPTIM and scheduler == HF_SCHEDULER:
+            return
+
         if optim == HF_OPTIM:
             del ds_config_dict["optimizer"]
 
