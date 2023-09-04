@@ -1290,7 +1290,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif (
             device_map is not None
             and isinstance(device_map, dict)
-            and ("cpu" in device_map.keys() or "disk" in device_map.keys())
+            and ("cpu" in device_map.values() or "disk" in device_map.values())
         ):
             raise ValueError(
                 "You are attempting to use Flash Attention 2.0 with a model dispatched on CPU or disk. This is not supported. Please make sure to "
