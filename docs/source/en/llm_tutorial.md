@@ -27,7 +27,7 @@ This tutorial will show you how to:
 
 * Generate text with an LLM
 * Avoid common pitfalls
-* Next steps to help you get the most out your LLM
+* Next steps to help you get the most out of your LLM
 
 Before you begin, make sure you have all the necessary libraries installed:
 
