@@ -629,6 +629,7 @@ class FlaxGenerationMixin:
             next_tokens_scores = logits_processor(state.sequences, logits, state.cur_len)
 
             next_token = jnp.argmax(next_tokens_scores, axis=-1)
+
             if output_scores:
                 if state.scores is not None:
                     tokens_scores = state.scores.at[:, state.cur_len, :].set(next_tokens_scores)
@@ -637,6 +638,7 @@ class FlaxGenerationMixin:
                     tokens_scores = scores.at[:, state.cur_len, :].set(next_tokens_scores)
             else:
                 tokens_scores = None
+
             next_token = next_token * ~state.is_sent_finished + pad_token_id * state.is_sent_finished
             next_is_sent_finished = state.is_sent_finished | (next_token == eos_token_id)
             next_token = next_token[:, None]
