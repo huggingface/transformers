@@ -264,11 +264,6 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         # TODO: verify usage
         if do_normalize:
             features = [(x - x.mean()) / np.sqrt(x.var() + 1e-7) for x in features]
-        if self.normalize_means:
-            features = [feature - feature.mean(axis=0) for feature in features]
-        if self.normalize_vars:
-            features = [torch.divide(feature, feature.std(axis=0)) for feature in features]
-
         # convert into correct format for padding
         encoded_inputs = BatchFeature({"input_features": features})
 

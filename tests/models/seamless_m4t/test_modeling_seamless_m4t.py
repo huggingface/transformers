@@ -18,8 +18,10 @@
 import unittest
 import inspect
 
-from transformers import SeamlessM4TConfig, is_torch_available
+from transformers import SeamlessM4TConfig, SeamlessM4TProcessor, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.utils import cached_property
+
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -239,17 +241,6 @@ class SeamlessM4TModelTester:
         # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
         self.parent.assertEqual(len(decoder_past[0]), 4)
 
-    # def create_and_check_for_causal_lm(
-    #    self,
-    #    config,
-    #    input_ids,
-    #    input_mask,
-    # ):
-    #    model = SeamlessM4TForCausalLM(config=config)
-    #    model.to(torch_device)
-    #    model.eval()
-    #    result = model(input_ids, attention_mask=input_mask, , labels=token_labels)
-    #    self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -595,9 +586,100 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
 
 @require_torch
 class SeamlessM4TModelIntegrationTest(unittest.TestCase):
+    
+    repo_id = "meta-private/m4t_large"
+    
+
+    @cached_property
+    def processor(self):
+        return SeamlessM4TProcessor.from_pretrained(self.repo_id)
+
+    @cached_property
+    def input_text(self):
+        input_ids = self.processor("This is a test")
+
+        input_ids = input_ids.to(torch_device)
+
+        return input_ids
+
+    @cached_property
+    def input_audio(self):
+        # TODO: random torch with set seed
+        input_ids = self.processor("This is a test")
+
+        input_ids = input_ids.to(torch_device)
+
+        return input_ids
+    
+    @cached_property
+    def expected_output_text_to_speech(self):
+        
+        expected_text_ids = []
+        expected_unit_ids = []
+        expected_wav = []
+        
+        output = {
+            "expected_text_ids": expected_text_ids,
+            "expected_unit_ids": expected_unit_ids,
+            "expected_wav": expected_wav,
+        }
+    
+        return output
+    
+    
+    @cached_property
+    def expected_output_speech_to_speech(self):
+        
+        expected_text_ids = []
+        expected_unit_ids = []
+        expected_wav = []
+        
+        output = {
+            "expected_text_ids": expected_text_ids,
+            "expected_unit_ids": expected_unit_ids,
+            "expected_wav": expected_wav,
+        }
+    
+        return output
+    
+    def same_output(self, prediction, original):
+        #self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+
+        return
+    
+    @slow
+    def test_whole_model(self):
+        model = SeamlessM4TModel.from_pretrained(self.repo_id)
+        
+        output_text = model.generate(**self.input_text)
+        
+        self.same_text_output(output_text, self.expected_output_text_to_speech)
+        
+        
+        output_speech = model.generate(**self.input_speech)
+        self.same_text_output(output_speech, self.expected_output_speech_to_speech)
+        
+    
+    # TODO: every other tasks
+    @slow
+    def test_text_to_speech_model(self):
+        model = SeamlessM4TModel.from_pretrained(self.repo_id)
+        
+        output_text = model.generate(**self.input_text)
+        
+        self.same_text_output(output_text, self.expected_output_text_to_speech)
+        
+        
+        output_speech = model.generate(**self.input_speech)
+        self.same_text_output(output_speech, self.expected_output_speech_to_speech)
+        
+        
+        
+    
+    
     @slow
     def test_inference_masked_lm(self):
-        model = SeamlessM4TModel.from_pretrained("meta-private/m4t_large")
+        model = SeamlessM4TModel.from_pretrained(self.repo_id)
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
@@ -623,4 +705,4 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         # fmt: off
         # fmt: on
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        

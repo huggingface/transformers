@@ -427,6 +427,7 @@ def load_model(pytorch_dump_folder_path, model_type):
 
     del original_model
 
+    hf_model.generation_config._from_model_config = False
     hf_model.save_pretrained(save_dir)  # , push_to_hub=True, repo_id="ylacombe/test_seamlessM4T")
     hf_model = SeamlessM4TModel.from_pretrained(save_dir)
 
