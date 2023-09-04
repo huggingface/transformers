@@ -173,6 +173,55 @@ class GroundingDINODecoderOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
+@dataclass
+class GroundingDINOEncoderOutput(ModelOutput):
+    """
+    Base class for outputs of the GroundingDINOEncoder. This class extends
+    BaseModelOutput, due to:
+    - vision and text last hidden states
+    - vision and text intermediate hidden states
+    - vision and text attentions
+    - vision and text cross attentions
+
+    Args:
+        last_hidden_state_vision (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the vision encoder.
+        last_hidden_state_text (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the text encoder.
+        hidden_states_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the vision embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the vision encoder at the output of each layer
+            plus the initial embedding outputs.
+        hidden_states_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the text embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the text encoder at the output of each layer
+            plus the initial embedding outputs.
+        attentions_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the vision encoder, after the attention softmax, used to compute the weighted average in
+            the multi-scale deformable attention heads.
+        attentions_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the text encoder, after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
+        cross_attentions_vision (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each text encoder layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the vision encoder's fusion layer, after the attention softmax,
+            used to compute the weighted average in the bi-attention heads.
+        cross_attentions_text (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each vision encoder layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the text encoder's fusion layer, after the attention softmax,
+            used to compute the weighted average in the bi-attention heads.
+    """
+    last_hidden_state_vision: torch.FloatTensor = None
+    last_hidden_state_text: torch.FloatTensor = None
+    hidden_states_vision: Optional[Tuple[torch.FloatTensor]] = None
+    hidden_states_text: Optional[Tuple[torch.FloatTensor]] = None
+    attentions_vision: Optional[Tuple[torch.FloatTensor]] = None
+    attentions_text: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions_vision: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions_text: Optional[Tuple[torch.FloatTensor]] = None
+
 
 @dataclass
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrModelOutput with DeformableDetr->GroundingDINO,Deformable DETR->Grounding DINO
@@ -892,7 +941,7 @@ class GroundingDINOTextEnhancerLayer(nn.Module):
             attention_masks = attention_masks.repeat(self.num_heads, 1, 1)
 
         q = k = self.with_pos_embed(hidden_states, position_embeddings)
-        attention_output = self.self_attn(q, k, value=hidden_states, attn_mask=attention_masks)[0]
+        attention_output, attention_weights = self.self_attn(q, k, value=hidden_states, attn_mask=attention_masks)
 
         hidden_states = hidden_states + self.dropout1(attention_output)
         hidden_states = self.layer_norm_before(hidden_states)
@@ -900,7 +949,7 @@ class GroundingDINOTextEnhancerLayer(nn.Module):
         attention_output = self.fc2(self.dropout(hidden_states))
         hidden_states = hidden_states + self.dropout2(attention_output)
         hidden_states = self.layer_norm_after(hidden_states)
-        return hidden_states
+        return hidden_states, attention_weights
     
 class GroundingDINOBiMultiHeadAttention(nn.Module):
     def __init__(
@@ -932,10 +981,6 @@ class GroundingDINOBiMultiHeadAttention(nn.Module):
 
         self.out_vision_proj = nn.Linear(self.embed_dim, self.vision_dim)
         self.out_text_proj = nn.Linear(self.embed_dim, self.text_dim)
-
-        self.stable_softmax_2d = True
-        self.clamp_min_for_underflow = True
-        self.clamp_max_for_overflow = True
 
         self._reset_parameters()
 
@@ -1068,7 +1113,7 @@ class GroundingDINOBiMultiHeadAttention(nn.Module):
         vision_attn_output = self.out_vision_proj(vision_attn_output)
         text_attn_output = self.out_text_proj(text_attn_output)
 
-        return vision_attn_output, text_attn_output
+        return (vision_attn_output, vision_attn_weights), (text_attn_output, text_attn_weights)
 
 # Copied from transformers.models.beit.modeling_beit.drop_path
 def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
@@ -1128,16 +1173,16 @@ class GroundingDINOFusionLayer(nn.Module):
     def forward(self, vision_features, text_features, attention_mask_vision=None, attention_mask_text=None):
         vision_features = self.layer_norm_vision(vision_features)
         text_features = self.layer_norm_text(text_features)
-        delta_v, delta_l = self.attn(
+        (delta_v, vision_attn), (delta_t, text_attn) = self.attn(
             vision_features, 
             text_features, 
             attention_mask_vision=attention_mask_vision, 
             attention_mask_text=attention_mask_text
         )
-        # vision_features, text_features = vision_features + delta_v, text_features + delta_l
         vision_features = vision_features + self.drop_path(self.gamma_v * delta_v)
-        text_features = text_features + self.drop_path(self.gamma_l * delta_l)
-        return vision_features, text_features
+        text_features = text_features + self.drop_path(self.gamma_l * delta_t)
+
+        return (vision_features, vision_attn), (text_features, text_attn)
 
 #NOTE just renamed the class
 class GroundingDINODeformableLayer(nn.Module):
@@ -1263,6 +1308,29 @@ class GroundingDINOEncoderLayer(nn.Module):
         self.fusion_layer = GroundingDINOFusionLayer(config)
         self.deformable_layer = GroundingDINODeformableLayer(config)
 
+    def get_text_position_embeddings(
+            self, 
+            text_features: Tensor, 
+            text_position_embedding: Tensor, 
+            text_position_ids: Tensor
+        ) -> Tensor:
+        bs, n_text, text_dim = text_features.shape
+        if text_position_embedding is None and text_position_ids is None:
+            text_position_embedding = (
+                torch.arange(n_text, device=text_features.device)
+                .float()
+                .unsqueeze(0)
+                .unsqueeze(-1)
+                .repeat(bs, 1, 1)
+            )
+            text_position_embedding = get_sine_pos_embed(text_position_embedding, num_pos_feats=256, exchange_xy=False)
+        if text_position_ids is not None:
+            text_position_embedding = get_sine_pos_embed(
+                text_position_ids[..., None], num_pos_feats=256, exchange_xy=False
+            )
+        
+        return text_position_embedding
+
     def forward(
         self,
         vision_features: Tensor,
@@ -1277,35 +1345,28 @@ class GroundingDINOEncoderLayer(nn.Module):
         text_self_attention_masks: Optional[Tensor] = None,
         text_position_ids: Optional[Tensor] = None
     ):
-        bs, n_text, text_dim = text_features.shape
-        if text_position_embedding is None and text_position_ids is None:
-            pos_text = (
-                torch.arange(n_text, device=text_features.device)
-                .float()
-                .unsqueeze(0)
-                .unsqueeze(-1)
-                .repeat(bs, 1, 1)
-            )
-            pos_text = get_sine_pos_embed(text_position_embedding, num_pos_feats=256, exchange_xy=False)
-        if text_position_ids is not None:
-            text_position_embedding = get_sine_pos_embed(
-                text_position_ids[..., None], num_pos_feats=256, exchange_xy=False
-            )
+        text_position_embedding = self.get_text_position_embeddings(
+            text_features, 
+            text_position_embedding, 
+            text_position_ids
+        )
 
-        vision_features, text_features = self.fusion_layer(
+        (vision_features, vision_fused_attn), (text_features, text_fused_attn) = self.fusion_layer(
             vision_features=vision_features,
             text_features=text_features,
             attention_mask_vision=key_padding_mask,
             attention_mask_text=text_attention_mask,
         )
 
-        text_features = self.text_enhancer_layer(
+        (text_features, text_enhanced_attn) = self.text_enhancer_layer(
             hidden_states=text_features.transpose(0, 1),
             attention_masks=~text_self_attention_masks,  # note we use ~ for mask here
-            position_embeddings=(pos_text.transpose(0, 1) if pos_text is not None else None),
+            position_embeddings=(
+                text_position_embedding.transpose(0, 1) if text_position_embedding is not None else None
+            ),
         ).transpose(0, 1)
 
-        vision_features = self.deformable_layer(
+        (vision_features, vision_deformable_attn) = self.deformable_layer(
             hidden_states=vision_features,
             attention_mask=key_padding_mask,
             position_embeddings=vision_position_embedding,
@@ -1314,7 +1375,10 @@ class GroundingDINOEncoderLayer(nn.Module):
             level_start_index=level_start_index,
         )
 
-        return vision_features, text_features
+        return (
+            (vision_features, text_features), 
+            (vision_fused_attn, text_fused_attn, text_enhanced_attn, vision_deformable_attn)
+        )
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrDecoderLayer with DeformableDetr->GroundingDINO
@@ -1538,7 +1602,6 @@ GROUNDING_DINO_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrEncoder with DeformableDetr->GroundingDINO
 class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* deformable attention layers. Each layer is a
@@ -1592,26 +1655,31 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
 
     def forward(
         self,
-        inputs_embeds=None,
-        attention_mask=None,
-        position_embeddings=None,
-        spatial_shapes=None,
-        level_start_index=None,
+        vision_features: Tensor,
+        vision_attention_mask: Tensor,
+        vision_position_embedding: Tensor,
+        spatial_shapes: Tensor,
+        level_start_index: Tensor,
         valid_ratios=None,
+        text_features: Optional[Tensor] = None,
+        text_attention_mask: Optional[Tensor] = None,
+        text_position_embedding: Optional[Tensor] = None,
+        text_self_attention_masks: Optional[Tensor] = None,
+        text_position_ids: Optional[Tensor] = None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
         r"""
         Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            vision_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            vision_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
                 - 1 for pixel features that are real (i.e. **not masked**),
                 - 0 for pixel features that are padding (i.e. **masked**).
                 [What are attention masks?](../glossary#attention-mask)
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            vision_position_embedding (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Position embeddings that are added to the queries and keys in each self-attention layer.
             spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
                 Spatial shapes of each feature map.
@@ -1619,6 +1687,21 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
                 Starting index of each feature map.
             valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
                 Ratio of valid area in each feature level.
+            text_features (`torch.FloatTensor` of shape `(batch_size, text_seq_len, hidden_size)`):
+                Flattened text features that are passed to the encoder.
+            text_attention_mask (`torch.Tensor` of shape `(batch_size, text_seq_len)`, *optional*):
+                Mask to avoid performing attention on padding text features. Mask values selected in `[0, 1]`:
+                - 1 for text features that are real (i.e. **not masked**),
+                - 0 for text features that are padding (i.e. **masked**).
+                [What are attention masks?](../glossary#attention-mask)
+            text_position_embedding (`torch.FloatTensor` of shape `(batch_size, text_seq_len)`):
+                Position embeddings that are added to the queries and keys in each self-attention layer.
+            text_self_attention_masks (`torch.BoolTensor` of shape `(batch_size, text_seq_len, text_seq_len)`):
+                Masks to avoid performing attention between padding text features. Mask values selected in `[0, 1]`:
+                - 1 for text features that are real (i.e. **not masked**),
+                - 0 for text features that are padding (i.e. **masked**).
+            text_position_ids (`torch.LongTensor` of shape `(batch_size, num_queries)`):
+                Position ids for text features.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1634,40 +1717,75 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states = inputs_embeds
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        #TODO check if this is necessary according to original implementation
+        vision_features = nn.functional.dropout(vision_features, p=self.dropout, training=self.training)
 
-        reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=inputs_embeds.device)
+        reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=vision_features.device)
 
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
+        encoder_vision_states = () if output_hidden_states else None
+        encoder_text_states = () if output_hidden_states else None
+        all_attn_fused_text = () if output_attentions else None
+        all_attn_fused_vision = () if output_attentions else None
+        all_attn_enhanced_text = () if output_attentions else None
+        all_attn_deformable = () if output_attentions else None
         for i, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            layer_outputs = encoder_layer(
-                hidden_states,
-                attention_mask,
-                position_embeddings=position_embeddings,
-                reference_points=reference_points,
+                encoder_vision_states += (vision_features,)
+                encoder_text_states += (text_features,)
+            # INPUTS FOR ENCODER LAYER
+            #   - vision_features: Tensor,
+            #   - vision_position_embedding: Tensor,
+            #   - spatial_shapes: Tensor,
+            #   - level_start_index: Tensor,
+            #   - key_padding_mask: Tensor,
+            #   - reference_points: Tensor,
+            #   - text_features: Optional[Tensor] = None,
+            #   - text_attention_mask: Optional[Tensor] = None,
+            #   - text_position_embedding: Optional[Tensor] = None,
+            #   - text_self_attention_masks: Optional[Tensor] = None,
+            #   - text_position_ids: Optional[Tensor] = None
+            (vision_features, text_features), attentions = encoder_layer(
+                vision_features=vision_features,
+                vision_position_embedding=vision_position_embedding,
                 spatial_shapes=spatial_shapes,
                 level_start_index=level_start_index,
-                output_attentions=output_attentions,
+                key_padding_mask=vision_attention_mask,
+                reference_points=reference_points,
+                text_features=text_features,
+                text_attention_mask=text_attention_mask,
+                text_position_embedding=text_position_embedding,
+                text_self_attention_masks=text_self_attention_masks,
+                text_position_ids=text_position_ids
             )
 
-            hidden_states = layer_outputs[0]
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+                all_attn_fused_vision += (attentions[0],)
+                all_attn_fused_text += (attentions[1],)
+                all_attn_enhanced_text += (attentions[2],)
+                all_attn_deformable += (attentions[3],)
 
         if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
+            encoder_vision_states += (vision_features,)
+            encoder_text_states += (text_features,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            enc_outputs = [
+                vision_features, text_features,
+                all_attn_fused_vision, all_attn_fused_text, 
+                all_attn_enhanced_text, all_attn_deformable
+            ]
+            return tuple(v for v in enc_outputs if v is not None)
+        return GroundingDINOEncoderOutput(
+            last_hidden_state_vision=vision_features,
+            last_hidden_state_text=text_features,
+            hidden_states_vision=encoder_vision_states,
+            hidden_states_text=encoder_text_states,
+            cross_attentions_vision=all_attn_fused_vision,
+            cross_attentions_text=all_attn_fused_text,
+            attentions_vision=all_attn_deformable,
+            attentions_text=all_attn_enhanced_text
         )
-
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrDecoder with DeformableDetr->GroundingDINO,Deformable DETR->Grounding DINO
 class GroundingDINODecoder(GroundingDINOPreTrainedModel):
