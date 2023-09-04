@@ -88,7 +88,7 @@ class NougatProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
-    
+
     def post_process_generation(self, *args, **kwargs):
         """
         This method forwards all its arguments to NougatTokenizer's [`~PreTrainedTokenizer.post_process_generation`].
