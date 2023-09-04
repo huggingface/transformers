@@ -1200,7 +1200,7 @@ else:
             "PatchTSMixerModel",
             "PatchTSMixerForPretraining",
             "PatchTSMixerForForecasting",
-            "PatchTSMixerForClassification"
+            "PatchTSMixerForClassification",
             "PatchTSMixerForRegression"
         ]
     )

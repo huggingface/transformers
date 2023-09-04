@@ -133,6 +133,10 @@ class PatchTSMixerConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
     model_type = "patchtsmixer"
+    attribute_map = {
+        "hidden_size": "num_features",
+        "num_hidden_layers": "num_layers",
+    }
 
     def __init__(
         self,
