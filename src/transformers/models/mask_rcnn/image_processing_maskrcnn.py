@@ -19,7 +19,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import PaddingMode, pad, rescale, resize, to_channel_dimension_format
+from ...image_transforms import PaddingMode, pad, resize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -765,9 +765,15 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
                 "Size must contain 'height' and 'width' keys or 'shortest_edge' and 'longest_edge' keys. Got"
                 f" {size.keys()}."
             )
-        image = resize(image, size=size, resample=resample, data_format=data_format, input_data_format=input_data_format,)
+        image = resize(
+            image,
+            size=size,
+            resample=resample,
+            data_format=data_format,
+            input_data_format=input_data_format,
+        )
         return image
-    
+
     # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor._pad_image
     def _pad_image(
         self,
@@ -978,7 +984,9 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
                 resized_images, resized_annotations = [], []
                 for image, target in zip(images, annotations):
                     orig_size = get_image_size(image)
-                    resized_image = self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
+                    resized_image = self.resize(
+                        image, size=size, resample=resample, input_data_format=input_data_format
+                    )
                     resized_annotation = self.resize_annotation(target, orig_size, get_image_size(resized_image))
                     resized_images.append(resized_image)
                     resized_annotations.append(resized_annotation)
@@ -986,17 +994,25 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
                 annotations = resized_annotations
                 del resized_images, resized_annotations
             else:
-                images = [self.resize(image, size=size, resample=resample, input_data_format=input_data_format) for image in images]
+                images = [
+                    self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
+                    for image in images
+                ]
 
         if do_rescale:
-            images = [self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format) for image in images]
+            images = [
+                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_normalize:
-            images = [self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format) for image in images]
+            images = [
+                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                for image in images
+            ]
 
         if do_pad:
             # Pads images up to the largest image in the batch
-            # TODO check img_metas when padding is activated
             data = self.pad(images, data_format=data_format)
         else:
             images = [to_channel_dimension_format(image, data_format) for image in images]
