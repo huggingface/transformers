@@ -1168,10 +1168,10 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, input_ids, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
+        self, past_values, past_key_values=None, attention_mask=None, inputs_embeds=None, **kwargs
     ):
         if past_key_values:
-            input_ids = input_ids[:, -1:]
+            past_values = past_values[:, -1:]
 
         position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
@@ -1185,7 +1185,7 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {"input_ids": input_ids}
+            model_inputs = {"past_values": past_values}
 
         model_inputs.update(
             {
