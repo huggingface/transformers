@@ -66,7 +66,6 @@ class BrosModelTester:
         num_labels=3,
         num_choices=4,
         scope=None,
-        range_bbox=1000,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -91,7 +90,6 @@ class BrosModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.scope = scope
-        self.range_bbox = range_bbox
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
