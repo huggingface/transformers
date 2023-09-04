@@ -156,7 +156,7 @@ class PretrainedConfig(PushToHubMixin):
             means no penalty.
         length_penalty (`float`, *optional*, defaults to 1):
             Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent to
-            the sequence length, which in turn is used to divide the score of the sequence. Since the score is the log
+            the sequence length, which in turn is used to divide the  of the sequence. Since the score is the log
             likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences, while
             `length_penalty` < 0.0 encourages shorter sequences.
         no_repeat_ngram_size (`int`, *optional*, defaults to 0) -- Value that will be used by default in the
@@ -855,6 +855,9 @@ class PretrainedConfig(PushToHubMixin):
 
         self.dict_torch_dtype_to_str(serializable_config_dict)
 
+        if "_use_flash_attn_2" in serializable_config_dict:
+            del serializable_config_dict["_use_flash_attn_2"]
+
         return serializable_config_dict
 
     def to_dict(self) -> Dict[str, Any]:
@@ -871,6 +874,8 @@ class PretrainedConfig(PushToHubMixin):
             del output["_auto_class"]
         if "_commit_hash" in output:
             del output["_commit_hash"]
+        if "_use_flash_attn_2" in output:
+            del output["_use_flash_attn_2"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
