@@ -1020,11 +1020,6 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
 
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
-        # add metadata
-        # TODO perhaps remove?
-        # img_metas = [{"img_shape": image_shape, "pad_shape": image_shape} for image_shape in image_shapes]
-        # encoded_inputs["img_metas"] = img_metas
-
         if annotations is not None:
             encoded_inputs["labels"] = [
                 BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
@@ -1173,6 +1168,9 @@ class MaskRCNNImageProcessor(BaseImageProcessor):
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
+            scale_factors (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the scale factor
+                (height, width) of each image in the batch. If left to None, predictions will not be rescaled.
 
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image

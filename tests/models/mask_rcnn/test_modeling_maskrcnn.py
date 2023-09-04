@@ -397,7 +397,6 @@ class MaskRCNNModelIntegrationTest(unittest.TestCase):
         local_path = hf_hub_download(repo_id="nielsr/init-files", filename="masks.pt")
         target["masks"] = torch.load(local_path).to(torch_device)
         target["size"] = torch.tensor(img.shape[1:]).to(torch_device)
-        # labels["gt_bboxes_ignore"] = None
         labels.append(target)
 
         # forward pass
