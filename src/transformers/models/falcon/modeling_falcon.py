@@ -504,6 +504,7 @@ class FalconFlashAttention(nn.Module):
     def __init__(self, config: FalconConfig):
         super().__init__()
 
+        self.config = config
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.hidden_size // self.num_heads
@@ -516,7 +517,7 @@ class FalconFlashAttention(nn.Module):
                 f" {self.num_heads})."
             )
 
-        self.maybe_rotary = FalconRotaryEmbedding(config.head_dim) if config.rotary else lambda q, k, t: (q, k)
+        self.maybe_rotary = self._init_rope() if config.rotary else lambda q, k, t: (q, k)
 
         # Layer-wise attention scaling
         self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
