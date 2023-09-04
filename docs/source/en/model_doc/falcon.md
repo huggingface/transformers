@@ -49,9 +49,6 @@ of the Transformers library. To use this script, simply call it with
 you can immediately load it from the directory afterwards with e.g. `from_pretrained()`. If your model hasn't been
 uploaded to the Hub, we recommend making a backup before attempting the conversion, just in case!
 
-If you fine-tuned from Falcon-40B, please also add the argument `--new_decoder_architecture` to ensure your model is 
-correctly converted. If you fine-tuned from Falcon-7B or Falcon-RW, you do not need to add this flag.
-
 
 ## FalconConfig
 
