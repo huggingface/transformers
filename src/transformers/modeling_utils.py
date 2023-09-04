@@ -1260,7 +1260,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if _is_bettertransformer:
             raise ValueError(
-                "Flash Attention 2 and BetterTransformer API are not compatible. Please use one API or the other."
+                "Flash Attention 2 and BetterTransformer API are not compatible. Please make sure to disable BetterTransformers by doing ..."
             )
 
         config._flash_attn_2_enabled = True
