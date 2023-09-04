@@ -23,6 +23,7 @@ import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from .number_normalizer import EnglishNumberNormalizer
 
 
 logger = logging.get_logger(__name__)
@@ -64,6 +65,8 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (`str`, *optional*, defaults to `"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
+        normalize (`bool`, *optional*, defaults to `False`):
+            Whether to convert numeric quantities in the text to their spelt-out english counterparts.
         sp_model_kwargs (`dict`, *optional*):
             Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
             SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
@@ -97,6 +100,7 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         unk_token="<unk>",
         pad_token="<pad>",
+        normalize=False,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> None:
@@ -107,18 +111,39 @@ class SpeechT5Tokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
+            normalize=normalize,
             sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
 
         self.vocab_file = vocab_file
+        self.normalize = normalize
+        self._normalizer = None
 
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
 
+    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
+        normalize = kwargs.pop("normalize", self.normalize)
+        if is_split_into_words:
+            text = " " + text
+        if normalize:
+            text = self.normalizer(text)
+        return (text, kwargs)
+
     @property
     def vocab_size(self):
         return self.sp_model.get_piece_size()
+
+    @property
+    def normalizer(self):
+        if self._normalizer is None:
+            self._normalizer = EnglishNumberNormalizer()
+        return self._normalizer
+
+    @normalizer.setter
+    def normalizer(self, value):
+        self._normalizer = value
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}

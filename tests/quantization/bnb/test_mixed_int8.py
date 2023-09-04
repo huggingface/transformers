@@ -131,7 +131,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         from accelerate import init_empty_weights
 
         from transformers import AutoModelForMaskedLM, Blip2ForConditionalGeneration, MptForCausalLM, OPTForCausalLM
-        from transformers.utils.bitsandbytes import get_keys_to_not_convert
+        from transformers.integrations.bitsandbytes import get_keys_to_not_convert
 
         model_id = "mosaicml/mpt-7b"
         config = AutoConfig.from_pretrained(
@@ -753,6 +753,7 @@ class MixedInt8TestCpuGpu(BaseMixedInt8Test):
             model_8bit = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
                 device_map=device_map,
+                load_in_8bit=True,
                 llm_int8_enable_fp32_cpu_offload=True,
                 offload_folder=tmpdirname,
             )

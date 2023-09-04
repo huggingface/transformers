@@ -337,6 +337,16 @@ class NllbMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
+    def test_get_loss(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
+        input_dict["output_router_logits"] = True
+        input_dict["labels"] = input_dict["input_ids"]
+        model = NllbMoeForConditionalGeneration(config).eval().to(torch_device)
+        out = model(**input_dict)
+        self.assertIsNotNone(out.loss)
+        self.assertIsNotNone(model(**input_dict)["encoder_router_logits"][1])
+        self.assertIsNotNone(model(**input_dict)["decoder_router_logits"][0])
+
 
 @require_torch
 @require_sentencepiece
