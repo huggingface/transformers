@@ -24,10 +24,11 @@ import numpy as np
 
 from transformers import PretrainedConfig, VitsConfig
 from transformers.testing_utils import (
+    is_flaky,
     is_torch_available,
     require_torch,
     slow,
-    torch_device, is_flaky,
+    torch_device,
 )
 from transformers.trainer_utils import set_seed
 
