@@ -1170,7 +1170,9 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
 
         # only keep certain features, and reshape
         # note that we do +1 as the encoder_hidden_states also includes the initial embeddings
-        features = [feature for idx, feature in enumerate(encoder_hidden_states) if idx + 1 in self.config.out_indices]
+        features = [
+            feature for idx, feature in enumerate(encoder_hidden_states) if idx + 1 in self.config.semantic_out_indices
+        ]
         batch_size = pixel_values.shape[0]
         patch_resolution = self.config.image_size // self.config.patch_size
         features = [
