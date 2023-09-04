@@ -31,7 +31,8 @@ class BackboneTesterMixin:
         # test default config
         config = config_class()
         self.assertIsNotNone(config)
-        expected_stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(config.depths) + 1)]
+        num_stages = len(config.depths) if hasattr(config, "depths") else config.num_hidden_layers
+        expected_stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_stages + 1)]
         self.assertEqual(config.stage_names, expected_stage_names)
         self.assertTrue(set(config.out_features).issubset(set(config.stage_names)))
 

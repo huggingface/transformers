@@ -956,6 +956,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "ConvNextBackbone",
     "ConvNextV2Backbone",
     "DinatBackbone",
+    "Dinov2Backbone",
     "FocalNetBackbone",
     "MaskFormerSwinBackbone",
     "MaskFormerSwinConfig",
@@ -965,6 +966,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "SwinBackbone",
     "TimmBackbone",
     "TimmBackboneConfig",
+    "VitDetBackbone",
 ]
 
 
