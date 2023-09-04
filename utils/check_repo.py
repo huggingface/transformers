@@ -963,7 +963,6 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "MaskFormerSwinModel",
     "NatBackbone",
     "ResNetBackbone",
-    "SamVisionAutoBackboneConfig",
     "SwinBackbone",
     "TimmBackbone",
     "TimmBackboneConfig",

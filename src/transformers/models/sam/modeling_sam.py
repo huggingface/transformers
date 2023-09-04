@@ -25,18 +25,11 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import Tensor, nn
 
-from ... import AutoBackbone
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from .configuration_sam import (
-    SamConfig,
-    SamMaskDecoderConfig,
-    SamPromptEncoderConfig,
-    SamVisionAutoBackboneConfig,
-    SamVisionConfig,
-)
+from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -572,7 +565,8 @@ class SamMaskDecoder(nn.Module):
 class SamPositionalEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.register_buffer("positional_embedding", torch.randn((2, config.num_pos_feats)))
+        self.scale = config.hidden_size // 2
+        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
 
     def forward(self, input_coords, input_shape=None):
         """Positionally encode points that are normalized to [0,1]."""
@@ -966,14 +960,11 @@ class SamVisionLayer(nn.Module):
 
 
 class SamVisionNeck(nn.Module):
-    def __init__(self, config: Union[SamVisionConfig, SamVisionAutoBackboneConfig]):
+    def __init__(self, config: SamVisionConfig):
         super().__init__()
         self.config = config
 
-        hidden_size = (
-            config.backbone_config.hidden_sizes[-1] if hasattr(config, "backbone_config") else config.hidden_size
-        )
-        self.conv1 = nn.Conv2d(hidden_size, config.output_channels, kernel_size=1, bias=False)
+        self.conv1 = nn.Conv2d(config.hidden_size, config.output_channels, kernel_size=1, bias=False)
         self.layer_norm1 = SamLayerNorm(config.output_channels, data_format="channels_first")
         self.conv2 = nn.Conv2d(config.output_channels, config.output_channels, kernel_size=3, padding=1, bias=False)
         self.layer_norm2 = SamLayerNorm(config.output_channels, data_format="channels_first")
@@ -989,38 +980,32 @@ class SamVisionNeck(nn.Module):
 
 
 class SamVisionEncoder(nn.Module):
-    def __init__(self, config: Union[SamVisionConfig, SamVisionAutoBackboneConfig]):
+    def __init__(self, config: SamVisionConfig):
         super().__init__()
         self.config = config
+        self.image_size = config.image_size
 
-        self.backbone = None
-        if hasattr(config, "backbone_config"):
-            self.backbone = AutoBackbone.from_config(config.backbone_config)
+        self.patch_embed = SamPatchEmbeddings(config)
 
-        else:
-            self.image_size = config.image_size
-
-            self.patch_embed = SamPatchEmbeddings(config)
-
-            self.pos_embed = None
-            if config.use_abs_pos:
-                # Initialize absolute positional embedding with pretrain image size.
-                self.pos_embed = nn.Parameter(
-                    torch.zeros(
-                        1,
-                        config.image_size // config.patch_size,
-                        config.image_size // config.patch_size,
-                        config.hidden_size,
-                    )
+        self.pos_embed = None
+        if config.use_abs_pos:
+            # Initialize absolute positional embedding with pretrain image size.
+            self.pos_embed = nn.Parameter(
+                torch.zeros(
+                    1,
+                    config.image_size // config.patch_size,
+                    config.image_size // config.patch_size,
+                    config.hidden_size,
                 )
+            )
 
-            self.layers = nn.ModuleList()
-            for i in range(config.num_hidden_layers):
-                layer = SamVisionLayer(
-                    config,
-                    window_size=config.window_size if i not in config.global_attn_indexes else 0,
-                )
-                self.layers.append(layer)
+        self.layers = nn.ModuleList()
+        for i in range(config.num_hidden_layers):
+            layer = SamVisionLayer(
+                config,
+                window_size=config.window_size if i not in config.global_attn_indexes else 0,
+            )
+            self.layers.append(layer)
 
         self.neck = SamVisionNeck(config)
 
@@ -1045,53 +1030,39 @@ class SamVisionEncoder(nn.Module):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
+        hidden_states = self.patch_embed(pixel_values)
+        if self.pos_embed is not None:
+            hidden_states = hidden_states + self.pos_embed
+
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        if self.backbone is not None:
-            backbone_outputs = self.backbone.forward_with_filtered_kwargs(
-                pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
-            )
-            hidden_states = backbone_outputs.feature_maps[-1]
-            print("Shape of backbone features:", hidden_states.shape)
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + backbone_outputs.attentions
-
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + backbone_outputs.hidden_states
-
-        else:
-            hidden_states = self.patch_embed(pixel_values)
-            if self.pos_embed is not None:
-                hidden_states = hidden_states + self.pos_embed
-
-            for i, layer_module in enumerate(self.layers):
-                if output_hidden_states:
-                    all_hidden_states = all_hidden_states + (hidden_states,)
-
-                if self.gradient_checkpointing and self.training:
-
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer_module),
-                        hidden_states,
-                    )
-                else:
-                    layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
-
-                hidden_states = layer_outputs[0]
-
-                if output_attentions:
-                    all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
+        for i, layer_module in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
+
+            if self.gradient_checkpointing and self.training:
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer_module),
+                    hidden_states,
+                )
+            else:
+                layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
         hidden_states = self.neck(hidden_states)
 

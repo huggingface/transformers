@@ -503,7 +503,6 @@ _import_structure = {
         "SamMaskDecoderConfig",
         "SamProcessor",
         "SamPromptEncoderConfig",
-        "SamVisionAutoBackboneConfig",
         "SamVisionConfig",
     ],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
@@ -4597,7 +4596,6 @@ if TYPE_CHECKING:
         SamMaskDecoderConfig,
         SamProcessor,
         SamPromptEncoderConfig,
-        SamVisionAutoBackboneConfig,
         SamVisionConfig,
     )
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig

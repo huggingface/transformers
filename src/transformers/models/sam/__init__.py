@@ -28,7 +28,6 @@ _import_structure = {
         "SamConfig",
         "SamMaskDecoderConfig",
         "SamPromptEncoderConfig",
-        "SamVisionAutoBackboneConfig",
         "SamVisionConfig",
     ],
     "processing_sam": ["SamProcessor"],
@@ -72,7 +71,6 @@ if TYPE_CHECKING:
         SamConfig,
         SamMaskDecoderConfig,
         SamPromptEncoderConfig,
-        SamVisionAutoBackboneConfig,
         SamVisionConfig,
     )
     from .processing_sam import SamProcessor
