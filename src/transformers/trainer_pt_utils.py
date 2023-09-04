@@ -27,6 +27,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from logging import StreamHandler
 from typing import Any, Dict, Iterator, List, Optional, Union
+from itertools import zip_longest
 
 import numpy as np
 import torch
@@ -107,11 +108,13 @@ def nested_concat(tensors, new_tensors, padding_index=-100):
     Concat the `new_tensors` to `tensors` on the first dim and pad them on the second if needed. Works for tensors or
     nested list/tuples/dict of tensors.
     """
+    if new_tensors is None or tensors is None:
+        return tensors if new_tensors is None else new_tensors
     assert type(tensors) == type(
         new_tensors
     ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
     if isinstance(tensors, (list, tuple)):
-        return type(tensors)(nested_concat(t, n, padding_index=padding_index) for t, n in zip(tensors, new_tensors))
+        return type(tensors)(nested_concat(t, n, padding_index=padding_index) for t, n in zip_longest(tensors, new_tensors))
     elif isinstance(tensors, torch.Tensor):
         return torch_pad_and_concatenate(tensors, new_tensors, padding_index=padding_index)
     elif isinstance(tensors, Mapping):
