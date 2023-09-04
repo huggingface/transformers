@@ -2539,7 +2539,7 @@ def _generate_speech(
     vocoder: Optional[nn.Module] = None,
     output_cross_attentions: bool = False,
 ) -> Union[torch.FloatTensor, Tuple[torch.FloatTensor, torch.FloatTensor]]:
-    encoder_attention_mask = torch.ones_like(input_values)
+    encoder_attention_mask = (1 - (input_values==model.config.pad_token_id).int())
 
     encoder_out = model.speecht5.encoder(
         input_values=input_values,
