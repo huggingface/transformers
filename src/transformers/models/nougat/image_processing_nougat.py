@@ -153,7 +153,12 @@ class NougatImageProcessor(BaseImageProcessor):
         data = (data - min_val) / (max_val - min_val) * 255
         gray = 255 * (data < 200).astype(np.uint8)
 
-        coords = cv2.findNonZero(gray)  # Find all non-zero points (text)
+        # Find all non-zero points (text), returns (x,y)
+        # below: equivalent implementation of coords = cv2.findNonZero(gray)
+        coords = np.argwhere(gray)  # Numpy returns (y,x) so we need to swap the columns
+        coords[:, [0, 1]] = coords[:, [1, 0]]
+        coords = np.expand_dims(coords, axis=1)
+
         a, b, w, h = cv2.boundingRect(coords)  # Find minimum spanning bounding box
 
         return image.crop((a, b, w + a, h + b))
