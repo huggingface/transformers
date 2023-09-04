@@ -195,7 +195,6 @@ from . import (
     timesformer,
     timm_backbone,
     tinyvit,
-    trajectory_transformer,
     transfo_xl,
     trocr,
     tvlt,
