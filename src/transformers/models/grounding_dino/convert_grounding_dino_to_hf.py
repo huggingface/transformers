@@ -131,6 +131,88 @@ def create_rename_keys(state_dict, config):
         if "module.bert" in layer_name:
             rename_keys.append((layer_name, layer_name.replace("module.bert", "model.text_backbone")))
     ########################################## TEXT BACKBONE - END
+
+    ########################################## ENCODER - START
+    deformable_key_mappings = {
+        'self_attn.sampling_offsets.weight': 'deformable_layer.self_attn.sampling_offsets.weight',
+        'self_attn.sampling_offsets.bias': 'deformable_layer.self_attn.sampling_offsets.bias',
+        'self_attn.attention_weights.weight': 'deformable_layer.self_attn.attention_weights.weight',
+        'self_attn.attention_weights.bias': 'deformable_layer.self_attn.attention_weights.bias',
+        'self_attn.value_proj.weight': 'deformable_layer.self_attn.value_proj.weight',
+        'self_attn.value_proj.bias': 'deformable_layer.self_attn.value_proj.bias',
+        'self_attn.output_proj.weight': 'deformable_layer.self_attn.output_proj.weight',
+        'self_attn.output_proj.bias': 'deformable_layer.self_attn.output_proj.bias',
+        'norm1.weight': 'deformable_layer.self_attn_layer_norm.weight',
+        'norm1.bias': 'deformable_layer.self_attn_layer_norm.bias',
+        'linear1.weight': 'deformable_layer.fc1.weight',
+        'linear1.bias': 'deformable_layer.fc1.bias',
+        'linear2.weight': 'deformable_layer.fc2.weight',
+        'linear2.bias': 'deformable_layer.fc2.bias',
+        'norm2.weight': 'deformable_layer.final_layer_norm.weight',
+        'norm2.bias': 'deformable_layer.final_layer_norm.bias',
+    }
+    text_enhancer_key_mappings = {
+        'self_attn.in_proj_weight': 'text_enhancer_layer.self_attn.in_proj_weight',
+        'self_attn.in_proj_bias': 'text_enhancer_layer.self_attn.in_proj_bias',
+        'self_attn.out_proj.weight': 'text_enhancer_layer.self_attn.out_proj.weight',
+        'self_attn.out_proj.bias': 'text_enhancer_layer.self_attn.out_proj.bias',
+        'linear1.weight': 'text_enhancer_layer.fc1.weight',
+        'linear1.bias': 'text_enhancer_layer.fc1.bias',
+        'linear2.weight': 'text_enhancer_layer.fc2.weight',
+        'linear2.bias': 'text_enhancer_layer.fc2.bias',
+        'norm1.weight': 'text_enhancer_layer.layer_norm_before.weight',
+        'norm1.bias': 'text_enhancer_layer.layer_norm_before.bias',
+        'norm2.weight': 'text_enhancer_layer.layer_norm_after.weight',
+        'norm2.bias': 'text_enhancer_layer.layer_norm_after.bias',
+    }
+    fusion_key_mappings = {
+        'gamma_v': 'fusion_layer.gamma_v',
+        'gamma_l': 'fusion_layer.gamma_l',
+        'layer_norm_v.weight': 'fusion_layer.layer_norm_vision.weight',
+        'layer_norm_v.bias': 'fusion_layer.layer_norm_vision.bias',
+        'layer_norm_l.weight': 'fusion_layer.layer_norm_text.weight',
+        'layer_norm_l.bias': 'fusion_layer.layer_norm_text.bias',
+        'attn.v_proj.weight': 'fusion_layer.attn.vision_proj.weight',
+        'attn.v_proj.bias': 'fusion_layer.attn.vision_proj.bias',
+        'attn.l_proj.weight': 'fusion_layer.attn.text_proj.weight',
+        'attn.l_proj.bias': 'fusion_layer.attn.text_proj.bias',
+        'attn.values_v_proj.weight': 'fusion_layer.attn.values_vision_proj.weight',
+        'attn.values_v_proj.bias': 'fusion_layer.attn.values_vision_proj.bias',
+        'attn.values_l_proj.weight': 'fusion_layer.attn.values_text_proj.weight',
+        'attn.values_l_proj.bias': 'fusion_layer.attn.values_text_proj.bias',
+        'attn.out_v_proj.weight': 'fusion_layer.attn.out_vision_proj.weight',
+        'attn.out_v_proj.bias': 'fusion_layer.attn.out_vision_proj.bias',
+        'attn.out_l_proj.weight': 'fusion_layer.attn.out_text_proj.weight',
+        'attn.out_l_proj.bias': 'fusion_layer.attn.out_text_proj.bias',
+    }
+    
+    for layer in range(config.encoder_layers):
+        # deformable
+        for src, dest in deformable_key_mappings.items():
+            rename_keys.append((f"module.transformer.encoder.layers.{layer}.{src}", 
+                                f"model.encoder.layers.{layer}.{dest}"))
+        # text enhance
+        for src, dest in text_enhancer_key_mappings.items():
+            rename_keys.append((f"module.transformer.encoder.text_layers.{layer}.{src}", 
+                                f"model.encoder.layers.{layer}.{dest}"))
+        # fusion layers
+        for src, dest in fusion_key_mappings.items():
+            rename_keys.append((f"module.transformer.encoder.fusion_layers.{layer}.{src}", 
+                                f"model.encoder.layers.{layer}.{dest}"))
+    ########################################## ENCODER - END
+
+    #TODO convert decoder
+    ########################################## DECODER - START
+    ########################################## DECODER - END
+
+    #TODO convert head
+    ########################################## HEAD - START
+    ########################################## HEAD - END
+
+    #TODO convert additional layers
+    ########################################## Additional - START
+    ########################################## Additional - END
+
     # fmt: on
     return rename_keys
 
@@ -259,6 +341,7 @@ def convert_grounding_dino_checkpoint(model_name, checkpoint_path):
     # Rename keys
     new_state_dict = original_state_dict.copy()
     rename_keys = create_rename_keys(original_state_dict, config)
+    
     for src, dest in rename_keys:
         rename_key(new_state_dict, src, dest)
     read_in_q_k_v(new_state_dict, config)

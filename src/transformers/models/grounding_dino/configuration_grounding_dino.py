@@ -157,7 +157,7 @@ class GroundingDINOConfig(PretrainedConfig):
         backbone_config={"model_type": "swin"},
         text_backbone_config="bert-base-uncased",
         num_channels=3,
-        num_queries=300,
+        num_queries=900,
         max_position_embeddings=1024,
         encoder_layers=6,
         encoder_ffn_dim=2048,
