@@ -7929,10 +7929,6 @@ class VitDetPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-VITS_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class VitsModel(metaclass=DummyObject):
 VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -7943,8 +7939,24 @@ class VitMatteForImageMatting(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class VitsPreTrainedModel(metaclass=DummyObject):
 class VitMattePreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+VITS_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class VitsModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VitsPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

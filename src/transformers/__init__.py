@@ -587,12 +587,12 @@ _import_structure = {
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
     "models.vitdet": ["VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitDetConfig"],
+    "models.vitmatte": ["VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitMatteConfig"],
     "models.vits": [
         "VITS_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VitsConfig",
         "VitsTokenizer",
     ],
-    "models.vitmatte": ["VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VitMatteConfig"],
     "models.vivit": [
         "VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "VivitConfig",
@@ -2943,16 +2943,18 @@ else:
             "VitDetPreTrainedModel",
         ]
     )
-    _import_structure["models.vits"].extend(
-        [
-            "VITS_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "VitsModel",
-            "VitsPreTrainedModel",
     _import_structure["models.vitmatte"].extend(
         [
             "VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST",
             "VitMatteForImageMatting",
             "VitMattePreTrainedModel",
+        ]
+    )
+    _import_structure["models.vits"].extend(
+        [
+            "VITS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VitsModel",
+            "VitsPreTrainedModel",
         ]
     )
     _import_structure["models.vivit"].extend(
@@ -4664,12 +4666,12 @@ if TYPE_CHECKING:
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
     from .models.vitdet import VITDET_PRETRAINED_CONFIG_ARCHIVE_MAP, VitDetConfig
+    from .models.vitmatte import VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP, VitMatteConfig
     from .models.vits import (
         VITS_PRETRAINED_CONFIG_ARCHIVE_MAP,
         VitsConfig,
         VitsTokenizer,
     )
-    from .models.vitmatte import VITMATTE_PRETRAINED_CONFIG_ARCHIVE_MAP, VitMatteConfig
     from .models.vivit import VIVIT_PRETRAINED_CONFIG_ARCHIVE_MAP, VivitConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -6624,14 +6626,15 @@ if TYPE_CHECKING:
             VitDetModel,
             VitDetPreTrainedModel,
         )
-        from .models.vits import (
-            VITS_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VitsModel,
-            VitsPreTrainedModel,
         from .models.vitmatte import (
             VITMATTE_PRETRAINED_MODEL_ARCHIVE_LIST,
             VitMatteForImageMatting,
             VitMattePreTrainedModel,
+        )
+        from .models.vits import (
+            VITS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VitsModel,
+            VitsPreTrainedModel,
         )
         from .models.vivit import (
             VIVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
