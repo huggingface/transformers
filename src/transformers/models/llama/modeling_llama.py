@@ -68,27 +68,6 @@ def _make_causal_mask(
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-def _convert_to_padding_mask(attention_mask: torch.Tensor, mask_value: float = 0.0):
-    """
-    Convert causal attention mask to key-padding mask
-    """
-    if len(attention_mask.size()) != 4:
-        raise ValueError(
-            "Expecting attention_mask to have 4 dimensions, got tensor of shape: " f"{attention_mask.size()}"
-        )
-
-    batch_size = attention_mask.size(0)
-    key_length = attention_mask.size(-1)
-
-    padding_mask = torch.ones((batch_size, key_length), device=attention_mask.device)
-
-    for i in range(batch_size):
-        mask_slice = attention_mask[i, :, -1, :]
-        padding_mask[i, :] = torch.all(mask_slice == mask_value, dim=0)
-
-    return padding_mask
-
-
 # Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """

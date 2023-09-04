@@ -149,28 +149,6 @@ def _expand_mask(mask: torch.Tensor, past_key_values_length: int) -> torch.BoolT
     return expanded_mask.expand(batch_size, 1, seq_length, total_length)
 
 
-# Copied from transformers.models.llama.modeling_llama._convert_to_padding_mask
-def _convert_to_padding_mask(attention_mask: torch.Tensor, mask_value: float = 0.0):
-    """
-    Convert causal attention mask to key-padding mask
-    """
-    if len(attention_mask.size()) != 4:
-        raise ValueError(
-            "Expecting attention_mask to have 4 dimensions, got tensor of shape: " f"{attention_mask.size()}"
-        )
-
-    batch_size = attention_mask.size(0)
-    key_length = attention_mask.size(-1)
-
-    padding_mask = torch.ones((batch_size, key_length), device=attention_mask.device)
-
-    for i in range(batch_size):
-        mask_slice = attention_mask[i, :, -1, :]
-        padding_mask[i, :] = torch.all(mask_slice == mask_value, dim=0)
-
-    return padding_mask
-
-
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
     batch_size, seq_length = attention_mask.shape
     closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
@@ -319,6 +297,7 @@ class FalconAttention(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
+        padding_mask: Optional[torch.LongTensor] = None,
     ):
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv_heads
@@ -529,6 +508,7 @@ class FalconFlashAttention(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
+        padding_mask: Optional[torch.LongTensor] = None,
     ):
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         num_kv_heads = self.num_heads if self.new_decoder_architecture else self.num_kv_heads
@@ -572,12 +552,11 @@ class FalconFlashAttention(nn.Module):
         if alibi is not None:
             raise ValueError("`alibi` is not supported when `use_flash_attn` is True")
 
-        padding_mask = _convert_to_padding_mask(attention_mask * 1.0, mask_value=0)
-
         # contains at least one padding token
-        if padding_mask.sum().item() != batch_size * kv_seq_length:
+        if padding_mask is not None:
             _, q_len, _, _ = query_layer.shape
 
+            # This assumes it uses tokenizer.padding_side == 'left'
             if use_cache:
                 query_padding_mask = padding_mask[:, -q_len:]
             else:
@@ -604,11 +583,6 @@ class FalconFlashAttention(nn.Module):
         else:
             attn_output = flash_attn_func(query_layer, key_layer, value_layer, 0.0, causal=True)
 
-        # print(batch_size, query_length, self.num_heads * self.head_dim)
-        # print(attn_output.shape)
-        # import pdb
-
-        # pdb.set_trace()
         attn_weights = attn_output.reshape(batch_size, query_length, self.num_heads * self.head_dim)
         attn_output = self.dense(attn_weights)
 
@@ -667,6 +641,7 @@ class FalconDecoderLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         use_cache: bool = False,
         output_attentions: bool = False,
+        padding_mask: Optional[torch.LongTensor] = None,
     ):
         residual = hidden_states
 
@@ -685,6 +660,7 @@ class FalconDecoderLayer(nn.Module):
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            padding_mask=padding_mask,
         )
 
         attention_output = attn_outputs[0]
@@ -982,8 +958,10 @@ class FalconModel(FalconPreTrainedModel):
             past_key_values_length = past_key_values[0][0].shape[1]  # 1 because RW-cache, not standard format
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_length + past_key_values_length), device=hidden_states.device)
+            padding_mask = None
         else:
             attention_mask = attention_mask.to(hidden_states.device)
+            padding_mask = attention_mask
 
         if self.use_alibi:
             alibi = build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
@@ -1015,11 +993,7 @@ class FalconModel(FalconPreTrainedModel):
                     return custom_forward
 
                 outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
-                    hidden_states,
-                    alibi,
-                    causal_mask,
-                    head_mask[i],
+                    create_custom_forward(block), hidden_states, alibi, causal_mask, head_mask[i], padding_mask
                 )
             else:
                 outputs = block(
@@ -1030,6 +1004,7 @@ class FalconModel(FalconPreTrainedModel):
                     use_cache=use_cache,
                     output_attentions=output_attentions,
                     alibi=alibi,
+                    padding_mask=padding_mask,
                 )
 
             hidden_states = outputs[0]
