@@ -373,18 +373,31 @@ class BrosSelfAttention(nn.Module):
             positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
             if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+                relative_position_scores = torch.matmul(
+                    query_layer.unsqueeze(-2), positional_embedding.permute(0, 2, 1).unsqueeze(0).unsqueeze(0)
+                ).squeeze()
+                # equivalent of torch.einsum("bhld,lrd->bhlr", query_layer_expanded, positional_embedding)
+
                 attention_scores = attention_scores + relative_position_scores
             elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
+                relative_position_scores_query = torch.matmul(
+                    query_layer.unsqueeze(-2), positional_embedding.permute(0, 2, 1).unsqueeze(0).unsqueeze(0)
+                ).squeeze()  # equivalent of torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+
+                relative_position_scores_key = torch.matmul(
+                    key_layer.unsqueeze(-2), positional_embedding.permute(0, 2, 1).unsqueeze(0).unsqueeze(0)
+                ).squeeze()  # equivalent of torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
+
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
         # bbox positional encoding
         batch_size, n_head, seq_length, d_head = query_layer.shape
         bbox_pos_emb = bbox_pos_emb.view(seq_length, seq_length, batch_size, d_head)
-        bbox_pos_emb = bbox_pos_emb.permute([2, 0, 1, 3])
-        bbox_pos_scores = torch.einsum("bnid,bijd->bnij", (query_layer, bbox_pos_emb))
+        bbox_pos_emb = bbox_pos_emb.permute([2, 0, 3, 1])
+
+        bbox_pos_scores = torch.matmul(
+            query_layer.unsqueeze(3), bbox_pos_emb.unsqueeze(1)
+        ).squeeze()  # equivalent of torch.einsum("bnid,bidj->bnij", (query_layer, bbox_pos_emb))
 
         attention_scores = attention_scores + bbox_pos_scores
 
@@ -748,7 +761,9 @@ class BrosRelationExtractor(nn.Module):
         )
         key_layer = key_layer.view(key_layer.size(0), key_layer.size(1), self.n_relations, self.head_hidden_size)
 
-        relation_score = torch.einsum("ibnd,jbnd->nbij", (query_layer, key_layer))
+        relation_score = torch.matmul(
+            query_layer.permute(2, 1, 0, 3), key_layer.permute(2, 1, 3, 0)
+        )  # equivalent to torch.einsum("ibnd,jbnd->nbij", (query_layer, key_layer))
 
         return relation_score
 
