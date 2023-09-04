@@ -16,16 +16,17 @@ rendered properly in your Markdown viewer.
 
 # Falcon
 
-
-
 ## Overview
+
 Falcon is a class of causal decoder-only models built by [TII](https://www.tii.ae/). The largest Falcon checkpoints
 have been trained on >=1T tokens of text, with a particular emphasis on the [RefinedWeb](https://arxiv.org/abs/2306.01116)
 corpus. They are made available under the Apache 2.0 license.
 
+
 Falcon's architecture is modern and optimized for inference, with multi-query attention and support for efficient
 attention variants like `FlashAttention`. Both 'base' models trained only as causal language models as well as
 'instruct' models that have received further fine-tuning are available.
+
 
 Falcon models are (as of 2023) some of the largest and most powerful open-source language models,
 and consistently rank highly in the [OpenLLM leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard).
