@@ -34,6 +34,7 @@ from ..utils import (
 
 
 logger = logging.get_logger(__name__)
+METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
 
 
 class GenerationConfig(PushToHubMixin):
@@ -315,6 +316,13 @@ class GenerationConfig(PushToHubMixin):
         # Validate the values of the attributes
         self.validate(is_init=True)
 
+    def __hash__(self):
+        self_dict = self.__dict__.copy()
+        # ignore metadata
+        for metadata_field in METADATA_FIELDS:
+            self_dict.pop(metadata_field, None)
+        return hash(tuple(sorted(self_dict.items())))
+
     def __eq__(self, other):
         if not isinstance(other, GenerationConfig):
             return False
@@ -322,7 +330,7 @@ class GenerationConfig(PushToHubMixin):
         self_dict = self.__dict__.copy()
         other_dict = other.__dict__.copy()
         # ignore metadata
-        for metadata_field in ("_from_model_config", "_commit_hash", "transformers_version"):
+        for metadata_field in METADATA_FIELDS:
             self_dict.pop(metadata_field, None)
             other_dict.pop(metadata_field, None)
         return self_dict == other_dict
@@ -729,11 +737,7 @@ class GenerationConfig(PushToHubMixin):
         else:
             logger.info(f"loading configuration file {configuration_file} from cache at {resolved_config_file}")
 
-        generation_config = cls.from_dict(config_dict, **kwargs)
-        # If the generation_config contains the `_from_config` attribute, we ignore it. This attribute's purpose is to
-        # flag that the GenerationConfig instance was created from a model config file, which is not the case here.
-        generation_config._from_model_config = False
-        return generation_config
+        return cls.from_dict(config_dict, **kwargs)
 
     @classmethod
     def _dict_from_json_file(cls, json_file: Union[str, os.PathLike]):
@@ -768,6 +772,10 @@ class GenerationConfig(PushToHubMixin):
         # See https://github.com/huggingface/transformers/pull/21269
         config = cls(**{**config_dict, **kwargs})
         unused_kwargs = config.update(**kwargs)
+
+        # Keep the original hash to detect whether the generation config has been mutated. This property is used to
+        # disable legacy behavior (if the generation config is mutated, the legacy behavior is disabled).
+        config._original_object_hash = hash(config)
 
         logger.info(f"Generate config {config}")
         if return_unused_kwargs:
@@ -818,8 +826,12 @@ class GenerationConfig(PushToHubMixin):
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         output = copy.deepcopy(self.__dict__)
+
+        # Fields to ignore at serialization time
         if "_commit_hash" in output:
             del output["_commit_hash"]
+        if "_original_object_hash" in output:
+            del output["_original_object_hash"]
 
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
