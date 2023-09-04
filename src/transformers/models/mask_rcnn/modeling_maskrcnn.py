@@ -805,8 +805,8 @@ def mask_target_single(pos_proposals, pos_assigned_gt_inds, gt_masks, cfg):
     return mask_targets
 
 
-def unmap(data, count, indices, fill=0):
-    """Unmap a subset of item (data) back to the original set of items (of size count)"""
+def remap_subset(data, count, indices, fill=0):
+    """Remap a subset of items (data) back to the original set of items (of size count)"""
     new_size = (count,) + data.size()[1:]
     result = data.new_full(new_size, fill)
     result[indices.type(torch.bool)] = data
@@ -1965,10 +1965,10 @@ class MaskRCNNRPN(nn.Module):
 
         # map outputs up to original set of anchors
         num_total_anchors = flat_anchors.size(0)
-        labels = unmap(labels, num_total_anchors, inside_flags, fill=self.num_classes)  # fill background label
-        label_weights = unmap(label_weights, num_total_anchors, inside_flags)
-        bbox_targets = unmap(bbox_targets, num_total_anchors, inside_flags)
-        bbox_weights = unmap(bbox_weights, num_total_anchors, inside_flags)
+        labels = remap_subset(labels, num_total_anchors, inside_flags, fill=self.num_classes)  # fill background label
+        label_weights = remap_subset(label_weights, num_total_anchors, inside_flags)
+        bbox_targets = remap_subset(bbox_targets, num_total_anchors, inside_flags)
+        bbox_weights = remap_subset(bbox_weights, num_total_anchors, inside_flags)
 
         return (labels, label_weights, bbox_targets, bbox_weights, pos_indices, neg_indices, sampling_result)
 
