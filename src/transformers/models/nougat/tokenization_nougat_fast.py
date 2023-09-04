@@ -34,14 +34,6 @@ from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 from transformers.utils import add_end_docstrings
 
 
-# Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
-TOKENIZER_FILE = "tokenizer.json"
-SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
-TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
-
-# Slow tokenizers have an additional added tokens files
-ADDED_TOKENS_FILE = "added_tokens.json"
-
 INIT_TOKENIZER_DOCSTRING += """
         tokenizer_object ([`tokenizers.Tokenizer`]):
             A [`tokenizers.Tokenizer`] object from 🤗 tokenizers to instantiate from. See [Using tokenizers from 🤗
@@ -58,7 +50,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
     },
 }
 
-VOCAB_FILES_NAMES = {"tokenizer_file": TOKENIZER_FILE}
+VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
 
 
 def markdown_compatible(s: str) -> str:
