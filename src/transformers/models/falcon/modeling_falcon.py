@@ -1054,7 +1054,11 @@ class FalconModel(FalconPreTrainedModel):
             padding_mask = None
         else:
             attention_mask = attention_mask.to(hidden_states.device)
-            padding_mask = attention_mask
+
+            if 0 in attention_mask:
+                padding_mask = attention_mask
+            else:
+                padding_mask = None
 
         if self.use_alibi:
             alibi = build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
