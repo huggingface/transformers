@@ -341,7 +341,7 @@ model. This is different from pushing the code to the Hub in the sense that user
 get the custom models (contrarily to automatically downloading the model code from the Hub).
 
 As long as your config has a `model_type` attribute that is different from existing model types, and that your model
-classes have the right `config_class` attributes, you can just add them to the auto classes likes this:
+classes have the right `config_class` attributes, you can just add them to the auto classes like this:
 
 ```py
 from transformers import AutoConfig, AutoModel, AutoModelForImageClassification
