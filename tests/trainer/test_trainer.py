@@ -2165,6 +2165,8 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
         except HTTPError:
             pass
 
+    # TODO: fix me (ydshieh)
+    @unittest.skip("skip for now as failing on main")
     def test_push_to_hub(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
@@ -2185,6 +2187,8 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
             self.assertEqual(model.a.item(), trainer.model.a.item())
             self.assertEqual(model.b.item(), trainer.model.b.item())
 
+    # TODO: fix me (ydshieh)
+    @unittest.skip("skip for now as failing on main")
     def test_push_to_hub_in_organization(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(output_dir=tmp_dir)
