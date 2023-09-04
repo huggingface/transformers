@@ -425,7 +425,7 @@ class FalconAttention(nn.Module):
                 logger.warning_once(
                     "The current implementation of Falcon calls `torch.scaled_dot_product_attention` directly, this will be deprecated in the"
                     " future in favor of the `BetterTransformer` API. Please install the latest optimum library with `pip install -U optimum` and call "
-                    "`model.to_bettertransformer()` to benefit from `torch.scaled_dot_product_attention`."
+                    "`model.to_bettertransformer()` to benefit from `torch.scaled_dot_product_attention` and future performance optimizations."
                 )
 
                 attn_output = F.scaled_dot_product_attention(
