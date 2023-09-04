@@ -23,15 +23,14 @@ class NougatProcessor(ProcessorMixin):
     r"""
     Constructs a Nougat processor which wraps a Nougat image processor and a Nougat tokenizer into a single processor.
 
-    [`NougatProcessor`] offers all the functionalities of [`NougatImageProcessor`] and
-    [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. See the [`~NougatProcessor.__call__`] and
-    [`~NougatProcessor.decode`] for more information.
+    [`NougatProcessor`] offers all the functionalities of [`NougatImageProcessor`] and [`NougatTokenizerFast`]. See the
+    [`~NougatProcessor.__call__`] and [`~NougatProcessor.decode`] for more information.
 
     Args:
         image_processor ([`NougatImageProcessor`]):
             An instance of [`NougatImageProcessor`]. The image processor is a required input.
-        tokenizer ([`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]):
-            An instance of [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. The tokenizer is a required input.
+        tokenizer ([`NougatTokenizerFast`]):
+            An instance of [`NougatTokenizerFast`]. The tokenizer is a required input.
     """
     attributes = ["image_processor", "tokenizer"]
     image_processor_class = "AutoImageProcessor"

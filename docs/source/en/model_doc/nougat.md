@@ -52,3 +52,8 @@ Tips:
 ## NougatProcessor
 
 [[autodoc]] NougatProcessor
+    - __call__
+    - from_pretrained
+    - save_pretrained
+    - batch_decode
+    - decode
