@@ -42,13 +42,25 @@ from .configuration_llama import LlamaConfig
 
 if is_flash_attn_available():
     from flash_attn import flash_attn_func, flash_attn_varlen_func
-    from flash_attn.bert_padding import pad_input, unpad_input  # noqa
+    from flash_attn.bert_padding import pad_input, unpad_input, index_first_axis  # noqa
+    from einops import rearrange
 
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlamaConfig"
 
+
+def _get_unpad_data(attention_mask):
+    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
+    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
+    return (
+        indices,
+        cu_seqlens,
+        max_seqlen_in_batch,
+    )
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(
@@ -508,29 +520,40 @@ class LlamaFlashAttention(nn.Module):
 
         # contains at least one padding token
         if padding_mask is not None:
-            key_states, _, current_key_length, key_max_seqlen = unpad_input(key_states, padding_mask)
-            value_states, _, _, _ = unpad_input(value_states, padding_mask)
+            indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
+            key_states = index_first_axis(rearrange(key_states, "b s ... -> (b s) ..."), indices_k)
+            value_states = index_first_axis(rearrange(value_states, "b s ... -> (b s) ..."), indices_k)
 
-            # This assumes padding_side = "left" during generation with use_cache=True.
-            if use_cache:
+            # In an ideal world, at least for the path q_len == kv_seq_len and q_len == 1, we should collect the
+            if q_len == kv_seq_len:
+                query_states = index_first_axis(rearrange(query_states, "b s ... -> (b s) ..."), indices_k)
+                cu_seqlens_q = cu_seqlens_k
+                max_seqlen_in_batch_q = max_seqlen_in_batch_k
+                indices_q = indices_k
+            elif q_len == 1:
+                max_seqlen_in_batch_q = 1
+                cu_seqlens_q = torch.arange(bsz + 1, dtype=torch.int32, device=query_states.device)  # There is a memcpy here, that is very bad.
+                indices_q = cu_seqlens_q[:-1]
+                query_states = query_states.squeeze(1)
+            else:
+                # The -q_len: slice assumes left padding.
                 padding_mask = padding_mask[:, -q_len:]
-
-            query_states, indices, current_query_length, query_max_seqlen = unpad_input(query_states, padding_mask)
+                query_states, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_states, padding_mask)
 
             attn_output_unpad = flash_attn_varlen_func(
                 query_states,
                 key_states,
                 value_states,
-                cu_seqlens_q=current_query_length,
-                cu_seqlens_k=current_key_length,
-                max_seqlen_q=query_max_seqlen,
-                max_seqlen_k=key_max_seqlen,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_k,
+                max_seqlen_q=max_seqlen_in_batch_q,
+                max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=0.0,
                 softmax_scale=None,
                 causal=True,
             )
 
-            attn_output = pad_input(attn_output_unpad, indices, bsz, q_len)
+            attn_output = pad_input(attn_output_unpad, indices_q, bsz, q_len)
         else:
             attn_output = flash_attn_func(query_states, key_states, value_states, dropout_rate, causal=True)
 
