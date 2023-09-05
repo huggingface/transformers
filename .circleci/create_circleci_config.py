@@ -228,7 +228,7 @@ class CircleCIJob:
 
         check_test_command = f'if [ -s reports/{self.name}/failures_short.txt ]; '
         check_test_command += 'then echo "Some test failed!"; echo ""; '
-        check_test_command += f'cat reports/tests_{self.name}/failures_short.txt; '
+        check_test_command += f'cat reports/{self.name}/failures_short.txt; '
         check_test_command += 'echo ""; echo ""; '
 
         py_command = f'import os; fp = open("reports/{self.name}/summary_short.txt"); failed = os.linesep.join([x for x in fp.read().split(os.linesep) if x.startswith("FAILED ", "ERROR ")]); fp.close(); fp = open("summary_short.txt", "w"); fp.write(failed); fp.close()'
