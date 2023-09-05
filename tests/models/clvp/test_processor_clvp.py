@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
+import gc
+
 import shutil
 import tempfile
 import unittest
@@ -24,20 +27,23 @@ from transformers.testing_utils import require_torch
 from .test_feature_extraction_clvp import floats_list
 
 
+
 @require_torch
 class CLVPProcessorTest(unittest.TestCase):
     def setUp(self):
         self.checkpoint = "susnato/clvp_dev"
         self.tmpdirname = tempfile.mkdtemp()
 
+    def tearDown(self):
+        super().tearDown()
+        shutil.rmtree(self.tmpdirname)
+        gc.collect()
+
     def get_tokenizer(self, **kwargs):
         return CLVPTokenizer.from_pretrained(self.checkpoint, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
         return CLVPFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
-
-    def tearDown(self):
-        shutil.rmtree(self.tmpdirname)
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()

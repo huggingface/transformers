@@ -15,6 +15,8 @@
 """ Testing suite for the PyTorch CLVP model. """
 
 
+import gc
+
 import tempfile
 import unittest
 
@@ -169,6 +171,12 @@ class CLVPTransformerWithProjectionTest(ModelTesterMixin, unittest.TestCase):
         self.text_config_tester = ConfigTester(self, config_class=CLVPTextConfig, hidden_size=64)
         self.speech_config_tester = ConfigTester(self, config_class=CLVPSpeechConfig, hidden_size=64)
 
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        torch.cuda.empty_cache()
+
     def test_config(self):
         self.text_config_tester.run_common_tests()
         self.speech_config_tester.run_common_tests()
@@ -253,93 +261,6 @@ class CLVPModelTester:
             "return_loss": False,
         }
         return config, inputs_dict
-
-
-@require_torch
-class CLVPModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (CLVPModel,) if is_torch_available() else ()
-
-    test_head_masking = False
-    test_pruning = False
-    test_resize_embeddings = False
-    test_attention_outputs = False
-    test_torchscript = False
-
-    def setUp(self):
-        self.model_tester = CLVPModelTester(self)
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skip(reason="CLVPModel does not output Hidden_states, since it has two types(text and speech) of them")
-    def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip(reason="CLVPModel does not take inputs_embeds as inputs")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="Retain_grad is tested in individual model tests")
-    def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(
-        reason="CLVPModel does not have input/output embeddings, since it has two types(text and speech) of them"
-    )
-    def test_model_common_attributes(self):
-        pass
-
-    # override as the `logit_scale` parameter initilization is different for CLVP
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    # check if `logit_scale` is initilized as per the original implementation
-                    if name == "logit_scale":
-                        self.assertAlmostEqual(
-                            param.data.item(),
-                            np.log(1 / 0.07),
-                            delta=1e-3,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                    else:
-                        self.assertIn(
-                            ((param.data.mean() * 1e9).round() / 1e9).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
-    def test_load_speech_text_autoregressive_config(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # Save CLVPConfig and check if we can load CLVPSpeechConfig from it
-        with tempfile.TemporaryDirectory() as tmp_dir_name:
-            config.save_pretrained(tmp_dir_name)
-            speech_config = CLVPSpeechConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.speech_config.to_dict(), speech_config.to_dict())
-
-        # Save CLVPConfig and check if we can load CLVPTextConfig from it
-        with tempfile.TemporaryDirectory() as tmp_dir_name:
-            config.save_pretrained(tmp_dir_name)
-            text_config = CLVPTextConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
-
-        # Save CLVPConfig and check if we can load CLVPAutoRegressiveConfig from it
-        with tempfile.TemporaryDirectory() as tmp_dir_name:
-            config.save_pretrained(tmp_dir_name)
-            autoregressive_config = CLVPAutoRegressiveConfig.from_pretrained(tmp_dir_name)
-            self.assertDictEqual(config.autoregressive_config.to_dict(), autoregressive_config.to_dict())
-
-    @slow
-    def test_model_from_pretrained(self):
-        for model_name in CLVP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = CLVPModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
 
 
 class CLVPAutoRegressiveLMHeadModelTester:
@@ -438,6 +359,12 @@ class CLVPAutoRegressiveLMHeadModelTest(ModelTesterMixin, GenerationTesterMixin,
     def setUp(self):
         self.model_tester = CLVPAutoRegressiveLMHeadModelTester(self)
 
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        torch.cuda.empty_cache()
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -479,6 +406,99 @@ class CLVPAutoRegressiveLMHeadModelTest(ModelTesterMixin, GenerationTesterMixin,
         pass
 
 
+@require_torch
+class CLVPModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (CLVPModel,) if is_torch_available() else ()
+
+    test_head_masking = False
+    test_pruning = False
+    test_resize_embeddings = False
+    test_attention_outputs = False
+    test_torchscript = False
+
+    def setUp(self):
+        self.model_tester = CLVPModelTester(self)
+
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @unittest.skip(reason="CLVPModel does not output Hidden_states, since it has two types(text and speech) of them")
+    def test_hidden_states_output(self):
+        pass
+
+    @unittest.skip(reason="CLVPModel does not take inputs_embeds as inputs")
+    def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(reason="Retain_grad is tested in individual model tests")
+    def test_retain_grad_hidden_states_attentions(self):
+        pass
+
+    @unittest.skip(
+        reason="CLVPModel does not have input/output embeddings, since it has two types(text and speech) of them"
+    )
+    def test_model_common_attributes(self):
+        pass
+
+    # override as the `logit_scale` parameter initilization is different for CLVP
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    # check if `logit_scale` is initilized as per the original implementation
+                    if name == "logit_scale":
+                        self.assertAlmostEqual(
+                            param.data.item(),
+                            np.log(1 / 0.07),
+                            delta=1e-3,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+
+    def test_load_speech_text_autoregressive_config(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Save CLVPConfig and check if we can load CLVPSpeechConfig from it
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            config.save_pretrained(tmp_dir_name)
+            speech_config = CLVPSpeechConfig.from_pretrained(tmp_dir_name)
+            self.assertDictEqual(config.speech_config.to_dict(), speech_config.to_dict())
+
+        # Save CLVPConfig and check if we can load CLVPTextConfig from it
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            config.save_pretrained(tmp_dir_name)
+            text_config = CLVPTextConfig.from_pretrained(tmp_dir_name)
+            self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
+
+        # Save CLVPConfig and check if we can load CLVPAutoRegressiveConfig from it
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            config.save_pretrained(tmp_dir_name)
+            autoregressive_config = CLVPAutoRegressiveConfig.from_pretrained(tmp_dir_name)
+            self.assertDictEqual(config.autoregressive_config.to_dict(), autoregressive_config.to_dict())
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in CLVP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = CLVPModel.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+
+
 # Since CLVP has a lot of different models connected with each other it's better to test each of them individually along
 # with a test_full_model_integration. If the model breaks in future, it could be of a great help to identify the broken part.
 
@@ -501,6 +521,12 @@ class CLVPModelIntegrationTest(unittest.TestCase):
         self.input_features = feature_extractor(
             raw_speech=self.speech_samples, sampling_rate=self.sr, return_tensors="pt"
         )["input_features"].to(torch_device)
+
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        torch.cuda.empty_cache()
 
     def test_conditional_encoder(self):
         with torch.no_grad():

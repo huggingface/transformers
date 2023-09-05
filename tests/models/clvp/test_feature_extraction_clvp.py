@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import gc
 
 import itertools
 import os
@@ -111,6 +112,12 @@ class CLVPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
     def setUp(self):
         self.feat_extract_tester = CLVPFeatureExtractionTester(self)
 
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        gc.collect()
+        torch.cuda.empty_cache()
+
     def test_feat_extract_from_and_save_pretrained(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
 
@@ -185,8 +192,6 @@ class CLVPFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Tes
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
     def test_double_precision_pad(self):
-        import torch
-
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         np_speech_inputs = np.random.rand(100, 32).astype(np.float64)
         py_speech_inputs = np_speech_inputs.tolist()
