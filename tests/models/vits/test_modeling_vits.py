@@ -68,7 +68,7 @@ class VitsModelTester:
         self,
         parent,
         batch_size=2,
-        seq_length=7,
+        seq_length=8,
         is_training=False,
         hidden_size=16,
         num_hidden_layers=2,
@@ -148,7 +148,7 @@ class VitsModelTester:
         attention_mask = inputs_dict["attention_mask"]
 
         result = model(input_ids, attention_mask=attention_mask)
-        self.parent.assertEqual((self.batch_size, 624), result.waveform.shape)
+        self.parent.assertEqual((self.batch_size, 272), result.waveform.shape)
 
 
 @require_torch
