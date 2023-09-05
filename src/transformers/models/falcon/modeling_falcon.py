@@ -44,7 +44,8 @@ from .configuration_falcon import FalconConfig
 
 
 if is_flash_attn_available():
-    from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from einops import rearrange
+    from flash_attn import flash_attn_func, flash_attn_varlen_func, index_first_axis
     from flash_attn.bert_padding import pad_input, unpad_input  # noqa
 
 logger = logging.get_logger(__name__)
@@ -75,6 +76,19 @@ class FalconLinear(nn.Linear):
 def rotate_half(x):
     x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
+
+
+# Copied from transformers.models.llama.modeling_llama._get_unpad_data
+def _get_unpad_data(attention_mask):
+    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
+    max_seqlen_in_batch = seqlens_in_batch.max().item()
+    cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
+    return (
+        indices,
+        cu_seqlens,
+        max_seqlen_in_batch,
+    )
 
 
 class FalconRotaryEmbedding(nn.Module):
@@ -655,32 +669,42 @@ class FalconFlashAttention(nn.Module):
 
         # contains at least one padding token
         if padding_mask is not None:
-            _, q_len, _, _ = query_layer.shape
+            indices_k, cu_seqlens_k, max_seqlen_in_batch_k = _get_unpad_data(padding_mask)
+            key_layer = index_first_axis(rearrange(key_layer, "b s ... -> (b s) ..."), indices_k)
+            value_layer = index_first_axis(rearrange(value_layer, "b s ... -> (b s) ..."), indices_k)
 
-            # This assumes it uses tokenizer.padding_side == 'left'
-            if use_cache:
-                query_padding_mask = padding_mask[:, -q_len:]
+            # In an ideal world, at least for the path q_len == kv_seq_len and q_len == 1, we should collect the
+            if query_length == kv_seq_length:
+                query_layer = index_first_axis(rearrange(query_layer, "b s ... -> (b s) ..."), indices_k)
+                cu_seqlens_q = cu_seqlens_k
+                max_seqlen_in_batch_q = max_seqlen_in_batch_k
+                indices_q = indices_k
+            elif query_length == 1:
+                max_seqlen_in_batch_q = 1
+                cu_seqlens_q = torch.arange(
+                    batch_size + 1, dtype=torch.int32, device=query_layer.device
+                )  # There is a memcpy here, that is very bad.
+                indices_q = cu_seqlens_q[:-1]
+                query_layer = query_layer.squeeze(1)
             else:
-                query_padding_mask = padding_mask
-
-            query_layer, indices, current_query_length, query_max_seqlen = unpad_input(query_layer, query_padding_mask)
-            key_layer, _, current_key_length, key_max_seqlen = unpad_input(key_layer, padding_mask)
-            value_layer, _, _, _ = unpad_input(value_layer, padding_mask)
+                # The -q_len: slice assumes left padding.
+                padding_mask = padding_mask[:, -query_length:]
+                query_layer, indices_q, cu_seqlens_q, max_seqlen_in_batch_q = unpad_input(query_layer, padding_mask)
 
             attn_output_unpad = flash_attn_varlen_func(
                 query_layer,
                 key_layer,
                 value_layer,
-                cu_seqlens_q=current_query_length,
-                cu_seqlens_k=current_key_length,
-                max_seqlen_q=query_max_seqlen,
-                max_seqlen_k=key_max_seqlen,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_k,
+                max_seqlen_q=max_seqlen_in_batch_q,
+                max_seqlen_k=max_seqlen_in_batch_k,
                 dropout_p=0.0,
                 softmax_scale=None,
                 causal=True,
             )
 
-            attn_output = pad_input(attn_output_unpad, indices, batch_size, q_len)
+            attn_output = pad_input(attn_output_unpad, indices_q, batch_size, query_length)
         else:
             attn_output = flash_attn_func(query_layer, key_layer, value_layer, 0.0, causal=True)
 
