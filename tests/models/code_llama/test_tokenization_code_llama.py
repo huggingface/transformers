@@ -522,7 +522,7 @@ class LlamaIntegrationTest(unittest.TestCase):
     def test_special_token_special_word(self):
         # the word inform should be split as ['in', 'form']
         tokenizer = CodeLlamaTokenizer.from_pretrained("codellama/CodeLlama-7b-hf", legacy=False)
-        tokenizer.add_tokens(["<REPR_END>"], special_tokens=True)
+        tokenizer.add_tokens(["<REPR_END>"], special_tokens=False)
         out1 = tokenizer.decode(
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=False
         )
@@ -531,7 +531,7 @@ class LlamaIntegrationTest(unittest.TestCase):
             tokenizer.encode("<REPR_END>inform", add_special_tokens=False), spaces_between_special_tokens=True
         )
         self.assertEqual(
-            out2, "<REPR_END>inform"
+            out2, "<REPR_END> inform"
         )  # `spaces_between_special_tokens` will no longer work if the token is not special?
         input_ids = tokenizer.encode("<REPR_END>inform", add_special_tokens=False)
         self.assertEqual(input_ids, [32016, 262, 689])  # 29871 is the spiece underline, '▁'

@@ -199,7 +199,9 @@ class MPNetTokenizer(PreTrainedTokenizer):
         return len(self.vocab)
 
     def get_vocab(self):
-        return dict(self.vocab, **self.added_tokens_encoder)
+        vocab = self.vocab.coopy()
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     def _tokenize(self, text):
         split_tokens = []
