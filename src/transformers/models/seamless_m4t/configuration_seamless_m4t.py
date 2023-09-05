@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    ""ylacombe/hf-seamless-m4t-medium"": "https://huggingface.co/"ylacombe/hf-seamless-m4t-medium"/resolve/main/config.json",
+    "ylacombe/hf-seamless-m4t-medium": "https://huggingface.co/ylacombe/hf-seamless-m4t-medium/resolve/main/config.json",
     # See all SeamlessM4T models at https://huggingface.co/models?filter=seamless_m4t
 }
 

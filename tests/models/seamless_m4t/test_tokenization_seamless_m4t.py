@@ -20,8 +20,8 @@ from transformers import (
     SPIECE_UNDERLINE,
     AddedToken,
     BatchEncoding,
-    NllbTokenizer,
-    NllbTokenizerFast,
+    SeamlessM4TTokenizer,
+    SeamlessM4TTokenizerFast,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -47,9 +47,9 @@ RO_CODE = 256145
 
 @require_sentencepiece
 @require_tokenizers
-class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = NllbTokenizer
-    rust_tokenizer_class = NllbTokenizerFast
+class SeamlessM4TTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+    tokenizer_class = SeamlessM4TTokenizer
+    rust_tokenizer_class = SeamlessM4TTokenizerFast
     test_rust_tokenizer = True
     test_sentencepiece = True
     from_pretrained_kwargs = {}
@@ -58,11 +58,11 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = NllbTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = SeamlessM4TTokenizer(SAMPLE_VOCAB, keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_full_tokenizer(self):
-        tokenizer = NllbTokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = SeamlessM4TTokenizer(SAMPLE_VOCAB, keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -292,7 +292,7 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_torch
 @require_sentencepiece
 @require_tokenizers
-class NllbDistilledIntegrationTest(unittest.TestCase):
+class SeamlessM4TDistilledIntegrationTest(unittest.TestCase):
     checkpoint_name = "facebook/nllb-200-distilled-600M"
     src_text = [
         " UN Chief Says There Is No Military Solution in Syria",
@@ -324,7 +324,7 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tokenizer: NllbTokenizer = NllbTokenizer.from_pretrained(
+        cls.tokenizer: SeamlessM4TTokenizer = SeamlessM4TTokenizer.from_pretrained(
             cls.checkpoint_name, src_lang="eng_Latn", tgt_lang="ron_Latn"
         )
         cls.pad_token_id = 1
@@ -366,7 +366,7 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
         tmpdirname = tempfile.mkdtemp()
         original_special_tokens = self.tokenizer.fairseq_tokens_to_ids
         self.tokenizer.save_pretrained(tmpdirname)
-        new_tok = NllbTokenizer.from_pretrained(tmpdirname)
+        new_tok = SeamlessM4TTokenizer.from_pretrained(tmpdirname)
         self.assertDictEqual(new_tok.fairseq_tokens_to_ids, original_special_tokens)
 
     @require_torch
