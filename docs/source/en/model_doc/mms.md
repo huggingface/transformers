@@ -174,7 +174,7 @@ documentation under [VITS](https://huggingface.co/docs/transformers/main/en/mode
 
 To use the MMS model, first update to the latest version of the Transformers library:
 
-```
+```bash
 pip install --upgrade transformers accelerate
 ```
 
@@ -313,11 +313,12 @@ Different LID models are available based on the number of languages they can rec
 
 #### Inference
 First, we install transformers and some other libraries
-```
-pip install torch accelerate torchaudio datasets
+
+```bash
+pip install torch accelerate datasets[audio]
 pip install --upgrade transformers
 ````
-pip install torch datasets[audio]
+
 Next, we load a couple of audio samples via `datasets`. Make sure that the audio data is sampled to 16000 kHz.
 
 ```py
