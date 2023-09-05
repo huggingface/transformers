@@ -3893,16 +3893,19 @@ class Trainer:
         # post accelerator creation setup
         if self.is_fsdp_enabled:
             fsdp_plugin = self.accelerator.state.fsdp_plugin
-            if "limit_all_gathers" in self.args.fsdp_config:
-                setattr(fsdp_plugin, "limit_all_gathers", self.args.fsdp_config["limit_all_gathers"])
-            if "activation_checkpointing" in self.args.fsdp_config:
-                setattr(fsdp_plugin, "limit_all_gathers", self.args.fsdp_config["activation_checkpointing"])
-            if getattr(fsdp_plugin, "activation_checkpointing", False) and self.args.gradient_checkpointing:
-                raise ValueError(
-                    "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
-                    "can't be set to True simultaneously. Please use FSDP's activation_checkpointing logic "
-                    "when using FSDP."
+            fsdp_plugin.limit_all_gathers = self.args.fsdp_config.get(
+                "limit_all_gathers", fsdp_plugin.limit_all_gathers
+            )
+            if is_accelerate_available("0.23.0"):
+                fsdp_plugin.activation_checkpointing = self.args.fsdp_config.get(
+                    "activation_checkpointing", fsdp_plugin.activation_checkpointing
                 )
+                if fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
+                    raise ValueError(
+                        "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
+                        "can't be set to True simultaneously. Please use FSDP's activation_checkpointing logic "
+                        "when using FSDP."
+                    )
 
         if self.is_deepspeed_enabled:
             if getattr(self.args, "hf_deepspeed_config", None) is None:
