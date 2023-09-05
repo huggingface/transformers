@@ -139,9 +139,9 @@ class RegressionTrainingArguments(TrainingArguments):
     b: float = 0.0
 
     def __post_init__(self):
+        super().__post_init__()
         # save resources not dealing with reporting (also avoids the warning when it's not set)
         self.report_to = []
-        super().__post_init__()
 
 
 class RepeatDataset:
@@ -529,8 +529,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         self.check_trained_model(trainer.model)
 
         # Re-training should restart from scratch, thus lead the same results and new seed should be used.
-        args = TrainingArguments("./regression", learning_rate=0.1, seed=314)
-        trainer = Trainer(args=args, train_dataset=train_dataset, model_init=lambda: RegressionModel())
+        trainer.args.seed = 314
         trainer.train()
         self.check_trained_model(trainer.model, alternate_seed=True)
 

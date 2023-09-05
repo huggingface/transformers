@@ -44,7 +44,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.33.0.dev0")
+check_min_version("4.34.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-pretraining/requirements.txt")
 
@@ -162,15 +162,6 @@ class CustomTrainingArguments(TrainingArguments):
     base_learning_rate: float = field(
         default=1e-3, metadata={"help": "Base learning rate: absolute_lr = base_lr * total_batch_size / 256."}
     )
-
-    def __post_init__(self):
-        # Compute absolute learning rate while args are mutable
-        super().__post_init__()
-        if self.base_learning_rate is not None:
-            total_train_batch_size = self.train_batch_size * self.gradient_accumulation_steps * self.world_size
-            delattr(self, "_frozen")
-            self.learning_rate = self.base_learning_rate * total_train_batch_size / 256
-            setattr(self, "_frozen", True)
 
 
 def collate_fn(examples):
@@ -361,6 +352,13 @@ def main():
             )
         # Set the validation transforms
         ds["validation"].set_transform(preprocess_images)
+
+    # Compute absolute learning rate
+    total_train_batch_size = (
+        training_args.train_batch_size * training_args.gradient_accumulation_steps * training_args.world_size
+    )
+    if training_args.base_learning_rate is not None:
+        training_args.learning_rate = training_args.base_learning_rate * total_train_batch_size / 256
 
     # Initialize our trainer
     trainer = Trainer(

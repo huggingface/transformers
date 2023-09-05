@@ -152,3 +152,8 @@ contributed by [kamalkraj](https://huggingface.co/kamalkraj). The original code 
 
 [[autodoc]] TFDebertaV2ForQuestionAnswering
     - call
+
+## TFDebertaV2ForMultipleChoice
+
+[[autodoc]] TFDebertaV2ForMultipleChoice
+    - call

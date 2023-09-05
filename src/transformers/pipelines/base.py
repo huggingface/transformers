@@ -19,6 +19,7 @@ import json
 import os
 import pickle
 import sys
+import traceback
 import types
 import warnings
 from abc import ABC, abstractmethod
@@ -248,6 +249,7 @@ def infer_framework_load_model(
         if len(class_tuple) == 0:
             raise ValueError(f"Pipeline cannot infer suitable model classes from {model}")
 
+        all_traceback = {}
         for model_class in class_tuple:
             kwargs = model_kwargs.copy()
             if framework == "pt" and model.endswith(".h5"):
@@ -270,10 +272,16 @@ def infer_framework_load_model(
                 # Stop loading on the first successful load.
                 break
             except (OSError, ValueError):
+                all_traceback[model_class.__name__] = traceback.format_exc()
                 continue
 
         if isinstance(model, str):
-            raise ValueError(f"Could not load model {model} with any of the following classes: {class_tuple}.")
+            error = ""
+            for class_name, trace in all_traceback.items():
+                error += f"while loading with {class_name}, an error is thrown:\n{trace}\n"
+            raise ValueError(
+                f"Could not load model {model} with any of the following classes: {class_tuple}. See the original errors:\n\n{error}\n"
+            )
 
     if framework is None:
         framework = infer_framework(model.__class__)

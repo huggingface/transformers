@@ -18,7 +18,7 @@ import json
 import math
 import os
 import warnings
-from dataclasses import FrozenInstanceError, asdict, dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
@@ -50,6 +50,7 @@ from .utils import (
     is_torch_npu_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
+    is_torch_xpu_available,
     logging,
     requires_backends,
 )
@@ -154,6 +155,7 @@ class OptimizerNames(ExplicitEnum):
     PAGED_LION_8BIT = "paged_lion_8bit"
 
 
+# TODO: `TrainingArguments` users rely on it being fully mutable. In the future see if we can narrow this to a few keys: https://github.com/huggingface/transformers/pull/25903
 @dataclass
 class TrainingArguments:
     """
@@ -193,9 +195,9 @@ class TrainingArguments:
         prediction_loss_only (`bool`, *optional*, defaults to `False`):
             When performing evaluation and generating predictions, only returns the loss.
         per_device_train_batch_size (`int`, *optional*, defaults to 8):
-            The batch size per GPU/TPU/MPS/NPU core/CPU for training.
+            The batch size per GPU/XPU/TPU/MPS/NPU core/CPU for training.
         per_device_eval_batch_size (`int`, *optional*, defaults to 8):
-            The batch size per GPU/TPU/MPS/NPU core/CPU for evaluation.
+            The batch size per GPU/XPU/TPU/MPS/NPU core/CPU for evaluation.
         gradient_accumulation_steps (`int`, *optional*, defaults to 1):
             Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
 
@@ -1356,11 +1358,20 @@ class TrainingArguments:
                 if self.use_cpu and not is_torch_bf16_cpu_available() and not is_torch_tpu_available():
                     # cpu
                     raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
-                elif not self.use_cpu and torch.cuda.is_available() and not is_torch_bf16_gpu_available():
-                    # gpu
-                    raise ValueError(
-                        "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
-                    )
+                elif not self.use_cpu:
+                    if torch.cuda.is_available() and not is_torch_bf16_gpu_available():
+                        # gpu
+                        raise ValueError(
+                            "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
+                        )
+                    elif not is_torch_xpu_available():
+                        # xpu
+                        from .pytorch_utils import is_torch_greater_or_equal_than_1_12
+
+                        if not is_torch_greater_or_equal_than_1_12:
+                            raise ValueError(
+                                "Your setup doesn't support bf16/xpu. You need torch>=1.12, using Intel XPU/GPU with IPEX installed"
+                            )
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
@@ -1415,6 +1426,7 @@ class TrainingArguments:
             self.framework == "pt"
             and is_torch_available()
             and (self.device.type != "cuda")
+            and (self.device.type != "xpu")
             and (get_xla_device_type(self.device) != "GPU")
             and (get_xla_device_type(self.device) != "TPU")
             and (self.device.type != "cpu")
@@ -1422,7 +1434,7 @@ class TrainingArguments:
         ):
             raise ValueError(
                 "BF16 Mixed precision training with AMP (`--bf16`) and BF16 half precision evaluation"
-                " (`--bf16_full_eval`) can only be used on CUDA or CPU/TPU/NeuronCore devices."
+                " (`--bf16_full_eval`) can only be used on CUDA, XPU (with IPEX) or CPU/TPU/NeuronCore devices."
             )
 
         if self.torchdynamo is not None:
@@ -1545,10 +1557,10 @@ class TrainingArguments:
                 warnings.warn("`--fsdp_config` is useful only when `--fsdp` is specified.")
             with io.open(self.fsdp_config, "r", encoding="utf-8") as f:
                 self.fsdp_config = json.load(f)
-                for k, v in self.fsdp_config.items():
+                for k in list(self.fsdp_config.keys()):
                     if k.startswith("fsdp_"):
-                        self.fsdp_config[k.replace("fsdp_", "")] = v
-                        del self.fsdp_config[k]
+                        v = self.fsdp_config.pop(k)
+                        self.fsdp_config[k[5:]] = v
 
         if self.fsdp_min_num_params > 0:
             warnings.warn("using `--fsdp_min_num_params` is deprecated. Use fsdp_config instead ", FutureWarning)
@@ -1707,16 +1719,6 @@ class TrainingArguments:
                 FutureWarning,
             )
 
-        # Finally set the `TrainingArguments` to be immutable
-        self._frozen = True
-
-    def __setattr__(self, name, value):
-        # Once fully through the `__post_init__`, `TrainingArguments` are immutable
-        if not name.startswith("_") and getattr(self, "_frozen", False):
-            raise FrozenInstanceError(f"cannot assign to field {name}")
-        else:
-            super().__setattr__(name, value)
-
     def __str__(self):
         self_as_dict = asdict(self)
 
@@ -1788,6 +1790,10 @@ class TrainingArguments:
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
             torch.cuda.set_device(device)
+        elif is_torch_xpu_available() and "ACCELERATE_USE_XPU" not in os.environ:
+            os.environ["ACCELERATE_USE_XPU"] = "true"
+            device = torch.device("xpu:0")
+            self._n_gpu = 1
         elif is_sagemaker_dp_enabled():
             self.distributed_state = PartialState(_use_sagemaker_dp=True)
             self._n_gpu = 1
@@ -1816,6 +1822,12 @@ class TrainingArguments:
         elif is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled():
             # Already set _n_gpu
             pass
+        elif self.distributed_state.distributed_type == DistributedType.MULTI_XPU:
+            if "ACCELERATE_USE_XPU" not in os.environ:
+                os.environ["ACCELERATE_USE_XPU"] = "true"
+            self._n_gpu = torch.xpu.device_count()
+            device = torch.device("xpu:0")
+            torch.xpu.set_device(device)
         elif self.distributed_state.distributed_type == DistributedType.NO:
             if self.use_mps_device:
                 warnings.warn(
@@ -1833,6 +1845,10 @@ class TrainingArguments:
             elif self.use_cpu:
                 device = torch.device("cpu")
                 self._n_gpu = 0
+            elif is_torch_xpu_available():
+                device = torch.device("xpu:0")
+                torch.xpu.set_device(device)
+                self._n_gpu = 1
             elif is_torch_npu_available():
                 device = torch.device("npu:0")
                 torch.npu.set_device(device)
