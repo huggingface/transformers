@@ -158,6 +158,7 @@ class FlaxDinov2PatchEmbeddings(nn.Module):
         return jnp.reshape(embeddings, (batch_size, -1, channels))
 
 
+# Copied from transformers.models.vit.modeling_flax_vit.FlaxViTSelfAttention with ViT->Dinov2
 class FlaxDinov2SelfAttention(nn.Module):
     config: Dinov2Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
