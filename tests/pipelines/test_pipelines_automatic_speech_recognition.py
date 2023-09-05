@@ -300,6 +300,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(output, {"text": "A MAN SAID TO THE UNIVERSE SIR I EXIST"})
 
     @require_torch
+    @slow
     def test_return_timestamps_in_preprocess(self):
         pipe = pipeline(
             task="automatic-speech-recognition",
