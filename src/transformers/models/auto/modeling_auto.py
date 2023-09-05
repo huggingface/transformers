@@ -41,6 +41,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("bark", "BarkModel"),
         ("bart", "BartModel"),
         ("beit", "BeitModel"),
+        ("beit-3", "Beit3Model"),
         ("bert", "BertModel"),
         ("bert-generation", "BertGenerationEncoder"),
         ("big_bird", "BigBirdModel"),
@@ -904,6 +905,7 @@ MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         ("blip-2", "Blip2ForConditionalGeneration"),
         ("vilt", "ViltForQuestionAnswering"),
+        ("beit-3", "Beit3Model"),
     ]
 )
 

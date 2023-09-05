@@ -79,6 +79,3 @@ The original code can be found [here](https://github.com/microsoft/unilm/tree/ma
 
 [[autodoc]] Beit3ForVisualReasoning
     - forward
-
-
-
