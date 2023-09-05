@@ -252,7 +252,7 @@ class GPTQTestActOrderExllama(unittest.TestCase):
 
     EXPECTED_OUTPUTS = set()
     EXPECTED_OUTPUTS.add("Hello my name is Katie and I am a 20 year")
-    model_name = "TheBloke/Llama-2-7B-GPTQ"
+    model_name = "hf-internal-testing/Llama-2-7B-GPTQ"
     revision = "gptq-4bit-128g-actorder_True"
     input_text = "Hello my name is"
 
