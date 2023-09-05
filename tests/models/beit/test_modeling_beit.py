@@ -67,7 +67,7 @@ class BeitModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=2,
+        num_hidden_layers=4,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -77,8 +77,8 @@ class BeitModelTester:
         initializer_range=0.02,
         num_labels=3,
         scope=None,
-        semantic_out_indices=[0, 1, 2, 3],
-        out_features=["stage1", "stage2"],
+        out_indices=[1, 2, 3, 4],
+        out_features=["stage1", "stage2", "stage3", "stage4"],
     ):
         self.parent = parent
         self.vocab_size = vocab_size
@@ -98,7 +98,7 @@ class BeitModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
-        self.semantic_out_indices = semantic_out_indices
+        self.out_indices = out_indices
         self.out_features = out_features
         self.num_labels = num_labels
 
@@ -134,7 +134,7 @@ class BeitModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            semantic_out_indices=self.semantic_out_indices,
+            out_indices=self.out_indices,
             out_features=self.out_features,
         )
 

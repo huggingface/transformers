@@ -151,7 +151,6 @@ class BeitConfig(PretrainedConfig, BackboneConfigMixin):
         layer_scale_init_value=0.1,
         drop_path_rate=0.1,
         use_mean_pooling=True,
-        semantic_out_indices=[3, 5, 7, 11],
         pool_scales=[1, 2, 3, 6],
         use_auxiliary_head=True,
         auxiliary_loss_weight=0.4,
@@ -187,7 +186,6 @@ class BeitConfig(PretrainedConfig, BackboneConfigMixin):
         self.drop_path_rate = drop_path_rate
         self.use_mean_pooling = use_mean_pooling
         # decode head attributes (semantic segmentation)
-        self.semantic_out_indices = semantic_out_indices
         self.pool_scales = pool_scales
         # auxiliary head attributes (semantic segmentation)
         self.use_auxiliary_head = use_auxiliary_head
@@ -196,6 +194,18 @@ class BeitConfig(PretrainedConfig, BackboneConfigMixin):
         self.auxiliary_num_convs = auxiliary_num_convs
         self.auxiliary_concat_input = auxiliary_concat_input
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
+
+        # handle backwards compatibility
+        if "segmentation_indices" in kwargs:
+            logger.warning(
+                "The `segmentation_indices` argument is deprecated and will be removed in a future version, use `out_indices` instead.",
+                FutureWarning,
+            )
+            out_indices = kwargs.pop("segmentation_indices")
+        elif out_indices == [3, 5, 7, 11]:
+            out_features = ["stage4", "stage6", "stage8", "stage12"]
+        elif out_indices == [7, 11, 15, 23]:
+            out_features = ["stage8", "stage12", "stage16", "stage24"]
 
         # backbone attributes
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
