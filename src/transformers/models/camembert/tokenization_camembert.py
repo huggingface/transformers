@@ -151,7 +151,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
             4: AddedToken("<unk>NOTUSED"),
         }
 
-        self.fairseq_offset = len(self.added_tokens_decoder) - 1
+        self.fairseq_offset = 4 # 3 tokens are newly added
 
 
         super().__init__(
@@ -194,6 +194,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
+        # TODO decode outputs do not match between fast and slow
         current_sub_tokens = []
         out_string = ""
         prev_is_special = False
