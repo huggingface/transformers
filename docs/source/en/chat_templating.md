@@ -85,7 +85,7 @@ default template for that model class is used instead. Let's take a look at the 
 >>> from transformers import AutoTokenizer
 >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
 
->>> tokenizer.chat_template
+>>> tokenizer.default_chat_template
 "{% for message in messages %}{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}{{ message['content'] }}{% if not loop.last %}{{ '  ' }}{% endif %}{% endfor %}{{ eos_token }}"
 ```
 
