@@ -2850,7 +2850,8 @@ class Trainer:
                     " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
                     " zero_to_fp32.py to recover weights"
                 )
-                self._save(output_dir, state_dict={})
+                if self.args.should_save:
+                    self._save(output_dir, state_dict={})
                 # remove the dummy state_dict
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
