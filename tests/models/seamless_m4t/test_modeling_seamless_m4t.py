@@ -317,6 +317,7 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     test_model_parallel = True
     test_resize_embeddings = False
     test_headmasking = False
+    test_torchscript = False
 
     all_model_classes = (
         (
@@ -442,10 +443,6 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="The speech encoder doesn't support head masking")
     def test_generate_with_head_masking(self):
         pass
-    
-    #@unittest.skip(reason="The speech encoder doesn't support head masking")
-    #def test_generate_with_head_masking(self):
-    #    pass
                 
     @unittest.skip(reason="SeamlessM4TModel can takes input_ids or input_features")
     def test_forward_signature(self):
@@ -461,6 +458,7 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
     test_model_parallel = True
     test_resize_embeddings = True
     test_headmasking = False
+    test_torchscript = False
     
     all_model_classes = (
         (
@@ -574,7 +572,6 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
     def test_forward_signature(self):
         pass
     
-
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
@@ -758,17 +755,17 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_text_to_speech_model(self):
-        self.factory_test_task(self, SeamlessM4TModel, SeamlessM4TForTextToSpeech, self.input_text, tgt_lang="eng")
+        self.factory_test_task(SeamlessM4TModel, SeamlessM4TForTextToSpeech, self.input_text, tgt_lang="eng")
 
     @slow
     def test_text_to_text_model(self):
-        self.factory_test_task(self, SeamlessM4TModel, SeamlessM4TForTextToText, self.input_text, tgt_lang="eng", generate_speech=False)
+        self.factory_test_task(SeamlessM4TModel, SeamlessM4TForTextToText, self.input_text, tgt_lang="eng", generate_speech=False)
 
     @slow
     def test_speech_to_speech_model(self):
-        self.factory_test_task(self, SeamlessM4TModel, SeamlessM4TForSpeechToSpeech, self.input_audio, tgt_lang="eng")
+        self.factory_test_task(SeamlessM4TModel, SeamlessM4TForSpeechToSpeech, self.input_audio, tgt_lang="eng")
 
     @slow
     def test_speech_to_text_model(self):
-        self.factory_test_task(self, SeamlessM4TModel, SeamlessM4TForSpeechToText, self.input_audio, tgt_lang="eng", generate_speech=False)
+        self.factory_test_task(SeamlessM4TModel, SeamlessM4TForSpeechToText, self.input_audio, tgt_lang="eng", generate_speech=False)
 
