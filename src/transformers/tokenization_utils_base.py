@@ -76,7 +76,7 @@ if is_tokenizers_available():
     from tokenizers import Encoding as EncodingFast
 else:
 
-    @dataclass(frozen=True, eq=True)
+    @dataclass(frozen=False, eq=True)
     class AddedToken:
         """
         AddedToken represents a token to be added to a Tokenizer An AddedToken can have special options defining the
@@ -88,6 +88,7 @@ else:
         lstrip: bool = False
         rstrip: bool = False
         normalized: bool = True
+        special:bool = False
 
         def __getstate__(self):
             return self.__dict__
@@ -1573,9 +1574,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self.name_or_path = kwargs.pop("name_or_path", "")
         self._processor_class = kwargs.pop("processor_class", None)
 
-        if not hasattr(self, "_added_tokens_decoder"):
-            self._added_tokens_decoder: Dict[int, AddedToken] = {}
-
         # For backward compatibility we fallback to set model_max_length from max_len if provided
         model_max_length = kwargs.pop("model_max_length", kwargs.pop("max_len", None))
         self.model_max_length = model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
@@ -1608,23 +1606,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self._in_target_context_manager = False
         super().__init__(**kwargs)
 
-    @property
-    def added_tokens_encoder(self) -> Dict[str, int]:
-        return {k.content: v for v, k in self._added_tokens_decoder.items()}
-
-    @property
-    def added_tokens_decoder(self) -> Dict[int, AddedToken]:
-        return self._added_tokens_decoder
-
-    @added_tokens_decoder.setter
-    def added_tokens_decoder(self, value: Dict[int, Union[AddedToken, str]]) -> Dict[int, AddedToken]:
-        # Always raise an error if string because users should define the behavior
-        for index, token in value.items():
-            if not isinstance(token, (str, AddedToken)) or not isinstance(index, int):
-                raise ValueError(
-                    f"The provided `added_tokens_decoder` has an element of type {index.__class__, token.__class__}, should be a dict of {int, Union[AddedToken, str]}"
-                )
-            self._added_tokens_decoder[index] = AddedToken(token) if isinstance(token, str) else token
 
     @property
     def max_len_single_sentence(self) -> int:
@@ -1670,13 +1651,21 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         """Sets processor class as an attribute."""
         self._processor_class = processor_class
 
+    @property
+    def added_tokens_encoder(self) -> Dict[str, int]:
+        return {k.content: v for v, k in self.added_tokens_decoder.items()}
+
+    @property
+    def added_tokens_decoder(self) -> Dict[int, AddedToken]:
+        raise NotImplementedError()
+
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length}, is_fast={self.is_fast},"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
             f" special_tokens={self.special_tokens_map}, clean_up_tokenization_spaces={self.clean_up_tokenization_spaces}), "
-            f" added_tokens_encoder={self.get_added_vocab()}"
+            f" added_tokens_decoder={self.added_tokens_decoder}"
         )
 
     def __len__(self) -> int:
@@ -2083,11 +2072,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     tokenizer_file_handle = json.load(tokenizer_file_handle)
                     added_tokens = tokenizer_file_handle.pop("added_tokens")
                 for serialized_tokens in added_tokens:
-                    idx = int(serialized_tokens["id"])
+                    idx = int(serialized_tokens.pop("id"))
+                    # for legacy purpose, we ignore whether or not these tokens are special.
                     serialized_tokens.pop("special")
                     added_tokens_decoder[idx] = AddedToken(**serialized_tokens)
-                    # for legacy purpose, we ignore whether or not these tokens are special.
-                    # TODO @ArthurZ special tokens can sometimes not be in `_tokenizer.get_added_vocab()`
 
         # slow -> slow, non-legacy: deserialize the `added_tokens_decoder`. Special tokens stored in `additional_special_tokens`
         if "added_tokens_decoder" in init_kwargs:
@@ -2150,10 +2138,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens! Only time we need to check
         # We should deprecate this since you need a `convert_slow_tokenizer` method anyway, better to add the tokens then! (consistency)
-        if slow_to_fast:
+        if slow_to_fast: # or name == MVNet ?? When the added tokens are not in the tokenizer.json
             tokens = []
             special_tokens = tokenizer.all_special_tokens
-            is_last_special = None
             added_tok_decoder_sorted = sorted(added_tokens_decoder.items(), key=lambda x: x[0])
             tokenizer_length = len(tokenizer)
             for index, token in added_tok_decoder_sorted:
@@ -2171,16 +2158,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             " the token will be added is different from the one saved in the `added_tokens.json`. This means"
                             f" that the {cls.__name__} was initialized with tokens that were not part of the vocab."
                         )
-                is_special = bool(token in special_tokens)
-                if is_last_special is None or is_last_special == is_special:
-                    tokens.append(token)
-                else:
-                    tokenizer.add_tokens(tokens, special_tokens=is_last_special)
-                    tokens = [token]
-                is_last_special = is_special
+                token.special = bool(token in special_tokens)
+                tokens.append(token)
 
             if tokens:
-                tokenizer.add_tokens(tokens, special_tokens=is_last_special)
+                tokenizer.add_tokens(tokens) # information about being special is stored in the token
+
             tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
             # end legacy
 
@@ -2310,7 +2293,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         for key, value in self.added_tokens_decoder.items():
             added_tokens[key] = value.__getstate__()
         tokenizer_config["added_tokens_decoder"] = added_tokens
-        self.legacy_save = False  # FOR TESTING PURPOSES
+
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
         tokenizer_class = self.__class__.__name__
         # Remove the Fast at the end unless we have a special `PreTrainedTokenizerFast`
@@ -2339,7 +2322,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Sanitize AddedTokens in special_tokens_map
 
-        # TODO kept for forward compatibility, will be removed in transoformers 5
+        # kept for forward compatibility, will be removed in transoformers 5
         write_dict = self.convert_added_tokens(self.special_tokens_map_extended, add_type_field=True)
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
             out_str = json.dumps(write_dict, indent=2, sort_keys=True, ensure_ascii=False) + "\n"

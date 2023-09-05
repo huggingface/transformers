@@ -185,6 +185,16 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def vocab(self) -> Dict[str, int]:
         return self.get_vocab()
 
+    @property
+    def added_tokens_decoder(self) -> Dict[int, AddedToken]:
+        """
+        Returns the added tokens in the vocabulary as a dictionary of index to AddedToken.
+         
+        Returns:
+            `Dict[str, int]`: The added tokens.
+        """
+        return self._tokenizer.get_added_tokens_decoder()
+
     def get_added_vocab(self) -> Dict[str, int]:
         """
         Returns the added tokens in the vocabulary as a dictionary of token to index.

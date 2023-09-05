@@ -350,12 +350,12 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # 1. Init the parent class
         super().__init__(**kwargs)
         self.tokens_trie = Trie()
+        self._added_tokens_decoder: Dict[int, AddedToken] = {}
 
         # 2. if a `added_tokens_decoder` is passed, we are loading from a saved tokenizer
-
         if "added_tokens_decoder" in kwargs:
             # overwriting the class's added_tokens_decoder. This is the source of truth!
-            self.added_tokens_decoder.update(kwargs.get("added_tokens_decoder"))
+            self._added_tokens_decoder.update(kwargs.get("added_tokens_decoder"))
 
         # 3. If some of the special tokens are not part of the vocab, we add them, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
@@ -363,6 +363,25 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
 
         self._decode_use_source_tokenizer = False
 
+    @property
+    def added_tokens_decoder(self) -> Dict[int, AddedToken]:
+        """
+        Returns the added tokens in the vocabulary as a dictionary of index to AddedToken. Results 
+        Returns:
+            `Dict[str, int]`: The added tokens.
+        """
+        return self._added_tokens_decoder
+
+    @added_tokens_decoder.setter
+    def added_tokens_decoder(self, value: Dict[int, Union[AddedToken, str]]) -> Dict[int, AddedToken]:
+        # Always raise an error if string because users should define the behavior
+        for index, token in value.items():
+            if not isinstance(token, (str, AddedToken)) or not isinstance(index, int):
+                raise ValueError(
+                    f"The provided `added_tokens_decoder` has an element of type {index.__class__, token.__class__}, should be a dict of {int, Union[AddedToken, str]}"
+                )
+            self._added_tokens_decoder[index] = AddedToken(token) if isinstance(token, str) else token
+            
     @property
     def is_fast(self) -> bool:
         return False
@@ -435,6 +454,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 token = AddedToken(token, normalized=not special_tokens, rstrip=True, lstrip=True)
             if token in self._added_tokens_decoder:
                 continue
+            if special_tokens:
+                token.special = True
             if token.content == self.unk_token:
                 # unk_token and this token have the same pointer, let's update it even if it is already part of the vocab
                 if self.convert_tokens_to_ids(token.content) is None:
@@ -443,23 +464,19 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 else:
                     self._added_tokens_decoder[self.convert_tokens_to_ids(token.content)] = token
             elif self.unk_token_id is not None and self.convert_tokens_to_ids(token.content) == self.unk_token_id:
-                if not special_tokens and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
+                if not token.special and token.normalized and hasattr(self, "do_lower_case") and self.do_lower_case:
                     # Normalize if requested
-                    content = token.content.lower()
-                    token = AddedToken(
-                        content, single_word=token.single_word, lstrip=token.lstrip, rstrip=token.rstrip
-                    )
+                    token.content = token.content.lower()
                 self._added_tokens_decoder[new_idx + added_tokens] = token
                 added_tokens += 1
             elif self.convert_tokens_to_ids(token.content) is not None:
                 self._added_tokens_decoder[self.convert_tokens_to_ids(token.content)] = token
             else:
-                # TODO get vocab might not be the best way to get the current length with the added tokens
                 self._added_tokens_decoder[new_idx + added_tokens] = token
                 added_tokens += 1
 
             # if we are adding this as an additional special token (no need to store the added tokens object)
-            if special_tokens and str(token) not in self.all_special_tokens:
+            if token.special and str(token) not in self.all_special_tokens:
                 self._additional_special_tokens.append(token)
 
             if self.verbose:
