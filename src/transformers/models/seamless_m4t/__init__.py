@@ -20,6 +20,7 @@ _import_structure = {
     "configuration_seamless_m4t": ["SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP", "SeamlessM4TConfig"],
     "feature_extractor_seamless_m4T": ["SeamlessM4TFeatureExtractor"],
     "tokenization_seamless_m4t": ["SeamlessM4TTokenizer"],
+    "processing_seamless_m4t":  ["SeamlessM4TProcessor"],
 }
 
 try:
@@ -55,6 +56,7 @@ if TYPE_CHECKING:
     from .configuration_seamless_m4t import SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP, SeamlessM4TConfig
     from .feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
     from .tokenization_seamless_m4t import SeamlessM4TTokenizer
+    from .processing_seamless_m4t import SeamlessM4TProcessor
 
     try:
         if not is_tokenizers_available():

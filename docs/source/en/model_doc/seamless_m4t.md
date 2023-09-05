@@ -77,9 +77,11 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingfac
 
 ## SeamlessM4TFeatureExtractor
 
-[[autodoc]] SeamlessM4TTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
+[[autodoc]] SeamlessM4TFeatureExtractor
+
+## SeamlessM4TProcessor
+
+[[autodoc]] SeamlessM4TProcessor
+
+
 
