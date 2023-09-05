@@ -148,7 +148,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
             1: AddedToken(pad_token),
             2: AddedToken("</s>NOTUSED"),
             3: AddedToken(unk_token),
-            4: AddedToken("<unk>NOTUSED", special = True),
+            4: AddedToken("<unk>NOTUSED"),
         }
 
         self.fairseq_offset = len(self.added_tokens_decoder) - 1
