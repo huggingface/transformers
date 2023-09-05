@@ -149,11 +149,17 @@ class Seq2SeqTrainer(Trainer):
         """
 
         gen_kwargs = gen_kwargs.copy()
-        if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
+
+        # Use legacy argument setting if a) the option is not explicitly passed; and b) the argument is set in the
+        # training args
+        if (
+            gen_kwargs.get("max_length") is None
+            and gen_kwargs.get("max_new_tokens") is None
+            and self.args.generation_max_length is not None
+        ):
             gen_kwargs["max_length"] = self.args.generation_max_length
-        gen_kwargs["num_beams"] = (
-            gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.args.generation_num_beams
-        )
+        if gen_kwargs.get("num_beams") is None and self.args.generation_num_beams is not None:
+            gen_kwargs["num_beams"] = self.args.generation_num_beams
         self._gen_kwargs = gen_kwargs
 
         return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
