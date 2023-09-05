@@ -1565,7 +1565,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self._in_target_context_manager = False
 
         # Stores a Jinja template that formats chat histories into tokenizable strings
-        self._chat_template = kwargs.pop("chat_template", None)
+        self.chat_template = kwargs.pop("chat_template", None)
 
         super().__init__(**kwargs)
 
@@ -1674,7 +1674,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # priority: `chat_template` argument > `tokenizer.chat_template` > `tokenizer.default_chat_template`
         if chat_template is None:
-            chat_template = self.chat_template
+            if self.chat_template is not None:
+                chat_template = self.chat_template
+            else:
+                chat_template = self.default_chat_template
 
         jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
         compiled_template = jinja_env.from_string(chat_template)
@@ -1683,17 +1686,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             return self.encode(rendered, add_special_tokens=False, **tokenizer_kwargs)
         else:
             return rendered
-
-    @property
-    def chat_template(self):
-        if self._chat_template is not None:
-            return self._chat_template
-        else:
-            return self.default_chat_template
-
-    @chat_template.setter
-    def chat_template(self, value):
-        self._chat_template = value
 
     @property
     def default_chat_template(self):
@@ -2267,8 +2259,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)
 
-        if getattr(self, "_chat_template", None) is not None:
-            tokenizer_config["chat_template"] = self._chat_template
+        if self.chat_template is not None:
+            tokenizer_config["chat_template"] = self.chat_template
 
         if len(self.init_inputs) > 0:
             tokenizer_config["init_inputs"] = copy.deepcopy(self.init_inputs)
