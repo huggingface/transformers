@@ -1388,7 +1388,7 @@ class GroundingDINODecoderLayer(nn.Module):
         self.embed_dim = config.d_model
 
         # self-attention
-        self.self_attn = GroundingDINOMultiheadAttention(
+        self.self_attn = nn.MultiheadAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -1398,6 +1398,13 @@ class GroundingDINODecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        # cross-attention text
+        self.encoder_attn_text = nn.MultiheadAttention(
+            embed_dim=self.embed_dim,
+            num_heads=config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+        )
+        self.encoder_attn_text_layer_norm = nn.LayerNorm(self.embed_dim)
         # cross-attention
         self.encoder_attn = GroundingDINOMultiscaleDeformableAttention(
             config,
@@ -1410,6 +1417,9 @@ class GroundingDINODecoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
+    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+        return tensor if position_embeddings is None else tensor + position_embeddings
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1417,8 +1427,11 @@ class GroundingDINODecoderLayer(nn.Module):
         reference_points=None,
         spatial_shapes=None,
         level_start_index=None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        vision_encoder_hidden_states: Optional[torch.Tensor] = None,
+        vision_encoder_attention_mask: Optional[torch.Tensor] = None,
+        text_encoder_hidden_states: Optional[torch.Tensor] = None,
+        text_encoder_attention_mask: Optional[torch.Tensor] = None,
+        self_attn_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ):
         """
@@ -1446,9 +1459,10 @@ class GroundingDINODecoderLayer(nn.Module):
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
-            output_attentions=output_attentions,
+            query=self.with_pos_embed(hidden_states, position_embeddings),
+            key=self.with_pos_embed(hidden_states, position_embeddings),
+            value=hidden_states,
+            attn_mask=self_attn_mask
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1457,13 +1471,27 @@ class GroundingDINODecoderLayer(nn.Module):
 
         second_residual = hidden_states
 
+        # Cross-Attention Text
+        hidden_states, text_cross_attn_weights = self.encoder_attn_text(
+            query=self.with_pos_embed(hidden_states, position_embeddings),
+            key=text_encoder_hidden_states.transpose(0, 1),
+            value=text_encoder_hidden_states.transpose(0, 1),
+            attn_mask=text_encoder_attention_mask,
+        )
+
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = second_residual + hidden_states
+        hidden_states = self.encoder_attn_text_layer_norm(hidden_states)
+
+        third_residual = hidden_states
+
         # Cross-Attention
         cross_attn_weights = None
         hidden_states, cross_attn_weights = self.encoder_attn(
             hidden_states=hidden_states,
-            attention_mask=encoder_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
+            attention_mask=vision_encoder_attention_mask,
+            encoder_hidden_states=vision_encoder_hidden_states,
+            encoder_attention_mask=vision_encoder_attention_mask,
             position_embeddings=position_embeddings,
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
@@ -1472,8 +1500,7 @@ class GroundingDINODecoderLayer(nn.Module):
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = second_residual + hidden_states
-
+        hidden_states = third_residual + hidden_states
         hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
         # Fully Connected
@@ -1488,7 +1515,7 @@ class GroundingDINODecoderLayer(nn.Module):
         outputs = (hidden_states,)
 
         if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
+            outputs += (self_attn_weights, text_cross_attn_weights, cross_attn_weights)
 
         return outputs
 
