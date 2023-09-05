@@ -19,9 +19,11 @@ Utilities for working with the local dataset cache.
 
 import copy
 import csv
+import json
 import linecache
 import os
 import platform
+import subprocess
 import sys
 import warnings
 from abc import ABC, abstractmethod
@@ -38,12 +40,14 @@ from ..utils import (
     is_py3nvml_available,
     is_tf_available,
     is_torch_available,
+    is_torch_rocm_available,
     logging,
 )
 from .benchmark_args_utils import BenchmarkArguments
 
 
 if is_torch_available():
+    from torch.cuda import device_count as torch_device_count
     from torch.cuda import empty_cache as torch_empty_cache
 
 if is_tf_available():
@@ -375,7 +379,9 @@ def start_memory_tracing(
         )
         process = None
 
-    if is_py3nvml_available():
+    if is_torch_rocm_available():
+        devices = list(range(torch_device_count())) if gpus_to_trace is None else gpus_to_trace
+    elif is_py3nvml_available():
         try:
             nvml.nvmlInit()
             devices = list(range(nvml.nvmlDeviceGetCount())) if gpus_to_trace is None else gpus_to_trace
@@ -455,15 +461,22 @@ def start_memory_tracing(
             if is_tf_available():
                 tf_context.context()._clear_caches()  # See https://github.com/tensorflow/tensorflow/issues/20218#issuecomment-416771802
 
-            # Sum used memory for all GPUs
-            nvml.nvmlInit()
+            if is_torch_rocm_available():
+                for i in devices:
+                    command = f"rocm-smi --showmeminfo vram --device {i} --json"
+                    output = subprocess.check_output(command, shell=True).decode()
+                    output_dict = json.loads(output)
+                    gpu_mem += int(output_dict[f"card{i}"]["VRAM Total Used Memory (B)"])
+            else:
+                # Sum used memory for all GPUs
+                nvml.nvmlInit()
 
-            for i in devices:
-                handle = nvml.nvmlDeviceGetHandleByIndex(i)
-                meminfo = nvml.nvmlDeviceGetMemoryInfo(handle)
-                gpu_mem += meminfo.used
+                for i in devices:
+                    handle = nvml.nvmlDeviceGetHandleByIndex(i)
+                    meminfo = nvml.nvmlDeviceGetMemoryInfo(handle)
+                    gpu_mem += meminfo.used
 
-            nvml.nvmlShutdown()
+                nvml.nvmlShutdown()
 
         mem_state = UsedMemoryState(traced_state, cpu_mem, gpu_mem)
         memory_trace.append(mem_state)
@@ -820,7 +833,17 @@ class Benchmark(ABC):
             info["use_gpu"] = self.args.is_gpu
             if self.args.is_gpu:
                 info["num_gpus"] = 1  # TODO(PVP) Currently only single GPU is supported
-                if is_py3nvml_available():
+                if is_torch_rocm_available():
+                    command = f"rocm-smi --showmaxpower --showmeminfo vram --device {self.args.device_idx} --json"
+                    output = subprocess.check_output(command, shell=True).decode()
+
+                    info["gpu"] = output.keys()[0]
+                    info["gpu_ram_mb"] = int(output[f"card{self.args.device_idx}"]["VRAM Total Used Memory (B)"])
+                    info["gpu_power_watts"] = float(output["Max Graphics Package Power (W)"])
+                    info["gpu_performance_state"] = "N/A"
+
+                    json.loads(output)
+                elif is_py3nvml_available():
                     nvml.nvmlInit()
                     handle = nvml.nvmlDeviceGetHandleByIndex(self.args.device_idx)
                     info["gpu"] = nvml.nvmlDeviceGetName(handle)
