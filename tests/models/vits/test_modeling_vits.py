@@ -21,7 +21,6 @@ import unittest
 from typing import Dict, List, Tuple
 
 import numpy as np
-from torch import nn
 
 from transformers import PretrainedConfig, VitsConfig
 from transformers.testing_utils import (
@@ -180,7 +179,7 @@ class VitsModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
     @require_torch_multi_gpu
-    # override to make test deterministic across GPUs
+    # override to force all elements of the batch to have the same sequence length across GPUs
     def test_multi_gpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.use_stochastic_duration_prediction = False
@@ -198,7 +197,7 @@ class VitsModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
 
             # Wrap model in nn.DataParallel
-            model = nn.DataParallel(model)
+            model = torch.nn.DataParallel(model)
             set_seed(555)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class)).waveform
