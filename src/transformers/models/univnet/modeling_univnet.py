@@ -101,7 +101,6 @@ class UnivNetKernelPredictorResidualBlock(nn.Module):
         nn.utils.remove_weight_norm(self.conv2)
 
 
-# For now, only support leaky ReLU as activation function (reference implementation supports arbitrary act fns)
 class UnivNetKernelPredictor(nn.Module):
     """
     Implementation of the kernel predictor network which supplies the kernel and bias for the location variable
@@ -328,7 +327,11 @@ class UnivNetLVCResidualBlock(nn.Module):
         """
         batch, _, in_length = hidden_states.shape
         batch, _, out_channels, kernel_size, kernel_length = kernel.shape
-        assert in_length == (kernel_length * hop_size), "length of (hidden_states, kernel) is not matched"
+        if in_length != (kernel_length * hop_size):
+            raise ValueError(
+                f"Dim 2 of `hidden_states` should be {kernel_length * hop_size}) but got {in_length}. Please check"
+                " `hidden_states` or `kernel` and `hop_size` to make sure they are correct."
+            )
 
         padding = dilation * int((kernel_size - 1) / 2)
         hidden_states = nn.functional.pad(

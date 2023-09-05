@@ -50,9 +50,12 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         num_mel_bins (`int`, *optional*, defaults to 80):
             The number of mel-frequency bins in the extracted spectrogram features.
         hop_length (`int`, *optional*, defaults to 256):
-            Number of ms between windows. Otherwise referred to as "shift" in many papers.
+            The direct number of samples between sliding windows. Otherwise referred to as "shift" in many papers. Note
+            that this is different from other audio feature extractors such as [`SpeechT5FeatureExtractor`] which take
+            the `hop_length` in ms.
         win_length (`int`, *optional*, defaults to 1024):
-            Number of ms per window.
+            The direct number of samples for each sliding window. Note that this is different from other audio feature
+            extractors such as [`SpeechT5FeatureExtractor`] which take the `win_length` in ms.
         filter_length (`int`, *optional*, defaults to 1024):
             The number of FFT components to use. If `None`, this is determined using
             `transformers.audio_utils.optimal_fft_length`.
@@ -102,7 +105,6 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         win_function: str = "hann_window",
         filter_length: Optional[int] = 1024,
         max_length_s: int = 10,
-        frame_signal_scale: float = 1.0,
         fmin: float = 0.0,
         fmax: Optional[float] = None,
         mel_floor: float = 1e-9,
@@ -111,7 +113,6 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         compression_clip_val: float = 1e-5,
         normalize_min: float = -11.512925148010254,
         normalize_max: float = 2.3143386840820312,
-        reduction_factor: int = 2,
         return_attention_mask: bool = True,
         **kwargs,
     ):
@@ -130,21 +131,15 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         self.win_length = win_length
         self.win_function = win_function
         self.filter_length = filter_length
-        self.frame_signal_scale = frame_signal_scale
         self.fmin = fmin
         if fmax is None:
             # Follows the librosa.filters.mel implementation
             fmax = float(sampling_rate) / 2
         self.fmax = fmax
         self.mel_floor = mel_floor
-        self.reduction_factor = reduction_factor
 
         self.max_length_s = max_length_s
         self.num_max_samples = max_length_s * sampling_rate
-
-        # Currently the default arguments are the "direct" win_length and hop_length
-        # self.sample_size = win_length * sampling_rate // 1000
-        # self.sample_stride = hop_length * sampling_rate // 1000
 
         if filter_length is None:
             self.n_fft = optimal_fft_length(self.sample_size)
@@ -169,17 +164,6 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         self.compression_clip_val = compression_clip_val
         self.normalize_min = normalize_min
         self.normalize_max = normalize_max
-
-        if frame_signal_scale != 1.0:
-            warnings.warn(
-                "The argument `frame_signal_scale` is deprecated and will be removed in version 4.30.0 of Transformers",
-                FutureWarning,
-            )
-        if reduction_factor != 2.0:
-            warnings.warn(
-                "The argument `reduction_factor` is deprecated and will be removed in version 4.30.0 of Transformers",
-                FutureWarning,
-            )
 
     # Based on tacotron2.audio_processing.dynamic_range_compression
     # https://github.com/NVIDIA/tacotron2/blob/master/audio_processing.py#L78

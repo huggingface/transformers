@@ -43,9 +43,6 @@ class UnivNetGanConfig(PretrainedConfig):
             The number of hidden channels of each residual block in the UnivNet residual network.
         num_mel_channels ('int', *optional*, defaults to 100):
             The number of frequency bins in the conditioning log-mel spectrogram.
-        upsample_rates (`Tuple[int]` or `List[int]`, *optional*, defaults to `[1]`):
-            The UnivNet vocoder doesn't upsample the input spectrogram and this is set to a dummy value of `[1]` to be
-            compatible with vocoders which do upsample the input spectrogram (e.g. [`SpeechT5HifiGan`]).
         resblock_kernel_sizes (`Tuple[int]` or `List[int]`, *optional*, defaults to `[3, 3, 3]`):
             A tuple of integers defining the kernel sizes of the 1D convolutional layers in the UnivNet residual
             network. The length of `resblock_kernel_sizes` defines the number of resnet blocks and should match that of
@@ -106,6 +103,12 @@ class UnivNetGanConfig(PretrainedConfig):
         leaky_relu_slope=0.2,
         **kwargs,
     ):
+        if not (len(resblock_kernel_sizes) == len(resblock_stride_sizes) == len(resblock_dilation_sizes)):
+            raise ValueError(
+                "`resblock_kernel_sizes`, `resblock_stride_sizes`, and `resblock_dilation_sizes` must all have the"
+                " same length (which will be the number of resnet blocks in the model)."
+            )
+        
         self.model_in_channels = model_in_channels
         self.model_hidden_channels = model_hidden_channels
         self.num_mel_channels = num_mel_channels
