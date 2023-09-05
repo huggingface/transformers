@@ -15,16 +15,16 @@
 """ Testing suite for the PyTorch PatchTST model. """
 
 import inspect
+import random
 import tempfile
 import unittest
 
-import numpy as np
 from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
-from transformers.testing_utils import is_flaky, require_torch, torch_device, slow
 from transformers.models.auto import get_values
-import random
+from transformers.testing_utils import is_flaky, require_torch, slow, torch_device
+
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -34,10 +34,18 @@ TOLERANCE = 1e-4
 
 if is_torch_available():
     import torch
-    from transformers import PatchTSTConfig, MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING, MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
-    from transformers import PatchTSTModel, PatchTSTForPrediction, PatchTSTForForecasting, PatchTSTForMaskPretraining, \
-        PatchTSTForClassification, PatchTSTForRegression
 
+    from transformers import (
+        MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING,
+        PatchTSTConfig,
+        PatchTSTForClassification,
+        PatchTSTForForecasting,
+        PatchTSTForMaskPretraining,
+        PatchTSTForPrediction,
+        PatchTSTForRegression,
+        PatchTSTModel,
+    )
 
 
 @require_torch
@@ -106,7 +114,7 @@ class PatchTSTModelTester:
             activation_function=self.hidden_act,
             seed_number=self.seed_number,
             num_classes=self.num_classes,
-            num_output_channels=self.num_output_channels
+            num_output_channels=self.num_output_channels,
         )
 
     def prepare_patchtst_inputs_dict(self, config):
@@ -137,25 +145,27 @@ class PatchTSTModelTester:
 @require_torch
 class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (PatchTSTModel,
-         PatchTSTForPrediction,
-         PatchTSTForForecasting,
-         PatchTSTForMaskPretraining,
-         PatchTSTForClassification,
-         PatchTSTForRegression)
+        (
+            PatchTSTModel,
+            PatchTSTForPrediction,
+            PatchTSTForForecasting,
+            PatchTSTForMaskPretraining,
+            PatchTSTForClassification,
+            PatchTSTForRegression,
+        )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (PatchTSTForPrediction, PatchTSTForForecasting, PatchTSTForMaskPretraining) if is_torch_available() else ()
+    all_generative_model_classes = (
+        (PatchTSTForPrediction, PatchTSTForForecasting, PatchTSTForMaskPretraining) if is_torch_available() else ()
+    )
     pipeline_model_mapping = {"feature-extraction": PatchTSTModel} if is_torch_available() else {}
-    is_encoder_decoder = False
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
     test_torchscript = False
     test_inputs_embeds = False
     test_model_common_attributes = False
-
 
     test_resize_embeddings = True
     test_resize_position_embeddings = False
@@ -201,7 +211,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
 
-#
+    #
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -211,7 +221,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = outputs.hidden_states
 
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers
@@ -228,7 +238,7 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
-            print('model_class: ', model_class)
+            print("model_class: ", model_class)
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
@@ -237,8 +247,9 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
-#
-#     # Ignore since we have no tokens embeddings
+
+    #
+    #     # Ignore since we have no tokens embeddings
 
     def test_resize_tokens_embeddings(self):
         pass
@@ -268,8 +279,9 @@ class PatchTSTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                 "past_values",
                 "future_values",
             ]
-            if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or \
-                    model_class in get_values(MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING):
+            if model_class in get_values(MODEL_FOR_TIME_SERIES_CLASSIFICATION_MAPPING) or model_class in get_values(
+                MODEL_FOR_TIME_SERIES_REGRESSION_MAPPING
+            ):
                 expected_arg_names.remove("future_values")
                 expected_arg_names.append("labels")
             expected_arg_names.extend(
@@ -303,17 +315,16 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
 
         torch.manual_seed(0)
         with torch.no_grad():
-            output = model(
-                past_values=batch["past_values"].to(torch_device)
-            ).prediction_output
-        num_patch = (max(model.config.context_length,
-                         model.config.patch_length) - model.config.patch_length) // model.config.stride + 1
+            output = model(past_values=batch["past_values"].to(torch_device)).prediction_output
+        num_patch = (
+            max(model.config.context_length, model.config.patch_length) - model.config.patch_length
+        ) // model.config.stride + 1
         expected_shape = torch.Size([64, model.config.num_input_channels, num_patch, model.config.patch_length])
         self.assertEqual(output.shape, expected_shape)
 
-        expected_slice = torch.tensor([[[-0.0170]], [[0.0163]], [[0.0090]], [[0.0139]], [[0.0067]],
-                                       [[0.0246]], [[0.0090]]],
-                                      device=torch_device)
+        expected_slice = torch.tensor(
+            [[[-0.0170]], [[0.0163]], [[0.0090]], [[0.0139]], [[0.0067]], [[0.0246]], [[0.0090]]], device=torch_device
+        )
         self.assertTrue(torch.allclose(output[0, :7, :1, :1], expected_slice, atol=TOLERANCE))
 
     # Publishing of pretrained weights are under internal review. Pretrained model is not yet downloadable.
@@ -326,12 +337,13 @@ class PatchTSTModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             output = model(
                 past_values=batch["past_values"].to(torch_device),
-                future_values=batch["future_values"].to(torch_device)
+                future_values=batch["future_values"].to(torch_device),
             ).prediction_output
         expected_shape = torch.Size([64, model.config.prediction_length, model.config.num_input_channels])
         self.assertEqual(output.shape, expected_shape)
 
-        expected_slice = torch.tensor([[-0.8200, 0.3741, -0.7543, 0.3971, -0.6659, -0.0124, -0.8308]],
-                                      device=torch_device,
-                                      )
+        expected_slice = torch.tensor(
+            [[-0.8200, 0.3741, -0.7543, 0.3971, -0.6659, -0.0124, -0.8308]],
+            device=torch_device,
+        )
         self.assertTrue(torch.allclose(output[0, :1, :7], expected_slice, atol=TOLERANCE))

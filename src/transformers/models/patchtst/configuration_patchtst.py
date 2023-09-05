@@ -14,7 +14,7 @@
 # limitations under the License.
 """PatchTST model configuration"""
 
-from typing import List, Optional, Union
+from typing import List, Optional
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.utils import logging
@@ -24,6 +24,7 @@ logger = logging.get_logger(__name__)
 
 PATCHTST_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "ibm/patchtst-base": "https://huggingface.co/ibm/patchtst-base/resolve/main/config.json",
+    # See all PatchTST models at https://huggingface.co/ibm/models?filter=patchtst
 }
 
 
@@ -32,6 +33,7 @@ class PatchTSTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`PatchTSTModel`]. It is used to instantiate an
     PatchTST model according to the specified arguments, defining the model architecture.
+    [ibm/patchtst](https://huggingface.co/ibm/patchtst) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -90,7 +92,7 @@ class PatchTSTConfig(PretrainedConfig):
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal weight initialization distribution.
         use_cache (`bool`, *optional*, defaults to `True`):
-            Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.        
+            Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
         distil (`bool`, *optional*, defaults to `True`):
             Whether to use distilling in encoder.
 
@@ -119,11 +121,6 @@ class PatchTSTConfig(PretrainedConfig):
         # time series specific configuration
         num_input_channels: int = 1,
         context_length: int = 32,
-        num_dynamic_real_features: int = 0,
-        num_static_real_features: int = 0,
-        num_static_categorical_features: int = 0,
-        num_time_features: int = 0,
-        is_encoder_decoder: bool = False,
         # PatchTST arguments
         patch_length: int = 8,
         stride: int = 8,
@@ -143,7 +140,6 @@ class PatchTSTConfig(PretrainedConfig):
         bias: bool = True,
         activation_function: str = "gelu",
         pre_norm: bool = False,
-        store_attn: bool = False,
         positional_encoding: str = "sincos",
         learn_pe: bool = False,
         use_cls_token: bool = False,
@@ -151,7 +147,6 @@ class PatchTSTConfig(PretrainedConfig):
         individual: bool = False,
         seed_number: int = None,
         revin: Optional[bool] = True,
-        qkv_bias: bool = True,
         # mask pretraining
         mask_input: Optional[bool] = None,
         mask_type: str = "random",
@@ -170,14 +165,9 @@ class PatchTSTConfig(PretrainedConfig):
         num_output_channels: int = 1,
         **kwargs,
     ):
-
         # time series specific configuration
         self.context_length = context_length
-        self.num_input_channels = num_input_channels # n_vars
-        self.num_time_features = num_time_features
-        self.num_dynamic_real_features = num_dynamic_real_features
-        self.num_static_real_features = num_static_real_features
-        self.num_static_categorical_features = num_static_categorical_features
+        self.num_input_channels = num_input_channels  # n_vars
 
         # Transformer architecture configuration
         self.d_model = d_model
@@ -195,12 +185,10 @@ class PatchTSTConfig(PretrainedConfig):
         self.bias = bias
         self.activation_function = activation_function
         self.pre_norm = pre_norm
-        self.store_attention = store_attn
         self.positional_encoding = positional_encoding
         self.learn_pe = learn_pe
         self.use_cls_token = use_cls_token
         self.init_std = init_std
-        self.qkv_bias = qkv_bias
         self.revin = revin
 
         # PatchTST
@@ -234,8 +222,7 @@ class PatchTSTConfig(PretrainedConfig):
         self.num_output_channels = num_output_channels
         self.prediction_range = prediction_range
 
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        super().__init__(**kwargs)
 
     def _num_patches(self):
         return (max(self.context_length, self.patch_length) - self.patch_length) // self.stride + 1
-
