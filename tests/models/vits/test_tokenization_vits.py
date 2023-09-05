@@ -174,7 +174,7 @@ class VitsTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         for tokenizer_class in tokenizer_classes:
             tokenizer = tokenizer_class.from_pretrained(
                 "facebook/mms-tts-eng",
-                revision="d188a254c84ae6cfd24deb7a8f5c0c1d349d7d9f",  # to pin the tokenizer version
+                revision="dbb8b304793064d664490cc14438247f7da9e551",  # to pin the tokenizer version
             )
 
             encoding = tokenizer(sequences, padding=True, normalize=True)
