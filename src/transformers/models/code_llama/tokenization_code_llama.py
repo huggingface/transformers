@@ -439,6 +439,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         return output
 
     @property
+    # Copied from transformers.models.llama.tokenization_llama.LlamaTokenizer.default_chat_template
     def default_chat_template(self):
         """
         LLaMA uses [INST] and [/INST] to indicate user messages, and <<SYS>> and <</SYS>> to indicate system messages.
@@ -447,8 +448,16 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         rather than needing special tokens. This template should definitely be changed if you wish to fine-tune a model
         with more flexible role ordering!
         """
-        return (
-            "{% for message in messages %}"
+        template = "{% for message in messages %}"
+        if self.use_default_system_prompt:
+            prompt = DEFAULT_SYSTEM_PROMPT.replace("\n", "\\n").replace("'", "\\'")
+            template += (
+                "{% if loop.index == 0 and message['role'] != 'system' %}"
+                "{{ '<<SYS>>\\n' + 'sys_prompt' + '\\n<</SYS>>\\n\\n' }}"
+                "{% endif %}"
+            )
+            template = template.replace("sys_prompt", prompt)  # Use replace to avoid f-string + Jinja interaction
+        template += (
             "{% if message['role'] == 'user' %}"
             "{{ bos_token + '[INST] ' + message['content'].strip() + ' [/INST]' }}"
             "{% elif message['role'] == 'system' %}"
@@ -458,6 +467,7 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
             "{% endif %}"
             "{% endfor %}"
         )
+        return template
 
     def __getstate__(self):
         state = self.__dict__.copy()
