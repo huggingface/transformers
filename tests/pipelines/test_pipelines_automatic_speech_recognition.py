@@ -915,7 +915,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         sample = dataset[0]["audio"]
 
-        output = speech_recognizer(sample.copy())
+        output = speech_recognizer(sample)
         self.assertEqual(
             output,
             {"text": "MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL"},
