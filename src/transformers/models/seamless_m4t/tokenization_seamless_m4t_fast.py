@@ -38,15 +38,15 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": 
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "meta-private/m4t_large": "https://huggingface.co/meta-private/m4t_large/resolve/main/vocab.txt",
+        ""ylacombe/hf-seamless-m4t-medium"": "https://huggingface.co/"ylacombe/hf-seamless-m4t-medium"/resolve/main/vocab.txt",
     },
     "tokenizer_file": {
-        "meta-private/m4t_large": "https://huggingface.co/meta-private/m4t_large/resolve/main/tokenizer.json",
+        ""ylacombe/hf-seamless-m4t-medium"": "https://huggingface.co/"ylacombe/hf-seamless-m4t-medium"/resolve/main/tokenizer.json",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "meta-private/m4t_large": 2048,
+    ""ylacombe/hf-seamless-m4t-medium"": 2048,
 }
 
 

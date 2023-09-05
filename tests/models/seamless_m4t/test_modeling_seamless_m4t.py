@@ -585,7 +585,7 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
 @require_torch
 class SeamlessM4TModelIntegrationTest(unittest.TestCase):
     
-    repo_id = "meta-private/m4t_large"
+    repo_id = "ylacombe/hf-seamless-m4t-medium"
 
     def assertListAlmostEqual(self, list1, list2, tol=1e-5):
         self.assertEqual(len(list1), len(list2))
@@ -605,33 +605,41 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         # fmt: on
 
         input_ids = input_ids.to(torch_device)
+        
+        attention_mask = torch.ones_like(input_ids).to(torch_device)
+        
+        inputs = {
+            "attention_mask": attention_mask,
+            "input_ids": input_ids,
+        }
 
-        return input_ids
+        return inputs
 
     @cached_property
     def input_audio(self):
 
         set_seed(0)
         seq_len = 20000
+        sampling_rate = 16000
         input_features = torch.rand((2,seq_len))
-        input_features = input_features.to(torch_device)
-
-        return input_features
+        
+        return self.processor(audios = input_features, sampling_rate=sampling_rate).to(torch_device)
     
-    def factory_test_task(self, class1, class2, inputs, **generate_kwargs):
-        model1 = class1.from_pretrained(self.repo_id)
-        model2 = class2.from_pretrained(self.repo_id)
+    def factory_test_task(self, class1, class2, inputs, class1_kwargs, class2_kwargs):
+        model1 = class1.from_pretrained(self.repo_id).to(torch_device)
+        model2 = class2.from_pretrained(self.repo_id).to(torch_device)
         
         with torch.inference_mode():
-            output_1 = model1.generate(**inputs, **generate_kwargs)
-            output_2 = model2.generate(**inputs, **generate_kwargs)
+            output_1 = model1.generate(**inputs, **class1_kwargs)
+            output_2 = model2.generate(**inputs, **class2_kwargs)
 
         for key in output_1:
-            self.assertListAlmostEqual(output_1[key], output_2[key])
+            if isinstance(output_1[key], torch.Tensor):
+                self.assertListAlmostEqual(output_1[key].squeeze().tolist(), output_2[key].squeeze().tolist())
     
     @slow
     def test_whole_model(self):
-        model = SeamlessM4TModel.from_pretrained(self.repo_id)
+        model = SeamlessM4TModel.from_pretrained(self.repo_id).to(torch_device)
         
         slice_begin=50
         slice_end=60
@@ -662,7 +670,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         expected_wav_std = 0.12780693173408508 
             
         with torch.inference_mode():
-            output = model.generate(**self.input_text, num_beams=2, tgt_lang="eng")
+            output = model.generate(**self.input_text, num_beams=2, tgt_lang="eng", return_intermediate_token_ids=True)
         
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
         self.assertListEqual(expected_unit_tokens, output.unit_sequences.squeeze().tolist())
@@ -699,7 +707,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         expected_wav_std =  0.22130604088306427
 
         with torch.inference_mode():
-            output = model.generate(**self.input_text, num_beams=2, tgt_lang="swh")
+            output = model.generate(**self.input_text, num_beams=2, tgt_lang="swh", return_intermediate_token_ids=True)
         
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
         self.assertListEqual(expected_unit_tokens, output.unit_sequences.squeeze().tolist())
@@ -740,7 +748,7 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         
         
         with torch.inference_mode():
-            output = model.generate(**self.input_audio, num_beams=2, tgt_lang="rus")
+            output = model.generate(**self.input_audio, num_beams=2, tgt_lang="rus", return_intermediate_token_ids=True)
         
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
         self.assertListEqual(expected_unit_tokens, output.unit_sequences.squeeze().tolist())
@@ -754,18 +762,50 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         ########################
 
     @slow
-    def test_text_to_speech_model(self):
-        self.factory_test_task(SeamlessM4TModel, SeamlessM4TForTextToSpeech, self.input_text, tgt_lang="eng")
-
-    @slow
     def test_text_to_text_model(self):
-        self.factory_test_task(SeamlessM4TModel, SeamlessM4TForTextToText, self.input_text, tgt_lang="eng", generate_speech=False)
+        kwargs1 = {
+            "tgt_lang":"eng",
+            "return_intermediate_token_ids": True,
+            "generate_speech":False
+        }        
+        kwargs2 = {
+            "tgt_lang":"eng",
+            "output_hidden_states":True,
+            "return_dict_in_generate":True,
+            "output_scores":True,
+        }
+        self.factory_test_task(SeamlessM4TModel, SeamlessM4TForTextToText, self.input_text, kwargs1, kwargs2)
+        
+    @slow
+    def test_speech_to_text_model(self):
+        kwargs1 = {
+            "tgt_lang":"eng",
+            "return_intermediate_token_ids": True,
+            "generate_speech":False
+        }        
+        kwargs2 = {
+            "tgt_lang":"eng",
+            "output_hidden_states":True,
+            "return_dict_in_generate":True,
+            "output_scores":True,
+        }
+        self.factory_test_task(SeamlessM4TModel, SeamlessM4TForSpeechToText, self.input_audio, kwargs1, kwargs2)
 
     @slow
     def test_speech_to_speech_model(self):
-        self.factory_test_task(SeamlessM4TModel, SeamlessM4TForSpeechToSpeech, self.input_audio, tgt_lang="eng")
+        kwargs1 = {
+            "tgt_lang":"eng",
+            "return_intermediate_token_ids": True
+        }
+        self.factory_test_task(SeamlessM4TModel, SeamlessM4TForSpeechToSpeech, self.input_audio, kwargs1, kwargs1)
+
+
 
     @slow
-    def test_speech_to_text_model(self):
-        self.factory_test_task(SeamlessM4TModel, SeamlessM4TForSpeechToText, self.input_audio, tgt_lang="eng", generate_speech=False)
-
+    def test_text_to_speech_model(self):
+        kwargs1 = {
+            "tgt_lang":"eng",
+            "return_intermediate_token_ids": True
+        }
+        
+        self.factory_test_task(SeamlessM4TModel, SeamlessM4TForTextToSpeech, self.input_text, kwargs1, kwargs1)
