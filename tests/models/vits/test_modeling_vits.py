@@ -21,6 +21,7 @@ import unittest
 from typing import Dict, List, Tuple
 
 import numpy as np
+from torch import nn
 
 from transformers import PretrainedConfig, VitsConfig
 from transformers.testing_utils import (
@@ -28,7 +29,7 @@ from transformers.testing_utils import (
     is_torch_available,
     require_torch,
     slow,
-    torch_device,
+    torch_device, require_torch_multi_gpu,
 )
 from transformers.trainer_utils import set_seed
 
@@ -68,7 +69,7 @@ class VitsModelTester:
         self,
         parent,
         batch_size=2,
-        seq_length=8,
+        seq_length=7,
         is_training=False,
         hidden_size=16,
         num_hidden_layers=2,
@@ -176,6 +177,30 @@ class VitsModelTest(ModelTesterMixin, unittest.TestCase):
         global_rng.seed(12345)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
+
+    @require_torch_multi_gpu
+    # override to make test deterministic across GPUs
+    def test_multi_gpu_data_parallel_forward(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.use_stochastic_duration_prediction = False
+
+        # move input tensors to cuda:O
+        for key, value in inputs_dict.items():
+            if torch.is_tensor(value):
+                # make all elements of the batch the same -> ensures the output seq lengths are the same for DP
+                value[1:] = value[0]
+                inputs_dict[key] = value.to(0)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            model.to(0)
+            model.eval()
+
+            # Wrap model in nn.DataParallel
+            model = nn.DataParallel(model)
+            set_seed(555)
+            with torch.no_grad():
+                _ = model(**self._prepare_for_class(inputs_dict, model_class)).waveform
 
     @unittest.skip("VITS is not deterministic")
     def test_determinism(self):
