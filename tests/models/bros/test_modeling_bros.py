@@ -434,11 +434,7 @@ class BrosModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [
-                [-3.0744e-01, 1.3626e-01, 3.1431e-01],
-                [9.2455e-02, -1.1548e-01, 1.0497e-01],
-                [2.2101e-02, 2.9981e-04, 1.2854e-01],
-            ]
+            [[-0.4027, 0.0756, -0.0647], [-0.0192, -0.0065, 0.1042], [-0.0671, 0.0214, 0.0960]]
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))

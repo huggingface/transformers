@@ -204,7 +204,22 @@ class BrosPositionalEmbedding2D(nn.Module):
         return bbox_pos_emb
 
 
-class BrosEmbeddings(nn.Module):
+class BrosBboxEmbeddings(nn.Module):
+    def __init__(self, config):
+        super(BrosBboxEmbeddings, self).__init__()
+        self.bbox_sinusoid_emb = BrosPositionalEmbedding2D(config)
+        self.bbox_projection = nn.Linear(config.dim_bbox_sinusoid_emb_2d, config.dim_bbox_projection, bias=False)
+
+    def forward(self, bbox: torch.Tensor):
+        bbox_t = bbox.transpose(0, 1)
+        bbox_pos = bbox_t[None, :, :, :] - bbox_t[:, None, :, :]
+        bbox_pos_emb = self.bbox_sinusoid_emb(bbox_pos)
+        bbox_pos_emb = self.bbox_projection(bbox_pos_emb)
+
+        return bbox_pos_emb
+
+
+class BrosTextEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
@@ -230,9 +245,6 @@ class BrosEmbeddings(nn.Module):
             ),
             persistent=False,
         )
-
-        self.bbox_sinusoid_emb = BrosPositionalEmbedding2D(config)
-        self.bbox_projection = nn.Linear(config.dim_bbox_sinusoid_emb_2d, config.dim_bbox_projection, bias=False)
 
     def forward(
         self,
@@ -271,14 +283,6 @@ class BrosEmbeddings(nn.Module):
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
-
-    def calculate_bbox_pos_emb(self, bbox: torch.Tensor):
-        bbox_t = bbox.transpose(0, 1)
-        bbox_pos = bbox_t[None, :, :, :] - bbox_t[:, None, :, :]
-        bbox_pos_emb = self.bbox_sinusoid_emb(bbox_pos)
-        bbox_pos_emb = self.bbox_projection(bbox_pos_emb)
-
-        return bbox_pos_emb
 
 
 class BrosSelfAttention(nn.Module):
@@ -374,28 +378,19 @@ class BrosSelfAttention(nn.Module):
             positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
             if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.matmul(
-                    query_layer.unsqueeze(-2), positional_embedding.permute(0, 2, 1).unsqueeze(0).unsqueeze(0)
-                ).squeeze()
-                # equivalent of torch.einsum("bhld,lrd->bhlr", query_layer_expanded, positional_embedding)
-
+                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
                 attention_scores = attention_scores + relative_position_scores
             elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.matmul(
-                    query_layer.unsqueeze(-2), positional_embedding.permute(0, 2, 1).unsqueeze(0).unsqueeze(0)
-                ).squeeze()  # equivalent of torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-
-                relative_position_scores_key = torch.matmul(
-                    key_layer.unsqueeze(-2), positional_embedding.permute(0, 2, 1).unsqueeze(0).unsqueeze(0)
-                ).squeeze()  # equivalent of torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
+                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
 
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
         # bbox positional encoding
         batch_size, n_head, seq_length, d_head = query_layer.shape
         bbox_pos_emb = bbox_pos_emb.view(seq_length, seq_length, batch_size, d_head)
-        bbox_pos_emb = bbox_pos_emb.permute([2, 0, 3, 1])
 
+        bbox_pos_emb = bbox_pos_emb.permute([2, 0, 3, 1])
         bbox_pos_scores = torch.matmul(
             query_layer.unsqueeze(3), bbox_pos_emb.unsqueeze(1)
         ).squeeze()  # equivalent of torch.einsum("bnid,bidj->bnij", (query_layer, bbox_pos_emb))
@@ -804,7 +799,8 @@ class BrosModel(BrosPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = BrosEmbeddings(config)
+        self.embeddings = BrosTextEmbeddings(config)
+        self.bbox_embeddings = BrosBboxEmbeddings(config)
         self.encoder = BrosEncoder(config)
 
         self.pooler = BrosPooler(config) if add_pooling_layer else None
@@ -937,7 +933,7 @@ class BrosModel(BrosPreTrainedModel):
             if bbox.shape[-1] == 4:
                 bbox = bbox[:, :, [0, 1, 2, 1, 2, 3, 0, 3]]
             scaled_bbox = bbox * self.config.bbox_scale
-            bbox_position_embeddings = self.embeddings.calculate_bbox_pos_emb(scaled_bbox)
+            bbox_position_embeddings = self.bbox_embeddings(scaled_bbox)
 
         encoder_outputs = self.encoder(
             embedding_output,
