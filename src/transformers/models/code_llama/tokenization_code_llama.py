@@ -154,7 +154,6 @@ class CodeLlamaTokenizer(PreTrainedTokenizer):
         for token in [prefix_token, middle_token, suffix_token, eot_token]:
             additional_special_tokens += [token] if token is not None else []
 
-
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token

@@ -366,8 +366,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
     @property
     def added_tokens_decoder(self) -> Dict[int, AddedToken]:
         """
-        Returns the added tokens in the vocabulary as a dictionary of index to AddedToken. Results 
-        Returns:
+        Returns the added tokens in the vocabulary as a dictionary of index to AddedToken. Results Returns:
             `Dict[str, int]`: The added tokens.
         """
         return self._added_tokens_decoder
@@ -381,7 +380,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                     f"The provided `added_tokens_decoder` has an element of type {index.__class__, token.__class__}, should be a dict of {int, Union[AddedToken, str]}"
                 )
             self._added_tokens_decoder[index] = AddedToken(token) if isinstance(token, str) else token
-            
+
     @property
     def is_fast(self) -> bool:
         return False

@@ -189,7 +189,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def added_tokens_decoder(self) -> Dict[int, AddedToken]:
         """
         Returns the added tokens in the vocabulary as a dictionary of index to AddedToken.
-         
+
         Returns:
             `Dict[str, int]`: The added tokens.
         """

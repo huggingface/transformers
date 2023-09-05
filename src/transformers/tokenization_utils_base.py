@@ -88,7 +88,7 @@ else:
         lstrip: bool = False
         rstrip: bool = False
         normalized: bool = True
-        special:bool = False
+        special: bool = False
 
         def __getstate__(self):
             return self.__dict__
@@ -1606,7 +1606,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self._in_target_context_manager = False
         super().__init__(**kwargs)
 
-
     @property
     def max_len_single_sentence(self) -> int:
         """
@@ -2138,7 +2137,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens! Only time we need to check
         # We should deprecate this since you need a `convert_slow_tokenizer` method anyway, better to add the tokens then! (consistency)
-        if slow_to_fast: # or name == MVNet ?? When the added tokens are not in the tokenizer.json
+        if slow_to_fast:  # or name == MVNet ?? When the added tokens are not in the tokenizer.json
             tokens = []
             special_tokens = tokenizer.all_special_tokens
             added_tok_decoder_sorted = sorted(added_tokens_decoder.items(), key=lambda x: x[0])
@@ -2162,7 +2161,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 tokens.append(token)
 
             if tokens:
-                tokenizer.add_tokens(tokens) # information about being special is stored in the token
+                tokenizer.add_tokens(tokens)  # information about being special is stored in the token
 
             tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
             # end legacy
