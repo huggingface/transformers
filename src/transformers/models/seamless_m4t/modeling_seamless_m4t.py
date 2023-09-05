@@ -41,7 +41,6 @@ from ...utils import (
     logging,
 )
 from .configuration_seamless_m4t import SeamlessM4TConfig
-from .tokenization_seamless_m4t import UNIT_SUPPORTED_LANGUAGES
 
 
 logger = logging.get_logger(__name__)
