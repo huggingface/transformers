@@ -18,12 +18,14 @@
 """
 
 
+import json
+import subprocess
 import timeit
 from typing import Callable, Optional
 
 from ..configuration_utils import PretrainedConfig
 from ..models.auto.modeling_auto import MODEL_MAPPING, MODEL_WITH_LM_HEAD_MAPPING
-from ..utils import is_py3nvml_available, is_torch_available, logging
+from ..utils import is_py3nvml_available, is_torch_available, is_torch_rocm_available, logging
 from .benchmark_utils import (
     Benchmark,
     Memory,
@@ -235,7 +237,12 @@ class PyTorchBenchmark(Benchmark):
                     " `--no-memory` or `args.memory=False`"
                 )
             elif self.args.is_gpu:
-                if not is_py3nvml_available():
+                if is_torch_rocm_available():
+                    command = f"rocm-smi --showmeminfo vram --device {self.args.device_idx} --json"
+                    output = subprocess.check_output(command, shell=True).decode()
+                    output_dict = json.loads(output)
+                    memory = int(output_dict[f"card{self.args.device_idx}"]["VRAM Total Used Memory (B)"])
+                elif not is_py3nvml_available():
                     logger.warning(
                         "py3nvml not installed, we won't log GPU memory usage. "
                         "Install py3nvml (pip install py3nvml) to log information about GPU."

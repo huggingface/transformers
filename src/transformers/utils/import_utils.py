@@ -275,6 +275,18 @@ def is_torch_cuda_available():
         return False
 
 
+def is_torch_rocm_available():
+    if is_torch_available():
+        import torch
+
+        if torch.version.hip:
+            return True
+        else:
+            return False
+    else:
+        return False
+
+
 def is_torch_mps_available():
     if is_torch_available():
         import torch
