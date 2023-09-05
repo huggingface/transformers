@@ -381,6 +381,7 @@ def start_memory_tracing(
 
     if is_torch_rocm_available():
         devices = list(range(torch_device_count())) if gpus_to_trace is None else gpus_to_trace
+        log_gpu = True
     elif is_py3nvml_available():
         try:
             nvml.nvmlInit()
@@ -836,13 +837,15 @@ class Benchmark(ABC):
                 if is_torch_rocm_available():
                     command = f"rocm-smi --showmaxpower --showmeminfo vram --device {self.args.device_idx} --json"
                     output = subprocess.check_output(command, shell=True).decode()
-
-                    info["gpu"] = output.keys()[0]
-                    info["gpu_ram_mb"] = int(output[f"card{self.args.device_idx}"]["VRAM Total Used Memory (B)"])
-                    info["gpu_power_watts"] = float(output["Max Graphics Package Power (W)"])
+                    output_dict = json.loads(output)
+                    info["gpu"] = list(output_dict.keys())[0]
+                    info["gpu_ram_mb"] = bytes_to_mega_bytes(
+                        int(output_dict[f"card{self.args.device_idx}"]["VRAM Total Used Memory (B)"])
+                    )
+                    info["gpu_power_watts"] = float(
+                        output_dict[f"card{self.args.device_idx}"]["Max Graphics Package Power (W)"]
+                    )
                     info["gpu_performance_state"] = "N/A"
-
-                    json.loads(output)
                 elif is_py3nvml_available():
                     nvml.nvmlInit()
                     handle = nvml.nvmlDeviceGetHandleByIndex(self.args.device_idx)
