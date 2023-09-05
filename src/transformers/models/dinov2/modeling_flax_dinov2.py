@@ -599,12 +599,16 @@ class FlaxDinov2ForImageClassificationModule(nn.Module):
 
     def setup(self):
         self.dinov2 = FlaxDinov2Module(config=self.config, dtype=self.dtype)
-        self.classifier = nn.Dense(
-            self.config.num_labels,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.variance_scaling(
-                self.config.initializer_range**2, "fan_in", "truncated_normal"
-            ),
+        self.classifier = (
+            nn.Dense(
+                self.config.num_labels,
+                dtype=self.dtype,
+                kernel_init=jax.nn.initializers.variance_scaling(
+                    self.config.initializer_range**2, "fan_in", "truncated_normal"
+                ),
+            )
+            if self.config.num_labels > 0
+            else lambda x: x
         )
         self.num_labels = self.config.num_labels
 
