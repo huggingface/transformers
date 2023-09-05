@@ -31,7 +31,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import torch
 from packaging import version
 from torch import Tensor, nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, Identity
 
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
@@ -149,20 +149,6 @@ def no_init_weights(_enable=True):
         yield
     finally:
         _init_weights = old_init_weights
-
-
-try:
-    from torch.nn import Identity
-except ImportError:
-    # Older PyTorch compatibility
-    class Identity(nn.Module):
-        r"""A placeholder identity operator that is argument-insensitive."""
-
-        def __init__(self, *args, **kwargs):
-            super().__init__()
-
-        def forward(self, input):
-            return input
 
 
 def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
