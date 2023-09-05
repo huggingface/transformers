@@ -1366,10 +1366,8 @@ class TrainingArguments:
                         )
                     elif not is_torch_xpu_available():
                         # xpu
-                        import torch
+                        from .pytorch_utils import is_torch_greater_or_equal_than_1_12
 
-                        parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
-                        is_torch_greater_or_equal_than_1_12 = parsed_torch_version_base >= version.parse("1.12")
                         if not is_torch_greater_or_equal_than_1_12:
                             raise ValueError(
                                 "Your setup doesn't support bf16/xpu. You need torch>=1.12, using Intel XPU/GPU with IPEX installed"
