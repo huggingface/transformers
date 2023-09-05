@@ -28,8 +28,9 @@ from transformers.testing_utils import (
     is_flaky,
     is_torch_available,
     require_torch,
+    require_torch_multi_gpu,
     slow,
-    torch_device, require_torch_multi_gpu,
+    torch_device,
 )
 from transformers.trainer_utils import set_seed
 
