@@ -127,7 +127,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        additional_special_tokens=["<s>NOTUSED", "</s>NOTUSED", "<unk>NOTUSED"],
+        additional_special_tokens=["<s>NOTUSED", "</s>NOTUSED"],
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> None:
@@ -148,7 +148,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
             1: AddedToken(pad_token),
             2: AddedToken("</s>NOTUSED"),
             3: AddedToken(unk_token),
-            4: AddedToken("<unk>NOTUSED"),
+            4: AddedToken("<unk>NOTUSED", special = True),
         }
 
         self.fairseq_offset = len(self.added_tokens_decoder) - 1
