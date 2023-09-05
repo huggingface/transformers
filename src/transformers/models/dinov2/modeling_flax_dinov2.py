@@ -571,7 +571,7 @@ class FlaxDinov2Module(nn.Module):
         )
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
-        pooled_output = sequence_output[:, 0, :]  # Check channel order?
+        pooled_output = sequence_output[:, 0, :]
 
         if not return_dict:
             head_outputs = (sequence_output, pooled_output)
