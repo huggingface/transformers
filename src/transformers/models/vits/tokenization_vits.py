@@ -184,7 +184,7 @@ class VitsTokenizer(PreTrainedTokenizer):
 
         filtered_text = self._preprocess_char(text)
 
-        if has_non_roman_characters(filtered_text):
+        if has_non_roman_characters(filtered_text) and self.is_uroman:
             logger.warning(
                 "Text to the tokenizer contains non-Roman characters. Ensure the `uroman` Romanizer is "
                 "applied to the text prior to passing it to the tokenizer. See "
