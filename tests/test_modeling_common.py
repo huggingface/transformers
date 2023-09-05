@@ -224,6 +224,7 @@ class ModelTesterMixin:
 
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        torch.use_deterministic_algorithms(True)
 
         def check_save_load(out1, out2):
             # make sure we don't have nans
@@ -456,6 +457,7 @@ class ModelTesterMixin:
 
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        torch.use_deterministic_algorithms(True)
 
         def check_determinism(first, second):
             out_1 = first.cpu().numpy()
@@ -1727,6 +1729,7 @@ class ModelTesterMixin:
 
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        torch.use_deterministic_algorithms(True)
 
         def set_nan_tensor_to_zero(t):
             t[t != t] = 0
