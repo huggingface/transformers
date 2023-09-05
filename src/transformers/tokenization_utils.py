@@ -992,8 +992,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             if skip_special_tokens and token in self.all_special_ids:
                 continue
             # set(self.added_tokens_encoder) - set(self.all_special_tokens) gives the added tokens from pervious versions. Kept for legacy. -> Currently does not exactly work see REFORM llama and LlamaCode issue
-            # we should probably just fix this to use all tokens in all_special_tokens?
-            if token in set(self.added_tokens_encoder) - set(self.all_special_tokens):
+            # we should probably just fix this to use all tokens in all_special_tokens? (MLuke actually uses this to fix the extra space added by our encoding)
+            if token in set(self.added_tokens_encoder) - set(self.all_special_tokens) | set(self.additional_special_tokens):
                 if current_sub_text:
                     sub_texts.append(self.convert_tokens_to_string(current_sub_text))
                     current_sub_text = []
