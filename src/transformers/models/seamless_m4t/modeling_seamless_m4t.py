@@ -3836,6 +3836,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
+    # TODO: in docstrings, if not generate_speech return generation output
     @torch.no_grad()
     def generate(
         self,
@@ -3844,6 +3845,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         return_intermediate_token_ids: Optional[bool] = None,
         tgt_lang: Optional[str] = None,
         spkr_id: Optional[int] = None,
+        generate_speech: bool = True,
         **kwargs,
     ) -> Union[torch.Tensor, SeamlessM4TGenerationOutput]:
         if input_ids is None and input_features is None and kwargs.get("inputs_embeds", None) is None:
@@ -3910,7 +3912,9 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             text_generation_output = super().generate(input_ids=input_ids, input_features=None, **kwargs_text)
         sequences = text_generation_output.sequences
 
-
+        if not generate_speech:
+            return text_generation_output
+            
         # prepare second generation
         num_return_sequences = len(sequences) // batch_size
         attention_mask = kwargs_speech.get("attention_mask", kwargs_text.get("attention_mask", None))

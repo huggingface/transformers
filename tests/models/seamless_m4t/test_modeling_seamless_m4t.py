@@ -21,6 +21,7 @@ import inspect
 from transformers import SeamlessM4TConfig, SeamlessM4TProcessor, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import cached_property
+from transformers.trainer_utils import set_seed
 
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -588,7 +589,11 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
 class SeamlessM4TModelIntegrationTest(unittest.TestCase):
     
     repo_id = "meta-private/m4t_large"
-    
+
+    def assertListAlmostEqual(self, list1, list2, tol=1e-5):
+        self.assertEqual(len(list1), len(list2))
+        for a, b in zip(list1, list2):
+            self.assertAlmostEqual(a, b, delta=tol)    
 
     @cached_property
     def processor(self):
@@ -596,7 +601,11 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
     @cached_property
     def input_text(self):
-        input_ids = self.processor("This is a test")
+        # corresponds to "C'est un test." with seamlessM4T_medium checkpoint
+        
+        # fmt: off
+        input_ids = torch.tensor([[256057, 152, 248116, 354, 159, 7356, 248075, 3]])
+        # fmt: on
 
         input_ids = input_ids.to(torch_device)
 
@@ -604,105 +613,162 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
     @cached_property
     def input_audio(self):
-        # TODO: random torch with set seed
-        input_ids = self.processor("This is a test")
 
-        input_ids = input_ids.to(torch_device)
+        set_seed(0)
+        seq_len = 20000
+        input_features = torch.rand((2,seq_len))
+        input_features = input_features.to(torch_device)
 
-        return input_ids
+        return input_features
     
-    @cached_property
-    def expected_output_text_to_speech(self):
+    def factory_test_task(self, class1, class2, inputs, **generate_kwargs):
+        model1 = class1.from_pretrained(self.repo_id)
+        model2 = class2.from_pretrained(self.repo_id)
         
-        expected_text_ids = []
-        expected_unit_ids = []
-        expected_wav = []
-        
-        output = {
-            "expected_text_ids": expected_text_ids,
-            "expected_unit_ids": expected_unit_ids,
-            "expected_wav": expected_wav,
-        }
-    
-        return output
-    
-    
-    @cached_property
-    def expected_output_speech_to_speech(self):
-        
-        expected_text_ids = []
-        expected_unit_ids = []
-        expected_wav = []
-        
-        output = {
-            "expected_text_ids": expected_text_ids,
-            "expected_unit_ids": expected_unit_ids,
-            "expected_wav": expected_wav,
-        }
-    
-        return output
-    
-    def same_output(self, prediction, original):
-        #self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        with torch.inference_mode():
+            output_1 = model1.generate(**inputs, **generate_kwargs)
+            output_2 = model2.generate(**inputs, **generate_kwargs)
 
-        return
+        for key in output_1:
+            self.assertListAlmostEqual(output_1[key], output_2[key])
     
     @slow
     def test_whole_model(self):
         model = SeamlessM4TModel.from_pretrained(self.repo_id)
         
-        output_text = model.generate(**self.input_text)
+        slice_begin=50
+        slice_end=60
         
-        self.same_text_output(output_text, self.expected_output_text_to_speech)
+        # test text - tgt lang: eng
+        
+        # fmt: off
+        expected_text_tokens = [3, 256047, 3291, 248116, 248066, 9, 7356, 248075, 3]
+        # fmt: on
+        
+        # fmt: off
+        expected_unit_tokens = [
+            2,10051,8980,8212,949,1270,4311,1123,5918,2333,5311,3882,2415,5284,1123,612,8816,6370,5386,7334,4345,5645,
+            9437,5748,1378,9818,4319,7968,7375,2909,9119,5151,8728,5335,3896,4013,8939,8885,6048,9530,3167,5833,1072,693,
+            431,9867,364,7909,4608,5938,1889,9984,7947,4944,6171,3767,9861,9169,1187,8365,4571,7635,7784,7635,800,2393,
+            32,5380,5852,8289,2530,2762,1833,2056,3553,4641,3553,5683,370,2288,1344,1518,7534,703,8359,7699,2
+        ]
+        # fmt: on
+        
+        # fmt: off
+        expected_wav_slice = [
+            -3.101921174675226e-05,-0.0003968471137341112,-0.00036757803172804415,-0.00012504588812589645,-6.0264719650149345e-05,
+            0.00012214039452373981,-0.00016360613517463207,0.0002510063350200653,6.980844773352146e-05,-2.9616057872772217e-05
+        ]
+        # fmt: on
+        
+        expected_wav_mean = 0.00021144005586393178 
+        expected_wav_std = 0.12780693173408508 
+            
+        with torch.inference_mode():
+            output = model.generate(**self.input_text, num_beams=2, tgt_lang="eng")
+        
+        self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
+        self.assertListEqual(expected_unit_tokens, output.unit_sequences.squeeze().tolist())
+        
+        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50,60])
+        
+        self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
+        self.assertTrue(expected_wav_std == output.waveforms.std().item())
+
+        ######################## 
+        
+        # test text - tgt lang: swh
+        
+        # fmt: off
+        expected_text_tokens = [3, 256168, 1665, 188589, 7040, 248075, 3]
+        # fmt: on
+        
+        # fmt: off
+        expected_unit_tokens = [
+            2,10071,5729,9995,3089,7546,1204,1721,2532,4340,5623,3496,432,7730,9096,7677,3143,8211,6447,8399,4248,3565,
+            4529,7700,9308,217,6476,3485,9667,3194,8476,4923,5593,1148,4466,7416,4872,463,4872,253,2348,4640,3450,2133,
+            6318,2806,817,7613,2698,6563,8712,8344,9286,6878,6387,4281,6387,640,6387,3200,640,8355,640,6708,979,1738,2
+        ]
+        # fmt: on
+        
+        # fmt: off
+        expected_wav_slice = [
+            5.950569175183773e-06, -6.774172652512789e-05, -4.4876011088490486e-05, -3.7831603549420834e-05, -5.852582398802042e-05, 
+            -9.454227983951569e-05, -9.632168803364038e-05, -2.4773296900093555e-05, -7.404130883514881e-05, -1.877115573734045e-05,
+            ]
+        # fmt: on
+        
+        expected_wav_mean = -0.0006770279142074287 
+        expected_wav_std =  0.22130604088306427
+
+        with torch.inference_mode():
+            output = model.generate(**self.input_text, num_beams=2, tgt_lang="swh")
+        
+        self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
+        self.assertListEqual(expected_unit_tokens, output.unit_sequences.squeeze().tolist())
+        
+        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50,60])
+        
+        self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
+        self.assertTrue(expected_wav_std == output.waveforms.std().item())
         
         
-        output_speech = model.generate(**self.input_speech)
-        self.same_text_output(output_speech, self.expected_output_speech_to_speech)
+        ########################
         
-    
-    # TODO: every other tasks
+        
+        # test audio - tgt lang: rus
+        
+        # fmt: off
+        expected_text_tokens = [3, 256147, 1197, 73565, 3413, 537, 233331, 248075, 3]
+        # fmt: on
+        
+        # fmt: off
+        expected_unit_tokens = [
+            2, 10067, 5729, 4798, 9631, 8378, 4446, 2393, 6901, 5983, 2817, 4629, 8532, 1991, 2931, 8576, 8857, 5936, 4317, 
+            9000, 7740, 7995, 1225, 5980, 6094, 1420, 5373, 8771, 6600, 4487, 7029, 3630, 6740, 4870, 1483, 3003, 5585, 5511, 
+            7465, 3222, 32, 6272, 1950, 3120, 5368, 639, 3713, 5935, 7943, 567, 6129, 6822, 1226, 5063, 9878, 7756, 8825, 1078, 5943, 
+            457, 9282, 9668, 817, 7613, 2698, 6563, 8712, 8704, 9286, 8704, 6387, 4281, 6387, 640, 3200, 6387, 640, 8355, 6708, 979, 1738, 2
+        ]
+        # fmt: on
+        
+        # fmt: off
+        expected_wav_slice = [
+            0.00013284594751894474, 0.00012186134699732065, 0.00014385231770575047, 2.8222682885825634e-05, 1.6152625903487206e-06, 
+            -6.230012513697147e-05, -0.00018148438539355993, -0.0001594738569110632, -0.00021119299344718456, -0.0001834919094108045,
+            ]
+        # fmt: on
+        
+        expected_wav_mean = 0.00013920154015067965
+        expected_wav_std =  0.09129837900400162
+        
+        
+        with torch.inference_mode():
+            output = model.generate(**self.input_audio, num_beams=2, tgt_lang="rus")
+        
+        self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
+        self.assertListEqual(expected_unit_tokens, output.unit_sequences.squeeze().tolist())
+        
+        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50,60])
+        
+        self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
+        self.assertTrue(expected_wav_std == output.waveforms.std().item())
+        
+        
+        ########################
+
     @slow
     def test_text_to_speech_model(self):
-        model = SeamlessM4TModel.from_pretrained(self.repo_id)
-        
-        output_text = model.generate(**self.input_text)
-        
-        self.same_text_output(output_text, self.expected_output_text_to_speech)
-        
-        
-        output_speech = model.generate(**self.input_speech)
-        self.same_text_output(output_speech, self.expected_output_speech_to_speech)
-        
-        
-        
-    
-    
+        self.factory_test_task(self, SeamlessM4TModel, SeamlessM4TForTextToSpeech, self.input_text, tgt_lang="eng")
+
     @slow
-    def test_inference_masked_lm(self):
-        model = SeamlessM4TModel.from_pretrained(self.repo_id)
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
+    def test_text_to_text_model(self):
+        self.factory_test_task(self, SeamlessM4TModel, SeamlessM4TForTextToText, self.input_text, tgt_lang="eng", generate_speech=False)
 
-        # TODO Replace vocab size
-        vocab_size = 32000
+    @slow
+    def test_speech_to_speech_model(self):
+        self.factory_test_task(self, SeamlessM4TModel, SeamlessM4TForSpeechToSpeech, self.input_audio, tgt_lang="eng")
 
-        expected_shape = torch.Size((1, 6, vocab_size))
-        self.assertEqual(output.shape, expected_shape)
+    @slow
+    def test_speech_to_text_model(self):
+        self.factory_test_task(self, SeamlessM4TModel, SeamlessM4TForSpeechToText, self.input_audio, tgt_lang="eng", generate_speech=False)
 
-        # TODO Replace values below with what was printed above.
-        expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
-        )
-
-        # sentence: "This is something to be translated in French"
-        # fmt: off
-        # fmt:on
-
-        # beam_size = 1
-        # fmt: off
-        # fmt: on
-
-        # fmt: off
-        # fmt: on
-
-        

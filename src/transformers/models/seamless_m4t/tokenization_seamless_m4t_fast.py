@@ -28,8 +28,6 @@ from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, logging
 from .tokenization_seamless_m4t import (
     LARGE_SEAMLESS_M4T_LANGUAGE_CODES,
-    UNIT_SUPPORTED_LANGUAGES,
-    VOCODER_SUPPORTED_LANGUAGES,
     SeamlessM4TTokenizer,
 )
 
@@ -164,36 +162,12 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-
-        self.vocab_file = vocab_file
-        self.can_save_slow_tokenizer = False if not self.vocab_file else True
-
-        language_code = language_code if language_code is not None else LARGE_SEAMLESS_M4T_LANGUAGE_CODES
-        language_code = [f"__{code}__" for code in language_code if "__" not in code]
-
-        _additional_special_tokens = language_code.copy()
-
-        if additional_special_tokens is not None:
-            # Only add those special tokens if they are not already there.
-            _additional_special_tokens.extend(
-                [t for t in additional_special_tokens if t not in _additional_special_tokens]
-            )
-
-        self.add_special_tokens({"additional_special_tokens": _additional_special_tokens})
-        self.lang_code_to_id = {lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in language_code}
-
+        
         self._src_lang = f"__{src_lang}__"
-        self.cur_lang_code = self.convert_tokens_to_ids(self._src_lang)
         self._tgt_lang = f"__{tgt_lang}__"
-        self.set_tgt_lang_special_tokens(self._tgt_lang)
+        self.set_src_lang_special_tokens(self._src_lang)
+        self.set_tgt_lang_special_tokens(self._tgt_lang)        
 
-        self.t2u_language_code = UNIT_SUPPORTED_LANGUAGES
-        self.t2u_lang_code_to_id = {code: i for i, code in enumerate(self.t2u_language_code)}
-        self.t2u_id_to_lang_code = {v: k for k, v in self.t2u_lang_code_to_id.items()}
-
-        self.vocoder_language_code = VOCODER_SUPPORTED_LANGUAGES
-        self.vocoder_lang_code_to_id = {code: i for i, code in enumerate(self.vocoder_language_code)}
-        self.vocoder_id_to_lang_code = {v: k for k, v in self.vocoder_lang_code_to_id.items()}
 
     @property
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang
@@ -326,7 +300,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         """Reset the special tokens to the target lang setting.
         Prefix=[eos, tgt_lang_code] and suffix=[eos].
         """
-        self.cur_lang_code = self.lang_code_to_id[lang]
+        self.cur_lang_code = self.convert_tokens_to_ids(lang)
 
         self.prefix_tokens = [self.eos_token_id, self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
@@ -364,18 +338,15 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         padding: Union[bool, str, PaddingStrategy] = True,
         pad_to_multiple_of: Optional[int] = 2,
+        src_lang: Optional[str] = None,
+        tgt_lang: Optional[str] = None,
         **kwargs,
     ):
+        if src_lang is not None:
+            self.src_leng = src_lang
+        if tgt_lang is not None:
+            self.tgt_lang = tgt_lang
+            
         output = super().__call__(text=text, padding=padding, pad_to_multiple_of=pad_to_multiple_of, **kwargs)
-
-        output["decoder_input_ids"] = [[self.lang_code_to_id[self.tgt_lang]]]  # TODO: check batch behavior
-
-        if self._tgt_lang in self.t2u_lang_code_to_id:
-            output["speech_tgt_lang_id"] = [[self.t2u_lang_code_to_id[self._tgt_lang]]]  # TODO: check batch behavior
-
-        if self._tgt_lang in self.vocoder_lang_code_to_id:
-            output["vocoder_tgt_lang_id"] = [
-                [self.vocoder_lang_code_to_id[self._tgt_lang]]
-            ]  # TODO: check batch behavior
 
         return BatchEncoding(output, tensor_type=kwargs.get("return_tensors"))
