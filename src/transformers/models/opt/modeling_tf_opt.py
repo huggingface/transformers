@@ -67,10 +67,6 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     """
     bsz = input_ids_shape[0]
     tgt_len = input_ids_shape[1]
-    # mask = tf.ones((tgt_len, tgt_len)) * LARGE_NEGATIVE
-    # mask_cond = tf.range(shape_list(mask)[-1])
-    #
-    # mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (shape_list(mask)[-1], 1)), 0.0, mask)
     # We need triu with k = 1 but TF expects known compile-time dims for that, so we hack around it
     mask = tf.fill((tgt_len, tgt_len), tf.cast(LARGE_NEGATIVE, tf.float32))
     mask = tf.linalg.band_part(mask, 0, -1) - tf.linalg.band_part(mask, 0, 0)
