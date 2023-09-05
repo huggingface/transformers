@@ -1542,6 +1542,9 @@ class MegaModel(MegaPreTrainedModel):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
+        if self.config.use_chunking:
+            input_shape = torch.tensor([input_shape[0], self.config.chunk_size])
+
         batch_size, sequence_length = input_shape
 
         if self.config.use_chunking and (sequence_length > self.config.chunk_size):
