@@ -226,7 +226,7 @@ class Wav2Vec2ConformerModelTester:
         model.eval()
 
         with torch.no_grad():
-            result = model(input_values, attention_mask=attention_mask)
+            result = model(input_values.type(dtype=torch.float16), attention_mask=attention_mask)
 
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
