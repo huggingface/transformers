@@ -482,6 +482,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.config_tester.run_common_tests()
 
     def test_model(self):
+        assert 1 == 2
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
