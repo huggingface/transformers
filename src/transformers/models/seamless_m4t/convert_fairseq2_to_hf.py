@@ -28,6 +28,8 @@ from transformers.models.seamless_m4t.configuration_seamless_m4t import Seamless
 from transformers.models.seamless_m4t.feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
 from transformers.models.seamless_m4t.modeling_seamless_m4t import SeamlessM4TModel
 from transformers.models.seamless_m4t.tokenization_seamless_m4t import SeamlessM4TTokenizer
+from transformers.models.seamless_m4t.processing_seamless_m4t import SeamlessM4TProcessor
+
 from transformers.trainer_utils import set_seed
 from transformers.utils import logging
 
@@ -245,7 +247,7 @@ def _convert_model(
     return hf_model
 
 
-def load_model(pytorch_dump_folder_path, model_type):
+def load_model(pytorch_dump_folder_path, model_type, repo_id="ylacombe/hf-seamless-m4t-medium"):
     """
     Meta SeamlessM4T is made of 8 main components:
     - speech_encoder (#1) and speech_encoder_frontend (#2)
@@ -276,6 +278,7 @@ def load_model(pytorch_dump_folder_path, model_type):
     sanity_check_lang_id = tokenizer.lang_code_to_id["__fra__"]
 
     tokenizer.save_pretrained(save_dir)
+    #tokenizer.push_to_hub(repo_id=repo_id, create_pr = True)
     tokenizer = SeamlessM4TTokenizer.from_pretrained(save_dir)
 
     if sanity_check_lang_id != tokenizer.lang_code_to_id["__fra__"]:
@@ -292,20 +295,20 @@ def load_model(pytorch_dump_folder_path, model_type):
     ######### FE
 
     fe = SeamlessM4TFeatureExtractor(language_code=langs)
-    sanity_check_lang_id_fe = fe.lang_code_to_id["__fra__"]
 
-    if sanity_check_lang_id != sanity_check_lang_id_fe:
-        raise ValueError(
-            f"Not coherent lang id accross FE and tokenizer: {sanity_check_lang_id} vs {sanity_check_lang_id_fe}"
-        )
+
 
     fe.save_pretrained(save_dir)
+    #fe.push_to_hub(repo_id=repo_id, create_pr=True)
     fe = SeamlessM4TFeatureExtractor.from_pretrained(save_dir)
 
-    if sanity_check_lang_id_fe != fe.lang_code_to_id["__fra__"]:
-        raise ValueError(
-            f"Error in FE saving/loading - __fra__ lang id is not coherent: {sanity_check_lang_id_fe} vs {fe.lang_code_to_id['__fra__']}"
-        )
+        
+    processor = SeamlessM4TProcessor(feature_extractor=fe, tokenizer=tokenizer)
+    processor.save_pretrained(save_dir)
+    processor.push_to_hub(repo_id=repo_id, create_pr=True)
+    
+    processor = SeamlessM4TProcessor.from_pretrained(save_dir)
+    
 
     ######## Model
 
@@ -428,7 +431,8 @@ def load_model(pytorch_dump_folder_path, model_type):
     del original_model
 
     hf_model.generation_config._from_model_config = False
-    hf_model.save_pretrained(save_dir)  # , push_to_hub=True, repo_id="ylacombe/test_seamlessM4T")
+    hf_model.save_pretrained(save_dir)
+    hf_model.push_to_hub(repo_id=repo_id, create_pr=True, max_shard_size="20GB")
     hf_model = SeamlessM4TModel.from_pretrained(save_dir)
 
     input_test_text = "This is something to be translated in French"

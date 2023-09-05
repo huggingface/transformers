@@ -18,7 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 _import_structure = {
     "configuration_seamless_m4t": ["SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP", "SeamlessM4TConfig"],
-    "feature_extractor_seamless_m4T": ["SeamlessM4TFeatureExtractor"],
+    "feature_extraction_seamless_m4t": ["SeamlessM4TFeatureExtractor"],
     "tokenization_seamless_m4t": ["SeamlessM4TTokenizer"],
     "processing_seamless_m4t":  ["SeamlessM4TProcessor"],
 }
