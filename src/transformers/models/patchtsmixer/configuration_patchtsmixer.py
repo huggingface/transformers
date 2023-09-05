@@ -171,6 +171,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         is_encoder_decoder: bool = False,
         init_std: float = 0.02,
         seed_number: int = 42,
+        post_init: bool = False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -223,5 +224,6 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.d_size = "4D"
         self.init_std = init_std
         self.seed_number = seed_number
+        self.post_init = post_init
         
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)

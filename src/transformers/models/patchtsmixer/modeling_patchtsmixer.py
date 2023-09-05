@@ -262,7 +262,8 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
         
 
         # Initialize weights and apply final processing
-        self.post_init()
+        if config.post_init:
+            self.post_init()
 
     def forward(self, context_values: torch.Tensor, output_hidden_states: Optional[bool] = False) -> PatchTSMixerEncoderOutputWithNoAttention:
         """
@@ -306,15 +307,10 @@ class PatchTSMixerModelOutputWithNoAttention(ModelOutput):
 
 
 class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
-    def __init__(self, config: PatchTSMixerConfig):
+    def __init__(self, config: PatchTSMixerConfig, mask_input: bool = False):
         super().__init__(config)
 
         set_seed(config.seed_number)
-
-        if hasattr(config, "mask_input"):
-            mask_input = config.mask_input
-        else:
-            mask_input = False
 
         self.encoder = PatchTSMixerEncoder(config)
         self.patching = Patch(
@@ -341,7 +337,8 @@ class PatchTSMixerModel(PatchTSMixerPreTrainedModel):
             self.revin = None
 
         # Initialize weights and apply final processing
-        self.post_init()
+        if config.post_init:
+            self.post_init()
 
     def forward(
             self, 
@@ -428,8 +425,7 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
     # PatchTSTModel + Pretraining Head
     def __init__(self, config: PatchTSMixerConfig):
         super().__init__(config)
-        config.mask_input = True
-        self.model = PatchTSMixerModel(config)
+        self.model = PatchTSMixerModel(config, mask_input=True)
         self.head = PatchTSMixerPretrainHead(config)
         self.masked_loss = config.masked_loss
         if config.masked_loss is True:
@@ -443,7 +439,8 @@ class PatchTSMixerForPretraining(PatchTSMixerPreTrainedModel):
             self.revin = None
         
         # Initialize weights and apply final processing
-        self.post_init()
+        if config.post_init:
+            self.post_init()
 
     def forward(
             self, 
@@ -532,7 +529,8 @@ class PatchTSMixerForForecasting(PatchTSMixerPreTrainedModel):
             self.revin = None
         
         # Initialize weights and apply final processing
-        self.post_init()
+        if config.post_init:
+            self.post_init()
 
     def forward(
         self,
@@ -635,7 +633,8 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
             self.inject_revin = None
         
         # Initialize weights and apply final processing
-        self.post_init()
+        if config.post_init:
+            self.post_init()
 
 
     def forward(
@@ -735,7 +734,8 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
             self.inject_revin = None
         
         # Initialize weights and apply final processing
-        self.post_init()
+        if config.post_init:
+            self.post_init()
 
     def forward(
         self,
