@@ -417,8 +417,8 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
         """
         return (
             "{% for message in messages %}"
-            "{% if message.role == 'user' %}{{ ' ' }}{% endif %}"
-            "{{ message.content }}"
+            "{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}"
+            "{{ message['content'] }}"
             "{% if not loop.last %}{{ '  ' }}{% endif %}"
             "{% endfor %}"
             "{{ eos_token }}"

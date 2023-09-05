@@ -36,8 +36,8 @@ and `content` keys, and represents a single chat message. Chat templates are str
 specifies how to format a conversation for a given model into a single tokenizable sequence. By storing this information
 with the tokenizer, we can ensure that models get input data in the format they expect.
 
-Let's make this concrete with a quick example using the `BlenderBot` model. Blenderbot has an extremely simple template,
-which mostly just adds whitespace between rounds of dialogue:
+Let's make this concrete with a quick example using the `BlenderBot` model. Blenderbot has an extremely simple default 
+template, which mostly just adds whitespace between rounds of dialogue:
 
 ```python
 >>> from transformers import AutoTokenizer
