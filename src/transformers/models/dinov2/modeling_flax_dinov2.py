@@ -464,6 +464,7 @@ class FlaxDinov2Encoder(nn.Module):
         )
 
 
+# Copied from transformers.models.vit.modeling_flax_vit.FlaxViTPreTrainedModel with ViT->Dinov2, vit->dinov2, VIT->DINOV2
 class FlaxDinov2PreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -511,7 +512,7 @@ class FlaxDinov2PreTrainedModel(FlaxPreTrainedModel):
     @add_start_docstrings_to_model_forward(DINOV2_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
         self,
-        pixel_values: jnp.ndarray,
+        pixel_values,
         params: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
         train: bool = False,
@@ -526,7 +527,6 @@ class FlaxDinov2PreTrainedModel(FlaxPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
-
         # Handle any PRNG if needed
         rngs = {}
         if dropout_rng is not None:
