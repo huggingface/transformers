@@ -657,7 +657,6 @@ class FalconFlashAttention(nn.Module):
 
         past_key_value = (key_layer, value_layer) if use_cache else None
 
-        # (attention_mask * 1.0).masked_fill(attention_mask, float("-1e9")).to(torch_dtype)
         query_layer = (
             query_layer.reshape(batch_size, self.num_heads, -1, self.head_dim).transpose(1, 2).to(torch_dtype)
         )
