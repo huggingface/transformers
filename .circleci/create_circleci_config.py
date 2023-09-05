@@ -223,7 +223,7 @@ class CircleCIJob:
             # failure.
             test_command = f"({test_command}) || true"
         else:
-            test_command += " | tee tests_output.txt || true"
+            test_command += " || true"
         steps.append({"run": {"name": "Run tests", "command": test_command}})
 
         check_test_command = f'if [ -s reports/tests_{self.name}/failures_short.txt ]; '
