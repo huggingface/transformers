@@ -10,7 +10,6 @@ without needing trust_remote_code=True.
 """
 
 if __name__ == "__main__":
-
     parser = ArgumentParser()
     parser.add_argument(
         "--checkpoint_dir",
