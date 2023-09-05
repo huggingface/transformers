@@ -332,9 +332,11 @@ class MegaModelTester:
 
         model = MegaForCausalLM(config).to(torch_device).eval()
 
-        result = model(
-            input_ids.repeat(1, 8),
-        )
+        input_ids = input_ids.repeat(1, 8)
+        # multiply the sequence length by 8 since we repeat the same ids 8 times in input_ids
+        input_mask = random_attention_mask([self.batch_size, self.seq_length * 8])
+
+        result = model(input_ids, attention_mask=input_mask)
 
         # test if the sequence length of attentions is same provided chunk_size
         self.parent.assertEqual(result["attentions"][0].shape[-1], config.chunk_size)
