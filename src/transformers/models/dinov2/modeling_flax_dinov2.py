@@ -125,13 +125,8 @@ class FlaxDinov2Embeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.models.vit.modeling_flax_vit.FlaxViTPatchEmbeddings with ViT->Dinov2
 class FlaxDinov2PatchEmbeddings(nn.Module):
-    """
-    This class turns `pixel_values` of shape `(batch_size, height, width, num_channels)` into the initial
-    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-    Transformer.
-    """
-
     config: Dinov2Config
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
