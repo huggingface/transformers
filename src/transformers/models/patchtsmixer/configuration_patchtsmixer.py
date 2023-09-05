@@ -158,7 +158,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         mask_patch_ratios: list = [1, 1],
         mask_value=0,
         masked_loss: bool = False,
-        mask_mode: str = "mask_before_encoder",
+        # mask_mode: str = "mask_before_encoder",
         channel_consistent_masking: bool = True,
         revin: bool = True,
         head_dropout: float = 0.2,
@@ -202,7 +202,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.mask_patch_ratios = mask_patch_ratios
         self.mask_value = mask_value
         self.channel_consistent_masking = channel_consistent_masking
-        self.mask_mode = mask_mode
+        # self.mask_mode = mask_mode
         self.masked_loss = masked_loss
         # patching related
         self.patch_last = True
