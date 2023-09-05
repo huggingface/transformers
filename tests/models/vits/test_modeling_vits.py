@@ -150,7 +150,7 @@ class VitsModelTester:
         attention_mask = inputs_dict["attention_mask"]
 
         result = model(input_ids, attention_mask=attention_mask)
-        self.parent.assertEqual((self.batch_size, 272), result.waveform.shape)
+        self.parent.assertEqual((self.batch_size, 624), result.waveform.shape)
 
 
 @require_torch
