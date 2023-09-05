@@ -15,6 +15,7 @@
 """PyTorch Falcon model."""
 
 import math
+import os
 from typing import Optional, Tuple, Union
 
 import torch
@@ -38,6 +39,7 @@ from ...utils import (
     is_flash_attn_available,
     logging,
 )
+from ..auto.configuration_auto import sanitize_code_revision
 from .configuration_falcon import FalconConfig
 
 
@@ -431,9 +433,19 @@ class FalconAttention(nn.Module):
         value_layer_ = value_layer.reshape(batch_size, num_kv_heads, -1, self.head_dim)
 
         if alibi is None:
-            if output_attentions:
-                # F.scaled_dot_product_attention doesn't return the attention weights, so we have
-                # to do it by hand if we want them
+            if hasattr(F, "scaled_dot_product_attention") and not output_attentions:
+                # TODO: deprecate this once we add FA2 support in Falcon
+                logger.warning_once(
+                    "The current implementation of Falcon calls `torch.scaled_dot_product_attention` directly, this will be deprecated in the"
+                    " future in favor of the `BetterTransformer` API. Please install the latest optimum library with `pip install -U optimum` and call "
+                    "`model.to_bettertransformer()` to benefit from `torch.scaled_dot_product_attention` and future performance optimizations."
+                )
+
+                attn_output = F.scaled_dot_product_attention(
+                    query_layer_, key_layer_, value_layer_, attention_mask_float, 0.0, is_causal=False
+                )
+                attention_scores = None
+            else:
                 attention_scores = query_layer_ @ key_layer_.transpose(-1, -2)
                 attention_scores /= math.sqrt(self.head_dim)
 
@@ -441,11 +453,6 @@ class FalconAttention(nn.Module):
                     attention_scores + attention_mask_float, dim=-1, dtype=hidden_states.dtype
                 )
                 attn_output = attention_scores @ value_layer_
-            else:
-                attn_output = F.scaled_dot_product_attention(
-                    query_layer_, key_layer_, value_layer_, attention_mask_float, 0.0, is_causal=False
-                )
-                attention_scores = None
 
             attn_output = attn_output.view(batch_size, self.num_heads, query_length, self.head_dim)
             attn_output = attn_output.permute(0, 2, 1, 3)
@@ -926,6 +933,37 @@ class FalconPreTrainedModel(PreTrainedModel):
                 layer_past[1].view(batch_size_times_num_heads, kv_length, head_dim),
             )
             for layer_past in past_key_value
+        )
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: Optional[Union[str, os.PathLike]],
+        *model_args,
+        config: Optional[Union[str, os.PathLike]] = None,
+        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        ignore_mismatched_sizes: bool = False,
+        force_download: bool = False,
+        local_files_only: bool = False,
+        token: Optional[Union[str, bool]] = None,
+        revision: str = "main",
+        use_safetensors: bool = None,
+        **kwargs,
+    ):
+        revision = sanitize_code_revision(pretrained_model_name_or_path, revision, kwargs.get("trust_remote_code"))
+
+        return super().from_pretrained(
+            pretrained_model_name_or_path,
+            *model_args,
+            config=config,
+            cache_dir=cache_dir,
+            ignore_mismatched_sizes=ignore_mismatched_sizes,
+            force_download=force_download,
+            local_files_only=local_files_only,
+            token=token,
+            revision=revision,
+            use_safetensors=use_safetensors,
+            **kwargs,
         )
 
 

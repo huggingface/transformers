@@ -76,14 +76,14 @@ def infer_framework_from_repr(x):
     Tries to guess the framework of an object `x` from its repr (brittle but will help in `is_tensor` to try the
     frameworks in a smart order, without the need to import the frameworks).
     """
-    representation = repr(x)
-    if representation.startswith("tensor"):
+    representation = str(type(x))
+    if representation.startswith("<class 'torch."):
         return "pt"
-    elif "tf.Tensor" in representation:
+    elif representation.startswith("<class 'tensorflow."):
         return "tf"
-    elif representation.startswith("Array"):
+    elif representation.startswith("<class 'jax"):
         return "jax"
-    elif representation.startswith("array"):
+    elif representation.startswith("<class 'numpy."):
         return "np"
 
 
