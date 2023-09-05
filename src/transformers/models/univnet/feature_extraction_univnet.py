@@ -13,7 +13,6 @@
 # limitations under the License.
 """Feature extractor class for UnivNetGan."""
 
-import warnings
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np

@@ -108,7 +108,7 @@ class UnivNetGanConfig(PretrainedConfig):
                 "`resblock_kernel_sizes`, `resblock_stride_sizes`, and `resblock_dilation_sizes` must all have the"
                 " same length (which will be the number of resnet blocks in the model)."
             )
-        
+
         self.model_in_channels = model_in_channels
         self.model_hidden_channels = model_hidden_channels
         self.num_mel_channels = num_mel_channels
