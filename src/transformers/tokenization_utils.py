@@ -350,14 +350,17 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # 1. Init the parent class
         super().__init__(**kwargs)
         self.tokens_trie = Trie()
-        self._added_tokens_decoder: Dict[int, AddedToken] = {}
+        
+        # 2. init `_added_tokens_decoder` if child class did not
+        if not hasattr(self, "_added_tokens_decoder"):
+            self._added_tokens_decoder: Dict[int, AddedToken] = {}
 
-        # 2. if a `added_tokens_decoder` is passed, we are loading from a saved tokenizer
+        # 3. if a `added_tokens_decoder` is passed, we are loading from a saved tokenizer, we overwrite
         if "added_tokens_decoder" in kwargs:
             # overwriting the class's added_tokens_decoder. This is the source of truth!
             self._added_tokens_decoder.update(kwargs.get("added_tokens_decoder"))
 
-        # 3. If some of the special tokens are not part of the vocab, we add them, at the end.
+        # 4. If some of the special tokens are not part of the vocab, we add them, at the end.
         # the order of addition is the same as self.SPECIAL_TOKENS_ATTRIBUTES following `tokenizers`
         self._add_tokens(self.all_special_tokens_extended, special_tokens=True)
 
