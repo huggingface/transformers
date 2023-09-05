@@ -460,7 +460,7 @@ def main():
     # if SpecAugment is used for whisper models, return attention_mask to guide the mask along time axis
     forward_attention_mask = (
         getattr(config, "model_type", None) == "whisper"
-        and getattr(config, "apply_spec_augment", False)
+        and getattr(config, "apply_spec_augment", True)
         and getattr(config, "mask_time_prob", 0) > 0
     )
 
