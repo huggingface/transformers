@@ -285,8 +285,8 @@ def load_model(pytorch_dump_folder_path, model_type):
         
     ####### get language to ids dict
     text_decoder_lang_code_to_id = {lang: tokenizer.lang_code_to_id[f"__{lang}__"] for lang in langs}
-    t2u_lang_code_to_id = {code: i for i, code in enumerate(UNIT_SUPPORTED_LANGUAGES)}
-    vocoder_lang_code_to_id = {code: i for i, code in enumerate(VOCODER_SUPPORTED_LANGUAGES)}
+    t2u_lang_code_to_id = {code.replace("__", ""): i for i, code in enumerate(UNIT_SUPPORTED_LANGUAGES)}
+    vocoder_lang_code_to_id = {code.replace("__", ""): i for i, code in enumerate(VOCODER_SUPPORTED_LANGUAGES)}
     
 
     ######### FE

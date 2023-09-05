@@ -25,11 +25,6 @@ import torchaudio.compliance.kaldi as ta_kaldi
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import PaddingStrategy, TensorType, logging
-from .tokenization_seamless_m4t import (
-    LARGE_SEAMLESS_M4T_LANGUAGE_CODES,
-    UNIT_SUPPORTED_LANGUAGES,
-    VOCODER_SUPPORTED_LANGUAGES,
-)
 
 
 logger = logging.get_logger(__name__)
@@ -68,7 +63,6 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         num_mel_bins=80,
         padding_value=0.0,
         stride=2,  # TODO: add to docstrings
-        lang_start_idx=256001,  # TODO: add to docstrings
         src_lang="eng",
         tgt_lang="fra",
         language_code: Optional[List] = None,
@@ -77,45 +71,11 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         self.num_mel_bins = num_mel_bins
         self.return_attention_mask = True
         self.stride = stride
-        self.lang_start_idx = lang_start_idx
 
-        language_code = language_code if language_code is not None else LARGE_SEAMLESS_M4T_LANGUAGE_CODES
-        language_code = [f"__{code}__" for code in language_code if "__" not in code]
-        self.lang_code_to_id = {code: lang_start_idx + i for i, code in enumerate(language_code)}
-
-        self.t2u_language_code = UNIT_SUPPORTED_LANGUAGES
-        self.t2u_lang_code_to_id = {code: i for i, code in enumerate(self.t2u_language_code)}
-
-        self.vocoder_language_code = VOCODER_SUPPORTED_LANGUAGES
-        self.vocoder_lang_code_to_id = {code: i for i, code in enumerate(self.vocoder_language_code)}
-
-        self._src_lang = f"__{src_lang}__"
-        self._tgt_lang = f"__{tgt_lang}__"
+        self.src_lang = src_lang
+        self.tgt_lang = tgt_lang
 
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
-
-    @property
-    # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang
-    def src_lang(self) -> str:
-        return self._src_lang
-
-    @src_lang.setter
-    def src_lang(self, new_src_lang: str) -> None:
-        if "__" not in new_src_lang:
-            self._src_lang = f"__{new_src_lang}__"
-        else:
-            self._src_lang = new_src_lang
-
-    @property
-    def tgt_lang(self) -> str:
-        return self._tgt_lang
-
-    @tgt_lang.setter
-    def tgt_lang(self, new_tgt_lang: str) -> None:
-        if "__" not in new_tgt_lang:
-            self._tgt_lang = f"__{new_tgt_lang}__"
-        else:
-            self._tgt_lang = new_tgt_lang
             
     @staticmethod
     # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
@@ -164,6 +124,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
         do_normalize: Optional[bool] = True,
+        tgt_lang: Optional[str] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -225,6 +186,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
                 Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
                 improve the performance of the model.
         """
+        self.tgt_lang = self.tgt_lang if tgt_lang is None else tgt_lang
 
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -295,20 +257,9 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
 
         padded_inputs["input_features"] = input_features
         padded_inputs["attention_mask"] = attention_mask
-
-        padded_inputs["decoder_input_ids"] = [[self.lang_code_to_id[self.tgt_lang]]]  # TODO: check batch behavior
-
-        if self._tgt_lang in self.t2u_lang_code_to_id:
-            padded_inputs["speech_tgt_lang_id"] = [
-                [self.t2u_lang_code_to_id[self._tgt_lang]]
-            ]  # TODO: check batch behavior
-
-        if self._tgt_lang in self.vocoder_lang_code_to_id:
-            padded_inputs["vocoder_tgt_lang_id"] = [
-                [self.vocoder_lang_code_to_id[self._tgt_lang]]
-            ]  # TODO: check batch behavior
-
+        
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
+
 
         return padded_inputs
