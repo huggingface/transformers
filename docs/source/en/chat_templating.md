@@ -58,17 +58,18 @@ that string will also be tokenized for us. To see a more complex template in act
 `meta-llama/Llama-2-7b-chat-hf` model. Note that this model has gated access, so you will have to
 [request access on the repo](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf) if you want to run this code yourself:
 
+<!--- We use >> instead of >>> to make doctest skip this one, because it can't access the gated repo. -->
 ```python
->>> from transformers import AutoTokenizer
->>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+>> from transformers import AutoTokenizer
+>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
 
->>> chat = [
+>> chat = [
 ...   {"role": "user", "content": "Hello, how are you?"},
 ...   {"role": "assistant", "content": "I'm doing great. How can I help you today?"},
 ...   {"role": "user", "content": "I'd like to show off how chat templating works!"},
 ... ]
 
->>> tokenizer.apply_chat_template(chat, tokenize=False)
+>> tokenizer.apply_chat_template(chat, tokenize=False)
 "<s>[INST] Hello, how are you? [/INST] I'm doing great. How can I help you today? </s><s>[INST] I'd like to show off how chat templating works! [/INST]"
 ```
 
@@ -179,6 +180,11 @@ tokenizer.push_to_hub("model_name")  # Upload your new template to the Hub!
 
 The method [`~PreTrainedTokenizer.apply_chat_template`] which uses your chat template is called by the [`ConversationalPipeline`] class, so 
 once you set the correct chat template, your model will automatically become compatible with [`ConversationalPipeline`].
+
+## What are "default" templates?
+
+TODO MATT FILL IN 
+
 
 ## What template should I use?
 
