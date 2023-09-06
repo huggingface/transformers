@@ -144,21 +144,24 @@ class PatchTSMixerConfig(PretrainedConfig):
         patch_len: int = 8,
         in_channels: int = 3,
         stride: int = 8,
-        num_features: int = 128,
+        num_features: int = 8,
         expansion_factor: int = 2,
-        num_layers: int = 8,
-        dropout: float = 0.5,
+        num_layers: int = 3,
+        dropout: float = 0.2,
         mode: str = "common_channel",
         gated_attn: bool = True,
-        norm_mlp="LayerNorm",
-        # masking related
+        norm_mlp: str="LayerNorm",
+        self_attn: bool = False,
+        self_attn_heads: int = 1,
+        use_pe: bool = False,
+        pe: str = "zeros",
+        learn_pe: bool = False,
         mask_type: str = "random",
         mask_ratio=0.5,
         mask_patches: list = [2, 3],
         mask_patch_ratios: list = [1, 1],
         mask_value=0,
         masked_loss: bool = False,
-        # mask_mode: str = "mask_before_encoder",
         channel_consistent_masking: bool = True,
         revin: bool = True,
         head_dropout: float = 0.2,
@@ -207,6 +210,10 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.masked_loss = masked_loss
         # patching related
         self.patch_last = True
+        
+        self.use_pe = use_pe
+        self.pe = pe
+        self.learn_pe = learn_pe
 
         # forecast/prediction related
         self.forecast_len = forecast_len
@@ -219,8 +226,8 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.head_agg = head_agg
 
         # other params
-        self.self_attn = False
-        self.self_attn_heads = 1
+        self.self_attn = self_attn
+        self.self_attn_heads = self_attn_heads
         self.d_size = "4D"
         self.init_std = init_std
         self.seed_number = seed_number

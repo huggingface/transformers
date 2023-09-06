@@ -13,10 +13,11 @@ import torch.nn.functional as F
 import numpy as np
 import inspect
 from collections import OrderedDict
-from .basics import *
+from .basics import SigmoidRange, positional_encoding
 from .gated_attention import GatedAttention
 from .norm import NormLayer
 from .mixutils import get_class_params_via_inspect
+from torch.nn.modules.activation import MultiheadAttention
 
 logger = logging.getLogger(__name__)
 
@@ -156,10 +157,12 @@ class PatchMixer(nn.Module):
 
         if self_attn:
             self.self_attn_layer = MultiheadAttention(
-                d_model=num_features,
-                n_heads=self_attn_heads,
-                attn_dropout=dropout,
-                proj_dropout=dropout,
+                embed_dim=num_features,
+                num_heads=self_attn_heads,
+                dropout=dropout,
+                add_bias_kv=True,
+                add_zero_attn=False,
+                batch_first=True,
             )
             self.norm_attn = NormLayer(
                 norm_mlp=norm_mlp, mode=mode, num_features=num_features
@@ -181,8 +184,8 @@ class PatchMixer(nn.Module):
                 #  (batch_size, num_patches, num_features) if flatten
                 #  (batch_size, n_vars, num_patches, num_features) if common_channel
 
-            x_attn, _ = self.self_attn_layer(x_tmp)
-
+            x_attn, _ = self.self_attn_layer(x_tmp,x_tmp,x_tmp, need_weights=False)
+            
             if self.mode in ["common_channel", "mix_channel"]:
                 x_attn = torch.reshape(
                     x_attn, (x.shape[0], x.shape[1], x.shape[2], x.shape[3])
@@ -517,14 +520,20 @@ class PatchTSMixer(nn.Module):
         self_attn: bool = False,
         self_attn_heads: int = 1,
         norm_mlp="LayerNorm",
+        use_pe: bool = False,
+        pe: str = "zeros",
+        learn_pe: bool = False,
     ):
         super().__init__()
 
         ffn = "mlp"
         mixer_type = "base"
 
+        # if mode == "flatten":
+        #     logger.warn("Use mode = common_channel or mix_channel. mode=flatten is not preferred due to poor performance")
             
         self.mode = mode
+        self.use_pe = use_pe
     
         if mode == "flatten":
             self.patcher = nn.Linear(in_channels * patch_size, num_features)
@@ -555,9 +564,11 @@ class PatchTSMixer(nn.Module):
             norm_mlp=norm_mlp,
         )
 
+        if use_pe:
+            self.W_pos = positional_encoding(pe, learn_pe, num_patches, num_features)
+
     def forward(self, x, output_hidden_states: Optional[bool] = False):
         # x: [bs  x n_vars x num_patch x patch_len]
-
         batch_size = x.shape[0]
         logger.debug(x.shape)
 
@@ -577,7 +588,10 @@ class PatchTSMixer(nn.Module):
 
         logger.debug(x.shape)
 
-    
+        if self.use_pe:
+            patches = patches + self.W_pos
+        
+        
         embedding, all_hidden_states = self.mlp_mixer_encoder(patches, output_hidden_states = output_hidden_states)
 
         logger.debug(x.shape)

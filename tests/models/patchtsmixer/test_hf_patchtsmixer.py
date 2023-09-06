@@ -47,6 +47,11 @@ class TestHFPatchTSMixer(unittest.TestCase):
             output_range=None,
             head_agg=None,
             revin = True,
+            use_pe = False,
+            pe = "sincos",
+            learn_pe = True,
+            self_attn = False,
+            self_attn_heads = 1,
         )
 
         cls.num_patches = (
@@ -166,6 +171,159 @@ class TestHFPatchTSMixer(unittest.TestCase):
         
         self.assertEqual(output.shape, self.__class__.correct_forecast_output.shape)
 
+    def check_module(self, task, params = None, output_hidden_states = True,):
+        config = PatchTSMixerConfig(**params)
+        if task == "forecast":
+            mdl = PatchTSMixerForForecasting(config)
+            target_input = self.__class__.correct_forecast_output
+            if config.forecast_channel_indices is not None:
+                target_output = self.__class__.correct_sel_forecast_output
+            else:
+                target_output = target_input
+        
+        elif task == "classification":
+            mdl = PatchTSMixerForClassification(config)
+            target_input = self.__class__.correct_classification_classes
+            target_output = self.__class__.correct_classification_output
+        elif task == "regression":
+            mdl = PatchTSMixerForRegression(config)
+            target_input = self.__class__.correct_regression_output
+            target_output = self.__class__.correct_regression_output
+        elif task == "pretrain":
+            mdl = PatchTSMixerForPretraining(config)
+            target_input = None
+            target_output = self.__class__.correct_pretrain_output
+        else:
+            print("invalid task")
+        
+        if config.mode == "flatten":
+            enc_output = self.__class__.flat_enc_output
+        else:
+            enc_output = self.__class__.enc_output
+        
+        if target_input is None:
+            output = mdl(self.__class__.data, 
+                    output_hidden_states = output_hidden_states)
+        else:
+            output = mdl(self.__class__.data, 
+                    target_values=target_input, 
+                    output_hidden_states = output_hidden_states)
+
+        self.assertEqual(
+                output.prediction_logits.shape, target_output.shape
+            )
+
+        self.assertEqual(
+            output.last_hidden_state.shape, enc_output.shape
+        )
+
+        if output_hidden_states is True:
+            self.assertEqual(len(output.hidden_states),params["num_layers"])
+            
+        else:
+            self.assertEqual(output.hidden_states, None)
+            
+        
+        self.assertEqual(output.loss.item()<100,True)
+
+
+    def test_forecast(self):
+        for mode in ["flatten","common_channel","mix_channel"]:
+            for self_attn in [True,False]:
+                for revin in [True, False]:
+                    for gated_attn in [True, False]:
+                        for forecast_channel_indices in [None, [0,2]]:
+                            params = self.__class__.params.copy()
+                            params.update(mode = mode, 
+                                self_attn=self_attn,
+                                revin=revin,
+                                forecast_channel_indices=forecast_channel_indices,
+                                gated_attn = gated_attn)
+                            
+                            self.check_module(task="forecast",params=params)
+
+    def test_classification(self):
+        for mode in ["common_channel","mix_channel","flatten"]:
+            for self_attn in [True,False]:
+                for revin in [True, False]:
+                    for gated_attn in [True, False]:
+                        for head_agg in ["max_pool","avg_pool"]:
+                            if mode == "flatten" and revin is True:
+                                continue
+                            params = self.__class__.params.copy()
+                            params.update(mode = mode, 
+                                self_attn=self_attn,
+                                revin=revin,
+                                head_agg=head_agg,
+                                gated_attn = gated_attn)
+                            # print(mode,self_attn,revin,gated_attn,head_agg)
+                        
+                            self.check_module(task="classification",params=params)
+
+    def test_regression(self):
+        for mode in ["common_channel","mix_channel","flatten"]:
+            for self_attn in [True,False]:
+                for revin in [True, False]:
+                    for gated_attn in [True, False]:
+                        for head_agg in ["max_pool","avg_pool"]:
+                            if mode == "flatten" and revin is True:
+                                continue
+                            params = self.__class__.params.copy()
+                            params.update(mode = mode, 
+                                self_attn=self_attn,
+                                revin=revin,
+                                head_agg=head_agg,
+                                gated_attn = gated_attn)
+                            # print(mode,self_attn,revin,gated_attn,head_agg)
+                        
+                            self.check_module(task="regression",params=params)
+
+
+    
+    def test_pretrain(self):
+        for mode in ["common_channel","mix_channel","flatten"]:
+            for self_attn in [True,False]:
+                for revin in [True, False]:
+                    for gated_attn in [True, False]:
+                        for mask_type in ["random","forecast"]:
+                            for masked_loss in [True, False]:
+                                for channel_consistent_masking in [True, False]:
+                                    params = self.__class__.params.copy()
+                                    params.update(mode = mode, 
+                                        self_attn=self_attn,
+                                        revin=revin,
+                                        gated_attn = gated_attn,
+                                        mask_type = mask_type,
+                                        masked_loss = masked_loss,
+                                        channel_consistent_masking = channel_consistent_masking,
+                                        )
+                                    # print(mode,self_attn,revin,gated_attn,head_agg)
+                                
+                                    self.check_module(task="pretrain",params=params)
+
+        # for mode in ["flatten","common_channel","mix_channel"]:
+        #     for task in ["forecast","classification","regression","pretrain"]:
+        #         for self_attn in [True,False]:
+        #             for head_agg in ["max_pool","avg_pool"]:
+        #                 for mask_type in ["random","forecast"]:
+        #                     for masked_loss in [True, False]:
+        #                         for channel_consistent_masking in [True, False]:
+        #                             for revin in [True, False]:
+        #                                 for forecast_channel_indices in [None, [0,2]]:
+
+
+
+
+
+
+
+
+        
+
+        
+
+        
+
     def forecast_full_module(self, params = None, output_hidden_states = False):
         
         config = PatchTSMixerConfig(**params)
@@ -180,7 +338,8 @@ class TestHFPatchTSMixer(unittest.TestCase):
             enc_output = self.__class__.flat_enc_output
         else:
             enc_output = self.__class__.enc_output
-        output = mdl(self.__class__.data, target_values=target_val, output_hidden_states = output_hidden_states)
+        
+        output = mdl(self.__class__.data, target_values=self.__class__.correct_forecast_output, output_hidden_states = output_hidden_states)
 
         self.assertEqual(
                 output.prediction_logits.shape, target_val.shape
@@ -201,7 +360,11 @@ class TestHFPatchTSMixer(unittest.TestCase):
         # print("loss shape", output.loss, output.loss.shape)
 
     def test_forecast_full(self):
-        self.forecast_full_module(self.__class__.params, output_hidden_states = True)
+        self.check_module(task = "forecast",
+                            params = self.__class__.params,
+                            output_hidden_states = True
+                            )
+        # self.forecast_full_module(self.__class__.params, output_hidden_states = True)
     
     def test_forecast_full_2(self):
         params = self.__class__.params.copy()
@@ -215,6 +378,15 @@ class TestHFPatchTSMixer(unittest.TestCase):
                         )
         self.forecast_full_module(params, output_hidden_states = True)
     
+    def test_forecast_full_5(self):
+        params = self.__class__.params.copy()
+        params.update(self_attn = True,
+                        use_pe = True,
+                        pe = "sincos",
+                        learn_pe = True,
+                        )
+        self.forecast_full_module(params, output_hidden_states = True)
+
     def test_forecast_full_4(self):
         params = self.__class__.params.copy()
         params.update(mode = "mix_channel",

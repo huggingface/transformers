@@ -258,6 +258,9 @@ class PatchTSMixerEncoder(PatchTSMixerPreTrainedModel):
             self_attn=config.self_attn,
             self_attn_heads=config.self_attn_heads,
             norm_mlp=config.norm_mlp,
+            use_pe = config.use_pe,
+            pe = config.pe,
+            learn_pe = config.learn_pe,
         )
         
 
@@ -626,8 +629,11 @@ class PatchTSMixerForClassification(PatchTSMixerPreTrainedModel):
         self.loss = torch.nn.CrossEntropyLoss()
 
         if config.revin is True:
+            if config.mode == "flatten":
+                raise Exception("revin is not enabled for classification task when mode == flatten")
             self.inject_revin = InjectRevinStatistics4D(num_features = config.num_features,
                                 num_patches = config.num_patches)
+                            
                         
         else:
             self.inject_revin = None
@@ -728,6 +734,8 @@ class PatchTSMixerForRegression(PatchTSMixerPreTrainedModel):
         self.loss = torch.nn.MSELoss(reduction="mean")
 
         if config.revin == True:
+            if config.mode == "flatten":
+                raise Exception("revin is not enabled for regression task when mode == flatten")
             self.inject_revin = InjectRevinStatistics4D(num_features = config.num_features,
                                 num_patches = config.num_patches)
         else:
