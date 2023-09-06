@@ -635,7 +635,10 @@ class TrainingArguments:
             This flag is experimental and subject to change in future releases.
         include_tokens_per_second (`bool`, *optional*):
             Whether or not to compute the number of tokens per second per device for training speed metrics.
-            This will iterate over the entire training dataloader once beforehand, and will slow down the entire process.
+
+            This will iterate over the entire training dataloader once beforehand,
+
+            and will slow down the entire process.
     """
 
     framework = "pt"

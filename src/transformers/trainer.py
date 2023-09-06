@@ -1606,7 +1606,7 @@ class Trainer:
                 # May be slightly incorrect if the last batch in the training dataloader has a smaller size but it's
                 # the best we can do.
                 num_train_samples = args.max_steps * total_train_batch_size
-                if args.tgs_metrics:
+                if args.include_tokens_per_second:
                     num_train_tokens = (
                         args.max_steps
                         * self.num_tokens(train_dataloader, True)
@@ -1617,7 +1617,7 @@ class Trainer:
                 max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
                 num_train_epochs = math.ceil(args.num_train_epochs)
                 num_train_samples = self.num_examples(train_dataloader) * args.num_train_epochs
-                if args.tgs_metrics:
+                if args.include_tokens_per_second:
                     num_train_tokens = self.num_tokens(train_dataloader) * args.world_size * args.num_train_epochs
         elif args.max_steps > 0:  # Rely on max_steps when dataloader does not have a working size
             max_steps = args.max_steps
@@ -1626,7 +1626,7 @@ class Trainer:
             num_update_steps_per_epoch = max_steps
             num_examples = total_train_batch_size * args.max_steps
             num_train_samples = args.max_steps * total_train_batch_size
-            if args.tgs_metrics:
+            if args.include_tokens_per_second:
                 num_train_tokens = (
                     args.max_steps
                     * self.num_tokens(train_dataloader, True)
@@ -2014,7 +2014,7 @@ class Trainer:
             start_time,
             num_samples=num_train_samples,
             num_steps=self.state.max_steps,
-            num_tokens=None if args.tgs_metrics is None else num_train_tokens / args.world_size,
+            num_tokens=None if args.include_tokens_per_second is None else num_train_tokens / args.world_size,
         )
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos
