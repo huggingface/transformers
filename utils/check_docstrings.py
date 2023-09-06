@@ -873,7 +873,8 @@ def stringify_default(default: Any) -> str:
     elif isinstance(default, int):
         return str(default)
     elif isinstance(default, float):
-        return str(round(default, 2))
+        result = str(default)
+        return str(round(default, 2)) if len(result) > 6 else result
     elif isinstance(default, str):
         return str(default) if default.isnumeric() else f'`"{default}"`'
     elif isinstance(default, type):
