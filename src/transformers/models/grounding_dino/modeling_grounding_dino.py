@@ -160,10 +160,14 @@ class GroundingDINODecoderOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
             the self-attention heads.
-        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
+        vision_cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
             used to compute the weighted average in the cross-attention heads.
+        text_cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` and `config.add_cross_attention=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights of the encoder's cross-attention layer, after the attention softmax,
+            used to compute the weighted average in the text cross-attention heads.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -171,7 +175,8 @@ class GroundingDINODecoderOutput(ModelOutput):
     intermediate_reference_points: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    vision_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    text_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 @dataclass
 class GroundingDINOEncoderOutput(ModelOutput):
@@ -1814,7 +1819,6 @@ class GroundingDINOEncoder(GroundingDINOPreTrainedModel):
             attentions_text=all_attn_enhanced_text
         )
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrDecoder with DeformableDetr->GroundingDINO,Deformable DETR->Grounding DINO
 class GroundingDINODecoder(GroundingDINOPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`GroundingDINODecoderLayer`].
@@ -1840,20 +1844,24 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
         # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
         self.bbox_embed = None
         self.class_embed = None
+        self.query_scale = None
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def forward(
         self,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
+        inputs_embeds,
+        vision_encoder_hidden_states,
+        vision_encoder_attention_mask=None,
+        text_encoder_hidden_states=None,
+        text_encoder_attention_mask=None,
         position_embeddings=None,
         reference_points=None,
         spatial_shapes=None,
         level_start_index=None,
         valid_ratios=None,
+        self_attn_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1902,7 +1910,8 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+        all_cross_attns_vision = () if (output_attentions and vision_encoder_hidden_states is not None) else None
+        all_cross_attns_text = () if (output_attentions and text_encoder_hidden_states is not None) else None
         intermediate = ()
         intermediate_reference_points = ()
 
@@ -1930,20 +1939,23 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(decoder_layer),
                     hidden_states,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
+                    vision_encoder_hidden_states,
+                    vision_encoder_attention_mask,
                     None,
                 )
             else:
                 layer_outputs = decoder_layer(
-                    hidden_states,
+                    hidden_states=hidden_states,
                     position_embeddings=position_embeddings,
-                    encoder_hidden_states=encoder_hidden_states,
                     reference_points=reference_points_input,
                     spatial_shapes=spatial_shapes,
                     level_start_index=level_start_index,
-                    encoder_attention_mask=encoder_attention_mask,
-                    output_attentions=output_attentions,
+                    vision_encoder_hidden_states=vision_encoder_hidden_states,
+                    vision_encoder_attention_mask=vision_encoder_attention_mask,
+                    text_encoder_hidden_states=text_encoder_hidden_states,
+                    text_encoder_attention_mask=text_encoder_attention_mask,
+                    self_attn_mask=self_attn_mask,
+                    output_attentions=output_attentions
                 )
 
             hidden_states = layer_outputs[0]
@@ -1970,8 +1982,12 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
+                if text_encoder_hidden_states is not None:
+                    all_cross_attns_text += (layer_outputs[2],)
+
+                if vision_encoder_hidden_states is not None:
+                    all_cross_attns_vision += (layer_outputs[3],)
+
 
         # Keep batch_size as first dimension
         intermediate = torch.stack(intermediate, dim=1)
@@ -2000,7 +2016,8 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
             intermediate_reference_points=intermediate_reference_points,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
+            vision_cross_attentions=all_cross_attns_vision,
+            text_cross_attentions=all_cross_attns_text
         )
 
 

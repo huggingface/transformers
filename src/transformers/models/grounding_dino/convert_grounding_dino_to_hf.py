@@ -203,6 +203,43 @@ def create_rename_keys(state_dict, config):
 
     #TODO convert decoder
     ########################################## DECODER - START
+    key_mappings_decoder = {
+        'cross_attn.sampling_offsets.weight': 'encoder_attn.sampling_offsets.weight',
+        'cross_attn.sampling_offsets.bias': 'encoder_attn.sampling_offsets.bias',
+        'cross_attn.attention_weights.weight': 'encoder_attn.attention_weights.weight',
+        'cross_attn.attention_weights.bias': 'encoder_attn.attention_weights.bias',
+        'cross_attn.value_proj.weight': 'encoder_attn.value_proj.weight',
+        'cross_attn.value_proj.bias': 'encoder_attn.value_proj.bias',
+        'cross_attn.output_proj.weight': 'encoder_attn.output_proj.weight',
+        'cross_attn.output_proj.bias': 'encoder_attn.output_proj.bias',
+        'norm1.weight': 'encoder_attn_layer_norm.weight',
+        'norm1.bias': 'encoder_attn_layer_norm.bias',
+        'ca_text.in_proj_weight': 'encoder_attn_text.in_proj_weight',
+        'ca_text.in_proj_bias': 'encoder_attn_text.in_proj_bias',
+        'ca_text.out_proj.weight': 'encoder_attn_text.out_proj.weight',
+        'ca_text.out_proj.bias': 'encoder_attn_text.out_proj.bias',
+        'catext_norm.weight': 'encoder_attn_text_layer_norm.weight',
+        'catext_norm.bias': 'encoder_attn_text_layer_norm.bias',
+        'self_attn.in_proj_weight': 'self_attn.in_proj_weight',
+        'self_attn.in_proj_bias': 'self_attn.in_proj_bias',
+        'self_attn.out_proj.weight': 'self_attn.out_proj.weight',
+        'self_attn.out_proj.bias': 'self_attn.out_proj.bias',
+        'norm2.weight': 'self_attn_layer_norm.weight',
+        'norm2.bias': 'self_attn_layer_norm.bias',
+        'linear1.weight': 'fc1.weight',
+        'linear1.bias': 'fc1.bias',
+        'linear2.weight': 'fc2.weight',
+        'linear2.bias': 'fc2.bias',
+        'norm3.weight': 'final_layer_norm.weight',
+        'norm3.bias': 'final_layer_norm.bias',
+    }
+    for layer_num in range(config.decoder_layers):
+        source_prefix_decoder = f'module.transformer.decoder.layers.{layer_num}.'
+        target_prefix_decoder = f'model.decoder.layers.{layer_num}.'
+
+        for source_name, target_name in key_mappings_decoder.items():
+            rename_keys.append((source_prefix_decoder + source_name, 
+                               target_prefix_decoder + target_name))
     ########################################## DECODER - END
 
     #TODO convert head
