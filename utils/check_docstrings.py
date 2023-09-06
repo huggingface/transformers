@@ -54,7 +54,7 @@ OPTIONAL_KEYWORD = "*optional*"
 # Re pattern that catches args blocks in docstrings (with all variation around the name supported).
 _re_args = re.compile(r"^\s*(Args?|Arguments?|Attributes?|Params?|Parameters?):\s*$")
 # Re pattern that parses the start of an arg block: catches <name> (<description>) in those lines.
-_re_parse_arg = re.compile(r"^(\s*)(\S+)\s+\(.+)\)(?:\:|$)")
+_re_parse_arg = re.compile(r"^(\s*)(\S+)\s+\((.+)\)(?:\:|$)")
 # Re pattern that parses the end of a description of an arg (catches the default in *optional*, defaults to xxx).
 _re_parse_description = re.compile(r"\*optional\*, defaults to (.*)$")
 
