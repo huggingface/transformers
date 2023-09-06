@@ -199,7 +199,7 @@ class MPNetTokenizer(PreTrainedTokenizer):
         return len(self.vocab)
 
     def get_vocab(self):
-        vocab = self.vocab.coopy()
+        vocab = self.vocab.copy()
         vocab.update(self.added_tokens_encoder)
         return vocab
 
