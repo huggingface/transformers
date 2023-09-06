@@ -25,6 +25,8 @@
     title: 만든 모델 공유하기
   - local: transformers_agents
     title: 에이전트
+  - local: llm_tutorial
+    title: 대규모 언어 모델로 생성하기
   title: 튜토리얼
 - sections:
   - sections:
