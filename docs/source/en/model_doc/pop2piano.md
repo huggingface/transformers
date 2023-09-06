@@ -12,6 +12,12 @@ specific language governing permissions and limitations under the License.
 
 # Pop2Piano
 
+<div class="flex flex-wrap space-x-1">
+<a href="https://huggingface.co/spaces/sweetcocoa/pop2piano">
+<img alt="Spaces" src="https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue">
+</a>
+</div>
+
 ## Overview
 
 The Pop2Piano model was proposed in [Pop2Piano : Pop Audio-based Piano Cover Generation](https://arxiv.org/abs/2211.00895) by Jongho Choi and Kyogu Lee.

@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.33.0.dev0"
+__version__ = "4.34.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -748,6 +748,7 @@ _import_structure = {
         "is_torch_npu_available",
         "is_torch_tpu_available",
         "is_torchvision_available",
+        "is_torch_xpu_available",
         "is_vision_available",
         "logging",
     ],
@@ -3359,6 +3360,7 @@ else:
         [
             "TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TFDebertaV2ForMaskedLM",
+            "TFDebertaV2ForMultipleChoice",
             "TFDebertaV2ForQuestionAnswering",
             "TFDebertaV2ForSequenceClassification",
             "TFDebertaV2ForTokenClassification",
@@ -4814,6 +4816,7 @@ if TYPE_CHECKING:
         is_torch_neuroncore_available,
         is_torch_npu_available,
         is_torch_tpu_available,
+        is_torch_xpu_available,
         is_torchvision_available,
         is_vision_available,
         logging,
@@ -6967,6 +6970,7 @@ if TYPE_CHECKING:
         from .models.deberta_v2 import (
             TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDebertaV2ForMaskedLM,
+            TFDebertaV2ForMultipleChoice,
             TFDebertaV2ForQuestionAnswering,
             TFDebertaV2ForSequenceClassification,
             TFDebertaV2ForTokenClassification,
