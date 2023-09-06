@@ -237,6 +237,29 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+    def test_batched_unbatched_consistency(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        speech_inputs = floats_list((1, 800))[0]
+        np_speech_inputs = np.asarray(speech_inputs)
+
+        # Test unbatched vs batched list
+        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_features
+        encoded_sequences_2 = feature_extractor([speech_inputs], return_tensors="np").input_features
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
+        # Test np.ndarray vs List[np.ndarray]
+        encoded_sequences_1 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
+        encoded_sequences_2 = feature_extractor([np_speech_inputs], return_tensors="np").input_features
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
+        # Test unbatched np.ndarray vs batched np.ndarray
+        encoded_sequences_1 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
+        encoded_sequences_2 = feature_extractor(np.expand_dims(np_speech_inputs, axis=0), return_tensors="np").input_features
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
     def test_generate_noise(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]

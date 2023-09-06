@@ -199,6 +199,37 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(inputs["spectrogram"].to(torch_device), inputs["noise_sequence"].to(torch_device))
             self.assertTrue(outputs.dim() == 1, msg="Got un-batched inputs but batched output")
 
+    def test_unbatched_batched_outputs_consistency(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            unbatched_spectrogram = inputs["spectrogram"].detach().clone()
+            unbatched_noise_sequence = inputs["noise_sequence"].detach().clone()
+            batched_spectrogram = inputs["spectrogram"].unsqueeze(0)
+            batched_noise_sequence = inputs["noise_sequence"].unsqueeze(0)
+
+            with torch.no_grad():
+                unbatched_outputs = model(
+                    unbatched_spectrogram.to(torch_device),
+                    unbatched_noise_sequence.to(torch_device),
+                )
+                print(f"Unbatched outputs shape: {unbatched_outputs.shape}")
+
+                batched_outputs = model(
+                    batched_spectrogram.to(torch_device),
+                    batched_noise_sequence.to(torch_device),
+                )
+                print(f"Batched outputs shape: {batched_outputs.shape}")
+
+            self.assertTrue(
+                torch.allclose(unbatched_outputs, batched_outputs),
+                msg="Got different batch dims for input and output",
+            )
+
 
 @require_torch_gpu
 @slow
