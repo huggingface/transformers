@@ -170,7 +170,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         n_classes: int = 3,
         n_targets: int = 3,
         output_range: list = None,
-        head_agg: str = None,
+        head_agg: str = "max_pool",
         is_encoder_decoder: bool = False,
         init_std: float = 0.02,
         seed_number: int = 42,
@@ -210,7 +210,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         self.masked_loss = masked_loss
         # patching related
         self.patch_last = True
-        
+
         self.use_pe = use_pe
         self.pe = pe
         self.learn_pe = learn_pe
