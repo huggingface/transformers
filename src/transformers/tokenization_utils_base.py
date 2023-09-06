@@ -1641,8 +1641,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         conversation: Union[List[Dict[str, str]], "Conversation"],
         chat_template: Optional[str] = None,
         tokenize: bool = True,
-        padding: Optional[bool] = None,
-        truncation: Optional[bool] = None,
+        padding: bool = False,
+        truncation: bool = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **tokenizer_kwargs,
@@ -1699,6 +1699,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         jinja_env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
         compiled_template = jinja_env.from_string(chat_template)
         rendered = compiled_template.render(messages=conversation, **self.special_tokens_map)
+
+        if padding is True:
+            padding = "max_length"
+        if truncation is True:
+            truncation = "max_length"
         if tokenize:
             return self.encode(
                 rendered,
