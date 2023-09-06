@@ -73,7 +73,7 @@ class FastViTConfig(PretrainedConfig):
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
         encoder_stride (`int`, `optional`, defaults to 16):
-           Factor to increase the spatial resolution by in the decoder head for masked image modeling.
+            Factor to increase the spatial resolution by in the decoder head for masked image modeling.
 
     Example:
     ```python
@@ -96,6 +96,7 @@ class FastViTConfig(PretrainedConfig):
         num_channels=3,
         patch_size=4,
         depths=[2, 2, 4, 2],
+        num_attention_heads=32,
         hidden_sizes=[48, 96, 192, 384],
         pos_embeds = None,
         token_mixers = ("repmixer", "repmixer", "repmixer", "repmixer"),
@@ -106,6 +107,7 @@ class FastViTConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         qkv_bias=True,
+        inference_mode=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -124,7 +126,8 @@ class FastViTConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
-
+        self.num_attention_heads = num_attention_heads
+        self.inference_mode = inference_mode
 
 class FastViTOnnxConfig(OnnxConfig):
     torch_onnx_minimum_version = version.parse("1.11")
