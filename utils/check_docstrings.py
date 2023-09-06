@@ -54,7 +54,7 @@ OPTIONAL_KEYWORD = "*optional*"
 # Re pattern that catches args blocks in docstrings (with all variation around the name supported).
 _re_args = re.compile(r"^\s*(Args?|Arguments?|Attributes?|Params?|Parameters?):\s*$")
 # Re pattern that parses the start of an arg block: catches <name> (<description>) in those lines.
-_re_parse_arg = re.compile(r"^(\s*)(\S+)\s+\(([^\)]+)\)")
+_re_parse_arg = re.compile(r"^(\s*)(\S+)\s+\(.+)\)(?:\:|$)")
 # Re pattern that parses the end of a description of an arg (catches the default in *optional*, defaults to xxx).
 _re_parse_description = re.compile(r"\*optional\*, defaults to (.*)$")
 
@@ -286,7 +286,7 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
                     new_description = replace_default_in_arg_description(description, default)
                 else:
                     new_description = description
-                init_doc = _re_parse_arg.sub(fr"\1\2 ({new_description})", obj_doc_lines[idx])
+                init_doc = _re_parse_arg.sub(fr"\1\2 ({new_description}):", obj_doc_lines[idx])
                 arguments[current_arg] = [init_doc]
         elif current_arg is not None:
             arguments[current_arg].append(obj_doc_lines[idx])
