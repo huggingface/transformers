@@ -430,16 +430,16 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         else:
             batched_speech["input_features"] = mel_spectrograms
 
+        if pad_end:
+            batched_speech["input_features"] = [
+                self.pad_spectrogram_end(spectrogram, pad_length, spectrogram_zero) for spectrogram in batched_speech["input_features"]
+            ]
+
         if return_noise:
             noise = [
                 self.generate_noise(spectrogram.shape[0], model_in_channels, generator) for spectrogram in batched_speech['input_features']
             ]
             batched_speech["noise"] = noise
-        
-        if pad_end:
-            batched_speech["input_features"] = [
-                self.pad_spectrogram_end(spectrogram, pad_length, spectrogram_zero) for spectrogram in batched_speech["input_features"]
-            ]
 
         if do_normalize:
             batched_speech["input_features"] = [
