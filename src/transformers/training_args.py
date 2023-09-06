@@ -1791,8 +1791,8 @@ class TrainingArguments:
             self._n_gpu = 1
             torch.cuda.set_device(device)
         elif is_torch_xpu_available() and "ACCELERATE_USE_XPU" not in os.environ:
-            self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
             os.environ["ACCELERATE_USE_XPU"] = "true"
+            self.distributed_state = PartialState(timeout=timedelta(seconds=self.ddp_timeout))
             device = torch.device("xpu:0")
             self._n_gpu = 1
         elif is_sagemaker_dp_enabled():
