@@ -335,8 +335,8 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
 
         audio, sr = self._load_datasamples(1, sampling_rate=feature_extractor.sampling_rate)
 
-        input_features = feature_extractor(audio, sampling_rate=sr[0], return_tensors="pt").input_features
-        input_features = input_features.to(device=torch_device, dtype=torch.float)
+        input_features = feature_extractor(audio, sampling_rate=sr[0], return_tensors="pt").spectrogram
+        input_features = input_features.to(device=torch_device)
 
         input_speech = self.get_inputs(torch_device, num_samples=1, noise_length=input_features.shape[1])
         input_speech["spectrogram"] = input_features

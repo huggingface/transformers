@@ -196,7 +196,7 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         # Test feature size
         input_features = feature_extractor(
             np_speech_inputs, padding="max_length", max_length=1600, return_tensors="np"
-        ).input_features
+        ).spectrogram
         self.assertTrue(input_features.ndim == 3)
         # Note: for some reason I get a weird padding error when feature_size > 1
         # self.assertTrue(input_features.shape[-2] == feature_extractor.feature_size)
@@ -204,21 +204,21 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         self.assertTrue(input_features.shape[-1] == feature_extractor.num_mel_bins)
 
         # Test not batched input
-        encoded_sequences_1 = feature_extractor(speech_inputs[0], return_tensors="np").input_features
-        encoded_sequences_2 = feature_extractor(np_speech_inputs[0], return_tensors="np").input_features
+        encoded_sequences_1 = feature_extractor(speech_inputs[0], return_tensors="np").spectrogram
+        encoded_sequences_2 = feature_extractor(np_speech_inputs[0], return_tensors="np").spectrogram
         self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
 
         # Test batched
-        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_features
-        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
+        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").spectrogram
+        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").spectrogram
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
         # Test 2-D numpy arrays are batched.
         speech_inputs = [floats_list((1, x))[0] for x in (800, 800, 800)]
         np_speech_inputs = np.asarray(speech_inputs)
-        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_features
-        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
+        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").spectrogram
+        encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").spectrogram
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
@@ -232,8 +232,8 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         speech_inputs_truncated = [x[: feature_extractor.num_max_samples] for x in speech_inputs]
         np_speech_inputs_truncated = [np.asarray(speech_input) for speech_input in speech_inputs_truncated]
 
-        encoded_sequences_1 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
-        encoded_sequences_2 = feature_extractor(np_speech_inputs_truncated, return_tensors="np").input_features
+        encoded_sequences_1 = feature_extractor(np_speech_inputs, return_tensors="np").spectrogram
+        encoded_sequences_2 = feature_extractor(np_speech_inputs_truncated, return_tensors="np").spectrogram
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
@@ -243,22 +243,22 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         np_speech_inputs = np.asarray(speech_inputs)
 
         # Test unbatched vs batched list
-        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").input_features
-        encoded_sequences_2 = feature_extractor([speech_inputs], return_tensors="np").input_features
+        encoded_sequences_1 = feature_extractor(speech_inputs, return_tensors="np").spectrogram
+        encoded_sequences_2 = feature_extractor([speech_inputs], return_tensors="np").spectrogram
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
         # Test np.ndarray vs List[np.ndarray]
-        encoded_sequences_1 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
-        encoded_sequences_2 = feature_extractor([np_speech_inputs], return_tensors="np").input_features
+        encoded_sequences_1 = feature_extractor(np_speech_inputs, return_tensors="np").spectrogram
+        encoded_sequences_2 = feature_extractor([np_speech_inputs], return_tensors="np").spectrogram
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
         # Test unbatched np.ndarray vs batched np.ndarray
-        encoded_sequences_1 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
+        encoded_sequences_1 = feature_extractor(np_speech_inputs, return_tensors="np").spectrogram
         encoded_sequences_2 = feature_extractor(
             np.expand_dims(np_speech_inputs, axis=0), return_tensors="np"
-        ).input_features
+        ).spectrogram
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
@@ -267,8 +267,8 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
 
         features = feature_extractor(speech_inputs, return_noise=True)
-        input_features = features.input_features
-        noise_features = features.noise_sequences
+        input_features = features.spectrogram
+        noise_features = features.noise_sequence
 
         for spectrogram, noise in zip(input_features, noise_features):
             self.assertEqual(spectrogram.shape[0], noise.shape[0])
@@ -277,8 +277,8 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
 
-        input_features1 = feature_extractor(speech_inputs, padding=False, pad_end=False).input_features
-        input_features2 = feature_extractor(speech_inputs, padding=False, pad_end=True).input_features
+        input_features1 = feature_extractor(speech_inputs, padding=False, pad_end=False).spectrogram
+        input_features2 = feature_extractor(speech_inputs, padding=False, pad_end=True).spectrogram
 
         for spectrogram1, spectrogram2 in zip(input_features1, input_features2):
             self.assertEqual(spectrogram1.shape[0] + self.feat_extract_tester.pad_end_length, spectrogram2.shape[0])
@@ -288,8 +288,8 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
 
         features = feature_extractor(speech_inputs, padding=False, return_noise=True, pad_end=True)
-        input_features = features.input_features
-        noise_features = features.noise_sequences
+        input_features = features.spectrogram
+        noise_features = features.noise_sequence
 
         for spectrogram, noise in zip(input_features, noise_features):
             self.assertEqual(spectrogram.shape[0], noise.shape[0])
@@ -327,14 +327,13 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
                 -5.9655, -5.6057, -5.8382, -5.9602, -5.9005, -5.9123, -5.7669, -6.1441,
                 -5.5168, -5.1405, -5.3927, -6.0032, -5.5784, -5.3728
             ],
-            dtype=torch.float64,
         )
         # fmt: on
 
         input_speech, sr = self._load_datasamples(1)
 
         feature_extractor = UnivNetFeatureExtractor()
-        input_features = feature_extractor(input_speech, sampling_rate=sr[0], return_tensors="pt").input_features
+        input_features = feature_extractor(input_speech, sampling_rate=sr[0], return_tensors="pt").spectrogram
         self.assertEqual(input_features.shape, (1, 548, 100))
 
         input_features_mean = torch.mean(input_features)

@@ -406,7 +406,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
         # always return batch
         if not is_batched:
-            raw_speech = [np.asarray(raw_speech)]
+            raw_speech = [np.asarray(raw_speech, dtype=np.float32)]
 
         batched_speech = BatchFeature({"input_features": raw_speech})
 
@@ -426,26 +426,27 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         mel_spectrograms = [self.mel_spectrogram(waveform) for waveform in input_features]
 
         if isinstance(input_features[0], List):
-            batched_speech["input_features"] = [np.asarray(mel) for mel in mel_spectrograms]
+            batched_speech["spectrogram"] = [np.asarray(mel, dtype=np.float32) for mel in mel_spectrograms]
         else:
-            batched_speech["input_features"] = mel_spectrograms
+            batched_speech["spectrogram"] = [mel.astype(np.float32) for mel in mel_spectrograms]
+        del batched_speech["input_features"]
 
         if pad_end:
-            batched_speech["input_features"] = [
+            batched_speech["spectrogram"] = [
                 self.pad_spectrogram_end(spectrogram, pad_length, spectrogram_zero)
-                for spectrogram in batched_speech["input_features"]
+                for spectrogram in batched_speech["spectrogram"]
             ]
 
         if return_noise:
             noise = [
                 self.generate_noise(spectrogram.shape[0], model_in_channels, generator)
-                for spectrogram in batched_speech["input_features"]
+                for spectrogram in batched_speech["spectrogram"]
             ]
-            batched_speech["noise_sequences"] = noise
+            batched_speech["noise_sequence"] = noise
 
         if do_normalize:
-            batched_speech["input_features"] = [
-                self.normalize(spectrogram) for spectrogram in batched_speech["input_features"]
+            batched_speech["spectrogram"] = [
+                self.normalize(spectrogram) for spectrogram in batched_speech["spectrogram"]
             ]
 
         if return_tensors is not None:
