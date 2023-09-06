@@ -15,6 +15,7 @@ on:
       - ".github/**"
       - "templates/**"
       - "utils/**"
+  pull_request:
   repository_dispatch:
 
 env:
