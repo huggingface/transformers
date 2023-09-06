@@ -1641,6 +1641,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         conversation: Union[List[Dict[str, str]], "Conversation"],
         chat_template: Optional[str] = None,
         tokenize: bool = True,
+        padding: Optional[bool] = None,
+        truncation: Optional[bool] = None,
+        max_length: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
         **tokenizer_kwargs,
     ) -> Union[str, List[int]]:
         """
@@ -1654,7 +1658,20 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 with "role" and "content" keys, representing the chat history so far.
             chat_template (str, *optional*): A Jinja template to use for this conversion. If
                 this is not passed, the model's default chat template will be used instead.
-            tokenize (bool, defaults to True): Whether to tokenize the output. If False, the output will be a string.
+            tokenize (`bool`, *optional*):
+                Whether to tokenize the output. If `False`, the output will be a string.
+            padding (`bool`, *optional*):
+                Whether to pad sequences to the maximum length.
+            truncation (`bool`, *optional*):
+                Whether to truncate sequences at the maximum length.
+            max_length (`int`, *optional*):
+                Maximum length of the returned list and optionally padding length (see above).
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
             **tokenizer_kwargs: Additional kwargs to pass to the tokenizer.
 
 
@@ -1683,7 +1700,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         compiled_template = jinja_env.from_string(chat_template)
         rendered = compiled_template.render(messages=conversation, **self.special_tokens_map)
         if tokenize:
-            return self.encode(rendered, add_special_tokens=False, **tokenizer_kwargs)
+            return self.encode(
+                rendered,
+                add_special_tokens=False,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                return_tensors=return_tensors,
+                **tokenizer_kwargs,
+            )
         else:
             return rendered
 
