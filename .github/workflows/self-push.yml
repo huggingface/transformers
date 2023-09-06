@@ -38,7 +38,7 @@ jobs:
           fetch-depth: 2
 
       - name: Check Runner Status
-        run: python utils/check_self_hosted_runner.py --target_runners single-gpu-ci-runner-docker,multi-gpu-ci-runner-docker --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+        run: python utils/check_self_hosted_runner.py --target_runners single-gpu-ci-runner-docker,multi-gpu-ci-runner-docker,single-amdgpu-ci-runner-docker --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
 
   check_runners:
     name: Check Runners
@@ -60,8 +60,8 @@ jobs:
     needs: check_runners
     strategy:
       matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: [self-hosted, docker-gpu, '${{ matrix.machine_type }}']
+        machine_type: [single-gpu, multi-gpu, single-amdgpu]
+    runs-on: [self-hosted, docker-gpu, docker-amdgpu, '${{ matrix.machine_type }}']
     container:
       image: huggingface/transformers-all-latest-gpu-push-ci
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
