@@ -41,8 +41,9 @@ import re
 from pathlib import Path
 from typing import Any, Optional, Tuple, Union
 
-from transformers.utils import direct_transformers_import
 from check_repo import ignore_undocumented
+
+from transformers.utils import direct_transformers_import
 
 
 PATH_TO_TRANSFORMERS = Path("src").resolve() / "transformers"
@@ -77,8 +78,9 @@ MATH_OPERATORS = {
     ast.Div: op.truediv,
     ast.Pow: op.pow,
     ast.BitXor: op.xor,
-    ast.USub: op.neg
+    ast.USub: op.neg,
 }
+
 
 def find_indent(line: str) -> int:
     """
@@ -126,11 +128,11 @@ def eval_math_expression(expression: str) -> Optional[Union[float, int]]:
 
     Args:
         expression (`str`): The expression to evaluate.
-    
+
     Returns:
         `Optional[Union[float, int]]`: Returns `None` if the evaluation fails in any way and the value computed
         otherwise.
-    
+
     Example:
 
     ```py
@@ -149,11 +151,11 @@ def eval_math_expression(expression: str) -> Optional[Union[float, int]]:
 
 
 def eval_node(node):
-    if isinstance(node, ast.Num): # <number>
+    if isinstance(node, ast.Num):  # <number>
         return node.n
-    elif isinstance(node, ast.BinOp): # <left> <operator> <right>
+    elif isinstance(node, ast.BinOp):  # <left> <operator> <right>
         return MATH_OPERATORS[type(node.op)](eval_node(node.left), eval_node(node.right))
-    elif isinstance(node, ast.UnaryOp): # <operator> <operand> e.g., -1
+    elif isinstance(node, ast.UnaryOp):  # <operator> <operand> e.g., -1
         return MATH_OPERATORS[type(node.op)](eval_node(node.operand))
     else:
         raise TypeError(node)
@@ -166,7 +168,7 @@ def replace_default_in_arg_description(description: str, default: Any) -> str:
     Args:
         description (`str`): The description of an argument in a docstring to process.
         default (`Any`): The default value that whould be in the docstring of that argument.
-    
+
     Returns:
        `str`: The description updated with the new default value.
     """
@@ -188,7 +190,7 @@ def replace_default_in_arg_description(description: str, default: Any) -> str:
             description = f"{description}, {OPTIONAL_KEYWORD}"
         elif re.search(r"defaults to `?None`?", description) is not None:
             len_optional = len(OPTIONAL_KEYWORD)
-            description = description[:idx + len_optional]
+            description = description[: idx + len_optional]
     else:
         str_default = None
         # For numbers we may have a default that is given by a math operation (1/255 is really popular). We don't
@@ -214,8 +216,8 @@ def replace_default_in_arg_description(description: str, default: Any) -> str:
             len_optional = len(OPTIONAL_KEYWORD)
             description = f"{description[:idx + len_optional]}, defaults to {str_default}"
         else:
-            description =  _re_parse_description.sub(fr"*optional*, defaults to {str_default}", description)
-    
+            description = _re_parse_description.sub(rf"*optional*, defaults to {str_default}", description)
+
     return description
 
 
@@ -251,7 +253,7 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
 
     Args:
         obj (`Any`): The object to process.
-    
+
     Returns:
         `Optional[Tuple[str, str]]`: Returns `None` if there is no docstring or no parameters documented in the
         docstring, otherwise returns a tuple of two strings: the current documentation of the arguments in the
@@ -268,7 +270,7 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
     idx = 0
     while idx < len(obj_doc_lines) and _re_args.search(obj_doc_lines[idx]) is None:
         idx += 1
-    
+
     if idx == len(obj_doc_lines):
         # Nothing to do, no parameters are documented.
         return
@@ -279,7 +281,9 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
     idx += 1
     start_idx = idx
     # Keep going until the arg section is finished (nonempty line at the same indent level) or the end of the docstring.
-    while idx < len(obj_doc_lines) and (len(obj_doc_lines[idx].strip()) == 0 or find_indent(obj_doc_lines[idx]) > indent):
+    while idx < len(obj_doc_lines) and (
+        len(obj_doc_lines[idx].strip()) == 0 or find_indent(obj_doc_lines[idx]) > indent
+    ):
         if find_indent(obj_doc_lines[idx]) == indent + 4:
             # New argument -> let's generate the proper doc for it
             re_search_arg = _re_parse_arg.search(obj_doc_lines[idx])
@@ -293,13 +297,13 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
                     new_description = replace_default_in_arg_description(description, default)
                 else:
                     new_description = description
-                init_doc = _re_parse_arg.sub(fr"\1\2 ({new_description}):", obj_doc_lines[idx])
+                init_doc = _re_parse_arg.sub(rf"\1\2 ({new_description}):", obj_doc_lines[idx])
                 arguments[current_arg] = [init_doc]
         elif current_arg is not None:
             arguments[current_arg].append(obj_doc_lines[idx])
-        
+
         idx += 1
-    
+
     # We went too far by one (perhaps more if there are a lot of new lines)
     idx -= 1
     while len(obj_doc_lines[idx].strip()) == 0:
@@ -307,15 +311,18 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
         idx -= 1
     # And we went too far by one again.
     idx += 1
-    
-    old_doc_arg = "\n".join(obj_doc_lines[start_idx: idx])
-    
+
+    old_doc_arg = "\n".join(obj_doc_lines[start_idx:idx])
+
     arguments = {name: "\n".join(doc) for name, doc in arguments.items()}
     # Add missing arguments with a template
     for name in set(signature.keys()) - set(arguments.keys()):
         arg = signature[name]
         # We ignore private arguments or *args/**kwargs (unless they are documented by the user)
-        if name.startswith("_") or arg.kind in [inspect._ParameterKind.VAR_KEYWORD, inspect._ParameterKind.VAR_POSITIONAL]:
+        if name.startswith("_") or arg.kind in [
+            inspect._ParameterKind.VAR_KEYWORD,
+            inspect._ParameterKind.VAR_POSITIONAL,
+        ]:
             arguments[name] = ""
         else:
             arg_desc = get_default_description(arg)
@@ -324,7 +331,7 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
     # Arguments are sorted by the order in the signature
     new_param_docs = [arguments[name] for name in signature.keys() if len(arguments[name]) > 0]
     new_doc_arg = "\n".join(new_param_docs)
-    
+
     return old_doc_arg, new_doc_arg
 
 
@@ -349,40 +356,40 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
     idx = 0
     while idx < len(source) and _re_args.search(source[idx]) is None:
         idx += 1
-    
+
     if idx == len(source):
         # Args are not defined in the docstring of this object
         return
-    
+
     # Get to the line where we stop documenting arguments
     indent = find_indent(source[idx])
     idx += 1
     start_idx = idx
     while idx < len(source) and (len(source[idx].strip()) == 0 or find_indent(source[idx]) > indent):
         idx += 1
-    
+
     idx -= 1
     while len(source[idx].strip()) == 0:
         idx -= 1
     idx += 1
-    
-    if "".join(source[start_idx: idx])[:-1] != old_doc_args:
+
+    if "".join(source[start_idx:idx])[:-1] != old_doc_args:
         # Args are not fully defined in the docstring of this object
         return
-    
+
     # Find the source file.
     module = obj.__module__
     obj_file = PATH_TO_TRANSFORMERS
     for part in module.split(".")[1:]:
         obj_file = obj_file / part
     obj_file = obj_file.with_suffix(".py")
-    
+
     with open(obj_file, "r", encoding="utf-8") as f:
         content = f.read()
-    
+
     # Replace content
     lines = content.split("\n")
-    lines = lines[:line_number + start_idx - 1] + [new_doc_args] + lines[line_number + idx - 1:]
+    lines = lines[: line_number + start_idx - 1] + [new_doc_args] + lines[line_number + idx - 1 :]
 
     print(f"Fixing the docstring of {obj.__name__} in {obj_file}.")
     with open(obj_file, "w", encoding="utf-8") as f:
@@ -407,13 +414,13 @@ def check_docstrings(overwrite: bool = False):
         obj = getattr(transformers, name)
         if not callable(obj) or not isinstance(obj, type) or getattr(obj, "__doc__", None) is None:
             continue
-    
+
         # Check docstring
         try:
             result = match_docstring_with_signature(obj)
             if result is not None:
                 old_doc, new_doc = result
-        except:
+        except Exception:
             hard_failures.append(name)
             continue
         if old_doc != new_doc:
@@ -423,7 +430,7 @@ def check_docstrings(overwrite: bool = False):
                     fix_docstring(obj, old_doc, new_doc)
             else:
                 failures.append(name)
-    
+
     # Deal with errors
     error_message = ""
     if len(hard_failures) > 0:
@@ -437,11 +444,11 @@ def check_docstrings(overwrite: bool = False):
             "The following objects docstrings do not match their signature. Run `make fix-copies` to fix this."
         )
         error_message += "\n" + "\n".join([f"- {name}" for name in failures])
-    
+
     if len(error_message) > 0:
         error_message = "There was at least one problem when checking docstrings of public objects.\n" + error_message
         raise ValueError(error_message)
-    
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
