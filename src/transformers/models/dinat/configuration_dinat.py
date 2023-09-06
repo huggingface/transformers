@@ -67,7 +67,7 @@ class DinatConfig(BackboneConfigMixin, PretrainedConfig):
             `"selu"` and `"gelu_new"` are supported.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 0.0):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         layer_scale_init_value (`float`, *optional*, defaults to 0.0):
             The initial value for the layer scale. Disabled if <=0.
