@@ -74,7 +74,9 @@ class UnivNetFeatureExtractionTester(unittest.TestCase):
         compression_clip_val=1e-5,
         normalize_min=-11.512925148010254,
         normalize_max=2.3143386840820312,
-        return_attention_mask=False,
+        model_in_channels=64,
+        pad_end_length=10,
+        spectrogram_zero=-11.5129,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -100,7 +102,9 @@ class UnivNetFeatureExtractionTester(unittest.TestCase):
         self.compression_clip_val = compression_clip_val
         self.normalize_min = normalize_min
         self.normalize_max = normalize_max
-        self.return_attention_mask = return_attention_mask
+        self.model_in_channels = model_in_channels
+        self.pad_end_length = pad_end_length
+        self.spectrogram_zero = spectrogram_zero
 
     def prepare_feat_extract_dict(self):
         return {
@@ -122,7 +126,9 @@ class UnivNetFeatureExtractionTester(unittest.TestCase):
             "compression_clip_val": self.compression_clip_val,
             "normalize_min": self.normalize_min,
             "normalize_max": self.normalize_max,
-            "return_attention_mask": self.return_attention_mask,
+            "model_in_channels": self.model_in_channels,
+            "pad_end_length": self.pad_end_length,
+            "spectrogram_zero": self.spectrogram_zero,
         }
 
     def prepare_inputs_for_common(self, equal_length=False, numpify=False):
