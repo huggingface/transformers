@@ -166,6 +166,7 @@ class TrainerControl:
 
 
 class TrainerCallback:
+    # no-format
     """
     A class for objects that will inspect the state of the training loop at some events and take some decisions. At
     each of those events the following arguments are available:

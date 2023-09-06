@@ -61,15 +61,15 @@ _re_parse_description = re.compile(r"\*optional\*, defaults to (.*)$")
 
 
 # This is a temporary list of objects to ignore while we progressively fix them. Do not add anything here, fix the
-# docstrings instead.
+# docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
+# line before the docstring.
 OBJECTS_TO_IGNORE = [
     # Deprecated
     "InputExample",
     "InputFeatures",
-    # Signature is *args/**kwargs, would be nice to fix
-    "GenerationConfig",
-    "PretrainedConfig",
-    "TrainerCallback",
+    # Signature is *args/**kwargs, would be nice to fix but ignored them for now
+    # "PretrainedConfig",
+    # "GenerationConfig",
     # Missing arguments in the docstring
     "ASTFeatureExtractor",
     "AlbertConfig",
@@ -630,6 +630,23 @@ def get_default_description(arg: inspect.Parameter) -> str:
         return f"`{arg_type}`, {OPTIONAL_KEYWORD}, defaults to {str_default}"
 
 
+def find_source_file(obj: Any) -> Path:
+    """
+    Finds the source file of an object.
+
+    Args:
+        obj (`Any`): The object whose source file we are looking for.
+
+    Returns:
+        `Path`: The source file.
+    """
+    module = obj.__module__
+    obj_file = PATH_TO_TRANSFORMERS
+    for part in module.split(".")[1:]:
+        obj_file = obj_file / part
+    obj_file = obj_file.with_suffix(".py")
+
+
 def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
     """
     Matches the docstring of an object with its signature.
@@ -646,6 +663,26 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
         # Nothing to do, there is no docstring.
         return
 
+    # Read the docstring in the source code to see if there is a special command to ignore this object.
+    try:
+        source, _ = inspect.getsourcelines(obj)
+    except OSError:
+        source = []
+
+    idx = 0
+    while idx < len(source) and '"""' not in source[idx]:
+        idx += 1
+
+    ignore_order = False
+    if idx < len(source):
+        line_before_docstring = source[idx - 1]
+        if re.search(r"^\s*#\s*no-format\s*$", line_before_docstring):
+            # This object is ignored
+            return
+        elif re.search(r"^\s*#\s*ignore-order\s*$", line_before_docstring):
+            ignore_order = True
+
+    # Read the signature
     signature = inspect.signature(obj).parameters
 
     obj_doc_lines = obj.__doc__.split("\n")
@@ -697,6 +734,7 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
 
     old_doc_arg = "\n".join(obj_doc_lines[start_idx:idx])
 
+    old_arguments = list(arguments.keys())
     arguments = {name: "\n".join(doc) for name, doc in arguments.items()}
     # Add missing arguments with a template
     for name in set(signature.keys()) - set(arguments.keys()):
@@ -711,8 +749,13 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
             arg_desc = get_default_description(arg)
             arguments[name] = " " * (indent + 4) + f"{name} ({arg_desc}): <fill_docstring>"
 
-    # Arguments are sorted by the order in the signature
-    new_param_docs = [arguments[name] for name in signature.keys() if len(arguments[name]) > 0]
+    # Arguments are sorted by the order in the signature unless a special comment is put.
+    if ignore_order:
+        new_param_docs = [arguments[name] for name in old_arguments]
+        missing = set(signature.keys()) - set(old_arguments)
+        new_param_docs.extend([arguments[name] for name in missing if len(arguments[name]) > 0])
+    else:
+        new_param_docs = [arguments[name] for name in signature.keys() if len(arguments[name]) > 0]
     new_doc_arg = "\n".join(new_param_docs)
 
     return old_doc_arg, new_doc_arg
@@ -760,13 +803,7 @@ def fix_docstring(obj: Any, old_doc_args: str, new_doc_args: str):
         # Args are not fully defined in the docstring of this object
         return
 
-    # Find the source file.
-    module = obj.__module__
-    obj_file = PATH_TO_TRANSFORMERS
-    for part in module.split(".")[1:]:
-        obj_file = obj_file / part
-    obj_file = obj_file.with_suffix(".py")
-
+    obj_file = find_source_file(obj)
     with open(obj_file, "r", encoding="utf-8") as f:
         content = f.read()
 
@@ -806,7 +843,8 @@ def check_docstrings(overwrite: bool = False):
                 old_doc, new_doc = result
             else:
                 old_doc, new_doc = None, None
-        except Exception:
+        except Exception as e:
+            print(e)
             hard_failures.append(name)
             continue
         if old_doc != new_doc:
@@ -814,7 +852,7 @@ def check_docstrings(overwrite: bool = False):
                 fix_docstring(obj, old_doc, new_doc)
             else:
                 failures.append(name)
-        elif not overwrite and ("<fill_type>" in new_doc or "<fill_docstring>" in new_doc):
+        elif not overwrite and new_doc is not None and ("<fill_type>" in new_doc or "<fill_docstring>" in new_doc):
             to_clean.append(name)
 
     # Deal with errors
