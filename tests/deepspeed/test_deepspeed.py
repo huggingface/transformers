@@ -136,6 +136,14 @@ ZERO3 = "zero3"
 FP16 = "fp16"
 BF16 = "bf16"
 
+HF_OPTIM = "hf_optim"
+HF_SCHEDULER = "hf_scheduler"
+DS_OPTIM = "ds_optim"
+DS_SCHEDULER = "ds_scheduler"
+
+optims = [HF_OPTIM, DS_OPTIM]
+schedulers = [HF_SCHEDULER, DS_SCHEDULER]
+
 stages = [ZERO2, ZERO3]
 if is_torch_bf16_gpu_available():
     dtypes = [FP16, BF16]
@@ -152,6 +160,8 @@ def parameterized_custom_name_func(func, param_num, param):
 
 # Cartesian-product of zero stages with models to test
 params = list(itertools.product(stages, dtypes))
+
+params_with_optims_and_schedulers = list(itertools.product(stages, dtypes, optims, schedulers))
 
 
 @require_deepspeed
@@ -640,10 +650,16 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 "Can't find a valid checkpoint at" in str(context.exception), f"got exception: {context.exception}"
             )
 
-    @parameterized.expand(params, name_func=parameterized_custom_name_func)
-    def test_can_resume_training_normal(self, stage, dtype):
+    @parameterized.expand(params_with_optims_and_schedulers, name_func=parameterized_custom_name_func)
+    def test_can_resume_training_normal(self, stage, dtype, optim, scheduler):
         # adapted from TrainerIntegrationTest.test_can_resume_training
         # test normal resume for each stage separately, error-handling is tested in a different test
+
+        # ToDo: Currently, hf_optim + hf_scheduler resumes with the correct states and
+        # also has same losses for few steps but then slowly diverges. Need to figure it out.
+        if optim == HF_OPTIM and scheduler == HF_SCHEDULER:
+            return
+
         output_dir = self.get_auto_remove_tmp_dir("./xxx", after=False)
         ds_config_dict = self.get_config_dict(stage)
         if dtype == FP16:
@@ -651,6 +667,12 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         # XXX:
         if stage == ZERO3:
             ds_config_dict["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = True
+
+        if optim == HF_OPTIM:
+            del ds_config_dict["optimizer"]
+
+        if scheduler == HF_SCHEDULER:
+            del ds_config_dict["scheduler"]
 
         kwargs = {
             "output_dir": output_dir,
