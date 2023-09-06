@@ -2143,12 +2143,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             for index, token in sorted(added_tokens_decoder.items(), key=lambda x: x[0]):
                 if tokenizer.convert_tokens_to_ids(str(token)) != index:
                     warnings += f"\texpected id: {tokenizer.convert_tokens_to_ids(str(token))}, found: {index},  token: `{token}`,\n"
-
-            logger.warn(
-                f"You are converting a {slow_tokenizer.__class__.__name__} to a {cls.__name__}, but"
-                f"wrong indexes were founds when adding the `added_tokens` from the `slow` tokenizer to the `fast`. "
-                f" following tokens had unexpected id :\n{warnings}. You should try using `from_slow`."
-            )
+            if len(warnings) > 1:
+                logger.warn(
+                    f"You are converting a {slow_tokenizer.__class__.__name__} to a {cls.__name__}, but"
+                    f" wrong indexes were founds when adding the `added_tokens` from the `slow` tokenizer to the `fast`. "
+                    f" The following tokens had unexpected id :\n{warnings}. You should try using `from_slow`."
+                )
             # finally we add all the special_tokens to make sure eveything is initialized
             tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
 
