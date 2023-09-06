@@ -14,6 +14,7 @@
 # limitations under the License.
 """ PyTorch CLVP model."""
 
+import copy
 
 import math
 from dataclasses import dataclass
@@ -147,15 +148,14 @@ class CLVPRMSNorm(nn.Module):
         return hidden_states / norm.clamp(min=self.eps) * self.gain
 
 
-@dataclass
-class CLVPSpeechModelOutput(ModelOutput):
+class CLVPTransformerWithProjectionOutput(ModelOutput):
     """
-    Base class for speech model's outputs that also contains speech embeddings of the pooling of the last hidden
-    states.
+    Base class for text and speech model's outputs that contains a pooling of the last hidden states as well as a
+    projection output(a linear layer on top of the pooled output).
 
     Args:
-        speech_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The speech embeddings obtained by applying the projection layer to the pooler_output.
+        embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+            The embeddings obtained by applying the projection layer to the pooler_output.
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
         pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
@@ -163,49 +163,14 @@ class CLVPSpeechModelOutput(ModelOutput):
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
             Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
-
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
-
-    speech_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-class CLVPTextModelOutput(ModelOutput):
-    """
-    Base class for text model's outputs that also contains a pooling of the last hidden states.
-
-    Args:
-        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-            The text embeddings obtained by applying the projection layer to the pooler_output.
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
-            Pooled output of the `last_hidden_state`.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    text_embeds: Optional[torch.FloatTensor] = None
+    embeds: Optional[torch.FloatTensor] = None
     last_hidden_state: torch.FloatTensor = None
     pooler_output: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -244,117 +209,6 @@ class CLVPOutput(ModelOutput):
     speech_model_output: BaseModelOutputWithPooling = None
 
 
-class CLVPAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-        self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
-
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-
-    # Copied from transformers.models.clip.modeling_clip.CLIPAttention._shape
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
-    def forward(
-        self,
-        hidden_states: torch.FloatTensor,
-        rotary_pos_emb: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        causal_attention_mask: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor], Optional[Tuple[torch.FloatTensor]]]:
-        """Input shape: Batch x Time x Channel"""
-
-        bsz, tgt_len, embed_dim = hidden_states.size()
-
-        # get query proj
-        query_states = self.q_proj(hidden_states) * self.scale
-        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
-
-        if rotary_pos_emb is not None:
-            query_states = apply_rotary_pos_emb(query_states, rotary_pos_emb)
-            key_states = apply_rotary_pos_emb(key_states, rotary_pos_emb)
-            value_states = apply_rotary_pos_emb(value_states, rotary_pos_emb)
-
-        src_len = key_states.size(1)
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
-            raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        # apply the causal_attention_mask first
-        if causal_attention_mask is not None:
-            if causal_attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
-                    f" {causal_attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        if attention_mask is not None:
-            if attention_mask.size() != (bsz, 1, tgt_len, src_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
-                )
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if output_attentions:
-            # this operation is a bit akward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights_reshaped
-
-
 class CLVPGatedLinearUnit(nn.Module):
     """
     `CLVPGatedLinearUnit` uses the second half of the `hidden_states` to act as a gate for the first half of the
@@ -371,7 +225,10 @@ class CLVPGatedLinearUnit(nn.Module):
         return hidden_states * self.activation_fn(gate)
 
 
-class CLVPMLP(nn.Module):
+class CLVPTransformerMLP(nn.Module):
+    """
+    This MLP is used in CLVP speech or text models.
+    """
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -417,299 +274,186 @@ class CLVPRotaryPositionalEmbedding(nn.Module):
         return self.cached_rotary_positional_embedding
 
 
-class CLVPEncoderLayer(nn.Module):
-    def __init__(self, config: CLVPConfig):
+class CLVPSelfAttention(nn.Module):
+    """Multi-headed attention to combine Absolute and Rotary Positional Embeddings"""
+
+    def __init__(self, config, apply_hidden_states_norm=False):
         super().__init__()
+        self.apply_hidden_states_norm = apply_hidden_states_norm
         self.config = config
         self.embed_dim = config.hidden_size
-        self.self_attn = CLVPAttention(config)
-        self.mlp = CLVPMLP(config)
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        self.scale = self.head_dim ** -0.5
+        self.dropout = config.attention_dropout
 
-        self.pre_branch_norm1 = CLVPRMSNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.pre_branch_norm2 = CLVPRMSNorm(self.embed_dim, eps=config.layer_norm_eps)
+        if hasattr(config, "max_position_embeddings"):
+            max_positions = config.max_position_embeddings
+            self.register_buffer(
+                "bias",
+                torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
+                    1, 1, max_positions, max_positions
+                ),
+                persistent=False,
+            )
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.use_attention_bias)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+
+        if self.apply_hidden_states_norm:
+            num_groups, num_channels = self.compute_groupnorm_groups(self.embed_dim)
+            self.norm = nn.GroupNorm(num_groups, num_channels, eps=1e-5, affine=True)
+
+    def compute_groupnorm_groups(self, channels: int):
+        """
+        Calculates the value of both `num_groups` and `num_channels` for nn.GroupNorm.
+        This logic is taken from the official repo.
+        link : https://github.com/neonbjb/tortoise-tts/blob/4003544b6ff4b68c09856e04d3eff9da26d023c2/tortoise/models/arch_util.py#L26
+        """
+        groups = 32
+        if channels <= 16:
+            groups = 8
+        elif channels <= 64:
+            groups = 16
+        while channels % groups != 0:
+            groups = int(groups / 2)
+
+        if groups <= 2:
+            raise ValueError(f"Number of groups for the GroupNorm must be greater than 2, but it is {groups}."
+                             f"Please consider using a different `n_embd` or `hidden_size`")
+
+        return groups, channels
+
+    # Copied from transformers.models.clip.modeling_clip.CLIPAttention._shape
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
         self,
         hidden_states: torch.FloatTensor,
-        rotary_pos_emb: torch.FloatTensor,
-        attention_mask: torch.LongTensor,
-        causal_attention_mask: torch.LongTensor,
+        rotary_pos_emb: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        layer_past: Optional[Tuple[torch.Tensor]] = None,
+        use_cache: Optional[bool] = False,
+        causal_attention_mask: Optional[torch.LongTensor] = None,
+        use_causal_attention_mask: Optional[bool] = True,
+        head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-                `(config.encoder_attention_heads,)`.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-        """
-        residual = hidden_states
+    ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor], Optional[Tuple[torch.FloatTensor]]]:
+        """Input shape: Batch x Time x Channel"""
 
-        hidden_states = self.pre_branch_norm1(hidden_states)
-        hidden_states, attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            rotary_pos_emb=rotary_pos_emb,
-            attention_mask=attention_mask,
-            causal_attention_mask=causal_attention_mask,
-            output_attentions=output_attentions,
-        )
+        # This logic is only used for the attention in CLVPConditioningEncoder. For the attention of AutoRegressive,
+        # speech and text models it is not used.
+        if self.apply_hidden_states_norm:
+            hidden_states = torch.permute(self.norm(torch.permute(hidden_states, (0, 2, 1))), (0, 2, 1))
 
-        hidden_states = residual + hidden_states
+        bsz, tgt_len, embed_dim = hidden_states.size()
 
-        residual = hidden_states
-        hidden_states = self.pre_branch_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        # get query proj
+        query_states = self.q_proj(hidden_states) * self.scale
+        key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+        value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
 
-# This is mostly ported from T5Attention with some changes to ensure it behaves as expected.
-class CLVPRelativeAttention(nn.Module):
-    """
-    `CLVPRelativeAttention` is used in `CLVPConditioningEncoder` to process log-mel spectrograms.
-    """
+        if layer_past is not None:
+            past_key, past_value = layer_past
+            key_states = torch.cat((past_key, key_states), dim=-2)
+            value_states = torch.cat((past_value, value_states), dim=-2)
 
-    def __init__(self, config: CLVPAutoRegressiveConfig, has_relative_attention_bias=False):
-        super().__init__()
-        self.config = config
-        self.has_relative_attention_bias = has_relative_attention_bias
-        self.relative_attention_num_buckets = config.relative_attention_num_buckets
-        self.relative_attention_max_distance = config.relative_attention_max_distance
-        self.n_embd = config.n_embd
-        self.n_heads = config.n_head
-        self.dropout = config.attn_pdrop
-        self.q = nn.Linear(self.n_embd, self.n_embd, bias=True)
-        self.k = nn.Linear(self.n_embd, self.n_embd, bias=True)
-        self.v = nn.Linear(self.n_embd, self.n_embd, bias=True)
-        self.o = nn.Linear(self.n_embd, self.n_embd, bias=True)
-
-        self.norm = nn.GroupNorm(32, self.n_embd, eps=1e-5, affine=True)
-
-        if self.has_relative_attention_bias:
-            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
-        self.pruned_heads = set()
-        self.gradient_checkpointing = False
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.n_heads, self.n_embd // self.n_heads, self.pruned_heads
-        )
-        # Prune linear layers
-        self.q = prune_linear_layer(self.q, index)
-        self.k = prune_linear_layer(self.k, index)
-        self.v = prune_linear_layer(self.v, index)
-        self.o = prune_linear_layer(self.o, index, dim=1)
-        # Update hyper params
-        self.n_heads = self.n_heads - len(heads)
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    @staticmethod
-    def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
-        """
-        Args:
-        Adapted from Mesh Tensorflow:
-        https:
-            //github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
-        Translate relative position to a bucket number for relative attention. The relative position is defined as
-        memory_position - query_position, i.e. the distance in tokens from the attending position to the attended-to
-        position. If bidirectional=False, then positive relative positions are invalid. We use smaller buckets for
-        small absolute relative_position and larger buckets for larger absolute relative_positions. All relative
-        positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.:
-        This should allow for more graceful generalization to longer sequences than the model has been trained on
-            relative_position: an int32 Tensor bidirectional: a boolean - whether the attention is bidirectional
-            num_buckets: an integer max_distance: an integer
-        Returns:
-            a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)
-        """
-        relative_buckets = 0
-        if bidirectional:
-            num_buckets //= 2
-            relative_buckets += (relative_position > 0).to(torch.long) * num_buckets
-            relative_position = torch.abs(relative_position)
+        if use_cache is True:
+            present = (key_states, value_states)
         else:
-            relative_position = -torch.min(relative_position, torch.zeros_like(relative_position))
-        # now relative_position is in the range [0, inf)
+            present = None
 
-        # half of the buckets are for exact increments in positions
-        max_exact = num_buckets // 2
-        is_small = relative_position < max_exact
+        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
+        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
+        key_states = key_states.view(*proj_shape)
+        value_states = value_states.view(*proj_shape)
 
-        # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
-        relative_position_if_large = max_exact + (
-            torch.log(relative_position.float() / max_exact)
-            / math.log(max_distance / max_exact)
-            * (num_buckets - max_exact)
-        ).to(torch.long)
-        relative_position_if_large = torch.min(
-            relative_position_if_large, torch.full_like(relative_position_if_large, num_buckets - 1)
-        )
+        if rotary_pos_emb is not None:
+            query_states = apply_rotary_pos_emb(query_states, rotary_pos_emb)
+            key_states = apply_rotary_pos_emb(key_states, rotary_pos_emb)
+            value_states = apply_rotary_pos_emb(value_states, rotary_pos_emb)
 
-        relative_buckets += torch.where(is_small, relative_position, relative_position_if_large)
-        return relative_buckets
+        src_len = key_states.size(1)
+        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
-    def compute_bias(self, query_length, key_length, device=None):
-        """Compute binned relative position bias"""
-        if device is None:
-            device = self.relative_attention_bias.weight.device
-        context_position = torch.arange(query_length, dtype=torch.long, device=device)[:, None]
-        memory_position = torch.arange(key_length, dtype=torch.long, device=device)[None, :]
-        relative_position = memory_position - context_position  # shape (query_length, key_length)
-        relative_position_bucket = self._relative_position_bucket(
-            relative_position,  # shape (query_length, key_length)
-            bidirectional=False,
-            num_buckets=self.relative_attention_num_buckets,
-            max_distance=self.relative_attention_max_distance,
-        )
-        values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
-        values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
-        return values
+        if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
+            raise ValueError(
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {attn_weights.size()}"
+            )
 
-    def forward(
-        self,
-        hidden_states,
-        mask=None,
-        key_value_states=None,
-        position_bias=None,
-        past_key_value=None,
-        layer_head_mask=None,
-        query_length=None,
-        use_cache=False,
-        output_attentions=False,
-    ):
-        """
-        Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
-        """
-        norm_hidden_states = torch.permute(self.norm(torch.permute(hidden_states, (0, 2, 1))), (0, 2, 1))
+        # apply the causal_attention_mask first
+        if use_causal_attention_mask:
+            if causal_attention_mask is not None:
+                if causal_attention_mask.size() != (bsz, 1, tgt_len, src_len):
+                    raise ValueError(
+                        f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
+                        f" {causal_attention_mask.size()}"
+                    )
+                attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + causal_attention_mask
+                attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        # Input is (batch_size, seq_length, dim)
-        # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
-        # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
-        batch_size, seq_length = norm_hidden_states.shape[:2]
+            # if there is no causal mask given but we already know the `max_position_embeddings` then use the constructed
+            # mask. This portion mimics the `GPT2Attention`.
+            elif causal_attention_mask is None and hasattr(self.config, "max_position_embeddings"):
+                query_length, key_length = query_states.size(-2), key_states.size(-2)
+                causal_mask = self.bias[:, :, key_length - query_length: key_length, :key_length]
+                mask_value = torch.finfo(attn_weights.dtype).min
+                mask_value = torch.full([], mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
+                attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+                attn_weights = torch.where(causal_mask, attn_weights.to(attn_weights.dtype), mask_value)
+                attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        real_seq_length = seq_length
+        if attention_mask is not None:
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
-        if past_key_value is not None:
-            if len(past_key_value) != 2:
-                raise ValueError(
-                    f"past_key_value should have 2 past states: keys and values. Got {len(past_key_value)} past states"
-                )
-            real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
-
-        key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
-
-        def shape(states):
-            """projection"""
-            return states.view(batch_size, -1, self.n_heads, self.n_embd // self.n_heads).transpose(1, 2)
-
-        def unshape(states):
-            """reshape"""
-            return states.transpose(1, 2).contiguous().view(batch_size, -1, self.n_embd)
-
-        def project(hidden_states, proj_layer, key_value_states, past_key_value):
-            """projects hidden states correctly to key/query states"""
-            if key_value_states is None:
-                # self-attn
-                # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(hidden_states))
-            elif past_key_value is None:
-                # cross-attn
-                # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(key_value_states))
-
-            if past_key_value is not None:
-                if key_value_states is None:
-                    # self-attn
-                    # (batch_size, n_heads, key_length, dim_per_head)
-                    hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
-                elif past_key_value.shape[2] != key_value_states.shape[1]:
-                    # checking that the `sequence_length` of the `past_key_value` is the same as
-                    # the provided `key_value_states` to support prefix tuning
-                    # cross-attn
-                    # (batch_size, n_heads, seq_length, dim_per_head)
-                    hidden_states = shape(proj_layer(key_value_states))
-                else:
-                    # cross-attn
-                    hidden_states = past_key_value
-            return hidden_states
-
-        scale = 1 / math.sqrt(self.n_embd // self.n_heads)
-
-        # get query states
-        query_states = shape(self.q(norm_hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
-
-        # get key/value states
-        key_states = project(
-            norm_hidden_states, self.k, key_value_states, past_key_value[0] if past_key_value is not None else None
-        )
-        value_states = project(
-            norm_hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
-        )
-
-        # compute scores
-        scores = torch.matmul(
-            query_states * scale, key_states.transpose(3, 2)
-        )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
-
-        if position_bias is None:
-            if not self.has_relative_attention_bias:
-                position_bias = torch.zeros(
-                    (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
-                )
-                if self.gradient_checkpointing and self.training:
-                    position_bias.requires_grad = True
-            else:
-                position_bias = self.compute_bias(real_seq_length, key_length, device=scores.device)
-
-            # if key and values are already calculated
-            # we want only the last query position bias
-            if past_key_value is not None:
-                position_bias = position_bias[:, :, -norm_hidden_states.size(1) :, :]
-
-            if mask is not None:
-                position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
-
-        if self.pruned_heads:
-            mask = torch.ones(position_bias.shape[1])
-            mask[list(self.pruned_heads)] = 0
-            position_bias_masked = position_bias[:, mask.bool()]
-        else:
-            position_bias_masked = position_bias
-
-        # scores += position_bias_masked
-        scores += (
-            position_bias_masked * 8
-        )  # its actually root under the dimension of each attn head will be updated in the final version
-
-        attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
-            scores
-        )  # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = nn.functional.dropout(
-            attn_weights, p=self.dropout, training=self.training
-        )  # (batch_size, n_heads, seq_length, key_length)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
         # Mask heads if we want to
-        if layer_head_mask is not None:
-            attn_weights = attn_weights * layer_head_mask
-
-        attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
-        attn_output = self.o(attn_output) + hidden_states
-
-        present_key_value_state = None
-        outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
+        if head_mask is not None:
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights * head_mask
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
-            outputs = outputs + (attn_weights,)
+            # this operation is a bit akward, but it's required to
+            # make sure that attn_weights keeps its gradient.
+            # In order to do so, attn_weights have to reshaped
+            # twice and have to be reused in the following
+            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+        else:
+            attn_weights_reshaped = None
+
+        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+
+        attn_output = torch.bmm(attn_probs, value_states)
+
+        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
+
+        attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(bsz, tgt_len, embed_dim)
+
+        attn_output = self.out_proj(attn_output)
+
+        outputs = (attn_output, present)
+        if output_attentions:
+            outputs += (attn_weights_reshaped,)
 
         return outputs
 
@@ -731,16 +475,17 @@ class CLVPConditioningEncoder(nn.Module):
         super().__init__()
 
         text_config = config.text_config
-        autoregressive_config = config.autoregressive_config
+
         self.text_start_token_id = text_config.bos_token_id
         self.text_end_token_id = text_config.eos_token_id
 
-        self.mel_conv = nn.Conv1d(autoregressive_config.feature_size, autoregressive_config.n_embd, kernel_size=1)
-        self.mel_attn_blocks = nn.ModuleList([CLVPRelativeAttention(autoregressive_config) for _ in range(6)])
+        self.mel_conv = nn.Conv1d(config.autoregressive_config.feature_size, config.autoregressive_config.n_embd, kernel_size=1)
 
-        self.text_token_embedding = nn.Embedding(text_config.vocab_size, autoregressive_config.n_embd)
+        self.mel_attn_blocks = nn.ModuleList([CLVPSelfAttention(config.autoregressive_config, apply_hidden_states_norm=True) for _ in range(6)])
+
+        self.text_token_embedding = nn.Embedding(text_config.vocab_size, config.autoregressive_config.n_embd)
         self.text_position_embedding = nn.Embedding(
-            autoregressive_config.max_text_tokens, autoregressive_config.n_embd
+            config.autoregressive_config.max_text_tokens, config.autoregressive_config.n_embd
         )
 
     def forward(self, mel_spec: torch.FloatTensor, text_tokens: torch.LongTensor):
@@ -749,7 +494,7 @@ class CLVPConditioningEncoder(nn.Module):
 
         mel_spec = torch.permute(mel_spec, (0, 2, 1))
         for mel_attn_block in self.mel_attn_blocks:
-            mel_spec = mel_attn_block(mel_spec)[0]
+            mel_spec = mel_attn_block(mel_spec, use_causal_attention_mask=False)[0] + mel_spec
         mel_spec = torch.permute(mel_spec, (0, 2, 1))
         mel_spec = mel_spec[:, :, 0]
 
@@ -791,7 +536,7 @@ class CLVPPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=factor * 0.02)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, CLVPAttention):
+        elif isinstance(module, CLVPSelfAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
@@ -799,7 +544,7 @@ class CLVPPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.k_proj.weight, std=in_proj_std)
             nn.init.normal_(module.v_proj.weight, std=in_proj_std)
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-        elif isinstance(module, CLVPMLP):
+        elif isinstance(module, CLVPTransformerMLP):
             factor = self.config.initializer_factor
             in_proj_std = (
                 (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
@@ -813,18 +558,6 @@ class CLVPPreTrainedModel(PreTrainedModel):
         elif isinstance(module, CLVPConditioningEncoder):
             module.mel_conv.weight.data.normal_(mean=0.0, std=factor)
             module.mel_conv.bias.data.zero_()
-        elif isinstance(module, CLVPRelativeAttention):
-            d_model = self.config.autoregressive_config.n_embd
-            key_value_proj_dim = self.config.autoregressive_config.n_embd // self.config.autoregressive_config.n_head
-            n_heads = self.config.autoregressive_config.n_head
-
-            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
-
-            if module.has_relative_attention_bias:
-                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
         elif isinstance(module, CLVPAutoRegressiveLMHeadModel):
             for name, p in module.named_parameters():
                 if name == "c_proj.weight":
@@ -890,6 +623,65 @@ CLVP_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
+
+
+class CLVPEncoderLayer(nn.Module):
+    def __init__(self, config: CLVPConfig):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.self_attn = CLVPSelfAttention(config)
+        self.mlp = CLVPTransformerMLP(config)
+
+        self.pre_branch_norm1 = CLVPRMSNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.pre_branch_norm2 = CLVPRMSNorm(self.embed_dim, eps=config.layer_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.FloatTensor,
+        rotary_pos_emb: torch.FloatTensor,
+        attention_mask: torch.LongTensor,
+        causal_attention_mask: torch.LongTensor,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.FloatTensor]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+                `(config.encoder_attention_heads,)`.
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+        """
+        residual = hidden_states
+
+        hidden_states = self.pre_branch_norm1(hidden_states)
+
+        attention_outputs = self.self_attn(
+            hidden_states=hidden_states,
+            rotary_pos_emb=rotary_pos_emb,
+            attention_mask=attention_mask,
+            causal_attention_mask=causal_attention_mask,
+            use_causal_attention_mask=False if causal_attention_mask is None else True,
+            output_attentions=output_attentions,
+        )
+
+        hidden_states = attention_outputs[0]
+
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.pre_branch_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attention_outputs[-1],)
+
+        return outputs
 
 
 class CLVPEncoder(nn.Module):
@@ -994,7 +786,7 @@ class CLVPEncoder(nn.Module):
             encoder_states = encoder_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
+            return (hidden_states, encoder_states, all_attentions)
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
@@ -1107,7 +899,7 @@ class CLVPTransformerWithProjection(CLVPPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, CLVPTextModelOutput, CLVPSpeechModelOutput]:
+    ) -> Union[Tuple, CLVPTransformerWithProjectionOutput]:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1166,27 +958,22 @@ class CLVPTransformerWithProjection(CLVPPreTrainedModel):
 
         if not return_dict:
             outputs = (embeds,) + transformer_outputs
-            return tuple(output for output in outputs if output is not None)
+            return outputs
 
-        if self.model_type == "clvp_text_model":
-            return CLVPTextModelOutput(
-                text_embeds=embeds,
+        return CLVPTransformerWithProjectionOutput(
+                embeds=embeds,
                 last_hidden_state=transformer_outputs.last_hidden_state,
                 pooler_output=transformer_outputs.pooler_output,
                 hidden_states=transformer_outputs.hidden_states,
                 attentions=transformer_outputs.attentions,
             )
 
-        return CLVPSpeechModelOutput(
-            speech_embeds=embeds,
-            last_hidden_state=transformer_outputs.last_hidden_state,
-            pooler_output=transformer_outputs.pooler_output,
-            hidden_states=transformer_outputs.hidden_states,
-            attentions=transformer_outputs.attentions,
-        )
 
-
-class GPT2MLP(nn.Module):
+# Copied from transformers.models.gpt2.modeling_gpt2.GPT2Block with GPT2->CLVPAutoRegressive
+class CLVPAutoRegressiveMLP(nn.Module):
+    """
+    This MLP is used in the CLVP generative model.
+    """
     def __init__(self, intermediate_size, config):
         super().__init__()
         embed_dim = config.hidden_size
@@ -1203,242 +990,18 @@ class GPT2MLP(nn.Module):
         return hidden_states
 
 
-class GPT2Attention(nn.Module):
-    def __init__(self, config, is_cross_attention=False, layer_idx=None):
-        super().__init__()
-
-        max_positions = config.max_position_embeddings
-        self.register_buffer(
-            "bias",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
-                1, 1, max_positions, max_positions
-            ),
-            persistent=False,
-        )
-        self.register_buffer("masked_bias", torch.tensor(-1e4), persistent=False)
-
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        self.split_size = self.embed_dim
-        if self.head_dim * self.num_heads != self.embed_dim:
-            raise ValueError(
-                f"`embed_dim` must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {self.num_heads})."
-            )
-
-        self.scale_attn_weights = config.scale_attn_weights
-        self.is_cross_attention = is_cross_attention
-
-        # Layer-wise attention scaling, reordering, and upcasting
-        self.scale_attn_by_inverse_layer_idx = config.scale_attn_by_inverse_layer_idx
-        self.layer_idx = layer_idx
-        self.reorder_and_upcast_attn = config.reorder_and_upcast_attn
-
-        if self.is_cross_attention:
-            self.c_attn = Conv1D(2 * self.embed_dim, self.embed_dim)
-            self.q_attn = Conv1D(self.embed_dim, self.embed_dim)
-        else:
-            self.c_attn = Conv1D(3 * self.embed_dim, self.embed_dim)
-        self.c_proj = Conv1D(self.embed_dim, self.embed_dim)
-
-        self.attn_dropout = nn.Dropout(config.attn_pdrop)
-        self.resid_dropout = nn.Dropout(config.resid_pdrop)
-
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(heads, self.num_heads, self.head_dim, self.pruned_heads)
-        index_attn = torch.cat([index, index + self.split_size, index + (2 * self.split_size)])
-
-        # Prune conv1d layers
-        self.c_attn = prune_conv1d_layer(self.c_attn, index_attn, dim=1)
-        self.c_proj = prune_conv1d_layer(self.c_proj, index, dim=0)
-
-        # Update hyper params
-        self.split_size = (self.split_size // self.num_heads) * (self.num_heads - len(heads))
-        self.num_heads = self.num_heads - len(heads)
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def _attn(self, query, key, value, attention_mask=None, head_mask=None):
-        attn_weights = torch.matmul(query, key.transpose(-1, -2))
-
-        if self.scale_attn_weights:
-            attn_weights = attn_weights / torch.full(
-                [], value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
-            )
-
-        # Layer-wise attention scaling
-        if self.scale_attn_by_inverse_layer_idx:
-            attn_weights = attn_weights / float(self.layer_idx + 1)
-
-        if not self.is_cross_attention:
-            # if only "normal" attention layer implements causal mask
-            query_length, key_length = query.size(-2), key.size(-2)
-            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
-            mask_value = torch.finfo(attn_weights.dtype).min
-            # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
-            # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.full([], mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
-            attn_weights = torch.where(causal_mask, attn_weights.to(attn_weights.dtype), mask_value)
-
-        if attention_mask is not None:
-            # Apply the attention mask
-            attn_weights = attn_weights + attention_mask
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        # Downcast (if necessary) back to V's dtype (if in mixed-precision) -- No-Op otherwise
-        attn_weights = attn_weights.type(value.dtype)
-        attn_weights = self.attn_dropout(attn_weights)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attn_weights = attn_weights * head_mask
-
-        attn_output = torch.matmul(attn_weights, value)
-
-        return attn_output, attn_weights
-
-    def _upcast_and_reordered_attn(self, query, key, value, attention_mask=None, head_mask=None):
-        # Use `torch.baddbmm` (a bit more efficient w/ alpha param for scaling -- from Megatron-LM)
-        bsz, num_heads, q_seq_len, dk = query.size()
-        _, _, k_seq_len, _ = key.size()
-
-        # Preallocate attn_weights for `baddbmm`
-        attn_weights = torch.empty(bsz * num_heads, q_seq_len, k_seq_len, dtype=torch.float32, device=query.device)
-
-        # Compute Scale Factor
-        scale_factor = 1.0
-        if self.scale_attn_weights:
-            scale_factor /= float(value.size(-1)) ** 0.5
-
-        if self.scale_attn_by_inverse_layer_idx:
-            scale_factor /= float(self.layer_idx + 1)
-
-        # Upcast (turn off autocast) and reorder (Scale K by 1 / root(dk))
-        with autocast(enabled=False):
-            q, k = query.reshape(-1, q_seq_len, dk), key.transpose(-1, -2).reshape(-1, dk, k_seq_len)
-            attn_weights = torch.baddbmm(attn_weights, q.float(), k.float(), beta=0, alpha=scale_factor)
-            attn_weights = attn_weights.reshape(bsz, num_heads, q_seq_len, k_seq_len)
-
-        if not self.is_cross_attention:
-            # if only "normal" attention layer implements causal mask
-            query_length, key_length = query.size(-2), key.size(-2)
-            causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
-            mask_value = torch.finfo(attn_weights.dtype).min
-            # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
-            # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
-            mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype).to(attn_weights.device)
-            attn_weights = torch.where(causal_mask, attn_weights, mask_value)
-
-        if attention_mask is not None:
-            # Apply the attention mask
-            attn_weights = attn_weights + attention_mask
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        # Downcast (if necessary) back to V's dtype (if in mixed-precision) -- No-Op if otherwise
-        if attn_weights.dtype != torch.float32:
-            raise RuntimeError("Error with upcasting, attn_weights does not have dtype torch.float32")
-        attn_weights = attn_weights.type(value.dtype)
-        attn_weights = self.attn_dropout(attn_weights)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attn_weights = attn_weights * head_mask
-
-        attn_output = torch.matmul(attn_weights, value)
-
-        return attn_output, attn_weights
-
-    def _split_heads(self, tensor, num_heads, attn_head_size):
-        """
-        Splits hidden_size dim into attn_head_size and num_heads
-        """
-        new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
-        tensor = tensor.view(new_shape)
-        return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
-
-    def _merge_heads(self, tensor, num_heads, attn_head_size):
-        """
-        Merges attn_head_size dim and num_attn_heads dim into hidden_size
-        """
-        tensor = tensor.permute(0, 2, 1, 3).contiguous()
-        new_shape = tensor.size()[:-2] + (num_heads * attn_head_size,)
-        return tensor.view(new_shape)
-
-    def forward(
-        self,
-        hidden_states: Optional[Tuple[torch.FloatTensor]],
-        layer_past: Optional[Tuple[torch.Tensor]] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = False,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
-        if encoder_hidden_states is not None:
-            if not hasattr(self, "q_attn"):
-                raise ValueError(
-                    "If class is used as cross attention, the weights `q_attn` have to be defined. "
-                    "Please make sure to instantiate class with `GPT2Attention(..., is_cross_attention=True)`."
-                )
-
-            query = self.q_attn(hidden_states)
-            key, value = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
-            attention_mask = encoder_attention_mask
-        else:
-            query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
-
-        query = self._split_heads(query, self.num_heads, self.head_dim)
-        key = self._split_heads(key, self.num_heads, self.head_dim)
-        value = self._split_heads(value, self.num_heads, self.head_dim)
-
-        if layer_past is not None:
-            past_key, past_value = layer_past
-            key = torch.cat((past_key, key), dim=-2)
-            value = torch.cat((past_value, value), dim=-2)
-
-        if use_cache is True:
-            present = (key, value)
-        else:
-            present = None
-
-        if self.reorder_and_upcast_attn:
-            attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
-        else:
-            attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
-
-        attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
-        attn_output = self.c_proj(attn_output)
-        attn_output = self.resid_dropout(attn_output)
-
-        outputs = (attn_output, present)
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs  # a, present, (attentions)
-
-
-class GPT2Block(nn.Module):
+# Copied from transformers.models.gpt2.modeling_gpt2.GPT2Block with GPT2->CLVPAutoRegressive, GPT2Attention->CLVPSelfAttention
+class CLVPAutoRegressiveBlock(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         hidden_size = config.hidden_size
         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
 
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.attn = GPT2Attention(config, layer_idx=layer_idx)
+        self.attn = CLVPSelfAttention(config)
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
 
-        if config.add_cross_attention:
-            self.crossattention = GPT2Attention(config, is_cross_attention=True, layer_idx=layer_idx)
-            self.ln_cross_attn = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-
-        self.mlp = GPT2MLP(inner_dim, config)
+        self.mlp = CLVPAutoRegressiveMLP(inner_dim, config)
 
     def forward(
         self,
@@ -1502,7 +1065,7 @@ class GPT2Block(nn.Module):
         return outputs  # hidden_states, present, (attentions, cross_attentions)
 
 
-GPT2_INPUTS_DOCSTRING = r"""
+CLVP_AUTOREGRESSIVE_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else
@@ -1588,7 +1151,7 @@ class CLVPAutoRegressiveLMHeadModel(CLVPPreTrainedModel):
         self.wpe = nn.Embedding(self.config.max_mel_tokens, self.embed_dim)
 
         self.drop = nn.Dropout(self.config.embd_pdrop)
-        self.h = nn.ModuleList([GPT2Block(self.config, layer_idx=i) for i in range(self.config.n_layer)])
+        self.h = nn.ModuleList([CLVPAutoRegressiveBlock(self.config, layer_idx=i) for i in range(self.config.n_layer)])
         self.ln_f = nn.LayerNorm(self.embed_dim, eps=self.config.layer_norm_epsilon)
 
         self.final_norm = nn.LayerNorm(self.embed_dim)
@@ -1673,7 +1236,7 @@ class CLVPAutoRegressiveLMHeadModel(CLVPPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.h[layer].attn.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(CLVP_AUTOREGRESSIVE_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -2014,9 +1577,12 @@ class CLVPModel(CLVPPreTrainedModel):
     def get_speech_features(
         self,
         speech_ids: torch.LongTensor = None,
+        input_ids: torch.LongTensor = None,
         input_features: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         use_causal_attention_mask: Optional[bool] = False,
+        generation_config: Optional[GenerationConfig] = None,
+        **kwargs,
     ) -> torch.FloatTensor:
         r"""
         This method can be used to extract speech_embeds from `speech_ids`. The speech embeddings obtained by applying
@@ -2059,90 +1625,104 @@ class CLVPModel(CLVPPreTrainedModel):
         ```
         """
 
+        if speech_ids is None:
+            if generation_config is None:
+                generation_config = self.generation_config
+            generation_config.update(**kwargs)
+
+            conditioning_embeds = self.conditioning_encoder(mel_spec=input_features, text_tokens=input_ids)
+
+            speech_ids = self.autoregressive_model.generate(
+                conditioning_embeds=conditioning_embeds,
+                generation_config=generation_config,
+            )
+
+            speech_ids = self.fix_autoregressive_speech_output(speech_ids[0])
+
         return self.speech_model(
             input_ids=speech_ids,
             attention_mask=attention_mask,
             use_causal_attention_mask=use_causal_attention_mask,
         )[0]
 
-    def get_speech_features_with_autoreg_generate(
-        self,
-        input_ids: torch.LongTensor = None,
-        input_features: torch.FloatTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        use_causal_attention_mask: Optional[bool] = False,
-        generation_config: Optional[GenerationConfig] = None,
-        **kwargs,
-    ) -> torch.FloatTensor:
-        r"""
-        This method can be used to extract speech_embeds from audio. The speech embeddings obtained by applying the
-        projection layer to the pooled output of the CLVP Text Model.
-
-        Please note that this method uses the `CLVPConditioningEncoder` and `CLVPAutoRegressiveLMHeadModel` to generate
-        the `speech_ids` and then the CLVP Speech Model is applied to the generated `speech_ids`. Thus we need both the
-        `input_ids` and `input_features` for this method.
-
-        Args:
-            input_ids (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-                Speech Tokens. Padding will be ignored by default should you provide it.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-            use_causal_attention_mask (`bool`, *optional*, defaults to `False`):
-                Whether to use causal attention mask.
-
-        Returns:
-            `torch.FloatTensor` of shape `(num_return_sequences, output_dim)`:
-                The speech embeddings obtained by applying the projection layer to the pooled output of the CLVP Speech
-                Model. The `num_return_sequences` and the generation process can be controlled by passing a suitable
-                `generation_config` or directly passing them as kwargs.
-
-        Examples:
-
-        ```python
-        >>> import datasets
-        >>> from transformers import CLVPProcessor, CLVPModel
-
-        >>> # Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library)
-        >>> text = "This is an example text."
-        >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
-        >>> _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
-
-        >>> # Define processor and model
-        >>> processor = CLVPProcessor.from_pretrained("susnato/clvp_dev")
-        >>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
-
-        >>> # Generate processor output and model output
-        >>> processor_output = processor(raw_speech=audio, sampling_rate=sr, text=text, return_tensors="pt")
-        >>> speech_embeds = model.get_speech_features_with_autoreg_generate(
-        ...     input_ids=processor_output["input_ids"], input_features=processor_output["input_features"]
-        ... )
-        ```
-        """
-
-        if generation_config is None:
-            generation_config = self.generation_config
-        generation_config.update(**kwargs)
-
-        conditioning_embeds = self.conditioning_encoder(mel_spec=input_features, text_tokens=input_ids)
-
-        speech_candidates = self.autoregressive_model.generate(
-            conditioning_embeds=conditioning_embeds,
-            generation_config=generation_config,
-        )
-
-        speech_candidates = self.fix_autoregressive_speech_output(speech_candidates[0])
-
-        return self.speech_model(
-            input_ids=speech_candidates,
-            attention_mask=attention_mask,
-            use_causal_attention_mask=use_causal_attention_mask,
-        )[0]
+    # def get_speech_features_with_autoreg_generate(
+    #     self,
+    #     input_ids: torch.LongTensor = None,
+    #     input_features: torch.FloatTensor = None,
+    #     attention_mask: Optional[torch.Tensor] = None,
+    #     use_causal_attention_mask: Optional[bool] = False,
+    #     generation_config: Optional[GenerationConfig] = None,
+    #     **kwargs,
+    # ) -> torch.FloatTensor:
+    #     r"""
+    #     This method can be used to extract speech_embeds from audio. The speech embeddings obtained by applying the
+    #     projection layer to the pooled output of the CLVP Text Model.
+    #
+    #     Please note that this method uses the `CLVPConditioningEncoder` and `CLVPAutoRegressiveLMHeadModel` to generate
+    #     the `speech_ids` and then the CLVP Speech Model is applied to the generated `speech_ids`. Thus we need both the
+    #     `input_ids` and `input_features` for this method.
+    #
+    #     Args:
+    #         input_ids (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+    #             Speech Tokens. Padding will be ignored by default should you provide it.
+    #         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+    #             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+    #
+    #             - 1 for tokens that are **not masked**,
+    #             - 0 for tokens that are **masked**.
+    #
+    #             [What are attention masks?](../glossary#attention-mask)
+    #         use_causal_attention_mask (`bool`, *optional*, defaults to `False`):
+    #             Whether to use causal attention mask.
+    #
+    #     Returns:
+    #         `torch.FloatTensor` of shape `(num_return_sequences, output_dim)`:
+    #             The speech embeddings obtained by applying the projection layer to the pooled output of the CLVP Speech
+    #             Model. The `num_return_sequences` and the generation process can be controlled by passing a suitable
+    #             `generation_config` or directly passing them as kwargs.
+    #
+    #     Examples:
+    #
+    #     ```python
+    #     >>> import datasets
+    #     >>> from transformers import CLVPProcessor, CLVPModel
+    #
+    #     >>> # Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library)
+    #     >>> text = "This is an example text."
+    #     >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+    #     >>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
+    #     >>> _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
+    #
+    #     >>> # Define processor and model
+    #     >>> processor = CLVPProcessor.from_pretrained("susnato/clvp_dev")
+    #     >>> model = CLVPModel.from_pretrained("susnato/clvp_dev")
+    #
+    #     >>> # Generate processor output and model output
+    #     >>> processor_output = processor(raw_speech=audio, sampling_rate=sr, text=text, return_tensors="pt")
+    #     >>> speech_embeds = model.get_speech_features_with_autoreg_generate(
+    #     ...     input_ids=processor_output["input_ids"], input_features=processor_output["input_features"]
+    #     ... )
+    #     ```
+    #     """
+    #
+    #     if generation_config is None:
+    #         generation_config = self.generation_config
+    #     generation_config.update(**kwargs)
+    #
+    #     conditioning_embeds = self.conditioning_encoder(mel_spec=input_features, text_tokens=input_ids)
+    #
+    #     speech_candidates = self.autoregressive_model.generate(
+    #         conditioning_embeds=conditioning_embeds,
+    #         generation_config=generation_config,
+    #     )
+    #
+    #     speech_candidates = self.fix_autoregressive_speech_output(speech_candidates[0])
+    #
+    #     return self.speech_model(
+    #         input_ids=speech_candidates,
+    #         attention_mask=attention_mask,
+    #         use_causal_attention_mask=use_causal_attention_mask,
+    #     )[0]
 
     @add_start_docstrings_to_model_forward(CLVP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CLVPOutput, config_class=CLVPConfig)

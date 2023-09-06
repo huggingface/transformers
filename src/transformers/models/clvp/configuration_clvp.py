@@ -68,6 +68,8 @@ class CLVPTextConfig(PretrainedConfig):
             The dropout ratio for the feed-forward layers in [`CLVPMLP`].
         use_rotary_embedding (`bool`, *optional*, defaults to `True`):
             Whether to use rotary_embedding or not.
+        use_attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in Query, Key and Value layers during self attention.
         summary_type (`str`, *optional*, defaults to `"mean"`):
             What strategy to use to get pooler_output from the last_hidden_state. `"last"`, `"first"`, `"mean"` and
             `"cls_index"` are supported.
@@ -104,6 +106,7 @@ class CLVPTextConfig(PretrainedConfig):
         attention_dropout=0.1,
         dropout=0.1,
         use_rotary_embedding=True,
+        use_attention_bias=False,
         summary_type="mean",
         initializer_factor=1.0,
         pad_token_id=1,
@@ -125,6 +128,7 @@ class CLVPTextConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.dropout = dropout
         self.use_rotary_embedding = use_rotary_embedding
+        self.use_attention_bias = use_attention_bias
         self.summary_type = summary_type
 
     @classmethod
@@ -181,6 +185,8 @@ class CLVPSpeechConfig(PretrainedConfig):
             The dropout ratio for the feed forward layers in [`CLVPMLP`].
         use_rotary_embedding (`bool`, *optional*, defaults to `True`):
             Whether to use rotary_embedding or not.
+        use_attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in Query, Key and Value layers during self attention.
         summary_type (`str`, *optional*, defaults to `"mean"`):
             What strategy to use to get pooler_output from the last_hidden_state. `"last"`, `"first"`, `"mean"` and
             `"cls_index"` are supported.
@@ -218,6 +224,7 @@ class CLVPSpeechConfig(PretrainedConfig):
         attention_dropout=0.1,
         dropout=0.1,
         use_rotary_embedding=True,
+        use_attention_bias=False,
         summary_type="mean",
         initializer_factor=1.0,
         pad_token_id=1,
@@ -239,6 +246,7 @@ class CLVPSpeechConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.dropout = dropout
         self.use_rotary_embedding = use_rotary_embedding
+        self.use_attention_bias = use_attention_bias
         self.summary_type = summary_type
 
     @classmethod
@@ -335,6 +343,8 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
         relative_attention_max_distance (`int`, *optional*, defaults to 128):
             The maximum distance of the longer sequences for the bucket separation. This value is used in
             `CLVPRelativeAttention`.
+        use_attention_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in Query, Key and Value layers during self attention.
         initializer_factor (`float`, *optional*, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
@@ -346,6 +356,7 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
         "max_position_embeddings": "max_mel_tokens",
         "num_attention_heads": "n_head",
         "num_hidden_layers": "n_layer",
+        "attention_dropout": "attn_pdrop",
     }
 
     def __init__(
@@ -377,6 +388,7 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
         feature_size=80,
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
+        use_attention_bias=True,
         initializer_factor=1.0,
         **kwargs,
     ):
@@ -405,6 +417,7 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
         self.feature_size = feature_size
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.relative_attention_max_distance = relative_attention_max_distance
+        self.use_attention_bias = use_attention_bias
         self.initializer_factor = initializer_factor
 
         self.bos_token_id = bos_token_id

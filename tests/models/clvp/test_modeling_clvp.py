@@ -86,6 +86,7 @@ class CLVPTransformerWithProjectionTester:
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
         self.scope = scope
+        self.num_hidden_states_types = 0
 
     def get_config(self):
         # we are only checking with speech config though both of the configs have same attributes
@@ -147,7 +148,7 @@ class CLVPTransformerWithProjectionTester:
             result = text_model(input_ids, attention_mask=input_mask)
             result = text_model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.text_embeds.shape, (self.batch_size, self.projection_dim))
+        self.parent.assertEqual(result[0].shape, (self.batch_size, self.projection_dim))
 
         # now check with speech config
         speech_model = CLVPTransformerWithProjection(config=speech_config)
@@ -157,7 +158,7 @@ class CLVPTransformerWithProjectionTester:
             result = speech_model(input_ids, attention_mask=input_mask)
             result = speech_model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.speech_embeds.shape, (self.batch_size, self.projection_dim))
+        self.parent.assertEqual(result[0].shape, (self.batch_size, self.projection_dim))
 
 
 @require_torch
@@ -165,6 +166,7 @@ class CLVPTransformerWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (CLVPTransformerWithProjection,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = CLVPTransformerWithProjectionTester(self)
@@ -554,7 +556,7 @@ class CLVPModelIntegrationTest(unittest.TestCase):
 
     def test_speech_and_text_projection_models(self):
         # check for text embeds
-        text_embeds = self.model.text_model(input_ids=self.text_tokens, return_dict=True).text_embeds.cpu()
+        text_embeds = self.model.text_model(input_ids=self.text_tokens, return_dict=True)[0].cpu()
 
         # fmt: off
         EXPECTED_TEXT_EMBEDS = torch.tensor(
@@ -567,7 +569,7 @@ class CLVPModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(text_embeds[0, :20], EXPECTED_TEXT_EMBEDS, atol=1e-4))
 
         # check for speech embeds
-        speech_embeds = self.model.speech_model(input_ids=self.text_tokens, return_dict=True).speech_embeds.cpu()
+        speech_embeds = self.model.speech_model(input_ids=self.text_tokens, return_dict=True)[0].cpu()
 
         # fmt: off
         EXPECTED_SPEECH_EMBEDS = torch.tensor(
@@ -590,5 +592,7 @@ class CLVPModelIntegrationTest(unittest.TestCase):
         ).speech_candidates.cpu()
 
         EXPECTED_OUTPUTS = torch.tensor([[729, 155, 334], [757, 729, 1305], [729, 757, 334]])
+
+        print(full_model_output[-3:, -3:])
 
         self.assertTrue(torch.allclose(full_model_output[-3:, -3:], EXPECTED_OUTPUTS))

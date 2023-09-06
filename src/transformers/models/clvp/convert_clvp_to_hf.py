@@ -52,191 +52,198 @@ clvp = (
 clvp.load_state_dict(weights_clvp, strict=True)
 clvp.eval()
 
+
 # Define weights for our hf model
-
-weights_ar = torch.load("./autoregressive.pth")
-weights_clvp = torch.load("./clvp2.pth")
-
 model_weights = {}
 
+dim = 1024
+n_heads = 16
 # AutoRegressive Model weights
 for i in range(cfg.autoregressive_config.n_layer):
-    model_weights[f"autoregressive_model.h.{i}.attn.c_attn.bias"] = weights_ar[f"gpt.h.{i}.attn.c_attn.bias"]
-    model_weights[f"autoregressive_model.h.{i}.attn.c_attn.weight"] = weights_ar[f"gpt.h.{i}.attn.c_attn.weight"]
-    model_weights[f"autoregressive_model.h.{i}.attn.c_proj.bias"] = weights_ar[f"gpt.h.{i}.attn.c_proj.bias"]
-    model_weights[f"autoregressive_model.h.{i}.attn.c_proj.weight"] = weights_ar[f"gpt.h.{i}.attn.c_proj.weight"]
+    w1, w2, w3 = weights_ar[f"gpt.h.{i}.attn.c_attn.weight"].squeeze(-1).T.split(split_size=1024, dim=0)
+    b1, b2, b3 = weights_ar[f"gpt.h.{i}.attn.c_attn.bias"].split(split_size=dim, dim=0)
+
+    model_weights[f"autoregressive_model.h.{i}.attn.q_proj.weight"] = w1
+    model_weights[f"autoregressive_model.h.{i}.attn.q_proj.bias"] = b1
+
+    model_weights[f"autoregressive_model.h.{i}.attn.k_proj.weight"] = w2
+    model_weights[f"autoregressive_model.h.{i}.attn.k_proj.bias"] = b2
+
+    model_weights[f"autoregressive_model.h.{i}.attn.v_proj.weight"] = w3
+    model_weights[f"autoregressive_model.h.{i}.attn.v_proj.bias"] = b3
+
+    model_weights[f"autoregressive_model.h.{i}.attn.out_proj.weight"] = weights_ar[
+        f"gpt.h.{i}.attn.c_proj.weight"].squeeze(-1).T
+    model_weights[f"autoregressive_model.h.{i}.attn.out_proj.bias"] = weights_ar[f"gpt.h.{i}.attn.c_proj.bias"].squeeze(
+        -1)
+
     model_weights[f"autoregressive_model.h.{i}.ln_1.bias"] = weights_ar[f"gpt.h.{i}.ln_1.bias"]
     model_weights[f"autoregressive_model.h.{i}.ln_1.weight"] = weights_ar[f"gpt.h.{i}.ln_1.weight"]
     model_weights[f"autoregressive_model.h.{i}.ln_2.bias"] = weights_ar[f"gpt.h.{i}.ln_2.bias"]
     model_weights[f"autoregressive_model.h.{i}.ln_2.weight"] = weights_ar[f"gpt.h.{i}.ln_2.weight"]
+
     model_weights[f"autoregressive_model.h.{i}.mlp.c_fc.bias"] = weights_ar[f"gpt.h.{i}.mlp.c_fc.bias"]
     model_weights[f"autoregressive_model.h.{i}.mlp.c_fc.weight"] = weights_ar[f"gpt.h.{i}.mlp.c_fc.weight"]
     model_weights[f"autoregressive_model.h.{i}.mlp.c_proj.bias"] = weights_ar[f"gpt.h.{i}.mlp.c_proj.bias"]
     model_weights[f"autoregressive_model.h.{i}.mlp.c_proj.weight"] = weights_ar[f"gpt.h.{i}.mlp.c_proj.weight"]
 
-model_weights["autoregressive_model.final_norm.bias"] = weights_ar["final_norm.bias"]
-model_weights["autoregressive_model.final_norm.weight"] = weights_ar["final_norm.weight"]
-model_weights["autoregressive_model.lm_head.bias"] = weights_ar["mel_head.bias"]
-model_weights["autoregressive_model.lm_head.weight"] = weights_ar["mel_head.weight"]
-model_weights["autoregressive_model.ln_f.bias"] = weights_ar["gpt.ln_f.bias"]
-model_weights["autoregressive_model.ln_f.weight"] = weights_ar["gpt.ln_f.weight"]
-model_weights["autoregressive_model.wpe.weight"] = weights_ar["mel_pos_embedding.emb.weight"]
-model_weights["autoregressive_model.wte.weight"] = weights_ar["mel_embedding.weight"]
+model_weights['autoregressive_model.final_norm.bias'] = weights_ar["final_norm.bias"]
+model_weights['autoregressive_model.final_norm.weight'] = weights_ar["final_norm.weight"]
+model_weights['autoregressive_model.lm_head.bias'] = weights_ar["mel_head.bias"]
+model_weights['autoregressive_model.lm_head.weight'] = weights_ar["mel_head.weight"]
+model_weights['autoregressive_model.ln_f.bias'] = weights_ar["gpt.ln_f.bias"]
+model_weights['autoregressive_model.ln_f.weight'] = weights_ar["gpt.ln_f.weight"]
+model_weights['autoregressive_model.wpe.weight'] = weights_ar["mel_pos_embedding.emb.weight"]
+model_weights['autoregressive_model.wte.weight'] = weights_ar["mel_embedding.weight"]
 
 # Conditioning Encoder Model weights
 
-model_weights["conditioning_encoder.mel_conv.bias"] = weights_ar["conditioning_encoder.init.bias"]
-model_weights["conditioning_encoder.mel_conv.weight"] = weights_ar["conditioning_encoder.init.weight"]
-model_weights["conditioning_encoder.text_position_embedding.weight"] = weights_ar["text_pos_embedding.emb.weight"]
-model_weights["conditioning_encoder.text_token_embedding.weight"] = weights_ar["text_embedding.weight"]
+model_weights['conditioning_encoder.mel_conv.bias'] = weights_ar["conditioning_encoder.init.bias"]
+model_weights['conditioning_encoder.mel_conv.weight'] = weights_ar["conditioning_encoder.init.weight"]
+model_weights['conditioning_encoder.text_position_embedding.weight'] = weights_ar["text_pos_embedding.emb.weight"]
+model_weights['conditioning_encoder.text_token_embedding.weight'] = weights_ar["text_embedding.weight"]
 
-dim = 1024
-n_heads = 16
 for i in range(6):
     model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.norm.weight"] = weights_ar[
-        f"conditioning_encoder.attn.{i}.norm.weight"
-    ]
+        f"conditioning_encoder.attn.{i}.norm.weight"]
     model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.norm.bias"] = weights_ar[
-        f"conditioning_encoder.attn.{i}.norm.bias"
-    ]
+        f"conditioning_encoder.attn.{i}.norm.bias"]
 
     w1, w2, w3 = weights_ar[f"conditioning_encoder.attn.{i}.qkv.weight"].squeeze(-1).split(split_size=dim, dim=0)
     b1, b2, b3 = weights_ar[f"conditioning_encoder.attn.{i}.qkv.bias"].split(split_size=dim, dim=0)
 
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.q.weight"] = torch.concatenate(
+    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.q_proj.weight"] = torch.concatenate(
         [
-            w1[0 * (dim // n_heads) : 1 * (dim // n_heads), :],
-            w1[3 * (dim // n_heads) : 4 * (dim // n_heads), :],
-            w1[6 * (dim // n_heads) : 7 * (dim // n_heads), :],
-            w1[9 * (dim // n_heads) : 10 * (dim // n_heads), :],
-            w1[12 * (dim // n_heads) : 13 * (dim // n_heads), :],
-            w1[15 * (dim // n_heads) : 16 * (dim // n_heads), :],
-            w2[2 * (dim // n_heads) : 3 * (dim // n_heads), :],
-            w2[5 * (dim // n_heads) : 6 * (dim // n_heads), :],
-            w2[8 * (dim // n_heads) : 9 * (dim // n_heads), :],
-            w2[11 * (dim // n_heads) : 12 * (dim // n_heads), :],
-            w2[14 * (dim // n_heads) : 15 * (dim // n_heads), :],
-            w3[1 * (dim // n_heads) : 2 * (dim // n_heads), :],
-            w3[4 * (dim // n_heads) : 5 * (dim // n_heads), :],
-            w3[7 * (dim // n_heads) : 8 * (dim // n_heads), :],
-            w3[10 * (dim // n_heads) : 11 * (dim // n_heads), :],
-            w3[13 * (dim // n_heads) : 14 * (dim // n_heads), :],
+            w1[0 * (dim // n_heads): 1 * (dim // n_heads), :],
+            w1[3 * (dim // n_heads): 4 * (dim // n_heads), :],
+            w1[6 * (dim // n_heads): 7 * (dim // n_heads), :],
+            w1[9 * (dim // n_heads): 10 * (dim // n_heads), :],
+            w1[12 * (dim // n_heads): 13 * (dim // n_heads), :],
+            w1[15 * (dim // n_heads): 16 * (dim // n_heads), :],
+            w2[2 * (dim // n_heads): 3 * (dim // n_heads), :],
+            w2[5 * (dim // n_heads): 6 * (dim // n_heads), :],
+            w2[8 * (dim // n_heads): 9 * (dim // n_heads), :],
+            w2[11 * (dim // n_heads): 12 * (dim // n_heads), :],
+            w2[14 * (dim // n_heads): 15 * (dim // n_heads), :],
+            w3[1 * (dim // n_heads): 2 * (dim // n_heads), :],
+            w3[4 * (dim // n_heads): 5 * (dim // n_heads), :],
+            w3[7 * (dim // n_heads): 8 * (dim // n_heads), :],
+            w3[10 * (dim // n_heads): 11 * (dim // n_heads), :],
+            w3[13 * (dim // n_heads): 14 * (dim // n_heads), :],
         ],
         axis=0,
     )
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.q.bias"] = torch.concatenate(
+    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.q_proj.bias"] = torch.concatenate(
         [
-            b1[0 * (dim // n_heads) : 1 * (dim // n_heads)],
-            b1[3 * (dim // n_heads) : 4 * (dim // n_heads)],
-            b1[6 * (dim // n_heads) : 7 * (dim // n_heads)],
-            b1[9 * (dim // n_heads) : 10 * (dim // n_heads)],
-            b1[12 * (dim // n_heads) : 13 * (dim // n_heads)],
-            b1[15 * (dim // n_heads) : 16 * (dim // n_heads)],
-            b2[2 * (dim // n_heads) : 3 * (dim // n_heads)],
-            b2[5 * (dim // n_heads) : 6 * (dim // n_heads)],
-            b2[8 * (dim // n_heads) : 9 * (dim // n_heads)],
-            b2[11 * (dim // n_heads) : 12 * (dim // n_heads)],
-            b2[14 * (dim // n_heads) : 15 * (dim // n_heads)],
-            b3[1 * (dim // n_heads) : 2 * (dim // n_heads)],
-            b3[4 * (dim // n_heads) : 5 * (dim // n_heads)],
-            b3[7 * (dim // n_heads) : 8 * (dim // n_heads)],
-            b3[10 * (dim // n_heads) : 11 * (dim // n_heads)],
-            b3[13 * (dim // n_heads) : 14 * (dim // n_heads)],
-        ],
-        axis=0,
-    )
-
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.k.weight"] = torch.concatenate(
-        [
-            w1[1 * (dim // n_heads) : 2 * (dim // n_heads), :],
-            w1[4 * (dim // n_heads) : 5 * (dim // n_heads), :],
-            w1[7 * (dim // n_heads) : 8 * (dim // n_heads), :],
-            w1[10 * (dim // n_heads) : 11 * (dim // n_heads), :],
-            w1[13 * (dim // n_heads) : 14 * (dim // n_heads), :],
-            w2[0 * (dim // n_heads) : 1 * (dim // n_heads), :],
-            w2[3 * (dim // n_heads) : 4 * (dim // n_heads), :],
-            w2[6 * (dim // n_heads) : 7 * (dim // n_heads), :],
-            w2[9 * (dim // n_heads) : 10 * (dim // n_heads), :],
-            w2[12 * (dim // n_heads) : 13 * (dim // n_heads), :],
-            w2[15 * (dim // n_heads) : 16 * (dim // n_heads), :],
-            w3[2 * (dim // n_heads) : 3 * (dim // n_heads), :],
-            w3[5 * (dim // n_heads) : 6 * (dim // n_heads), :],
-            w3[8 * (dim // n_heads) : 9 * (dim // n_heads), :],
-            w3[11 * (dim // n_heads) : 12 * (dim // n_heads), :],
-            w3[14 * (dim // n_heads) : 15 * (dim // n_heads), :],
-        ],
-        axis=0,
-    )
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.k.bias"] = torch.concatenate(
-        [
-            b1[1 * (dim // n_heads) : 2 * (dim // n_heads)],
-            b1[4 * (dim // n_heads) : 5 * (dim // n_heads)],
-            b1[7 * (dim // n_heads) : 8 * (dim // n_heads)],
-            b1[10 * (dim // n_heads) : 11 * (dim // n_heads)],
-            b1[13 * (dim // n_heads) : 14 * (dim // n_heads)],
-            b2[0 * (dim // n_heads) : 1 * (dim // n_heads)],
-            b2[3 * (dim // n_heads) : 4 * (dim // n_heads)],
-            b2[6 * (dim // n_heads) : 7 * (dim // n_heads)],
-            b2[9 * (dim // n_heads) : 10 * (dim // n_heads)],
-            b2[12 * (dim // n_heads) : 13 * (dim // n_heads)],
-            b2[15 * (dim // n_heads) : 16 * (dim // n_heads)],
-            b3[2 * (dim // n_heads) : 3 * (dim // n_heads)],
-            b3[5 * (dim // n_heads) : 6 * (dim // n_heads)],
-            b3[8 * (dim // n_heads) : 9 * (dim // n_heads)],
-            b3[11 * (dim // n_heads) : 12 * (dim // n_heads)],
-            b3[14 * (dim // n_heads) : 15 * (dim // n_heads)],
+            b1[0 * (dim // n_heads): 1 * (dim // n_heads)],
+            b1[3 * (dim // n_heads): 4 * (dim // n_heads)],
+            b1[6 * (dim // n_heads): 7 * (dim // n_heads)],
+            b1[9 * (dim // n_heads): 10 * (dim // n_heads)],
+            b1[12 * (dim // n_heads): 13 * (dim // n_heads)],
+            b1[15 * (dim // n_heads): 16 * (dim // n_heads)],
+            b2[2 * (dim // n_heads): 3 * (dim // n_heads)],
+            b2[5 * (dim // n_heads): 6 * (dim // n_heads)],
+            b2[8 * (dim // n_heads): 9 * (dim // n_heads)],
+            b2[11 * (dim // n_heads): 12 * (dim // n_heads)],
+            b2[14 * (dim // n_heads): 15 * (dim // n_heads)],
+            b3[1 * (dim // n_heads): 2 * (dim // n_heads)],
+            b3[4 * (dim // n_heads): 5 * (dim // n_heads)],
+            b3[7 * (dim // n_heads): 8 * (dim // n_heads)],
+            b3[10 * (dim // n_heads): 11 * (dim // n_heads)],
+            b3[13 * (dim // n_heads): 14 * (dim // n_heads)],
         ],
         axis=0,
     )
 
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.v.weight"] = torch.concatenate(
+    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.k_proj.weight"] = torch.concatenate(
         [
-            w1[2 * (dim // n_heads) : 3 * (dim // n_heads), :],
-            w1[5 * (dim // n_heads) : 6 * (dim // n_heads), :],
-            w1[8 * (dim // n_heads) : 9 * (dim // n_heads), :],
-            w1[11 * (dim // n_heads) : 12 * (dim // n_heads), :],
-            w1[14 * (dim // n_heads) : 15 * (dim // n_heads), :],
-            w2[1 * (dim // n_heads) : 2 * (dim // n_heads), :],
-            w2[4 * (dim // n_heads) : 5 * (dim // n_heads), :],
-            w2[7 * (dim // n_heads) : 8 * (dim // n_heads), :],
-            w2[10 * (dim // n_heads) : 11 * (dim // n_heads), :],
-            w2[13 * (dim // n_heads) : 14 * (dim // n_heads), :],
-            w3[0 * (dim // n_heads) : 1 * (dim // n_heads), :],
-            w3[3 * (dim // n_heads) : 4 * (dim // n_heads), :],
-            w3[6 * (dim // n_heads) : 7 * (dim // n_heads), :],
-            w3[9 * (dim // n_heads) : 10 * (dim // n_heads), :],
-            w3[12 * (dim // n_heads) : 13 * (dim // n_heads), :],
-            w3[15 * (dim // n_heads) : 16 * (dim // n_heads), :],
+            w1[1 * (dim // n_heads): 2 * (dim // n_heads), :],
+            w1[4 * (dim // n_heads): 5 * (dim // n_heads), :],
+            w1[7 * (dim // n_heads): 8 * (dim // n_heads), :],
+            w1[10 * (dim // n_heads): 11 * (dim // n_heads), :],
+            w1[13 * (dim // n_heads): 14 * (dim // n_heads), :],
+            w2[0 * (dim // n_heads): 1 * (dim // n_heads), :],
+            w2[3 * (dim // n_heads): 4 * (dim // n_heads), :],
+            w2[6 * (dim // n_heads): 7 * (dim // n_heads), :],
+            w2[9 * (dim // n_heads): 10 * (dim // n_heads), :],
+            w2[12 * (dim // n_heads): 13 * (dim // n_heads), :],
+            w2[15 * (dim // n_heads): 16 * (dim // n_heads), :],
+            w3[2 * (dim // n_heads): 3 * (dim // n_heads), :],
+            w3[5 * (dim // n_heads): 6 * (dim // n_heads), :],
+            w3[8 * (dim // n_heads): 9 * (dim // n_heads), :],
+            w3[11 * (dim // n_heads): 12 * (dim // n_heads), :],
+            w3[14 * (dim // n_heads): 15 * (dim // n_heads), :],
         ],
         axis=0,
     )
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.v.bias"] = torch.concatenate(
+    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.k_proj.bias"] = torch.concatenate(
         [
-            b1[2 * (dim // n_heads) : 3 * (dim // n_heads)],
-            b1[5 * (dim // n_heads) : 6 * (dim // n_heads)],
-            b1[8 * (dim // n_heads) : 9 * (dim // n_heads)],
-            b1[11 * (dim // n_heads) : 12 * (dim // n_heads)],
-            b1[14 * (dim // n_heads) : 15 * (dim // n_heads)],
-            b2[1 * (dim // n_heads) : 2 * (dim // n_heads)],
-            b2[4 * (dim // n_heads) : 5 * (dim // n_heads)],
-            b2[7 * (dim // n_heads) : 8 * (dim // n_heads)],
-            b2[10 * (dim // n_heads) : 11 * (dim // n_heads)],
-            b2[13 * (dim // n_heads) : 14 * (dim // n_heads)],
-            b3[0 * (dim // n_heads) : 1 * (dim // n_heads)],
-            b3[3 * (dim // n_heads) : 4 * (dim // n_heads)],
-            b3[6 * (dim // n_heads) : 7 * (dim // n_heads)],
-            b3[9 * (dim // n_heads) : 10 * (dim // n_heads)],
-            b3[12 * (dim // n_heads) : 13 * (dim // n_heads)],
-            b3[15 * (dim // n_heads) : 16 * (dim // n_heads)],
+            b1[1 * (dim // n_heads): 2 * (dim // n_heads)],
+            b1[4 * (dim // n_heads): 5 * (dim // n_heads)],
+            b1[7 * (dim // n_heads): 8 * (dim // n_heads)],
+            b1[10 * (dim // n_heads): 11 * (dim // n_heads)],
+            b1[13 * (dim // n_heads): 14 * (dim // n_heads)],
+            b2[0 * (dim // n_heads): 1 * (dim // n_heads)],
+            b2[3 * (dim // n_heads): 4 * (dim // n_heads)],
+            b2[6 * (dim // n_heads): 7 * (dim // n_heads)],
+            b2[9 * (dim // n_heads): 10 * (dim // n_heads)],
+            b2[12 * (dim // n_heads): 13 * (dim // n_heads)],
+            b2[15 * (dim // n_heads): 16 * (dim // n_heads)],
+            b3[2 * (dim // n_heads): 3 * (dim // n_heads)],
+            b3[5 * (dim // n_heads): 6 * (dim // n_heads)],
+            b3[8 * (dim // n_heads): 9 * (dim // n_heads)],
+            b3[11 * (dim // n_heads): 12 * (dim // n_heads)],
+            b3[14 * (dim // n_heads): 15 * (dim // n_heads)],
         ],
         axis=0,
     )
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.o.weight"] = weights_ar[
-        f"conditioning_encoder.attn.{i}.proj_out.weight"
-    ].squeeze(-1)
-    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.o.bias"] = weights_ar[
-        f"conditioning_encoder.attn.{i}.proj_out.bias"
-    ].squeeze(-1)
+
+    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.v_proj.weight"] = torch.concatenate(
+        [
+            w1[2 * (dim // n_heads): 3 * (dim // n_heads), :],
+            w1[5 * (dim // n_heads): 6 * (dim // n_heads), :],
+            w1[8 * (dim // n_heads): 9 * (dim // n_heads), :],
+            w1[11 * (dim // n_heads): 12 * (dim // n_heads), :],
+            w1[14 * (dim // n_heads): 15 * (dim // n_heads), :],
+            w2[1 * (dim // n_heads): 2 * (dim // n_heads), :],
+            w2[4 * (dim // n_heads): 5 * (dim // n_heads), :],
+            w2[7 * (dim // n_heads): 8 * (dim // n_heads), :],
+            w2[10 * (dim // n_heads): 11 * (dim // n_heads), :],
+            w2[13 * (dim // n_heads): 14 * (dim // n_heads), :],
+            w3[0 * (dim // n_heads): 1 * (dim // n_heads), :],
+            w3[3 * (dim // n_heads): 4 * (dim // n_heads), :],
+            w3[6 * (dim // n_heads): 7 * (dim // n_heads), :],
+            w3[9 * (dim // n_heads): 10 * (dim // n_heads), :],
+            w3[12 * (dim // n_heads): 13 * (dim // n_heads), :],
+            w3[15 * (dim // n_heads): 16 * (dim // n_heads), :],
+        ],
+        axis=0,
+    )
+    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.v_proj.bias"] = torch.concatenate(
+        [
+            b1[2 * (dim // n_heads): 3 * (dim // n_heads)],
+            b1[5 * (dim // n_heads): 6 * (dim // n_heads)],
+            b1[8 * (dim // n_heads): 9 * (dim // n_heads)],
+            b1[11 * (dim // n_heads): 12 * (dim // n_heads)],
+            b1[14 * (dim // n_heads): 15 * (dim // n_heads)],
+            b2[1 * (dim // n_heads): 2 * (dim // n_heads)],
+            b2[4 * (dim // n_heads): 5 * (dim // n_heads)],
+            b2[7 * (dim // n_heads): 8 * (dim // n_heads)],
+            b2[10 * (dim // n_heads): 11 * (dim // n_heads)],
+            b2[13 * (dim // n_heads): 14 * (dim // n_heads)],
+            b3[0 * (dim // n_heads): 1 * (dim // n_heads)],
+            b3[3 * (dim // n_heads): 4 * (dim // n_heads)],
+            b3[6 * (dim // n_heads): 7 * (dim // n_heads)],
+            b3[9 * (dim // n_heads): 10 * (dim // n_heads)],
+            b3[12 * (dim // n_heads): 13 * (dim // n_heads)],
+            b3[15 * (dim // n_heads): 16 * (dim // n_heads)],
+        ],
+        axis=0,
+    )
+    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.out_proj.weight"] = weights_ar[
+        f"conditioning_encoder.attn.{i}.proj_out.weight"].squeeze(-1)
+    model_weights[f"conditioning_encoder.mel_attn_blocks.{i}.out_proj.bias"] = weights_ar[
+        f"conditioning_encoder.attn.{i}.proj_out.bias"].squeeze(-1)
 
 # Transformer Encoder Models weights
 
@@ -327,8 +334,7 @@ model_weights["text_model.transformer.encoder.rotary_pos_emb.inv_freq"] = weight
 ]
 # norm
 model_weights["text_model.transformer.final_layer_norm.weight"] = weights_clvp[
-    "text_transformer.transformer.norm.weight"
-]
+    "text_transformer.transformer.norm.weight"]
 model_weights["text_model.transformer.final_layer_norm.bias"] = weights_clvp["text_transformer.transformer.norm.bias"]
 # word embedding
 model_weights["text_model.transformer.token_embedding.weight"] = weights_clvp["text_emb.weight"]
@@ -344,30 +350,12 @@ model_weights["speech_model.transformer.encoder.rotary_pos_emb.inv_freq"] = weig
 ]
 # norm
 model_weights["speech_model.transformer.final_layer_norm.weight"] = weights_clvp[
-    "speech_transformer.transformer.norm.weight"
-]
+    "speech_transformer.transformer.norm.weight"]
 model_weights["speech_model.transformer.final_layer_norm.bias"] = weights_clvp[
-    "speech_transformer.transformer.norm.bias"
-]
+    "speech_transformer.transformer.norm.bias"]
 # word embedding
 model_weights["speech_model.transformer.token_embedding.weight"] = weights_clvp["speech_emb.weight"]
 # projection
 model_weights["speech_model.projection.weight"] = weights_clvp["to_speech_latent.weight"]
 
-
-# Load hf model weights
-print(model.load_state_dict(model_weights, strict=True))
-model.eval()
-
-print("Weights Loaded successfully!")
-
-# define inputs
-ipt1 = torch.randint(low=0, high=255, size=[101, 15])
-ipt2 = torch.randint(low=0, high=255, size=[1, 23])
-
-# # get both model outputs
-# model_opt1 = model(ipt1, ipt2, return_loss=False)
-# model_opt2 = clvp(ipt1, ipt2, return_loss=False)
-#
-# # check the logits
-# print(f"Logits are same or not : {torch.allclose(model_opt1.logits_per_speech, model_opt2, atol=1e-4, rtol=1e-4)}")
+model.load_state_dict(model_weights, strict=True)
