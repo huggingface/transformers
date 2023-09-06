@@ -110,7 +110,7 @@ class Pop2PianoTokenizer(PreTrainedTokenizer):
 
         # create mappings for encoder
         self.decoder = {v: k for k, v in self.encoder.items()}
-        
+
         super().__init__(
             unk_token=unk_token,
             eos_token=eos_token,
