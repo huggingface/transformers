@@ -18,7 +18,7 @@
 import unittest
 import inspect
 
-from transformers import SeamlessM4TConfig, SeamlessM4TProcessor, is_torch_available
+from transformers import SeamlessM4TConfig, SeamlessM4TProcessor, is_torch_available, GenerationConfig
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import cached_property
 from transformers.trainer_utils import set_seed
@@ -33,6 +33,8 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
+
+import copy
 
 
 if is_torch_available():
@@ -69,8 +71,8 @@ class SeamlessM4TModelTester:
         num_labels=3,
         num_choices=4,
         scope=None,
-        vocab_size=18,
-        unit_vocab_size=18,
+        vocab_size=20,
+        unit_vocab_size=20,
         hidden_size=6,
         num_hidden_layers=2,
         intermediate_size=6,
@@ -93,6 +95,8 @@ class SeamlessM4TModelTester:
         num_conv_pos_embeddings=8,
         lang_embed_dim=6,
         
+        unit_hifi_gan_vocab_size = 12,
+        t2u_num_langs = 0,
     ):
         self.parent = parent
         self.input_modality = input_modality
@@ -136,6 +140,9 @@ class SeamlessM4TModelTester:
         self.lang_embed_dim = lang_embed_dim
         
         self.max_new_tokens = max_new_tokens
+        
+        self.unit_hifi_gan_vocab_size = unit_hifi_gan_vocab_size
+        self.t2u_num_langs = t2u_num_langs
         
     def prepare_config_and_inputs(self):
         if self.input_modality == "text":
@@ -190,6 +197,8 @@ class SeamlessM4TModelTester:
             num_conv_pos_embeddings=self.num_conv_pos_embeddings,
             lang_embed_dim=self.lang_embed_dim,
             max_new_tokens=self.max_new_tokens,
+            unit_hifi_gan_vocab_size=self.unit_hifi_gan_vocab_size,
+            t2u_num_langs=self.t2u_num_langs,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -234,8 +243,13 @@ class SeamlessM4TModelTester:
         decoder_past = result.past_key_values
         encoder_output = result.encoder_last_hidden_state
 
-        # TODO: not seq_length but subsampled one
-        self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.seq_length, self.hidden_size))
+        if self.input_modality == "text":
+            seq_length = self.seq_length
+        else:
+            # if speech, expected length has been subsampled.
+            seq_length = model._compute_sub_sample_lengths_from_attention_mask(input_mask).max().item()
+            
+        self.parent.assertEqual(encoder_output.size(), (self.batch_size, seq_length, self.hidden_size))
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, decoder_input_ids.shape[1], self.vocab_size))
         # There should be `num_layers` key value embeddings stored in decoder_past
         self.parent.assertEqual(len(decoder_past), config.decoder_layers)
@@ -447,6 +461,112 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="SeamlessM4TModel can takes input_ids or input_features")
     def test_forward_signature(self):
         pass
+    
+    def test_attention_outputs(self):
+        # expected length is subsampled so need to change a bit this test
+        if not self.has_attentions:
+            self.skipTest(reason="Model does not output attentions")
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        seq_len = getattr(self.model_tester, "seq_length", None)
+        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        # no more chunk_length test
+
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            )
+            out_len = len(outputs)
+
+            if self.is_encoder_decoder:
+                correct_outlen = 5
+
+                # loss is at first position
+                if "labels" in inputs_dict:
+                    correct_outlen += 1  # loss is added to beginning
+                if "past_key_values" in outputs:
+                    correct_outlen += 1  # past_key_values have been returned
+
+                self.assertEqual(out_len, correct_outlen)
+
+                # decoder attentions
+                decoder_attentions = outputs.decoder_attentions
+                self.assertIsInstance(decoder_attentions, (list, tuple))
+                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(decoder_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                )
+
+                # cross attentions
+                cross_attentions = outputs.cross_attentions
+                self.assertIsInstance(cross_attentions, (list, tuple))
+                self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+                
+                sub_sampled_length = model._compute_sub_sample_lengths_from_attention_mask(inputs_dict["attention_mask"]).max().item()
+                self.assertListEqual(
+                    list(cross_attentions[0].shape[-3:]),
+                    [
+                        self.model_tester.num_attention_heads,
+                        decoder_seq_length,
+                        sub_sampled_length,
+                    ],
+                )
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            if hasattr(self.model_tester, "num_hidden_states_types"):
+                added_hidden_states = self.model_tester.num_hidden_states_types
+            elif self.is_encoder_decoder:
+                added_hidden_states = 2
+            else:
+                added_hidden_states = 1
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            )
 
 
 @require_torch
@@ -581,6 +701,115 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
         pass
     
 
+@require_torch
+class SeamlessM4TMGenerationTest(unittest.TestCase):
+    # test that non-standard generation works
+    # test generation of: SeamlessM4TModel, SeamlessM4TForSpeechToSpeech, SeamlessM4TForSpeechToText, SeamlessM4TForTextToSpeech
+    
+    def setUp(self):
+        self.speech_model_tester = SeamlessM4TModelTester(self, input_modality="speech")
+        self.text_model_tester = SeamlessM4TModelTester(self, input_modality="text")
+        
+    def update_generation(self, model):
+        lang_code_to_id = {
+            "fra": 1,
+            "eng": 1,
+        }
+        
+        generation_config = copy.deepcopy(model.generation_config)
+        
+        
+        generation_config.__setattr__("text_decoder_lang_to_code_id",lang_code_to_id)
+        generation_config.__setattr__("t2u_lang_code_to_id",lang_code_to_id)
+        generation_config.__setattr__("vocoder_lang_code_to_id",lang_code_to_id)
+        
+        generation_config._from_model_config = False
+        
+        model.generation_config = generation_config
+        
+            
+        
+    def prepare_text_input(self):
+        config, inputs, decoder_input_ids, input_mask, lm_labels = self.text_model_tester.prepare_config_and_inputs()
+        
+        input_dict = {
+            "input_ids": inputs,
+            "decoder_input_ids": decoder_input_ids,
+            "attention_mask": input_mask, 
+            "tgt_lang": "eng",
+        }
+        
+        return config, input_dict
+    
+    def prepare_speech_input(self):
+        config, inputs, decoder_input_ids, input_mask, lm_labels = self.speech_model_tester.prepare_config_and_inputs()
+        
+        input_dict = {
+            "input_features": inputs,
+            "decoder_input_ids": decoder_input_ids,
+            "attention_mask": input_mask,
+            "tgt_lang": "eng",
+        }
+        
+        return config, input_dict
+    
+    def factory_generation_speech_test(self, model, inputs):
+        
+        output = model.generate(**inputs)
+        
+        print(output)
+        
+
+    def test_generation_text_input(self):
+        config, inputs = self.prepare_text_input()
+        
+        
+        model = SeamlessM4TModel(config=config)
+        self.update_generation(model)
+        model.to(torch_device)
+        model.eval()
+        
+        self.factory_generation_speech_test(model, inputs)
+        
+        # test big model return only text as well
+        
+        
+
+        model = SeamlessM4TForTextToSpeech(config=config)
+        self.update_generation(model)
+        model.to(torch_device)
+        model.eval()
+        
+        self.factory_generation_speech_test(model, inputs)
+        
+        
+
+    def test_generation_speech_input(self):
+        config, inputs = self.prepare_speech_input()
+        
+        
+        model = SeamlessM4TModel(config=config)
+        self.update_generation(model)
+        model.to(torch_device)
+        model.eval()
+        
+        self.factory_generation_speech_test(model, inputs)
+        
+        # test big model return only text as well
+        
+        
+
+        model = SeamlessM4TForSpeechToSpeech(config=config)
+        self.update_generation(model)
+        model.to(torch_device)
+        model.eval()
+        
+        self.factory_generation_speech_test(model, inputs)
+        
+        
+        # TODO: test speechtotext
+        
+        
 
 @require_torch
 class SeamlessM4TModelIntegrationTest(unittest.TestCase):
