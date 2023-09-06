@@ -7,6 +7,7 @@ on:
     types: [completed]
   push:
     branches:
+      - ci-amdgpu
       - ci_*
       - ci-*
     paths:
@@ -15,7 +16,6 @@ on:
       - ".github/**"
       - "templates/**"
       - "utils/**"
-  pull_request:
   repository_dispatch:
 
 env:
