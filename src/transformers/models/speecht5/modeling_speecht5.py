@@ -734,6 +734,7 @@ class SpeechT5SpeechDecoderPrenet(nn.Module):
             speaker_embeddings = nn.functional.normalize(speaker_embeddings)
             speaker_embeddings = speaker_embeddings.unsqueeze(1)
             speaker_embeddings = speaker_embeddings.expand(-1, inputs_embeds.size(1), -1)
+            speaker_embeddings = speaker_embeddings.repeat(inputs_embeds.size(0), 1, 1)
             inputs_embeds = torch.cat([inputs_embeds, speaker_embeddings], dim=-1)
             inputs_embeds = nn.functional.relu(self.speaker_embeds_layer(inputs_embeds))
 
@@ -2533,13 +2534,19 @@ def _generate_speech(
     model: SpeechT5PreTrainedModel,
     input_values: torch.FloatTensor,
     speaker_embeddings: Optional[torch.FloatTensor] = None,
+    attention_mask: Optional[torch.LongTensor] = None,
     threshold: float = 0.5,
     minlenratio: float = 0.0,
     maxlenratio: float = 20.0,
     vocoder: Optional[nn.Module] = None,
     output_cross_attentions: bool = False,
 ) -> Union[torch.FloatTensor, Tuple[torch.FloatTensor, torch.FloatTensor]]:
-    encoder_attention_mask = (1 - (input_values==model.config.pad_token_id).int())
+    if attention_mask is None:
+        encoder_attention_mask = (1 - (input_values==model.config.pad_token_id).int())
+    else:
+        encoder_attention_mask = attention_mask
+
+    bsz = input_values.size(0)
 
     encoder_out = model.speecht5.encoder(
         input_values=input_values,
@@ -2559,12 +2566,13 @@ def _generate_speech(
     minlen = int(encoder_last_hidden_state.size(1) * minlenratio / model.config.reduction_factor)
 
     # Start the output sequence with a mel spectrum that is all zeros.
-    output_sequence = encoder_last_hidden_state.new_zeros(1, 1, model.config.num_mel_bins)
+    output_sequence = encoder_last_hidden_state.new_zeros(bsz, 1, model.config.num_mel_bins)
 
     spectrogram = []
     cross_attentions = []
     past_key_values = None
     idx = 0
+    result_spectrogram = {}
 
     while True:
         idx += 1
@@ -2587,31 +2595,43 @@ def _generate_speech(
         if output_cross_attentions:
             cross_attentions.append(torch.cat(decoder_out.cross_attentions, dim=0))
 
-        last_decoder_output = decoder_out.last_hidden_state[0, -1]
+        last_decoder_output = decoder_out.last_hidden_state.squeeze(1)
         past_key_values = decoder_out.past_key_values
 
         # Predict the new mel spectrum for this step in the sequence.
         spectrum = model.speech_decoder_postnet.feat_out(last_decoder_output)
-        spectrum = spectrum.view(model.config.reduction_factor, model.config.num_mel_bins)
+        spectrum = spectrum.view(bsz, model.config.reduction_factor, model.config.num_mel_bins)
         spectrogram.append(spectrum)
 
         # Extend the output sequence with the new mel spectrum.
-        output_sequence = torch.cat((output_sequence, spectrum[-1].view(1, 1, model.config.num_mel_bins)), dim=1)
-
+        output_sequence = torch.cat((output_sequence, spectrum[:, -1, :].view(bsz, 1, model.config.num_mel_bins)), dim=1)
         # Predict the probability that this is the stop token.
         prob = torch.sigmoid(model.speech_decoder_postnet.prob_out(last_decoder_output))
 
-        # Finished when stop token or maximum length is reached.
-        if idx >= minlen and (int(sum(prob >= threshold)) > 0 or idx >= maxlen):
-            spectrogram = torch.cat(spectrogram, dim=0).unsqueeze(0)
-            spectrogram = model.speech_decoder_postnet.postnet(spectrogram)
-            spectrogram = spectrogram.squeeze(0)
-            break
+        if idx < minlen:
+            continue
+        else:
+            spectrograms = torch.stack(spectrogram)
 
+            # Finished when stop token or maximum length is reached or every text in the batches reaches the prob threshold
+            for i, p in enumerate(prob):
+                if i in result_spectrogram: # already has result
+                    continue
+                cur_spectrogram = spectrograms[:, i, :, :]
+                cur_spectrogram = model.speech_decoder_postnet.postnet(cur_spectrogram)
+                if idx >= maxlen or int(sum(p >= threshold)) > 0:
+                    result_spectrogram[i] = cur_spectrogram.view((-1, cur_spectrogram.size(-1)))
+            if len(result_spectrogram) >= bsz:
+                break
+
+    spectrograms = [result_spectrogram[i] for i in range(len(result_spectrogram))]
+
+    outputs = []
     if vocoder is not None:
-        outputs = vocoder(spectrogram)
+        for spectrogram in spectrograms:
+            outputs.append(vocoder(spectrogram))
     else:
-        outputs = spectrogram
+        outputs = spectrograms
 
     if output_cross_attentions:
         cross_attentions = torch.cat(cross_attentions, dim=2)
@@ -2783,6 +2803,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
     def generate(
         self,
         input_ids: torch.LongTensor,
+        attention_mask: Optional[torch.LongTensor] = None,
         speaker_embeddings: Optional[torch.FloatTensor] = None,
         threshold: float = 0.5,
         minlenratio: float = 0.0,
@@ -2803,6 +2824,9 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 [`~PreTrainedTokenizer.__call__`] for details.
 
                 [What are input IDs?](../glossary#input-ids)
+            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Attention mask from the tokenizer, required for batched inference to
+                signal to the model where to ignore padded tokens from the input_ids.
             speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
                 Tensor containing the speaker embeddings.
             threshold (`float`, *optional*, defaults to 0.5):
@@ -2830,6 +2854,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         return _generate_speech(
             self,
             input_ids,
+            attention_mask,
             speaker_embeddings,
             threshold,
             minlenratio,
@@ -2843,6 +2868,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         speaker_embeddings: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         threshold: float = 0.5,
         minlenratio: float = 0.0,
         maxlenratio: float = 20.0,
@@ -2863,6 +2889,9 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
                 [What are input IDs?](../glossary#input-ids)
             speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
                 Tensor containing the speaker embeddings.
+            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Attention mask from the tokenizer, required for batched inference to
+                signal to the model where to ignore padded tokens from the input_ids.
             threshold (`float`, *optional*, defaults to 0.5):
                 The generated sequence ends when the predicted stop token probability exceeds this value.
             minlenratio (`float`, *optional*, defaults to 0.0):
@@ -2889,6 +2918,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             self,
             input_ids,
             speaker_embeddings,
+            attention_mask,
             threshold,
             minlenratio,
             maxlenratio,
@@ -3052,6 +3082,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         self,
         input_values: torch.FloatTensor,
         speaker_embeddings: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
         threshold: float = 0.5,
         minlenratio: float = 0.0,
         maxlenratio: float = 20.0,
@@ -3072,6 +3103,9 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
                 of type `torch.FloatTensor`. See [`SpeechT5Processor.__call__`] for details.
             speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, config.speaker_embedding_dim)`, *optional*):
                 Tensor containing the speaker embeddings.
+            attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Attention mask from the tokenizer, required for batched inference to
+                signal to the model where to ignore padded tokens from the input_ids.
             threshold (`float`, *optional*, defaults to 0.5):
                 The generated sequence ends when the predicted stop token probability exceeds this value.
             minlenratio (`float`, *optional*, defaults to 0.0):
@@ -3101,6 +3135,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             self,
             input_values,
             speaker_embeddings,
+            attention_mask,
             threshold,
             minlenratio,
             maxlenratio,
