@@ -333,6 +333,15 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
 
         feature_extractor = UnivNetFeatureExtractor()
         input_features = feature_extractor(input_speech, sampling_rate=sr[0], return_tensors="pt").input_features
-
         self.assertEqual(input_features.shape, (1, 548, 100))
+
+        input_features_mean = torch.mean(input_features)
+        input_features_stddev = torch.std(input_features)
+        input_features_slice = input_features[0, :30, 0]
+
+        expected_mean = np.array([-6.18862009])
+        expected_stddev = np.array([2.80845642])
+
+        self.assertTrue(np.allclose(input_features_mean, expected_mean))
+        self.assertTrue(np.allclose(input_features_stddev, expected_stddev))
         self.assertTrue(torch.allclose(input_features[0, :30, 0], EXPECTED_INPUT_FEATURES, atol=1e-4))

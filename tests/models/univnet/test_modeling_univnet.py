@@ -292,11 +292,17 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         # Get batched noise and spectrogram inputs.
         input_speech = self.get_inputs(torch_device, num_samples=3)
 
-        waveform = model(**input_speech)
-        waveform_slice = waveform[-1, -9:].detach().cpu().flatten().numpy()
+        waveform = model(**input_speech).detach().cpu()
+        waveform_mean = torch.mean(waveform)
+        waveform_stddev = torch.std(waveform)
+        waveform_slice = waveform[-1, -9:].flatten().numpy()
 
+        expected_mean = np.array([-0.19989729])
+        expected_stddev = np.array([0.35230172])
         expected_slice = np.array([-0.3408, -0.6045, -0.5052, 0.1160, -0.1556, -0.0405, -0.3024, -0.5290, -0.5019])
 
+        self.assertTrue(np.allclose(waveform_mean, expected_mean, atol=1e-4))
+        self.assertTrue(np.allclose(waveform_stddev, expected_stddev, atol=1e-4))
         self.assertTrue(np.allclose(waveform_slice, expected_slice, atol=5e-4))
 
     @torch.no_grad()
@@ -308,11 +314,17 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         # Get unbatched noise and spectrogram inputs.
         input_speech = self.get_inputs(torch_device, num_samples=1)
 
-        waveform = model(**input_speech)
-        waveform_slice = waveform[-9:].detach().cpu().flatten().numpy()
+        waveform = model(**input_speech).detach().cpu()
+        waveform_mean = torch.mean(waveform)
+        waveform_stddev = torch.std(waveform)
+        waveform_slice = waveform[-9:].flatten().numpy()
 
+        expected_mean = np.array([-0.22895093])
+        expected_stddev = np.array([0.33986747])
         expected_slice = np.array([-0.3276, -0.5504, -0.3484, 0.3574, -0.0373, -0.1826, -0.4880, -0.6431, -0.5162])
 
+        self.assertTrue(np.allclose(waveform_mean, expected_mean, atol=1e-4))
+        self.assertTrue(np.allclose(waveform_stddev, expected_stddev, atol=1e-4))
         self.assertTrue(np.allclose(waveform_slice, expected_slice, atol=5e-4))
 
     @torch.no_grad()
@@ -329,9 +341,13 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         input_speech = self.get_inputs(torch_device, num_samples=1, noise_length=input_features.shape[1])
         input_speech["spectrogram"] = input_features
 
-        waveform = model(**input_speech)
-        waveform_slice = waveform[-9:].detach().cpu().flatten().numpy()
+        waveform = model(**input_speech).detach().cpu()
+        waveform_mean = torch.mean(waveform)
+        waveform_stddev = torch.std(waveform)
+        waveform_slice = waveform[-9:].flatten().numpy()
 
+        expected_mean = np.array([0.00051374])
+        expected_stddev = np.array([0.058105603])
         expected_slice = np.array(
             [
                 -4.3934e-04,
@@ -346,4 +362,6 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
             ]
         )
 
+        self.assertTrue(np.allclose(waveform_mean, expected_mean, atol=5e-6))
+        self.assertTrue(np.allclose(waveform_stddev, expected_stddev, atol=1e-4))
         self.assertTrue(np.allclose(waveform_slice, expected_slice, atol=5e-6))
