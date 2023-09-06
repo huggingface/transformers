@@ -675,8 +675,8 @@ FLAX_VISION_CLASSIF_DOCSTRING = """
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     >>> image = Image.open(requests.get(url, stream=True).raw)
 
-    >>> image_processor = AutoImageProcessor.from_pretrained("facebook/dinov2-base-patch16-224")
-    >>> model = FlaxDinov2ForImageClassification.from_pretrained("facebook/dinov2-base-patch16-224")
+    >>> image_processor = AutoImageProcessor.from_pretrained("facebook/dinov2-base")
+    >>> model = FlaxDinov2ForImageClassification.from_pretrained("facebook/dinov2-base")
 
     >>> inputs = image_processor(images=image, return_tensors="np")
     >>> outputs = model(**inputs)
