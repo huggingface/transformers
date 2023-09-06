@@ -789,6 +789,7 @@ def check_docstrings(overwrite: bool = False):
     """
     failures = []
     hard_failures = []
+    to_clean = []
     for name in dir(transformers):
         # Skip objects that are private or not documented.
         if name.startswith("_") or ignore_undocumented(name) or name in OBJECTS_TO_IGNORE:
@@ -810,11 +811,11 @@ def check_docstrings(overwrite: bool = False):
             continue
         if old_doc != new_doc:
             if overwrite:
-                # Temporary: we only fix the ones with no tempaltes to fill
-                if "<fill_type>" not in new_doc and "<fill_docstring>" not in new_doc:
-                    fix_docstring(obj, old_doc, new_doc)
+                fix_docstring(obj, old_doc, new_doc)
             else:
                 failures.append(name)
+        elif not overwrite and ("<fill_type>" in new_doc or "<fill_docstring>" in new_doc):
+            to_clean.append(name)
 
     # Deal with errors
     error_message = ""
@@ -829,6 +830,12 @@ def check_docstrings(overwrite: bool = False):
             "The following objects docstrings do not match their signature. Run `make fix-copies` to fix this."
         )
         error_message += "\n" + "\n".join([f"- {name}" for name in failures])
+    if len(to_clean) > 0:
+        error_message += (
+            "The following objects docstrings contain templates you need to fix: search for `<fill_type>` or "
+            "`<fill_docstring>`."
+        )
+        error_message += "\n" + "\n".join([f"- {name}" for name in to_clean])
 
     if len(error_message) > 0:
         error_message = "There was at least one problem when checking docstrings of public objects.\n" + error_message
