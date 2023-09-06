@@ -1130,7 +1130,7 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
 
     # Arguments are sorted by the order in the signature unless a special comment is put.
     if ignore_order:
-        new_param_docs = [arguments[name] for name in old_arguments]
+        new_param_docs = [arguments[name] for name in old_arguments if name in signature]
         missing = set(signature.keys()) - set(old_arguments)
         new_param_docs.extend([arguments[name] for name in missing if len(arguments[name]) > 0])
     else:
