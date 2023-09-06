@@ -140,10 +140,10 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         self.max_length_s = max_length_s
         self.num_max_samples = max_length_s * sampling_rate
 
-        if filter_length is None:
-            self.n_fft = optimal_fft_length(self.sample_size)
+        if self.filter_length is None:
+            self.n_fft = optimal_fft_length(self.win_length)
         else:
-            self.n_fft = filter_length
+            self.n_fft = self.filter_length
         self.n_freqs = (self.n_fft // 2) + 1
 
         self.window = window_function(window_length=self.win_length, name=self.win_function, periodic=True)
@@ -356,12 +356,11 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
         return batched_speech
 
-    # Currently from transformers.models.speecht5.feature_extraction_speecht5.to_dict
     def to_dict(self) -> Dict[str, Any]:
         output = super().to_dict()
 
         # Don't serialize these as they are derived from the other properties.
-        names = ["window", "mel_filters", "sample_size", "sample_stride", "n_fft", "n_freqs"]
+        names = ["window", "mel_filters", "n_fft", "n_freqs", "num_max_samples"]
         for name in names:
             if name in output:
                 del output[name]
