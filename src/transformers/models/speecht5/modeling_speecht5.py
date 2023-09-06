@@ -2696,7 +2696,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
     ) -> Union[Tuple, Seq2SeqSpectrogramOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. The `batch_size` should be 1 currently.
+            Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using [`SpeechT5Tokenizer`]. See [`~PreTrainedTokenizer.encode`] and
             [`~PreTrainedTokenizer.__call__`] for details.
@@ -2818,7 +2818,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. The `batch_size` should be 1 currently.
+                Indices of input sequence tokens in the vocabulary.
 
                 Indices can be obtained using [`SpeechT5Tokenizer`]. See [`~PreTrainedTokenizer.encode`] and
                 [`~PreTrainedTokenizer.__call__`] for details.
@@ -2881,7 +2881,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. The `batch_size` should be 1 currently.
+                Indices of input sequence tokens in the vocabulary.
 
                 Indices can be obtained using [`SpeechT5Tokenizer`]. See [`~PreTrainedTokenizer.encode`] and
                 [`~PreTrainedTokenizer.__call__`] for details.
@@ -3095,7 +3095,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
 
         Args:
             input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-                Float values of input raw speech waveform. The `batch_size` should be 1 currently.
+                Float values of input raw speech waveform.
 
                 Values can be obtained by loading a *.flac* or *.wav* audio file into an array of type `List[float]` or
                 a `numpy.ndarray`, *e.g.* via the soundfile library (*pip install soundfile*). To prepare the array
