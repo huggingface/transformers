@@ -137,7 +137,6 @@ GROUNDING_DINO_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 @dataclass
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrDecoderOutput with DeformableDetr->GroundingDINO
 class GroundingDINODecoderOutput(ModelOutput):
     """
     Base class for outputs of the GroundingDINODecoder. This class adds two attributes to
@@ -1153,7 +1152,6 @@ class GroundingDINODropPath(nn.Module):
 
     def extra_repr(self) -> str:
         return "p={}".format(self.drop_prob)
-    
 class GroundingDINOFusionLayer(nn.Module):
     def __init__(self, config, init_values=1e-4):
         super().__init__()
@@ -1386,7 +1384,6 @@ class GroundingDINOEncoderLayer(nn.Module):
         )
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrDecoderLayer with DeformableDetr->GroundingDINO
 class GroundingDINODecoderLayer(nn.Module):
     def __init__(self, config: GroundingDINOConfig):
         super().__init__()
@@ -2006,7 +2003,8 @@ class GroundingDINODecoder(GroundingDINOPreTrainedModel):
                     intermediate_reference_points,
                     all_hidden_states,
                     all_self_attns,
-                    all_cross_attentions,
+                    all_cross_attns_vision,
+                    all_cross_attns_text
                 ]
                 if v is not None
             )
