@@ -59,9 +59,11 @@ def get_dataloader_sampler(dataloader):
     # after accelerate.prepare function the wraped dataloader.sampler will be SequentialSampler instead of RandomSampler
     if hasattr(dataloader, "sampler") and isinstance(dataloader.sampler, RandomSampler):
         return dataloader.sampler
-    if hasattr(dataloader, "batch_sampler") and dataloader.batch_sampler is not None:
+    elif hasattr(dataloader, "batch_sampler") and dataloader.batch_sampler is not None:
         return get_dataloader_sampler(dataloader.batch_sampler)
-    return dataloader.sampler
+    elif hasattr(dataloader, "sampler"):
+        return dataloader.sampler
+    return None
 
 
 def atleast_1d(tensor_or_array: Union[torch.Tensor, np.ndarray]):
