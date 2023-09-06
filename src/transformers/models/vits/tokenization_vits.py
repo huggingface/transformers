@@ -93,7 +93,6 @@ class VitsTokenizer(PreTrainedTokenizer):
         is_uroman=False,
         **kwargs,
     ) -> None:
-
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
 

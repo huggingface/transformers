@@ -350,7 +350,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         # 1. Init the parent class
         super().__init__(**kwargs)
         self.tokens_trie = Trie()
-        
+
         # 2. init `_added_tokens_decoder` if child class did not
         if not hasattr(self, "_added_tokens_decoder"):
             self._added_tokens_decoder: Dict[int, AddedToken] = {}
@@ -372,7 +372,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Returns the added tokens in the vocabulary as a dictionary of index to AddedToken. Results Returns:
             `Dict[str, int]`: The added tokens.
         """
-        return {index: token for index, token in sorted(self._added_tokens_decoder.items(), key = lambda item: item[0])}
+        return dict(sorted(self._added_tokens_decoder.items(), key=lambda item: item[0]))
 
     @added_tokens_decoder.setter
     def added_tokens_decoder(self, value: Dict[int, Union[AddedToken, str]]) -> Dict[int, AddedToken]:
@@ -981,7 +981,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 "and does not exist in our fast implementation. Future tokenizers will handle the decoding process on a per-model rule."
             )
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
-        legacy_added_tokens = set(self.added_tokens_encoder) - set(self.all_special_tokens) | set([token for token in self.additional_special_tokens if self.convert_tokens_to_ids(token) >= self.vocab_size])
+        legacy_added_tokens = set(self.added_tokens_encoder) - set(self.all_special_tokens) | {
+            token for token in self.additional_special_tokens if self.convert_tokens_to_ids(token) >= self.vocab_size
+        }
         # To avoid mixing byte-level and unicode for byte-level BPT
         # we need to build string separately for added tokens and byte-level tokens
         # cf. https://github.com/huggingface/transformers/issues/1133

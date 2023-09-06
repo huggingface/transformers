@@ -254,7 +254,6 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         text = "\nif len_a > len_b:\n    result = a\nelse:\n    result = b\n\n\n\n#"
         expected_trucated_text = "\nif len_a > len_b:      result = a\nelse:      result = b"
 
-
         input_ids = tokenizer.encode(text)
         truncation_pattern = ["^#", re.escape("<|endoftext|>"), "^'''", '^"""', "\n\n\n"]
         decoded_text = tokenizer.decode(input_ids, truncate_before_pattern=truncation_pattern)

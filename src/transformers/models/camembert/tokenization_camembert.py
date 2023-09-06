@@ -151,7 +151,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
             4: AddedToken("<unk>NOTUSED"),
         }
 
-        self.fairseq_offset = 4 # 3 tokens are newly added
+        self.fairseq_offset = 4  # 3 tokens are newly added
 
         # legacy: camemebert is a particular case were we have to make sure `"<unk>NOTUSED"` is here
         if "added_tokens_decoder" in kwargs:

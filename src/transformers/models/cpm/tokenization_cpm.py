@@ -40,7 +40,7 @@ class CpmTokenizer(PreTrainedTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    
+
     def __init__(
         self,
         vocab_file,

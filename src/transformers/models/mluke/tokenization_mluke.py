@@ -262,8 +262,16 @@ class MLukeTokenizer(PreTrainedTokenizer):
 
         # we add 2 special tokens for downstream tasks
         # for more information about lstrip and rstrip, see https://github.com/huggingface/transformers/pull/2778
-        entity_token_1 = AddedToken(entity_token_1, lstrip=False, rstrip=False)if isinstance(entity_token_1, str) else entity_token_1
-        entity_token_2 = AddedToken(entity_token_2, lstrip=False, rstrip=False)if isinstance(entity_token_2, str) else entity_token_2
+        entity_token_1 = (
+            AddedToken(entity_token_1, lstrip=False, rstrip=False)
+            if isinstance(entity_token_1, str)
+            else entity_token_1
+        )
+        entity_token_2 = (
+            AddedToken(entity_token_2, lstrip=False, rstrip=False)
+            if isinstance(entity_token_2, str)
+            else entity_token_2
+        )
         additional_special_tokens = kwargs.pop("additional_special_tokens", [])
         additional_special_tokens += [entity_token_1, entity_token_2]
 
@@ -338,11 +346,10 @@ class MLukeTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-
     @property
     # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer.vocab_size
     def vocab_size(self):
-        return len(self.sp_model) + self.fairseq_offset + 1 
+        return len(self.sp_model) + self.fairseq_offset + 1  # Add the <mask> token
 
     # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer.get_vocab
     def get_vocab(self):
@@ -1622,4 +1629,3 @@ class MLukeTokenizer(PreTrainedTokenizer):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
-

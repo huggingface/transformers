@@ -1652,7 +1652,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     @property
     def added_tokens_encoder(self) -> Dict[str, int]:
-        return {k.content: v for v, k in sorted(self.added_tokens_decoder.items(), key = lambda item: item[1])}
+        return {k.content: v for v, k in sorted(self.added_tokens_decoder.items(), key=lambda item: item[1])}
 
     @property
     def added_tokens_decoder(self) -> Dict[int, AddedToken]:
@@ -2072,7 +2072,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary."
                     )
         else:
-            init_kwargs = cls.convert_added_tokens(init_kwargs, False)
             # begin legacy: read the added_tokens_file and update kwargs with special_tokens_map if modified
             if special_tokens_map_file is not None:
                 with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
@@ -2108,6 +2107,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         if len(additional_special_tokens) > 0:
             init_kwargs["additional_special_tokens"] = additional_special_tokens
         init_kwargs["added_tokens_decoder"] = added_tokens_decoder
+
+        # convert {'__type': 'AddedToken', 'content': '<ent>', 'lstrip': False, 'normalized': True, ...} to AddedTokens
+        init_kwargs = cls.convert_added_tokens(init_kwargs, False)
         # Instantiate the tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
@@ -2132,20 +2134,20 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     serialized_tokens.pop("special")
                     tokens_to_add_from_fast.append(AddedToken(**serialized_tokens))
                 tokenizer.add_tokens(tokens_to_add_from_fast)
-                    
+
         # allows converting a slow -> fast, non-legacy: if the `tokenizer.json` does not have all the added tokens
         # uses the information stored in `added_tokens_decoder`. Checks after addition that we have the same ids
         if init_kwargs.get("slow_to_fast", False):
             tokenizer.add_tokens([token for _, token in sorted(added_tokens_decoder.items(), key=lambda x: x[0])])
             warnings = ""
             for index, token in sorted(added_tokens_decoder.items(), key=lambda x: x[0]):
-                if (tokenizer.convert_tokens_to_ids(str(token)) != index):
+                if tokenizer.convert_tokens_to_ids(str(token)) != index:
                     warnings += f"\texpected id: {tokenizer.convert_tokens_to_ids(str(token))}, found: {index},  token: `{token}`,\n"
 
             logger.warn(
-                    f"You are converting a {slow_tokenizer.__class__.__name__} to a {cls.__name__}, but"
-                    f"wrong indexes were founds when adding the `added_tokens` from the `slow` tokenizer to the `fast`. "
-                    f" following tokens had unexpected id :\n{warnings}. You should try using `from_slow`."
+                f"You are converting a {slow_tokenizer.__class__.__name__} to a {cls.__name__}, but"
+                f"wrong indexes were founds when adding the `added_tokens` from the `slow` tokenizer to the `fast`. "
+                f" following tokens had unexpected id :\n{warnings}. You should try using `from_slow`."
             )
             # finally we add all the special_tokens to make sure eveything is initialized
             tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
