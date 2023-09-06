@@ -241,6 +241,100 @@ jobs:
           name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
           path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
 
+  run_tests_single_amdgpu:
+    name: Model tests
+    needs: setup
+    # `dummy` means there is no test to run
+    if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
+    strategy:
+      fail-fast: false
+      matrix:
+        folders: ${{ fromJson(needs.setup.outputs.matrix) }}
+        machine_type: [ single-amdgpu ]
+    runs-on: [ self-hosted, docker-amdgpu, '${{ matrix.machine_type }}' ]
+    container:
+      # --device /dev/dri/renderD128 == AMDGPU:0 (indexing for AMDGPU starts at 128 ...)
+      image: huggingface/transformers-pytorch-latest-amdgpu-push-ci  # <--- We test only for PyTorch for now
+      options: --device /dev/kfd --device /dev/dri/renderD128 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      # Necessary to get the correct branch name and commit SHA for `workflow_run` event
+      # We also take into account the `push` event (we might want to test some changes in a branch)
+      - name: Prepare custom environment variables
+        shell: bash
+        # For the meaning of these environment variables, see the job `Setup`
+        run: |
+          CI_BRANCH_PUSH=${{ github.event.ref }}
+          CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
+          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
+          CI_SHA_PUSH=${{ github.event.head_commit.id }}
+          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
+          echo $CI_BRANCH_PUSH
+          echo $CI_BRANCH_WORKFLOW_RUN
+          echo $CI_SHA_PUSH
+          echo $CI_SHA_WORKFLOW_RUN
+          [[ ! -z "$CI_BRANCH_PUSH" ]] && echo "CI_BRANCH=$CI_BRANCH_PUSH" >> $GITHUB_ENV || echo "CI_BRANCH=$CI_BRANCH_WORKFLOW_RUN" >> $GITHUB_ENV
+          [[ ! -z "$CI_SHA_PUSH" ]] && echo "CI_SHA=$CI_SHA_PUSH" >> $GITHUB_ENV || echo "CI_SHA=$CI_SHA_WORKFLOW_RUN" >> $GITHUB_ENV
+
+      - name: print environment variables
+        run: |
+          echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
+          echo "env.CI_SHA = ${{ env.CI_SHA }}"
+
+      - name: Update clone using environment variables
+        working-directory: /transformers
+        run: |
+          echo "original branch = $(git branch --show-current)"
+          git fetch && git checkout ${{ env.CI_BRANCH }}
+          echo "updated branch = $(git branch --show-current)"
+          git checkout ${{ env.CI_SHA }}
+          echo "log = $(git log -n 1)"
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: Echo folder ${{ matrix.folders }}
+        shell: bash
+        # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
+        # set the artifact folder names (because the character `/` is not allowed).
+        run: |
+          echo "${{ matrix.folders }}"
+          echo "${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}"
+          matrix_folders=${{ matrix.folders }}
+          matrix_folders=${matrix_folders/'models/'/'models_'}
+          echo "$matrix_folders"
+          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
+
+      - name: ROCM-SMI
+        run: |
+          rocm-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
+      - name: Run all non-slow selected tests on GPU
+        working-directory: /transformers
+        run: |
+          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} ${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}
+
+      - name: Failure short reports
+        if: ${{ failure() }}
+        continue-on-error: true
+        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
+          path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
+
   run_tests_multi_gpu:
     name: Model tests
     needs: setup
