@@ -75,11 +75,14 @@ class SeamlessM4TGenerationOutput(ModelOutput):
             early due to the `t2u_eos_token_id`.
         waveforms (`torch.LongTensor` of shape `(batch_size, nb_channels, sequence_length)`):
             The generated translated speech waveforms.
+        waveform_lengths (`torch.IntTensor` of shape `(batch_size,)`):
+            The length of each waveform.
     """
 
     sequences: Optional[Tuple[torch.FloatTensor]] = None
     unit_sequences: Optional[Tuple[torch.FloatTensor]] = None
     waveforms: Optional[torch.FloatTensor] = None
+    waveform_lengths: Optional[torch.IntTensor] = None
 
 
 SEAMLESS_M4T_START_DOCSTRING = r"""
@@ -3408,16 +3411,16 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
         spkr_id = 0 if spkr_id is None else spkr_id
         spkr_id = torch.tensor([[spkr_id]]*len(unit_ids)).to(self.device)
         
-        waveforms = self.vocoder(
+        waveforms, waveform_lengths = self.vocoder(
             input_ids=unit_ids, speaker_id=spkr_id, lang_id=vocoder_tgt_lang_id
         )
 
         if return_intermediate_token_ids:
             return SeamlessM4TGenerationOutput(
-                sequences=sequences, unit_sequences=t2u_generation_output, waveforms=waveforms
+                sequences=sequences, unit_sequences=t2u_generation_output, waveforms=waveforms, waveform_lengths=waveform_lengths
             )
 
-        return waveforms
+        return waveforms, waveform_lengths
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
@@ -3642,16 +3645,16 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
         spkr_id = 0 if spkr_id is None else spkr_id
         spkr_id = torch.tensor([[spkr_id]]*len(unit_ids)).to(self.device)
         
-        waveforms = self.vocoder(
+        waveforms, waveform_lengths = self.vocoder(
             input_ids=unit_ids, speaker_id=spkr_id, lang_id=vocoder_tgt_lang_id
         )
 
         if return_intermediate_token_ids:
             return SeamlessM4TGenerationOutput(
-                sequences=sequences, unit_sequences=t2u_generation_output, waveforms=waveforms
+                sequences=sequences, unit_sequences=t2u_generation_output, waveforms=waveforms, waveform_lengths=waveform_lengths
             )
 
-        return waveforms
+        return waveforms, waveform_lengths
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
@@ -4040,16 +4043,16 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         spkr_id = 0 if spkr_id is None else spkr_id
         spkr_id = torch.tensor([[spkr_id]]*len(unit_ids)).to(self.device)
         
-        waveforms = self.vocoder(
+        waveforms, waveform_lengths = self.vocoder(
             input_ids=unit_ids, speaker_id=spkr_id, lang_id=vocoder_tgt_lang_id
         )
 
         if return_intermediate_token_ids:
             return SeamlessM4TGenerationOutput(
-                sequences=sequences, unit_sequences=t2u_generation_output, waveforms=waveforms
+                sequences=sequences, unit_sequences=t2u_generation_output, waveforms=waveforms, waveform_lengths=waveform_lengths
             )
 
-        return waveforms
+        return waveforms, waveform_lengths
 
     def prepare_inputs_for_generation(
         self,
