@@ -633,14 +633,9 @@ class TrainingArguments:
             Refer to the PyTorch doc for possible values and note that they may change across PyTorch versions.
 
             This flag is experimental and subject to change in future releases.
-        tgs_metrics (`bool`, *optional*, defaults to `False`):
-            Whether or not to compute the `tgs` for training speed metrics.
-
-            If set to `True`, the speed metrics will include `tgs`(tokens per second per device).
-
-            It will iterate over the dataloader ahead of training.
-
-            This will slow down the whole process, especally for large datasets.
+        include_tokens_per_second (`bool`, *optional*):
+            Whether or not to compute the number of tokens per second per device for training speed metrics.
+            This will iterate over the entire training dataloader once beforehand, and will slow down the entire process.
     """
 
     framework = "pt"
