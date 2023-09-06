@@ -212,49 +212,35 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-def to_attention_mask(seqs: Tensor, seq_lens: Optional[Tensor]) -> Optional[Tensor]:
-    """Convert a sequence length array to a float attention mask.
+def _compute_new_attention_mask(
+                                hidden_states: Tensor,
+                                seq_lens: Optional[Tensor] = None):
+    """
+    Computes an attention mask of the form `(batch, seq_len)` with an attention for each element in the batch that stops at the corresponding element in `seq_lens`. 
+    
+    Args:
+        hidden_states (`torch.FloatTensor`):
+            The sequences to mask of shape `(batch, seq_len, *)` where `*` is any number of sequence-specific dimensions including none.
+        seq_lens (`torch.Tensor`):
+            A tensor of shape `(batch,)` where each element represents the length of the sequence at the same index in `hidden_states`
 
-    :param seqs:
-        The sequences to mask. *Shape:* :math:`(N,S,*)`, where :math:`N` is the batch size, :math:`S` is the sequence
-        length, and :math:`*` is any number of sequence-specific dimensions including none.
-    :param seq_lens:
-        An array where each element represents the length of the sequence at the same index in ``seqs``. *Shape:*
-        :math:`(N)`, where :math:`N` is the batch size.
-
-    :returns:
-        The float attention mask. *Shape:* :math:`(N,S)`, where :math:`N` is the batch size and :math:`S` is the
-        sequence length.
+    Returns:
+        `torch.FloatTensor`: The float attention mask of shape `(batch, seq_len)`
     """
     if seq_lens is None:
         return None
 
-    batch_size, mask_seq_len = seqs.shape[:2]
+    batch_size, mask_seq_len = hidden_states.shape[:2]
 
     indices = torch.arange(mask_seq_len, device=seq_lens.device).expand(batch_size, -1)
 
     bool_mask = indices >= seq_lens.unsqueeze(1).expand(-1, mask_seq_len)
 
-    mask = seqs.new_ones((batch_size, mask_seq_len))
+    mask = hidden_states.new_ones((batch_size, mask_seq_len))
 
     mask = mask.masked_fill(bool_mask, 0)
 
     return mask
-
-
-def _compute_new_attention_mask(
-    seqs: Tensor, attention_mask: Optional[Tensor], kernel_size: int, stride: int
-) -> Optional[Tensor]:
-    if attention_mask is None:
-        return attention_mask
-
-    pad = kernel_size // 2
-
-    seq_lens = attention_mask.size(1) - (1 - attention_mask.int()).sum(1)
-
-    seq_lens = ((seq_lens + 2 * pad - kernel_size) / stride) + 1
-
-    return to_attention_mask(seqs, seq_lens.floor())
 
 
 ############ SPEECH ENCODER related code ################
@@ -874,6 +860,19 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
         self.ffn_layer_norm = nn.LayerNorm(embed_dim)
         self.ffn = SeamlessM4TConformerFeedForward(config, use_relu=True)
         self.ffn_dropout = torch.nn.Dropout(dropout)
+        
+    def _compute_sub_sample_lengths_from_attention_mask(
+        self,
+        attention_mask
+    ):
+        if attention_mask is None:
+            return None
+        pad = self.kernel_size // 2
+        seq_lens = attention_mask.size(1) - (1-attention_mask.int()).sum(1)
+        
+        seq_lens = ((seq_lens + 2 * pad - self.kernel_size) / self.stride) + 1
+        
+        return seq_lens.floor()
 
     def forward(
         self,
@@ -901,7 +900,8 @@ class SeamlessM4TConformerAdapterLayer(nn.Module):
         # (batch, feature_dim, seq_len) -> (batch, seq_len, feature_dim)
         hidden_states = hidden_states.transpose(1, 2)
 
-        attention_mask = _compute_new_attention_mask(hidden_states, attention_mask, self.kernel_size, self.stride)
+        sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask)
+        attention_mask = _compute_new_attention_mask(hidden_states=hidden_states, seq_lens=sub_sampled_lengths)
         if attention_mask is not None:
             attention_mask = _expand_mask(
                 attention_mask,
@@ -982,7 +982,7 @@ class SeamlessM4TSinusoidalPositionalEmbedding(nn.Module):
             # zero pad
             emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
         if padding_idx is not None:
-            emb[padding_idx, :] = 0
+            emb[padding_idx, :] = 0 # TODO: not sure it is used in fairseq code
 
         return emb.to(torch.get_default_dtype())
 
@@ -1457,6 +1457,21 @@ class SeamlessM4TPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (SeamlessM4TDecoder, SeamlessM4TEncoder, SeamlessM4TSpeechEncoder)):
             module.gradient_checkpointing = value
+            
+            
+    def _compute_sub_sample_lengths_from_attention_mask(
+        self,
+        attention_mask
+    ):
+        if attention_mask is None:
+            return None
+        kernel_size, stride = self.config.adaptor_kernel_size, self.config.adaptor_stride
+        pad = kernel_size // 2
+        seq_lens = attention_mask.size(1) - (1-attention_mask.int()).sum(1)
+        
+        seq_lens = ((seq_lens + 2 * pad - kernel_size) / stride) + 1
+        
+        return seq_lens.floor()
 
     def compute_last_hidden_states_per_sample(
         self,
@@ -3049,9 +3064,8 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
 
         encoder_attention_mask = attention_mask
         if attention_mask is not None:
-            encoder_attention_mask = _compute_new_attention_mask(
-                encoder_outputs[0], attention_mask, self.config.adaptor_kernel_size, self.config.adaptor_stride
-            )
+            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask)
+            encoder_attention_mask = _compute_new_attention_mask(hidden_states=encoder_outputs[0], seq_lens=sub_sampled_lengths)
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.text_decoder(
@@ -3322,7 +3336,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
 
         # Compute new attention mask
         seq_lens = (sequences != pad_token_id).int().sum(1)
-        t2u_model_attention_mask = to_attention_mask(t2u_input_embeds, seq_lens)
+        t2u_model_attention_mask = _compute_new_attention_mask(t2u_input_embeds, seq_lens)
         kwargs_speech["attention_mask"] = t2u_model_attention_mask
 
         
@@ -3525,12 +3539,8 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
 
         # input modality = speech so new attention mask for the decoder
         if attention_mask is not None:
-            attention_mask = _compute_new_attention_mask(
-                encoder_hidden_states,
-                attention_mask,
-                self.config.adaptor_kernel_size,
-                self.config.adaptor_stride,
-            )
+            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask)
+            attention_mask = _compute_new_attention_mask(hidden_states=encoder_hidden_states, seq_lens=sub_sampled_lengths)
 
         # get decoder last hidden state - must do a pass through the text decoder
         t2u_input_embeds = self.text_decoder(
@@ -3558,7 +3568,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
 
         # Compute new attention mask
         seq_lens = (sequences != pad_token_id).int().sum(1)
-        t2u_model_attention_mask = to_attention_mask(t2u_input_embeds, seq_lens)
+        t2u_model_attention_mask = _compute_new_attention_mask(t2u_input_embeds, seq_lens)
         kwargs_speech["attention_mask"] = t2u_model_attention_mask
 
         # Compute decoder_input_ids if necessary
@@ -3792,9 +3802,8 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         encoder_attention_mask = attention_mask
         # input modality = speech so new attention mask
         if self.current_modality == "speech" and attention_mask is not None:
-            encoder_attention_mask = _compute_new_attention_mask(
-                encoder_outputs[0], attention_mask, self.config.adaptor_kernel_size, self.config.adaptor_stride
-            )
+            sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask)
+            encoder_attention_mask = _compute_new_attention_mask(hidden_states=encoder_outputs[0], seq_lens=sub_sampled_lengths)
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.text_decoder(
@@ -3926,12 +3935,8 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
             # input modality = speech so new attention mask for the decoder
             if attention_mask is not None:
-                attention_mask = _compute_new_attention_mask(
-                    encoder_hidden_states,
-                    attention_mask,
-                    self.config.adaptor_kernel_size,
-                    self.config.adaptor_stride,
-                )
+                sub_sampled_lengths = self._compute_sub_sample_lengths_from_attention_mask(attention_mask)
+                attention_mask = _compute_new_attention_mask(hidden_states=encoder_hidden_states, seq_lens=sub_sampled_lengths)
         else:
             encoder_hidden_states = text_generation_output.encoder_hidden_states[-1]
             
@@ -3962,7 +3967,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
 
         # Compute new attention mask
         seq_lens = (sequences != pad_token_id).int().sum(1)
-        t2u_model_attention_mask = to_attention_mask(t2u_input_embeds, seq_lens)
+        t2u_model_attention_mask = _compute_new_attention_mask(t2u_input_embeds, seq_lens)
         kwargs_speech["attention_mask"] = t2u_model_attention_mask
 
         # Compute decoder_input_ids if necessary
