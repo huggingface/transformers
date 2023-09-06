@@ -92,11 +92,14 @@ class SeamlessM4TModelTester:
         upsample_initial_channel=32,
         unit_embed_dim=6,
         spkr_embed_dim=6,
-        num_conv_pos_embeddings=8,
         lang_embed_dim=6,
+        num_conv_pos_embeddings=8,
+
         
-        unit_hifi_gan_vocab_size = 12,
+        unit_hifi_gan_vocab_size = 15,
         t2u_num_langs = 0,
+        t2u_max_new_tokens=10,
+        vocoder_offset_tgt_lang=0,
     ):
         self.parent = parent
         self.input_modality = input_modality
@@ -143,18 +146,20 @@ class SeamlessM4TModelTester:
         
         self.unit_hifi_gan_vocab_size = unit_hifi_gan_vocab_size
         self.t2u_num_langs = t2u_num_langs
+        self.t2u_max_new_tokens = t2u_max_new_tokens
+        self.vocoder_offset_tgt_lang = vocoder_offset_tgt_lang
         
     def prepare_config_and_inputs(self):
         if self.input_modality == "text":
-            inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+            inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size-1)
         else:
-            inputs = ids_tensor([self.batch_size, self.seq_length, 160], self.vocab_size).float()
+            inputs = ids_tensor([self.batch_size, self.seq_length, 160], self.vocab_size-1).float()
 
         input_mask = None
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
             
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size-1)
 
         lm_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
 
@@ -199,6 +204,9 @@ class SeamlessM4TModelTester:
             max_new_tokens=self.max_new_tokens,
             unit_hifi_gan_vocab_size=self.unit_hifi_gan_vocab_size,
             t2u_num_langs=self.t2u_num_langs,
+            t2u_max_new_tokens=self.t2u_max_new_tokens,
+            vocoder_offset_tgt_lang=self.vocoder_offset_tgt_lang,
+            model_in_dim=self.unit_embed_dim +self.spkr_embed_dim +self.lang_embed_dim
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -712,8 +720,8 @@ class SeamlessM4TMGenerationTest(unittest.TestCase):
         
     def update_generation(self, model):
         lang_code_to_id = {
-            "fra": 1,
-            "eng": 1,
+            "fra": 4,
+            "eng": 4,
         }
         
         generation_config = copy.deepcopy(model.generation_config)
@@ -734,7 +742,7 @@ class SeamlessM4TMGenerationTest(unittest.TestCase):
         
         input_dict = {
             "input_ids": inputs,
-            "decoder_input_ids": decoder_input_ids,
+            #"decoder_input_ids": decoder_input_ids,
             "attention_mask": input_mask, 
             "tgt_lang": "eng",
         }
@@ -746,7 +754,7 @@ class SeamlessM4TMGenerationTest(unittest.TestCase):
         
         input_dict = {
             "input_features": inputs,
-            "decoder_input_ids": decoder_input_ids,
+            #"decoder_input_ids": decoder_input_ids,
             "attention_mask": input_mask,
             "tgt_lang": "eng",
         }

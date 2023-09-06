@@ -223,6 +223,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         vocoder_num_spkrs=200,
         variance_predictor_kernel_size=3,
         var_pred_dropout=0.5,
+        vocoder_offset_tgt_lang=5,
         **kwargs,
     ):
         # overall_config
@@ -314,6 +315,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.vocoder_num_spkrs = vocoder_num_spkrs
         self.variance_predictor_kernel_size = variance_predictor_kernel_size
         self.var_pred_dropout = var_pred_dropout
+        self.vocoder_offset_tgt_lang = vocoder_offset_tgt_lang
         
         # for proper config init
         self.num_attention_heads = decoder_attention_heads

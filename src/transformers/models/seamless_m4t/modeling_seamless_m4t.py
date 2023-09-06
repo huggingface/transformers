@@ -2648,50 +2648,31 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @staticmethod
-    def _upsample(signal: Tensor, max_frames: int) -> Tensor:
-        if signal.dim() == 3:
-            bsz, channels, cond_length = signal.size()
-        elif signal.dim() == 2:
-            signal = signal.unsqueeze(2)
-            bsz, channels, cond_length = signal.size()
-        else:
-            signal = signal.view(-1, 1, 1)
-            bsz, channels, cond_length = signal.size()
-
-        signal = signal.unsqueeze(3).repeat(1, 1, 1, max_frames // cond_length)
-
-        # pad zeros as needed (if signal's shape does not divide completely with max_frames)
-        remainder = (max_frames - signal.shape[2] * signal.shape[3]) // signal.shape[3]
-        if remainder > 0:
-            raise NotImplementedError("Padding condition signal - misalignment between condition features.")
-
-        signal = signal.view(bsz, channels, max_frames)
-        return signal
-
     def forward(
         self, input_ids: Tensor, speaker_id: Tensor, lang_id: Tensor
     ) -> Tensor:  # type: ignore
         hidden_states = self.unit_embedding(input_ids).transpose(1, 2)
-
-        if hidden_states.size(0) != 1:
-            raise ValueError(
-                f"Input `batch_size={hidden_states.size(0)}, but the variance predictor only supports single sample prediction. Use it sample per sample."
-            )
+        spkr = self.speaker_embedding(speaker_id).transpose(1, 2)
+        lang = self.language_embedding(lang_id).transpose(1, 2)
 
         log_dur_pred = self.dur_predictor(hidden_states.transpose(1, 2))
         dur_out = torch.clamp(torch.round((torch.exp(log_dur_pred) - 1)).long(), min=1)
         # B x C x T
-        hidden_states = torch.repeat_interleave(hidden_states, dur_out.view(-1), dim=2)
+        if hidden_states.size(0) == 1:
+            hidden_states = torch.repeat_interleave(hidden_states, dur_out.view(-1), dim=2)
+        else:
+            # if batched sample, need to interleave per sample, and pad -> loss of parallelism
+            # TODO: warnings if self.training ?
+            dur_out = torch.randint_like(dur_out,1, 5)
+            hidden_states = [torch.repeat_interleave(hidden_state, duration, dim=-1).transpose(0,1) for (hidden_state, duration) in zip(hidden_states,dur_out)]
+            
+            hidden_states = nn.utils.rnn.pad_sequence(hidden_states, batch_first=True).transpose(1,2)
+            
 
-        spkr = self.speaker_embedding(speaker_id).transpose(1, 2)
-        spkr = self._upsample(spkr, hidden_states.shape[-1])
-        hidden_states = torch.cat([hidden_states, spkr], dim=1)
+        spkr = spkr.repeat(1,1,hidden_states.shape[-1])
+        lang = lang.repeat(1,1,hidden_states.shape[-1])
+        hidden_states = torch.cat([lang, hidden_states, spkr], dim=1)
 
-        lang = self.language_embedding(lang_id).transpose(1, 2)
-        lang = self._upsample(lang, hidden_states.shape[-1])
-        hidden_states = torch.cat([lang, hidden_states], dim=1)
-        
         hidden_states = self.hifi_gan(hidden_states)
 
         return hidden_states
@@ -3349,7 +3330,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
                     f"`tgt_lang={tgt_lang}` is not supported for speech generation. Please specify a `tgt_lang` in {', '.join(self.generation_config.t2u_lang_code_to_id.keys())} to generate speech, or set TODO" # TODO
                 )
             # + 5 for EOS/PAD/BOS/UNK token + mask token
-            t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.unit_hifi_gan_vocab_size + self.config.t2u_num_langs + 5
+            t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.unit_hifi_gan_vocab_size + self.config.t2u_num_langs + self.config.vocoder_offset_tgt_lang
             t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]]*batch_size).to(self.device)
         
         kwargs_speech["decoder_input_ids"] = t2u_decoder_input_ids
@@ -3582,7 +3563,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
                     f"`tgt_lang={tgt_lang}` is not supported for speech generation. Please specify a `tgt_lang` in {', '.join(self.generation_config.t2u_lang_code_to_id.keys())} to generate speech, or set TODO" # TODO
                 )
             # + 5 for EOS/PAD/BOS/UNK token + mask token
-            t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.unit_hifi_gan_vocab_size + self.config.t2u_num_langs + 5
+            t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.unit_hifi_gan_vocab_size + self.config.t2u_num_langs + self.config.vocoder_offset_tgt_lang
             t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]]*batch_size).to(self.device)
         
         kwargs_speech["decoder_input_ids"] = t2u_decoder_input_ids
@@ -3981,7 +3962,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                     f"`tgt_lang={tgt_lang}` is not supported for speech generation. Please specify a `tgt_lang` in {', '.join(self.generation_config.t2u_lang_code_to_id.keys())} to generate speech, or set TODO" # TODO
                 )
             # + 5 for EOS/PAD/BOS/UNK token + mask token
-            t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.unit_hifi_gan_vocab_size + self.config.t2u_num_langs + 5
+            t2u_tgt_lang_id = t2u_tgt_lang_id + self.config.unit_hifi_gan_vocab_size + self.config.t2u_num_langs + self.config.vocoder_offset_tgt_lang
             t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]]*batch_size).to(self.device)
         
         kwargs_speech["decoder_input_ids"] = t2u_decoder_input_ids
