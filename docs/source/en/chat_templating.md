@@ -129,8 +129,8 @@ Effectively, the template does three things:
 
 This is a pretty simple template - it doesn't add any control tokens, and it doesn't support "system" messages, which 
 are a common way to give the model directives about how it should behave in the subsequent conversation.
-But Jinja gives you a lot of flexibility to do those things! Here's the LLaMA template, again with newlines and
-indentations added for readability:
+But Jinja gives you a lot of flexibility to do those things! Here's the LLaMA default template, again with 
+newlines and indentations added for readability:
 
 ```
 {% for message in messages %}
@@ -183,8 +183,16 @@ once you set the correct chat template, your model will automatically become com
 
 ## What are "default" templates?
 
-TODO MATT FILL IN 
+Before the introduction of chat templates, chat handling was hardcoded at the model class level. For backwards 
+compatibility, we have retained this class-specific handling as default templates, also set at the class level. If a
+model does not have a chat template set, but there is a default template for its model class, the `ConversationPipeline`
+class and methods like `apply_chat_template` will use the class template instead. The attribute
+`tokenizer.default_chat_template` contains the default template for your model.
 
+This is something we do purely for backward compatibility reasons, to avoid breaking any existing workflows. Even when
+the class template is appropriate for your model, we strongly recommend setting the `chat_template` 
+attribute explicitly to make it clear to users that your model has been correctly configured for chat, and
+to future-proof in case the default templates are ever altered or deprecated.
 
 ## What template should I use?
 
@@ -221,13 +229,15 @@ The "user", "system" and "assistant" roles are the standard for chat, and we rec
 particularly if you want your model to operate well with [`ConversationalPipeline`]. However, you are not limited
 to these roles - templating is extremely flexible, and any string can be a role.
 
-## I want to use chat templates! What should I do?
+## I want to use chat templates! How should I get started?
 
-If you have any chat models, you should check their `tokenizer.chat_template` attribute. It will be set
-to a default value based on the model class - if this doesn't match the format you used to train the model, then you
-should set it to a template that does, and test it using [`~PreTrainedTokenizer.apply_chat_template`]. 
-This applies even if you're not the model owner - if you're using a model with an incorrect chat template, please open 
-a [pull request](https://huggingface.co/docs/hub/repositories-pull-requests-discussions) to the model repository so that this attribute can be set properly!
+If you have any chat models, you should set their `tokenizer.chat_template` attribute and test it using
+[`~PreTrainedTokenizer.apply_chat_template`]. This applies even if you're not the model owner - if you're using a model
+with an empty chat template, or one that's still using the default class template, please open a [pull request](https://huggingface.co/docs/hub/repositories-pull-requests-discussions) to
+the model repository so that this attribute can be set properly!
+
+Once the attribute is set, that's it, you're done! `tokenizer.apply_chat_template` will now work correctly for that
+model, which means it is also automatically supported in places like `ConversationPipeline`!
 
 By ensuring that models have this attribute, we can make sure that the whole community gets to use the full power of
 open-source models. Formatting mismatches have been haunting the field and silently harming performance for too long - 
