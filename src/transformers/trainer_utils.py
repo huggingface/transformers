@@ -112,7 +112,7 @@ class EvalPrediction:
     Parameters:
         predictions (`np.ndarray`): Predictions of the model.
         label_ids (`np.ndarray`): Targets to be matched.
-        inputs (`np.ndarray`, *optional*)
+        inputs (`np.ndarray`, *optional*):
     """
 
     def __init__(

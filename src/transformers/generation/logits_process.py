@@ -357,7 +357,7 @@ class TopPLogitsWarper(LogitsWarper):
         top_p (`float`):
             If set to < 1, only the smallest set of most probable tokens with probabilities that add up to `top_p` or
             higher are kept for generation.
-        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+        filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.
         min_tokens_to_keep (`int`, *optional*, defaults to 1):
             Minimum number of tokens that cannot be filtered.
@@ -447,7 +447,7 @@ class TypicalLogitsWarper(LogitsWarper):
     Generation](https://arxiv.org/abs/2202.00666) for more information.
 
     Args:
-        mass (`float`):
+        mass (`float`, *optional*, defaults to 0.9):
             Value of typical_p between 0 and 1 inclusive, defaults to 0.9.
         filter_value (`float`, *optional*, defaults to -inf):
             All filtered values will be set to this float value.

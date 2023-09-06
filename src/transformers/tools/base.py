@@ -348,7 +348,7 @@ class RemoteTool(Tool):
     A [`Tool`] that will make requests to an inference endpoint.
 
     Args:
-        endpoint_url (`str`):
+        endpoint_url (`str`, *optional*):
             The url of the endpoint to use.
         token (`str`, *optional*):
             The token to use as HTTP bearer authorization for remote files. If unset, will use the token generated when

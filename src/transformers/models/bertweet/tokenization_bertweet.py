@@ -77,7 +77,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
             Path to the vocabulary file.
         merges_file (`str`):
             Path to the merges file.
-        normalization (`bool`, *optional*, defaults to `False`)
+        normalization (`bool`, *optional*, defaults to `False`):
             Whether or not to apply a normalization preprocess.
         bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
