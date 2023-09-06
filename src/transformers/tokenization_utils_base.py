@@ -1652,7 +1652,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
     @property
     def added_tokens_encoder(self) -> Dict[str, int]:
-        return {k.content: v for v, k in self.added_tokens_decoder.items()}
+        return {k.content: v for v, k in sorted(self.added_tokens_decoder.items(), key = lambda item: item[1])}
 
     @property
     def added_tokens_decoder(self) -> Dict[int, AddedToken]:
@@ -2057,27 +2057,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         init_kwargs["name_or_path"] = pretrained_model_name_or_path
 
-        # Convert AddedTokens serialized as dict to class instances
-        if "added_tokens_decoder" not in init_kwargs:
-            init_kwargs = cls.convert_added_tokens(init_kwargs, False)
-
         additional_special_tokens = init_kwargs.pop("additional_special_tokens", None) or []
         added_tokens_decoder = {}
-        # fast -> slow, non-legacy: convert the `added_tokens` to `added_tokens_decoder`. Special tokens stored in `token.special`
-        if "Fast" not in cls.__name__ and has_tokenizer_file:
-            tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
-            if tokenizer_file is not None:
-                with open(tokenizer_file, encoding="utf-8") as tokenizer_file_handle:
-                    tokenizer_file_handle = json.load(tokenizer_file_handle)
-                    added_tokens = tokenizer_file_handle.pop("added_tokens")
-                for serialized_tokens in added_tokens:
-                    idx = int(serialized_tokens.pop("id"))
-                    # for legacy purpose, we ignore whether or not these tokens are special.
-                    serialized_tokens.pop("special")
-                    added_tokens_decoder[idx] = AddedToken(**serialized_tokens)
 
-        # slow -> slow, non-legacy: deserialize the `added_tokens_decoder`. Special tokens stored in `additional_special_tokens`
-        if "added_tokens_decoder" in init_kwargs:
+        legacy_saved = "added_tokens_decoder" not in init_kwargs
+        if not legacy_saved:
             for idx, token in init_kwargs["added_tokens_decoder"].items():
                 if isinstance(token, dict):
                     token = AddedToken(**token)
@@ -2087,9 +2071,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     raise ValueError(
                         f"Found a {token.__class__} in the saved `added_tokens_decoder`, should be a dictionary."
                     )
-        # begin legacy: read the added_tokens_file and update kwargs with special_tokens_map if modified
         else:
-            # backward compatibility
+            init_kwargs = cls.convert_added_tokens(init_kwargs, False)
+            # begin legacy: read the added_tokens_file and update kwargs with special_tokens_map if modified
             if special_tokens_map_file is not None:
                 with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
                     special_tokens_map = json.load(special_tokens_map_handle)
@@ -2108,7 +2092,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                         else:
                             init_kwargs[key] = value
             # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.
-            # TODO this is useless for a fast tokenizer ? Unless you have from_slow = True
             if added_tokens_file is not None:
                 with open(added_tokens_file, encoding="utf-8") as added_tokens_handle:
                     added_tok_encoder = json.load(added_tokens_handle)
@@ -2118,11 +2101,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 }
             # end legacy
 
-        # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens!
-        # TODO 3 models are still failing because they need to have from_slow = False but still read the added_tokens file
-        slow_to_fast = from_slow and added_tokens_file is not None and "Fast" in cls.__name__
-        init_kwargs["slow_to_fast"] = slow_to_fast
-
+        # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens if the `fast` was not properly saved!
+        # thus we delay adding special tokens in the init using `slow_to_fast` flag.
+        if added_tokens_decoder is not {} and legacy_saved and "Fast" in cls.__name__:
+            init_kwargs["slow_to_fast"] = True
         if len(additional_special_tokens) > 0:
             init_kwargs["additional_special_tokens"] = additional_special_tokens
         init_kwargs["added_tokens_decoder"] = added_tokens_decoder
@@ -2135,43 +2117,44 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
 
-        # slow -> fast, non-legacy: we need to make sure the `added_tokens_decoder` is used to add tokens! Only time we need to check
-        # We should deprecate this since you need a `convert_slow_tokenizer` method anyway, better to add the tokens then! (consistency)
-        if slow_to_fast:  # or name == MVNet ?? When the added tokens are not in the tokenizer.json
-            tokens = []
-            special_tokens = tokenizer.all_special_tokens
-            added_tok_decoder_sorted = sorted(added_tokens_decoder.items(), key=lambda x: x[0])
-            tokenizer_length = len(tokenizer)
-            for index, token in added_tok_decoder_sorted:
-                if (
-                    tokenizer.convert_tokens_to_ids(str(token)) == tokenizer.unk_token_id
-                    and str(token) != tokenizer.unk_token
-                ):
-                    if index != tokenizer_length + len(tokens):
-                        raise ValueError(
-                            f"Wrong index found for {token}: should be {tokenizer.convert_tokens_to_ids(str(token))} but found "
-                            f"{index}. You are converting a {slow_tokenizer.__class__.__name__} to a {cls.__name__}, but the"
-                            " content of the `added_tokens.json` is incompatible with the converted fast version of the tokenizer."
-                            " The added tokens were sorted based on their indexes and if their content cannot be convert to an id,"
-                            " they are added using `tokenizer.add_tokens(token)`. You are seeing this error because the index were"
-                            " the token will be added is different from the one saved in the `added_tokens.json`. This means"
-                            f" that the {cls.__name__} was initialized with tokens that were not part of the vocab."
-                        )
-                token.special = bool(token in special_tokens)
-                tokens.append(token)
+        # allows converting a fast -> slow: add the `tokenizer.json`'s `"added_tokens"` to the slow tokenizer
+        # if `added_tokens_decoder` not in `tokenizer_config.json` and  `added_tokens.json` is `None`
+        if legacy_saved and "Fast" not in cls.__name__ and added_tokens_file is None:
+            tokenizer_file = resolved_vocab_files.pop("tokenizer_file", None)
+            if tokenizer_file is not None:
+                tokens_to_add_from_fast = []
+                with open(tokenizer_file, encoding="utf-8") as tokenizer_file_handle:
+                    tokenizer_file_handle = json.load(tokenizer_file_handle)
+                    added_tokens = tokenizer_file_handle.pop("added_tokens")
+                for serialized_tokens in added_tokens:
+                    serialized_tokens.pop("id")
+                    # for legacy purpose, we ignore whether or not these tokens are special.
+                    serialized_tokens.pop("special")
+                    tokens_to_add_from_fast.append(AddedToken(**serialized_tokens))
+                tokenizer.add_tokens(tokens_to_add_from_fast)
+                    
+        # allows converting a slow -> fast, non-legacy: if the `tokenizer.json` does not have all the added tokens
+        # uses the information stored in `added_tokens_decoder`. Checks after addition that we have the same ids
+        if init_kwargs.get("slow_to_fast", False):
+            tokenizer.add_tokens([token for _, token in sorted(added_tokens_decoder.items(), key=lambda x: x[0])])
+            warnings = ""
+            for index, token in sorted(added_tokens_decoder.items(), key=lambda x: x[0]):
+                if (tokenizer.convert_tokens_to_ids(str(token)) != index):
+                    warnings += f"\texpected id: {tokenizer.convert_tokens_to_ids(str(token))}, found: {index},  token: `{token}`,\n"
 
-            if tokens:
-                tokenizer.add_tokens(tokens)  # information about being special is stored in the token
-
+            logger.warn(
+                    f"You are converting a {slow_tokenizer.__class__.__name__} to a {cls.__name__}, but"
+                    f"wrong indexes were founds when adding the `added_tokens` from the `slow` tokenizer to the `fast`. "
+                    f" following tokens had unexpected id :\n{warnings}. You should try using `from_slow`."
+            )
+            # finally we add all the special_tokens to make sure eveything is initialized
             tokenizer.add_tokens(tokenizer.all_special_tokens_extended, special_tokens=True)
-            # end legacy
 
         if len(added_tokens_decoder) > 0:
             logger.warning_advice(
                 "Special tokens have been added in the vocabulary, make sure the associated word embeddings are"
                 " fine-tuned or trained."
             )
-
         return tokenizer
 
     @staticmethod
