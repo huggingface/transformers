@@ -232,7 +232,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
         # Return spectrogram with num_mel_bins last
         return log_mel_spectrogram.T
-    
+
     def generate_noise(
         self,
         noise_length: int,
@@ -251,8 +251,8 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 `model_in_channels` of the [`UnivNetGan`] model. If not set, this will default to
                 `self.config.model_in_channels`.
             generator (`numpy.random.Generator`, *optional*, defaults to `None`)
-                An optional `numpy.random.Generator` random number generator to control noise generation. If not set,
-                a new generator with fresh entropy will be created.
+                An optional `numpy.random.Generator` random number generator to control noise generation. If not set, a
+                new generator with fresh entropy will be created.
 
         Returns:
             `numpy.ndarray` containing random standard Gaussian noise of shape `(noise_length, model_in_channels)`.
@@ -261,12 +261,12 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             model_in_channels = self.model_in_channels
         if generator is None:
             generator = np.random.default_rng()
-        
+
         noise_shape = (noise_length, model_in_channels)
         noise = generator.standard_normal(noise_shape, dtype=np.float32)
 
         return noise
-    
+
     def pad_spectrogram_end(
         self,
         spectrogram: np.ndarray,
@@ -286,7 +286,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             spectrogram_zero (`float`, *optional*, defaults to `None`):
                 The "zero" value of the spectrogram to pad with. If not set, this will default to
                 `self.config.spectrogram_zero`.
-        
+
         Returns:
             `numpy.ndarray` containing the padded spectrogram of shape `(num_frames + pad_length, num_mel_bins)`.
         """
@@ -432,12 +432,14 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
 
         if pad_end:
             batched_speech["input_features"] = [
-                self.pad_spectrogram_end(spectrogram, pad_length, spectrogram_zero) for spectrogram in batched_speech["input_features"]
+                self.pad_spectrogram_end(spectrogram, pad_length, spectrogram_zero)
+                for spectrogram in batched_speech["input_features"]
             ]
 
         if return_noise:
             noise = [
-                self.generate_noise(spectrogram.shape[0], model_in_channels, generator) for spectrogram in batched_speech['input_features']
+                self.generate_noise(spectrogram.shape[0], model_in_channels, generator)
+                for spectrogram in batched_speech["input_features"]
             ]
             batched_speech["noise_sequence"] = noise
 
