@@ -65,20 +65,19 @@ class UnivNetGanTester:
         self.seed = seed
         self.is_training = is_training
 
-    def prepare_noise_waveform(self):
+    def prepare_noise_sequence(self):
         generator = torch.manual_seed(self.seed)
         noise_shape = (self.seq_length, self.in_channels)
         # Create noise on CPU for reproducibility
-        noise_waveform = torch.randn(noise_shape, generator=generator, dtype=torch.float)
-        # noise_waveform = noise_waveform.to(torch_device)
-        return noise_waveform
+        noise_sequence = torch.randn(noise_shape, generator=generator, dtype=torch.float)
+        return noise_sequence
 
     def prepare_config_and_inputs(self):
         spectrogram = floats_tensor([self.seq_length, self.num_mel_bins], scale=1.0)
-        noise_waveform = self.prepare_noise_waveform()
-        noise_waveform = noise_waveform.to(spectrogram.device)
+        noise_sequence = self.prepare_noise_sequence()
+        noise_sequence = noise_sequence.to(spectrogram.device)
         config = self.get_config()
-        return config, spectrogram, noise_waveform
+        return config, spectrogram, noise_sequence
 
     def get_config(self):
         return UnivNetGanConfig(
@@ -88,14 +87,14 @@ class UnivNetGanTester:
             kernel_predictor_hidden_channels=self.kernel_predictor_hidden_channels,
         )
 
-    def create_and_check_model(self, config, spectrogram, noise_waveform):
+    def create_and_check_model(self, config, spectrogram, noise_sequence):
         model = UnivNetGan(config=config).to(torch_device).eval()
-        result = model(spectrogram, noise_waveform)
+        result = model(spectrogram, noise_sequence)
         self.parent.assertEqual(result.shape, (self.seq_length * 256,))
 
     def prepare_config_and_inputs_for_common(self):
-        config, spectrogram, noise_waveform = self.prepare_config_and_inputs()
-        inputs_dict = {"spectrogram": spectrogram, "noise_waveform": noise_waveform}
+        config, spectrogram, noise_sequence = self.prepare_config_and_inputs()
+        inputs_dict = {"spectrogram": spectrogram, "noise_sequence": noise_sequence}
         return config, inputs_dict
 
 
@@ -175,11 +174,11 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
 
             batched_spectrogram = inputs["spectrogram"].unsqueeze(0).repeat(2, 1, 1)
-            batched_noise_waveform = inputs["noise_waveform"].unsqueeze(0).repeat(2, 1, 1)
+            batched_noise_sequence = inputs["noise_sequence"].unsqueeze(0).repeat(2, 1, 1)
             with torch.no_grad():
                 batched_outputs = model(
                     batched_spectrogram.to(torch_device),
-                    batched_noise_waveform.to(torch_device),
+                    batched_noise_sequence.to(torch_device),
                 )
 
             self.assertEqual(
@@ -197,7 +196,7 @@ class UnivNetGanTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
 
             with torch.no_grad():
-                outputs = model(inputs["spectrogram"].to(torch_device), inputs["noise_waveform"].to(torch_device))
+                outputs = model(inputs["spectrogram"].to(torch_device), inputs["noise_sequence"].to(torch_device))
             self.assertTrue(outputs.dim() == 1, msg="Got un-batched inputs but batched output")
 
 
@@ -221,13 +220,13 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
         generator = torch.manual_seed(seed)
         # Note: hardcode model_in_channels -> 64
         if num_samples == 1:
-            noise_waveform_shape = (64, noise_length)
+            noise_sequence_shape = (64, noise_length)
         else:
-            noise_waveform_shape = (num_samples, 64, noise_length)
-        # Explicity generate noise waveform on CPU for consistency.
-        noise_waveform = torch.randn(noise_waveform_shape, generator=generator, dtype=torch.float32, device="cpu")
-        # Put noise_waveform on the desired device.
-        noise_waveform = noise_waveform.to(device)
+            noise_sequence_shape = (num_samples, 64, noise_length)
+        # Explicity generate noise_sequence on CPU for consistency.
+        noise_sequence = torch.randn(noise_sequence_shape, generator=generator, dtype=torch.float32, device="cpu")
+        # Put noise_sequence on the desired device.
+        noise_sequence = noise_sequence.to(device)
 
         # Note: hardcode num_mel_channels -> 100
         if num_samples == 1:
@@ -239,15 +238,15 @@ class UnivNetGanIntegrationTests(unittest.TestCase):
 
         # Permute to match diffusers implementation
         if num_samples == 1:
-            noise_waveform = noise_waveform.transpose(1, 0)
+            noise_sequence = noise_sequence.transpose(1, 0)
             spectrogram = spectrogram.transpose(1, 0)
         else:
-            noise_waveform = noise_waveform.transpose(2, 1)
+            noise_sequence = noise_sequence.transpose(2, 1)
             spectrogram = spectrogram.transpose(2, 1)
 
         inputs = {
             "spectrogram": spectrogram,
-            "noise_waveform": noise_waveform,
+            "noise_sequence": noise_sequence,
             "generator": generator,
         }
 

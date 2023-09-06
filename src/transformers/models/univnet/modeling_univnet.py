@@ -561,7 +561,7 @@ class UnivNetGan(PreTrainedModel):
     def forward(
         self,
         spectrogram: torch.FloatTensor,
-        noise_waveform: Optional[torch.FloatTensor] = None,
+        noise_sequence: Optional[torch.FloatTensor] = None,
         generator: Optional[torch.Generator] = None,
     ):
         r"""
@@ -573,8 +573,8 @@ class UnivNetGan(PreTrainedModel):
             spectrogram (`torch.FloatTensor`):
                 Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
                 config.num_mel_channels)`, or un-batched and of shape `(sequence_length, config.num_mel_channels)`.
-            noise_waveform (`torch.FloatTensor`, *optional*):
-                Tensor containing a noise waveform sequence of standard Gaussian noise. Can be batched and of shape
+            noise_sequence (`torch.FloatTensor`, *optional*):
+                Tensor containing a noise sequence of standard Gaussian noise. Can be batched and of shape
                 `(batch_size, sequence_length, config.model_in_channels)`, or un-batched and of shape (sequence_length,
                 config.model_in_channels)`. If not supplied, will be randomly generated.
             generator (`torch.Generator`, *optional*):
@@ -603,40 +603,40 @@ class UnivNetGan(PreTrainedModel):
          >>> audio = model(**inputs)
          ```
         """
-        # Resolve batch sizes for noise_waveform and spectrogram
+        # Resolve batch sizes for noise_sequence and spectrogram
         spectrogram_batched = spectrogram.dim() == 3
         if not spectrogram_batched:
             spectrogram = spectrogram.unsqueeze(0)
         spectrogram_batch_size, spectrogram_length, _ = spectrogram.shape
 
-        if noise_waveform is not None:
-            noise_waveform_batched = noise_waveform.dim() == 3
-            if not noise_waveform_batched:
-                noise_waveform = noise_waveform.unsqueeze(0)
+        if noise_sequence is not None:
+            noise_sequence_batched = noise_sequence.dim() == 3
+            if not noise_sequence_batched:
+                noise_sequence = noise_sequence.unsqueeze(0)
         else:
-            # Randomly generate noise_waveform
-            noise_waveform_shape = (spectrogram_batch_size, spectrogram_length, self.config.model_in_channels)
-            noise_waveform = torch.randn(
-                noise_waveform_shape, generator=generator, dtype=spectrogram.dtype, device=spectrogram.device
+            # Randomly generate noise_sequence
+            noise_sequence_shape = (spectrogram_batch_size, spectrogram_length, self.config.model_in_channels)
+            noise_sequence = torch.randn(
+                noise_sequence_shape, generator=generator, dtype=spectrogram.dtype, device=spectrogram.device
             )
-            noise_waveform_batched = True
-        noise_waveform_batch_size = noise_waveform.shape[0]
+            noise_sequence_batched = True
+        noise_sequence_batch_size = noise_sequence.shape[0]
 
-        if spectrogram_batch_size > 1 and noise_waveform_batch_size == 1:
-            # Repeat noise_waveform spectrogram_batch_size times
-            noise_waveform = noise_waveform.repeat(spectrogram_batch_size, 1, 1)
-        elif noise_waveform_batch_size > 1 and spectrogram_batch_size == 1:
-            # Repeat spectrogram noise_waveform_batch_size times
-            spectrogram = spectrogram.repeat(noise_waveform_batch_size, 1, 1)
+        if spectrogram_batch_size > 1 and noise_sequence_batch_size == 1:
+            # Repeat noise_sequence spectrogram_batch_size times
+            noise_sequence = noise_sequence.repeat(spectrogram_batch_size, 1, 1)
+        elif noise_sequence_batch_size > 1 and spectrogram_batch_size == 1:
+            # Repeat spectrogram noise_sequence_batch_size times
+            spectrogram = spectrogram.repeat(noise_sequence_batch_size, 1, 1)
 
-        if noise_waveform_batch_size != spectrogram_batch_size:
+        if noise_sequence_batch_size != spectrogram_batch_size:
             raise ValueError(
-                f"The batch size of `noise_waveform` is {noise_waveform_batch_size} and the batch size of"
+                f"The batch size of `noise_sequence` is {noise_sequence_batch_size} and the batch size of"
                 f" `spectrogram` is {spectrogram_batch_size}, but the two are expected to be equal."
             )
 
         # Change shapes to have channels before sequence lengths
-        hidden_states = noise_waveform.transpose(2, 1)
+        hidden_states = noise_sequence.transpose(2, 1)
         spectrogram = spectrogram.transpose(2, 1)
 
         hidden_states = self.conv_pre(hidden_states)

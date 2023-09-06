@@ -240,7 +240,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
         generator: Optional[np.random.Generator] = None,
     ) -> np.ndarray:
         """
-        Generates a random noise sequence of standard Gaussian noise for use in the `noise_waveform` argument of
+        Generates a random noise sequence of standard Gaussian noise for use in the `noise_sequence` argument of
         [`UnivNetGan.forward`].
 
         Args:
@@ -439,7 +439,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
             noise = [
                 self.generate_noise(spectrogram.shape[0], model_in_channels, generator) for spectrogram in batched_speech['input_features']
             ]
-            batched_speech["noise"] = noise
+            batched_speech["noise_sequence"] = noise
 
         if do_normalize:
             batched_speech["input_features"] = [
