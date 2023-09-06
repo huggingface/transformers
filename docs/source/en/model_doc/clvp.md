@@ -77,7 +77,7 @@ Example :
 ## CLVPConfig
 
 [[autodoc]] CLVPConfig
-    - from_text_speech_autoregressive_configs
+    - from_sub_model_configs
 
 ## CLVPTextConfig
 
@@ -115,7 +115,6 @@ Example :
     - generate
     - get_text_features
     - get_speech_features
-    - get_speech_features_with_autoreg_generate
 
 ## CLVPTransformerWithProjection
 
