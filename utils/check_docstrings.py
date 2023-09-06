@@ -59,9 +59,14 @@ _re_parse_arg = re.compile(r"^(\s*)(\S+)\s+\((.+)\)(?:\:|$)")
 _re_parse_description = re.compile(r"\*optional\*, defaults to (.*)$")
 
 
+# This is a temporary list of objects to ignore while we progressively fix them. Do not add anything here, fix the
+# docstrings instead.
 OBJECTS_TO_IGNORE = [
+    # Signature is *args/**kwargs, would be nice to fix
     "GenerationConfig",
     "PretrainedConfig",
+    "TrainerCallback",
+    # Missing arguments in the docstring
 ]
 
 # Supported math operations when interpreting the value of defaults.
@@ -165,6 +170,8 @@ def replace_default_in_arg_description(description: str, default: Any) -> str:
     Returns:
        `str`: The description updated with the new default value.
     """
+    # Lots of docstrings have `optional` instead of *optional* so we do this fix here.
+    description = description.replace("`optional`", OPTIONAL_KEYWORD)
     if default is inspect._empty:
         # No default, make sure the description doesn't have any either
         idx = description.find(OPTIONAL_KEYWORD)

@@ -29,13 +29,19 @@ from check_docstrings import get_default_description, replace_default_in_arg_des
 
 class CheckDostringsTested(unittest.TestCase):
     def test_replace_default_in_arg_description(self):
+        # Standard docstring with default.
         desc_with_default = "`float`, *optional*, defaults to 2.0"
         self.assertEqual(replace_default_in_arg_description(desc_with_default, 2.0), "`float`, *optional*, defaults to 2.0")
         self.assertEqual(replace_default_in_arg_description(desc_with_default, 1.0), "`float`, *optional*, defaults to 1.0")
-        # If the default is None we do not erase the value in the docstring.
-        self.assertEqual(replace_default_in_arg_description(desc_with_default, None), "`float`, *optional*, defaults to 2.0")
         self.assertEqual(replace_default_in_arg_description(desc_with_default, inspect._empty), "`float`")
 
+        # Standard docstring with default but optional is not using the stars.
+        desc_with_default_typo = "`float`, `optional`, defaults to 2.0"
+        self.assertEqual(replace_default_in_arg_description(desc_with_default_typo, 2.0), "`float`, *optional*, defaults to 2.0")
+        self.assertEqual(replace_default_in_arg_description(desc_with_default_typo, 1.0), "`float`, *optional*, defaults to 1.0")
+
+        # If the default is None we do not erase the value in the docstring.
+        self.assertEqual(replace_default_in_arg_description(desc_with_default, None), "`float`, *optional*, defaults to 2.0")
         # If the default is None (and set as such in the docstring), we do not include it.
         desc_with_default = "`float`, *optional*, defaults to None"
         self.assertEqual(replace_default_in_arg_description(desc_with_default, None), "`float`, *optional*")
