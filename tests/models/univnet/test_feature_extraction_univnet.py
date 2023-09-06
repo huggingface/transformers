@@ -256,7 +256,9 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
 
         # Test unbatched np.ndarray vs batched np.ndarray
         encoded_sequences_1 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
-        encoded_sequences_2 = feature_extractor(np.expand_dims(np_speech_inputs, axis=0), return_tensors="np").input_features
+        encoded_sequences_2 = feature_extractor(
+            np.expand_dims(np_speech_inputs, axis=0), return_tensors="np"
+        ).input_features
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
@@ -337,7 +339,6 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
 
         input_features_mean = torch.mean(input_features)
         input_features_stddev = torch.std(input_features)
-        input_features_slice = input_features[0, :30, 0]
 
         expected_mean = np.array([-6.18862009])
         expected_stddev = np.array([2.80845642])
