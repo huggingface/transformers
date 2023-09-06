@@ -441,7 +441,7 @@ class UnivNetFeatureExtractor(SequenceFeatureExtractor):
                 self.generate_noise(spectrogram.shape[0], model_in_channels, generator)
                 for spectrogram in batched_speech["input_features"]
             ]
-            batched_speech["noise_sequence"] = noise
+            batched_speech["noise_sequences"] = noise
 
         if do_normalize:
             batched_speech["input_features"] = [

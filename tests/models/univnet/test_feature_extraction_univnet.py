@@ -237,6 +237,38 @@ class UnivNetFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+    def test_generate_noise(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+
+        features = feature_extractor(speech_inputs, return_noise=True)
+        input_features = features.input_features
+        noise_features = features.noise_sequences
+
+        for spectrogram, noise in zip(input_features, noise_features):
+            self.assertEqual(spectrogram.shape[0], noise.shape[0])
+
+    def test_pad_end(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+
+        input_features1 = feature_extractor(speech_inputs, padding=False, pad_end=False).input_features
+        input_features2 = feature_extractor(speech_inputs, padding=False, pad_end=True).input_features
+
+        for spectrogram1, spectrogram2 in zip(input_features1, input_features2):
+            self.assertEqual(spectrogram1.shape[0] + self.feat_extract_tester.pad_end_length, spectrogram2.shape[0])
+
+    def test_generate_noise_and_pad_end(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+
+        features = feature_extractor(speech_inputs, padding=False, return_noise=True, pad_end=True)
+        input_features = features.input_features
+        noise_features = features.noise_sequences
+
+        for spectrogram, noise in zip(input_features, noise_features):
+            self.assertEqual(spectrogram.shape[0], noise.shape[0])
+
     @require_torch
     def test_double_precision_pad(self):
         import torch
