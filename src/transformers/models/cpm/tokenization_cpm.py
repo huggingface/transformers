@@ -38,6 +38,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
 class CpmTokenizer(PreTrainedTokenizer):
     """Runs pre-tokenization with Jieba segmentation tool. It is used in CPM models."""
 
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    
     def __init__(
         self,
         vocab_file,
