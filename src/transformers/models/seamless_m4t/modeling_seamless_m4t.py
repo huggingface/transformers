@@ -1864,10 +1864,11 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(self.vocab_size, config.hidden_size, self.padding_idx)
 
+        # padding_idx is 0 to stay consistent with the origina implementation for both text decoder and t2u decoder
         self.embed_positions = SeamlessM4TSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
             config.hidden_size,
-            self.padding_idx,
+            padding_idx=0,
         )
 
         self.layers = nn.ModuleList(
@@ -2032,7 +2033,7 @@ class SeamlessM4TDecoder(SeamlessM4TPreTrainedModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(input, past_key_values_length)
+        positions = self.embed_positions(input, past_key_values_length = past_key_values_length)
 
         hidden_states = inputs_embeds + positions.to(inputs_embeds.device)
 
@@ -2637,6 +2638,7 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        self.pad_token_id = config.t2u_pad_token_id
         self.dur_predictor = SeamlessM4TVariancePredictor(config)
 
         self.unit_embedding = nn.Embedding(config.unit_hifi_gan_vocab_size, config.unit_embed_dim)
@@ -2647,6 +2649,50 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
         
         # Initialize weights and apply final processing
         self.post_init()
+        
+    def _get_dur_output_lengths(self, input_ids, dur_out):
+        unit_lengths = (input_ids != self.pad_token_id).sum(1)
+        
+        cumulative_dur_out = torch.cumsum(dur_out, dim=1)
+        unit_lengths = cumulative_dur_out.gather(dim=1, index=unit_lengths.unsqueeze(1)).squeeze()
+        
+        return unit_lengths
+    
+    
+    # Copied from transformers.models.unispeech.modeling_unispeech.UniSpeechPreTrainedModel._get_feat_extract_output_lengths
+    def _get_output_hifigan_lengths(self, input_lengths: Union[torch.LongTensor, int]):
+        """
+        Computes the output length of the hifigan convolutional layers
+        """
+        
+        def _conv_out_length(input_length, kernel_size, stride, pad, dilation=1):
+            # 1D convolutional layer output length formula taken
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+            return torch.div(input_length + 2 * pad - dilation * (kernel_size - 1)-1, stride, rounding_mode="floor") + 1
+        
+        def _transpose_conv_out_length(input_length, kernel_size, stride, pad, dilation=1):
+            return (input_length-1)*stride -2*pad +dilation*(kernel_size-1)+1
+        
+        # conv_pre
+        input_lengths = _conv_out_length(input_lengths, 7, 1, 3)
+        
+        # upsampler
+        for i, (upsample_rate, kernel_size) in enumerate(zip(self.config.upsample_rates, self.config.upsample_kernel_sizes)):
+            input_lengths = _transpose_conv_out_length(input_lengths, kernel_size, upsample_rate,(kernel_size - upsample_rate) // 2)
+            
+        # resblock
+        for i in range(len(self.config.upsample_rates)):
+            for kernel_size, dilation in zip(self.config.resblock_kernel_sizes, self.config.resblock_dilation_sizes):               
+                for dil in dilation:
+                    input_lengths = _conv_out_length(input_lengths, kernel_size, 1, (kernel_size-1)*dil//2, dilation=dil)
+                    
+                for dil in dilation:
+                    input_lengths = _conv_out_length(input_lengths, kernel_size, 1, (kernel_size-1)//2, dilation=1)                
+
+        # conv_post
+        input_lengths = _conv_out_length(input_lengths, 7, 1, 3) 
+
+        return input_lengths
 
     def forward(
         self, input_ids: Tensor, speaker_id: Tensor, lang_id: Tensor
@@ -2663,7 +2709,6 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
         else:
             # if batched sample, need to interleave per sample, and pad -> loss of parallelism
             # TODO: warnings if self.training ?
-            dur_out = torch.randint_like(dur_out,1, 5)
             hidden_states = [torch.repeat_interleave(hidden_state, duration, dim=-1).transpose(0,1) for (hidden_state, duration) in zip(hidden_states,dur_out)]
             
             hidden_states = nn.utils.rnn.pad_sequence(hidden_states, batch_first=True).transpose(1,2)
@@ -2673,9 +2718,14 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
         lang = lang.repeat(1,1,hidden_states.shape[-1])
         hidden_states = torch.cat([lang, hidden_states, spkr], dim=1)
 
+        #mask = torch.arange(hidden_states.shape[2]).repeat(2,1)<unit_lengths.unsqueeze(1)
+        #hidden_states = hidden_states * mask.unsqueeze(1)
         hidden_states = self.hifi_gan(hidden_states)
+        
+        unit_lengths = self._get_dur_output_lengths(input_ids,dur_out)
+        lengths = self._get_output_hifigan_lengths(unit_lengths)
 
-        return hidden_states
+        return hidden_states, lengths
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -3970,7 +4020,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         t2u_generation_output = self.t2u_model.generate(inputs_embeds=t2u_input_embeds, **kwargs_speech)
 
         # TODO: adapt if return_generate dict
-
+        # TODO: t2u_generation_output is dynamically changed, is it ok to copy?
         unit_ids = t2u_generation_output
 
         # get rid of t2u_decoder_input_ids
