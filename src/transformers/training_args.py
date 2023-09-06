@@ -1235,7 +1235,7 @@ class TrainingArguments:
         },
     )
 
-    tgs_metrics: Optional[bool] = field(
+    include_tokens_per_second: Optional[bool] = field(
         default=False,
         metadata={"help": "If set to `True`, the speed metrics will include `tgs`(tokens per second per device)."},
     )
