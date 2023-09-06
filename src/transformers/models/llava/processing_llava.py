@@ -18,14 +18,13 @@ Processor class for InstructBLIP. Largely copy of Blip2Processor with addition o
 
 import os
 from typing import List, Optional, Union
-
+import torch
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
-from ..auto import AutoTokenizer
-
+from ..clip import CLIPVisionModel
 
 class LlavaProcessor(ProcessorMixin):
     r"""
@@ -40,13 +39,17 @@ class LlavaProcessor(ProcessorMixin):
             An instance of [`CLIPProcessor`]. The image processor is a required input.
         tokenizer (`AutoTokenizer`):
             An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
+        feature_extractor (`CLIPProcessor`):
+            An instance of ['PreTrainedTokenizer`]. The Q-Former tokenizer is a required input.
         """
     attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "CLIPProcessor"
     tokenizer_class = "AutoTokenizer"
+    image_processor_class = "CLIPImageProcessor"
 
-    def __init__(self, image_processor, tokenizer):
+    def __init__(self, image_processor, tokenizer, vision_model):
         super().__init__(image_processor, tokenizer)
+      
+        self.vision_model = vision_model
 
     def __call__(
         self,
@@ -74,14 +77,24 @@ class LlavaProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
+        # Model Constants
+        IGNORE_INDEX = -100
+        IMAGE_TOKEN_INDEX = 200
+        DEFAULT_IMAGE_TOKEN = "<image>"
+        DEFAULT_IMAGE_PATCH_TOKEN = "<im_patch>"
+        DEFAULT_IM_START_TOKEN = "<im_start>"
+        DEFAULT_IM_END_TOKEN = "<im_end>"
+
         if images is None and text is None:
             raise ValueError("You have to specify at least images or text.")
-
+        
+        text = DEFAULT_IMAGE_TOKEN + "\n" + text
         encoding = BatchFeature()
-
+        dummy = {}
         if text is not None:
-            text_encoding = self.tokenizer(
-                text=text,
+            print(self.tokenizer)
+            prompt_chunks = [self.tokenizer(
+                chunk,
                 add_special_tokens=add_special_tokens,
                 padding=padding,
                 truncation=truncation,
@@ -95,16 +108,41 @@ class LlavaProcessor(ProcessorMixin):
                 return_token_type_ids=return_token_type_ids,
                 return_length=return_length,
                 verbose=verbose,
-                return_tensors=return_tensors,
-                **kwargs,
-            )
-            encoding.update(text_encoding)
+                #return_tensors=return_tensors,
+            ).input_ids for chunk in text.split('<image>')]
+
+            def insert_separator(X, sep):
+                return [ele for sublist in zip(X, [sep]*len(X)) for ele in sublist][:-1]
+
+            input_ids = []
+            offset = 0
+            if len(prompt_chunks) > 0 and len(prompt_chunks[0]) > 0 and prompt_chunks[0][0] == self.tokenizer.bos_token_id:
+                offset = 1
+                input_ids.append(prompt_chunks[0][0])
+
+            for x in insert_separator(prompt_chunks, [IMAGE_TOKEN_INDEX] * (offset + 1)):
+                input_ids.extend(x[offset:])
+            
+            if return_tensors == 'pt':
+                input_ids = torch.tensor(input_ids, dtype=torch.long)
+            dummy["input_ids"] = input_ids.unsqueeze(0)
+            encoding.update(dummy)
 
         if images is not None:
-            image_encoding = self.image_processor(images, return_tensors=return_tensors)
-            encoding.update(image_encoding)
+            image_encoding = self.image_processor.preprocess(images, return_tensors=return_tensors)
+            vision_encoding = self.vision_model(image_encoding['pixel_values'], output_hidden_states=True)
+            image_features = vision_encoding.hidden_states[-2]
+            image_features = image_features[:, 1:]
 
+            dummy["pixel_values"] = image_features
+            encoding.update(dummy)
         return encoding
+
+
+    def feature_select(image_forward_outs):
+        image_features = image_forward_outs.hidden_states[-2]
+        image_features = image_features[:, 1:]
+        return image_features
 
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
     def batch_decode(self, *args, **kwargs):
@@ -121,4 +159,21 @@ class LlavaProcessor(ProcessorMixin):
         to the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
+    
+    @property
+    # Copied from transformers.models.blip.processing_blip.BlipProcessor.model_input_names
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+    
+    # overwrite to load the Q-Former tokenizer from a separate folder
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+        #pretrained_model_name_or_path = "openai/clip-vit-large-patch14"
+        vision_model = CLIPVisionModel.from_pretrained("openai/clip-vit-large-patch14")
+        #tokenizer = AutoTokenizer.from_pretrained("shauray/llva-llama-2-7B")
+        args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
+        args.append(vision_model)
+        return cls(*args)
 
