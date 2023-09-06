@@ -33,7 +33,14 @@ class MarkupLMProcessor(ProcessorMixin):
     Next, these are provided to [`MarkupLMTokenizer`] or [`MarkupLMTokenizerFast`], which turns them into token-level
     `input_ids`, `attention_mask`, `token_type_ids`, `xpath_tags_seq` and `xpath_subs_seq`.
 
-    Args:"""
+    Args:
+        feature_extractor (`MarkupLMFeatureExtractor`):
+            An instance of [`MarkupLMFeatureExtractor`]. The feature extractor is a required input.
+        tokenizer (`MarkupLMTokenizer` or `MarkupLMTokenizerFast`):
+            An instance of [`MarkupLMTokenizer`] or [`MarkupLMTokenizerFast`]. The tokenizer is a required input.
+        parse_html (`bool`, *optional*, defaults to `True`):
+            Whether or not to use `MarkupLMFeatureExtractor` to parse HTML strings into nodes and corresponding xpaths.
+    """
     feature_extractor_class = "MarkupLMFeatureExtractor"
     tokenizer_class = ("MarkupLMTokenizer", "MarkupLMTokenizerFast")
     parse_html = True
