@@ -412,7 +412,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
         # Delete token from added_tokens
         old_index = self.added_tokens_encoder[token]
-        del self.added_tokens_decoder[old_index]
+        self._added_tokens_decoder.pop(old_index)
 
     def moses_punct_norm(self, text):
         return self.moses_punct_normalizer.normalize(text)
