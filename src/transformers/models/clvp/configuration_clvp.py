@@ -37,10 +37,10 @@ CLVP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class CLVPTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLVPTextModel`]. It is used to instantiate a CLVP
-    text encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the text encoder of the CLVP
-    [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
+    This is the configuration class to store the configuration of a [`CLVPTransformerWithProjection`]. It is used to
+    instantiate a CLVP text encoder according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the text encoder of
+    the CLVP [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -48,7 +48,7 @@ class CLVPTextConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 256):
             Vocabulary size of the CLVP text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`CLVPTextModel`].
+            the `inputs_ids` passed when calling [`CLVPTransformerWithProjection`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 1536):
@@ -82,13 +82,13 @@ class CLVPTextConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CLVPTextConfig, CLVPTextModel
+    >>> from transformers import CLVPTextConfig, CLVPTransformerWithProjection
 
     >>> # Initializing a CLVPTextConfig with susnato/clvp_dev style configuration
     >>> configuration = CLVPTextConfig()
 
-    >>> # Initializing a CLVPTextModel (with random weights) from the susnato/clvp_dev style configuration
-    >>> model = CLVPTextModel(configuration)
+    >>> # Initializing a CLVPTransformerWithProjection (with random weights) from the susnato/clvp_dev style configuration
+    >>> model = CLVPTransformerWithProjection(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -154,10 +154,10 @@ class CLVPTextConfig(PretrainedConfig):
 
 class CLVPSpeechConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`CLVPSpeechModel`]. It is used to instantiate a
-    CLVP speech encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the speech encoder of the CLVP
-    [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
+    This is the configuration class to store the configuration of a [`CLVPTransformerWithProjection`]. It is used to
+    instantiate a CLVP speech encoder according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the speech encoder of
+    the CLVP [susnato/clvp_dev](https://huggingface.co/susnato/clvp_dev) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -165,7 +165,7 @@ class CLVPSpeechConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 8192):
             Vocabulary size of the CLVP speech model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`CLVPSpeechModel`].
+            the `inputs_ids` passed when calling [`CLVPTransformerWithProjection`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 1536):
@@ -199,13 +199,13 @@ class CLVPSpeechConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import CLVPSpeechConfig, CLVPSpeechModel
+    >>> from transformers import CLVPSpeechConfig, CLVPTransformerWithProjection
 
     >>> # Initializing a CLVPSpeechConfig with susnato/clvp_dev style configuration
     >>> configuration = CLVPSpeechConfig()
 
-    >>> # Initializing a CLVPSpeechModel (with random weights) from the susnato/clvp_dev style configuration
-    >>> model = CLVPSpeechModel(configuration)
+    >>> # Initializing a CLVPTransformerWithProjection (with random weights) from the susnato/clvp_dev style configuration
+    >>> model = CLVPTransformerWithProjection(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

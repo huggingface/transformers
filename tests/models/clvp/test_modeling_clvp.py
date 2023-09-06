@@ -186,11 +186,11 @@ class CLVPTransformerWithProjectionTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="CLVPTextModelWithProjection does not output loss")
+    @unittest.skip(reason="CLVPTransformerWithProjection does not output loss")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="CLVPTextModelWithProjection does not output loss")
+    @unittest.skip(reason="CLVPTransformerWithProjection does not output loss")
     def test_training_gradient_checkpointing(self):
         pass
 

@@ -84,7 +84,7 @@ def number_to_words(num: int) -> str:
 
     ```python
     >>> print(number_to_words(1_101_000_000_000))
-    'one trillion, one hundred one billion'
+    one trillion, one hundred one billion
     ```
     """
 
@@ -231,7 +231,7 @@ def normalize_numbers(text: str) -> str:
 
     ```python
     >>> print(normalize_numbers("$1000.51"))
-    "one thousand dollars, fifty-one cents"
+    one thousand dollars, fifty-one cents
     ```
     """
 
@@ -252,7 +252,7 @@ def expand_abbreviations(text: str) -> str:
 
     ```python
     >>> print(expand_abbreviations("mrs."))
-    "misess"
+    misess
     ```
     """
 
