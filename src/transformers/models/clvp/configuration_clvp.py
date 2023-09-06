@@ -490,7 +490,7 @@ class CLVPConfig(PretrainedConfig):
     >>> config_speech = CLVPSpeechConfig()
     >>> autoregressive_config = CLVPAutoRegressiveConfig()
 
-    >>> config = CLVPConfig.from_text_speech_configs(config_text, config_speech, autoregressive_config)
+    >>> config = CLVPConfig.from_sub_model_configs(config_text, config_speech, autoregressive_config)
     ```"""
 
     model_type = "clvp"
