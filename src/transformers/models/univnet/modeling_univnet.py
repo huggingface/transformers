@@ -63,19 +63,21 @@ class UnivNetKernelPredictorResidualBlock(nn.Module):
         super().__init__()
         self.leaky_relu_slope = leaky_relu_slope
 
+        padding = (kernel_size - 1) // 2
+
         self.dropout = nn.Dropout(dropout)
         self.conv1 = nn.Conv1d(
             channels,
             channels,
             kernel_size,
-            padding=self.get_padding(kernel_size),
+            padding=padding,
             bias=True,
         )
         self.conv2 = nn.Conv1d(
             channels,
             channels,
             kernel_size,
-            padding=self.get_padding(kernel_size),
+            padding=padding,
             bias=True,
         )
 
@@ -88,9 +90,6 @@ class UnivNetKernelPredictorResidualBlock(nn.Module):
         hidden_states = self.conv2(hidden_states)
         hidden_states = nn.functional.leaky_relu(hidden_states, self.leaky_relu_slope)
         return hidden_states + residual
-
-    def get_padding(self, kernel_size: int, dilation: int = 1):
-        return dilation * (kernel_size - 1) // 2
 
     def apply_weight_norm(self):
         nn.utils.weight_norm(self.conv1)
@@ -158,7 +157,7 @@ class UnivNetKernelPredictor(nn.Module):
 
         kernel_channels = conv_in_channels * conv_out_channels * conv_kernel_size * conv_layers
         bias_channels = conv_out_channels * conv_layers
-        padding = self.get_padding(resnet_kernel_size)
+        padding = (resnet_kernel_size - 1) // 2
 
         self.input_conv = nn.Conv1d(resnet_in_channels, resnet_hidden_channels, 5, padding=2, bias=True)
 
@@ -227,9 +226,6 @@ class UnivNetKernelPredictor(nn.Module):
 
         return kernels, biases
 
-    def get_padding(self, kernel_size: int, dilation: int = 1):
-        return dilation * (kernel_size - 1) // 2
-
     def apply_weight_norm(self):
         nn.utils.weight_norm(self.input_conv)
         for layer in self.resblocks:
@@ -271,11 +267,13 @@ class UnivNetLVCResidualBlock(nn.Module):
         self.hidden_channels = hidden_channels
         self.leaky_relu_slope = leaky_relu_slope
 
+        padding = dilation * (kernel_size - 1) // 2
+
         self.conv = nn.Conv1d(
             hidden_channels,
             hidden_channels,
             kernel_size,
-            padding=self.get_padding(kernel_size, dilation),
+            padding=padding,
             dilation=dilation,
         )
 
@@ -363,9 +361,6 @@ class UnivNetLVCResidualBlock(nn.Module):
         output_hidden_states = output_hidden_states.contiguous().view(batch, out_channels, -1)
 
         return output_hidden_states
-
-    def get_padding(self, kernel_size: int, dilation: int = 1):
-        return dilation * (kernel_size - 1) // 2
 
     def apply_weight_norm(self):
         nn.utils.weight_norm(self.conv)
