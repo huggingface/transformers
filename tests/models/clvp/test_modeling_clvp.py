@@ -16,7 +16,6 @@
 
 
 import gc
-
 import tempfile
 import unittest
 
@@ -379,34 +378,6 @@ class CLVPAutoRegressiveLMHeadModelTest(ModelTesterMixin, GenerationTesterMixin,
 
         return inputs_dict
 
-    @unittest.skip(
-        "This test is not valid for CLVPAutoRegressiveLMHeadModel since save_pretrained and from_pretrained can"
-        "give errors in most cases."
-    )
-    def test_save_load(self):
-        pass
-
-    @unittest.skip(
-        "This test is not valid for CLVPAutoRegressiveLMHeadModel since save_pretrained and from_pretrained can"
-        "give errors in most cases."
-    )
-    def test_head_pruning_save_load_from_pretrained(self):
-        pass
-
-    @unittest.skip(
-        "This test is not valid for CLVPAutoRegressiveLMHeadModel since save_pretrained and from_pretrained can"
-        "give errors in most cases."
-    )
-    def test_load_save_without_tied_weights(self):
-        pass
-
-    @unittest.skip(
-        "This test is not valid for CLVPAutoRegressiveLMHeadModel since save_pretrained and from_pretrained can"
-        "give errors in most cases."
-    )
-    def test_can_use_safetensors(self):
-        pass
-
 
 @require_torch
 class CLVPModelTest(ModelTesterMixin, unittest.TestCase):
@@ -548,7 +519,7 @@ class CLVPModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(conditioning_encoder_outputs[0, :3, :3], EXPECTED_OUTPUTS, atol=1e-4))
 
     def test_autoregressive_model_generate(self):
-        autoregressive_model_output = self.model.autoregressive_model.generate(input_ids=self.text_tokens).cpu()
+        autoregressive_model_output = self.model.speech_autoregressive_model.generate(input_ids=self.text_tokens).cpu()
 
         EXPECTED_OUTPUTS = torch.tensor([[147, 2, 54, 2, 43, 2, 169, 122, 29, 64, 2, 136, 37, 33, 9, 8193]])
 
@@ -592,7 +563,5 @@ class CLVPModelIntegrationTest(unittest.TestCase):
         ).speech_candidates.cpu()
 
         EXPECTED_OUTPUTS = torch.tensor([[729, 155, 334], [757, 729, 1305], [729, 757, 334]])
-
-        print(full_model_output[-3:, -3:])
 
         self.assertTrue(torch.allclose(full_model_output[-3:, -3:], EXPECTED_OUTPUTS))

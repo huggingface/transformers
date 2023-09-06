@@ -14,7 +14,9 @@
 # limitations under the License.
 """ CLVP model configuration"""
 
+
 import copy
+import json
 import os
 from typing import TYPE_CHECKING, Union
 
@@ -327,22 +329,10 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
             Whether the projection outputs should have `config.num_labels` or `config.hidden_size` classes.
         summary_first_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio to be used after the projection and activation.
-        scale_attn_weights (`bool`, *optional*, defaults to `True`):
-            Scale attention weights by dividing by sqrt(hidden_size)..
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        scale_attn_by_inverse_layer_idx (`bool`, *optional*, defaults to `False`):
-            Whether to additionally scale attention weights by `1 / layer_idx + 1`.
-        reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
-            Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
-            dot-product/softmax to float() when training with mixed precision.
         feature_size (`int`, *optional*, defaults to 80):
             The feature dimension of the extracted mel features. This value is used in `CLVPConditioningEncoder`.
-        relative_attention_num_buckets (`int`, *optional*, defaults to 32):
-            The number of buckets to use for each attention layer. This value is used in `CLVPRelativeAttention`.
-        relative_attention_max_distance (`int`, *optional*, defaults to 128):
-            The maximum distance of the longer sequences for the bucket separation. This value is used in
-            `CLVPRelativeAttention`.
         use_attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in Query, Key and Value layers during self attention.
         initializer_factor (`float`, *optional*, defaults to 1):
@@ -379,15 +369,10 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
         summary_activation=None,
         summary_proj_to_labels=True,
         summary_first_dropout=0.1,
-        scale_attn_weights=True,
         use_cache=True,
         bos_token_id=8192,
         eos_token_id=8193,
-        scale_attn_by_inverse_layer_idx=False,
-        reorder_and_upcast_attn=False,
         feature_size=80,
-        relative_attention_num_buckets=32,
-        relative_attention_max_distance=128,
         use_attention_bias=True,
         initializer_factor=1.0,
         **kwargs,
@@ -410,13 +395,8 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
         self.summary_activation = summary_activation
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
-        self.scale_attn_weights = scale_attn_weights
         self.use_cache = use_cache
-        self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
-        self.reorder_and_upcast_attn = reorder_and_upcast_attn
         self.feature_size = feature_size
-        self.relative_attention_num_buckets = relative_attention_num_buckets
-        self.relative_attention_max_distance = relative_attention_max_distance
         self.use_attention_bias = use_attention_bias
         self.initializer_factor = initializer_factor
 
@@ -442,6 +422,26 @@ class CLVPAutoRegressiveConfig(PretrainedConfig):
             )
 
         return cls.from_dict(config_dict, **kwargs)
+
+    # This makes sure that the config will be saved as a nested dict of {"autoregressive_config": config}, so that
+    # when loading the `CLVPAutoRegressiveLMHeadModel` from a custom config won't fail.
+    def to_json_string(self, use_diff: bool = True) -> str:
+        """
+        Serializes this instance to a JSON string.
+
+        Args:
+            use_diff (`bool`, *optional*, defaults to `True`):
+                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
+                is serialized to JSON string.
+
+        Returns:
+            `str`: String containing all the attributes that make up this configuration instance in JSON format.
+        """
+        if use_diff is True:
+            config_dict = {"autoregressive_config": self.to_diff_dict()}
+        else:
+            config_dict = {"autoregressive_config": self.to_dict()}
+        return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
 
 class CLVPConfig(PretrainedConfig):

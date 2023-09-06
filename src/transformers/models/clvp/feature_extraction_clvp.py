@@ -228,7 +228,7 @@ class CLVPFeatureExtractor(SequenceFeatureExtractor):
 
         return padded_inputs.convert_to_tensors(return_tensors)
 
-    # Copied from transformers.models.whisper.feature_extraction_whisper.to_dict
+    # Copied from transformers.models.whisper.feature_extraction_whisper.WhisperFeatureExtractor.to_dict
     def to_dict(self) -> Dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.

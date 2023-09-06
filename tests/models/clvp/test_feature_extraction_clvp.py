@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import gc
-
 import itertools
 import os
 import random

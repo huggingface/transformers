@@ -14,7 +14,6 @@
 
 
 import gc
-
 import shutil
 import tempfile
 import unittest
@@ -25,7 +24,6 @@ from transformers import CLVPFeatureExtractor, CLVPProcessor, CLVPTokenizer
 from transformers.testing_utils import require_torch
 
 from .test_feature_extraction_clvp import floats_list
-
 
 
 @require_torch
