@@ -40,6 +40,7 @@ from ...utils import (
     add_start_docstrings,
     logging,
 )
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings, add_code_sample_docstrings
 from .configuration_seamless_m4t import SeamlessM4TConfig
 
 
@@ -99,43 +100,95 @@ SEAMLESS_M4T_START_DOCSTRING = r"""
 
 SEAMLESS_M4T_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`SeamlessM4TTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
+            Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
+        attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Indices of decoder input sequence tokens in the vocabulary.
 
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
-            [What are token type IDs?](../glossary#token-type-ids)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.max_position_embeddings - 1]`.
+            [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+            Bart uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If `past_key_values`
+            is used, optionally only the last `decoder_input_ids` have to be input (see `past_key_values`).
+
+            For translation and summarization training, `decoder_input_ids` should be provided. If no
+            `decoder_input_ids` is provided, the model will create this tensor by shifting the `input_ids` to the right
+            for denoising pre-training following the paper.
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+
+            If you want to change padding behavior, you should read [`modeling_bart._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
+        head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
-            model's internal embedding lookup matrix.
+        decoder_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
+            Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in `[0,
+            1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape`(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you
+            can choose to directly pass an embedded representation. This is useful if you want more control over how to
+            convert `input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
+            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
+            input (see `past_key_values`). This is useful if you want more control over how to convert
+            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+
+            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
+            of `inputs_embeds`.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
+            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
+            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -2923,8 +2976,17 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
 
     def generate(self, input_ids=None, tgt_lang=None, **kwargs):
         """
-        kwargs (*optional*): Remaining dictionary of keyword arguments that will be passed to
-        [`GenerationMixin.generate`].
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        tgt_lang (`str`, *optional*):
+            The language to use as target language for translation.
+            
+        kwargs (*optional*): Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`].
         """
         # prepare text_decoder_input_ids
         text_decoder_input_ids = kwargs.pop("decoder_input_ids", None)
@@ -3147,8 +3209,13 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
 
     def generate(self, input_features=None, tgt_lang=None, **kwargs):
         """
-        kwargs (*optional*): Remaining dictionary of keyword arguments that will be passed to
-        [`GenerationMixin.generate`].
+        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
+            Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
+            
+        tgt_lang (`str`, *optional*):
+            The language to use as target language for translation.
+            
+        kwargs (*optional*): Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`].
         """
         # prepare text_decoder_input_ids
         text_decoder_input_ids = kwargs.pop("decoder_input_ids", None)
@@ -3292,6 +3359,37 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
         spkr_id: Optional[int] = None,
         **kwargs,
     ) -> Union[torch.Tensor, SeamlessM4TGenerationOutput]:
+        """
+        Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        return_intermediate_token_ids (`bool`, *optional*):
+            If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter will be ignored.
+        
+        tgt_lang (`str`, *optional*):
+            The language to use as target language for translation.
+        spkr_id (`int`, *optional*):
+            The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
+
+        kwargs (*optional*): Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword arguments are of two types:
+
+                - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model, except for `decoder_input_ids` which will only be passed through the text components.
+                - With a *text_* or *speech_* prefix, they will be input for the `generate` method of the
+                text model and speech model respectively. It has the priority over the keywords without a prefix.
+
+                This means you can, for example, specify a generation strategy for one generation but not for the other.
+
+
+        Returns:
+            `Union[SeamlessM4TGenerationOutput, Tuple[Tensor]]`:
+            - If `return_intermediate_token_ids`, returns [`SeamlessM4TGenerationOutput`]. 
+            - If not `return_intermediate_token_ids`, returns a tuple composed of waveforms of shape `(batch_size, sequence_length)`and and `waveform_lengths` which gives the length of each sample.
+        """
         batch_size = len(input_ids) if input_ids is not None else len(kwargs.get("inputs_embeds"))
 
         # prepare text_decoder_input_ids
@@ -3523,6 +3621,33 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
         spkr_id: Optional[int] = None,
         **kwargs,
     ) -> Union[torch.Tensor, SeamlessM4TGenerationOutput]:
+        """
+        Args:
+        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
+            Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
+            
+        return_intermediate_token_ids (`bool`, *optional*):
+            If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter will be ignored.
+        
+        tgt_lang (`str`, *optional*):
+            The language to use as target language for translation.
+        spkr_id (`int`, *optional*):
+            The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
+
+        kwargs (*optional*): Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword arguments are of two types:
+
+                - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model, except for `decoder_input_ids` which will only be passed through the text components.
+                - With a *text_* or *speech_* prefix, they will be input for the `generate` method of the
+                text model and speech model respectively. It has the priority over the keywords without a prefix.
+
+                This means you can, for example, specify a generation strategy for one generation but not for the other.
+
+
+        Returns:
+            `Union[SeamlessM4TGenerationOutput, Tuple[Tensor]]`:
+            - If `return_intermediate_token_ids`, returns [`SeamlessM4TGenerationOutput`]. 
+            - If not `return_intermediate_token_ids`, returns a tuple composed of waveforms of shape `(batch_size, sequence_length)`and and `waveform_lengths` which gives the length of each sample.
+        """
         batch_size = len(input_features) if input_features is not None else len(kwargs.get("inputs_embeds"))
 
         # prepare text_decoder_input_ids
@@ -3744,12 +3869,12 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         self.text_decoder.embed_tokens = value
         self.shared = value
 
-    # @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    # @add_code_sample_docstrings(
-    #    checkpoint=_CHECKPOINT_FOR_DOC,
-    #    output_type=BaseModelOutputWithPastAndCrossAttentions,
-    #    config_class=_CONFIG_FOR_DOC,
-    # )
+    @add_start_docstrings_to_model_forward(SEAMLESS_M4T_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+       checkpoint=_CHECKPOINT_FOR_DOC,
+       output_type=Seq2SeqLMOutput,
+       config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -3771,16 +3896,6 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
-
-        """
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -3895,7 +4010,6 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
             encoder_attentions=encoder_outputs.attentions,
         )
 
-    # TODO: in docstrings, if not generate_speech return generation output
     @torch.no_grad()
     def generate(
         self,
@@ -3904,9 +4018,45 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         return_intermediate_token_ids: Optional[bool] = None,
         tgt_lang: Optional[str] = None,
         spkr_id: Optional[int] = None,
-        generate_speech: bool = True,
+        generate_speech: Optional[bool] = True,
         **kwargs,
     ) -> Union[torch.Tensor, SeamlessM4TGenerationOutput]:
+        """
+        Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
+            Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
+            
+        return_intermediate_token_ids (`bool`, *optional*):
+            If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter will be ignored.
+        
+        tgt_lang (`str`, *optional*):
+            The language to use as target language for translation.
+        spkr_id (`int`, *optional*):
+            The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
+        generate_speech (`bool`, *optional*, defaults to `True`):
+            If `False`, will only returns the text tokens and won't generate speech.
+        
+        kwargs (*optional*): Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword arguments are of two types:
+
+                - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model, except for `decoder_input_ids` which will only be passed through the text components.
+                - With a *text_* or *speech_* prefix, they will be input for the `generate` method of the
+                text model and speech model respectively. It has the priority over the keywords without a prefix.
+
+                This means you can, for example, specify a generation strategy for one generation but not for the other.
+
+        Returns:
+            `Union[SeamlessM4TGenerationOutput, Tuple[Tensor], ModelOutput]`:
+            - If `generate_speech` and `return_intermediate_token_ids`, returns [`SeamlessM4TGenerationOutput`]. 
+            - If `generate_speech` and not `return_intermediate_token_ids`, returns a tuple composed of waveforms of shape `(batch_size, sequence_length)`and and `waveform_lengths` which gives the length of each sample.
+            - If `generate_speech`, it will returns `ModelOutput`.
+        """
         if input_ids is None and input_features is None and kwargs.get("inputs_embeds", None) is None:
             raise ValueError(
                 "`input_ids`,`input_features` and `inputs_embeds` are all empty. Make sure at least one of them is not."
