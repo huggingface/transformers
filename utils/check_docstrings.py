@@ -67,9 +67,12 @@ OBJECTS_TO_IGNORE = [
     # Deprecated
     "InputExample",
     "InputFeatures",
-    # Signature is *args/**kwargs, would be nice to fix but ignored them for now
-    # "PretrainedConfig",
-    # "GenerationConfig",
+    # Signature is *args/**kwargs
+    # "PretrainedConfig", #ignored but could be fixed
+    # "GenerationConfig", #ignored but could be fixed
+    "TFSequenceSummary",
+    "TFBertTokenizer",
+    "TFGPT2Tokenizer",
     # Missing arguments in the docstring
     "ASTFeatureExtractor",
     "AlbertConfig",
@@ -644,7 +647,7 @@ def find_source_file(obj: Any) -> Path:
     obj_file = PATH_TO_TRANSFORMERS
     for part in module.split(".")[1:]:
         obj_file = obj_file / part
-    obj_file = obj_file.with_suffix(".py")
+    return obj_file.with_suffix(".py")
 
 
 def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
