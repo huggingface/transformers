@@ -15,14 +15,14 @@
 """ Testing suite for the PyTorch SeamlessM4T model. """
 
 
-import unittest
+import copy
 import inspect
+import unittest
 
-from transformers import SeamlessM4TConfig, SeamlessM4TProcessor, is_torch_available, GenerationConfig
+from transformers import SeamlessM4TConfig, SeamlessM4TProcessor, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import cached_property
 from transformers.trainer_utils import set_seed
-
+from transformers.utils import cached_property
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -33,8 +33,6 @@ from ...test_modeling_common import (
     ids_tensor,
     random_attention_mask,
 )
-
-import copy
 
 
 if is_torch_available():
@@ -86,7 +84,6 @@ class SeamlessM4TModelTester:
         t2u_encoder_ffn_dim=6,
         t2u_decoder_ffn_dim=6,
         num_heads=2,
-        
         vocoder_num_spkrs=5,
         vocoder_num_langs=5,
         upsample_initial_channel=32,
@@ -94,10 +91,8 @@ class SeamlessM4TModelTester:
         spkr_embed_dim=6,
         lang_embed_dim=6,
         num_conv_pos_embeddings=8,
-
-        
-        unit_hifi_gan_vocab_size = 15,
-        t2u_num_langs = 0,
+        unit_hifi_gan_vocab_size=15,
+        t2u_num_langs=0,
         t2u_max_new_tokens=10,
         vocoder_offset_tgt_lang=0,
     ):
@@ -133,7 +128,7 @@ class SeamlessM4TModelTester:
         self.t2u_decoder_ffn_dim = t2u_decoder_ffn_dim
         self.num_heads = num_heads
         self.num_attention_heads = num_heads
-        
+
         self.vocoder_num_spkrs = vocoder_num_spkrs
         self.vocoder_num_langs = vocoder_num_langs
         self.upsample_initial_channel = upsample_initial_channel
@@ -141,25 +136,25 @@ class SeamlessM4TModelTester:
         self.spkr_embed_dim = spkr_embed_dim
         self.num_conv_pos_embeddings = num_conv_pos_embeddings
         self.lang_embed_dim = lang_embed_dim
-        
+
         self.max_new_tokens = max_new_tokens
-        
+
         self.unit_hifi_gan_vocab_size = unit_hifi_gan_vocab_size
         self.t2u_num_langs = t2u_num_langs
         self.t2u_max_new_tokens = t2u_max_new_tokens
         self.vocoder_offset_tgt_lang = vocoder_offset_tgt_lang
-        
+
     def prepare_config_and_inputs(self):
         if self.input_modality == "text":
-            inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size-1)
+            inputs = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 1)
         else:
-            inputs = ids_tensor([self.batch_size, self.seq_length, 160], self.vocab_size-1).float()
+            inputs = ids_tensor([self.batch_size, self.seq_length, 160], self.vocab_size - 1).float()
 
         input_mask = None
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
-            
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size-1)
+
+        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 1)
 
         lm_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
 
@@ -176,7 +171,7 @@ class SeamlessM4TModelTester:
             vocab_size=self.vocab_size,
             unit_vocab_size=self.unit_vocab_size,
             hidden_size=self.hidden_size,
-            speech_encoder_layers = self.num_heads,
+            speech_encoder_layers=self.num_heads,
             speech_encoder_intermediate_size=self.intermediate_size,
             max_position_embeddings=self.max_position_embeddings,
             encoder_layers=self.encoder_layers,
@@ -206,7 +201,7 @@ class SeamlessM4TModelTester:
             t2u_num_langs=self.t2u_num_langs,
             t2u_max_new_tokens=self.t2u_max_new_tokens,
             vocoder_offset_tgt_lang=self.vocoder_offset_tgt_lang,
-            model_in_dim=self.unit_embed_dim +self.spkr_embed_dim +self.lang_embed_dim
+            model_in_dim=self.unit_embed_dim + self.spkr_embed_dim + self.lang_embed_dim,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -232,7 +227,7 @@ class SeamlessM4TModelTester:
             encoder_hidden_states,
             encoder_attention_mask,
         )
-        
+
     def create_and_check_model(self, config, input_ids, decoder_input_ids, input_mask, labels):
         model = SeamlessM4TModel(config=config)
         model.to(torch_device)
@@ -242,11 +237,10 @@ class SeamlessM4TModelTester:
             result = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
             self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         else:
-            result = model(input_features=input_ids, attention_mask=input_mask, decoder_input_ids= decoder_input_ids)
-            result = model(input_features=input_ids,decoder_input_ids=decoder_input_ids)
+            result = model(input_features=input_ids, attention_mask=input_mask, decoder_input_ids=decoder_input_ids)
+            result = model(input_features=input_ids, decoder_input_ids=decoder_input_ids)
             self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-            
-            
+
         decoder_output = result.logits
         decoder_past = result.past_key_values
         encoder_output = result.encoder_last_hidden_state
@@ -256,14 +250,13 @@ class SeamlessM4TModelTester:
         else:
             # if speech, expected length has been subsampled.
             seq_length = model._compute_sub_sample_lengths_from_attention_mask(input_mask).max().item()
-            
+
         self.parent.assertEqual(encoder_output.size(), (self.batch_size, seq_length, self.hidden_size))
         self.parent.assertEqual(decoder_output.size(), (self.batch_size, decoder_input_ids.shape[1], self.vocab_size))
         # There should be `num_layers` key value embeddings stored in decoder_past
         self.parent.assertEqual(len(decoder_past), config.decoder_layers)
         # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
         self.parent.assertEqual(len(decoder_past[0]), 4)
-
 
     def create_and_check_decoder_model_past_large_inputs(
         self,
@@ -281,7 +274,9 @@ class SeamlessM4TModelTester:
         model.eval()
 
         # first forward pass
-        outputs = model(input_ids, decoder_input_ids=decoder_input_ids, decoder_attention_mask=input_mask, use_cache=True)
+        outputs = model(
+            input_ids, decoder_input_ids=decoder_input_ids, decoder_attention_mask=input_mask, use_cache=True
+        )
         past_key_values = outputs.past_key_values
 
         # create hypothetical multiple next token and extent to next_input_ids
@@ -292,7 +287,12 @@ class SeamlessM4TModelTester:
         next_input_ids = torch.cat([decoder_input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
-        output_from_no_past = model(input_ids, decoder_input_ids=next_input_ids, decoder_attention_mask=next_attention_mask, output_hidden_states=True)
+        output_from_no_past = model(
+            input_ids,
+            decoder_input_ids=next_input_ids,
+            decoder_attention_mask=next_attention_mask,
+            output_hidden_states=True,
+        )
         output_from_no_past = output_from_no_past["decoder_hidden_states"][0]
         output_from_past = model(
             input_ids,
@@ -311,7 +311,7 @@ class SeamlessM4TModelTester:
 
         # test that outputs are equal for slice
         # TODO: invest why error
-        print((output_from_past_slice-output_from_no_past_slice).abs().max())
+        print((output_from_past_slice - output_from_no_past_slice).abs().max())
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def prepare_config_and_inputs_for_common(self):
@@ -326,7 +326,12 @@ class SeamlessM4TModelTester:
 
         input_name = "input_ids" if self.input_modality == "text" else "input_features"
 
-        inputs_dict = {input_name: input_ids, "attention_mask": input_mask, "decoder_input_ids":decoder_input_ids, "labels": lm_labels}
+        inputs_dict = {
+            input_name: input_ids,
+            "attention_mask": input_mask,
+            "decoder_input_ids": decoder_input_ids,
+            "labels": lm_labels,
+        }
         return config, inputs_dict
 
 
@@ -449,27 +454,31 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
                             [0.0, 1.0],
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
-         
+
     @unittest.skip(reason="SeamlessM4TSpeechEncoder doesn't have an embedding layer")
     def test_inputs_embeds(self):
         pass
-    
-    @unittest.skip(reason="Expected missing keys serve when using SeamlessM4TForXXX.from_pretrained from a checkpoint saved by SeamlessM4TModel.save_pretrained.")
+
+    @unittest.skip(
+        reason="Expected missing keys serve when using SeamlessM4TForXXX.from_pretrained from a checkpoint saved by SeamlessM4TModel.save_pretrained."
+    )
     def test_model_weights_reload_no_missing_tied_weights(self):
         pass
-    
-    @unittest.skip(reason="SeamlessM4TModel has actually a bigger architecture than seamlessM4T models for specific tasks.")
+
+    @unittest.skip(
+        reason="SeamlessM4TModel has actually a bigger architecture than seamlessM4T models for specific tasks."
+    )
     def test_save_load_fast_init_to_base(self):
         pass
-    
+
     @unittest.skip(reason="The speech encoder doesn't support head masking")
     def test_generate_with_head_masking(self):
         pass
-                
+
     @unittest.skip(reason="SeamlessM4TModel can takes input_ids or input_features")
     def test_forward_signature(self):
         pass
-    
+
     def test_attention_outputs(self):
         # expected length is subsampled so need to change a bit this test
         if not self.has_attentions:
@@ -484,7 +493,6 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
         decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
         # no more chunk_length test
-
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -508,7 +516,6 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
@@ -540,8 +547,10 @@ class SeamlessM4TModelWithSpeechInputTest(ModelTesterMixin, unittest.TestCase):
                 cross_attentions = outputs.cross_attentions
                 self.assertIsInstance(cross_attentions, (list, tuple))
                 self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
-                
-                sub_sampled_length = model._compute_sub_sample_lengths_from_attention_mask(inputs_dict["attention_mask"]).max().item()
+
+                sub_sampled_length = (
+                    model._compute_sub_sample_lengths_from_attention_mask(inputs_dict["attention_mask"]).max().item()
+                )
                 self.assertListEqual(
                     list(cross_attentions[0].shape[-3:]),
                     [
@@ -587,7 +596,7 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
     test_resize_embeddings = True
     test_headmasking = False
     test_torchscript = False
-    
+
     all_model_classes = (
         (
             SeamlessM4TModel,
@@ -654,10 +663,12 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
-    @unittest.skip(reason="Expected missing keys serve when using SeamlessM4TForXXX.from_pretrained from a checkpoint saved by SeamlessM4TModel.save_pretrained.")
+    @unittest.skip(
+        reason="Expected missing keys serve when using SeamlessM4TForXXX.from_pretrained from a checkpoint saved by SeamlessM4TModel.save_pretrained."
+    )
     def test_model_weights_reload_no_missing_tied_weights(self):
         pass
-    
+
     def test_generate_with_head_masking(self):
         """Test designed for encoder-decoder models to ensure the attention head masking is used."""
         attention_names = ["encoder_attentions", "decoder_attentions", "cross_attentions"]
@@ -694,140 +705,125 @@ class SeamlessM4TModelWithTextInputTest(ModelTesterMixin, GenerationTesterMixin,
                 # We check the state of decoder_attentions and cross_attentions just from the last step
                 attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
                 self.assertEqual(sum([w.sum().item() for w in attn_weights]), 0.0)
-                
 
     @unittest.skip(reason="SeamlessM4TModel can takes input_ids or input_features")
     def test_forward_signature(self):
         pass
-    
+
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    @unittest.skip(reason="SeamlessM4TModel has actually a bigger architecture than seamlessM4T models for specific tasks.")
+    @unittest.skip(
+        reason="SeamlessM4TModel has actually a bigger architecture than seamlessM4T models for specific tasks."
+    )
     def test_save_load_fast_init_to_base(self):
         pass
-    
+
 
 @require_torch
 class SeamlessM4TMGenerationTest(unittest.TestCase):
     # test that non-standard generation works
     # test generation of: SeamlessM4TModel, SeamlessM4TForSpeechToSpeech, SeamlessM4TForSpeechToText, SeamlessM4TForTextToSpeech
-    
+
     def setUp(self):
         self.speech_model_tester = SeamlessM4TModelTester(self, input_modality="speech")
         self.text_model_tester = SeamlessM4TModelTester(self, input_modality="text")
-        
+
     def update_generation(self, model):
         lang_code_to_id = {
             "fra": 4,
             "eng": 4,
         }
-        
+
         generation_config = copy.deepcopy(model.generation_config)
-        
-        
-        generation_config.__setattr__("text_decoder_lang_to_code_id",lang_code_to_id)
-        generation_config.__setattr__("t2u_lang_code_to_id",lang_code_to_id)
-        generation_config.__setattr__("vocoder_lang_code_to_id",lang_code_to_id)
-        
+
+        generation_config.__setattr__("text_decoder_lang_to_code_id", lang_code_to_id)
+        generation_config.__setattr__("t2u_lang_code_to_id", lang_code_to_id)
+        generation_config.__setattr__("vocoder_lang_code_to_id", lang_code_to_id)
+
         generation_config._from_model_config = False
-        
+
         model.generation_config = generation_config
-        
-            
-        
+
     def prepare_text_input(self):
         config, inputs, decoder_input_ids, input_mask, lm_labels = self.text_model_tester.prepare_config_and_inputs()
-        
+
         input_dict = {
             "input_ids": inputs,
-            #"decoder_input_ids": decoder_input_ids,
-            "attention_mask": input_mask, 
-            "tgt_lang": "eng",
-        }
-        
-        return config, input_dict
-    
-    def prepare_speech_input(self):
-        config, inputs, decoder_input_ids, input_mask, lm_labels = self.speech_model_tester.prepare_config_and_inputs()
-        
-        input_dict = {
-            "input_features": inputs,
-            #"decoder_input_ids": decoder_input_ids,
+            # "decoder_input_ids": decoder_input_ids,
             "attention_mask": input_mask,
             "tgt_lang": "eng",
         }
-        
+
         return config, input_dict
-    
+
+    def prepare_speech_input(self):
+        config, inputs, decoder_input_ids, input_mask, lm_labels = self.speech_model_tester.prepare_config_and_inputs()
+
+        input_dict = {
+            "input_features": inputs,
+            # "decoder_input_ids": decoder_input_ids,
+            "attention_mask": input_mask,
+            "tgt_lang": "eng",
+        }
+
+        return config, input_dict
+
     def factory_generation_speech_test(self, model, inputs):
-        
         output = model.generate(**inputs)
-        
+
         print(output)
-        
 
     def test_generation_text_input(self):
         config, inputs = self.prepare_text_input()
-        
-        
+
         model = SeamlessM4TModel(config=config)
         self.update_generation(model)
         model.to(torch_device)
         model.eval()
-        
+
         self.factory_generation_speech_test(model, inputs)
-        
+
         # test big model return only text as well
-        
-        
 
         model = SeamlessM4TForTextToSpeech(config=config)
         self.update_generation(model)
         model.to(torch_device)
         model.eval()
-        
+
         self.factory_generation_speech_test(model, inputs)
-        
-        
 
     def test_generation_speech_input(self):
         config, inputs = self.prepare_speech_input()
-        
-        
+
         model = SeamlessM4TModel(config=config)
         self.update_generation(model)
         model.to(torch_device)
         model.eval()
-        
+
         self.factory_generation_speech_test(model, inputs)
-        
+
         # test big model return only text as well
-        
-        
 
         model = SeamlessM4TForSpeechToSpeech(config=config)
         self.update_generation(model)
         model.to(torch_device)
         model.eval()
-        
+
         self.factory_generation_speech_test(model, inputs)
-        
-        
+
         # TODO: test speechtotext
-        
-        
+
 
 @require_torch
 class SeamlessM4TModelIntegrationTest(unittest.TestCase):
-    
     repo_id = "ylacombe/hf-seamless-m4t-medium"
 
     def assertListAlmostEqual(self, list1, list2, tol=1e-5):
         self.assertEqual(len(list1), len(list2))
         for a, b in zip(list1, list2):
-            self.assertAlmostEqual(a, b, delta=tol)    
+            self.assertAlmostEqual(a, b, delta=tol)
 
     @cached_property
     def processor(self):
@@ -836,15 +832,15 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
     @cached_property
     def input_text(self):
         # corresponds to "C'est un test." with seamlessM4T_medium checkpoint
-        
+
         # fmt: off
         input_ids = torch.tensor([[256057, 152, 248116, 354, 159, 7356, 248075, 3]])
         # fmt: on
 
         input_ids = input_ids.to(torch_device)
-        
+
         attention_mask = torch.ones_like(input_ids).to(torch_device)
-        
+
         inputs = {
             "attention_mask": attention_mask,
             "input_ids": input_ids,
@@ -854,18 +850,17 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
 
     @cached_property
     def input_audio(self):
-
         set_seed(0)
         seq_len = 20000
         sampling_rate = 16000
-        input_features = torch.rand((2,seq_len))
-        
-        return self.processor(audios = input_features, sampling_rate=sampling_rate).to(torch_device)
-    
+        input_features = torch.rand((2, seq_len))
+
+        return self.processor(audios=input_features, sampling_rate=sampling_rate).to(torch_device)
+
     def factory_test_task(self, class1, class2, inputs, class1_kwargs, class2_kwargs):
         model1 = class1.from_pretrained(self.repo_id).to(torch_device)
         model2 = class2.from_pretrained(self.repo_id).to(torch_device)
-        
+
         with torch.inference_mode():
             output_1 = model1.generate(**inputs, **class1_kwargs)
             output_2 = model2.generate(**inputs, **class2_kwargs)
@@ -873,20 +868,18 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
         for key in output_1:
             if isinstance(output_1[key], torch.Tensor):
                 self.assertListAlmostEqual(output_1[key].squeeze().tolist(), output_2[key].squeeze().tolist())
-    
+
     @slow
     def test_whole_model(self):
         model = SeamlessM4TModel.from_pretrained(self.repo_id).to(torch_device)
-        
-        slice_begin=50
-        slice_end=60
-        
+
+
         # test text - tgt lang: eng
-        
+
         # fmt: off
         expected_text_tokens = [3, 256047, 3291, 248116, 248066, 9, 7356, 248075, 3]
         # fmt: on
-        
+
         # fmt: off
         expected_unit_tokens = [
             2,10051,8980,8212,949,1270,4311,1123,5918,2333,5311,3882,2415,5284,1123,612,8816,6370,5386,7334,4345,5645,
@@ -895,36 +888,36 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
             32,5380,5852,8289,2530,2762,1833,2056,3553,4641,3553,5683,370,2288,1344,1518,7534,703,8359,7699,2
         ]
         # fmt: on
-        
+
         # fmt: off
         expected_wav_slice = [
             -3.101921174675226e-05,-0.0003968471137341112,-0.00036757803172804415,-0.00012504588812589645,-6.0264719650149345e-05,
             0.00012214039452373981,-0.00016360613517463207,0.0002510063350200653,6.980844773352146e-05,-2.9616057872772217e-05
         ]
         # fmt: on
-        
-        expected_wav_mean = 0.00021144005586393178 
-        expected_wav_std = 0.12780693173408508 
-            
+
+        expected_wav_mean = 0.00021144005586393178
+        expected_wav_std = 0.12780693173408508
+
         with torch.inference_mode():
             output = model.generate(**self.input_text, num_beams=2, tgt_lang="eng", return_intermediate_token_ids=True)
-        
+
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
         self.assertListEqual(expected_unit_tokens, output.unit_sequences.squeeze().tolist())
-        
-        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50,60])
-        
+
+        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50, 60])
+
         self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
         self.assertTrue(expected_wav_std == output.waveforms.std().item())
 
-        ######################## 
-        
+        ########################
+
         # test text - tgt lang: swh
-        
+
         # fmt: off
         expected_text_tokens = [3, 256168, 1665, 188589, 7040, 248075, 3]
         # fmt: on
-        
+
         # fmt: off
         expected_unit_tokens = [
             2,10071,5729,9995,3089,7546,1204,1721,2532,4340,5623,3496,432,7730,9096,7677,3143,8211,6447,8399,4248,3565,
@@ -932,117 +925,99 @@ class SeamlessM4TModelIntegrationTest(unittest.TestCase):
             6318,2806,817,7613,2698,6563,8712,8344,9286,6878,6387,4281,6387,640,6387,3200,640,8355,640,6708,979,1738,2
         ]
         # fmt: on
-        
+
         # fmt: off
         expected_wav_slice = [
-            5.950569175183773e-06, -6.774172652512789e-05, -4.4876011088490486e-05, -3.7831603549420834e-05, -5.852582398802042e-05, 
+            5.950569175183773e-06, -6.774172652512789e-05, -4.4876011088490486e-05, -3.7831603549420834e-05, -5.852582398802042e-05,
             -9.454227983951569e-05, -9.632168803364038e-05, -2.4773296900093555e-05, -7.404130883514881e-05, -1.877115573734045e-05,
             ]
         # fmt: on
-        
-        expected_wav_mean = -0.0006770279142074287 
-        expected_wav_std =  0.22130604088306427
+
+        expected_wav_mean = -0.0006770279142074287
+        expected_wav_std = 0.22130604088306427
 
         with torch.inference_mode():
             output = model.generate(**self.input_text, num_beams=2, tgt_lang="swh", return_intermediate_token_ids=True)
-        
+
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
         self.assertListEqual(expected_unit_tokens, output.unit_sequences.squeeze().tolist())
-        
-        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50,60])
-        
+
+        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50, 60])
+
         self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
         self.assertTrue(expected_wav_std == output.waveforms.std().item())
-        
-        
+
         ########################
-        
-        
+
         # test audio - tgt lang: rus
-        
+
         # fmt: off
         expected_text_tokens = [3, 256147, 1197, 73565, 3413, 537, 233331, 248075, 3]
         # fmt: on
-        
+
         # fmt: off
         expected_unit_tokens = [
-            2, 10067, 5729, 4798, 9631, 8378, 4446, 2393, 6901, 5983, 2817, 4629, 8532, 1991, 2931, 8576, 8857, 5936, 4317, 
-            9000, 7740, 7995, 1225, 5980, 6094, 1420, 5373, 8771, 6600, 4487, 7029, 3630, 6740, 4870, 1483, 3003, 5585, 5511, 
-            7465, 3222, 32, 6272, 1950, 3120, 5368, 639, 3713, 5935, 7943, 567, 6129, 6822, 1226, 5063, 9878, 7756, 8825, 1078, 5943, 
+            2, 10067, 5729, 4798, 9631, 8378, 4446, 2393, 6901, 5983, 2817, 4629, 8532, 1991, 2931, 8576, 8857, 5936, 4317,
+            9000, 7740, 7995, 1225, 5980, 6094, 1420, 5373, 8771, 6600, 4487, 7029, 3630, 6740, 4870, 1483, 3003, 5585, 5511,
+            7465, 3222, 32, 6272, 1950, 3120, 5368, 639, 3713, 5935, 7943, 567, 6129, 6822, 1226, 5063, 9878, 7756, 8825, 1078, 5943,
             457, 9282, 9668, 817, 7613, 2698, 6563, 8712, 8704, 9286, 8704, 6387, 4281, 6387, 640, 3200, 6387, 640, 8355, 6708, 979, 1738, 2
         ]
         # fmt: on
-        
+
         # fmt: off
         expected_wav_slice = [
-            0.00013284594751894474, 0.00012186134699732065, 0.00014385231770575047, 2.8222682885825634e-05, 1.6152625903487206e-06, 
+            0.00013284594751894474, 0.00012186134699732065, 0.00014385231770575047, 2.8222682885825634e-05, 1.6152625903487206e-06,
             -6.230012513697147e-05, -0.00018148438539355993, -0.0001594738569110632, -0.00021119299344718456, -0.0001834919094108045,
             ]
         # fmt: on
-        
+
         expected_wav_mean = 0.00013920154015067965
-        expected_wav_std =  0.09129837900400162
-        
-        
+        expected_wav_std = 0.09129837900400162
+
         with torch.inference_mode():
-            output = model.generate(**self.input_audio, num_beams=2, tgt_lang="rus", return_intermediate_token_ids=True)
-        
+            output = model.generate(
+                **self.input_audio, num_beams=2, tgt_lang="rus", return_intermediate_token_ids=True
+            )
+
         self.assertListEqual(expected_text_tokens, output.sequences.squeeze().tolist())
         self.assertListEqual(expected_unit_tokens, output.unit_sequences.squeeze().tolist())
-        
-        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50,60])
-        
+
+        self.assertListAlmostEqual(expected_wav_slice, output.waveforms.squeeze().tolist()[50, 60])
+
         self.assertTrue(expected_wav_mean == output.waveforms.mean().item())
         self.assertTrue(expected_wav_std == output.waveforms.std().item())
-        
-        
+
         ########################
 
     @slow
     def test_text_to_text_model(self):
-        kwargs1 = {
-            "tgt_lang":"eng",
-            "return_intermediate_token_ids": True,
-            "generate_speech":False
-        }        
+        kwargs1 = {"tgt_lang": "eng", "return_intermediate_token_ids": True, "generate_speech": False}
         kwargs2 = {
-            "tgt_lang":"eng",
-            "output_hidden_states":True,
-            "return_dict_in_generate":True,
-            "output_scores":True,
+            "tgt_lang": "eng",
+            "output_hidden_states": True,
+            "return_dict_in_generate": True,
+            "output_scores": True,
         }
         self.factory_test_task(SeamlessM4TModel, SeamlessM4TForTextToText, self.input_text, kwargs1, kwargs2)
-        
+
     @slow
     def test_speech_to_text_model(self):
-        kwargs1 = {
-            "tgt_lang":"eng",
-            "return_intermediate_token_ids": True,
-            "generate_speech":False
-        }        
+        kwargs1 = {"tgt_lang": "eng", "return_intermediate_token_ids": True, "generate_speech": False}
         kwargs2 = {
-            "tgt_lang":"eng",
-            "output_hidden_states":True,
-            "return_dict_in_generate":True,
-            "output_scores":True,
+            "tgt_lang": "eng",
+            "output_hidden_states": True,
+            "return_dict_in_generate": True,
+            "output_scores": True,
         }
         self.factory_test_task(SeamlessM4TModel, SeamlessM4TForSpeechToText, self.input_audio, kwargs1, kwargs2)
 
     @slow
     def test_speech_to_speech_model(self):
-        kwargs1 = {
-            "tgt_lang":"eng",
-            "return_intermediate_token_ids": True
-        }
+        kwargs1 = {"tgt_lang": "eng", "return_intermediate_token_ids": True}
         self.factory_test_task(SeamlessM4TModel, SeamlessM4TForSpeechToSpeech, self.input_audio, kwargs1, kwargs1)
-
-
 
     @slow
     def test_text_to_speech_model(self):
-        kwargs1 = {
-            "tgt_lang":"eng",
-            "return_intermediate_token_ids": True
-        }
-        
+        kwargs1 = {"tgt_lang": "eng", "return_intermediate_token_ids": True}
+
         self.factory_test_task(SeamlessM4TModel, SeamlessM4TForTextToSpeech, self.input_text, kwargs1, kwargs1)

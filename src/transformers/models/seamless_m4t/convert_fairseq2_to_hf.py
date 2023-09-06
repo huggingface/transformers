@@ -27,9 +27,8 @@ from seamless_communication.models.inference.translator import Translator
 from transformers.models.seamless_m4t.configuration_seamless_m4t import SeamlessM4TConfig
 from transformers.models.seamless_m4t.feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
 from transformers.models.seamless_m4t.modeling_seamless_m4t import SeamlessM4TModel
-from transformers.models.seamless_m4t.tokenization_seamless_m4t import SeamlessM4TTokenizer
 from transformers.models.seamless_m4t.processing_seamless_m4t import SeamlessM4TProcessor
-
+from transformers.models.seamless_m4t.tokenization_seamless_m4t import SeamlessM4TTokenizer
 from transformers.trainer_utils import set_seed
 from transformers.utils import logging
 
@@ -278,47 +277,42 @@ def load_model(pytorch_dump_folder_path, model_type, repo_id="ylacombe/hf-seamle
     sanity_check_lang_id = tokenizer.lang_code_to_id["__fra__"]
 
     tokenizer.save_pretrained(save_dir)
-    #tokenizer.push_to_hub(repo_id=repo_id, create_pr = True)
+    # tokenizer.push_to_hub(repo_id=repo_id, create_pr = True)
     tokenizer = SeamlessM4TTokenizer.from_pretrained(save_dir)
 
     if sanity_check_lang_id != tokenizer.lang_code_to_id["__fra__"]:
         raise ValueError(
             f"Error in tokenizer saving/loading - __fra__ lang id is not coherent: {sanity_check_lang_id} vs {tokenizer.lang_code_to_id['__fra__']}"
         )
-        
+
     ####### get language to ids dict
     text_decoder_lang_code_to_id = {lang: tokenizer.lang_code_to_id[f"__{lang}__"] for lang in langs}
     t2u_lang_code_to_id = {code.replace("__", ""): i for i, code in enumerate(UNIT_SUPPORTED_LANGUAGES)}
     vocoder_lang_code_to_id = {code.replace("__", ""): i for i, code in enumerate(VOCODER_SUPPORTED_LANGUAGES)}
-    
 
     ######### FE
 
     fe = SeamlessM4TFeatureExtractor(language_code=langs)
 
-
-
     fe.save_pretrained(save_dir)
-    #fe.push_to_hub(repo_id=repo_id, create_pr=True)
+    # fe.push_to_hub(repo_id=repo_id, create_pr=True)
     fe = SeamlessM4TFeatureExtractor.from_pretrained(save_dir)
 
-        
     processor = SeamlessM4TProcessor(feature_extractor=fe, tokenizer=tokenizer)
     processor.save_pretrained(save_dir)
     processor.push_to_hub(repo_id=repo_id, create_pr=True)
-    
+
     processor = SeamlessM4TProcessor.from_pretrained(save_dir)
-    
 
     ######## Model
 
     # init model
     hf_config = _load_hf_config(model_type)
     hf_model = SeamlessM4TModel(hf_config)
-    
-    hf_model.generation_config.__setattr__("text_decoder_lang_to_code_id",text_decoder_lang_code_to_id)
-    hf_model.generation_config.__setattr__("t2u_lang_code_to_id",t2u_lang_code_to_id)
-    hf_model.generation_config.__setattr__("vocoder_lang_code_to_id",vocoder_lang_code_to_id)
+
+    hf_model.generation_config.__setattr__("text_decoder_lang_to_code_id", text_decoder_lang_code_to_id)
+    hf_model.generation_config.__setattr__("t2u_lang_code_to_id", t2u_lang_code_to_id)
+    hf_model.generation_config.__setattr__("vocoder_lang_code_to_id", vocoder_lang_code_to_id)
 
     # -1. take care of vocoder
     # similarly to speech T5 must apply and remove weight norm

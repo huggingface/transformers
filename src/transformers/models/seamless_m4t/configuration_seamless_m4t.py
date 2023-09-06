@@ -316,7 +316,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.variance_predictor_kernel_size = variance_predictor_kernel_size
         self.var_pred_dropout = var_pred_dropout
         self.vocoder_offset_tgt_lang = vocoder_offset_tgt_lang
-        
+
         # for proper config init
         self.num_attention_heads = decoder_attention_heads
         self.num_hidden_layers = decoder_layers

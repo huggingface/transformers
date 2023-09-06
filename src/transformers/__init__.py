@@ -505,7 +505,13 @@ _import_structure = {
         "SamPromptEncoderConfig",
         "SamVisionConfig",
     ],
-    "models.seamless_m4t": ["SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP", "SeamlessM4TConfig", "SeamlessM4TTokenizer", "SeamlessM4TFeatureExtractor", "SeamlessM4TProcessor"],
+    "models.seamless_m4t": [
+        "SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SeamlessM4TConfig",
+        "SeamlessM4TFeatureExtractor",
+        "SeamlessM4TProcessor",
+        "SeamlessM4TTokenizer",
+    ],
     "models.segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"],
     "models.sew": ["SEW_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWConfig"],
     "models.sew_d": ["SEW_D_PRETRAINED_CONFIG_ARCHIVE_MAP", "SEWDConfig"],
@@ -4610,8 +4616,8 @@ if TYPE_CHECKING:
         SEAMLESS_M4T_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SeamlessM4TConfig,
         SeamlessM4TFeatureExtractor,
-        SeamlessM4TTokenizer,
         SeamlessM4TProcessor,
+        SeamlessM4TTokenizer,
     )
     from .models.segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
     from .models.sew import SEW_PRETRAINED_CONFIG_ARCHIVE_MAP, SEWConfig

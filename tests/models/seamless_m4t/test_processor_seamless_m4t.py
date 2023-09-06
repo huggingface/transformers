@@ -18,7 +18,7 @@ import shutil
 import tempfile
 import unittest
 
-from transformers.models.seamless_m4t import SeamlessM4TTokenizer, SeamlessM4TFeatureExtractor, SeamlessM4TProcessor
+from transformers.models.seamless_m4t import SeamlessM4TFeatureExtractor, SeamlessM4TProcessor, SeamlessM4TTokenizer
 from transformers.models.seamless_m4t.tokenization_seamless_m4t import VOCAB_FILES_NAMES
 from transformers.utils import FEATURE_EXTRACTOR_NAME
 
@@ -80,7 +80,9 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.feature_extractor, SeamlessM4TFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = SeamlessM4TProcessor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
+        processor = SeamlessM4TProcessor(
+            tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor()
+        )
         processor.save_pretrained(self.tmpdirname)
 
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")

@@ -76,7 +76,7 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
         self.tgt_lang = tgt_lang
 
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
-            
+
     @staticmethod
     # Copied from transformers.models.wav2vec2.feature_extraction_wav2vec2.Wav2Vec2FeatureExtractor.zero_mean_unit_var_norm
     def zero_mean_unit_var_norm(
@@ -257,9 +257,8 @@ class SeamlessM4TFeatureExtractor(SequenceFeatureExtractor):
 
         padded_inputs["input_features"] = input_features
         padded_inputs["attention_mask"] = attention_mask
-        
+
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
-
 
         return padded_inputs

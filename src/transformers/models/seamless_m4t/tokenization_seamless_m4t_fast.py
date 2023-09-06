@@ -27,7 +27,6 @@ from ...tokenization_utils import (
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import PaddingStrategy, logging
 from .tokenization_seamless_m4t import (
-    LARGE_SEAMLESS_M4T_LANGUAGE_CODES,
     SeamlessM4TTokenizer,
 )
 
@@ -162,12 +161,11 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-        
+
         self._src_lang = f"__{src_lang}__"
         self._tgt_lang = f"__{tgt_lang}__"
         self.set_src_lang_special_tokens(self._src_lang)
-        self.set_tgt_lang_special_tokens(self._tgt_lang)        
-
+        self.set_tgt_lang_special_tokens(self._tgt_lang)
 
     @property
     # Copied from transformers.models.nllb.tokenization_nllb.NllbTokenizer.src_lang
@@ -346,7 +344,7 @@ class SeamlessM4TTokenizerFast(PreTrainedTokenizerFast):
             self.src_leng = src_lang
         if tgt_lang is not None:
             self.tgt_lang = tgt_lang
-            
+
         output = super().__call__(text=text, padding=padding, pad_to_multiple_of=pad_to_multiple_of, **kwargs)
 
         return BatchEncoding(output, tensor_type=kwargs.get("return_tensors"))
