@@ -165,19 +165,21 @@ class T5Tokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
 
-        if extra_ids > 0 and additional_special_tokens is not None:
-            # Check that we have the right number of extra_id special tokens
-            extra_tokens = len(set(filter(lambda x: bool("extra_id" in str(x)), additional_special_tokens)))
-            if extra_tokens != extra_ids:
+        if additional_special_tokens is not None:
+            extra_tokens = [ x for x in additional_special_tokens if "<extra_id_" in str(x)]
+            if extra_ids > 0 and extra_ids != len(extra_tokens):
                 raise ValueError(
                     f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are"
                     " provided to T5Tokenizer. In this case the additional_special_tokens must include the extra_ids"
                     " tokens"
                 )
+        else:
+            extra_tokens = [f"<extra_id_{i}>" for i in range(extra_ids)]
+            additional_special_tokens = extra_tokens
 
         # for legacy purpose, we keep this. Will be removed and tests updated. (when `added_tokens_decoder` is not passed as kwargs)
         self._added_tokens_decoder = {}
-        for i in range(extra_ids):
+        for i in range(len(extra_tokens)):
             self._added_tokens_decoder[len(self.sp_model) - 1 + extra_ids - i] = AddedToken(
                 f"<extra_id_{i}>", single_word=True, lstrip=True, rstrip=True, special=True
             )
