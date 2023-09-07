@@ -135,7 +135,9 @@ def create_sinusoidal_positions(num_pos, dim):
     return jnp.array(out[:, :, :num_pos])  # TODO: don't think slice is needed
 
 
-def rotate_half(x):
+def rotate_half(tensor):
+    """Rotates half the hidden dims of the input."""
+    rotate_half_tensor = jnp.concatenate((-tensor[..., tensor.shape[-1] // 2 :], tensor[..., : tensor.shape[-1] // 2]), axis=-1)
     """Rotates half the hidden dims of the input."""
     rotate_half_tensor = jnp.concatenate((-x[..., x.shape[-1] // 2 :], x[..., : x.shape[-1] // 2]), axis=-1)
     return rotate_half_tensor
