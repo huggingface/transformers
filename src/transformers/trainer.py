@@ -589,7 +589,7 @@ class Trainer:
             if args.half_precision_backend == "cpu_amp":
                 self.use_cpu_amp = True
                 self.amp_dtype = torch.bfloat16
-            if args.half_precision_backend == "apex":
+            elif args.half_precision_backend == "apex":
                 if not is_apex_available():
                     raise ImportError(
                         "Using FP16 with APEX but APEX is not installed, please refer to"
