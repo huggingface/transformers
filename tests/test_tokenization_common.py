@@ -998,7 +998,7 @@ class TokenizerTesterMixin:
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=self.space_between_special_tokens)
 
                 self.assertIn(decoded, [output, output.lower()])
-                return
+
                 # TODO Fix the different asserts here, special are never normalized Added can be, and can also not be
                 encoded = tokenizer.encode("[ABC] [DEF][SAMPLE]", add_special_tokens=False)
                 decoded = tokenizer.decode(encoded, spaces_between_special_tokens=True, skip_special_tokens=False)
@@ -2118,50 +2118,6 @@ class TokenizerTesterMixin:
                         encoded_sequences_batch_padded_1[key],
                         encoded_sequences_batch_padded_2[key],
                     )
-
-    @unittest.skip("Skipping for now as spm models are not properly updated")
-    def test_added_token_are_never_split(self):
-        if not self.test_slow_tokenizer:
-            self.skipTest("Currently this test is only for slow tokenizers")
-            return
-        if len(self.tokenizer_class.pretrained_vocab_files_map) < 1:
-            self.skipTest("This test needs a pretrained vocab to work!")
-            return
-        model_ids = [list(k.keys())[0] for k in self.tokenizer_class.pretrained_vocab_files_map.values()]
-        tokenizer = self.tokenizer_class.from_pretrained(model_ids[0], do_lowercase=False)
-        new_tokens = []
-        new_tokens.append(AddedToken("<lstrip=false, rstrip=false>", lstrip=False, rstrip=False, normalized=False))
-        new_tokens.append(AddedToken("<lstrip=true, rstrip=false>", lstrip=True, rstrip=False, normalized=False))
-        new_tokens.append(AddedToken("<lstrip=false, rstrip=true>", lstrip=False, rstrip=True, normalized=False))
-        new_tokens.append(AddedToken("<lstrip=true, rstrip=true>", lstrip=True, rstrip=True, normalized=False))
-
-        for token in new_tokens:
-            with self.subTest(f"testing with {token.content[1:-1]}"):
-                tokenizer.add_tokens([token])
-
-                tokens = tokenizer.tokenize(f"This sentence is{token}a test")
-                self.assertIn(token.content, tokens)
-
-                tokens = tokenizer.tokenize(f"This sentence is {token}a test")
-                self.assertIn(token.content, tokens)
-
-                left, _ = "".join(tokens).split(token.content)
-                if token.lstrip:
-                    assert left.endswith(tokenizer.tokenize("is")[-1])
-
-                tokens = tokenizer.tokenize(f"This sentence is{token} a test")
-                self.assertIn(token.content, tokens)
-                _, right = "".join(tokens).split(token.content)
-                if token.rstrip:
-                    assert right.startswith(tokenizer.tokenize("a")[-1])
-
-                tokens = tokenizer.tokenize(f"This sentence is {token} a test")
-                self.assertIn(token.content, tokens)
-                left, right = "".join(tokens).split(token.content)
-                if token.lstrip:
-                    assert left.endswith(tokenizer.tokenize("is")[-1])
-                if token.rstrip:
-                    assert right.startswith(tokenizer.tokenize("a")[-1])
 
     @require_tokenizers
     def test_added_token_are_matched_longest_first(self):
