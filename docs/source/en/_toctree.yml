@@ -83,12 +83,13 @@
     - local: tasks/text-to-speech
       title: Text to speech
     title: Multimodal
-  - isExpanded: false
-    sections:
+  title: Guides for fine-tuning specialized models
+- sections:
+    - local: tasks/idefics
+      title: Image tasks with IDEFICS
     - local: generation_strategies
       title: Customize the generation strategy
-    title: Generation
-  title: Task Guides
+  title: Prompting and Generation Guides for Large Models
 - sections:
   - local: fast_tokenizers
     title: Use fast tokenizers from 🤗 Tokenizers
