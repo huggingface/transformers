@@ -25,10 +25,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...utils import (
-    ModelOutput,
-    logging,
-)
+from ...utils import ModelOutput, logging
 from .configuration_idefics import IdeficsVisionConfig
 
 
