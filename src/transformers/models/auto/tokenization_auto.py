@@ -193,6 +193,13 @@ else:
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "persimmon",
+                (
+                    "PersimmonTokenizer" if is_sentencepiece_available() else None,
+                    "PersimmonTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "longt5",
