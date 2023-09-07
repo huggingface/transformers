@@ -16,6 +16,7 @@
 The Trainer class, to easily train a 🤗 Transformers from scratch or finetune it on a new task.
 """
 
+import contextlib
 import copy
 import functools
 import glob
@@ -548,8 +549,9 @@ class Trainer:
 
         self._signature_columns = None
 
-        # Apex Mixed precision setup
+        # Mixed precision setup
         self.use_apex = False
+        self.use_cpu_amp = False
 
         # Mixed precision setup for SageMaker Model Parallel
         if is_sagemaker_mp_enabled():
@@ -573,9 +575,20 @@ class Trainer:
                         f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
                         "but SageMaker Model Parallelism < 1.10 does not support FP16 in trainer."
                     )
+        if args.fp16 or args.bf16:
+            if args.half_precision_backend == "auto":
+                if args.device == torch.device("cpu"):
+                    if args.fp16:
+                        raise ValueError("Tried to use `fp16` but it is not supported on cpu")
+                    else:
+                        args.half_precision_backend = "cpu_amp"
+            logger.info(f"Using {args.half_precision_backend} half precision backend")
 
         if (args.fp16 or args.bf16) and not (self.is_deepspeed_enabled or is_sagemaker_mp_enabled()):
             # deepspeed and SageMaker Model Parallel manage their own half precision
+            if args.half_precision_backend == "cpu_amp":
+                self.use_cpu_amp = True
+                self.amp_dtype = torch.bfloat16
             if args.half_precision_backend == "apex":
                 if not is_apex_available():
                     raise ImportError(
@@ -1245,6 +1258,7 @@ class Trainer:
                     jit_model(**example_batch)
                     jit_model(**example_batch)
                 model = jit_model
+                self.use_cpu_amp = False
             except (RuntimeError, TypeError, ValueError, NameError, IndexError) as e:
                 logger.warning(f"failed to use PyTorch jit mode due to: {e}.")
 
@@ -1274,6 +1288,10 @@ class Trainer:
         return model
 
     def _wrap_model(self, model, training=True, dataloader=None):
+        if self.args.use_ipex:
+            dtype = torch.bfloat16 if self.use_cpu_amp else torch.float32
+            model = self.ipex_optimize_model(model, training, dtype=dtype)
+
         if is_sagemaker_mp_enabled():
             # Wrapping the base model twice in a DistributedModel will raise an error.
             if isinstance(self.model_wrapped, smp.model.DistributedModel):
@@ -2586,6 +2604,24 @@ class Trainer:
 
         return inputs
 
+    def compute_loss_context_manager(self):
+        """
+        A helper wrapper to group together context managers.
+        """
+        return self.autocast_smart_context_manager()
+
+    def autocast_smart_context_manager(self, cache_enabled: Optional[bool] = True):
+        """
+        A helper wrapper that creates an appropriate context manager for `autocast` while feeding it the desired
+        arguments, depending on the situation.
+        """
+        if self.use_cpu_amp:
+            ctx_manager = torch.cpu.amp.autocast(cache_enabled=cache_enabled, dtype=self.amp_dtype)
+        else:
+            ctx_manager = contextlib.nullcontext()
+
+        return ctx_manager
+
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
         Perform a training step on a batch of inputs.
@@ -2611,7 +2647,8 @@ class Trainer:
             loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
-        loss = self.compute_loss(model, inputs)
+        with self.compute_loss_context_manager():
+            loss = self.compute_loss(model, inputs)
 
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
@@ -3301,7 +3338,8 @@ class Trainer:
                     logits = smp_nested_concat(logits_mb)
             else:
                 if has_labels or loss_without_labels:
-                    loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+                    with self.compute_loss_context_manager():
+                        loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                     loss = loss.mean().detach()
 
                     if isinstance(outputs, dict):
@@ -3310,7 +3348,8 @@ class Trainer:
                         logits = outputs[1:]
                 else:
                     loss = None
-                    outputs = model(**inputs)
+                    with self.compute_loss_context_manager():
+                        outputs = model(**inputs)
                     if isinstance(outputs, dict):
                         logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
                     else:
