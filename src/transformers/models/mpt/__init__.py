@@ -18,7 +18,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_mpt": ["MPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MptConfig", "MptOnnxConfig","LlavaMptConfig"],
+    "configuration_mpt": ["MPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MptConfig", "MptOnnxConfig"],
 }
 
 try:
@@ -35,11 +35,10 @@ else:
         "MptForSequenceClassification",
         "MptForTokenClassification",
         "MptForQuestionAnswering",
-        "LlavaMptForCausalLM"
     ]
 
 if TYPE_CHECKING:
-    from .configuration_mpt import MPT_PRETRAINED_CONFIG_ARCHIVE_MAP, MptConfig, MptOnnxConfig, LlavaMptConfig
+    from .configuration_mpt import MPT_PRETRAINED_CONFIG_ARCHIVE_MAP, MptConfig, MptOnnxConfig
 
     try:
         if not is_torch_available():
@@ -55,7 +54,6 @@ if TYPE_CHECKING:
             MptForTokenClassification,
             MptModel,
             MptPreTrainedModel,
-            LlavaMptForCausalLM,
         )
 
 else:

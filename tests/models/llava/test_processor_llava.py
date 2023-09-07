@@ -27,11 +27,13 @@ if is_vision_available():
 
     from transformers import (
         AutoProcessor,
+        AutoTokenizer,
         LlamaTokenizerFast,
         CLIPImageProcessor,
         LlamaTokenizer,
         LlavaProcessor,
         PreTrainedTokenizerFast,
+        CLIPVisionModel,
     )
 
 
@@ -42,9 +44,9 @@ class LlavaProcessorTest(unittest.TestCase):
 
         image_processor = CLIPImageProcessor()
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer")
-        #qformer_tokenizer = BertTokenizerFast.from_pretrained("hf-internal-testing/tiny-random-bert")
+        vision_model = CLIPVisionModel.from_pretrained("openai/clip-vit-large-patch14")
 
-        processor = InstructBlipProcessor(image_processor, tokenizer)
+        processor = LlavaProcessor(image_processor, tokenizer,vision_model)
 
         processor.save_pretrained(self.tmpdirname)
 
@@ -69,13 +71,13 @@ class LlavaProcessorTest(unittest.TestCase):
 
         image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
 
-        return image_inputs
+        return image_inputs[0]
 
     def test_save_load_pretrained_additional_features(self):
         processor = LlavaProcessor(
             tokenizer=self.get_tokenizer(),
             image_processor=self.get_image_processor(),
-            #qformer_tokenizer=self.get_qformer_tokenizer(),
+            vision_model=self.get_vision_model(),
         )
         processor.save_pretrained(self.tmpdirname)
 
@@ -91,64 +93,48 @@ class LlavaProcessorTest(unittest.TestCase):
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, CLIPImageProcessor)
-        #self.assertIsInstance(processor.qformer_tokenizer, BertTokenizerFast)
+        self.assertIsInstance(processor.vision_model, CLIPVisionModel)
+  
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
-        #qformer_tokenizer = self.get_qformer_tokenizer()
+        vision_model = self.get_vision_model()
 
         processor = LlavaProcessor(
-            tokenizer=tokenizer, image_processor=image_processor
+            tokenizer=tokenizer, image_processor=image_processor,vision_model=vision_model
         )
-
+  
         image_input = self.prepare_image_inputs()
 
-        input_feat_extract = image_processor(image_input, return_tensors="np")
-        input_processor = processor(images=image_input, return_tensors="np")
+        input_feat_extract = image_processor(image_input, return_tensors="pt")
+        input_feat_extract = vision_model(input_feat_extract["pixel_values"], output_hidden_states=True)
+        image_features = input_feat_extract.hidden_states[-2]
+        image_features = image_features[:, 1:]
+        
+        input_processor = processor(images=image_input, return_tensors="pt")["pixel_values"]
+        print(image_features,input_processor)
+        self.assertAlmostEqual(image_features.sum(), input_processor.sum(), delta=1e-2)
 
-        for key in input_feat_extract.keys():
-            self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
-
-    def test_tokenizer(self):
-        image_processor = self.get_image_processor()
-        tokenizer = self.get_tokenizer()
-        #qformer_tokenizer = self.get_qformer_tokenizer()
-
-        processor = LlavaProcessor(
-            tokenizer=tokenizer, image_processor=image_processor
-        )
-
-        input_str = "lower newer"
-
-        encoded_processor = processor(text=input_str)
-
-        encoded_tokens = tokenizer(input_str, return_token_type_ids=False)
-        #encoded_tokens_qformer = qformer_tokenizer(input_str, return_token_type_ids=False)
-
-        for key in encoded_tokens.keys():
-            self.assertListEqual(encoded_tokens[key], encoded_processor[key])
-
-        #for key in encoded_tokens_qformer.keys():
-        #    self.assertListEqual(encoded_tokens_qformer[key], encoded_processor["qformer_" + key])
-
+    
     def test_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
-        #qformer_tokenizer = self.get_qformer_tokenizer()
+        vision_model = self.get_vision_model()
 
-        processor = InstructBlipProcessor(
-            tokenizer=tokenizer, image_processor=image_processor
+        processor = LlavaProcessor(
+            tokenizer=tokenizer, image_processor=image_processor,vision_model=vision_model
         )
+      
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(text=input_str, images=image_input)
+        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
 
         self.assertListEqual(
             list(inputs.keys()),
-            ["input_ids", "attention_mask", "pixel_values"],
+            ["input_ids", "pixel_values"],
         )
 
         # test if it raises when no input is passed
@@ -158,11 +144,12 @@ class LlavaProcessorTest(unittest.TestCase):
     def test_tokenizer_decode(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
-        #qformer_tokenizer = self.get_qformer_tokenizer()
+        vision_model = self.get_vision_model()
 
-        processor = InstructBlipProcessor(
-            tokenizer=tokenizer, image_processor=image_processor
+        processor = LlavaProcessor(
+            tokenizer=tokenizer, image_processor=image_processor, vision_model=vision_model
         )
+      
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
@@ -174,18 +161,19 @@ class LlavaProcessorTest(unittest.TestCase):
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
-        #qformer_tokenizer = self.get_qformer_tokenizer()
+        vision_model = self.get_vision_model()
 
-        processor = InstructBlipProcessor(
-            tokenizer=tokenizer, image_processor=image_processor
+        processor = LlavaProcessor(
+            tokenizer=tokenizer, image_processor=image_processor,vision_model=vision_model
         )
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(text=input_str, images=image_input)
+        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
 
         self.assertListEqual(
             list(inputs.keys()),
-            ["input_ids", "attention_mask","pixel_values"],
+            ["input_ids","pixel_values"],
         )
+

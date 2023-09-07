@@ -28,10 +28,10 @@ from ..clip import CLIPVisionModel
 
 class LlavaProcessor(ProcessorMixin):
     r"""
-    Constructs an LLava processor which wraps a BLIP image processor and a LLaMa/T5 tokenizer into a single
+    Constructs an LLava processor which wraps a CLIP image processor, CLIP vision model  and a LLaMa/T5 tokenizer into a single
     processor.
 
-    [`InstructBlipProcessor`] offers all the functionalities of [`BlipImageProcessor`] and [`AutoTokenizer`]. See the
+    [`LlavaProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`AutoTokenizer`]. See the
     docstring of [`~BlipProcessor.__call__`] and [`~BlipProcessor.decode`] for more information.
 
     Args:
@@ -39,8 +39,8 @@ class LlavaProcessor(ProcessorMixin):
             An instance of [`CLIPProcessor`]. The image processor is a required input.
         tokenizer (`AutoTokenizer`):
             An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
-        feature_extractor (`CLIPProcessor`):
-            An instance of ['PreTrainedTokenizer`]. The Q-Former tokenizer is a required input.
+        vision_model (`CLIPVisionModel`):
+            An instance of ['CLIPVisionModel`]. The Vision Model is a required input.
         """
     attributes = ["image_processor", "tokenizer"]
     tokenizer_class = "AutoTokenizer"
@@ -84,10 +84,10 @@ class LlavaProcessor(ProcessorMixin):
         if images is None and text is None:
             raise ValueError("You have to specify at least images or text.")
         
-        text = DEFAULT_IMAGE_TOKEN + "\n" + text
         encoding = BatchFeature()
         dummy = {}
         if text is not None:
+            text = DEFAULT_IMAGE_TOKEN + "\n" + text
             prompt_chunks = [self.tokenizer(
                 chunk,
                 add_special_tokens=add_special_tokens,
@@ -139,7 +139,7 @@ class LlavaProcessor(ProcessorMixin):
         image_features = image_features[:, 1:]
         return image_features
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
+    # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with LlamaTokenizerFast->PreTrainedTokenizer
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
@@ -147,7 +147,7 @@ class LlavaProcessor(ProcessorMixin):
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.decode with BertTokenizerFast->PreTrainedTokenizer
+    # Copied from transformers.models.blip.processing_blip.BlipProcessor.decode with LlamaTokenizerFast->PreTrainedTokenizer
     def decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer
@@ -165,9 +165,7 @@ class LlavaProcessor(ProcessorMixin):
     # overwrite to load the Q-Former tokenizer from a separate folder
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        #pretrained_model_name_or_path = "openai/clip-vit-large-patch14"
         vision_model = CLIPVisionModel.from_pretrained("openai/clip-vit-large-patch14")
-        #tokenizer = AutoTokenizer.from_pretrained("shauray/llva-llama-2-7B")
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         args.append(vision_model)
         return cls(*args)

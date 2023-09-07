@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,13 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
+""" Testing suite for the PyTorch LLaMA model. """
 
-import math
+
 import unittest
 
-from transformers import MptConfig, is_torch_available
-from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_gpu, slow, torch_device
+from parameterized import parameterized
+
+from transformers import LlamaConfig, is_torch_available, set_seed
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -30,28 +32,23 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        AutoTokenizer,
-        MptForCausalLM,
-        MptForQuestionAnswering,
-        MptForSequenceClassification,
-        MptForTokenClassification,
-        MptModel,
+        LlamaLlamaForCausalLM,
+        LlamaForSequenceClassification,
+        LlamaModel,
+        LlamaTokenizer,
     )
 
 
-@require_torch
-class MptModelTester:
+class LlamaModelTester:
     def __init__(
         self,
         parent,
-        batch_size=14,
+        batch_size=13,
         seq_length=7,
         is_training=True,
-        use_token_type_ids=False,
         use_input_mask=True,
+        use_token_type_ids=False,
         use_labels=True,
-        use_mc_token_ids=True,
         vocab_size=99,
         hidden_size=32,
         num_hidden_layers=2,
@@ -59,22 +56,23 @@ class MptModelTester:
         intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
-        attention_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
         num_labels=3,
         num_choices=4,
+        pad_token_id=0,
+        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
-        self.use_token_type_ids = use_token_type_ids
         self.use_input_mask = use_input_mask
+        self.use_token_type_ids = use_token_type_ids
         self.use_labels = use_labels
-        self.use_mc_token_ids = use_mc_token_ids
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -82,142 +80,100 @@ class MptModelTester:
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_dropout_prob = attention_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.num_choices = num_choices
-        self.scope = None
-        self.bos_token_id = vocab_size - 1
-        self.eos_token_id = vocab_size - 1
-        self.pad_token_id = vocab_size - 1
+        self.pad_token_id = pad_token_id
+        self.scope = scope
 
-    def get_large_model_config(self):
-        return MptConfig.from_pretrained("mosaicml/mpt-7b")
-
-    def prepare_config_and_inputs(self, gradient_checkpointing=False):
+    def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         input_mask = None
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
+        token_type_ids = None
+        if self.use_token_type_ids:
+            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+
         sequence_labels = None
+        token_labels = None
+        choice_labels = None
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = self.get_config(gradient_checkpointing=gradient_checkpointing)
+        config = self.get_config()
 
-        return (config, input_ids, input_mask, sequence_labels)
+        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
-    def get_config(self, gradient_checkpointing=False):
-        return MptConfig(
+    def get_config(self):
+        return LlamaConfig(
             vocab_size=self.vocab_size,
-            seq_length=self.seq_length,
             hidden_size=self.hidden_size,
-            n_layers=self.num_hidden_layers,
-            n_heads=self.num_attention_heads,
-            hidden_dropout=self.hidden_dropout_prob,
-            attention_dropout=self.attention_dropout_prob,
-            n_positions=self.max_position_embeddings,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            intermediate_size=self.intermediate_size,
+            hidden_act=self.hidden_act,
+            hidden_dropout_prob=self.hidden_dropout_prob,
+            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
+            is_decoder=False,
             initializer_range=self.initializer_range,
-            use_cache=True,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
-            num_labels=self.num_labels,
-            gradient_checkpointing=gradient_checkpointing,
-            dtype="float32",
         )
 
-    def create_and_check_mpt_model(self, config, input_ids, input_mask, *args):
-        model = MptModel(config=config)
+    def create_and_check_model(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = LlavaLlamaModel(config=config)
         model.to(torch_device)
         model.eval()
-
+        result = model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
-
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(len(result.past_key_values), config.n_layers)
 
-    def create_and_check_mpt_model_past(self, config, input_ids, input_mask, *args):
-        model = MptModel(config=config)
 
+    def create_and_check_for_causal_lm(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
+    ):
+        model = LlavaLlamaForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
+        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-        # first forward pass
-        outputs = model(input_ids, attention_mask=torch.ones_like(input_ids), use_cache=True)
-        outputs_use_cache_conf = model(input_ids, attention_mask=torch.ones_like(input_ids))
-        outputs_no_past = model(input_ids, use_cache=False, attention_mask=torch.ones_like(input_ids))
-
-        self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
-        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
-
-        past = outputs["past_key_values"]
-
-        # create hypothetical next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
-
-        # append to next input_ids and token_type_ids
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-
-        output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past)["last_hidden_state"]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
-    def create_and_check_mpt_model_attention_mask_past(self, config, input_ids, input_mask, *args):
-        model = MptModel(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # create attention mask
-        attn_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-        half_seq_length = self.seq_length // 2
-        attn_mask[:, half_seq_length:] = 0
-
-        # first forward pass
-        output, past = model(input_ids, attention_mask=attn_mask).to_tuple()
-
-        # create hypothetical next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
-
-        # change a random masked slice from input_ids
-        random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
-        random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
-        input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
-
-        # append to next input_ids and attn_mask
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
-            dim=1,
-        )
-
-        # get two different outputs
-        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past, attention_mask=attn_mask)["last_hidden_state"]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
-    def create_and_check_mpt_model_past_large_inputs(self, config, input_ids, input_mask, *args):
-        model = MptModel(config=config)
+    def create_and_check_decoder_model_past_large_inputs(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
+    ):
+        config.is_decoder = True
+        config.add_cross_attention = True
+        model = LlamaForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -225,6 +181,8 @@ class MptModelTester:
         outputs = model(
             input_ids,
             attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
             use_cache=True,
         )
         past_key_values = outputs.past_key_values
@@ -240,274 +198,111 @@ class MptModelTester:
         output_from_no_past = model(
             next_input_ids,
             attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
             output_hidden_states=True,
-        )
-        hidden_states_from_no_past = output_from_no_past["hidden_states"][0]
-
+        )["hidden_states"][0]
         output_from_past = model(
             next_tokens,
             attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             output_hidden_states=True,
-        )
-        hidden_states_from_past = output_from_past["hidden_states"][0]
+        )["hidden_states"][0]
 
         # select random slice
-        random_slice_idx = ids_tensor((1,), hidden_states_from_past.shape[-1]).item()
-        output_from_no_past_slice = hidden_states_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = hidden_states_from_past[:, :, random_slice_idx].detach()
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, *args):
-        model = MptForCausalLM(config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(input_ids, labels=input_ids)
-        self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_sequence_classification_model(self, config, input_ids, input_mask, *args):
-        config.num_labels = self.num_labels
-        model = MptForSequenceClassification(config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-
-    def create_and_check_token_classification_model(self, config, input_ids, input_mask, *args):
-        model = MptForTokenClassification(config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
-
-    def create_and_check_question_answering_model(self, config, input_ids, input_mask, *args):
-        model = MptForQuestionAnswering(config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
-
-    def create_and_check_forward_and_backwards(
-        self, config, input_ids, input_mask, *args, gradient_checkpointing=False
-    ):
-        model = MptForCausalLM(config)
-        model.to(torch_device)
-        if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
-
-        result = model(input_ids, labels=input_ids)
-        self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        result.loss.backward()
-
-    def create_and_check_mpt_weight_initialization(self, config, *args):
-        model = MptModel(config)
-        model_std = model.config.initializer_range / math.sqrt(2 * model.config.n_layers)
-        for key in model.state_dict().keys():
-            if "c_proj" in key and "weight" in key:
-                self.parent.assertLessEqual(abs(torch.std(model.state_dict()[key]) - model_std), 0.001)
-                self.parent.assertLessEqual(abs(torch.mean(model.state_dict()[key]) - 0.0), 0.01)
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-
-        config, input_ids, input_mask, sequence_labels = config_and_inputs
-
-        inputs_dict = {"input_ids": input_ids}
-
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
 
-class MptConfigTester(ConfigTester):
-    def __init__(self, parent, config_class=None, has_text_modality=True, common_properties=None, **kwargs):
-        super().__init__(parent, config_class, has_text_modality, common_properties, **kwargs)
-
-    def test_attn_config_as_dict(self):
-        config = self.config_class(**self.inputs_dict, attn_config={"attn_impl": "flash", "softmax_scale": None})
-        self.parent.assertTrue(config.attn_config.attn_impl == "flash")
-        self.parent.assertTrue(config.attn_config.softmax_scale is None)
-
-    def run_common_tests(self):
-        self.test_attn_config_as_dict()
-        return super().run_common_tests()
-
-
 @require_torch
-class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            MptModel,
-            MptForCausalLM,
-            MptForSequenceClassification,
-            MptForTokenClassification,
-            MptForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
-
-    all_generative_model_classes = (MptForCausalLM,) if is_torch_available() else ()
-    fx_compatible = False
-    test_missing_keys = False
-    test_pruning = False
-    test_torchscript = False
-    test_head_masking = False
+class LlavaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (LlamaModel, LlamaForCausalLM, LlamaForSequenceClassification) if is_torch_available() else ()
+    all_generative_model_classes = (LlamaForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": MptModel,
-            "question-answering": MptForQuestionAnswering,
-            "text-classification": MptForSequenceClassification,
-            "text-generation": MptForCausalLM,
-            "token-classification": MptForTokenClassification,
-            "zero-shot": MptForSequenceClassification,
+            "text-generation": LlavaLlamaForCausalLM,
         }
         if is_torch_available()
         else {}
     )
+    test_headmasking = False
+    test_pruning = False
 
     def setUp(self):
-        self.model_tester = MptModelTester(self)
-        self.config_tester = MptConfigTester(self, config_class=MptConfig, n_embd=37)
+        self.model_tester = LlamaModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=LlamaConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_mpt_model(self):
+    def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mpt_model(*config_and_inputs)
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_mpt_model_past(self):
+    def test_model_various_embeddings(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mpt_model_past(*config_and_inputs)
+        for type in ["absolute", "relative_key", "relative_key_query"]:
+            config_and_inputs[0].position_embedding_type = type
+            self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_mpt_model_att_mask_past(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mpt_model_attention_mask_past(*config_and_inputs)
 
-    def test_mpt_model_past_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mpt_model_past_large_inputs(*config_and_inputs)
-
-    def test_mpt_lm_head_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
-
-    def test_mpt_sequence_classification_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_sequence_classification_model(*config_and_inputs)
-
-    def test_mpt_token_classification_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_token_classification_model(*config_and_inputs)
-
-    def test_mpt_gradient_checkpointing(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
-
-    def test_mpt_weight_initialization(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_mpt_weight_initialization(*config_and_inputs)
-
-    @unittest.skip("For backward compatibility the lm_head is not in the model's state dict on the Hub.")
-    def test_model_weights_reload_no_missing_tied_weights(self):
+    @unittest.skip("LLaMA buffers include complex numbers, which breaks this test")
+    def test_save_load_fast_init_from_base(self):
         pass
 
+
+@require_torch
+class LlamaIntegrationTest(unittest.TestCase):
+    @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
     @slow
-    def test_model_from_pretrained(self):
-        for model_name in MPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = MptModel.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+    def test_model_7b_logits(self):
+        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
+        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="auto")
+        out = model(torch.tensor([input_ids]))
+        # Expected mean on dim = -1
+        EXPECTED_MEAN = torch.tensor([[-6.6550, -4.1227, -4.9859, -3.2406, 0.8262, -3.0033, 1.2964, -3.3699]])
+        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
+        # slicing logits[0, 0, 0:30]
+        # fmt: off
+        EXPECTED_SLICE = torch.tensor([-12.8281, -7.4453, -0.4639, -8.0625, -7.2500, -8.0000, -6.4883, -7.7695, -7.8438, -7.0312, -6.2188, -7.1328, -1.8496, 1.9961, -8.6250, -6.7227, -12.8281, -6.9492, -7.0742, -7.7852, -7.5820, -7.9062, -6.9375, -7.9805, -8.3438, -8.1562, -8.0469, -7.6250, -7.7422, -7.3398,])
+        # fmt: on
+        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
+
+    @unittest.skip("Logits are not exactly the same, once we fix the instabalities somehow, will update!")
+    @slow
+    def test_model_13b_logits(self):
+        input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
+        model = LlamaForCausalLM.from_pretrained("meta-llama/Llama-2-13b-hf", device_map="auto")
+        out = model(torch.tensor(input_ids))
+        # Expected mean on dim = -1
+        EXPECTED_MEAN = torch.tensor([[-2.0622, -1.2794, -1.1638, -0.9788, -1.4603, -1.0238, -1.7893, -1.4411]])
+        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
+        # slicing logits[0, 0, 0:30]
+        # fmt: off
+        EXPECTED_SLICE = torch.tensor([-8.1406, -8.0547, 2.7461, -1.2344, -0.1448, -1.8262, -1.0020, -1.8154, -1.6895, -1.8516, -2.3574, -0.9277, 3.7598, 6.5742, -1.2998, -0.1177, -8.1406, -2.9688, -2.9199, -3.1699, -3.5254, -2.3555, -2.7988, -3.4141, -2.8262, -4.5195, -3.3379, -3.3164, -2.7832, -3.0273])
+        # fmt: on
+        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, atol=1e-5, rtol=1e-5)
 
 
-@slow
-@require_torch_gpu
-@require_bitsandbytes
-class MptIntegrationTests(unittest.TestCase):
-    def test_generation_8k(self):
-        model_id = "mosaicml/mpt-7b-8k"
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-
-        # Load in 4bit to fit the daily CI runner GPU RAM
-        model = MptForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
-        )
-
-        input_text = "Hello"
-        expected_output = 'Hello, I\'m a new user of the forum. I have a question about the "Safety"'
-
-        inputs = tokenizer(input_text, return_tensors="pt")
-        outputs = model.generate(**inputs, max_new_tokens=20)
-
-        decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        self.assertEqual(decoded_output, expected_output)
-
-    def test_generation(self):
-        model_id = "mosaicml/mpt-7b"
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-
-        # Load in 4bit to fit the daily CI runner GPU RAM
-        model = MptForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
-        )
-
-        input_text = "Hello"
-        expected_output = (
-            "Hello and welcome to the first day of the new release countdown for the month of May!\nToday"
-        )
-
-        inputs = tokenizer(input_text, return_tensors="pt")
-        outputs = model.generate(**inputs, max_new_tokens=20)
-
-        decoded_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
-        self.assertEqual(decoded_output, expected_output)
-
-    def test_generation_batched(self):
-        model_id = "mosaicml/mpt-7b"
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-
-        # Load in 4bit to fit the daily CI runner GPU RAM
-        model = MptForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
-        )
-
-        input_texts = ["Hello my name is", "Today I am going at the gym and"]
-        tokenizer.pad_token_id = tokenizer.eos_token_id
-        tokenizer.padding_side = "left"
-
-        inputs = tokenizer(input_texts, return_tensors="pt", padding=True).to(torch_device)
-
-        expected_output = [
-            "Hello my name is Tiffany and I am a mother of two beautiful children. I have been a nanny for over",
-            "Today I am going at the gym and then I am going to go to the grocery store and get some food. I am going to make",
-        ]
-        outputs = model.generate(**inputs, max_new_tokens=20)
-
-        decoded_outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        for i, predicted_output in enumerate(decoded_outputs):
-            self.assertEqual(predicted_output, expected_output[i])
-
-    def test_model_logits(self):
-        model_id = "mosaicml/mpt-7b"
-
-        # Load in 4bit to fit the daily CI runner GPU RAM
-        model = MptForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, device_map={"": 0}, load_in_4bit=True
-        )
-
-        dummy_input = torch.LongTensor([[1, 2, 3, 4, 5]]).to(torch_device)
-
-        outputs = model(dummy_input, output_hidden_states=True)
-
-        expected_slice = torch.Tensor([-0.2539, -0.2178, -0.1953]).to(torch_device, torch.bfloat16)
-        predicted_slice = outputs.hidden_states[-1][0, 0, :3]
-
-        self.assertTrue(torch.allclose(expected_slice, predicted_slice, atol=1e-3, rtol=1e-3))
