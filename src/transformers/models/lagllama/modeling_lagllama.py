@@ -28,7 +28,12 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseTSModelOutputWithPast, CausalTSOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_outputs import (
+    BaseTSModelOutputWithPast,
+    CausalTSOutputWithPast,
+    SampleTSPredictionOutput,
+    SequenceClassifierOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -1212,18 +1217,33 @@ class LagLlamaForPrediction(LagLlamaPreTrainedModel):
         past_values: torch.Tensor,
         **model_kwargs,
     ):
-        # prepare model inputs
-        model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-
-        outputs = self(past_values=past_values, use_cache=True)
-        loc = outputs.loc
-        scale = outputs.scale
-
         repeated_past_values = past_values.repeat_interleave(self.config.num_parallel_samples, 0)
 
         # greedy decoding
+        future_samples = []
         for k in range(self.config.prediction_length):
-            pass
+            # prepare model inputs
+            model_inputs = self.prepare_inputs_for_generation(repeated_past_values, **model_kwargs)
+
+            outputs = self(**model_inputs, return_dict=True)
+            loc = outputs.loc
+            scale = outputs.scale
+            params = outputs.params
+
+            distr = self.output_distribution(params, loc=loc, scale=scale, trailing_n=1)
+            sample = distr.sample()
+            future_samples.append(sample)
+
+            repeated_past_values = torch.cat((repeated_past_values, sample), dim=1)
+
+        concat_future_samples = torch.cat(future_samples, dim=1)
+
+        return SampleTSPredictionOutput(
+            sequences=concat_future_samples.reshape(
+                (-1, self.config.num_parallel_samples, self.config.prediction_length) + self.target_shape,
+            )
+        )
+
 
 @add_start_docstrings(
     """
