@@ -15,10 +15,10 @@
 """ PyTorch IdeficsVision model: a copy of CLIPVisionModel using a simpler config object"""
 
 
+import math
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
-import math
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -120,7 +120,7 @@ class IdeficsVisionEmbeddings(nn.Module):
         assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
-        
+
     def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         if not interpolate_pos_encoding:
@@ -132,7 +132,7 @@ class IdeficsVisionEmbeddings(nn.Module):
 
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
-        
+
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
 
         class_embeds = self.class_embedding.expand(batch_size, 1, -1)
@@ -140,7 +140,7 @@ class IdeficsVisionEmbeddings(nn.Module):
 
         # add positional encoding to each token
         if interpolate_pos_encoding:
-            embeddings =  embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
         else:
             embeddings = embeddings + self.position_embedding(self.position_ids)
 
@@ -428,7 +428,7 @@ class IdeficsVisionTransformer(nn.Module):
     def __init__(self, config: IdeficsVisionConfig):
         super().__init__()
         self.config = config
-        self.interpolate_pos_encoding = config.interpolate_pos_encoding 
+        self.interpolate_pos_encoding = config.interpolate_pos_encoding
         embed_dim = config.hidden_size
 
         self.embeddings = IdeficsVisionEmbeddings(config)
