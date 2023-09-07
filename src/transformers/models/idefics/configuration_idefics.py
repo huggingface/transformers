@@ -71,6 +71,8 @@ class IdeficsVisionConfig(PretrainedConfig):
             testing).
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to False):
+            Activates interpolation of position embeddings, allowing for images of different sizes.
     """
     model_type = "idefics"
     attribute_map = {
@@ -91,6 +93,7 @@ class IdeficsVisionConfig(PretrainedConfig):
         attention_dropout=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
+        interpolate_pos_encoding=False,
         **kwargs,
     ):
         self.embed_dim = embed_dim
@@ -105,6 +108,7 @@ class IdeficsVisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.hidden_act = hidden_act
+        self.interpolate_pos_encoding = interpolate_pos_encoding
 
         super().__init__(**kwargs)
 
