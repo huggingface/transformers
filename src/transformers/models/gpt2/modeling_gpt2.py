@@ -1313,7 +1313,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             hidden_states = hidden_states.to(self.lm_head.weight.device)
 
         lm_logits = self.lm_head(hidden_states)
-        mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids).squeeze(-1)
+        mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids)
 
         mc_loss = None
         if mc_labels is not None:
