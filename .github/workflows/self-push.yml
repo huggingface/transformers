@@ -38,7 +38,8 @@ jobs:
           fetch-depth: 2
 
       - name: Check Runner Status
-        run: python utils/check_self_hosted_runner.py --target_runners single-gpu-ci-runner-docker,multi-gpu-ci-runner-docker,single-amdgpu-ci-runner-docker --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+#        run: python utils/check_self_hosted_runner.py --target_runners single-gpu-ci-runner-docker,multi-gpu-ci-runner-docker,single-amdgpu-ci-runner-docker --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+        run: python utils/check_self_hosted_runner.py --target_runners single-amdgpu-ci-runner-docker --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
 
   check_runners:
     name: Check Runners
