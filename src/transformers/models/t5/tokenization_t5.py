@@ -176,11 +176,6 @@ class T5Tokenizer(PreTrainedTokenizer):
                 )
 
         # for legacy purpose, we keep this. Will be removed and tests updated. (when `added_tokens_decoder` is not passed as kwargs)
-        additional_special_tokens = (
-            [i for i in additional_special_tokens if "<extra_id_" not in str(i)]
-            if additional_special_tokens is not None
-            else None
-        )
         self._added_tokens_decoder = {}
         for i in range(extra_ids):
             self._added_tokens_decoder[len(self.sp_model) - 1 + extra_ids - i] = AddedToken(
