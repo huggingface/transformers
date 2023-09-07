@@ -1163,7 +1163,7 @@ class Trainer:
         """
         Helper to get number of tokens in a [`~torch.utils.data.DataLoader`] by enumerating dataloader.
         """
-        train_tokens = 0 
+        train_tokens = 0
         try:
             for step, batch in enumerate(train_dl):
                 tokens = batch["input_ids"].numel()
@@ -1608,8 +1608,7 @@ class Trainer:
                 num_train_samples = args.max_steps * total_train_batch_size
                 if args.include_tokens_per_second:
                     num_train_tokens = (
-                        self.num_tokens(train_dataloader, args.max_steps)
-                        * args.gradient_accumulation_steps
+                        self.num_tokens(train_dataloader, args.max_steps) * args.gradient_accumulation_steps
                     )
             else:
                 max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
@@ -1625,10 +1624,7 @@ class Trainer:
             num_examples = total_train_batch_size * args.max_steps
             num_train_samples = args.max_steps * total_train_batch_size
             if args.include_tokens_per_second:
-                num_train_tokens = (
-                    self.num_tokens(train_dataloader, args.max_steps)
-                    * args.gradient_accumulation_steps
-                )
+                num_train_tokens = self.num_tokens(train_dataloader, args.max_steps) * args.gradient_accumulation_steps
         else:
             raise ValueError(
                 "args.max_steps must be set to a positive value if dataloader does not have a length, was"
