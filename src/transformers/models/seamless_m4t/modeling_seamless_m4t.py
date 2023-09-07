@@ -2402,15 +2402,6 @@ class SeamlessM4TTextToUnitForConditionalGeneration(SeamlessM4TPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Seq2SeqLMOutput, Tuple[torch.FloatTensor]]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
-
-        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
@@ -2523,7 +2514,7 @@ HIFIGAN_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`SpeechT5HifiGanConfig`]):
+        config ([`SeamlessM4TConfig`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -2698,16 +2689,10 @@ class SeamlessM4THifiGan(nn.Module):
 
 
 @add_start_docstrings(
-    """HiFi-GAN vocoder.""",
+    """Code HiFi-GAN vocoder as described in this [repository](https://github.com/facebookresearch/speech-resynthesis).""",
     HIFIGAN_START_DOCSTRING,
 )
 class SeamlessM4TCodeHifiGan(PreTrainedModel):
-    """Builds modules of a vocoder model (Code Hifigan) as described in
-    :cite:t`https://github.com/facebookresearch/speech-resynthesis`.
-
-    To tweak the architecture, you can derive from this class and override the corresponding methods.
-    """
-
     config_class = SeamlessM4TConfig
     main_input_name = "input_embeds"
 
@@ -2777,9 +2762,22 @@ class SeamlessM4TCodeHifiGan(PreTrainedModel):
 
         return input_lengths
 
-    def forward(self, input_ids: Tensor, speaker_id: Tensor, lang_id: Tensor) -> Tensor:  # type: ignore
+    def forward(self, input_ids: Tensor, spkr_id: Tensor, lang_id: Tensor) -> Tensor:  # type: ignore
+        """
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
+
+                Indices can be obtained using [`SeamlessM4TTextToUnitForConditionalGeneration`].
+                [What are input IDs?](../glossary#input-ids)
+            tgt_lang (`str`, *optional*):
+                The language id to use as target language for translation.
+            spkr_id (`int`, *optional*):
+                The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
+
+        """
         hidden_states = self.unit_embedding(input_ids).transpose(1, 2)
-        spkr = self.speaker_embedding(speaker_id).transpose(1, 2)
+        spkr = self.speaker_embedding(spkr_id).transpose(1, 2)
         lang = self.language_embedding(lang_id).transpose(1, 2)
 
         log_dur_pred = self.dur_predictor(hidden_states.transpose(1, 2))
@@ -3220,15 +3218,16 @@ class SeamlessM4TForSpeechToText(SeamlessM4TPreTrainedModel):
 
     def generate(self, input_features=None, tgt_lang=None, **kwargs):
         """
-        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
-            Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the
-            [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
+        Args:
+            input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
+                Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the
+                [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
 
-        tgt_lang (`str`, *optional*):
-            The language to use as target language for translation.
+            tgt_lang (`str`, *optional*):
+                The language to use as target language for translation.
 
-        kwargs (*optional*):
-            Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`].
+            kwargs (*optional*):
+                Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`].
         """
         # prepare text_decoder_input_ids
         text_decoder_input_ids = kwargs.pop("decoder_input_ids", None)
@@ -3526,7 +3525,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
         spkr_id = 0 if spkr_id is None else spkr_id
         spkr_id = torch.tensor([[spkr_id]] * len(unit_ids)).to(self.device)
 
-        waveforms, waveform_lengths = self.vocoder(input_ids=unit_ids, speaker_id=spkr_id, lang_id=vocoder_tgt_lang_id)
+        waveforms, waveform_lengths = self.vocoder(input_ids=unit_ids, spkr_id=spkr_id, lang_id=vocoder_tgt_lang_id)
 
         if return_intermediate_token_ids:
             return SeamlessM4TGenerationOutput(
@@ -3794,7 +3793,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
         spkr_id = 0 if spkr_id is None else spkr_id
         spkr_id = torch.tensor([[spkr_id]] * len(unit_ids)).to(self.device)
 
-        waveforms, waveform_lengths = self.vocoder(input_ids=unit_ids, speaker_id=spkr_id, lang_id=vocoder_tgt_lang_id)
+        waveforms, waveform_lengths = self.vocoder(input_ids=unit_ids, spkr_id=spkr_id, lang_id=vocoder_tgt_lang_id)
 
         if return_intermediate_token_ids:
             return SeamlessM4TGenerationOutput(
@@ -4244,7 +4243,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
         spkr_id = 0 if spkr_id is None else spkr_id
         spkr_id = torch.tensor([[spkr_id]] * len(unit_ids)).to(self.device)
 
-        waveforms, waveform_lengths = self.vocoder(input_ids=unit_ids, speaker_id=spkr_id, lang_id=vocoder_tgt_lang_id)
+        waveforms, waveform_lengths = self.vocoder(input_ids=unit_ids, spkr_id=spkr_id, lang_id=vocoder_tgt_lang_id)
 
         if return_intermediate_token_ids:
             return SeamlessM4TGenerationOutput(
