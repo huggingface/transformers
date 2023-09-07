@@ -39,6 +39,7 @@ from transformers.utils import ModelOutput, add_start_docstrings_to_model_forwar
 
 logger = logging.get_logger(__name__)
 
+
 BEIT3_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
@@ -49,6 +50,7 @@ BEIT3_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
+
 
 BEIT3_FOR_VISUALREASONING_INPUTS_DOCSTRING = r"""
     Args:
@@ -80,6 +82,7 @@ BEIT3_FOR_VISUALREASONING_INPUTS_DOCSTRING = r"""
 
 """
 
+
 BEIT3_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -94,6 +97,7 @@ BEIT3_FOR_IMAGE_CLASSIFICATION_INPUTS_DOCSTRING = r"""
             Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
             classification loss is computed (Cross-Entropy) against these labels.
 """
+
 
 BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
     Args:
@@ -126,6 +130,7 @@ BEIT3_FOR_CAPTIONING_INPUTS_DOCSTRING = r"""
             classification loss is computed (Cross-Entropy) against these labels.
 """
 
+
 BEIT3_FOR_VQA_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
@@ -150,6 +155,7 @@ BEIT3_FOR_VQA_INPUTS_DOCSTRING = r"""
             Labels for computing the classification loss. Indices should be in `[0, ..., config.num_labels - 1]`. A
             classification loss is computed (Cross-Entropy) against these labels.
 """
+
 
 BEIT3_FOR_TEXT_RETRIEVAL_INPUTS_DOCSTRING = r"""
     Args:
@@ -192,55 +198,6 @@ class Beit3MLP(nn.Module):
         hidden_states = self.act(hidden_states)
         return self.dense2(hidden_states)
 
-
-class Beit3PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = Beit3Config
-    base_model_prefix = "beit3"
-    main_input_name = "input_ids"
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(
-            module,
-            (
-                Beit3ForVisualReasoning,
-                Beit3ForImageTextRetrieval,
-                Beit3ForVisualQuestionAnswering,
-                Beit3ForImageClassification,
-                Beit3ForCaptioning,
-            ),
-        ):
-            module.beit3.text_embedding.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, Beit3Encoder):
-            module.gradient_checkpointing = value
-
-    def reset_parameters(self):
-        self.fc1.reset_parameters()
-        self.fc2.reset_parameters()
-        if self.ffn_layernorm is not None:
-            self.ffn_layernorm.reset_parameters()
-
-
 class Beit3MultiwayFeedForwardNetwork(nn.Module):
     def __init__(self, module):
         super().__init__()
@@ -265,7 +222,7 @@ class Beit3MultiwayFeedForwardNetwork(nn.Module):
 
 class Beit3Linear(nn.Module):
     def __init__(self, config):
-        super(Beit3Linear, self).__init__()
+        super().__init__()
         self.linear_1 = nn.Linear(config.embed_dim, config.embed_dim, bias=True)
         self.linear_2 = nn.Linear(config.embed_dim, config.embed_dim, bias=True)
 
@@ -526,6 +483,56 @@ class Beit3ModelOutput(ModelOutput):
     encoder_embedding: Optional[torch.FloatTensor] = None
     encoder_padding_mask: Optional[torch.FloatTensor] = None
     hidden_states: List[Any] = None
+
+
+class Beit3PreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = Beit3Config
+    base_model_prefix = "beit3"
+    main_input_name = "input_ids"
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(
+            module,
+            (
+                Beit3ForVisualReasoning,
+                Beit3ForImageTextRetrieval,
+                Beit3ForVisualQuestionAnswering,
+                Beit3ForImageClassification,
+                Beit3ForCaptioning,
+            ),
+        ):
+            module.beit3.text_embedding.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, Beit3Encoder):
+            module.gradient_checkpointing = value
+
+    def reset_parameters(self):
+        self.fc1.reset_parameters()
+        self.fc2.reset_parameters()
+        if self.ffn_layernorm is not None:
+            self.ffn_layernorm.reset_parameters()
+
+
 
 
 class Beit3EncoderLayer(Beit3PreTrainedModel):
@@ -1020,11 +1027,11 @@ class Beit3ForCaptioning(Beit3PreTrainedModel):
         )
 
 
-class Pooler(nn.Module):
-    def __init__(self, input_features, output_features, norm_layer):
+class Beit3Pooler(nn.Module):
+    def __init__(self,config):
         super().__init__()
-        self.norm = norm_layer(input_features)
-        self.dense = nn.Linear(input_features, output_features)
+        self.norm = nn.LayerNorm(config.embed_dim)
+        self.dense = nn.Linear(config.embed_dim, config.embed_dim)
         self.activation = nn.Tanh()
 
     def forward(self, x):
@@ -1049,11 +1056,7 @@ class Beit3ForVisualQuestionAnswering(Beit3PreTrainedModel):
         embed_dim = config.embed_dim
         self.num_labels = config.num_labels
         self.beit3 = Beit3Model(config)
-        self.pooler = Pooler(
-            input_features=embed_dim,
-            output_features=embed_dim,
-            norm_layer=nn.LayerNorm,
-        )
+        self.pooler = Beit3Pooler(config)
         self.pooler.apply(self._init_weights)
         self.classifier = nn.Sequential(
             nn.Linear(embed_dim, embed_dim * 2),
@@ -1137,7 +1140,7 @@ class Beit3ImageTextMatchingModelOutput(ModelOutput):
 
 
 @add_start_docstrings(
-    """Beit Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
+    """Beit 3 Model transformer with a 'language' modeling head on top. BEiT does masked image modeling by predicting
     visual tokens of a Vector-Quantize Variational Autoencoder (VQ-VAE), whereas other vision models like ViT and DeiT
     predict RGB pixel values. As a result, this class is incompatible with [`AutoModelForMaskedImageModeling`], so you
     will need to use [`BeitForMaskedImageModeling`] directly if you wish to do masked image modeling with BEiT.""",
@@ -1145,7 +1148,7 @@ class Beit3ImageTextMatchingModelOutput(ModelOutput):
 )
 class Beit3ForImageTextRetrieval(Beit3PreTrainedModel):
     def __init__(self, config):
-        super(Beit3ForImageTextRetrieval, self).__init__(config)
+        super().__init__(config)
         embed_dim = config.embed_dim
         self.beit3 = Beit3Model(config)
         self.language_classifier = nn.Linear(embed_dim, embed_dim, bias=False)

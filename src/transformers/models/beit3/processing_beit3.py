@@ -82,19 +82,14 @@ class Beit3Processor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You have to specify either text or images. Both cannot be none.")
 
+        encoding = dict()
         if text is not None:
-            encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
-
+            text_encoding = self.tokenizer(text, return_tensors=return_tensors, **kwargs)
+            encoding.update(text_encoding)
         if images is not None:
-            image_features = self.image_processor(images, return_tensors=return_tensors, **kwargs)
-
-        if text is not None and images is not None:
-            encoding["pixel_values"] = image_features.pixel_values
-            return encoding
-        elif text is not None:
-            return encoding
-        else:
-            return BatchEncoding(data=dict(**image_features), tensor_type=return_tensors)
+            image_encoding = self.image_processor(images, return_tensors=return_tensors, **kwargs)
+            encoding.update(image_encoding)
+        return BatchEncoding(data=encoding, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):
         """
