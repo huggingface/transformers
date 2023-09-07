@@ -2542,7 +2542,7 @@ def _generate_speech(
     output_cross_attentions: bool = False,
 ) -> Union[torch.FloatTensor, Tuple[torch.FloatTensor, torch.FloatTensor]]:
     if attention_mask is None:
-        encoder_attention_mask = (1 - (input_values==model.config.pad_token_id).int())
+        encoder_attention_mask = 1 - (input_values == model.config.pad_token_id).int()
     else:
         encoder_attention_mask = attention_mask
 
@@ -2604,7 +2604,9 @@ def _generate_speech(
         spectrogram.append(spectrum)
 
         # Extend the output sequence with the new mel spectrum.
-        output_sequence = torch.cat((output_sequence, spectrum[:, -1, :].view(bsz, 1, model.config.num_mel_bins)), dim=1)
+        output_sequence = torch.cat(
+            (output_sequence, spectrum[:, -1, :].view(bsz, 1, model.config.num_mel_bins)), dim=1
+        )
         # Predict the probability that this is the stop token.
         prob = torch.sigmoid(model.speech_decoder_postnet.prob_out(last_decoder_output))
 
@@ -2615,7 +2617,7 @@ def _generate_speech(
 
             # Finished when stop token or maximum length is reached or every text in the batches reaches the prob threshold
             for i, p in enumerate(prob):
-                if i in result_spectrogram: # already has result
+                if i in result_spectrogram:  # already has result
                     continue
                 cur_spectrogram = spectrograms[:, i, :, :]
                 cur_spectrogram = model.speech_decoder_postnet.postnet(cur_spectrogram)
