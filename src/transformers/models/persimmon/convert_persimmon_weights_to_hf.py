@@ -60,11 +60,6 @@ come in several checkpoints they each contain a part of each weight of the model
 import torch
 import flatdict
 
-# model_state_dict_chat = torch.load("/home/arthur_huggingface_co/adept-inference/weights/8b_chat_model_release/iter_0001251/mp_rank_00/model_optim_rng.pt", map_location="cpu")
-# config_chat = model_state_dict_chat["args"].__dict__
-model_state_dict_base = torch.load("/home/arthur_huggingface_co/adept-inference/weights/8b_base_model_release/iter_0375000/mp_rank_00/model_optim_rng.pt", map_location="cpu")
-config_base = model_state_dict_base["args"].__dict__
-
 KEYS_TO_MODIFY_MAPPING = {
     "self_attention": "self_attn",
     "language_model.encoder": "model",
@@ -72,11 +67,7 @@ KEYS_TO_MODIFY_MAPPING = {
     "embedding": "embed_tokens",
 }
 
-# TO REMOVE: 
-keys_to_remove = "rotary_emb.inv_freq"
-
-new_dict = flatdict.FlatDict(model_state_dict_base["model"], '.')
-out_state_dict = {}
+KEYS_TO_REMOVE = "rotary_emb.inv_freq"
 
 def rename_state_dict(state_dict):
     model_state_dict = {}
@@ -84,20 +75,19 @@ def rename_state_dict(state_dict):
         for key_to_modify, new_key in KEYS_TO_MODIFY_MAPPING.items():
             if key_to_modify in key:
                 key = key.replace(key_to_modify, new_key)
-        if keys_to_remove in key:
+        if KEYS_TO_REMOVE in key:
             continue
         model_state_dict[key] = value
     return model_state_dict
-    
-    
-def convert_persimmon_checkpoint(checkpoint_path, pytorch_dump_folder_path, config_path, enable_fusion=False):
+
+def convert_persimmon_checkpoint(checkpoint_path, pytorch_dump_folder_path, pt_model_path, safe_serialization=False):
     model_state_dict_base = torch.load(checkpoint_path, map_location="cpu")
     state_dict = flatdict.FlatDict(model_state_dict_base["model"], '.')
     state_dict = rename_state_dict(state_dict)
     
     transformers_config = PersimmonConfig()
     model = PersimmonModelForCausalLM(transformers_config).to(torch.bfloat16)
-    model.save_pretrained(pytorch_dump_folder_path)
+    model.save_pretrained(pytorch_dump_folder_path, safe_serialization = safe_serialization)
     transformers_config.save_pretrained(pytorch_dump_folder_path)
 
 def main():
@@ -105,6 +95,10 @@ def main():
     parser.add_argument(
         "--input_dir",
         help="Location of Persimmon weights, which contains tokenizer.model and model folders",
+    )
+    parser.add_argument(
+        "--pt_model_path",
+        help="Location of Persimmon `model_optim_rng.pt`",
     )
     parser.add_argument(
         "--output_dir",
@@ -115,11 +109,10 @@ def main():
     spm_path = os.path.join(args.input_dir, "tokenizer.model")
 
     convert_persimmon_checkpoint(
-        model_path=args.output_dir,
-        input_base_path=args.input_dir,
-        model_size=args.model_size,
+        checkpoint_path=args.input_dir,
+        pt_model_path=args.pt_model_path,
+        pytorch_dump_folder_path=args.output_dir,
         safe_serialization=args.safe_serialization,
-        tokenizer_path=spm_path,
     )
     tokenizer = LlamaTokenizer(spm_path, bos_token = "|ENDOFTEXT", eos_token = None)
     tokenizer.save_pretrained(args.output_dir)
