@@ -769,6 +769,7 @@ class PegasusXPreTrainedModel(PreTrainedModel):
     config_class = PegasusXConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = [r"PegasusXEncoderLayer", r"PegasusXDecoderLayer"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1298,6 +1299,8 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
 
         # embed positions
         positions = self.embed_positions(inputs_embeds, past_key_values_length)
+
+        positions = positions.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + positions
 

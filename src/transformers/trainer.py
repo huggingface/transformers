@@ -60,7 +60,7 @@ from .data.data_collator import DataCollator, DataCollatorWithPadding, default_d
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .dependency_versions_check import dep_version_check
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
-from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint
+from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
@@ -94,6 +94,7 @@ from .trainer_pt_utils import (
     nested_numpify,
     nested_xla_mesh_reduce,
     reissue_pt_warnings,
+    remove_dummy_checkpoint,
 )
 from .trainer_utils import (
     PREFIX_CHECKPOINT_DIR,
@@ -212,6 +213,9 @@ if is_accelerate_available():
             save_fsdp_optimizer,
         )
 
+    if is_deepspeed_available():
+        from accelerate.utils import DeepSpeedSchedulerWrapper
+
 
 if TYPE_CHECKING:
     import optuna
@@ -224,6 +228,7 @@ logger = logging.get_logger(__name__)
 TRAINING_ARGS_NAME = "training_args.bin"
 TRAINER_STATE_NAME = "trainer_state.json"
 OPTIMIZER_NAME = "optimizer.pt"
+OPTIMIZER_NAME_BIN = "optimizer.bin"
 SCHEDULER_NAME = "scheduler.pt"
 SCALER_NAME = "scaler.pt"
 
@@ -1172,8 +1177,6 @@ class Trainer:
         elif self.hp_search_backend == HPSearchBackend.WANDB:
             params = trial
 
-        # Unfreeze args for hyperparameter search
-        delattr(self.args, "_frozen")
         for key, value in params.items():
             if not hasattr(self.args, key):
                 logger.warning(
@@ -1205,8 +1208,6 @@ class Trainer:
             self.args.hf_deepspeed_config.trainer_config_process(self.args)
             self.args.deepspeed_plugin = DeepSpeedPlugin(hf_ds_config=self.args.hf_deepspeed_config)
 
-        # Re-freeze them
-        setattr(self.args, "_frozen", True)
         self.create_accelerator_and_postprocess()
 
     def _report_to_hp_search(self, trial: Union["optuna.Trial", Dict[str, Any]], step: int, metrics: Dict[str, float]):
@@ -2370,16 +2371,19 @@ class Trainer:
                     partial=True,
                     v3=smp.state.cfg.shard_optimizer_state,
                 )
-            if self.args.should_save:
-                with warnings.catch_warnings(record=True) as caught_warnings:
-                    torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
-                reissue_pt_warnings(caught_warnings)
-                if self.do_grad_scaling:
-                    torch.save(self.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
         elif self.args.should_save and not self.is_deepspeed_enabled and not (self.fsdp or self.is_fsdp_enabled):
             # deepspeed.save_checkpoint above saves model/optim/sched
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
 
+        # Save SCHEDULER & SCALER
+        is_deepspeed_custom_scheduler = self.is_deepspeed_enabled and not isinstance(
+            self.lr_scheduler, DeepSpeedSchedulerWrapper
+        )
+        if (
+            self.args.should_save
+            and (not self.is_deepspeed_enabled or is_deepspeed_custom_scheduler)
+            and not is_torch_tpu_available()
+        ):
             with warnings.catch_warnings(record=True) as caught_warnings:
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
             reissue_pt_warnings(caught_warnings)
@@ -2445,12 +2449,19 @@ class Trainer:
 
         if self.is_deepspeed_enabled:
             # deepspeed loads optimizer/lr_scheduler together with the model in deepspeed_init
+            if not isinstance(self.lr_scheduler, DeepSpeedSchedulerWrapper):
+                with warnings.catch_warnings(record=True) as caught_warnings:
+                    self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, SCHEDULER_NAME)))
+                reissue_pt_warnings(caught_warnings)
             return
 
         checkpoint_file_exists = (
             glob.glob(os.path.join(checkpoint, OPTIMIZER_NAME) + "_*")
             if is_sagemaker_mp_enabled()
-            else os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME))
+            else (
+                os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME))
+                or os.path.isfile(os.path.join(checkpoint, OPTIMIZER_NAME_BIN))
+            )
         )
         if checkpoint_file_exists and os.path.isfile(os.path.join(checkpoint, SCHEDULER_NAME)):
             # Load in optimizer and scheduler states
@@ -2791,12 +2802,8 @@ class Trainer:
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
             if self.is_fsdp_enabled:
-                # remove the dummy state_dict saved above
-                if self.args.should_save:
-                    for filename in [WEIGHTS_NAME, SAFE_WEIGHTS_NAME]:
-                        file = os.path.join(output_dir, filename)
-                        if os.path.isfile(file):
-                            os.remove(file)
+                # remove the dummy state_dict
+                remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 save_fsdp_model(self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir)
 
         elif self.is_deepspeed_enabled:
@@ -2812,6 +2819,9 @@ class Trainer:
                     " stage3_gather_16bit_weights_on_model_save=false. Saving the full checkpoint instead, use"
                     " zero_to_fp32.py to recover weights"
                 )
+                self._save(output_dir, state_dict={})
+                # remove the dummy state_dict
+                remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
         elif self.args.should_save:
@@ -3911,15 +3921,16 @@ class Trainer:
             fsdp_plugin.limit_all_gathers = self.args.fsdp_config.get(
                 "limit_all_gathers", fsdp_plugin.limit_all_gathers
             )
-            fsdp_plugin.activation_checkpointing = self.args.fsdp_config.get(
-                "activation_checkpointing", fsdp_plugin.activation_checkpointing
-            )
-            if fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
-                raise ValueError(
-                    "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
-                    "can't be set to True simultaneously. Please use FSDP's activation_checkpointing logic "
-                    "when using FSDP."
+            if is_accelerate_available("0.23.0"):
+                fsdp_plugin.activation_checkpointing = self.args.fsdp_config.get(
+                    "activation_checkpointing", fsdp_plugin.activation_checkpointing
                 )
+                if fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
+                    raise ValueError(
+                        "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
+                        "can't be set to True simultaneously. Please use FSDP's activation_checkpointing logic "
+                        "when using FSDP."
+                    )
 
         if self.is_deepspeed_enabled:
             if getattr(self.args, "hf_deepspeed_config", None) is None:
