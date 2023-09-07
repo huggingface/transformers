@@ -862,7 +862,7 @@ class SeamlessM4TConformerEncoder(nn.Module):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = torch.rand([])
 
-            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
+            skip_the_layer = True if self.training and (dropout_probability < self.config.speech_encoder_layerdrop) else False
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
@@ -2619,11 +2619,12 @@ class SeamlessM4THifiGan(nn.Module):
     # Almost the same as SpeechT5HifiGan.__init__
     def __init__(self, config: SeamlessM4TConfig):
         super().__init__()
+        model_in_dim = config.unit_embed_dim + config.lang_embed_dim + config.spkr_embed_dim
         self.leaky_relu_slope = config.leaky_relu_slope
         self.num_kernels = len(config.resblock_kernel_sizes)
         self.num_upsamples = len(config.upsample_rates)
         self.conv_pre = nn.Conv1d(
-            config.model_in_dim,
+            model_in_dim,
             config.upsample_initial_channel,
             kernel_size=7,
             stride=1,
@@ -2659,7 +2660,8 @@ class SeamlessM4THifiGan(nn.Module):
         Args:
             spectrogram (`torch.FloatTensor`):
                 Tensor containing the log-mel spectrograms. Can be batched and of shape `(batch_size, sequence_length,
-                config.model_in_dim)`, or un-batched and of shape `(sequence_length, config.model_in_dim)`.
+                model_in_dim)`, or un-batched and of shape `(sequence_length, model_in_dim)`.
+                Note that `model_in_dim` is the sum of `config.unit_embed_dim`, `config.lang_embed_dim` and `config.spkr_embed_dim`.
 
         Returns:
             `torch.FloatTensor`: Tensor containing the speech waveform. If the input spectrogram is batched, will be of
@@ -3482,7 +3484,7 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
                 t2u_tgt_lang_id
                 + self.config.unit_hifi_gan_vocab_size
                 + self.config.t2u_num_langs
-                + self.config.vocoder_offset_tgt_lang
+                + self.config.t2u_offset_tgt_lang
             )
             t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
                 self.device
@@ -3747,7 +3749,7 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
                 t2u_tgt_lang_id
                 + self.config.unit_hifi_gan_vocab_size
                 + self.config.t2u_num_langs
-                + self.config.vocoder_offset_tgt_lang
+                + self.config.t2u_offset_tgt_lang
             )
             t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
                 self.device
@@ -4192,7 +4194,7 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                 t2u_tgt_lang_id
                 + self.config.unit_hifi_gan_vocab_size
                 + self.config.t2u_num_langs
-                + self.config.vocoder_offset_tgt_lang
+                + self.config.t2u_offset_tgt_lang
             )
             t2u_decoder_input_ids = torch.tensor([[self.config.t2u_eos_token_id, t2u_tgt_lang_id]] * batch_size).to(
                 self.device

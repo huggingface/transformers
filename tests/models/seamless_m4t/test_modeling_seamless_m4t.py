@@ -94,7 +94,7 @@ class SeamlessM4TModelTester:
         unit_hifi_gan_vocab_size=15,
         t2u_num_langs=0,
         t2u_max_new_tokens=10,
-        vocoder_offset_tgt_lang=0,
+        t2u_offset_tgt_lang=0,
     ):
         self.parent = parent
         self.input_modality = input_modality
@@ -142,7 +142,7 @@ class SeamlessM4TModelTester:
         self.unit_hifi_gan_vocab_size = unit_hifi_gan_vocab_size
         self.t2u_num_langs = t2u_num_langs
         self.t2u_max_new_tokens = t2u_max_new_tokens
-        self.vocoder_offset_tgt_lang = vocoder_offset_tgt_lang
+        self.t2u_offset_tgt_lang = t2u_offset_tgt_lang
 
     def prepare_config_and_inputs(self):
         if self.input_modality == "text":
@@ -200,8 +200,7 @@ class SeamlessM4TModelTester:
             unit_hifi_gan_vocab_size=self.unit_hifi_gan_vocab_size,
             t2u_num_langs=self.t2u_num_langs,
             t2u_max_new_tokens=self.t2u_max_new_tokens,
-            vocoder_offset_tgt_lang=self.vocoder_offset_tgt_lang,
-            model_in_dim=self.unit_embed_dim + self.spkr_embed_dim + self.lang_embed_dim,
+            t2u_offset_tgt_lang=self.t2u_offset_tgt_lang,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
