@@ -520,9 +520,8 @@ class ChannelAttentionTSTEncoder(nn.Module):
         """
         all_hidden_states = []
         for mod in self.layers:
-            if output_hidden_states:
-                src = mod(src)
-                all_hidden_states.append(src)
+            src = mod(src)
+            all_hidden_states.append(src)
         if output_hidden_states:
             return src, all_hidden_states
         return src, None
@@ -1289,7 +1288,6 @@ class PatchTSTForForecasting(PatchTSTPreTrainedModel):
             self.revin = RevIN()
         else:
             self.revin = nn.Identity()
-        config.pooling = None
 
         # Initialize weights and apply final processing
         self.post_init()
