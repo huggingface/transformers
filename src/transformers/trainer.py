@@ -65,7 +65,7 @@ from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
-from .pytorch_utils import ALL_LAYERNORM_LAYERS
+from .pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_less_than_1_11
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -85,6 +85,7 @@ from .trainer_pt_utils import (
     distributed_broadcast_scalars,
     distributed_concat,
     find_batch_size,
+    get_dataloader_sampler,
     get_model_param_count,
     get_module_class_from_name,
     get_parameter_names,
@@ -218,6 +219,7 @@ if is_accelerate_available():
 
 if TYPE_CHECKING:
     import optuna
+
 
 logger = logging.get_logger(__name__)
 
@@ -1808,8 +1810,17 @@ class Trainer:
         # Skip the first epochs_trained epochs to get the random state of the dataloader at the right point.
         if not args.ignore_data_skip:
             for epoch in range(epochs_trained):
-                for _ in train_dataloader:
-                    break
+                sampler = get_dataloader_sampler(train_dataloader)
+                is_random_sampler = isinstance(sampler, RandomSampler)
+                if is_torch_less_than_1_11 or not is_random_sampler:
+                    # We just need to begin an iteration to create the randomization of the sampler.
+                    for _ in train_dataloader:
+                        break
+                else:
+                    # Otherwise we need to call the whooooole sampler cause there is some random operation added
+                    # AT THE VERY END!
+                    sampler = sampler if sampler is not None else []
+                    _ = list(sampler)
 
         total_batched_samples = 0
         for epoch in range(epochs_trained, num_train_epochs):
