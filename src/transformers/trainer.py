@@ -1608,8 +1608,7 @@ class Trainer:
                 num_train_samples = args.max_steps * total_train_batch_size
                 if args.include_tokens_per_second:
                     num_train_tokens = (
-                        args.max_steps
-                        * self.num_tokens(train_dataloader, True)
+                        self.num_tokens(train_dataloader, args.max_steps)
                         * args.gradient_accumulation_steps
                         * args.world_size
                     )
@@ -1628,8 +1627,7 @@ class Trainer:
             num_train_samples = args.max_steps * total_train_batch_size
             if args.include_tokens_per_second:
                 num_train_tokens = (
-                    args.max_steps
-                    * self.num_tokens(train_dataloader, True)
+                    self.num_tokens(train_dataloader, args.max_steps)
                     * args.gradient_accumulation_steps
                     * args.world_size
                 )
@@ -2014,7 +2012,7 @@ class Trainer:
             start_time,
             num_samples=num_train_samples,
             num_steps=self.state.max_steps,
-            num_tokens=None if args.include_tokens_per_second is None else num_train_tokens / args.world_size,
+            num_tokens=None if not args.include_tokens_per_second else num_train_tokens / args.world_size,
         )
         self.store_flos()
         metrics["total_flos"] = self.state.total_flos
