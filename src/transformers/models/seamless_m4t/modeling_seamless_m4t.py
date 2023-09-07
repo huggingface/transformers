@@ -2991,18 +2991,19 @@ class SeamlessM4TForTextToText(SeamlessM4TPreTrainedModel):
 
     def generate(self, input_ids=None, tgt_lang=None, **kwargs):
         """
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary.
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
+                Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See
+                [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
-            [What are input IDs?](../glossary#input-ids)
-        tgt_lang (`str`, *optional*):
-            The language to use as target language for translation.
+                [What are input IDs?](../glossary#input-ids)
+            tgt_lang (`str`, *optional*):
+                The language to use as target language for translation.
 
-        kwargs (*optional*):
-            Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`].
+            kwargs (*optional*):
+                Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`].
         """
         # prepare text_decoder_input_ids
         text_decoder_input_ids = kwargs.pop("decoder_input_ids", None)
@@ -3360,34 +3361,34 @@ class SeamlessM4TForTextToSpeech(SeamlessM4TForTextToText):
     ) -> Union[torch.Tensor, SeamlessM4TGenerationOutput]:
         """
         Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary.
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
+                Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See
+                [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
-            [What are input IDs?](../glossary#input-ids)
-        return_intermediate_token_ids (`bool`, *optional*):
-            If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also
-            want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter will
-            be ignored.
+                [What are input IDs?](../glossary#input-ids)
+            return_intermediate_token_ids (`bool`, *optional*):
+                If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also
+                want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter will
+                be ignored.
 
-        tgt_lang (`str`, *optional*):
-            The language to use as target language for translation.
-        spkr_id (`int`, *optional*):
-            The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
+            tgt_lang (`str`, *optional*):
+                The language to use as target language for translation.
+            spkr_id (`int`, *optional*):
+                The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
 
-        kwargs (*optional*):
-            Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword
-            arguments are of two types:
+            kwargs (*optional*):
+                Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword
+                arguments are of two types:
 
-                - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model,
-                  except for `decoder_input_ids` which will only be passed through the text components.
-                - With a *text_* or *speech_* prefix, they will be input for the `generate` method of the
-                text model and speech model respectively. It has the priority over the keywords without a prefix.
+                    - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model,
+                    except for `decoder_input_ids` which will only be passed through the text components.
+                    - With a *text_* or *speech_* prefix, they will be input for the `generate` method of the
+                    text model and speech model respectively. It has the priority over the keywords without a prefix.
 
-                This means you can, for example, specify a generation strategy for one generation but not for the
-                other.
+                    This means you can, for example, specify a generation strategy for one generation but not for the
+                    other.
 
 
         Returns:
@@ -3619,31 +3620,31 @@ class SeamlessM4TForSpeechToSpeech(SeamlessM4TForSpeechToText):
     ) -> Union[torch.Tensor, SeamlessM4TGenerationOutput]:
         """
         Args:
-        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
-            Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the
-            [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
+            input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
+                Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the
+                [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
 
-        return_intermediate_token_ids (`bool`, *optional*):
-            If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also
-            want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter will
-            be ignored.
+            return_intermediate_token_ids (`bool`, *optional*):
+                If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also
+                want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter will
+                be ignored.
 
-        tgt_lang (`str`, *optional*):
-            The language to use as target language for translation.
-        spkr_id (`int`, *optional*):
-            The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
+            tgt_lang (`str`, *optional*):
+                The language to use as target language for translation.
+            spkr_id (`int`, *optional*):
+                The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
 
-        kwargs (*optional*):
-            Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword
-            arguments are of two types:
+            kwargs (*optional*):
+                Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword
+                arguments are of two types:
 
-                - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model,
-                  except for `decoder_input_ids` which will only be passed through the text components.
-                - With a *text_* or *speech_* prefix, they will be input for the `generate` method of the
-                text model and speech model respectively. It has the priority over the keywords without a prefix.
+                    - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model,
+                    except for `decoder_input_ids` which will only be passed through the text components.
+                    - With a *text_* or *speech_* prefix, they will be input for the `generate` method of the
+                    text model and speech model respectively. It has the priority over the keywords without a prefix.
 
-                This means you can, for example, specify a generation strategy for one generation but not for the
-                other.
+                    This means you can, for example, specify a generation strategy for one generation but not for the
+                    other.
 
 
         Returns:
@@ -4032,40 +4033,40 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
     ) -> Union[torch.Tensor, SeamlessM4TGenerationOutput]:
         """
         Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary.
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
+                Indices can be obtained using [`SeamlessM4TTokenizer`] or [`SeamlessM4TProcessor`]. See
+                [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details.
 
-            [What are input IDs?](../glossary#input-ids)
-        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
-            Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the
-            [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
+                [What are input IDs?](../glossary#input-ids)
+            input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_banks)`):
+                Input audio features. This should be returnes by the [`SeamlessM4TFeatureExtractor`] class or the
+                [`SeamlessM4TProcessor`] class. See [`SeamlessM4TFeatureExtractor.__call__`] for details.
 
-        return_intermediate_token_ids (`bool`, *optional*):
-            If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also
-            want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter will
-            be ignored.
+            return_intermediate_token_ids (`bool`, *optional*):
+                If `True`, also also returns the intermediate generated text and unit tokens. Set to `True` if you also
+                want to get translated text alongside the audio. Note that if `generate_speech=True`, this parameter will
+                be ignored.
 
-        tgt_lang (`str`, *optional*):
-            The language to use as target language for translation.
-        spkr_id (`int`, *optional*):
-            The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
-        generate_speech (`bool`, *optional*, defaults to `True`):
-            If `False`, will only returns the text tokens and won't generate speech.
+            tgt_lang (`str`, *optional*):
+                The language to use as target language for translation.
+            spkr_id (`int`, *optional*):
+                The id of the speaker used for speech synthesis. Must be lower than `config.vocoder_num_spkrs`.
+            generate_speech (`bool`, *optional*, defaults to `True`):
+                If `False`, will only returns the text tokens and won't generate speech.
 
-        kwargs (*optional*):
-            Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword
-            arguments are of two types:
+            kwargs (*optional*):
+                Remaining dictionary of keyword arguments that will be passed to [`GenerationMixin.generate`]. Keyword
+                arguments are of two types:
 
-                - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model,
-                  except for `decoder_input_ids` which will only be passed through the text components.
-                - With a *text_* or *speech_* prefix, they will be input for the `generate` method of the
-                text model and speech model respectively. It has the priority over the keywords without a prefix.
+                    - Without a prefix, they will be entered as `**kwargs` for the `generate` method of each sub-model,
+                    except for `decoder_input_ids` which will only be passed through the text components.
+                    - With a *text_* or *speech_* prefix, they will be input for the `generate` method of the
+                    text model and speech model respectively. It has the priority over the keywords without a prefix.
 
-                This means you can, for example, specify a generation strategy for one generation but not for the
-                other.
+                    This means you can, for example, specify a generation strategy for one generation but not for the
+                    other.
 
         Returns:
             `Union[SeamlessM4TGenerationOutput, Tuple[Tensor], ModelOutput]`:
